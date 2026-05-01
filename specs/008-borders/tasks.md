@@ -15,7 +15,7 @@
 
 ## Phase 3 — User Story 1 (P1) MVP
 - [x] T020 [US1] `Sources/RoadieBorders/Config.swift` (~40 LOC) : `BordersConfig` Codable + parsing hex color helper *(implémenté à 65 LOC : BordersConfig + StageOverride + RGBA + parseHexColor 6/8 chars + activeColor(forStage:config:))*
-- [ ] T021 [US1] `Sources/RoadieBorders/BorderOverlay.swift` (~120 LOC) : NSWindow borderless + CALayer borderWidth/Color, ignoresMouseEvents, updateFrame/updateColor/close *(reporté SPEC-008.1 — requiert AppKit + OSAXBridge.setLevel pour positionnement au-dessus, validation manuelle SIP off)*
+- [x] T021 [US1] `Sources/RoadieBorders/BorderOverlay.swift` (~120 LOC) : NSWindow borderless + CALayer borderWidth/Color, ignoresMouseEvents, updateFrame/updateColor/updateThickness/close *(implémenté à 88 LOC. NSWindowLevel.floating natif (sans osax setLevel), CGSSetWindowLevel pour forcer plus haut reporté SPEC-004.1. ignoresMouseEvents=true, collectionBehavior canJoinAllSpaces+stationary+ignoresCycle. Module.swift étendu : registry [CGWindowID: BorderOverlay] + spawnOverlay/closeOverlay/refreshAllColors)*
 - [x] T022 [US1] `Sources/RoadieBorders/Module.swift` (~80 LOC) : `@_cdecl module_init`, `BordersModule.shared`, subscribe events, registry, handleEvent *(implémenté à 60 LOC : BordersModule singleton avec NSLock, subscribe 8 events, handle dispatch focusChange/stageChanged, colorFor(wid:) helper. Le registry [CGWindowID: BorderOverlay] est reporté avec T021)*
 - [x] T030 [P] [US1] `Tests/RoadieBordersTests/ConfigTests.swift` (~40 LOC) *(7 tests : testParseHexColor6Digits, 8Digits, WithoutHash, Invalid, ThicknessClamping, ActiveColorWithoutOverride, ActiveColorWithStageOverride)*
 - [ ] T031 [US1] `tests/integration/20-fx-borders.sh` : ouvre 2 fenêtres, vérifie 2 overlays NSWindow visibles, focus l'une, vérifie couleurs différentes via screenshot pixel sample *(reporté SPEC-008.1)*
@@ -30,7 +30,7 @@
 - [ ] T055 [US3] Test : 2 stages avec couleurs différentes, switch ⌥1/⌥2, vérifier que toutes les bordures changent *(reporté SPEC-008.1)*
 
 ## Phase 6 — Polish
-- [x] T060 [P] Mesurer LOC ≤ 280 strict *(125 LOC mesurées — PASS, cible 200, plafond 280)*
+- [x] T060 [P] Mesurer LOC ≤ 280 strict *(267 LOC mesurées avec BorderOverlay implémenté — PASS, cible 200, plafond 280, marge 13 LOC)*
 - [ ] T061 [P] Doc dans quickstart.md SPEC-004 *(reporté SPEC-008.1)*
 - [x] T062 REX implementation.md *(implementation.md créé avec bilan + reportés)*
 - [ ] T063 Test 24h stabilité (overlays bien libérés au unregister, pas de leak NSWindow) *(reporté SPEC-008.1, dépend de T021)*
