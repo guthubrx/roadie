@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-fx-framework`
 **Created**: 2026-05-01
-**Status**: In Progress (MVP Swift livré 2026-05-01 — Phase 1+2+3 complètes ; Phase 4 osax bundle + scripts install/uninstall reportés à SPEC-004.1, requièrent validation manuelle SIP off)
+**Status**: Implemented (Phase 1+2+3+4 complètes 2026-05-01 — daemon Swift + osax bundle Objective-C++ + scripts install/uninstall + Makefile cibles + tests intégration shell. Validation runtime sur machine SIP partial off à faire par l'utilisateur via `make install-fx`)
 **Dependencies**: SPEC-002-tiler-stage (V1), SPEC-003-multi-desktop (en cours, pas un bloqueur dur car développement parallèle via worktrees)
 **Input** : « Cadre commun pour modules optionnels qui requièrent SIP partiellement désactivé. Le daemon roadie reste 100% fonctionnel sans aucun module chargé (dealbreaker sans SIP). Modules livrés dans des dynamic libraries SwiftPM séparées, jamais liées au binaire daemon. Une scripting addition `roadied.osax` est injectée dans Dock pour exposer les CGS privés sur fenêtres tierces. Modules dialoguent avec l'osax via socket Unix locale. Plafond LOC framework : 800 strict (cible 600). Famille SPECs SIP-off : SPEC-005 RoadieShadowless, SPEC-006 RoadieOpacity, SPEC-007 RoadieAnimations Bézier-style, SPEC-008 RoadieBorders, SPEC-009 RoadieBlur, SPEC-010 RoadieCrossDesktop. »
 

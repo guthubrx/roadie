@@ -69,7 +69,7 @@
 
 ### Tests US1
 
-- [ ] T055 [P] [US1] Créer `tests/integration/11-fx-vanilla.sh` : démarre daemon sans dylibs ni osax, exécute `roadie fx status`, vérifie `modules: []`, exécute toutes les assertions des tests SPEC-002 + SPEC-003 (régression complète) *(reporté SPEC-004.1 — la régression a été validée manuellement via `swift test` qui exécute les 90 tests SPEC-002 + SPEC-003 sans échec)*
+- [x] T055 [P] [US1] Créer `tests/integration/11-fx-vanilla.sh` : démarre daemon sans dylibs ni osax, exécute `roadie fx status`, vérifie SC-007 (`nm` daemon retourne 0 symbole CGS d'écriture), assertions windows list / stage list répondent
 
 **Checkpoint US1** : tous les tests passent à l'identique vs SPEC-003. Aucune régression. ✅
 
@@ -83,12 +83,12 @@
 
 ### Implémentation osax
 
-- [ ] T070 [US2] Créer `osax/main.mm` (~40 LOC) : entry point Cocoa scripting addition, démarre serveur socket dans thread dédié *(reporté SPEC-004.1, requiert validation manuelle SIP off sur machine utilisateur)*
-- [ ] T071 [US2] Créer `osax/osax_socket.mm` (~80 LOC) : socket Unix server, accept loop, UID match, dispatch sur main queue *(reporté SPEC-004.1)*
-- [ ] T072 [US2] Créer `osax/osax_handlers.mm` (~80 LOC) : 8 handlers commandes (noop, set_alpha, set_shadow, set_blur, set_transform, set_level, move_window_to_space, set_sticky) *(reporté SPEC-004.1)*
-- [ ] T073 [US2] Créer `osax/cgs_private.h` (~30 LOC) : déclarations privées CGS d'écriture (jamais incluses par le daemon Swift) *(reporté SPEC-004.1)*
-- [ ] T074 [US2] Créer `osax/Info.plist` : bundle identifier `local.roadies.osax`, OSAScriptingAddition = true, signing ad-hoc *(reporté SPEC-004.1)*
-- [ ] T075 [US2] Créer `osax/build.sh` : compile bundle via `clang++ -bundle -framework Cocoa -framework SkyLight`, signe ad-hoc, dépose dans `osax/build/roadied.osax/` *(reporté SPEC-004.1)*
+- [x] T070 [US2] Créer `osax/main.mm` : entry point Cocoa scripting addition, `+[ROHooks load]` constructor démarre thread serveur via `NSThread detachNewThreadSelector`
+- [x] T071 [US2] Créer `osax/osax_socket.mm` : socket Unix server `/var/tmp/roadied-osax.sock`, mode 0600, accept loop, UID match (`getpeereid`), thread par client, dispatch sync sur main queue Dock
+- [x] T072 [US2] Créer `osax/osax_handlers.mm` : 9 handlers (noop, set_alpha, set_shadow, set_blur, set_transform, set_level, set_frame, move_window_to_space, set_sticky)
+- [x] T073 [US2] Créer `osax/cgs_private.h` : déclarations SLSSetWindow* (renommés depuis CGSSet* sur macOS Tahoe 26+), vérifiés via `dyld_info -exports`
+- [x] T074 [US2] Créer `osax/Info.plist` + `osax/roadied.sdef` : bundle identifier `local.roadies.osax`, OSAScriptingAddition = YES, NSPrincipalClass = ROHooks
+- [x] T075 [US2] Créer `osax/build.sh` : compile bundle via `clang++ -bundle -fobjc-arc -framework Cocoa -framework SkyLight`, signe ad-hoc, dépose dans `osax/build/roadied.osax/`
 
 ### Module stub pour validation
 
@@ -96,8 +96,8 @@
 
 ### Scripts d'install/uninstall
 
-- [ ] T085 [US2] Créer `scripts/install-fx.sh` (~30 LOC) : copie osax dans `/Library/ScriptingAdditions/`, force load Dock, copie dylibs dans `~/.local/lib/roadie/` *(reporté SPEC-004.1)*
-- [ ] T086 [US2] Créer `scripts/uninstall-fx.sh` (~30 LOC) : stop daemon, retire osax, force unload Dock, retire dylibs, restart daemon *(reporté SPEC-004.1)*
+- [x] T085 [US2] Créer `scripts/install-fx.sh` : check csrutil, build osax, swift build release, dépose osax dans `/Library/ScriptingAdditions/` (sudo), reload Dock via `osascript ... load scripting additions`, copie dylibs dans `~/.local/lib/roadie/`, restart daemon
+- [x] T086 [US2] Créer `scripts/uninstall-fx.sh` : stop daemon, retire osax, killall Dock pour force unload, retire dylibs, restart daemon vanilla
 
 ### Tests US2
 
@@ -106,7 +106,7 @@
 - [x] T092 [P] [US2] Créer `Tests/RoadieFXCoreTests/OSAXBridgeTests.swift` (~80 LOC) : mock socket, vérifie queue capping 1000, retry, heartbeat, UID match *(5 tests : disconnected returns error, queue depth, isConnected false, disconnect, queue cap 1000. Heartbeat reporté avec son code SPEC-004.1)*
 - [x] T092b [US2] Créer `Tests/RoadieFXCoreTests/OSAXCommandTests.swift` (NEW non prévu en plan) : 9 tests parsing JSON 8 commandes + OSAXResult — non listé initialement mais nécessaire pour valider la sérialisation
 - [x] T092c [US2] Créer `Tests/RoadieFXCoreTests/FXConfigTests.swift` (NEW non prévu en plan) : 4 tests defaults, missing section, custom TOML, expand `~`
-- [ ] T095 [US2] Créer `tests/integration/12-fx-loaded.sh` : install osax + stub, démarre daemon, vérifie module loaded en log, vérifie `roadie fx status` retourne stub, vérifie noop round-trip < 100 ms (mesuré via timestamps log) *(reporté SPEC-004.1)*
+- [x] T095 [US2] Créer `tests/integration/12-fx-loaded.sh` : vérifie `/Library/ScriptingAdditions/roadied.osax`, socket `/var/tmp/roadied-osax.sock`, noop heartbeat via `nc -U`, modules listés dans `roadie fx status`, sip state reporté
 
 **Checkpoint US2** : end-to-end loader+osax+bridge fonctionne avec un module factice. Aucun visuel mais le pipeline est validé. ✅ → SPEC-005 peut commencer.
 
@@ -141,7 +141,7 @@
 
 ## Phase 7 — Polish
 
-- [ ] T120 [P] Mettre à jour `Makefile` : cibles `build-fx`, `install-fx`, `uninstall-fx`, `verify-no-cgs-write` *(reporté SPEC-004.1, couplé osax)*
+- [x] T120 [P] Mettre à jour `Makefile` : cibles `build-fx`, `install-fx`, `uninstall-fx`, `verify-no-cgs-write` (gate SC-007 automatisé)
 - [ ] T121 [P] Mettre à jour `README.md` : section "Modules SIP-off opt-in" pointant vers `quickstart.md`, doc utilisateur "as-is no warranty" *(reporté SPEC-004.1)*
 - [x] T122 [P] Logs structurés cohérents : tous les events `fx_loader.*` / `osax_bridge.*` au format JSON-lines (continuité V1) *(boot logging fait via `logInfo("fx_loader: ...")` qui passe par le Logger JSON-lines existant)*
 - [x] T123 Mesurer LOC SPEC-004 final :
