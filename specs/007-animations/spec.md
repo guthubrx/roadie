@@ -2,7 +2,7 @@
 
 **Feature Branch**: `007-animations`
 **Created**: 2026-05-01
-**Status**: Draft
+**Status**: In Progress (engine Bézier + queue + factory + router + module livrés 2026-05-01 ; mode crossfade entrant + frame anim + integration stress test reportés SPEC-007.1)
 **Dependencies**: SPEC-004 fx-framework (RoadieFXCore + osax + AnimationLoop CVDisplayLink + BezierEngine). Optionnellement SPEC-006 RoadieOpacity (pour dim animé).
 **Input** : « Engine d'animations 60-120 FPS style Hyprland avec courbes Bézier configurables. Fade in/out à l'ouverture/fermeture de fenêtre, slide horizontal sur switch desktop, crossfade sur switch stage, frame interpolée sur resize/tile, focus pulse subtil. Config TOML inspirée Hyprland avec `[[fx.animations.bezier]]` réutilisables et `[[fx.animations.events]]` qui mappent event→propriété→durée→courbe. AnimationQueue avec coalescing (nouvelle anim sur même wid+property remplace l'ancienne). Plafond LOC strict : 700, cible 500. »
 
