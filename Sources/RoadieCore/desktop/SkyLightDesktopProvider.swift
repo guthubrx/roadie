@@ -1,5 +1,9 @@
 import Foundation
 import CoreFoundation
+import CoreGraphics
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Implémentation prod de `DesktopProvider` qui lit l'API privée SkyLight.
 /// Lecture seule : ne nécessite pas SIP désactivé. Pattern yabai/AeroSpace.
@@ -38,26 +42,33 @@ public final class SkyLightDesktopProvider: DesktopProvider {
     }
 
     public func requestFocus(uuid: String) {
-        // Sans SIP off, pas d'API publique stable pour scripter Mission Control.
-        // Best-effort via osascript : envoie Ctrl+<N> (1..9) si l'utilisateur a activé
-        // « Switch to Desktop N » dans Réglages Système > Clavier > Raccourcis > Mission Control.
-        // Sinon : aucun effet (pas de crash). L'utilisateur reste maître via gestures/clavier natif.
+        // Stratégie : envoyer Ctrl+<N> via NSAppleScript (= "Switch to Desktop N").
+        // Indépendant du desktop courant (pas de delta-calcul fragile quand
+        // CGSGetActiveSpace retourne un space hors de la liste filtrée type=0,
+        // ex: fullscreen apps ou stage manager macOS).
+        //
+        // Pré-requis macOS : hotkeys « Switch to Desktop N » activés dans
+        // Réglages > Clavier > Raccourcis > Mission Control. Pour activer
+        // par script (sans reboot, mais nécessite logout pour effet runtime) :
+        //   /usr/libexec/PlistBuddy ~/Library/Preferences/com.apple.symbolichotkeys.plist
         let desktops = listDesktops()
         guard let target = desktops.first(where: { $0.uuid == uuid }) else { return }
-        // Mapping macOS QWERTY US : keycodes des chiffres 1..9 (non séquentiels !).
-        // 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25.
-        let digitKeycodes = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+        // Mapping AZERTY/QWERTY physique : keycodes des chiffres 1..0 (non séquentiels).
+        let digitKeycodes = [18, 19, 20, 21, 23, 22, 26, 28, 25, 29]
         guard target.index >= 1, target.index <= digitKeycodes.count else { return }
         let keycode = digitKeycodes[target.index - 1]
-        let script = """
-        tell application "System Events"
-            key code \(keycode) using control down
-        end tell
-        """
-        let task = Process()
-        task.launchPath = "/usr/bin/osascript"
-        task.arguments = ["-e", script]
-        try? task.run()
+        logInfo("requestFocus", ["to_index": String(target.index), "keycode": String(keycode)])
+
+        let scriptText = "tell application \"System Events\" to key code \(keycode) using control down"
+        #if canImport(AppKit)
+        if let script = NSAppleScript(source: scriptText) {
+            var err: NSDictionary?
+            _ = script.executeAndReturnError(&err)
+            if let err = err {
+                logWarn("NSAppleScript error", ["err": "\(err)"])
+            }
+        }
+        #endif
     }
 
     // MARK: - Helpers
