@@ -10,6 +10,10 @@ public enum OSAXCommand: Sendable, Equatable {
     case setBlur(wid: CGWindowID, radius: Int)
     case setTransform(wid: CGWindowID, scale: Double, tx: Double, ty: Double)
     case setLevel(wid: CGWindowID, level: Int)
+    /// SPEC-007 : déplace l'origine de la fenêtre via SLSMoveWindow côté osax.
+    /// Resize via SkyLight trop fragile → daemon utilise AX pour le size.
+    /// `w` et `h` sont conservés dans le payload pour usages futurs.
+    case setFrame(wid: CGWindowID, x: Double, y: Double, w: Double, h: Double)
     case moveWindowToSpace(wid: CGWindowID, spaceUUID: String)
     case setSticky(wid: CGWindowID, sticky: Bool)
 
@@ -38,6 +42,9 @@ public enum OSAXCommand: Sendable, Equatable {
                     "scale": scale, "tx": tx, "ty": ty]
         case .setLevel(let wid, let level):
             return ["cmd": "set_level", "wid": Int(wid), "level": level]
+        case .setFrame(let wid, let x, let y, let w, let h):
+            return ["cmd": "set_frame", "wid": Int(wid),
+                    "x": x, "y": y, "w": w, "h": h]
         case .moveWindowToSpace(let wid, let spaceUUID):
             return ["cmd": "move_window_to_space", "wid": Int(wid), "space_uuid": spaceUUID]
         case .setSticky(let wid, let sticky):

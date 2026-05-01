@@ -77,4 +77,40 @@ final class AnimationFactoryTests: XCTestCase {
             XCTAssertEqual(to, -1440.0)
         } else { XCTFail() }
     }
+
+    func testCrossfadeWithIncomingWIDsGeneratesPair() {
+        let lib = BezierLibrary()
+        let rule = EventRule(event: "stage_changed", properties: ["alpha"],
+                             durationMs: 180, curve: "smooth",
+                             direction: nil, mode: "crossfade")
+        // Sortant = wid 1, entrants = [10, 20, 30]
+        let ctx = EventContext(eventKind: "stage_changed", wid: 1,
+                               currentAlpha: 1.0,
+                               incomingWIDs: [10, 20, 30])
+        let anims = AnimationFactory.make(rule: rule, context: ctx, curveLib: lib)
+        // 1 sortante (wid 1, α 1→0) + 3 entrantes (wids 10/20/30, α 0→1) = 4
+        XCTAssertEqual(anims.count, 4)
+        let outgoing = anims.first { $0.wid == 1 }
+        let incoming = anims.first { $0.wid == 10 }
+        XCTAssertNotNil(outgoing)
+        XCTAssertNotNil(incoming)
+        if case .scalar(let toOut) = outgoing!.to { XCTAssertEqual(toOut, 0.0) } else { XCTFail() }
+        if case .scalar(let toIn) = incoming!.to { XCTAssertEqual(toIn, 1.0) } else { XCTFail() }
+    }
+
+    func testWindowResizedFrameInterpolation() {
+        let lib = BezierLibrary()
+        let rule = EventRule(event: "window_resized", properties: ["frame"],
+                             durationMs: 120, curve: "snappy")
+        let from = CGRect(x: 0, y: 0, width: 100, height: 100)
+        let to = CGRect(x: 100, y: 100, width: 200, height: 200)
+        let ctx = EventContext(eventKind: "window_resized", wid: 5,
+                               currentFrame: from, targetFrame: to)
+        let anims = AnimationFactory.make(rule: rule, context: ctx, curveLib: lib)
+        XCTAssertEqual(anims.count, 1)
+        if case .rect(let r) = anims.first!.to {
+            XCTAssertEqual(r.size.width, 200)
+            XCTAssertEqual(r.origin.x, 100)
+        } else { XCTFail("expected rect") }
+    }
 }

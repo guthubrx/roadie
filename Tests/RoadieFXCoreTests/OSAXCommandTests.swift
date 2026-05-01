@@ -34,6 +34,16 @@ final class OSAXCommandTests: XCTestCase {
         return try JSONSerialization.jsonObject(with: data) as! [String: Any]
     }
 
+    func testSetFrameJSON() throws {
+        let cmd = OSAXCommand.setFrame(wid: 7, x: 10, y: 20, w: 100, h: 200)
+        let line = cmd.toJSONLine()
+        let dict = try parseJSONLine(line)
+        XCTAssertEqual(dict["cmd"] as? String, "set_frame")
+        XCTAssertEqual(dict["wid"] as? Int, 7)
+        XCTAssertEqual(dict["x"] as? Double ?? 0.0, 10.0, accuracy: 0.001)
+        XCTAssertEqual(dict["w"] as? Double ?? 0.0, 100.0, accuracy: 0.001)
+    }
+
     func testMoveWindowToSpaceJSON() {
         let uuid = "550e8400-e29b-41d4-a716-446655440000"
         let cmd = OSAXCommand.moveWindowToSpace(wid: 42, spaceUUID: uuid)
