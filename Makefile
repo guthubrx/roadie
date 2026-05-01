@@ -1,4 +1,4 @@
-.PHONY: build install clean test app-bundle install-app
+.PHONY: build install clean test app-bundle install-app build-fx install-fx uninstall-fx verify-no-cgs-write
 
 PREFIX ?= $(HOME)/.local
 APPDIR ?= $(HOME)/Applications
@@ -67,3 +67,29 @@ install-app: app-bundle
 	@echo "  + ajouter $(APPDIR)/$(APP_NAME) et activer l'interrupteur"
 	@echo ""
 	@echo "Puis : roadied --daemon"
+
+# === SPEC-004 famille SIP-off opt-in ============================
+
+# Build osax bundle Objective-C++
+build-fx: build
+	bash osax/build.sh
+
+# Install osax + dylibs (sudo requis pour /Library/ScriptingAdditions/)
+install-fx: build-fx
+	bash scripts/install-fx.sh
+
+# Uninstall osax + dylibs (laisse le daemon vanilla)
+uninstall-fx:
+	bash scripts/uninstall-fx.sh
+
+# Gate sécurité SC-007 : vérifier qu'aucun symbole CGS d'écriture
+# n'est linké statiquement au daemon. Doit retourner 0.
+verify-no-cgs-write: build
+	@count=$$(nm .build/release/roadied 2>/dev/null | grep -E 'CGSSetWindowAlpha|CGSSetWindowShadow|CGSSetWindowBlur|CGSSetWindowTransform|CGSAddWindowsToSpaces|CGSSetStickyWindow' | wc -l | tr -d ' '); \
+	if [ "$$count" -eq 0 ]; then \
+		echo "✓ SC-007 PASS : 0 symbole CGS d'écriture linké au daemon"; \
+	else \
+		echo "✗ SC-007 FAIL : $$count symboles CGS d'écriture détectés"; \
+		nm .build/release/roadied | grep -E 'CGSSetWindowAlpha|CGSSetWindowShadow|CGSSetWindowBlur|CGSSetWindowTransform|CGSAddWindowsToSpaces|CGSSetStickyWindow'; \
+		exit 1; \
+	fi
