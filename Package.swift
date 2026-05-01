@@ -18,6 +18,8 @@ let package = Package(
         .library(name: "RoadieOpacity", type: .dynamic, targets: ["RoadieOpacity"]),
         // SPEC-007 RoadieAnimations module opt-in
         .library(name: "RoadieAnimations", type: .dynamic, targets: ["RoadieAnimations"]),
+        // SPEC-008 RoadieBorders module opt-in
+        .library(name: "RoadieBorders", type: .dynamic, targets: ["RoadieBorders"]),
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
@@ -120,6 +122,17 @@ let package = Package(
             name: "RoadieAnimationsTests",
             dependencies: ["RoadieAnimations", "RoadieFXCore"],
             path: "Tests/RoadieAnimationsTests"
+        ),
+        // SPEC-008 RoadieBorders target
+        .target(
+            name: "RoadieBorders",
+            dependencies: ["RoadieCore", "RoadieFXCore"],
+            path: "Sources/RoadieBorders"
+        ),
+        .testTarget(
+            name: "RoadieBordersTests",
+            dependencies: ["RoadieBorders"],
+            path: "Tests/RoadieBordersTests"
         ),
     ]
 )
