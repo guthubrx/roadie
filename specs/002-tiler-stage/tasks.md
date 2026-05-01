@@ -151,9 +151,9 @@ Tous les chemins relatifs au worktree `/Users/moi/Nextcloud/10.Scripts/39.roadie
   Documenter dans `docs/performance.md`
 - [X] T064 [P] Vérifier SC-005 (pas de dépendances non-système au runtime) : `otool -L .build/release/roadied` ne montre que `/usr/lib/` et `/System/Library/`. Si TOMLKit lié dynamiquement → vendor en static.
 - [X] T065 [P] Vérifier SC-006 (LOC ≤ 4000) : `find Sources -name '*.swift' -exec grep -vE '^\s*$|^\s*//' {} + | wc -l`. Refactor si dépassé.
-- [ ] T066 [P] Whitelist apps connues problématiques (Zoom, Teams, certains Java) : créer `Sources/RoadieCore/KnownBundleIds.swift` avec workarounds
-- [ ] T067 [P] Au démarrage daemon, snapshotter les fenêtres existantes via `CGWindowListCopyWindowInfo`, traiter dans l'ordre `kCGWindowLayer` (cf. research §9.3)
-- [ ] T068 [P] Gestion popups/dialogs : exclure du tiling toute fenêtre dont `kAXSubroleAttribute ∈ {AXDialog, AXSheet, AXSystemDialog}`
+- [ ] T066 [P] Whitelist apps connues problématiques (Zoom, Teams, certains Java) : créer `Sources/RoadieCore/KnownBundleIds.swift` avec workarounds — **non fait, feature optionnelle, à reconsidérer si bug rapporté**
+- [X] T067 [P] Snapshot fenêtres existantes au boot via `CGWindowListCopyWindowInfo` — implémenté dans `Sources/roadied/main.swift.registerExistingWindows()` ligne 196 et `liveCGWindowIDs()` ligne 381
+- [X] T068 [P] Gestion popups/dialogs : exclus du tiling via `AXSubrole.isFloatingByDefault` (`.dialog`/`.sheet`/`.systemDialog` → isFloating=true) dans `Sources/RoadieCore/Types.swift` ligne 73
 - [X] T069 Code review finale : zéro `// todo` non tracé, zéro `print()` (tout via Logger), zéro `try!` (sauf bootstrap)
 - [X] T070 Implémentation `roadied --help` et `roadie --help` (même mode minimaliste mais cohérent)
 - [X] T071 README.md racine du worktree : pointeur vers quickstart.md + résumé 5 lignes
