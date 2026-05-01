@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<!--
+    Scripting addition AppleScript dictionary minimal — pas de verbe AppleScript
+    réel exposé. La présence du `.sdef` est requise par macOS pour reconnaître
+    le bundle comme scripting addition (chargeable via `tell app "Dock" to load
+    scripting additions`).
+-->
+<dictionary title="roadied">
+    <suite name="roadied" code="rdsa" description="roadie scripting addition (no scripting verbs, server only)">
+    </suite>
+</dictionary>

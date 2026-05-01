@@ -28,4 +28,7 @@ legacy/spec-001-stage-manager/stage.app/
 
 # Logs et état runtime test
 /tmp/
+
+# Artefacts osax (SPEC-004 famille SIP-off)
+osax/build/
 .tmp/
