@@ -5,5 +5,12 @@
 build/
 .build/
 .worktrees/
+DerivedData/
+*.swiftpm/
 *.o
 *.dSYM/
+
+# Le binaire compilé (présent à la racine après `make`)
+/stage
+/stage.x86_64
+/stage.arm64
