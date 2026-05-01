@@ -2,6 +2,16 @@ import Foundation
 import RoadieCore
 import RoadieTiler
 import RoadieStagePlugin
+import RoadieFXCore
+
+/// SPEC-010 : OSAXBridge partagé entre le daemon et les modules FX. Permet au
+/// daemon d'envoyer directement des commandes osax (move_window_to_space,
+/// set_sticky, set_level) sans passer par un module FX intermédiaire.
+/// Note : RoadieFXCore est lié dynamiquement (target `.dynamicLibrary`), donc
+/// le daemon ne lie aucun symbole CGS d'écriture statiquement (SC-007 préservé).
+public enum DaemonOSAXBridge {
+    public static let shared: OSAXBridge = OSAXBridge()
+}
 
 /// Routeur des commandes reçues sur le socket.
 @MainActor
@@ -324,6 +334,53 @@ enum CommandRouter {
             let cfg = FXConfig.load(fromTOML: (try? String(contentsOfFile: ConfigLoader.defaultConfigPath(), encoding: .utf8)) ?? "")
             let reloaded = loader.loadAll(config: cfg)
             return .success(["reloaded": AnyCodable(reloaded.count)])
+
+        case "window.space":
+            // SPEC-010 : déplace fenêtre frontmost vers desktop indiqué par selector
+            // (index 1-based ou label). Délègue résolution UUID au DesktopManager,
+            // envoi via OSAXBridge partagé avec les modules.
+            guard let dm = daemon.desktopManager else {
+                return .error(.multiDesktopDisabled, "multi_desktop disabled")
+            }
+            guard let selector = request.args?["selector"] else {
+                return .error(.invalidArgument, "missing selector")
+            }
+            guard let targetUUID = dm.resolveSelector(selector) else {
+                return .error(.unknownDesktop, "unknown desktop selector: \(selector)")
+            }
+            guard let frontmost = daemon.registry.focusedWindowID else {
+                return .error(.windowNotFound, "no frontmost window")
+            }
+            let result = await DaemonOSAXBridge.shared.send(.moveWindowToSpace(wid: frontmost, spaceUUID: targetUUID))
+            if !result.isOK {
+                return .error(.internalError, "osax move failed")
+            }
+            return .success(["wid": AnyCodable(Int(frontmost)), "target_uuid": AnyCodable(targetUUID)])
+
+        case "window.stick":
+            // SPEC-010 : pose ou retire le sticky flag (visible sur tous desktops).
+            guard let frontmost = daemon.registry.focusedWindowID else {
+                return .error(.windowNotFound, "no frontmost window")
+            }
+            let sticky = (request.args?["sticky"] ?? "true") == "true"
+            let result = await DaemonOSAXBridge.shared.send(.setSticky(wid: frontmost, sticky: sticky))
+            if !result.isOK {
+                return .error(.internalError, "osax set_sticky failed")
+            }
+            return .success(["wid": AnyCodable(Int(frontmost)), "sticky": AnyCodable(sticky)])
+
+        case "window.pin":
+            // SPEC-010 : pose ou retire always-on-top (level 24 / 0).
+            guard let frontmost = daemon.registry.focusedWindowID else {
+                return .error(.windowNotFound, "no frontmost window")
+            }
+            let pinned = (request.args?["pinned"] ?? "true") == "true"
+            let level = pinned ? 24 : 0
+            let result = await DaemonOSAXBridge.shared.send(.setLevel(wid: frontmost, level: level))
+            if !result.isOK {
+                return .error(.internalError, "osax set_level failed")
+            }
+            return .success(["wid": AnyCodable(Int(frontmost)), "pinned": AnyCodable(pinned)])
 
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")

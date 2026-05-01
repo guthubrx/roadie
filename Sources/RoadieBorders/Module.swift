@@ -58,6 +58,16 @@ public final class BordersModule: @unchecked Sendable {
         case .windowFocused:
             lock.lock(); focusedWID = event.wid; lock.unlock()
             refreshAllColors()
+            // SPEC-008 pulse_on_focus : anime borderWidth de l'overlay focused.
+            if config.pulseOnFocus, let wid = event.wid {
+                let thickness = config.clampedThickness
+                Task { @MainActor in
+                    self.lock.lock()
+                    let overlay = self.overlays[wid]
+                    self.lock.unlock()
+                    overlay?.pulse(from: thickness, to: thickness * 2)
+                }
+            }
         case .windowMoved, .windowResized:
             if let wid = event.wid, let frame = event.frame {
                 Task { @MainActor in
@@ -87,6 +97,12 @@ public final class BordersModule: @unchecked Sendable {
                                         thickness: thickness, color: nsColor)
             self.lock.withLock { _ = self.overlays[wid].map { $0.close() }
                                  self.overlays[wid] = overlay }
+            // SPEC-008 force level via osax : niveau 1000 met l'overlay au-dessus
+            // de toutes les NSWindowLevel.floating natives (24).
+            let overlayWID = overlay.overlayWindowID
+            if overlayWID > 0 {
+                _ = await BordersBridge.shared.send(.setLevel(wid: overlayWID, level: 1000))
+            }
         }
     }
 
@@ -121,6 +137,11 @@ public final class BordersModule: @unchecked Sendable {
         }
         return config.inactiveColor
     }
+}
+
+/// Singleton OSAXBridge partagé pour ce module (envois setLevel).
+public final class BordersBridge: @unchecked Sendable {
+    public static let shared: OSAXBridge = OSAXBridge()
 }
 
 /// Convertit un RGBA (config) en NSColor. Retourne nil si le hex est invalide.

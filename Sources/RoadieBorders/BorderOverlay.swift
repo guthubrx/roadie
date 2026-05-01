@@ -23,6 +23,13 @@ public final class BorderOverlay {
     public private(set) var thickness: Int
     public private(set) var color: NSColor
 
+    /// CGWindowID de l'overlay (différent de `trackedWID`). Permet à un caller
+    /// d'envoyer un OSAXCommand.setLevel sur l'overlay pour le forcer au-dessus
+    /// des autres fenêtres `.floating` natives. 0 si pas encore résolu.
+    public var overlayWindowID: CGWindowID {
+        CGWindowID(window.windowNumber)
+    }
+
     public init(wid: CGWindowID, frame: CGRect, thickness: Int, color: NSColor) {
         self.trackedWID = wid
         self.trackedFrame = frame
@@ -81,6 +88,18 @@ public final class BorderOverlay {
         thickness = newThickness
         layer.borderWidth = CGFloat(newThickness)
         updateFrame(trackedFrame)
+    }
+
+    /// SPEC-008 pulse on focus : anime borderWidth `from` → `to` → `from` sur
+    /// `duration` secondes via CAKeyframeAnimation native. Pas de dépendance
+    /// SPEC-007 RoadieAnimations — ce pulse est local au layer de l'overlay.
+    public func pulse(from: Int, to: Int, duration: TimeInterval = 0.25) {
+        let anim = CAKeyframeAnimation(keyPath: "borderWidth")
+        anim.values = [CGFloat(from), CGFloat(to), CGFloat(from)]
+        anim.keyTimes = [0.0, 0.5, 1.0]
+        anim.duration = duration
+        anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(anim, forKey: "pulse")
     }
 
     /// Ferme l'overlay et libère la NSWindow.

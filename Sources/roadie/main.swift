@@ -67,9 +67,33 @@ case "events":
 case "fx":
     handleFX(args: args)
 
+case "window":
+    handleWindow(args: args)
+
 default:
     printUsage()
     exit(64)
+}
+
+/// SPEC-010 : `roadie window space <selector>` / `stick [bool]` / `pin|unpin` / `unstick`.
+func handleWindow(args: [String]) {
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    switch args[2] {
+    case "space":
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "window.space", args: ["selector": args[3]]))
+    case "stick":
+        let sticky = args.count >= 4 ? args[3] : "true"
+        sendAndPrint(Request(command: "window.stick", args: ["sticky": sticky]))
+    case "unstick":
+        sendAndPrint(Request(command: "window.stick", args: ["sticky": "false"]))
+    case "pin":
+        sendAndPrint(Request(command: "window.pin", args: ["pinned": "true"]))
+    case "unpin":
+        sendAndPrint(Request(command: "window.pin", args: ["pinned": "false"]))
+    default:
+        printUsage(); exit(64)
+    }
 }
 
 func handleFX(args: [String]) {
