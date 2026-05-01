@@ -2,7 +2,7 @@
 
 **Feature Branch**: `005-shadowless`
 **Created**: 2026-05-01
-**Status**: Draft
+**Status**: In Progress (MVP Swift livré 2026-05-01 — Module + tests unitaires complets ; reload TOML + intégration osax reportés à SPEC-005.1)
 **Dependencies**: SPEC-004 fx-framework (loader + RoadieFXCore + roadied.osax) doit être livré et stable avant impl
 **Input** : « Premier module FX simple, proof-of-concept du framework SIP-off. Désactive l'ombre des fenêtres tierces (effet "tiling Linux clean"). Modes : `all` (toutes), `tiled-only` (les non-floating uniquement), `floating-only`. Densité paramétrable 0.0-1.0. Hot-reload via `roadie daemon reload`. Plafond LOC strict : 120 (cible 80). »
 
