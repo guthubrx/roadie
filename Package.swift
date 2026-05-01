@@ -57,7 +57,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "roadied",
-            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin"],
+            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin", "RoadieFXCore"],
             path: "Sources/roadied"
         ),
         .executableTarget(
