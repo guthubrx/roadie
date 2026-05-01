@@ -12,6 +12,8 @@ let package = Package(
         .library(name: "RoadieStagePlugin", targets: ["RoadieStagePlugin"]),
         // SPEC-004 fx-framework — chargé runtime via dlopen, JAMAIS lié au daemon
         .library(name: "RoadieFXCore", type: .dynamic, targets: ["RoadieFXCore"]),
+        // SPEC-010 RoadieCrossDesktop module opt-in
+        .library(name: "RoadieCrossDesktop", type: .dynamic, targets: ["RoadieCrossDesktop"]),
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
@@ -81,6 +83,17 @@ let package = Package(
             name: "RoadieFXCoreTests",
             dependencies: ["RoadieFXCore"],
             path: "Tests/RoadieFXCoreTests"
+        ),
+        // SPEC-010 RoadieCrossDesktop target
+        .target(
+            name: "RoadieCrossDesktop",
+            dependencies: ["RoadieCore", "RoadieFXCore"],
+            path: "Sources/RoadieCrossDesktop"
+        ),
+        .testTarget(
+            name: "RoadieCrossDesktopTests",
+            dependencies: ["RoadieCrossDesktop"],
+            path: "Tests/RoadieCrossDesktopTests"
         ),
     ]
 )
