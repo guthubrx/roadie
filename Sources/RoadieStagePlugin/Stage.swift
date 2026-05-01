@@ -1,0 +1,67 @@
+import Foundation
+import RoadieCore
+
+public struct Stage: Codable, Sendable {
+    public let id: StageID
+    public var displayName: String
+    public var memberWindows: [StageMember]
+    public var tilerStrategy: TilerStrategy
+    public var lastActiveAt: Date
+
+    public init(id: StageID, displayName: String,
+                tilerStrategy: TilerStrategy = .bsp,
+                memberWindows: [StageMember] = []) {
+        self.id = id
+        self.displayName = displayName
+        self.tilerStrategy = tilerStrategy
+        self.memberWindows = memberWindows
+        self.lastActiveAt = Date()
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case memberWindows = "members"
+        case tilerStrategy = "tiler_strategy"
+        case lastActiveAt = "last_active_at"
+    }
+}
+
+public struct StageMember: Codable, Sendable {
+    public var cgWindowID: WindowID
+    public let bundleID: String
+    public var titleHint: String
+    public var savedFrame: SavedRect?
+
+    public init(cgWindowID: WindowID, bundleID: String,
+                titleHint: String, savedFrame: SavedRect? = nil) {
+        self.cgWindowID = cgWindowID
+        self.bundleID = bundleID
+        self.titleHint = titleHint
+        self.savedFrame = savedFrame
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case cgWindowID = "cg_window_id"
+        case bundleID = "bundle_id"
+        case titleHint = "title_hint"
+        case savedFrame = "saved_frame"
+    }
+}
+
+/// Représentation Codable d'un CGRect (TOML ne sérialise pas CGRect nativement).
+public struct SavedRect: Codable, Sendable {
+    public let x: Double
+    public let y: Double
+    public let w: Double
+    public let h: Double
+
+    public init(_ rect: CGRect) {
+        x = Double(rect.origin.x); y = Double(rect.origin.y)
+        w = Double(rect.size.width); h = Double(rect.size.height)
+    }
+
+    public var cgRect: CGRect {
+        CGRect(x: x, y: y, width: w, height: h)
+    }
+}
