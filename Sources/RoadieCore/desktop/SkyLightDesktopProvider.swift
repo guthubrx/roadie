@@ -66,18 +66,30 @@ public final class SkyLightDesktopProvider: DesktopProvider {
         guard let displays = CGSCopyManagedDisplaySpaces(cid) as? [[String: Any]] else {
             return nil
         }
+        var triedKeys: [String] = []
         for display in displays {
             guard let spaces = display["Spaces"] as? [[String: Any]] else { continue }
             for entry in spaces {
-                if let id64 = entry["id64"] as? UInt64, id64 == id,
-                   let uuid = entry["uuid"] as? String {
-                    return uuid
-                }
-                if let id32 = entry["id"] as? Int, UInt64(id32) == id,
-                   let uuid = entry["uuid"] as? String {
-                    return uuid
+                if triedKeys.isEmpty { triedKeys = Array(entry.keys) }
+                // Tente plusieurs clés selon les versions macOS :
+                // - "ManagedSpaceID" (Sonoma 14+), "id64", "id"
+                for key in ["ManagedSpaceID", "id64", "id"] {
+                    guard let v = entry[key] else { continue }
+                    let entryID: CGSSpaceID?
+                    if let u = v as? UInt64 { entryID = u }
+                    else if let i = v as? Int { entryID = CGSSpaceID(i) }
+                    else if let i = v as? Int64 { entryID = CGSSpaceID(i) }
+                    else { entryID = nil }
+                    if entryID == id, let uuid = entry["uuid"] as? String {
+                        return uuid
+                    }
                 }
             }
+        }
+        if !triedKeys.isEmpty {
+            logWarn("CGS spaces lookup failed",
+                    ["space_id": String(id),
+                     "available_keys": triedKeys.joined(separator: ",")])
         }
         return nil
     }
