@@ -1,6 +1,6 @@
 # Feature Specification: RoadieCrossDesktop (SPEC-010)
 
-**Feature Branch**: `010-cross-desktop` | **Created**: 2026-05-01 | **Status**: Draft
+**Feature Branch**: `010-cross-desktop` | **Created**: 2026-05-01 | **Status**: In Progress (PinEngine + CommandHandler + Module livrés 2026-05-01 ; CLI sub-verbes + SPEC-003 API câblage + force-tiling reportés SPEC-010.1)
 **Dependencies**: SPEC-004 fx-framework, SPEC-003 multi-desktop awareness (utilise les desktop UUIDs)
 **Input** : « Manipulation programmatique de fenêtre cross-desktop : `roadie window space N`, pinning rules auto, sticky window, always-on-top, force-tiling fenêtres "non-resizable" (FaceTime, Apple Maps - P3 pas prioritaire). Débloque le FR-024 SPEC-003 qui était DEFER V3. Plafond LOC strict 450, cible 300. »
 
