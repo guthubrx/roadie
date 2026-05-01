@@ -294,9 +294,12 @@ func sendDesktopListAsTable() {
             print("(no desktops detected)")
             return
         }
-        // Header
-        print(String(format: "%-5s  %-36s  %-8s  %-7s  %-6s  %s",
-                     "INDEX", "UUID", "LABEL", "CURRENT", "STAGES", "WINDOWS"))
+        // Header — pad manuel car String(format: %s) attend un C-string et crash
+        // sur les String Swift natives (SIGSEGV).
+        func pad(_ s: String, _ w: Int) -> String {
+            s.count >= w ? s : s + String(repeating: " ", count: w - s.count)
+        }
+        print("\(pad("INDEX", 5))  \(pad("UUID", 36))  \(pad("LABEL", 8))  \(pad("CURRENT", 7))  \(pad("STAGES", 6))  WINDOWS")
         for d in desktops {
             let idx = (d["index"] as? Int) ?? 0
             let uuid = (d["uuid"] as? String) ?? ""
@@ -304,8 +307,7 @@ func sendDesktopListAsTable() {
             let isCurrent = uuid == currentUUID ? "*" : ""
             let stages = (d["stage_count"] as? Int) ?? 0
             let windows = (d["window_count"] as? Int) ?? 0
-            print(String(format: "%-5d  %-36s  %-8s  %-7s  %-6d  %d",
-                         idx, uuid, label, isCurrent, stages, windows))
+            print("\(pad(String(idx), 5))  \(pad(uuid, 36))  \(pad(label, 8))  \(pad(isCurrent, 7))  \(pad(String(stages), 6))  \(windows)")
         }
     } catch SocketClient.Error.daemonNotRunning {
         FileHandle.standardError.write(

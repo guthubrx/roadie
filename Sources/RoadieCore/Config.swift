@@ -32,6 +32,30 @@ public struct Config: Codable, Sendable {
         case desktops
     }
 
+    /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
+    /// valeurs par défaut (= comportement V1 strict si l'utilisateur n'a pas migré
+    /// sa config). Codable synthesised throw "keyNotFound" sans cet override, ce
+    /// qui casserait toute config V1 existante au boot V2.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.daemon = try c.decodeIfPresent(DaemonConfig.self, forKey: .daemon) ?? .init()
+        self.tiling = try c.decodeIfPresent(TilingConfig.self, forKey: .tiling) ?? .init()
+        self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? .init()
+        self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? .init()
+        self.multiDesktop = try c.decodeIfPresent(MultiDesktopConfig.self, forKey: .multiDesktop) ?? .init()
+        self.desktops = try c.decodeIfPresent([DesktopRule].self, forKey: .desktops) ?? []
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(daemon, forKey: .daemon)
+        try c.encode(tiling, forKey: .tiling)
+        try c.encode(stageManager, forKey: .stageManager)
+        try c.encode(exclusions, forKey: .exclusions)
+        try c.encode(multiDesktop, forKey: .multiDesktop)
+        try c.encode(desktops, forKey: .desktops)
+    }
+
     /// Validation des règles desktop (FR-018) : chaque DesktopRule DOIT avoir
     /// au moins un de match_index/match_label, jamais les deux. Throw si la config est mal formée.
     public func validateDesktopRules() throws {
