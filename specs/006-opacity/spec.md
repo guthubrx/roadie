@@ -2,7 +2,7 @@
 
 **Feature Branch**: `006-opacity`
 **Created**: 2026-05-01
-**Status**: Draft
+**Status**: In Progress (focus dimming + per-app rules livrés 2026-05-01 ; stage_hide via α + extension StageManager + animate_dim reportés à SPEC-006.1)
 **Dependencies**: SPEC-004 fx-framework. Optionnellement SPEC-007 RoadieAnimations (pour transitions animées de la dim, sinon dim instantané).
 **Input** : « Module focus dimming (style Hyprland dimstrength). Fenêtre focused α=1.0, autres dimées α=0.85. Per-app rules : Slack toujours α=0.92, etc. Stage hide via opacity (α=0 au lieu d'offscreen) en option, alternative à HideStrategy.corner SPEC-002. Plafond LOC strict 220, cible 150. »
 
