@@ -12,6 +12,8 @@ let package = Package(
         .library(name: "RoadieStagePlugin", targets: ["RoadieStagePlugin"]),
         // SPEC-004 fx-framework — chargé runtime via dlopen, JAMAIS lié au daemon
         .library(name: "RoadieFXCore", type: .dynamic, targets: ["RoadieFXCore"]),
+        // SPEC-009 RoadieBlur module opt-in
+        .library(name: "RoadieBlur", type: .dynamic, targets: ["RoadieBlur"]),
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
@@ -81,6 +83,17 @@ let package = Package(
             name: "RoadieFXCoreTests",
             dependencies: ["RoadieFXCore"],
             path: "Tests/RoadieFXCoreTests"
+        ),
+        // SPEC-009 RoadieBlur target
+        .target(
+            name: "RoadieBlur",
+            dependencies: ["RoadieCore", "RoadieFXCore"],
+            path: "Sources/RoadieBlur"
+        ),
+        .testTarget(
+            name: "RoadieBlurTests",
+            dependencies: ["RoadieBlur"],
+            path: "Tests/RoadieBlurTests"
         ),
     ]
 )
