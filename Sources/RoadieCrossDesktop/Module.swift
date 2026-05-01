@@ -56,8 +56,8 @@ public final class CrossDesktopBridge: @unchecked Sendable {
     public static let shared: OSAXBridge = OSAXBridge()
 }
 
-@_cdecl("module_init")
-public func module_init() -> UnsafeMutableRawPointer {
+@_cdecl("roadie_fx_init_crossdesktop")
+public func roadie_fx_init_crossdesktop() -> UnsafeMutableRawPointer {
     let vtable = UnsafeMutablePointer<FXModuleVTable>.allocate(capacity: 1)
     let nameStr = strdup("crossdesktop")!
     let versionStr = strdup("0.1.0")!

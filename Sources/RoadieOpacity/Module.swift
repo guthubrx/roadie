@@ -64,8 +64,8 @@ public final class OpacityBridge: @unchecked Sendable {
     public static let shared: OSAXBridge = OSAXBridge()
 }
 
-@_cdecl("module_init")
-public func module_init() -> UnsafeMutableRawPointer {
+@_cdecl("roadie_fx_init_opacity")
+public func roadie_fx_init_opacity() -> UnsafeMutableRawPointer {
     let vtable = UnsafeMutablePointer<FXModuleVTable>.allocate(capacity: 1)
     let nameStr = strdup("opacity")!
     let versionStr = strdup("0.1.0")!
