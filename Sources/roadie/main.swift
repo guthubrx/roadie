@@ -64,9 +64,24 @@ case "desktop":
 case "events":
     handleEvents(args: args)
 
+case "fx":
+    handleFX(args: args)
+
 default:
     printUsage()
     exit(64)
+}
+
+func handleFX(args: [String]) {
+    guard let verb = args.dropFirst().first else { printUsage(); exit(64) }
+    switch verb {
+    case "status":
+        sendAndPrint(Request(command: "fx.status"))
+    case "reload":
+        sendAndPrint(Request(command: "fx.reload"))
+    default:
+        printUsage(); exit(64)
+    }
 }
 
 func handleWindows(verb: String) {

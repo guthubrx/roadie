@@ -296,6 +296,35 @@ enum CommandRouter {
             dm.focus(uuid: target)
             return .success(["target_uuid": AnyCodable(target)])
 
+        case "fx.status":
+            // SPEC-004 : retourne l'état SIP + osax + modules chargés.
+            // Toujours répond, même si fxLoader nil (= aucun module, vanilla).
+            let sipState = FXLoader.detectSIP().rawValue
+            let osax = (daemon.fxLoader?.modules.contains(where: { _ in true }) ?? false) ? "loaded" : "absent"
+            let modules: [[String: AnyCodable]] = (daemon.fxLoader?.modules ?? []).map { m in
+                [
+                    "name": AnyCodable(m.name),
+                    "version": AnyCodable(m.version),
+                    "loaded_at": AnyCodable(ISO8601DateFormatter().string(from: m.loadedAt))
+                ]
+            }
+            return .success([
+                "sip": AnyCodable(sipState),
+                "osax": AnyCodable(osax),
+                "modules": AnyCodable(modules)
+            ])
+
+        case "fx.reload":
+            // Recharge tous les modules : unload + reload.
+            // Best-effort : si dlclose échoue ou re-load échoue, log + continue.
+            guard let loader = daemon.fxLoader else {
+                return .error(.invalidArgument, "fx loader not initialized")
+            }
+            loader.unloadAll()
+            let cfg = FXConfig.load(fromTOML: (try? String(contentsOfFile: ConfigLoader.defaultConfigPath(), encoding: .utf8)) ?? "")
+            let reloaded = loader.loadAll(config: cfg)
+            return .success(["reloaded": AnyCodable(reloaded.count)])
+
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")
         }
