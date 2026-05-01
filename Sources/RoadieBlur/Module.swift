@@ -76,8 +76,8 @@ public final class BlurBridge: @unchecked Sendable {
     public static let shared: OSAXBridge = OSAXBridge()
 }
 
-@_cdecl("module_init")
-public func module_init() -> UnsafeMutableRawPointer {
+@_cdecl("roadie_fx_init_blur")
+public func roadie_fx_init_blur() -> UnsafeMutableRawPointer {
     let vtable = UnsafeMutablePointer<FXModuleVTable>.allocate(capacity: 1)
     let nameStr = strdup("blur")!
     let versionStr = strdup("0.1.0")!

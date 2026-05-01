@@ -132,8 +132,8 @@ public func nsColor(fromHex hex: String) -> NSColor? {
                    alpha: CGFloat(rgba.a) / 255.0)
 }
 
-@_cdecl("module_init")
-public func module_init() -> UnsafeMutableRawPointer {
+@_cdecl("roadie_fx_init_borders")
+public func roadie_fx_init_borders() -> UnsafeMutableRawPointer {
     let vtable = UnsafeMutablePointer<FXModuleVTable>.allocate(capacity: 1)
     let nameStr = strdup("borders")!
     let versionStr = strdup("0.1.0")!

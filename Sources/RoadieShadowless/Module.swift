@@ -86,8 +86,8 @@ public final class OSAXBridgeProvider: @unchecked Sendable {
 
 /// Entry point appelé par le daemon FXLoader. Retourne un pointeur opaque
 /// vers la vtable que le loader cast en `FXModuleVTable`.
-@_cdecl("module_init")
-public func module_init() -> UnsafeMutableRawPointer {
+@_cdecl("roadie_fx_init_shadowless")
+public func roadie_fx_init_shadowless() -> UnsafeMutableRawPointer {
     let vtable = UnsafeMutablePointer<FXModuleVTable>.allocate(capacity: 1)
     let nameStr = strdup("shadowless")!
     let versionStr = strdup("0.1.0")!

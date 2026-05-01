@@ -71,8 +71,15 @@ public final class FXLoader: @unchecked Sendable {
             FileHandle.standardError.write(Data("fx_loader: dlopen failed for \(path): \(err)\n".utf8))
             return nil
         }
-        guard let initSym = dlsym(handle, "module_init") else {
-            FileHandle.standardError.write(Data("fx_loader: module_init missing in \(path)\n".utf8))
+        // Chaque module FX exporte son init via `@_cdecl("roadie_fx_init_<name>")`
+        // pour éviter les conflits de symboles quand plusieurs modules sont
+        // linkés ensemble (test runner). On extrait le `<name>` du basename
+        // du dylib (ex: `libRoadieShadowless.dylib` → "shadowless"), avec
+        // fallback historique sur `module_init` pour compat.
+        let symbolName = Self.expectedSymbolName(forDylibAt: path)
+        let initSym = dlsym(handle, symbolName) ?? dlsym(handle, "module_init")
+        guard let initSym = initSym else {
+            FileHandle.standardError.write(Data("fx_loader: \(symbolName) missing in \(path)\n".utf8))
             dlclose(handle)
             return nil
         }
@@ -87,6 +94,20 @@ public final class FXLoader: @unchecked Sendable {
         let url = URL(fileURLWithPath: path)
         let module = FXModule(vtable: vtablePtr.pointee, dylibHandle: handle, path: url)
         return module
+    }
+
+    /// Calcule le nom du symbole d'init attendu depuis le path du dylib.
+    /// `libRoadieShadowless.dylib` → `roadie_fx_init_shadowless`.
+    /// `libRoadieCrossDesktop.dylib` → `roadie_fx_init_crossdesktop`.
+    /// Si le pattern ne match pas, retourne `module_init` (fallback historique).
+    static func expectedSymbolName(forDylibAt path: String) -> String {
+        let basename = (path as NSString).lastPathComponent
+        let stripped = basename
+            .replacingOccurrences(of: "lib", with: "")
+            .replacingOccurrences(of: ".dylib", with: "")
+        guard stripped.hasPrefix("Roadie") else { return "module_init" }
+        let moduleName = String(stripped.dropFirst("Roadie".count)).lowercased()
+        return "roadie_fx_init_\(moduleName)"
     }
 
     /// Décharge tous les modules : appelle shutdown puis dlclose.
