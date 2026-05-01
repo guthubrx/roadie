@@ -27,6 +27,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// Override gaps actif sur le desktop courant (US4 — DesktopRule appliquée au switch).
     /// nil = pas d'override, on utilise `config.tiling.effectiveOuterGaps` global.
     var currentDesktopGaps: OuterGaps?
+    /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
+    /// nil tant que `bootstrap()` n'a pas tourné. Toujours instancié, même en SIP fully on.
+    var fxLoader: FXLoader?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -181,6 +184,20 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             self?.periodicScan()
         }
         periodicScanner?.start()
+
+        // SPEC-004 : init FX loader (gracieux même si SIP fully on ou aucun module).
+        // Le daemon reste 100 % fonctionnel sans modules. Si SIP partial off + dylibs
+        // présents : modules chargés, sinon log informatif et continue vanilla.
+        let sipState = FXLoader.detectSIP()
+        let fxConfigText = (try? String(contentsOfFile: ConfigLoader.defaultConfigPath(), encoding: .utf8)) ?? ""
+        let fxCfg = FXConfig.load(fromTOML: fxConfigText)
+        let loader = FXLoader()
+        let loaded = loader.loadAll(config: fxCfg)
+        logInfo("fx_loader: SIP=\(sipState.rawValue), loaded \(loaded.count) module(s)")
+        for m in loaded {
+            logInfo("fx_loader: loaded \(m.name) v\(m.version)")
+        }
+        self.fxLoader = loader
 
         logInfo("roadied ready")
     }

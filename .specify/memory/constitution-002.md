@@ -1,6 +1,6 @@
 # Constitution Projet 002-tiler-stage
 
-**Version** : 1.2.0 | **Créé** : 2026-05-01 | **Dernier amendement** : 2026-05-01 (Phase 9 — principe I' architecture pluggable validé empiriquement par TilerRegistry, MouseRaiser, PeriodicScanner) | **Pour** : SPEC-002 et au-delà
+**Version** : 1.3.0 | **Créé** : 2026-05-01 | **Dernier amendement** : 2026-05-01 (article C' amendé pour ouvrir SkyLight write + scripting addition aux modules opt-in famille SPEC-004+, sous 6 conditions strictes — cf ADR-004) | **Pour** : SPEC-002 et au-delà
 
 Cette constitution complète celle de SPEC-001 (`constitution.md`) en adaptant les principes pour l'échelle du tiler+stage manager (~2 500 LOC, multi-fichier, daemon).
 
@@ -16,8 +16,20 @@ Le scope du daemon (~2 500 LOC) rend le mono-fichier ingérable. Adaptation : **
 ### B'. Dépendances minimisées, pas zéro
 Pour SPEC-001 zéro dépendance était possible. Pour SPEC-002, **TOMLKit** est accepté pour parser la config (à internaliser en V2 si scope reste raisonnable). Toute autre dépendance externe DOIT être justifiée explicitement dans `plan.md` Complexity Tracking. Pas de framework "au cas où".
 
-### C'. Identifiants stables (inchangé)
-`CGWindowID` reste la clé primaire. `_AXUIElementGetWindow` (privé stable depuis 10.7) autorisé. **`SLS*`/SkyLight et scripting addition Dock interdits** (FR-005).
+### C'. Identifiants stables + APIs privées strictement encadrées (amendé 1.3.0)
+
+`CGWindowID` reste la clé primaire. `_AXUIElementGetWindow` (privé stable depuis 10.7) autorisé.
+
+Le **daemon core** (SPEC-001/002/003 + targets statiques `RoadieCore`, `RoadieTiler`, `RoadieStagePlugin`) DOIT s'en tenir aux APIs privées en lecture seule (`CGSGetActiveSpace`, `CGSCopyManagedDisplaySpaces`). Les APIs `SLS*`/SkyLight en écriture (`CGSSetWindow*`, `CGSAddWindowsToSpaces`, etc.) et l'injection via scripting addition Dock SONT AUTORISÉES **uniquement** dans les modules opt-in déclarés par une SPEC dédiée (famille SPEC-004+), à 6 conditions cumulatives strictes :
+
+1. Le daemon core reste 100 % fonctionnel sans aucun module chargé (vérifié par tests SPEC-002/003 régression + SC-007 SPEC-004 = `nm` sans symboles `CGSSetWindow*` linkés statiquement)
+2. Chaque module est un target SPM `.dynamicLibrary` séparé, jamais lié statiquement au daemon
+3. Le daemon ne crash pas si SIP est entièrement actif (no-op gracieux des modules)
+4. La scripting addition est installée par script utilisateur séparé, jamais par roadie automatiquement
+5. Chaque module fait l'objet de sa propre SPEC avec audit de sécurité dédié
+6. Le module est désactivable via flag config `[fx.<module_name>] enabled = false`
+
+Justification complète : voir `docs/decisions/ADR-004-sip-off-modules.md`.
 
 ### D'. Fail loud, log structuré (renforcé)
 - Stderr : erreurs utilisateur immédiates
@@ -69,7 +81,7 @@ V1 actuel : 2 014 LOC ✓ (marge 50 % avant plafond).
 - [ ] Aucun fichier Swift > 200 LOC effectives (sauf justifié explicitement)
 - [ ] Aucune dépendance externe non justifiée dans plan.md
 - [ ] CGWindowID utilisé partout, jamais `(bundleID, title)` comme clé primaire
-- [ ] FR-005 respecté : aucun usage SkyLight/SLS/scripting addition
+- [ ] FR-005 respecté pour le daemon core : aucun symbole CGS d'écriture linké statiquement (`nm roadied | grep CGSSetWindow* | wc -l == 0`). Modules opt-in famille SPEC-004+ exemptés sous les 6 conditions de l'article C' amendé.
 - [ ] Tiler protocol respecté (au moins 2 implementations en V1)
 - [ ] StagePlugin réellement séparé (compile sans Stage si flag off)
 - [ ] Logger structuré utilisé partout, jamais `print()`
