@@ -22,6 +22,8 @@ let package = Package(
         .library(name: "RoadieBorders", type: .dynamic, targets: ["RoadieBorders"]),
         // SPEC-009 RoadieBlur module opt-in
         .library(name: "RoadieBlur", type: .dynamic, targets: ["RoadieBlur"]),
+        // SPEC-010 RoadieCrossDesktop module opt-in
+        .library(name: "RoadieCrossDesktop", type: .dynamic, targets: ["RoadieCrossDesktop"]),
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
@@ -146,6 +148,17 @@ let package = Package(
             name: "RoadieBlurTests",
             dependencies: ["RoadieBlur"],
             path: "Tests/RoadieBlurTests"
+        ),
+        // SPEC-010 RoadieCrossDesktop target
+        .target(
+            name: "RoadieCrossDesktop",
+            dependencies: ["RoadieCore", "RoadieFXCore"],
+            path: "Sources/RoadieCrossDesktop"
+        ),
+        .testTarget(
+            name: "RoadieCrossDesktopTests",
+            dependencies: ["RoadieCrossDesktop"],
+            path: "Tests/RoadieCrossDesktopTests"
         ),
     ]
 )
