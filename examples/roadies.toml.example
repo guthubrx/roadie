@@ -1,0 +1,91 @@
+# roadies — exemple de configuration
+#
+# À copier dans `~/.config/roadies/roadies.toml` puis adapter.
+# Recharger sans redémarrer le daemon : `roadie daemon reload`.
+#
+# Toutes les sections sont optionnelles : roadie démarre avec des défauts si
+# le fichier est absent ou si une section manque.
+
+# ---------------------------------------------------------------------------
+# Section [daemon] — paramètres généraux
+# ---------------------------------------------------------------------------
+[daemon]
+log_level = "info"          # debug | info | warn | error
+socket_path = "~/.roadies/daemon.sock"
+
+# ---------------------------------------------------------------------------
+# Section [tiling] — moteur de tiling et marges (V1)
+# ---------------------------------------------------------------------------
+[tiling]
+default_strategy = "bsp"    # bsp | masterStack
+gaps_outer = 8              # marge externe uniforme (px)
+gaps_inner = 4              # marge entre fenêtres (px)
+master_ratio = 0.6          # pour master-stack uniquement
+
+# Override par côté (optionnel) — utile pour laisser un dock visible :
+# gaps_outer_top = 4
+# gaps_outer_bottom = 30
+# gaps_outer_left = 12
+# gaps_outer_right = 12
+
+# ---------------------------------------------------------------------------
+# Section [stage_manager] — équivalent Apple Stage Manager (V1)
+# ---------------------------------------------------------------------------
+[stage_manager]
+enabled = true
+hide_strategy = "corner"    # corner | minimize | hybrid
+default_stage = "main"
+
+# Stages pré-déclarés (chargés au boot s'ils n'existent pas déjà) :
+[[stage_manager.workspaces]]
+id = "1"
+display_name = "Work"
+
+[[stage_manager.workspaces]]
+id = "2"
+display_name = "Personal"
+
+# ---------------------------------------------------------------------------
+# Section [multi_desktop] — V2 conscience des desktops macOS (Mission Control)
+# ---------------------------------------------------------------------------
+# Désactivé par défaut (compat ascendante stricte FR-020). Mettre à true pour
+# que roadie suive le desktop macOS actif et persiste un état séparé par UUID.
+[multi_desktop]
+enabled = false                 # passer à true pour activer V2 multi-desktop
+back_and_forth = true           # `roadie desktop focus N` quand on est déjà sur N → bascule vers recent
+
+# ---------------------------------------------------------------------------
+# Section [[desktops]] — règles statiques par desktop (V2, optionnelles)
+# ---------------------------------------------------------------------------
+# Chaque règle DOIT avoir EXACTEMENT un de `match_index` ou `match_label`.
+# Les autres champs (default_strategy, gaps_*, default_stage) sont optionnels.
+# Les overrides s'appliquent au focus du desktop matching.
+
+# Exemple 1 : desktop "code" en BSP avec gaps 8 (par défaut, pour mémoire) :
+# [[desktops]]
+# match_label = "code"
+# default_strategy = "bsp"
+# gaps_outer = 8
+# default_stage = "1"
+
+# Exemple 2 : desktop "présentation" en BSP avec marges très généreuses :
+# [[desktops]]
+# match_label = "presentation"
+# default_strategy = "bsp"
+# gaps_outer = 60
+# gaps_inner = 30
+
+# Exemple 3 : desktop d'index 3 en master-stack pour monitoring :
+# [[desktops]]
+# match_index = 3
+# default_strategy = "masterStack"
+# gaps_outer = 4
+
+# ---------------------------------------------------------------------------
+# Section [exclusions] — apps toujours considérées flottantes
+# ---------------------------------------------------------------------------
+[exclusions]
+floating_bundles = [
+    # "com.apple.systempreferences",
+    # "com.apple.finder",
+]

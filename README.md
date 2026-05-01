@@ -9,12 +9,32 @@ Window manager macOS modulaire en Swift, inspiré de yabai et AeroSpace, sans n�
 
 ## Documentation
 
-- [Quickstart](specs/002-tiler-stage/quickstart.md) — install + premier run en 10 minutes
-- [Spécification](specs/002-tiler-stage/spec.md) — 4 user stories, 23 FR, 10 SC
-- [Plan technique](specs/002-tiler-stage/plan.md) — architecture 4 modules
-- [Recherche yabai+AeroSpace](specs/002-tiler-stage/research.md) — 820 lignes
+### V1 — Tiler + Stage Manager (mono-desktop)
+
+- [Quickstart V1](specs/002-tiler-stage/quickstart.md) — install + premier run en 10 minutes
+- [Spécification V1](specs/002-tiler-stage/spec.md) — 4 user stories, 23 FR, 10 SC
+- [Plan technique V1](specs/002-tiler-stage/plan.md) — architecture 4 modules
 - [ADR](docs/decisions/) — 3 décisions architecturales
-- [Implementation log + REX](specs/002-tiler-stage/implementation.md)
+- [Implementation log + REX V1](specs/002-tiler-stage/implementation.md)
+
+### V2 — Multi-desktop (Mission Control awareness)
+
+Roadie suit le desktop macOS actif via `NSWorkspace.activeSpaceDidChangeNotification` + SkyLight,
+persiste un état séparé par UUID, et restaure stages + tree BSP + gaps au switch. Opt-in via
+`multi_desktop.enabled = true`. **Stages V1 (⌥1/⌥2) inchangés.** Migration V1→V2 automatique
+au premier boot.
+
+- [Quickstart V2](specs/003-multi-desktop/quickstart.md) — activation + validation
+- [Spécification V2](specs/003-multi-desktop/spec.md) — 4 user stories P1+P2, 24 FR, 9 SC
+- [Plan V2](specs/003-multi-desktop/plan.md) + [research](specs/003-multi-desktop/research.md)
+- [Contrats CLI](specs/003-multi-desktop/contracts/cli-protocol.md) + [events stream](specs/003-multi-desktop/contracts/events-stream.md)
+- [Implementation log V2](specs/003-multi-desktop/implementation.md)
+
+Nouvelles commandes V2 :
+```
+roadie desktop list/current/focus <selector>/label <name>/back
+roadie events --follow [--filter desktop_changed|stage_changed]
+```
 
 ## Build minimal
 
