@@ -1,9 +1,22 @@
 .DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+Package.resolved
 *.swiftmodule
 *.swiftdoc
 *.swiftsourceinfo
-build/
-.build/
-.worktrees/
 *.o
 *.dSYM/
+build/
+.worktrees/
+
+# Binaires produits
+/roadie
+/roadied
+/roadied.app/
+
+# Logs et état runtime test
+/tmp/
+.tmp/
