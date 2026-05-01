@@ -1,0 +1,55 @@
+{
+  "title": "Stage Manager (39.roadies)",
+  "rules": [
+    {
+      "description": "alt+1 / alt+2 — basculer entre les stages",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "1",
+            "modifiers": { "mandatory": ["left_option"] }
+          },
+          "to": [
+            { "shell_command": "/Users/moi/.local/bin/stage 1" }
+          ]
+        },
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "2",
+            "modifiers": { "mandatory": ["left_option"] }
+          },
+          "to": [
+            { "shell_command": "/Users/moi/.local/bin/stage 2" }
+          ]
+        }
+      ]
+    },
+    {
+      "description": "alt+shift+1 / alt+shift+2 — assigner la fenetre frontmost a un stage",
+      "manipulators": [
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "1",
+            "modifiers": { "mandatory": ["left_option", "left_shift"] }
+          },
+          "to": [
+            { "shell_command": "/Users/moi/.local/bin/stage assign 1" }
+          ]
+        },
+        {
+          "type": "basic",
+          "from": {
+            "key_code": "2",
+            "modifiers": { "mandatory": ["left_option", "left_shift"] }
+          },
+          "to": [
+            { "shell_command": "/Users/moi/.local/bin/stage assign 2" }
+          ]
+        }
+      ]
+    }
+  ]
+}
