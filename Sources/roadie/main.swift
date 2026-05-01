@@ -97,8 +97,8 @@ func handleWindow(args: [String]) {
 }
 
 func handleFX(args: [String]) {
-    guard let verb = args.dropFirst().first else { printUsage(); exit(64) }
-    switch verb {
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    switch args[2] {
     case "status":
         sendAndPrint(Request(command: "fx.status"))
     case "reload":
@@ -379,6 +379,11 @@ func printUsage() {
       roadie desktop label <name>                # name vide → retire
       roadie desktop back                        # alias de focus recent
       roadie events --follow [--filter <event>]  # JSON-lines stream sur stdout
+      roadie fx status | reload                  # SPEC-004 framework SIP-off opt-in
+      roadie window space <prev|next|N|label>    # SPEC-010 déplacer fenêtre cross-desktop
+      roadie window stick [true|false]           # SPEC-010 sticky (visible sur tous desktops)
+      roadie window unstick                      # alias de stick false
+      roadie window pin | unpin                  # SPEC-010 always-on-top
     """
     FileHandle.standardError.write((usage + "\n").data(using: .utf8) ?? Data())
 }
