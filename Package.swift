@@ -14,6 +14,8 @@ let package = Package(
         .library(name: "RoadieFXCore", type: .dynamic, targets: ["RoadieFXCore"]),
         // SPEC-005 RoadieShadowless module opt-in
         .library(name: "RoadieShadowless", type: .dynamic, targets: ["RoadieShadowless"]),
+        // SPEC-006 RoadieOpacity module opt-in
+        .library(name: "RoadieOpacity", type: .dynamic, targets: ["RoadieOpacity"]),
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
@@ -94,6 +96,17 @@ let package = Package(
             name: "RoadieShadowlessTests",
             dependencies: ["RoadieShadowless"],
             path: "Tests/RoadieShadowlessTests"
+        ),
+        // SPEC-006 RoadieOpacity target
+        .target(
+            name: "RoadieOpacity",
+            dependencies: ["RoadieCore", "RoadieFXCore"],
+            path: "Sources/RoadieOpacity"
+        ),
+        .testTarget(
+            name: "RoadieOpacityTests",
+            dependencies: ["RoadieOpacity"],
+            path: "Tests/RoadieOpacityTests"
         ),
     ]
 )
