@@ -1,0 +1,58 @@
+{
+  "scope": "SPEC-003 multi-desktop V2",
+  "cycle": "scoring",
+  "mode": "readonly",
+  "date": "2026-05-01",
+  "note": "Cycle final lecture seule après cycle-1 fix. Re-évaluation post-corrections.",
+  "findings": [
+    {
+      "id": "F2",
+      "severity": "info",
+      "category": "robustness",
+      "description": "Race au boot DesktopManager.start() — Task @MainActor sérialise, négligeable. Conservé en l'état."
+    },
+    {
+      "id": "F3",
+      "severity": "info",
+      "category": "quality",
+      "description": "resolveSelector silencieux sur selector inconnu — UX suffisante via exit 5 côté client."
+    },
+    {
+      "id": "F5",
+      "severity": "low",
+      "category": "robustness",
+      "description": "Migration re-run même jour → graceful no-op. Acceptable."
+    },
+    {
+      "id": "F6",
+      "severity": "info",
+      "category": "robustness",
+      "description": "currentUUID Migration sans validation explicite — caller path safe."
+    },
+    {
+      "id": "F7",
+      "severity": "info",
+      "category": "quality",
+      "description": "Event payload [String:String] designed pour V2."
+    },
+    {
+      "id": "F8",
+      "severity": "low",
+      "category": "quality",
+      "description": "EventBus singleton designed."
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 2,
+    "info": 4,
+    "total": 6,
+    "all_unfixed_are_designed_choices": true
+  },
+  "tests": {
+    "unit": {"v1": 40, "v2": 21, "passed": 61, "failed": 0},
+    "integration_shell": {"automated": 0, "skeleton": 5, "manual_pending": ["T048", "T049", "T076", "T091", "T124"]}
+  }
+}

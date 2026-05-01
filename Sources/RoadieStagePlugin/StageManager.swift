@@ -24,7 +24,10 @@ public final class StageManager {
     private(set) public var currentStageID: StageID?
     private let layoutHooks: LayoutHooks?
 
-    private let stagesDir: String
+    /// Dossier de persistance courant. En mode V1, c'est `~/.config/roadies/stages`.
+    /// En mode V2 multi-desktop, le DesktopManager swap via `reload(stagesDir:)` pour
+    /// pointer vers `~/.config/roadies/desktops/<uuid>/stages` à chaque transition.
+    private(set) public var stagesDir: String
 
     public init(registry: WindowRegistry, hideStrategy: HideStrategy = .corner,
                 stagesDir: String = "~/.config/roadies/stages",
@@ -34,6 +37,38 @@ public final class StageManager {
         self.layoutHooks = layoutHooks
         self.stagesDir = (stagesDir as NSString).expandingTildeInPath
         try? FileManager.default.createDirectory(atPath: self.stagesDir, withIntermediateDirectories: true)
+    }
+
+    /// Multi-desktop V2 : swap atomique du dossier de persistance.
+    /// 1) Sauve l'état du desktop quitté (frames courantes + saveActive).
+    /// 2) Reset l'état en mémoire.
+    /// 3) Pointe `stagesDir` vers le nouveau path.
+    /// 4) Recharge depuis disque (loadFromDisk).
+    /// FR-004 (sauvegarde avant quitter) + FR-005 (state isolé par UUID).
+    public func reload(stagesDir newDir: String) {
+        // 1) Capture frames courantes du stage actif (cohérent avec switchTo).
+        if let current = currentStageID, var stage = stages[current] {
+            for i in 0..<stage.memberWindows.count {
+                let wid = stage.memberWindows[i].cgWindowID
+                if let element = registry.axElement(for: wid),
+                   let frame = AXReader.bounds(element) {
+                    stage.memberWindows[i].savedFrame = SavedRect(frame)
+                }
+            }
+            stages[current] = stage
+            saveStage(stage)
+        }
+        saveActive()
+
+        // 2-3) Reset + swap path
+        stages.removeAll()
+        currentStageID = nil
+        let expanded = (newDir as NSString).expandingTildeInPath
+        self.stagesDir = expanded
+        try? FileManager.default.createDirectory(atPath: expanded, withIntermediateDirectories: true)
+
+        // 4) Recharge
+        loadFromDisk()
     }
 
     public func loadFromDisk() {
@@ -117,10 +152,15 @@ public final class StageManager {
     }
 
     public func switchTo(stageID: StageID) {
-        guard stages[stageID] != nil else {
+        guard let targetStage = stages[stageID] else {
             logWarn("switch: unknown stage", ["stage": stageID.value])
             return
         }
+        // Capturer le from + name pour l'event stage_changed (V2 FR-015).
+        let fromID = currentStageID
+        let fromName = fromID.flatMap { stages[$0]?.displayName } ?? ""
+        let toName = targetStage.displayName
+
         // Capturer les frames actuelles des fenêtres du stage actuel pour restauration future.
         if let current = currentStageID, var stage = stages[current] {
             for i in 0..<stage.memberWindows.count {
@@ -176,7 +216,34 @@ public final class StageManager {
         currentStageID = stageID
         saveStage(target)
         saveActive()
+
+        // Émission event V2 stage_changed (FR-015). desktop_uuid extrait du stagesDir
+        // (.../desktops/<uuid>/stages → uuid). En mode V1, le path est .../stages → ""
+        // et l'event est quand même publié pour les subscribers (filtrable côté client).
+        let desktopUUID = extractDesktopUUID(fromStagesDir: stagesDir)
+        var payload: [String: String] = [
+            "desktop_uuid": desktopUUID,
+            "to": stageID.value,
+            "to_name": toName,
+        ]
+        if let from = fromID {
+            payload["from"] = from.value
+            payload["from_name"] = fromName
+        }
+        EventBus.shared.publish(DesktopEvent(name: "stage_changed", payload: payload))
+
         logInfo("stage switched", ["to": stageID.value])
+    }
+
+    /// Extrait l'UUID du desktop depuis le path `.../desktops/<uuid>/stages`.
+    /// Retourne "" si le path est `.../stages` (mode V1) ou inattendu.
+    private func extractDesktopUUID(fromStagesDir dir: String) -> String {
+        let parts = dir.split(separator: "/").map(String.init)
+        guard parts.count >= 2,
+              parts.last == "stages",
+              let desktopIdx = parts.firstIndex(of: "desktops"),
+              parts.indices.contains(desktopIdx + 1) else { return "" }
+        return parts[desktopIdx + 1]
     }
 
     public func handleWindowDestroyed(_ wid: WindowID) {
