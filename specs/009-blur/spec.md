@@ -1,6 +1,6 @@
 # Feature Specification: RoadieBlur (SPEC-009)
 
-**Feature Branch**: `009-blur` | **Created**: 2026-05-01 | **Status**: Draft
+**Feature Branch**: `009-blur` | **Created**: 2026-05-01 | **Status**: In Progress (module Swift complet livré 2026-05-01 ; integration test + doc reportés SPEC-009.1)
 **Dependencies**: SPEC-004 fx-framework
 **Input** : « Module simple : `CGSSetWindowBackgroundBlurRadius` sur fenêtres tierces. Blur global on/off + per-app rules (ex Slack toujours blur=30). Plafond LOC strict 150, cible 100. »
 
