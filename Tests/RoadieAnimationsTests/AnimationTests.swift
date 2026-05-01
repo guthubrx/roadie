@@ -39,11 +39,20 @@ final class AnimationTests: XCTestCase {
         XCTAssertEqual(cmd, .setAlpha(wid: 42, alpha: 0.5))
     }
 
-    func testCommandFrameNotSupportedYet() {
+    func testCommandFrameSetFrame() {
+        let target = CGRect(x: 10, y: 20, width: 100, height: 200)
         let anim = Animation(wid: 1, property: .frame,
-                             from: .rect(.zero), to: .rect(CGRect(x: 0, y: 0, width: 100, height: 100)),
+                             from: .rect(.zero), to: .rect(target),
                              curve: .linear, startTime: 0, duration: 1)
-        XCTAssertNil(anim.toCommand(value: .rect(.zero)))
+        let cmd = anim.toCommand(value: .rect(target))
+        guard case .setFrame(let wid, let x, let y, let w, let h) = cmd else {
+            XCTFail("expected setFrame"); return
+        }
+        XCTAssertEqual(wid, 1)
+        XCTAssertEqual(x, 10.0, accuracy: 0.001)
+        XCTAssertEqual(y, 20.0, accuracy: 0.001)
+        XCTAssertEqual(w, 100.0, accuracy: 0.001)
+        XCTAssertEqual(h, 200.0, accuracy: 0.001)
     }
 
     func testLerpScalar() {

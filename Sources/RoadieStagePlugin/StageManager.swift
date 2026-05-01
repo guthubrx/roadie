@@ -16,6 +16,15 @@ public struct LayoutHooks: Sendable {
     }
 }
 
+/// SPEC-006 RoadieOpacity peut s'enregistrer comme override pour intercepter
+/// les hide/show des stages et appliquer α=0 au lieu d'offscreen. Si nil :
+/// fallback sur HideStrategyImpl V2 (corner/minimize/hybrid).
+@MainActor
+public protocol StageHideOverride: AnyObject {
+    func hide(wid: WindowID, isTileable: Bool)
+    func show(wid: WindowID, isTileable: Bool)
+}
+
 @MainActor
 public final class StageManager {
     private let registry: WindowRegistry
@@ -23,6 +32,8 @@ public final class StageManager {
     private(set) public var stages: [StageID: Stage] = [:]
     private(set) public var currentStageID: StageID?
     private let layoutHooks: LayoutHooks?
+    /// SPEC-006 : si non nil, override les hide/show via le module RoadieOpacity.
+    public weak var hideOverride: StageHideOverride?
 
     /// Dossier de persistance courant. En mode V1, c'est `~/.config/roadies/stages`.
     /// En mode V2 multi-desktop, le DesktopManager swap via `reload(stagesDir:)` pour
@@ -179,6 +190,9 @@ public final class StageManager {
         //   espace redistribué aux voisines), (2) hide AX physique (offscreen) car
         //   sans ça la fenêtre reste visible à sa dernière position.
         // - Fenêtre flottante : hide AX physique seulement.
+        // SPEC-006 : si un override `hideOverride` est posé (ex : RoadieOpacity en
+        // mode α=0), il prend le pas sur HideStrategyImpl pour les fenêtres
+        // floating et appliquer α=0 au lieu d'offscreen.
         for (id, stage) in stages where id != stageID {
             for member in stage.memberWindows {
                 let wid = member.cgWindowID
@@ -186,7 +200,11 @@ public final class StageManager {
                 if isTileable, let hooks = layoutHooks {
                     hooks.setLeafVisible(wid, false)
                 }
-                HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
+                if let override = hideOverride {
+                    override.hide(wid: wid, isTileable: isTileable)
+                } else {
+                    HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
+                }
             }
         }
 
@@ -201,8 +219,13 @@ public final class StageManager {
             if isTileable, let hooks = layoutHooks {
                 hooks.setLeafVisible(wid, true)
                 // Pas de show ici : applyLayout va setBounds au bon endroit.
+                if let override = hideOverride { override.show(wid: wid, isTileable: true) }
             } else {
-                HideStrategyImpl.show(wid, registry: registry, strategy: hideStrategy)
+                if let override = hideOverride {
+                    override.show(wid: wid, isTileable: false)
+                } else {
+                    HideStrategyImpl.show(wid, registry: registry, strategy: hideStrategy)
+                }
                 if let saved = member.savedFrame, let element = registry.axElement(for: wid) {
                     AXReader.setBounds(element, frame: saved.cgRect)
                 }

@@ -8,27 +8,36 @@ public struct EventContext: Sendable {
     public let timestamp: TimeInterval
     public let wid: CGWindowID?
     public let currentFrame: CGRect?
+    public let targetFrame: CGRect?
     public let currentAlpha: Double?
     public let currentScale: Double?
     public let screenWidth: Double?
     public let screenHeight: Double?
+    /// SPEC-007 : pour le mode crossfade stage_changed, liste des wids entrants
+    /// (stage destination). L'AnimationFactory génère des animations α 0→1
+    /// pour chacun en plus de l'animation sortante α 1→0 sur `wid`.
+    public let incomingWIDs: [CGWindowID]
 
     public init(eventKind: String,
                 timestamp: TimeInterval = Date().timeIntervalSince1970,
                 wid: CGWindowID? = nil,
                 currentFrame: CGRect? = nil,
+                targetFrame: CGRect? = nil,
                 currentAlpha: Double? = nil,
                 currentScale: Double? = nil,
                 screenWidth: Double? = nil,
-                screenHeight: Double? = nil) {
+                screenHeight: Double? = nil,
+                incomingWIDs: [CGWindowID] = []) {
         self.eventKind = eventKind
         self.timestamp = timestamp
         self.wid = wid
         self.currentFrame = currentFrame
+        self.targetFrame = targetFrame
         self.currentAlpha = currentAlpha
         self.currentScale = currentScale
         self.screenWidth = screenWidth
         self.screenHeight = screenHeight
+        self.incomingWIDs = incomingWIDs
     }
 }
 
@@ -55,6 +64,16 @@ public enum AnimationFactory {
             if let anim = makeOne(prop: prop, rule: rule, context: context,
                                   curve: curve, duration: duration, start: start) {
                 animations.append(anim)
+            }
+            // SPEC-007 : mode crossfade — pour stage_changed + alpha, on ajoute
+            // une animation entrante α 0→1 pour chaque wid du stage cible.
+            if rule.mode == "crossfade" && rule.event == "stage_changed" && prop == .alpha {
+                for inWID in context.incomingWIDs {
+                    animations.append(Animation(wid: inWID, property: .alpha,
+                                                from: .scalar(0.0), to: .scalar(1.0),
+                                                curve: curve,
+                                                startTime: start, duration: duration))
+                }
             }
         }
         return animations
@@ -111,8 +130,14 @@ public enum AnimationFactory {
             let w = context.screenWidth ?? 1440.0
             return (.scalar(0.0), .scalar(rule.direction == "horizontal" ? -w : w))
         case ("stage_changed", .alpha):
-            // Crossfade sortant : 1 → 0 (l'entrant est géré séparément par 2e Animation)
+            // Crossfade sortant : 1 → 0. L'entrant est ajouté en plus dans
+            // `make()` via `context.incomingWIDs` (anims α 0→1 par wid cible).
             return (.scalar(context.currentAlpha ?? 1.0), .scalar(0.0))
+        case ("window_resized", .frame):
+            if let from = context.currentFrame, let to = context.targetFrame {
+                return (.rect(from), .rect(to))
+            }
+            return (nil, nil)
         default:
             return (nil, nil)
         }

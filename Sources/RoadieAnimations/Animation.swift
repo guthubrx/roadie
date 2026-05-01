@@ -93,9 +93,10 @@ public struct Animation: Sendable {
             return .setTransform(wid: wid, scale: 1.0, tx: x, ty: 0)
         case (.translateY, .scalar(let y)):
             return .setTransform(wid: wid, scale: 1.0, tx: 0, ty: y)
-        case (.frame, .rect):
-            // V1 : pas de OSAXCommand.setFrame (à étendre dans osax). On no-op pour l'instant.
-            return nil
+        case (.frame, .rect(let r)):
+            return .setFrame(wid: wid,
+                             x: Double(r.origin.x), y: Double(r.origin.y),
+                             w: Double(r.size.width), h: Double(r.size.height))
         default:
             return nil
         }
