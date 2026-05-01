@@ -1,6 +1,6 @@
 # Feature Specification: RoadieBorders (SPEC-008)
 
-**Feature Branch**: `008-borders` | **Created**: 2026-05-01 | **Status**: Draft
+**Feature Branch**: `008-borders` | **Created**: 2026-05-01 | **Status**: In Progress (logique pure Config + ColorResolver + Module skeleton livrés 2026-05-01 ; BorderOverlay NSWindow + integration pulse SPEC-007 reportés SPEC-008.1)
 **Dependencies**: SPEC-004 fx-framework. Optionnel SPEC-007 RoadieAnimations (pour pulse animé).
 **Input** : « Bordure colorée statique autour fenêtre focused, style i3/Sway. Couleurs active/inactive configurables. Pulse sur changement focus (utilise SPEC-007). Border config par stage actif (couleur différente par stage). Gradient animé droppé après revue scope (déco non utile). Plafond LOC strict 280, cible 200. »
 
