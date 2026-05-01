@@ -80,4 +80,14 @@ public final class WindowRegistry {
     public func windows(in stage: StageID) -> [WindowState] {
         windows.values.filter { $0.stageID == stage }
     }
+
+    /// Multi-desktop V2 — au `desktop_changed`, marque toutes les fenêtres présentes
+    /// dans le registry comme appartenant au desktop d'arrivée (FR-007).
+    /// Les fenêtres orphelines d'un desktop antérieur conservent leur `desktopUUID`
+    /// existant jusqu'à reapparition (cf. data-model SPEC-003).
+    public func applyDesktopUUID(_ uuid: String) {
+        for wid in windows.keys {
+            update(wid) { $0.desktopUUID = uuid }
+        }
+    }
 }

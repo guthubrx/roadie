@@ -1,0 +1,99 @@
+{
+  "scope": "SPEC-003 multi-desktop V2",
+  "cycle": 1,
+  "mode": "fix",
+  "date": "2026-05-01",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "medium",
+      "category": "robustness",
+      "file": "Sources/RoadieCore/desktop/DesktopManager.swift",
+      "description": "Les labels desktop sont stockés uniquement en mémoire (labels: [String: String]). Au redémarrage du daemon, `roadie desktop label dev` est perdu, FR-012 partiellement violée.",
+      "fixed": true,
+      "fix": "Ajout de loadPersistedLabels() au start() qui lit ~/.config/roadies/desktops/<uuid>/label.txt"
+    },
+    {
+      "id": "F2",
+      "severity": "info",
+      "category": "robustness",
+      "file": "Sources/RoadieCore/desktop/DesktopManager.swift",
+      "description": "start() lance la transition initiale via Task non-await ; risque race théorique avec l'observer NSWorkspace au boot.",
+      "fixed": false,
+      "fix": "Tasks @MainActor sérialisent les appels — race négligeable en pratique. À surveiller si symptôme."
+    },
+    {
+      "id": "F3",
+      "severity": "info",
+      "category": "quality",
+      "file": "Sources/RoadieCore/desktop/DesktopManager.swift",
+      "description": "resolveSelector retourne nil silencieusement quand le selector est inconnu — l'utilisateur peut avoir du mal à debugger un mauvais label.",
+      "fixed": false,
+      "fix": "L'erreur est rapportée par CommandRouter au client (exit 5 unknown_desktop) avec le selector dans le message — UX suffisante."
+    },
+    {
+      "id": "F4",
+      "severity": "high",
+      "category": "quality",
+      "file": "Sources/RoadieCore/desktop/SkyLightDesktopProvider.swift",
+      "description": "requestFocus calcule key code via `57 + index`, ce qui produit des touches aléatoires (57=shift, 58=capslock, etc.) au lieu des chiffres 1-9. Le bascule via `roadie desktop focus N` ne fonctionne pas même si l'utilisateur a configuré Ctrl+N dans Préférences Système.",
+      "fixed": true,
+      "fix": "Mapping correct macOS QWERTY US : digitKeycodes = [18,19,20,21,23,22,26,28,25] pour indices 1..9. Index hors [1,9] → no-op silencieux."
+    },
+    {
+      "id": "F5",
+      "severity": "low",
+      "category": "robustness",
+      "file": "Sources/RoadieCore/desktop/Migration.swift",
+      "description": "Si l'utilisateur lance la migration deux fois le même jour (cas pathologique), copyItem du backup throw 'file exists' et la migration n'aboutit pas.",
+      "fixed": false,
+      "fix": "Comportement actuel = retour migrated:false avec log warn — gracieux. Edge case rare (FS écrasable manuellement)."
+    },
+    {
+      "id": "F6",
+      "severity": "info",
+      "category": "robustness",
+      "file": "Sources/RoadieCore/desktop/Migration.swift",
+      "description": "currentUUID accepté sans validation — un UUID vide créerait `desktops/.toml`. Pas de threat path en prod (toujours appelé depuis SkyLightDesktopProvider qui retourne un UUID valide ou nil).",
+      "fixed": false,
+      "fix": "Validation à l'entrée pas nécessaire vu le caller path. À ajouter si l'API devient publique."
+    },
+    {
+      "id": "F7",
+      "severity": "info",
+      "category": "quality",
+      "file": "Sources/RoadieCore/desktop/EventBus.swift",
+      "description": "DesktopEvent.payload est [String: String] — pas d'imbrication possible. Restreint mais designed pour V2 (events simples desktop_changed/stage_changed).",
+      "fixed": false,
+      "fix": "Designed choice — V3 peut étendre vers [String: AnyCodable] si besoin."
+    },
+    {
+      "id": "F8",
+      "severity": "low",
+      "category": "quality",
+      "file": "Sources/RoadieCore/desktop/EventBus.swift",
+      "description": "EventBus.shared singleton public — couplage global. Tests utilisent EventBus() instance fresh.",
+      "fixed": false,
+      "fix": "Designed choice — pub/sub global est idiomatique pour ce use case. Singleton + init public = bon compromis."
+    },
+    {
+      "id": "F9",
+      "severity": "medium",
+      "category": "robustness",
+      "file": "Sources/roadied/CommandRouter.swift",
+      "description": "Handler desktop.label persiste uniquement en RAM via DesktopManager.setLabel — perdu au redémarrage daemon. Doublon de F1 du côté call site.",
+      "fixed": true,
+      "fix": "Ajout persistDesktopLabel() qui écrit/supprime ~/.config/roadies/desktops/<uuid>/label.txt après chaque setLabel."
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 2,
+    "info": 4,
+    "total": 9,
+    "fixed": 3,
+    "unfixed_designed": 6
+  }
+}

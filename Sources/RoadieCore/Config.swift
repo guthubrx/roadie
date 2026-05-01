@@ -6,15 +6,21 @@ public struct Config: Codable, Sendable {
     public var tiling: TilingConfig
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
+    public var multiDesktop: MultiDesktopConfig
+    public var desktops: [DesktopRule]
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
                 stageManager: StageManagerConfig = .init(),
-                exclusions: ExclusionsConfig = .init()) {
+                exclusions: ExclusionsConfig = .init(),
+                multiDesktop: MultiDesktopConfig = .init(),
+                desktops: [DesktopRule] = []) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
         self.exclusions = exclusions
+        self.multiDesktop = multiDesktop
+        self.desktops = desktops
     }
 
     enum CodingKeys: String, CodingKey {
@@ -22,6 +28,116 @@ public struct Config: Codable, Sendable {
         case tiling
         case stageManager = "stage_manager"
         case exclusions
+        case multiDesktop = "multi_desktop"
+        case desktops
+    }
+
+    /// Validation des règles desktop (FR-018) : chaque DesktopRule DOIT avoir
+    /// au moins un de match_index/match_label, jamais les deux. Throw si la config est mal formée.
+    public func validateDesktopRules() throws {
+        for (idx, rule) in desktops.enumerated() {
+            try rule.validate(positionForError: idx)
+        }
+    }
+}
+
+/// Section `[multi_desktop]` de `roadies.toml`. Désactivé par défaut (FR-020 compat V1).
+public struct MultiDesktopConfig: Codable, Sendable {
+    public var enabled: Bool
+    public var backAndForth: Bool
+
+    public init(enabled: Bool = false, backAndForth: Bool = true) {
+        self.enabled = enabled
+        self.backAndForth = backAndForth
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case backAndForth = "back_and_forth"
+    }
+}
+
+/// Section `[[desktops]]` répétable : règles statiques par desktop (FR-018).
+public struct DesktopRule: Codable, Sendable {
+    public var matchIndex: Int?
+    public var matchLabel: String?
+    public var defaultStrategy: TilerStrategy?
+    public var gapsOuter: Int?
+    public var gapsOuterTop: Int?
+    public var gapsOuterBottom: Int?
+    public var gapsOuterLeft: Int?
+    public var gapsOuterRight: Int?
+    public var gapsInner: Int?
+    public var defaultStage: String?
+
+    public init(matchIndex: Int? = nil, matchLabel: String? = nil,
+                defaultStrategy: TilerStrategy? = nil,
+                gapsOuter: Int? = nil,
+                gapsOuterTop: Int? = nil, gapsOuterBottom: Int? = nil,
+                gapsOuterLeft: Int? = nil, gapsOuterRight: Int? = nil,
+                gapsInner: Int? = nil,
+                defaultStage: String? = nil) {
+        self.matchIndex = matchIndex
+        self.matchLabel = matchLabel
+        self.defaultStrategy = defaultStrategy
+        self.gapsOuter = gapsOuter
+        self.gapsOuterTop = gapsOuterTop
+        self.gapsOuterBottom = gapsOuterBottom
+        self.gapsOuterLeft = gapsOuterLeft
+        self.gapsOuterRight = gapsOuterRight
+        self.gapsInner = gapsInner
+        self.defaultStage = defaultStage
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case matchIndex = "match_index"
+        case matchLabel = "match_label"
+        case defaultStrategy = "default_strategy"
+        case gapsOuter = "gaps_outer"
+        case gapsOuterTop = "gaps_outer_top"
+        case gapsOuterBottom = "gaps_outer_bottom"
+        case gapsOuterLeft = "gaps_outer_left"
+        case gapsOuterRight = "gaps_outer_right"
+        case gapsInner = "gaps_inner"
+        case defaultStage = "default_stage"
+    }
+
+    public func validate(positionForError idx: Int) throws {
+        let hasIdx = matchIndex != nil
+        let hasLbl = matchLabel != nil
+        if !hasIdx && !hasLbl {
+            throw DesktopRuleError.missingMatcher(rulePosition: idx)
+        }
+        if hasIdx && hasLbl {
+            throw DesktopRuleError.bothMatchers(rulePosition: idx)
+        }
+    }
+
+    /// Construit un GapsOverride à partir des champs gaps_* de la règle.
+    /// Tous les champs nil → retourne nil (pas d'override actif).
+    public func gapsOverride() -> GapsOverride? {
+        let top = gapsOuterTop ?? gapsOuter
+        let bottom = gapsOuterBottom ?? gapsOuter
+        let left = gapsOuterLeft ?? gapsOuter
+        let right = gapsOuterRight ?? gapsOuter
+        if top == nil && bottom == nil && left == nil && right == nil {
+            return nil
+        }
+        return GapsOverride(top: top, bottom: bottom, left: left, right: right)
+    }
+}
+
+public enum DesktopRuleError: Error, CustomStringConvertible {
+    case missingMatcher(rulePosition: Int)
+    case bothMatchers(rulePosition: Int)
+
+    public var description: String {
+        switch self {
+        case .missingMatcher(let i):
+            return "[[desktops]] rule #\(i): need at least match_index or match_label"
+        case .bothMatchers(let i):
+            return "[[desktops]] rule #\(i): cannot have both match_index and match_label"
+        }
     }
 }
 

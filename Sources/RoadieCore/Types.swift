@@ -89,6 +89,10 @@ public enum ErrorCode: String, Codable, Sendable {
     case windowNotFound = "window_not_found"
     case accessibilityDenied = "accessibility_denied"
     case internalError = "internal_error"
+    /// V2 : `multi_desktop.enabled = false` mais commande desktop demandée (exit 4 CLI).
+    case multiDesktopDisabled = "multi_desktop_disabled"
+    /// V2 : selector desktop introuvable (exit 5 CLI).
+    case unknownDesktop = "unknown_desktop"
 }
 
 // MARK: - WindowState
@@ -105,11 +109,16 @@ public struct WindowState: Sendable {
     public var isFullscreen: Bool
     public var workspaceID: WorkspaceID
     public var stageID: StageID?
+    /// UUID du desktop macOS (Mission Control) sur lequel cette fenêtre est physiquement
+    /// présente. nil au boot tant que la transition initiale n'a pas mis à jour le registry
+    /// (FR-007 + data-model SPEC-003).
+    public var desktopUUID: String?
 
     public init(cgWindowID: WindowID, pid: pid_t, bundleID: String,
                 title: String, frame: CGRect, subrole: AXSubrole,
                 isFloating: Bool, isMinimized: Bool = false, isFullscreen: Bool = false,
-                workspaceID: WorkspaceID = .main, stageID: StageID? = nil) {
+                workspaceID: WorkspaceID = .main, stageID: StageID? = nil,
+                desktopUUID: String? = nil) {
         self.cgWindowID = cgWindowID
         self.pid = pid
         self.bundleID = bundleID
@@ -121,6 +130,7 @@ public struct WindowState: Sendable {
         self.isFullscreen = isFullscreen
         self.workspaceID = workspaceID
         self.stageID = stageID
+        self.desktopUUID = desktopUUID
     }
 
     public var isTileable: Bool {

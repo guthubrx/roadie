@@ -84,6 +84,12 @@ public final class Server: @unchecked Sendable {
                 self.send(resp, on: connection)
                 continue
             }
+            // V2 events stream : mode push (FR-014). La connexion reste ouverte tant
+            // que le client ne ferme pas. Pas de buffer côté daemon (auto-flush).
+            if request.command == "events.subscribe" {
+                self.startEventStream(on: connection, request: request)
+                continue
+            }
             Task { @MainActor [weak self] in
                 guard let self = self, let handler = self.handler else {
                     let resp = Response.error(.internalError, "no handler")
@@ -94,6 +100,26 @@ public final class Server: @unchecked Sendable {
                 self.send(resp, on: connection)
             }
         }
+    }
+
+    /// Mode push : ack + souscription EventBus, chaque event devient une ligne
+    /// JSON envoyée immédiatement sur la connexion. La Task se termine quand le
+    /// stream se ferme (continuation cancelled au cancel de la connexion).
+    private func startEventStream(on connection: NWConnection, request: Request) {
+        let ack = Response.success(["subscribed": AnyCodable(true)])
+        self.send(ack, on: connection)
+        Task { @MainActor [weak self] in
+            let stream = EventBus.shared.subscribe()
+            for await event in stream {
+                let line = event.toJSONLine()
+                guard let data = line.data(using: .utf8) else { continue }
+                self?.sendRaw(data, on: connection)
+            }
+        }
+    }
+
+    private func sendRaw(_ data: Data, on connection: NWConnection) {
+        connection.send(content: data, completion: .contentProcessed { _ in })
     }
 
     private func send(_ response: Response, on connection: NWConnection) {
