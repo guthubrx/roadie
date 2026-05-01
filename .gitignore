@@ -1,16 +1,27 @@
 .DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
+Package.resolved
 *.swiftmodule
 *.swiftdoc
 *.swiftsourceinfo
-build/
-.build/
-.worktrees/
-DerivedData/
-*.swiftpm/
 *.o
 *.dSYM/
+build/
+.worktrees/
 
-# Le binaire compilé (présent à la racine après `make`)
+# Binaires SPEC-001 (présents à la racine après `make`)
 /stage
 /stage.x86_64
 /stage.arm64
+
+# Binaires SPEC-002 (roadied + bundle .app)
+/roadie
+/roadied
+/roadied.app/
+
+# Logs et état runtime test
+/tmp/
+.tmp/
