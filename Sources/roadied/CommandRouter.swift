@@ -272,6 +272,11 @@ enum CommandRouter {
             }
             return .success(["wid": AnyCodable(Int(frontmost)), "pinned": AnyCodable(pinned)])
 
+        // MARK: - SPEC-012 window.display
+
+        case "window.display":
+            return await handleWindowDisplay(request: request, daemon: daemon)
+
         // MARK: - SPEC-011 desktop.*
 
         case "desktop.list":
