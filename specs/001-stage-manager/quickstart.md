@@ -17,7 +17,7 @@ Guide minimal d'installation et de premier usage. Cible : utilisateur déjà à 
 ## Build
 
 ```bash
-cd /Users/moi/Nextcloud/10.Scripts/39.roadies   # racine du repo
+cd <path-to-roadie>   # racine du repo cloné
 make
 ```
 
@@ -47,7 +47,7 @@ Au premier lancement, le binaire vous dira sur stderr exactement quoi faire :
 stage 1
 # stage : permission Accessibility manquante.
 # Ouvre Réglages Système → Confidentialité et sécurité → Accessibilité,
-# ajoute le binaire (chemin : /Users/moi/.local/bin/stage) et coche-le.
+# ajoute le binaire (chemin : ~/.local/bin/stage) et coche-le.
 ```
 
 Faites-le, puis relancez. La permission est mémorisée — à faire une seule fois.

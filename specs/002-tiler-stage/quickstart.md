@@ -17,7 +17,7 @@ Guide install + premier usage. Cible : utilisateur déjà à l'aise en terminal 
 ## 1. Build
 
 ```bash
-cd /Users/moi/Nextcloud/10.Scripts/39.roadies/.worktrees/002-tiler-stage
+cd <repo-root>/.worktrees/002-tiler-stage
 swift build -c release
 ```
 
@@ -172,12 +172,12 @@ Le daemon n'inclut pas de gestion de hotkeys (principe Unix). Tu choisis ton out
     {
       "type": "basic",
       "from": { "key_code": "h", "modifiers": { "mandatory": ["left_shift", "left_command", "left_control", "left_option"] } },
-      "to": [{ "shell_command": "/Users/moi/.local/bin/roadie focus left" }]
+      "to": [{ "shell_command": "$HOME/.local/bin/roadie focus left" }]
     },
     {
       "type": "basic",
       "from": { "key_code": "j", "modifiers": { "mandatory": ["left_shift", "left_command", "left_control", "left_option"] } },
-      "to": [{ "shell_command": "/Users/moi/.local/bin/roadie focus down" }]
+      "to": [{ "shell_command": "$HOME/.local/bin/roadie focus down" }]
     }
     /* idem k=up, l=right, etc. */
   ]
@@ -188,7 +188,7 @@ Le daemon n'inclut pas de gestion de hotkeys (principe Unix). Tu choisis ton out
 
 ### BetterTouchTool
 
-Crée des raccourcis "Execute Shell Script" avec les commandes `/Users/moi/.local/bin/roadie focus left` etc.
+Crée des raccourcis "Execute Shell Script" avec les commandes `$HOME/.local/bin/roadie focus left` etc.
 
 ### skhd
 
@@ -221,7 +221,8 @@ Pour que `roadied` se lance à chaque login, créer un LaunchAgent :
   <string>com.local.roadies</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Users/moi/Applications/roadied.app/Contents/MacOS/roadied</string>
+    <!-- plist macOS n'expand pas ~ ni $HOME : remplace par ton chemin absolu -->
+    <string>/Users/USERNAME/Applications/roadied.app/Contents/MacOS/roadied</string>
   </array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

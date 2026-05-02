@@ -12,7 +12,7 @@ set -euo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/Applications/Xcode.app/Contents/Developer/usr/bin"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-APP_BIN="/Users/moi/Applications/roadied.app/Contents/MacOS/roadied"
+APP_BIN="$HOME/Applications/roadied.app/Contents/MacOS/roadied"
 CLI_BIN="$HOME/.local/bin/roadie"
 LOG="/tmp/roadied.log"
 

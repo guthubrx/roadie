@@ -21,7 +21,7 @@ description: "Tâches d'implémentation — Stage Manager Suckless"
 - Code source : `stage.swift` (mono-fichier à la racine, principe A constitution)
 - Build : `Makefile` à la racine
 - Tests d'acceptation : `tests/*.sh`
-- Tous les chemins sont relatifs à la racine du worktree `/Users/moi/Nextcloud/10.Scripts/39.roadies/.worktrees/001-stage-manager/`
+- Tous les chemins sont relatifs à la racine du worktree `<repo-root>/.worktrees/001-stage-manager/`
 
 ---
 

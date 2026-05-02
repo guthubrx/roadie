@@ -11,11 +11,11 @@ Convention : `- [ ] T<nnn> [P?] [US<k>?] Description + chemin`. `[P]` paralléli
 
 Préparer les fichiers et dépendances de base.
 
-- [ ] T001 Vérifier que `RoadieCore` lie déjà `AppKit` et `CoreGraphics` (devraient l'être via SkyLight imports SPEC-011) — pas de modif Package.swift nécessaire en théorie ; sinon ajouter `linkerSettings .linkedFramework("AppKit")` dans `Package.swift` target RoadieCore
-- [ ] T002 [P] Créer `Sources/RoadieCore/Display.swift` (entité Pure data, Sendable, Codable) — squelette uniquement, conforme à data-model.md
-- [ ] T003 [P] Créer `Tests/RoadieCoreTests/DisplayRegistryTests.swift` (squelette empty test class)
-- [ ] T004 [P] Créer `Tests/RoadieDesktopsTests/MultiDisplayPersistenceTests.swift` (squelette)
-- [ ] T005 [P] Étendre `Tests/StaticChecks/no-cgs.sh` pour inclure `Sources/RoadieCore/DisplayRegistry.swift` et `Sources/RoadieCore/Display.swift` dans le périmètre (modifs minimes du glob — déjà couvert par `Sources/RoadieDesktops/` ; il faut élargir au scope SPEC-012)
+- [x] T001 Vérifier que `RoadieCore` lie déjà `AppKit` et `CoreGraphics` (devraient l'être via SkyLight imports SPEC-011) — pas de modif Package.swift nécessaire en théorie ; sinon ajouter `linkerSettings .linkedFramework("AppKit")` dans `Package.swift` target RoadieCore
+- [x] T002 [P] Créer `Sources/RoadieCore/Display.swift` (entité Pure data, Sendable, Codable) — squelette uniquement, conforme à data-model.md
+- [x] T003 [P] Créer `Tests/RoadieCoreTests/DisplayRegistryTests.swift` (squelette empty test class)
+- [x] T004 [P] Créer `Tests/RoadieDesktopsTests/MultiDisplayPersistenceTests.swift` (squelette)
+- [x] T005 [P] Étendre `Tests/StaticChecks/no-cgs.sh` pour inclure `Sources/RoadieCore/DisplayRegistry.swift` et `Sources/RoadieCore/Display.swift` dans le périmètre (modifs minimes du glob — déjà couvert par `Sources/RoadieDesktops/` ; il faut élargir au scope SPEC-012)
 
 ---
 
@@ -23,13 +23,13 @@ Préparer les fichiers et dépendances de base.
 
 Briques de base bloquantes pour toutes les user stories.
 
-- [ ] T006 [P] Implémenter `Sources/RoadieCore/Display.swift` avec struct `Display` (id, index, uuid, name, frame, visibleFrame, isMain, isActive, tilerStrategy, gapsOuter, gapsInner) + initializer convenience depuis `NSScreen` (R-001, FR-001). Codable + Sendable.
-- [ ] T007 [P] Créer `Sources/RoadieCore/DisplayProvider.swift` : protocol `DisplayProvider` avec `func currentScreens() -> [NSScreen]`. Impl `NSScreenDisplayProvider` (production) + `MockDisplayProvider` (tests). Pattern R-011.
-- [ ] T008 Créer `Sources/RoadieCore/DisplayRegistry.swift` : actor avec `displays: [Display]`, `provider: any DisplayProvider`, `activeID: CGDirectDisplayID?`. Méthodes `refresh()` async, `display(at:)`, `display(forID:)`, `display(forUUID:)`, `displayContaining(point:)`, `setActive(id:)`, `count`. Conforme R-001..R-003 + FR-001..003, FR-005.
-- [ ] T009 [US7] Étendre `DisplayRegistry` : observer `NSApplication.didChangeScreenParametersNotification` dans `init()`, déclencher `refresh()` async + recovery (FR-002).
-- [ ] T010 [P] Étendre `Sources/RoadieDesktops/DesktopState.swift` : ajouter champ `displayUUID: String?` sur `WindowEntry`. Backward-compat (Codable.decode tolère absence). Conforme FR-020.
-- [ ] T011 Mettre à jour `Sources/RoadieDesktops/Parser.swift` : sérialisation/désérialisation `display_uuid` champ optionnel TOML.
-- [ ] T012 [P] Tests `Tests/RoadieDesktopsTests/MultiDisplayPersistenceTests.swift` : round-trip `WindowEntry` avec et sans `displayUUID`.
+- [x] T006 [P] Implémenter `Sources/RoadieCore/Display.swift` avec struct `Display` (id, index, uuid, name, frame, visibleFrame, isMain, isActive, tilerStrategy, gapsOuter, gapsInner) + initializer convenience depuis `NSScreen` (R-001, FR-001). Codable + Sendable.
+- [x] T007 [P] Créer `Sources/RoadieCore/DisplayProvider.swift` : protocol `DisplayProvider` avec `func currentScreens() -> [NSScreen]`. Impl `NSScreenDisplayProvider` (production) + `MockDisplayProvider` (tests). Pattern R-011.
+- [x] T008 Créer `Sources/RoadieCore/DisplayRegistry.swift` : actor avec `displays: [Display]`, `provider: any DisplayProvider`, `activeID: CGDirectDisplayID?`. Méthodes `refresh()` async, `display(at:)`, `display(forID:)`, `display(forUUID:)`, `displayContaining(point:)`, `setActive(id:)`, `count`. Conforme R-001..R-003 + FR-001..003, FR-005.
+- [x] T009 [US7] Étendre `DisplayRegistry` : observer `NSApplication.didChangeScreenParametersNotification` dans `init()`, déclencher `refresh()` async + recovery (FR-002).
+- [x] T010 [P] Étendre `Sources/RoadieDesktops/DesktopState.swift` : ajouter champ `displayUUID: String?` sur `WindowEntry`. Backward-compat (Codable.decode tolère absence). Conforme FR-020.
+- [x] T011 Mettre à jour `Sources/RoadieDesktops/Parser.swift` : sérialisation/désérialisation `display_uuid` champ optionnel TOML.
+- [x] T012 [P] Tests `Tests/RoadieDesktopsTests/MultiDisplayPersistenceTests.swift` : round-trip `WindowEntry` avec et sans `displayUUID`.
 
 ---
 

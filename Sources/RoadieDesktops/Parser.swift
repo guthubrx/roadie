@@ -43,6 +43,10 @@ public func serialize(_ desktop: RoadieDesktop) -> String {
         lines.append("expected_w = \(win.expectedFrame.size.width)")
         lines.append("expected_h = \(win.expectedFrame.size.height)")
         lines.append("stage_id = \(win.stageID)")
+        // SPEC-012 FR-020 : n'écrire display_uuid que si renseigné (backward-compat)
+        if let uuid = win.displayUUID {
+            lines.append("display_uuid = \"\(uuid)\"")
+        }
         lines.append("")
     }
     return lines.joined(separator: "\n")
@@ -133,13 +137,18 @@ private func parseWindows(from table: TOMLTable) throws -> [WindowEntry] {
         let w = t["expected_w"]?.double ?? 800
         let h = t["expected_h"]?.double ?? 600
         let stageID = t["stage_id"]?.int ?? 1
+        // SPEC-012 FR-020 : lecture tolérante — absence = nil (SPEC-011 compat)
+        let displayUUID: String? = t["display_uuid"]?.string.flatMap {
+            $0.isEmpty ? nil : $0
+        }
         let frame = CGRect(x: x, y: y, width: w, height: h)
         entries.append(WindowEntry(
             cgwid: UInt32(cgwid),
             bundleID: bundleID,
             title: title,
             expectedFrame: frame,
-            stageID: stageID
+            stageID: stageID,
+            displayUUID: displayUUID
         ))
     }
     return entries

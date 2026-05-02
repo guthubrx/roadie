@@ -51,6 +51,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var desktopRegistry: DesktopRegistry?
     /// SPEC-011 : orchestrateur de bascule. nil si desktops.enabled=false.
     var desktopSwitcher: DesktopSwitcher?
+    /// SPEC-012 : registry des écrans physiques.
+    var displayRegistry: DisplayRegistry?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -102,7 +104,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             Ouvre Réglages Système > Confidentialité et sécurité > Accessibilité,
             ajoute le binaire et coche-le.
 
-            Chemin attendu : /Users/moi/Applications/roadied.app
+            Chemin attendu : ~/Applications/roadied.app
 
             """.data(using: .utf8) ?? Data())
             exit(2)
@@ -367,6 +369,22 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         } else {
             logInfo("desktops disabled (desktops.enabled=false)")
         }
+
+        // SPEC-012 T009 US7 : init DisplayRegistry + observer didChangeScreenParameters.
+        // L'observer est dans bootstrap() et non dans l'actor car une notification
+        // ne peut pas être observée proprement depuis un actor Swift.
+        // Le hook recovery (T026-T029) sera câblé en Sprint 2.
+        let dspRegistry = DisplayRegistry()
+        await dspRegistry.refresh()
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak dspRegistry] _ in
+            Task { await dspRegistry?.refresh() }
+        }
+        self.displayRegistry = dspRegistry
+        logInfo("display_registry initialized", ["count": String(await dspRegistry.count)])
 
         logInfo("roadied ready")
     }

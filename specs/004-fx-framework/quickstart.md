@@ -21,7 +21,7 @@ Procédure pour installer et valider le framework FX sur une machine déjà équ
 V2 ne casse pas V1. La famille FX est strictement opt-in.
 
 ```bash
-cd /Users/moi/Nextcloud/10.Scripts/39.roadies/.worktrees/004-fx-framework
+cd <repo-root>/.worktrees/004-fx-framework
 make build-fx       # compile RoadieFXCore.dylib + module stub + osax bundle
 sudo make install-fx # dépose osax dans /Library/ScriptingAdditions/
 ```
@@ -118,7 +118,7 @@ roadie fx status
 ### Test SC-007 — daemon clean
 
 ```bash
-nm /Users/moi/.local/bin/roadied | grep -E 'CGSSetWindowAlpha|CGSSetWindowShadow|CGSSetWindowBlur|CGSSetWindowTransform|CGSAddWindowsToSpaces' | wc -l
+nm $HOME/.local/bin/roadied | grep -E 'CGSSetWindowAlpha|CGSSetWindowShadow|CGSSetWindowBlur|CGSSetWindowTransform|CGSAddWindowsToSpaces' | wc -l
 ```
 
 Doit retourner **0**. Si > 0 → le daemon a été contaminé par un linkage statique illicite, c'est un bug bloquant.
@@ -179,7 +179,7 @@ codesign --force --sign - --options runtime ~/.local/lib/roadie/*.dylib
 
 Cause : UID mismatch. Vérifier :
 ```bash
-echo "UID daemon : $(stat -f '%u' /Users/moi/.local/bin/roadied)"
+echo "UID daemon : $(stat -f '%u' $HOME/.local/bin/roadied)"
 echo "UID osax owner : $(stat -f '%u' /var/tmp/roadied-osax.sock)"
 # Doivent être identiques (= ton uid utilisateur)
 ```

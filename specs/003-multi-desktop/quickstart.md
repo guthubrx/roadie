@@ -15,7 +15,7 @@ Procédure pour activer et valider la conscience multi-desktop sur une installat
 V2 ne casse pas V1. La mise à jour suit le flow standard :
 
 ```bash
-cd /Users/moi/Nextcloud/10.Scripts/39.roadies/.worktrees/003-multi-desktop
+cd <repo-root>/.worktrees/003-multi-desktop
 make install-app
 ```
 

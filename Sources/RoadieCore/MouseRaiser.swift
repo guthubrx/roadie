@@ -30,7 +30,7 @@ public final class MouseRaiser {
             FileHandle.standardError.write("""
             roadied: permission Input Monitoring manquante — click-to-raise désactivé.
             Réglages Système > Confidentialité et sécurité > Surveillance des entrées,
-            ajoute /Users/moi/Applications/roadied.app et coche-le, puis relance le démon.
+            ajoute ~/Applications/roadied.app et coche-le, puis relance le démon.
 
             """.data(using: .utf8) ?? Data())
             logWarn("MouseRaiser disabled: Input Monitoring not granted")
