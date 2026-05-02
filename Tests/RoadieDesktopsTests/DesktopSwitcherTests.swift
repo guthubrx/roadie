@@ -2,14 +2,43 @@ import XCTest
 import CoreGraphics
 @testable import RoadieDesktops
 
-/// Vérifie qu'une position est hors de la zone visible, quel que soit le setup d'écrans.
-/// - Fallback headless : x ou y très négatif (≤ -1000)
-/// - Mode dynamique multi-display : x très positif (≥ 3000, hors du bounding box)
-/// Aucune fenêtre applicative réelle n'a |x| > 1000 dans un setup normal.
-private func isOffscreenPosition(_ point: CGPoint?) -> Bool {
-    guard let p = point else { return false }
-    return p.x <= -1000 || p.x >= 3000 || p.y <= -1000
+// MARK: - MockStageOps
+
+/// Mock de DesktopStageOps pour les tests unitaires (T016, T023).
+/// Enregistre les appels sans effets secondaires système.
+actor MockStageOps: DesktopStageOps {
+    enum Call: Equatable {
+        case currentStageID
+        case deactivateAll
+        case activate(Int)
+    }
+
+    private(set) var calls: [Call] = []
+    private var stubbedStageID: Int? = 1
+
+    func stubCurrentStageID(_ id: Int?) {
+        stubbedStageID = id
+    }
+
+    func currentStageID() async -> Int? {
+        calls.append(.currentStageID)
+        return stubbedStageID
+    }
+
+    func deactivateAll() async {
+        calls.append(.deactivateAll)
+    }
+
+    func activate(_ stageID: Int) async {
+        calls.append(.activate(stageID))
+    }
+
+    func reset() {
+        calls = []
+    }
 }
+
+// MARK: - DesktopSwitcherTests
 
 /// Tests de la state machine DesktopSwitcher (T023, FR-002, FR-006, FR-023, FR-025).
 final class DesktopSwitcherTests: XCTestCase {
@@ -33,8 +62,8 @@ final class DesktopSwitcherTests: XCTestCase {
     private func makeSwitcher(
         count: Int = 5,
         backAndForth: Bool = true,
-        mover: MockWindowMover? = nil
-    ) async -> (DesktopSwitcher, MockWindowMover, DesktopRegistry, DesktopEventBus) {
+        stageOps: MockStageOps? = nil
+    ) async -> (DesktopSwitcher, MockStageOps, DesktopRegistry, DesktopEventBus) {
         let registry = DesktopRegistry(configDir: tmpDir, count: count)
         await registry.load()
 
@@ -60,19 +89,19 @@ final class DesktopSwitcherTests: XCTestCase {
         try? await registry.save(d1)
         try? await registry.save(d2)
 
-        let mockMover = mover ?? MockWindowMover()
+        let mockOps = stageOps ?? MockStageOps()
         let bus = DesktopEventBus()
         let cfg = DesktopSwitcherConfig(count: count, backAndForth: backAndForth)
         let switcher = DesktopSwitcher(
-            registry: registry, mover: mockMover, bus: bus, config: cfg
+            registry: registry, stageOps: mockOps, bus: bus, config: cfg
         )
-        return (switcher, mockMover, registry, bus)
+        return (switcher, mockOps, registry, bus)
     }
 
     // MARK: - testBasicSwitch (T023)
 
     func testBasicSwitch() async throws {
-        let (switcher, mover, registry, bus) = await makeSwitcher()
+        let (switcher, stageOps, registry, bus) = await makeSwitcher()
         let stream = await bus.subscribe()
         let exp = expectation(description: "event received")
         let eventTask = Task {
@@ -86,26 +115,25 @@ final class DesktopSwitcherTests: XCTestCase {
 
         try await switcher.switch(to: 2)
 
+        // Vérifier le registry
         let currentID = await registry.currentID
         XCTAssertEqual(currentID, 2)
         let recentID = await registry.recentID
         XCTAssertEqual(recentID, 1)
 
-        // Vérifier que les fenêtres desktop 1 sont offscreen.
-        // L'invariant est display-agnostique : x très négatif (fallback headless)
-        // OU x très positif (calcul dynamique multi-display).
-        // Aucune fenêtre visible n'a |x| > 1000 dans un setup réaliste.
-        let moves = await mover.moves
-        let wid100Pos = moves.last(where: { $0.cgwid == 100 })?.point
-        let wid200Pos = moves.last(where: { $0.cgwid == 200 })?.point
-        XCTAssertTrue(isOffscreenPosition(wid100Pos), "wid100 should be offscreen, got \(String(describing: wid100Pos))")
-        XCTAssertTrue(isOffscreenPosition(wid200Pos), "wid200 should be offscreen, got \(String(describing: wid200Pos))")
+        // Vérifier la séquence d'appels StageOps : deactivateAll puis activate(1)
+        // (activeStageID du desktop 2 = 1 par défaut)
+        let calls = await stageOps.calls
+        XCTAssertTrue(calls.contains(.deactivateAll),
+                      "deactivateAll doit être appelé lors d'une bascule")
+        XCTAssertTrue(calls.contains(.activate(1)),
+                      "activate(1) doit être appelé pour le stage actif du desktop cible")
 
-        // Fenêtres desktop 2 restaurées à leur expectedFrame
-        let wid300Pos = moves.last(where: { $0.cgwid == 300 })?.point
-        let wid400Pos = moves.last(where: { $0.cgwid == 400 })?.point
-        XCTAssertEqual(wid300Pos, CGPoint(x: 200, y: 200))
-        XCTAssertEqual(wid400Pos, CGPoint(x: 50, y: 50))
+        // deactivateAll doit précéder activate
+        let deactivateIdx = calls.firstIndex(of: .deactivateAll)!
+        let activateIdx = calls.firstIndex(of: .activate(1))!
+        XCTAssertLessThan(deactivateIdx, activateIdx,
+                          "deactivateAll doit précéder activate")
 
         await fulfillment(of: [exp], timeout: 1.0)
         eventTask.cancel()
@@ -114,15 +142,15 @@ final class DesktopSwitcherTests: XCTestCase {
     // MARK: - testIdempotentNoop (FR-006, T023)
 
     func testIdempotentNoop() async throws {
-        let (switcher, mover, registry, _) = await makeSwitcher(backAndForth: false)
+        let (switcher, stageOps, registry, _) = await makeSwitcher(backAndForth: false)
 
         // desktop courant = 1, focus 1 → no-op
         try await switcher.switch(to: 1)
 
         let currentID = await registry.currentID
         XCTAssertEqual(currentID, 1)
-        let moves = await mover.moves
-        XCTAssertTrue(moves.isEmpty, "no moves expected for no-op, got \(moves.count)")
+        let calls = await stageOps.calls
+        XCTAssertTrue(calls.isEmpty, "aucun appel stageOps attendu pour no-op, got \(calls)")
     }
 
     // MARK: - testBackAndForth (FR-006, T023)
@@ -171,12 +199,9 @@ final class DesktopSwitcherTests: XCTestCase {
     /// 3 switches enchaînés quasi-simultanément → seul le dernier doit être appliqué.
 
     func testRapidSwitchCollapsing() async throws {
-        let (switcher, mover, registry, _) = await makeSwitcher(count: 5)
+        let (switcher, stageOps, registry, _) = await makeSwitcher(count: 5)
 
-        // Soumettre 3 bascules quasi-simultanément. L'ordre d'arrivée à l'actor
-        // n'est pas garanti avec `async let`, donc on teste la **propriété** :
-        // toutes les bascules se sérialisent sans crash, l'état final est l'un
-        // des targets demandés, et le desktop 1 (de départ) n'est plus courant.
+        // Soumettre 3 bascules quasi-simultanément.
         async let s1: Void = switcher.switch(to: 2)
         async let s2: Void = switcher.switch(to: 3)
         async let s3: Void = switcher.switch(to: 4)
@@ -188,12 +213,10 @@ final class DesktopSwitcherTests: XCTestCase {
         XCTAssertNotEqual(finalID, 1,
                           "Desktop 1 (initial) ne doit plus être courant après 3 switches")
 
-        // Les fenêtres de desktop 1 doivent être offscreen dans leur dernier
-        // mouvement enregistré (sérialisation correcte, pas de fenêtre orpheline).
-        let moves = await mover.moves
-        let lastPos100 = moves.last(where: { $0.cgwid == 100 })?.point
-        XCTAssertTrue(isOffscreenPosition(lastPos100),
-                      "Window 100 (desktop 1) doit être offscreen après bascule, got \(String(describing: lastPos100))")
+        // Au moins un deactivateAll doit avoir été appelé (bascule effective).
+        let calls = await stageOps.calls
+        XCTAssertTrue(calls.contains(.deactivateAll),
+                      "deactivateAll doit être appelé lors d'au moins une bascule")
     }
 
     // MARK: - testBackNoRecentThrows
@@ -207,6 +230,30 @@ final class DesktopSwitcherTests: XCTestCase {
             // Attendu
         } catch {
             XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - testDeactivateBeforeActivate
+
+    func testDeactivateBeforeActivate() async throws {
+        let (switcher, stageOps, _, _) = await makeSwitcher()
+
+        try await switcher.switch(to: 2)
+        try await switcher.switch(to: 1)
+
+        // Vérifier que chaque bascule a bien la séquence deactivate → activate
+        let calls = await stageOps.calls
+        var lastDeactivate = -1
+        for (i, call) in calls.enumerated() {
+            switch call {
+            case .deactivateAll:
+                lastDeactivate = i
+            case .activate:
+                XCTAssertGreaterThan(i, lastDeactivate,
+                    "activate doit toujours suivre deactivateAll — appel \(i) sans deactivate précédent")
+            default:
+                break
+            }
         }
     }
 }

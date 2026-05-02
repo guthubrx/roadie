@@ -210,6 +210,9 @@ enum CommandRouter {
             guard let stageStr = request.args?["stage_id"] else {
                 return .error(.invalidArgument, "missing stage_id")
             }
+            if stageStr == "1" {
+                return .error(.invalidArgument, "cannot delete default stage 1")
+            }
             sm.deleteStage(id: StageID(stageStr))
             return .success()
 
