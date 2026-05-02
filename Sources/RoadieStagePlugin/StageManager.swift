@@ -161,13 +161,20 @@ public final class StageManager {
 
     public func assign(wid: WindowID, to stageID: StageID) {
         guard let state = registry.get(wid) else { return }
-        // Retirer de tout autre stage
+        // Retirer de tout autre stage. Lazy stages : un stage qui devient vide
+        // suite à ce retrait est auto-détruit (UX "le stage existe par son contenu").
+        var emptied: [StageID] = []
         for (id, stage) in stages where id != stageID {
             var s = stage
             s.memberWindows.removeAll { $0.cgWindowID == wid }
             stages[id] = s
-            saveStage(s)
+            if s.memberWindows.isEmpty {
+                emptied.append(id)
+            } else {
+                saveStage(s)
+            }
         }
+        for id in emptied { deleteStage(id: id) }
         // Ajouter au stage cible
         guard var target = stages[stageID] else {
             logWarn("assign: unknown stage", ["stage": stageID.value])
@@ -299,14 +306,21 @@ public final class StageManager {
     }
 
     public func handleWindowDestroyed(_ wid: WindowID) {
+        var emptied: [StageID] = []
         for (id, stage) in stages {
             var s = stage
             let before = s.memberWindows.count
             s.memberWindows.removeAll { $0.cgWindowID == wid }
             if s.memberWindows.count != before {
-                stages[id] = s
-                saveStage(s)
+                if s.memberWindows.isEmpty {
+                    emptied.append(id)
+                } else {
+                    stages[id] = s
+                    saveStage(s)
+                }
             }
         }
+        // Lazy stages : auto-destroy si vidé par la destruction de fenêtre.
+        for id in emptied { deleteStage(id: id) }
     }
 }

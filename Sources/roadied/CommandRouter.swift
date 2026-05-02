@@ -177,14 +177,16 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id")
             }
             let stageID = StageID(stageStr)
-            guard sm.stages[stageID] != nil else {
-                return .error(.unknownStage, "unknown stage \(stageStr)")
-            }
             guard let wid = daemon.registry.focusedWindowID else {
                 return .error(.windowNotFound, "no focused window to assign")
             }
+            // Lazy stages : auto-créer le stage s'il n'existe pas. Évite à
+            // l'utilisateur de devoir `stage create N <name>` avant d'assigner.
+            if sm.stages[stageID] == nil {
+                _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
+            }
             sm.assign(wid: wid, to: stageID)
-            return .success()
+            return .success(["created": AnyCodable(true), "stage_id": AnyCodable(stageStr)])
 
         case "stage.create":
             guard let sm = daemon.stageManager else {

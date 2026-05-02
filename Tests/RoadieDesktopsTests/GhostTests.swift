@@ -3,6 +3,13 @@ import CoreGraphics
 @testable import RoadieDesktops
 import RoadieCore
 
+/// Vérifie qu'une position est hors de la zone visible, quel que soit le setup d'écrans.
+/// - Fallback headless : x ≤ -1000
+/// - Mode dynamique multi-display : x ≥ 3000 (hors du bounding box global)
+private func isOffscreenCoordX(_ x: CGFloat) -> Bool {
+    x <= -1000 || x >= 3000
+}
+
 /// Test anti-fantôme : après 100 bascules, aucune fenêtre n'est laissée offscreen
 /// à tort — les fenêtres du desktop courant sont toujours à leur expectedFrame (SC-002).
 final class GhostTests: XCTestCase {
@@ -86,12 +93,14 @@ final class GhostTests: XCTestCase {
             }
         }
 
-        // Vérifier que les fenêtres des autres desktops SONT offscreen
+        // Vérifier que les fenêtres des autres desktops SONT offscreen.
+        // Invariant display-agnostique : x très négatif (fallback) OU très positif
+        // (calcul dynamique). Cf. isOffscreenCoordX pour les seuils.
         for (id, wins) in desktops where id != finalCurrentID {
             for win in wins {
                 let lastPos = moves.last(where: { $0.cgwid == win.cgwid })?.point
                 if let pos = lastPos {
-                    XCTAssertLessThanOrEqual(pos.x, offscreenThreshold,
+                    XCTAssertTrue(isOffscreenCoordX(pos.x),
                         "Window \(win.cgwid) of desktop \(id) should be offscreen, got x=\(pos.x)")
                 }
             }

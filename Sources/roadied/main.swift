@@ -227,16 +227,46 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             self.desktopSwitcher = dSwitcher
 
             // SPEC-011 T-boot : populer le DesktopRegistry avec les fenêtres déjà
-            // enregistrées dans WindowRegistry (bootstrap AX antérieur à l'init
-            // desktops). Les fenêtres offscreen (x < -1000) sont ignorées.
+            // enregistrées dans WindowRegistry. Recovery : si une fenêtre est
+            // physiquement offscreen (laissée hors-écran par un daemon précédent
+            // tué pendant une bascule), on la ramène à une position visible avant
+            // de l'enregistrer. Sans ça, l'expectedFrame est offscreen et toute
+            // bascule la rendrait invisible définitivement.
             let currentDeskID = await dRegistry.currentID
+            // Bounding visible : union des visibleFrame (NS) → AX top-left.
+            let nsScreens = NSScreen.screens
+            let mainHeight = nsScreens.first?.frame.height ?? 0
+            let visibleAX: [CGRect] = nsScreens.map { ns in
+                let v = ns.visibleFrame
+                return CGRect(x: v.origin.x,
+                              y: mainHeight - (v.origin.y + v.height),
+                              width: v.width, height: v.height)
+            }
+            func isOnScreen(_ rect: CGRect) -> Bool {
+                visibleAX.contains { $0.intersects(rect) }
+            }
+            // Position de fallback pour fenêtre offscreen au boot : coin haut-gauche
+            // du primary screen, marge 80 px.
+            let fallback = CGPoint(x: 80, y: 80)
             for state in registry.allWindows where state.isTileable {
-                guard state.frame.origin.x > -1000 else { continue }
+                var frame = state.frame
+                if !isOnScreen(frame) {
+                    // Recovery visuelle + state propre.
+                    frame.origin = fallback
+                    if let element = registry.axElement(for: state.cgWindowID) {
+                        AXReader.setBounds(element, frame: frame)
+                    }
+                    registry.updateFrame(state.cgWindowID, frame: frame)
+                    logInfo("boot: recovered offscreen window",
+                            ["wid": String(state.cgWindowID),
+                             "from_x": String(format: "%.0f", state.frame.origin.x),
+                             "from_y": String(format: "%.0f", state.frame.origin.y)])
+                }
                 let entry = WindowEntry(
                     cgwid: UInt32(state.cgWindowID),
                     bundleID: state.bundleID,
                     title: state.title,
-                    expectedFrame: state.frame,
+                    expectedFrame: frame,
                     stageID: 1
                 )
                 do {
@@ -500,12 +530,55 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
               let frame = AXReader.bounds(element) else { return }
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
+        propagateExpectedFrame(wid: wid, frame: frame)
     }
     func axDidResizeWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
               let frame = AXReader.bounds(element) else { return }
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
+        propagateExpectedFrame(wid: wid, frame: frame)
+    }
+
+    /// SPEC-011 FR-005 : propage la nouvelle frame au DesktopRegistry pour que la
+    /// prochaine bascule de desktop restaure la position/taille courante.
+    /// Guards : (a) feature active, (b) hors fenêtre anti-feedback applyLayout 200 ms,
+    /// (c) frame on-screen (exclut positions offscreen de la bascule, typiquement
+    /// >= 3000 ou <= -1000, cf. DesktopSwitcher).
+    private func propagateExpectedFrame(wid: WindowID, frame: CGRect) {
+        guard let dReg = desktopRegistry,
+              Date().timeIntervalSince(lastApplyTimestamp) >= 0.2 else { return }
+        // Filtre on-screen rigoureux : la frame doit intersecter le visibleFrame
+        // d'au moins un écran connecté (en coords AX top-left). Sinon c'est une
+        // position offscreen (bascule en cours, ou fenêtre laissée hors-écran
+        // par un autre process) → on n'écrase pas l'expectedFrame mémorisée.
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { return }
+        let mainHeight = screens[0].frame.height
+        let onScreen = screens.contains { ns in
+            // visibleFrame en coords Quartz (origin bottom-left).
+            // Conversion AX top-left : axY = mainHeight - (ns.maxY)
+            let vis = ns.visibleFrame
+            let axRect = CGRect(
+                x: vis.origin.x,
+                y: mainHeight - (vis.origin.y + vis.height),
+                width: vis.width,
+                height: vis.height)
+            return axRect.intersects(frame)
+        }
+        guard onScreen else { return }
+        let cgwid = UInt32(wid)
+        Task {
+            let resolved = await dReg.desktopID(for: cgwid)
+            let fallback = await dReg.currentID
+            let did = resolved ?? fallback
+            do {
+                try await dReg.updateExpectedFrame(cgwid: cgwid, desktopID: did, frame: frame)
+            } catch {
+                logWarn("propagateExpectedFrame failed",
+                        ["wid": String(wid), "desktop": String(did), "error": "\(error)"])
+            }
+        }
     }
 
     /// Mémorise le wid qui reçoit des notifs pendant un drag. Aucune action immédiate :
