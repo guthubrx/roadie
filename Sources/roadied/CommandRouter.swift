@@ -46,12 +46,21 @@ enum CommandRouter {
             return .success(payload)
 
         case "daemon.status":
+            // SPEC-018 : ajouter stages_mode, migration_pending, current_scope.
+            let currentScope = await daemon.currentStageScope()
             let payload: [String: AnyCodable] = [
                 "version": AnyCodable("0.1.0"),
                 "tiled_windows": AnyCodable(daemon.registry.tileableWindows.count),
                 "tiler_strategy": AnyCodable(daemon.layoutEngine.workspace.tilerStrategy.rawValue),
                 "stage_manager_enabled": AnyCodable(daemon.config.stageManager.enabled),
                 "current_stage": AnyCodable(daemon.stageManager?.currentStageID?.value ?? ""),
+                "stages_mode": AnyCodable(daemon.stageManager?.stageMode.rawValue ?? "global"),
+                "migration_pending": AnyCodable(daemon.migrationPending),
+                "current_scope": AnyCodable([
+                    "display_uuid": currentScope.displayUUID,
+                    "desktop_id": currentScope.desktopID,
+                    "inferred_from": "cursor",
+                ] as [String: Any]),
             ]
             return .success(payload)
 
@@ -239,21 +248,54 @@ enum CommandRouter {
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
-            // SPEC-014 T041 : expose window_ids + is_active pour le rail UI.
-            let currentID = sm.currentStageID?.value ?? ""
-            let stages = sm.stages.values.map { stage -> [String: Any] in
-                [
-                    "id": stage.id.value,
-                    "display_name": stage.displayName,
-                    "window_count": stage.memberWindows.count,
-                    "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
-                    "is_active": stage.id.value == currentID,
-                ]
+            // SPEC-018 : en mode per_display, filtrer par (displayUUID, desktopID) du scope courant.
+            // En mode global, comportement V1 identique (toutes les stages).
+            let scope = await daemon.currentStageScope()
+            let currentID: String
+            let scopedStages: [[String: Any]]
+            if sm.stageMode == .global {
+                // Mode global : compat V1 — liste plate, currentStageID direct.
+                currentID = sm.currentStageID?.value ?? ""
+                scopedStages = sm.stages.values.map { stage -> [String: Any] in
+                    [
+                        "id": stage.id.value,
+                        "display_name": stage.displayName,
+                        "window_count": stage.memberWindows.count,
+                        "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
+                        "is_active": stage.id.value == currentID,
+                    ]
+                }
+                return .success([
+                    "current": AnyCodable(currentID),
+                    "stages": AnyCodable(scopedStages),
+                ])
+            } else {
+                // Mode per_display : filtrer stagesV2 par (displayUUID, desktopID).
+                let filtered = sm.stagesV2.filter {
+                    $0.key.displayUUID == scope.displayUUID && $0.key.desktopID == scope.desktopID
+                }
+                // Stage actif dans ce scope : chercher dans stagesV2 l'entrée dont la valeur
+                // correspond au currentStageID V1 (synchronisé par StageManager).
+                currentID = sm.currentStageID?.value ?? ""
+                scopedStages = filtered.map { (scopeKey, stage) -> [String: Any] in
+                    [
+                        "id": stage.id.value,
+                        "display_name": stage.displayName,
+                        "window_count": stage.memberWindows.count,
+                        "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
+                        "is_active": stage.id.value == currentID,
+                    ]
+                }
+                return .success([
+                    "current": AnyCodable(currentID),
+                    "mode": AnyCodable(sm.stageMode.rawValue),
+                    "stages": AnyCodable(scopedStages),
+                    "scope": AnyCodable([
+                        "display_uuid": scope.displayUUID,
+                        "desktop_id": scope.desktopID,
+                    ] as [String: Any]),
+                ])
             }
-            return .success([
-                "current": AnyCodable(currentID),
-                "stages": AnyCodable(stages),
-            ])
 
         case "stage.switch":
             guard let sm = daemon.stageManager else {
@@ -263,8 +305,19 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id")
             }
             let stageID = StageID(stageStr)
-            guard sm.stages[stageID] != nil else {
-                return .error(.unknownStage, "unknown stage \(stageStr)")
+            // SPEC-018 : en mode per_display, vérifier dans stagesV2 que le stage
+            // existe dans le scope courant avant de switcher.
+            if sm.stageMode == .perDisplay {
+                let scope = await daemon.currentStageScope()
+                let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID, stageID: stageID)
+                guard sm.stagesV2[fullScope] != nil else {
+                    return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
+                }
+            } else {
+                guard sm.stages[stageID] != nil else {
+                    return .error(.unknownStage, "unknown stage \(stageStr)")
+                }
             }
             sm.switchTo(stageID: stageID)
             return .success(["current": AnyCodable(stageID.value)])
@@ -287,12 +340,44 @@ enum CommandRouter {
             } else {
                 return .error(.windowNotFound, "no wid provided and no focused window")
             }
-            // Lazy stages : auto-créer le stage s'il n'existe pas. Évite à
-            // l'utilisateur de devoir `stage create N <name>` avant d'assigner.
-            if sm.stages[stageID] == nil {
-                _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
+            // Lazy stages : auto-créer le stage s'il n'existe pas.
+            // SPEC-018 : en mode per_display, créer ET assign dans le scope courant.
+            if sm.stageMode == .perDisplay {
+                let scope = await daemon.currentStageScope()
+                let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID, stageID: stageID)
+                if sm.stagesV2[fullScope] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
+                                       scope: fullScope)
+                }
+                sm.assign(wid: wid, to: fullScope)  // overload V2 scope-aware
+            } else {
+                if sm.stages[stageID] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
+                }
+                sm.assign(wid: wid, to: stageID)  // API V1
             }
-            sm.assign(wid: wid, to: stageID)
+            // Si la stage cible n'est pas la stage active, la fenêtre doit être
+            // cachée (elle vient de quitter la stage visible). Sinon le tiler
+            // doit re-distribuer la stage active sans elle. Dans les deux cas,
+            // applyLayout résout.
+            if let current = sm.currentStageID, current != stageID,
+               let state = daemon.registry.get(wid) {
+                if state.isTileable {
+                    daemon.layoutEngine.setLeafVisible(wid, false)
+                }
+                HideStrategyImpl.hide(wid, registry: daemon.registry,
+                                      strategy: daemon.config.stageManager.hideStrategy)
+            }
+            daemon.applyLayout()
+            // SPEC-014/018 : émettre window_assigned pour que le rail refresh sa liste.
+            EventBus.shared.publish(DesktopEvent(
+                name: "window_assigned",
+                payload: [
+                    "wid": String(wid),
+                    "stage_id": stageStr,
+                ]
+            ))
             return .success(["created": AnyCodable(true), "stage_id": AnyCodable(stageStr), "wid": AnyCodable(Int(wid))])
 
         case "stage.create":
@@ -304,10 +389,21 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id or display_name")
             }
             let stageID = StageID(stageStr)
-            if sm.stages[stageID] != nil {
-                return .error(.invalidArgument, "stage already exists")
+            // SPEC-018 : en mode per_display, vérifier l'unicité dans le scope courant.
+            if sm.stageMode == .perDisplay {
+                let scope = await daemon.currentStageScope()
+                let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID, stageID: stageID)
+                if sm.stagesV2[fullScope] != nil {
+                    return .error(.invalidArgument, "stage already exists in current scope")
+                }
+                _ = sm.createStage(id: stageID, displayName: displayName, scope: fullScope)
+            } else {
+                if sm.stages[stageID] != nil {
+                    return .error(.invalidArgument, "stage already exists")
+                }
+                _ = sm.createStage(id: stageID, displayName: displayName)
             }
-            _ = sm.createStage(id: stageID, displayName: displayName)
             return .success(["created": AnyCodable(stageID.value)])
 
         case "stage.rename":
@@ -320,10 +416,22 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id or new_name")
             }
             let stageID = StageID(stageStr)
-            guard let oldStage = sm.stages[stageID] else {
-                return .error(.unknownStage, "unknown stage \(stageStr)")
+            // SPEC-018 : en mode per_display, vérifier l'existence dans le scope courant.
+            let oldName: String
+            if sm.stageMode == .perDisplay {
+                let scope = await daemon.currentStageScope()
+                let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID, stageID: stageID)
+                guard let existing = sm.stagesV2[fullScope] else {
+                    return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
+                }
+                oldName = existing.displayName
+            } else {
+                guard let oldStage = sm.stages[stageID] else {
+                    return .error(.unknownStage, "unknown stage \(stageStr)")
+                }
+                oldName = oldStage.displayName
             }
-            let oldName = oldStage.displayName
             guard sm.renameStage(id: stageID, newName: newName) else {
                 return .error(.invalidArgument, "rename failed (empty or > 32 chars)")
             }
@@ -344,7 +452,16 @@ enum CommandRouter {
             if stageStr == "1" {
                 return .error(.invalidArgument, "cannot delete default stage 1")
             }
-            sm.deleteStage(id: StageID(stageStr))
+            // SPEC-018 : en mode per_display, supprimer dans le scope courant uniquement.
+            if sm.stageMode == .perDisplay {
+                let scope = await daemon.currentStageScope()
+                let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID,
+                                           stageID: StageID(stageStr))
+                sm.deleteStage(scope: fullScope)
+            } else {
+                sm.deleteStage(id: StageID(stageStr))
+            }
             return .success()
 
         case "fx.status":

@@ -38,15 +38,25 @@ final class ThumbnailFetcher {
         do {
             payload = try await ipc.send(command: "window.thumbnail", args: ["wid": String(wid)])
         } catch {
+            FileHandle.standardError.write(Data("thumbnailFetcher: ipc error wid=\(wid): \(error)\n".utf8))
             return nil
         }
-        guard let b64 = payload["png_base64"] as? String,
-              let pngData = Data(base64Encoded: b64),
-              !pngData.isEmpty
-        else { return nil }
+        let keys = payload.keys.sorted().joined(separator: ",")
+        FileHandle.standardError.write(Data("thumbnailFetcher: wid=\(wid) keys=[\(keys)]\n".utf8))
+        guard let b64 = payload["png_base64"] as? String else {
+            FileHandle.standardError.write(Data("thumbnailFetcher: wid=\(wid) png_base64 missing or not String, type=\(type(of: payload["png_base64"] ?? "nil"))\n".utf8))
+            return nil
+        }
+        guard let pngData = Data(base64Encoded: b64) else {
+            FileHandle.standardError.write(Data("thumbnailFetcher: wid=\(wid) base64 decode failed (len=\(b64.count))\n".utf8))
+            return nil
+        }
+        guard !pngData.isEmpty else { return nil }
 
-        let width = payload["width"] as? Double ?? 64
-        let height = payload["height"] as? Double ?? 40
+        // Le daemon renvoie size sous forme d'array [w, h] (cf CommandRouter.thumbnailResponse).
+        let sizeArr = (payload["size"] as? [Int]) ?? []
+        let width = Double(sizeArr.first ?? 64)
+        let height = Double(sizeArr.dropFirst().first ?? 40)
         let degraded = payload["degraded"] as? Bool ?? false
 
         return ThumbnailVM(

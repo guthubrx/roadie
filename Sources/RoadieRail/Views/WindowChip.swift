@@ -9,32 +9,44 @@ struct WindowChip: View {
     let appName: String
     let pid: Int32
     let bundleID: String
+    /// SPEC-014 : vignette ScreenCaptureKit. Si présente, affichée à la place de l'icône.
+    let thumbnail: ThumbnailVM?
     // SPEC-014 T051 (US3) : ID du stage parent, sert au drop-target pour skip same-stage.
     var sourceStageID: String = ""
 
-    private let appIcon: NSImage
-
-    init(wid: CGWindowID, appName: String, pid: Int32, bundleID: String,
-         sourceStageID: String = "") {
-        self.wid = wid
-        self.appName = appName
-        self.pid = pid
-        self.bundleID = bundleID
-        self.sourceStageID = sourceStageID
-        self.appIcon = Self.resolveIcon(pid: pid, bundleID: bundleID, appName: appName)
+    /// Icône résolue à chaque rendu : un `let` set dans init resterait stale
+    /// quand SwiftUI met à jour les props sans recréer la struct (id stable).
+    private var appIcon: NSImage {
+        Self.resolveIcon(pid: pid, bundleID: bundleID, appName: appName)
     }
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 7)
                 .fill(Color.white.opacity(0.08))
+            content
+        }
+        .frame(width: 56, height: 36)
+        .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        // Priorité : vraie vignette ScreenCaptureKit si non-vide ET non-degraded.
+        // Le mode degraded retombe sur l'icône d'app (fallback gracieux).
+        if let thumb = thumbnail, !thumb.pngData.isEmpty, !thumb.degraded,
+           let nsImage = NSImage(data: thumb.pngData) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 56, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+        } else {
             Image(nsImage: appIcon)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 18, height: 18)
+                .frame(width: 22, height: 22)
         }
-        .frame(width: 30, height: 30)
-        .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID))
     }
 
     // MARK: - Résolution d'icône (ordre de priorité : pid → nom → bundle → fallback)
