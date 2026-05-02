@@ -145,15 +145,21 @@ public actor DesktopRegistry {
     /// le primary par défaut — utiliser `setCurrent(_:on:)` pour cibler un display.
     public func setCurrent(id: Int) {
         guard id != currentID else { return }
-        recentID = currentID
+        let previous = currentID
+        recentID = previous
         currentID = id
         if mode == .global {
-            // FR-005 : sync toutes les entries.
-            for k in currentByDisplay.keys { currentByDisplay[k] = id }
+            // FR-005 : sync toutes les entries (current ET recent : sinon un appel
+            // mixte legacy + setCurrent(_:on:) produit des recents incohérents).
+            for k in currentByDisplay.keys {
+                if let old = currentByDisplay[k] { recentByDisplay[k] = old }
+                currentByDisplay[k] = id
+            }
         } else {
-            // perDisplay : mute l'entry du primary par défaut. Les autres displays
-            // gardent leur valeur.
             let primaryID = CGMainDisplayID()
+            if let old = currentByDisplay[primaryID], old != id {
+                recentByDisplay[primaryID] = old
+            }
             currentByDisplay[primaryID] = id
         }
     }
@@ -228,9 +234,15 @@ public actor DesktopRegistry {
     /// Appelé au boot et à chaque `displays_changed`. Les displays nouveaux héritent
     /// du `currentID` global (mode global) ou de la valeur 1 par défaut (perDisplay).
     public func syncCurrentByDisplay(presentIDs: [CGDirectDisplayID]) {
-        // Retirer les entries des displays absents.
+        // Retirer les entries des displays absents (current ET recent : sinon
+        // recentByDisplay garde des entries d'écrans débranchés indéfiniment,
+        // ce qui peut faire que `recentID(for:)` retourne un desktopID stale
+        // si le CGDirectDisplayID est réattribué à un nouvel écran physique).
         for k in currentByDisplay.keys where !presentIDs.contains(k) {
             currentByDisplay.removeValue(forKey: k)
+        }
+        for k in recentByDisplay.keys where !presentIDs.contains(k) {
+            recentByDisplay.removeValue(forKey: k)
         }
         // Ajouter les entries manquantes pour les displays présents.
         for id in presentIDs where currentByDisplay[id] == nil {

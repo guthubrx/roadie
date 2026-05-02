@@ -2,6 +2,23 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/). Versions majeures alignées sur les SPEC.
 
+## [Unreleased] — branche `015-mouse-modifier`
+
+### Added (SPEC-015 Mouse modifier drag & resize)
+
+- Section `[mouse]` dans `roadies.toml` : `modifier`, `action_left`, `action_right`, `action_middle`, `edge_threshold`. Defaults : `ctrl + left=move + right=resize + middle=none + edge=30px`.
+- Enums `ModifierKey` (ctrl/alt/cmd/shift/hyper/none) avec computed `nsFlags: NSEvent.ModifierFlags`.
+- Enum `MouseAction` (move/resize/none).
+- Struct `MouseConfig` avec parser tolérant : valeurs invalides → fallback default + log warn.
+- `MouseDragHandler` (`Sources/RoadieCore/MouseDragHandler.swift`, ~270 LOC) : hook `NSEvent.addGlobalMonitorForEvents` pour mouseDown/Dragged/Up des 3 boutons. Throttle 30ms entre setBounds.
+- `computeQuadrant(cursor:frame:edgeThreshold:)` : pure function, retourne 8 zones (corners, edges) ou center.
+- `computeResizedFrame(start:delta:quadrant:)` : pure function, ancre opposée au quadrant (corner TL → BR fixe, etc.), clamp taille minimum 100px.
+- `MouseRaiser.skipWhenModifier` : skip click-to-raise quand le modifier mouse-drag est pressé (FR-030).
+- Drag move sur fenêtre tilée → la sort du tile (= passe floating, FR-012).
+- Drag resize sur fenêtre tilée → `LayoutEngine.adaptToManualResize` au mouseUp (FR-022).
+- Cross-display : drag traverse les écrans, au mouseUp délégué à `Daemon.onDragDrop` (= flow SPEC-013 cross-display + adoption desktop en mode per_display).
+- 2 nouveaux fichiers de tests : `MouseConfigTests` (5 cas), `MouseQuadrantTests` (13 cas). 39 suites totales, 0 fail.
+
 ## [Unreleased] — branche `013-desktop-per-display`
 
 ### Added (SPEC-013 Desktop par Display)

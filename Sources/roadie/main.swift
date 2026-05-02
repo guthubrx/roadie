@@ -100,9 +100,25 @@ case "window":
 case "display":
     handleDisplay(args: args)
 
+case "rail":
+    handleRail(args: args)
+
 default:
     printUsage()
     exit(64)
+}
+
+/// SPEC-014 : `roadie rail status|toggle`.
+func handleRail(args: [String]) {
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    switch args[2] {
+    case "status":
+        sendAndPrint(Request(command: "rail.status"))
+    case "toggle":
+        sendAndPrint(Request(command: "rail.toggle"))
+    default:
+        printUsage(); exit(64)
+    }
 }
 
 /// SPEC-010/012 : `roadie window space|display|stick|pin|unpin`.
@@ -253,6 +269,11 @@ func handleStage(args: [String]) {
     case "delete":
         guard args.count >= 4 else { printUsage(); exit(64) }
         sendAndPrint(Request(command: "stage.delete", args: ["stage_id": args[3]]))
+    case "rename":
+        // SPEC-014 T071 : `roadie stage rename <id> <new_name>`
+        guard args.count >= 5 else { printUsage(); exit(64) }
+        sendAndPrint(Request(command: "stage.rename",
+                             args: ["stage_id": args[3], "new_name": args[4]]))
     default:
         // arg2 est le stage_id pour switch
         sendAndPrint(Request(command: "stage.switch", args: ["stage_id": arg2]))
@@ -493,6 +514,7 @@ func printUsage() {
       roadie stage assign <stage_id>             # assign frontmost
       roadie stage create <stage_id> <name>      # create new stage
       roadie stage delete <stage_id>             # delete stage
+      roadie stage rename <stage_id> <new_name>  # SPEC-014 rename stage
       roadie desktop list [--json]               # V2 multi-desktop
       roadie desktop current [--json]
       roadie desktop focus <prev|next|recent|first|last|N|label>
@@ -508,6 +530,8 @@ func printUsage() {
       roadie window stick [true|false]           # SPEC-010 sticky (visible sur tous desktops)
       roadie window unstick                      # alias de stick false
       roadie window pin | unpin                  # SPEC-010 always-on-top
+      roadie rail status                         # SPEC-014 état du binaire roadie-rail
+      roadie rail toggle                         # SPEC-014 démarre/arrête le rail
     """
     FileHandle.standardError.write((usage + "\n").data(using: .utf8) ?? Data())
 }

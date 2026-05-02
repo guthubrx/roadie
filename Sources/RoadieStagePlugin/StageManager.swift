@@ -199,6 +199,20 @@ public final class StageManager {
         if currentStageID == id { currentStageID = nil; saveActive() }
     }
 
+    /// SPEC-014 T071 (US5) : renomme un stage. Persiste sur disque et notifie.
+    /// Le caller (CommandRouter) émet l'event `stage_renamed` après succès.
+    @discardableResult
+    public func renameStage(id: StageID, newName: String) -> Bool {
+        guard var stage = stages[id] else { return false }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // FR-018 borne : 1..32 caractères.
+        guard !trimmed.isEmpty, trimmed.count <= 32 else { return false }
+        stage.displayName = trimmed
+        stages[id] = stage
+        saveStage(stage)
+        return true
+    }
+
     /// Garantit que le stage 1 par défaut existe et qu'un stage est actif.
     /// Appelé par bootstrap() après loadFromDisk() et après chaque reload(forDesktop:).
     public func ensureDefaultStage() {

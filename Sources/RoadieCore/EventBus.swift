@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Event émis sur le canal subscription (`roadie events --follow`).
 /// Format JSON-lines (1 event = 1 ligne JSON), spécifié dans contracts/events-stream.md.
@@ -62,6 +63,39 @@ public final class EventBus {
     }
 
     public var subscriberCount: Int { continuations.count }
+}
+
+// MARK: - Static factories (SPEC-014 rail events)
+// Contrats définis dans contracts/events-stream-rail.md
+
+public extension DesktopEvent {
+    /// Émis quand l'utilisateur clique sur le bureau (wallpaper).
+    /// Payload : x, y (coords NS entières), display_id.
+    static func wallpaperClick(x: Int, y: Int, displayID: CGDirectDisplayID) -> DesktopEvent {
+        DesktopEvent(name: "wallpaper_click", payload: [
+            "x": String(x),
+            "y": String(y),
+            "display_id": String(displayID),
+        ])
+    }
+
+    /// Émis quand un stage est renommé via le menu contextuel du rail.
+    /// Payload : stage_id, old_name, new_name.
+    static func stageRenamed(stageID: String, oldName: String, newName: String) -> DesktopEvent {
+        DesktopEvent(name: "stage_renamed", payload: [
+            "stage_id": stageID,
+            "old_name": oldName,
+            "new_name": newName,
+        ])
+    }
+
+    /// Émis quand SCKCaptureService a produit une nouvelle vignette pour `wid`.
+    /// Le rail peut alors fetch via window.thumbnail.
+    static func thumbnailUpdated(wid: CGWindowID) -> DesktopEvent {
+        DesktopEvent(name: "thumbnail_updated", payload: [
+            "wid": String(wid),
+        ])
+    }
 }
 
 /// Formatter ISO8601 partagé (millisecondes UTC, conforme contracts).
