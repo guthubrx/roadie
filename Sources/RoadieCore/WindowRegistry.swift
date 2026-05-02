@@ -14,6 +14,10 @@ public final class WindowRegistry {
     /// la prev-focused permet de placer la nouvelle "à côté" de celle qui avait le focus juste avant.
     public private(set) var previousFocusedWindowID: WindowID?
 
+    /// Callback invoqué quand `focusedWindowID` change effectivement (vrai diff).
+    /// Le daemon l'utilise pour publier `windowFocused` sur le bus FX (modules opt-in).
+    public var onFocusChanged: ((WindowID?) -> Void)?
+
     public init() {}
 
     public func register(_ state: WindowState, axElement: AXUIElement) {
@@ -48,7 +52,8 @@ public final class WindowRegistry {
         // (premier focus connu), on ne crée pas de prev artificielle —
         // l'init du focus au boot du daemon assure qu'on a un focus réel
         // dès le départ via refreshFromSystem().
-        if focusedWindowID != wid, let old = focusedWindowID {
+        let changed = focusedWindowID != wid
+        if changed, let old = focusedWindowID {
             previousFocusedWindowID = old
         }
         focusedWindowID = wid
@@ -56,6 +61,7 @@ public final class WindowRegistry {
             logInfo("focus changed", ["wid": String(wid),
                                       "prev": previousFocusedWindowID.map(String.init) ?? "nil"])
         }
+        if changed { onFocusChanged?(wid) }
     }
 
     /// Retourne le meilleur candidat "near" pour insertion :

@@ -16,26 +16,22 @@ public enum DesktopError: Error, Equatable {
 public struct DesktopSwitcherConfig: Sendable {
     public let count: Int
     public let backAndForth: Bool
-    public let offscreenX: Int
-    public let offscreenY: Int
 
-    public init(count: Int = 10, backAndForth: Bool = true,
-                offscreenX: Int = -30000, offscreenY: Int = -30000) {
+    public init(count: Int = 10, backAndForth: Bool = true) {
         self.count = count
         self.backAndForth = backAndForth
-        self.offscreenX = offscreenX
-        self.offscreenY = offscreenY
     }
 }
 
 // MARK: - DesktopSwitcher
 
 /// Orchestrateur de la bascule entre desktops virtuels (SPEC-011, FR-002).
+/// Délègue entièrement le hide/show des fenêtres au StageManager via DesktopStageOps.
+/// Pas d'appel aux frameworks privés — pas de déplacement offscreen direct (FR-004).
 /// Sérialise les bascules via actor + pendingTarget (R-003, FR-025).
-/// Pas d'appel SkyLight/CGS — déplacement offscreen/onscreen exclusivement via AX (FR-004).
 public actor DesktopSwitcher {
     private let registry: DesktopRegistry
-    private let mover: any WindowMover
+    private let stageOps: (any DesktopStageOps)?
     private let bus: DesktopEventBus
     private let config: DesktopSwitcherConfig
     /// Hook optionnel appelé après chaque transition (T031).
@@ -46,12 +42,12 @@ public actor DesktopSwitcher {
     private var pendingTarget: Int? = nil
 
     public init(registry: DesktopRegistry,
-                mover: any WindowMover,
+                stageOps: (any DesktopStageOps)? = nil,
                 bus: DesktopEventBus,
                 config: DesktopSwitcherConfig,
                 onDesktopChanged: (@Sendable (Int) async -> Void)? = nil) {
         self.registry = registry
-        self.mover = mover
+        self.stageOps = stageOps
         self.bus = bus
         self.config = config
         self.onDesktopChanged = onDesktopChanged
@@ -93,26 +89,6 @@ public actor DesktopSwitcher {
         try await performSwitch(to: id)
     }
 
-    /// Restauration visuelle au boot (T038) : show/hide sans émettre desktop_changed.
-    /// Aligne l'écran avec le state persisté après un redémarrage du daemon.
-    public func restoreInitialView() async {
-        let currentID = await registry.currentID
-        let allDesktops = await registry.allDesktops()
-        // Bounding box calculé une fois pour toute la restauration (stable pendant l'appel).
-        for desktop in allDesktops {
-            if desktop.id == currentID {
-                for entry in desktop.windows {
-                    await mover.move(CGWindowID(entry.cgwid), to: entry.expectedFrame.origin)
-                }
-            } else {
-                for entry in desktop.windows {
-                    let offPoint = computeOffscreenPoint(windowSize: entry.expectedFrame.size)
-                    await mover.move(CGWindowID(entry.cgwid), to: offPoint)
-                }
-            }
-        }
-    }
-
     /// Bascule vers `recentID` (FR-007).
     public func back() async throws {
         guard let recent = await registry.recentID else {
@@ -121,81 +97,26 @@ public actor DesktopSwitcher {
         try await `switch`(to: recent)
     }
 
-    // MARK: - Calcul position offscreen (multi-display safe)
-
-    /// Calcule une position offscreen garantie hors de tous les écrans physiques.
-    ///
-    /// Stratégie : placer la fenêtre à droite du bounding box global de tous les NSScreen,
-    /// en ajoutant sa propre largeur + une marge de 100 px, de sorte que même le bord
-    /// gauche de la fenêtre dépasse le `maxX` global.
-    ///
-    /// Conversion de coordonnées : NSScreen utilise l'origine bottom-left (Quartz) ;
-    /// AX utilise l'origine top-left. Pour l'axe X, les deux systèmes sont identiques.
-    /// On n'a besoin que de `maxX` (horizontal) pour garantir l'invisibilité à droite.
-    ///
-    /// En Y, on place la fenêtre à `minY` du bounding box AX, soit au-dessus de tous
-    /// les écrans — valeur très négative si les écrans sont arrangés vers le bas, ou 0
-    /// si l'écran principal est en haut. Utiliser `minY - windowHeight - 100` est plus sûr.
-    ///
-    /// Fallback : `config.offscreenX/Y` quand `NSScreen.screens` est vide (headless/test).
-    private nonisolated func computeOffscreenPoint(
-        windowSize: CGSize = .zero
-    ) -> CGPoint {
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else {
-            return CGPoint(x: config.offscreenX, y: config.offscreenY)
-        }
-
-        // Bounding box global en coordonnées Quartz (bottom-left origin).
-        // Recalculé à chaque hide pour tenir compte des changements dynamiques
-        // de configuration d'écrans (branchement/débranchement, repositionnement
-        // dans Réglages > Bureaux). FR-004 + multi-display safe.
-        let globalNS = screens.dropFirst().reduce(screens[0].frame) { $0.union($1.frame) }
-
-        // Stratégie AeroSpace : pousser X juste à droite du bounding box global.
-        // L'origine x = globalNS.maxX + margin place le bord GAUCHE de la fenêtre
-        // hors de tout écran ; le reste s'étend à droite, totalement invisible.
-        // Surtout : pas de + windowSize.width, sinon WindowServer macOS clamp
-        // (il ne tolère pas les fenêtres "perdues" trop loin du bounding).
-        // Y reste à l'origine du bounding global, dans une zone que le système
-        // accepte sans clamper. La conversion NS↔AX sur X est identité.
-        let margin: CGFloat = 100
-        let offsetX = globalNS.maxX + margin
-        let offsetY: CGFloat = 100   // valeur arbitraire valide en AX top-left
-        _ = windowSize  // taille non utilisée (offset fixe à droite suffit)
-
-        return CGPoint(x: offsetX, y: offsetY)
-    }
-
     // MARK: - Logique interne
 
     private func performSwitch(to targetID: Int) async throws {
         inFlight = true
-        defer {
-            inFlight = false
-        }
+        defer { inFlight = false }
 
         let fromID = await registry.currentID
 
-        // (a) Cacher les fenêtres du desktop courant.
-        // On récupère les WindowEntry pour disposer de la taille (windowSize)
-        // permettant un calcul offscreen par-fenêtre.
-        let fromDesktop = await registry.desktop(id: fromID)
-        let fromWindows = fromDesktop?.windows ?? []
-        for entry in fromWindows {
-            let offPoint = computeOffscreenPoint(windowSize: entry.expectedFrame.size)
-            await mover.move(CGWindowID(entry.cgwid), to: offPoint)
+        // (a) Sauvegarder le stage actif courant dans le desktop quitté
+        if let ops = stageOps {
+            let activeInFrom = await ops.currentStageID()
+            if let stageID = activeInFrom, var fromDesktop = await registry.desktop(id: fromID) {
+                fromDesktop.activeStageID = stageID
+                try? await registry.save(fromDesktop)
+            }
+            // (b) Tout cacher via StageManager
+            await ops.deactivateAll()
         }
 
-        // (b) Restaurer les fenêtres du desktop cible à leur expectedFrame
-        let toDesktop = await registry.desktop(id: targetID)
-        let toWindows = toDesktop?.windows ?? []
-        for entry in toWindows {
-            let origin = entry.expectedFrame.origin
-            await mover.move(CGWindowID(entry.cgwid), to: origin)
-        }
-
-        // (c) Mettre à jour le registry
+        // (c) Mettre à jour le registry (currentID + recentID)
         await registry.setCurrent(id: targetID)
         do {
             try await registry.saveCurrentID()
@@ -203,11 +124,21 @@ public actor DesktopSwitcher {
             logWarn("saveCurrentID failed", ["error": "\(error)", "desktop": String(targetID)])
         }
 
-        // (c.2) Notifier les modules scopés au desktop (ex : StageManager — T031)
+        // (d) Notifier les modules scopés au desktop (ex : StageManager — T031)
         await onDesktopChanged?(targetID)
 
-        // (d) Émettre l'event desktop_changed
+        // (e) Activer le stage du desktop d'arrivée
+        if let ops = stageOps {
+            let toDesktop = await registry.desktop(id: targetID)
+            let activeInTo = toDesktop?.activeStageID
+            if let stageID = activeInTo {
+                await ops.activate(stageID)
+            }
+        }
+
+        // (f) Émettre l'event desktop_changed
         let fromLabel = await registry.desktop(id: fromID)?.label ?? ""
+        let toDesktop = await registry.desktop(id: targetID)
         let toLabel = toDesktop?.label ?? ""
         let event = DesktopChangeEvent(
             event: "desktop_changed",
@@ -223,7 +154,6 @@ public actor DesktopSwitcher {
             pendingTarget = nil
             let newCurrent = await registry.currentID
             if next != newCurrent {
-                // Récursion via une nouvelle Task pour ne pas bloquer le defer
                 inFlight = false   // reset avant la récursion
                 try await performSwitch(to: next)
             }

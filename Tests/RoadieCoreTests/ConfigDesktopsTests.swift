@@ -12,8 +12,6 @@ final class ConfigDesktopsTests: XCTestCase {
         XCTAssertEqual(cfg.count, 10)
         XCTAssertEqual(cfg.defaultFocus, 1)
         XCTAssertTrue(cfg.backAndForth)
-        XCTAssertEqual(cfg.offscreenX, -30000)
-        XCTAssertEqual(cfg.offscreenY, -30000)
     }
 
     // MARK: - Parsing TOML complet (FR-018)
@@ -25,14 +23,11 @@ final class ConfigDesktopsTests: XCTestCase {
         count = 5
         default_focus = 2
         back_and_forth = false
-        offscreen_x = -20000
-        offscreen_y = -20000
         """
         let config = try TOMLDecoder().decode(Config.self, from: toml)
         XCTAssertEqual(config.desktops.count, 5)
         XCTAssertEqual(config.desktops.defaultFocus, 2)
         XCTAssertFalse(config.desktops.backAndForth)
-        XCTAssertEqual(config.desktops.offscreenX, -20000)
     }
 
     // MARK: - Section absente → défauts (FR-018, backward compat V1)
