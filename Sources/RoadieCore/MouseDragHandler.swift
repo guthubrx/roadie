@@ -82,10 +82,14 @@ public final class MouseDragHandler {
     }
 
     /// Reload : nouvelle config, redémarre le monitor pour qu'il prenne en compte
-    /// le modifier / actions à jour.
+    /// le modifier / actions à jour. FR-004 : un drag en cours n'est PAS interrompu
+    /// — la session active continue avec son ancien modifier (jusqu'au mouseUp),
+    /// puis les events suivants utilisent le nouveau modifier.
     public func reload(config newConfig: MouseConfig) {
+        let preservedSession = self.session
         stop()
         self.config = newConfig
+        self.session = preservedSession
         start()
     }
 
@@ -111,15 +115,13 @@ public final class MouseDragHandler {
     private func handle(event: NSEvent, at location: CGPoint) {
         switch event.type {
         case .leftMouseDown:
-            totalDownEvents += 1
-            // Log toutes les 10 mouse-down pour vérifier que le monitor capte.
-            if totalDownEvents % 10 == 0 {
-                logInfo("mouse monitor heartbeat", ["count": String(totalDownEvents)])
-            }
+            bumpHeartbeat()
             handleMouseDown(event: event, at: location, action: config.actionLeft)
         case .rightMouseDown:
+            bumpHeartbeat()
             handleMouseDown(event: event, at: location, action: config.actionRight)
         case .otherMouseDown:
+            bumpHeartbeat()
             handleMouseDown(event: event, at: location, action: config.actionMiddle)
         case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             handleMouseDragged(at: location)
@@ -129,27 +131,24 @@ public final class MouseDragHandler {
         }
     }
 
+    /// Compteur global de mouseDown : log heartbeat tous les 50 events sans
+    /// distinction de bouton. Permet de vérifier que le monitor reste vivant
+    /// sans polluer les logs (1 log par 50 clics ≈ 1/min en usage normal).
+    private func bumpHeartbeat() {
+        totalDownEvents += 1
+        if totalDownEvents % 50 == 0 {
+            logInfo("mouse monitor heartbeat", ["count": String(totalDownEvents)])
+        }
+    }
+
     // MARK: MouseDown
 
     private func handleMouseDown(event: NSEvent, at location: CGPoint, action: MouseAction) {
         guard action != .none else { return }
-        let active = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        let modPressed = modifierIsPressed(in: event)
-        // Diagnostic : logguer chaque mouseDown gauche avec les flags reçus
-        // pour identifier pourquoi le modifier ne matche pas.
-        logInfo("mouse-down received", [
-            "action": action.rawValue,
-            "flags_raw": String(active.rawValue),
-            "ctrl": active.contains(.control) ? "yes" : "no",
-            "alt": active.contains(.option) ? "yes" : "no",
-            "cmd": active.contains(.command) ? "yes" : "no",
-            "shift": active.contains(.shift) ? "yes" : "no",
-            "matches_config": modPressed ? "yes" : "no",
-            "config_mod": config.modifier.rawValue,
-        ])
-        guard modPressed else {
-            return
-        }
+        // Bail out tôt si le modifier configuré n'est pas pressé : évite la
+        // pollution des logs (chaque clic souris hors-modifier était loggué
+        // auparavant, soit des centaines d'entrées par session).
+        guard modifierIsPressed(in: event) else { return }
         // Identifier la fenêtre sous le curseur via CGWindowList.
         guard let cgPoint = nsToCG(location) else {
             logWarn("mouse-drag: nsToCG failed, no primary screen?")
