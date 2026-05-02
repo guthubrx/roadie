@@ -151,6 +151,7 @@ struct StageCard: View {
                     appName: windows[wid]?.appName ?? "",
                     pid: windows[wid]?.pid ?? 0,
                     bundleID: windows[wid]?.bundleID ?? "",
+                    thumbnail: thumbnails[wid],
                     sourceStageID: stage.id
                 )
             }
