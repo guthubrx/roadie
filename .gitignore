@@ -32,3 +32,6 @@ legacy/spec-001-stage-manager/stage.app/
 # Artefacts osax (SPEC-004 famille SIP-off)
 osax/build/
 .tmp/
+
+# Rapports d'audit générés par /audit (locaux, pas versionnés)
+audits/
