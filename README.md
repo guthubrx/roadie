@@ -1,5 +1,7 @@
 # roadie
 
+**[Français](README.md) · [English](README.en.md)**
+
 > **Work in progress — projet en évolution active.** Mon objectif est d'en faire mon daily driver. Toutes les remarques sont les bienvenues — voir [Status](#status).
 
 Un petit window manager tiling pour macOS, écrit en Swift, que je polis pour en faire mon poste de travail au quotidien.
