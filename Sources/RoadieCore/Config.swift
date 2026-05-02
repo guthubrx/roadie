@@ -6,20 +6,17 @@ public struct Config: Codable, Sendable {
     public var tiling: TilingConfig
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
-    public var multiDesktop: MultiDesktopConfig
-    public var desktops: [DesktopRule]
+    public var desktops: DesktopsConfig
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
                 stageManager: StageManagerConfig = .init(),
                 exclusions: ExclusionsConfig = .init(),
-                multiDesktop: MultiDesktopConfig = .init(),
-                desktops: [DesktopRule] = []) {
+                desktops: DesktopsConfig = .init()) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
         self.exclusions = exclusions
-        self.multiDesktop = multiDesktop
         self.desktops = desktops
     }
 
@@ -28,7 +25,6 @@ public struct Config: Codable, Sendable {
         case tiling
         case stageManager = "stage_manager"
         case exclusions
-        case multiDesktop = "multi_desktop"
         case desktops
     }
 
@@ -42,8 +38,7 @@ public struct Config: Codable, Sendable {
         self.tiling = try c.decodeIfPresent(TilingConfig.self, forKey: .tiling) ?? .init()
         self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? .init()
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? .init()
-        self.multiDesktop = try c.decodeIfPresent(MultiDesktopConfig.self, forKey: .multiDesktop) ?? .init()
-        self.desktops = try c.decodeIfPresent([DesktopRule].self, forKey: .desktops) ?? []
+        self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? .init()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -52,116 +47,59 @@ public struct Config: Codable, Sendable {
         try c.encode(tiling, forKey: .tiling)
         try c.encode(stageManager, forKey: .stageManager)
         try c.encode(exclusions, forKey: .exclusions)
-        try c.encode(multiDesktop, forKey: .multiDesktop)
         try c.encode(desktops, forKey: .desktops)
-    }
-
-    /// Validation des règles desktop (FR-018) : chaque DesktopRule DOIT avoir
-    /// au moins un de match_index/match_label, jamais les deux. Throw si la config est mal formée.
-    public func validateDesktopRules() throws {
-        for (idx, rule) in desktops.enumerated() {
-            try rule.validate(positionForError: idx)
-        }
     }
 }
 
-/// Section `[multi_desktop]` de `roadies.toml`. Désactivé par défaut (FR-020 compat V1).
-public struct MultiDesktopConfig: Codable, Sendable {
-    public var enabled: Bool
-    public var backAndForth: Bool
+// MARK: - DesktopsConfig (SPEC-011)
 
-    public init(enabled: Bool = false, backAndForth: Bool = true) {
+/// Configuration de la feature multi-desktop virtuel (pivot AeroSpace).
+/// Validation : count ∈ 1..16 (FR-001, FR-018).
+public struct DesktopsConfig: Codable, Sendable {
+    public var enabled: Bool
+    public var count: Int
+    public var defaultFocus: Int
+    public var backAndForth: Bool
+    public var offscreenX: Int
+    public var offscreenY: Int
+
+    public init(enabled: Bool = true,
+                count: Int = 10,
+                defaultFocus: Int = 1,
+                backAndForth: Bool = true,
+                offscreenX: Int = -30000,
+                offscreenY: Int = -30000) {
         self.enabled = enabled
+        self.count = count
+        self.defaultFocus = defaultFocus
         self.backAndForth = backAndForth
+        self.offscreenX = offscreenX
+        self.offscreenY = offscreenY
     }
 
     enum CodingKeys: String, CodingKey {
         case enabled
+        case count
+        case defaultFocus = "default_focus"
         case backAndForth = "back_and_forth"
-    }
-}
-
-/// Section `[[desktops]]` répétable : règles statiques par desktop (FR-018).
-public struct DesktopRule: Codable, Sendable {
-    public var matchIndex: Int?
-    public var matchLabel: String?
-    public var defaultStrategy: TilerStrategy?
-    public var gapsOuter: Int?
-    public var gapsOuterTop: Int?
-    public var gapsOuterBottom: Int?
-    public var gapsOuterLeft: Int?
-    public var gapsOuterRight: Int?
-    public var gapsInner: Int?
-    public var defaultStage: String?
-
-    public init(matchIndex: Int? = nil, matchLabel: String? = nil,
-                defaultStrategy: TilerStrategy? = nil,
-                gapsOuter: Int? = nil,
-                gapsOuterTop: Int? = nil, gapsOuterBottom: Int? = nil,
-                gapsOuterLeft: Int? = nil, gapsOuterRight: Int? = nil,
-                gapsInner: Int? = nil,
-                defaultStage: String? = nil) {
-        self.matchIndex = matchIndex
-        self.matchLabel = matchLabel
-        self.defaultStrategy = defaultStrategy
-        self.gapsOuter = gapsOuter
-        self.gapsOuterTop = gapsOuterTop
-        self.gapsOuterBottom = gapsOuterBottom
-        self.gapsOuterLeft = gapsOuterLeft
-        self.gapsOuterRight = gapsOuterRight
-        self.gapsInner = gapsInner
-        self.defaultStage = defaultStage
+        case offscreenX = "offscreen_x"
+        case offscreenY = "offscreen_y"
     }
 
-    enum CodingKeys: String, CodingKey {
-        case matchIndex = "match_index"
-        case matchLabel = "match_label"
-        case defaultStrategy = "default_strategy"
-        case gapsOuter = "gaps_outer"
-        case gapsOuterTop = "gaps_outer_top"
-        case gapsOuterBottom = "gaps_outer_bottom"
-        case gapsOuterLeft = "gaps_outer_left"
-        case gapsOuterRight = "gaps_outer_right"
-        case gapsInner = "gaps_inner"
-        case defaultStage = "default_stage"
-    }
-
-    public func validate(positionForError idx: Int) throws {
-        let hasIdx = matchIndex != nil
-        let hasLbl = matchLabel != nil
-        if !hasIdx && !hasLbl {
-            throw DesktopRuleError.missingMatcher(rulePosition: idx)
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        let rawCount = try c.decodeIfPresent(Int.self, forKey: .count) ?? 10
+        guard (1...16).contains(rawCount) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .count, in: c,
+                debugDescription: "desktops.count must be in 1..16, got \(rawCount)")
         }
-        if hasIdx && hasLbl {
-            throw DesktopRuleError.bothMatchers(rulePosition: idx)
-        }
-    }
-
-    /// Construit un GapsOverride à partir des champs gaps_* de la règle.
-    /// Tous les champs nil → retourne nil (pas d'override actif).
-    public func gapsOverride() -> GapsOverride? {
-        let top = gapsOuterTop ?? gapsOuter
-        let bottom = gapsOuterBottom ?? gapsOuter
-        let left = gapsOuterLeft ?? gapsOuter
-        let right = gapsOuterRight ?? gapsOuter
-        if top == nil && bottom == nil && left == nil && right == nil {
-            return nil
-        }
-        return GapsOverride(top: top, bottom: bottom, left: left, right: right)
-    }
-}
-
-public enum DesktopRuleError: Error, CustomStringConvertible {
-    case missingMatcher(rulePosition: Int)
-    case bothMatchers(rulePosition: Int)
-
-    public var description: String {
-        switch self {
-        case .missingMatcher(let i):
-            return "[[desktops]] rule #\(i): need at least match_index or match_label"
-        case .bothMatchers(let i):
-            return "[[desktops]] rule #\(i): cannot have both match_index and match_label"
-        }
+        self.count = rawCount
+        self.defaultFocus = try c.decodeIfPresent(Int.self, forKey: .defaultFocus) ?? 1
+        self.backAndForth = try c.decodeIfPresent(Bool.self, forKey: .backAndForth) ?? true
+        self.offscreenX = try c.decodeIfPresent(Int.self, forKey: .offscreenX) ?? -30000
+        self.offscreenY = try c.decodeIfPresent(Int.self, forKey: .offscreenY) ?? -30000
     }
 }
 

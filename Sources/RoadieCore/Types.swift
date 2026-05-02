@@ -109,16 +109,20 @@ public struct WindowState: Sendable {
     public var isFullscreen: Bool
     public var workspaceID: WorkspaceID
     public var stageID: StageID?
-    /// UUID du desktop macOS (Mission Control) sur lequel cette fenêtre est physiquement
-    /// présente. nil au boot tant que la transition initiale n'a pas mis à jour le registry
-    /// (FR-007 + data-model SPEC-003).
+    /// UUID du desktop macOS (Mission Control) — legacy SPEC-003, conservé pour compat.
     public var desktopUUID: String?
+    /// SPEC-011 : identifiant du desktop virtuel roadie (1..count). Défaut 1.
+    public var desktopID: Int
+    /// SPEC-011 : position/taille attendues quand la fenêtre est on-screen sur son desktop.
+    /// Mise à jour uniquement quand desktopID == currentDesktopID (R-002).
+    public var expectedFrame: CGRect
 
     public init(cgWindowID: WindowID, pid: pid_t, bundleID: String,
                 title: String, frame: CGRect, subrole: AXSubrole,
                 isFloating: Bool, isMinimized: Bool = false, isFullscreen: Bool = false,
                 workspaceID: WorkspaceID = .main, stageID: StageID? = nil,
-                desktopUUID: String? = nil) {
+                desktopUUID: String? = nil, desktopID: Int = 1,
+                expectedFrame: CGRect = .zero) {
         self.cgWindowID = cgWindowID
         self.pid = pid
         self.bundleID = bundleID
@@ -131,6 +135,8 @@ public struct WindowState: Sendable {
         self.workspaceID = workspaceID
         self.stageID = stageID
         self.desktopUUID = desktopUUID
+        self.desktopID = desktopID
+        self.expectedFrame = expectedFrame == .zero ? frame : expectedFrame
     }
 
     public var isTileable: Bool {

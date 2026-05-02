@@ -16,18 +16,3 @@ public func axWindowID(of element: AXUIElement) -> WindowID? {
     return (err == .success && wid != 0) ? wid : nil
 }
 
-// MARK: - SkyLight Spaces (SPEC-003)
-// Lecture seule, sans SIP désactivé. Pattern yabai depuis 10 ans.
-// Réf : research.md décision 1 et 2.
-
-public typealias CGSConnectionID = Int32
-public typealias CGSSpaceID = UInt64
-
-@_silgen_name("CGSMainConnectionID")
-public func CGSMainConnectionID() -> CGSConnectionID
-
-@_silgen_name("CGSGetActiveSpace")
-public func CGSGetActiveSpace(_ cid: CGSConnectionID) -> CGSSpaceID
-
-@_silgen_name("CGSCopyManagedDisplaySpaces")
-public func CGSCopyManagedDisplaySpaces(_ cid: CGSConnectionID) -> CFArray?
