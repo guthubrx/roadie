@@ -146,7 +146,11 @@ let package = Package(
         // SPEC-008 RoadieBorders target
         .target(
             name: "RoadieBorders",
-            dependencies: ["RoadieCore", "RoadieFXCore"],
+            dependencies: [
+                "RoadieCore",
+                "RoadieFXCore",
+                .product(name: "TOMLKit", package: "TOMLKit"),
+            ],
             path: "Sources/RoadieBorders"
         ),
         .testTarget(

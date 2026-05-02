@@ -35,13 +35,18 @@ public final class StageManager {
     /// SPEC-006 : si non nil, override les hide/show via le module RoadieOpacity.
     public weak var hideOverride: StageHideOverride?
 
-    /// Dossier de persistance courant. En mode V1, c'est `~/.config/roadies/stages`.
-    /// En mode V2 multi-desktop, le DesktopManager swap via `reload(stagesDir:)` pour
-    /// pointer vers `~/.config/roadies/desktops/<id>/stages` à chaque transition.
+    /// Source de vérité pour la persistance. Injecté à l'init ou substitué via
+    /// `setPersistence(_:)` après création (mode V2, quand DesktopRegistry est disponible).
+    /// Mode V1 (défaut) : FileBackedStagePersistence.
+    /// Mode V2 multi-desktop : DesktopBackedStagePersistence (injecté par le daemon).
+    private var persistence: any StagePersistence
+
+    /// Dossier de persistance courant. Conservé pour `extractDesktopID` (mode V1).
+    /// En mode V2 ce champ est ignoré pour la lecture/écriture (le persistence s'en charge).
     private(set) public var stagesDir: String
 
     /// Répertoire de base config (~/.config/roadies). Utilisé par reload(forDesktop:)
-    /// pour construire le path `desktops/<id>/stages`. nil = mode V1 (path fixe).
+    /// pour construire le path `desktops/<id>/stages` en mode V1 fallback.
     private let baseConfigDir: String?
 
     /// T048 (SPEC-011 US5) : callback optionnel appelé après chaque bascule de stage.
@@ -50,6 +55,8 @@ public final class StageManager {
     /// Signature : (desktopID: String, fromStageID: String, toStageID: String) -> Void
     public var onStageChanged: (@MainActor (String, String, String) -> Void)?
 
+    /// Initialisation mode V1 (fallback fichiers stages/*.toml).
+    /// Conservé pour la compatibilité descendante et les tests existants.
     public init(registry: WindowRegistry, hideStrategy: HideStrategy = .corner,
                 stagesDir: String = "~/.config/roadies/stages",
                 baseConfigDir: String? = nil,
@@ -57,90 +64,121 @@ public final class StageManager {
         self.registry = registry
         self.hideStrategy = hideStrategy
         self.layoutHooks = layoutHooks
+        let expandedDir = (stagesDir as NSString).expandingTildeInPath
+        self.stagesDir = expandedDir
+        self.baseConfigDir = baseConfigDir.map { ($0 as NSString).expandingTildeInPath }
+        self.persistence = FileBackedStagePersistence(stagesDir: expandedDir)
+    }
+
+    /// Initialisation mode V2 : source de vérité = DesktopRegistry via `persistence`.
+    /// Le `stagesDir` passé sert uniquement à `extractDesktopID` pour les events.
+    public init(registry: WindowRegistry, hideStrategy: HideStrategy = .corner,
+                stagesDir: String = "~/.config/roadies/stages",
+                baseConfigDir: String? = nil,
+                persistence: any StagePersistence,
+                layoutHooks: LayoutHooks? = nil) {
+        self.registry = registry
+        self.hideStrategy = hideStrategy
+        self.layoutHooks = layoutHooks
         self.stagesDir = (stagesDir as NSString).expandingTildeInPath
         self.baseConfigDir = baseConfigDir.map { ($0 as NSString).expandingTildeInPath }
-        try? FileManager.default.createDirectory(atPath: self.stagesDir, withIntermediateDirectories: true)
+        self.persistence = persistence
+    }
+
+    /// Substitue la persistence après création (injection différée, mode V2).
+    /// Appelé par le daemon après l'init du DesktopRegistry, avant le premier
+    /// `reload(forDesktop:)`. Invalide le cache en mémoire des stages.
+    public func setPersistence(_ newPersistence: any StagePersistence) {
+        persistence = newPersistence
+        stages.removeAll()
+        currentStageID = nil
     }
 
     /// Multi-desktop V2 (T030-T031) : bascule le scope du manager vers le desktop `id`.
-    /// Sauvegarde l'état du desktop quitté, charge celui d'arrivée, restaure le stage actif.
-    /// Si `baseConfigDir` est nil (mode V1), cette méthode est sans effet.
+    /// Délègue à `persistence.setDesktopID(_:)` qui est no-op en mode V1 (FileBackedStagePersistence)
+    /// et met à jour l'ID courant en mode V2 (DesktopBackedStagePersistence).
+    /// En mode V1, le swap de dossier physique est assuré par `reloadV1(stagesDir:)`.
     public func reload(forDesktop id: Int) {
-        guard let base = baseConfigDir else { return }
-        let newDir = "\(base)/desktops/\(id)/stages"
-        reload(stagesDir: newDir)
+        // Sauvegarder l'état du desktop quitté.
+        flushCurrentFrames()
+        persistence.saveActiveStage(currentStageID)
+        stages.removeAll()
+        currentStageID = nil
+        // Notifier la persistence du nouvel ID (no-op V1, essentiel V2).
+        persistence.setDesktopID(id)
+        if let base = baseConfigDir {
+            let newDir = ("\(base)/desktops/\(id)/stages" as NSString).expandingTildeInPath
+            if persistence.requiresPhysicalDirSwap {
+                // Mode V1 : créer une nouvelle FileBackedStagePersistence pour le nouveau
+                // dossier. La persistence V1 ne supporte pas le hot-swap de dossier — elle
+                // lit toujours depuis le path donné à l'init.
+                self.stagesDir = newDir
+                self.persistence = FileBackedStagePersistence(stagesDir: newDir)
+            } else {
+                // Mode V2 : mettre à jour uniquement pour extractDesktopID (events).
+                self.stagesDir = newDir
+            }
+        }
+        loadFromPersistence()
     }
 
-    /// Multi-desktop V2 : swap atomique du dossier de persistance.
-    /// 1) Sauve l'état du desktop quitté (frames courantes + saveActive).
-    /// 2) Reset l'état en mémoire.
-    /// 3) Pointe `stagesDir` vers le nouveau path.
-    /// 4) Recharge depuis disque (loadFromDisk).
-    /// FR-004 (sauvegarde avant quitter) + FR-005 (state isolé par UUID).
+    /// V1 uniquement : swap atomique du dossier de persistance.
+    /// Utilisé en interne et dans les tests de scope qui testent le comportement V1.
     public func reload(stagesDir newDir: String) {
-        // 1) Capture frames courantes du stage actif (cohérent avec switchTo).
-        if let current = currentStageID, var stage = stages[current] {
-            for i in 0..<stage.memberWindows.count {
-                let wid = stage.memberWindows[i].cgWindowID
-                if let element = registry.axElement(for: wid),
-                   let frame = AXReader.bounds(element) {
-                    stage.memberWindows[i].savedFrame = SavedRect(frame)
-                }
-            }
-            stages[current] = stage
-            saveStage(stage)
-        }
-        saveActive()
+        reloadV1(stagesDir: newDir)
+    }
 
-        // 2-3) Reset + swap path
+    private func reloadV1(stagesDir newDir: String) {
+        flushCurrentFrames()
+        persistence.saveActiveStage(currentStageID)
+
         stages.removeAll()
         currentStageID = nil
         let expanded = (newDir as NSString).expandingTildeInPath
         self.stagesDir = expanded
         try? FileManager.default.createDirectory(atPath: expanded, withIntermediateDirectories: true)
 
-        // 4) Recharge
-        loadFromDisk()
+        loadFromPersistence()
+    }
+
+    /// Capture les frames actuelles du stage actif avant toute transition.
+    private func flushCurrentFrames() {
+        guard let current = currentStageID, var stage = stages[current] else { return }
+        var changed = false
+        for i in 0..<stage.memberWindows.count {
+            let wid = stage.memberWindows[i].cgWindowID
+            if let element = registry.axElement(for: wid),
+               let frame = AXReader.bounds(element) {
+                stage.memberWindows[i].savedFrame = SavedRect(frame)
+                changed = true
+            }
+        }
+        if changed {
+            stages[current] = stage
+            persistence.saveStage(stage)
+        }
     }
 
     public func loadFromDisk() {
-        guard let entries = try? FileManager.default.contentsOfDirectory(atPath: stagesDir) else { return }
-        for entry in entries where entry.hasSuffix(".toml") && entry != "active.toml" {
-            let path = "\(stagesDir)/\(entry)"
-            guard let raw = try? String(contentsOfFile: path, encoding: .utf8),
-                  let stage = try? TOMLDecoder().decode(Stage.self, from: raw) else {
-                logWarn("stage file corrupt", ["path": path])
-                continue
-            }
+        loadFromPersistence()
+    }
+
+    private func loadFromPersistence() {
+        let loaded = persistence.loadStages()
+        stages.removeAll()
+        for stage in loaded {
             stages[stage.id] = stage
         }
-        // Active stage — ignorer les valeurs vides (saveActive écrit "" pour nil)
-        let activePath = "\(stagesDir)/active.toml"
-        if let raw = try? String(contentsOfFile: activePath, encoding: .utf8),
-           let parsed = try? TOMLDecoder().decode([String: String].self, from: raw),
-           let active = parsed["current_stage"],
-           !active.isEmpty {
-            currentStageID = StageID(active)
-        }
+        currentStageID = persistence.loadActiveStage()
         logInfo("stages loaded", ["count": String(stages.count), "current": currentStageID?.value ?? "nil"])
     }
 
     public func saveStage(_ stage: Stage) {
-        let path = "\(stagesDir)/\(stage.id.value).toml"
-        do {
-            let toml = try TOMLEncoder().encode(stage)
-            try toml.write(toFile: path, atomically: true, encoding: .utf8)
-        } catch {
-            logError("stage save failed", ["id": stage.id.value, "err": "\(error)"])
-        }
+        persistence.saveStage(stage)
     }
 
     private func saveActive() {
-        let path = "\(stagesDir)/active.toml"
-        let dict: [String: String] = ["current_stage": currentStageID?.value ?? ""]
-        if let toml = try? TOMLEncoder().encode(dict) {
-            try? toml.write(toFile: path, atomically: true, encoding: .utf8)
-        }
+        persistence.saveActiveStage(currentStageID)
     }
 
     // MARK: - API publique
@@ -153,10 +191,24 @@ public final class StageManager {
     }
 
     public func deleteStage(id: StageID) {
+        // Stage 1 immortel : stage par défaut de chaque desktop, jamais détruit.
+        // L'auto-destroy on-empty (assign / handleWindowDestroyed) saute ce cas.
+        if id.value == "1" { return }
         stages.removeValue(forKey: id)
-        let path = "\(stagesDir)/\(id.value).toml"
-        try? FileManager.default.removeItem(atPath: path)
+        persistence.deleteStage(id)
         if currentStageID == id { currentStageID = nil; saveActive() }
+    }
+
+    /// Garantit que le stage 1 par défaut existe et qu'un stage est actif.
+    /// Appelé par bootstrap() après loadFromDisk() et après chaque reload(forDesktop:).
+    public func ensureDefaultStage() {
+        let defaultID = StageID("1")
+        if stages[defaultID] == nil {
+            _ = createStage(id: defaultID, displayName: "1")
+        }
+        if currentStageID == nil {
+            switchTo(stageID: defaultID)
+        }
     }
 
     public func assign(wid: WindowID, to stageID: StageID) {
@@ -189,6 +241,83 @@ public final class StageManager {
         stages[stageID] = target
         saveStage(target)
         registry.update(wid) { $0.stageID = stageID }
+    }
+
+    // MARK: - API desktop (SPEC-011 refactor)
+
+    /// Cache toutes les fenêtres du stage actif courant et met currentStageID à nil.
+    /// Utilisé par DesktopSwitcher via DesktopStageOps pour la phase "quitter un desktop".
+    /// Sans effet si aucun stage n'est actif.
+    public func deactivateAll() {
+        // Capturer les frames du stage actif pour restauration future.
+        if let current = currentStageID, var updated = stages[current] {
+            for i in 0..<updated.memberWindows.count {
+                let wid = updated.memberWindows[i].cgWindowID
+                if let element = registry.axElement(for: wid),
+                   let frame = AXReader.bounds(element) {
+                    updated.memberWindows[i].savedFrame = SavedRect(frame)
+                }
+            }
+            stages[current] = updated
+            saveStage(updated)
+        }
+        // Cacher les fenêtres de TOUS les stages du desktop courant (pas seulement
+        // le stage actif). Sans ça, une fenêtre assignée à un stage non-actif
+        // resterait visible après bascule de desktop, créant l'illusion d'un
+        // "stage qui suit" l'utilisateur entre desktops.
+        var seenWids: Set<WindowID> = []
+        for stage in stages.values {
+            for member in stage.memberWindows {
+                let wid = member.cgWindowID
+                guard seenWids.insert(wid).inserted else { continue }
+                let isTileable = registry.get(wid)?.isTileable ?? false
+                if isTileable, let hooks = layoutHooks {
+                    hooks.setLeafVisible(wid, false)
+                }
+                if let override = hideOverride {
+                    override.hide(wid: wid, isTileable: isTileable)
+                } else {
+                    HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
+                }
+            }
+        }
+        currentStageID = nil
+        saveActive()
+        layoutHooks?.applyLayout()
+    }
+
+    /// Active le stage `stageID` en supposant qu'aucun stage n'est actuellement actif
+    /// (currentStageID == nil). Affiche les fenêtres du stage cible.
+    /// Utilisé par DesktopSwitcher via DesktopStageOps pour la phase "entrer dans un desktop".
+    public func activate(stageID: StageID) {
+        guard let target = stages[stageID] else {
+            logWarn("activate: unknown stage", ["stage": stageID.value])
+            return
+        }
+        for member in target.memberWindows {
+            let wid = member.cgWindowID
+            let isTileable = registry.get(wid)?.isTileable ?? false
+            if isTileable, let hooks = layoutHooks {
+                hooks.setLeafVisible(wid, true)
+                if let override = hideOverride { override.show(wid: wid, isTileable: true) }
+            } else {
+                if let override = hideOverride {
+                    override.show(wid: wid, isTileable: false)
+                } else {
+                    HideStrategyImpl.show(wid, registry: registry, strategy: hideStrategy)
+                }
+                if let saved = member.savedFrame, let element = registry.axElement(for: wid) {
+                    AXReader.setBounds(element, frame: saved.cgRect)
+                }
+            }
+        }
+        layoutHooks?.applyLayout()
+        var updated = target
+        updated.lastActiveAt = Date()
+        stages[stageID] = updated
+        currentStageID = stageID
+        saveStage(updated)
+        saveActive()
     }
 
     public func switchTo(stageID: StageID) {

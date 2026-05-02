@@ -3,6 +3,7 @@ import AppKit
 import CoreGraphics
 import RoadieCore
 import RoadieFXCore
+import TOMLKit
 
 /// SPEC-008 RoadieBorders — bordure colorée focused/inactive autour fenêtres tracked.
 /// Plafond LOC strict : 280 (cible 200). Gradient animé DROPPÉ après revue scope.
@@ -21,12 +22,42 @@ public final class BordersModule: @unchecked Sendable {
     private let lock = NSLock()
 
     public func subscribe(to bus: FXEventBus) {
+        loadConfigFromDisk()
         bus.subscribe(to: [.windowFocused, .windowCreated, .windowDestroyed,
                           .windowMoved, .windowResized,
                           .stageChanged, .desktopChanged,
                           .configReloaded]) { [weak self] event in
             self?.handle(event: event)
         }
+    }
+
+    /// Lit `[fx.borders]` dans `~/.config/roadies/roadies.toml` et applique
+    /// la config résultante. Appelé au boot et sur event `.configReloaded`.
+    /// Tolérant : fichier absent ou section absente → garde les défauts.
+    func loadConfigFromDisk() {
+        let path = ConfigLoader.defaultConfigPath()
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return
+        }
+        guard let root = try? TOMLTable(string: raw) else { return }
+        guard let fx = root["fx"]?.table, let borders = fx["borders"]?.table else {
+            return
+        }
+        var cfg = BordersConfig()
+        if let v = borders["enabled"]?.bool { cfg.enabled = v }
+        if let v = borders["thickness"]?.int { cfg.thickness = Int(v) }
+        if let v = borders["corner_radius"]?.int { cfg.cornerRadius = Int(v) }
+        if let v = borders["active_color"]?.string { cfg.activeColor = v }
+        if let v = borders["inactive_color"]?.string { cfg.inactiveColor = v }
+        if let v = borders["pulse_on_focus"]?.bool { cfg.pulseOnFocus = v }
+        if let v = borders["focused_only"]?.bool { cfg.focusedOnly = v }
+        if let arr = borders["stage_overrides"]?.array {
+            cfg.stageOverrides = arr.compactMap { item -> StageOverride? in
+                guard let t = item.table, let sid = t["stage_id"]?.string else { return nil }
+                return StageOverride(stageID: sid, activeColor: t["active_color"]?.string)
+            }
+        }
+        setConfig(cfg)
     }
 
     public func shutdown() {
@@ -47,6 +78,11 @@ public final class BordersModule: @unchecked Sendable {
     }
 
     private func handle(event: FXEvent) {
+        if event.kind == .configReloaded {
+            loadConfigFromDisk()
+            refreshAllColors()
+            return
+        }
         guard config.enabled else { return }
         switch event.kind {
         case .windowCreated:
@@ -92,9 +128,11 @@ public final class BordersModule: @unchecked Sendable {
             : config.inactiveColor
         let nsColor = nsColor(fromHex: colorHex) ?? .systemBlue
         let thickness = config.clampedThickness
+        let radius = config.clampedCornerRadius
         Task { @MainActor in
             let overlay = BorderOverlay(wid: wid, frame: frame,
-                                        thickness: thickness, color: nsColor)
+                                        thickness: thickness, color: nsColor,
+                                        cornerRadius: radius)
             self.lock.withLock { _ = self.overlays[wid].map { $0.close() }
                                  self.overlays[wid] = overlay }
             // SPEC-008 force level via osax : niveau 1000 met l'overlay au-dessus
@@ -112,19 +150,22 @@ public final class BordersModule: @unchecked Sendable {
     }
 
     /// Recalcule la couleur de tous les overlays (focused → activeColor,
-    /// autres → inactiveColor). Appelé sur focus_changed et stage_changed.
+    /// autres → inactiveColor) ET la visibilité selon `focused_only`.
+    /// Appelé sur focus_changed, stage_changed, configReloaded.
     private func refreshAllColors() {
-        let (focused, stageID, inactive, snapshot) = lock.withLock {
+        let (focused, stageID, inactive, focusedOnly, snapshot) = lock.withLock {
             (focusedWID, currentStageID, config.inactiveColor,
-             Array(overlays))
+             config.focusedOnly, Array(overlays))
         }
         let activeHex = activeColor(forStage: stageID, config: config)
         Task { @MainActor in
             for (wid, overlay) in snapshot {
-                let hex = (wid == focused) ? activeHex : inactive
+                let isFocused = (wid == focused)
+                let hex = isFocused ? activeHex : inactive
                 if let c = nsColor(fromHex: hex) {
                     overlay.updateColor(c)
                 }
+                overlay.setHidden(focusedOnly && !isFocused)
             }
         }
     }

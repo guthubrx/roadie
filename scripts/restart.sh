@@ -86,11 +86,15 @@ echo ""
 echo "→ deploy roadied → $APP_BIN"
 mkdir -p "$(dirname "$APP_BIN")"
 cp "$NEW_DAEMON" "$APP_BIN"
+# Re-codesign après cp : macOS Tahoe (codeSigningMonitor=2) invalide la signature
+# embarquée quand le binaire est copié → SIGKILL "Code Signature Invalid".
+codesign --force --sign - "$APP_BIN" 2>&1 | grep -v "replacing existing signature" || true
 echo "  ✓ $(ls -la "$APP_BIN" | awk '{print $5, $6, $7, $8}')"
 
 echo "→ deploy roadie  → $CLI_BIN"
 mkdir -p "$(dirname "$CLI_BIN")"
 cp "$NEW_CLI" "$CLI_BIN"
+codesign --force --sign - "$CLI_BIN" 2>&1 | grep -v "replacing existing signature" || true
 echo "  ✓ $(ls -la "$CLI_BIN" | awk '{print $5, $6, $7, $8}')"
 
 # Étape 4 : avertir si la config a une section legacy

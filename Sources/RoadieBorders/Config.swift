@@ -4,24 +4,38 @@ import Foundation
 public struct BordersConfig: Codable, Sendable {
     public var enabled: Bool = false
     public var thickness: Int = 2
+    public var cornerRadius: Int = 10
     public var activeColor: String = "#7AA2F7"
     public var inactiveColor: String = "#414868"
     public var pulseOnFocus: Bool = true
+    /// Sans osax (Tahoe 26 bloqué), on ne peut pas forcer un overlay à rester
+    /// juste au-dessus de sa fenêtre tracked. Quand `focusedOnly = true`, seule
+    /// la bordure de la fenêtre focused est visible — évite les artefacts de
+    /// chevauchement entre overlays et fenêtres en arrière-plan.
+    public var focusedOnly: Bool = true
     public var stageOverrides: [StageOverride] = []
 
     public init() {}
 
     enum CodingKeys: String, CodingKey {
         case enabled, thickness
+        case cornerRadius = "corner_radius"
         case activeColor = "active_color"
         case inactiveColor = "inactive_color"
         case pulseOnFocus = "pulse_on_focus"
+        case focusedOnly = "focused_only"
         case stageOverrides = "stage_overrides"
     }
 
     /// Validation : thickness ∈ [0, 20]. Hors range = clamp + log warning.
     public var clampedThickness: Int {
         max(0, min(20, thickness))
+    }
+
+    /// Validation : cornerRadius ∈ [0, 40]. 0 = coins carrés (style i3),
+    /// ~10 ≈ rayon natif macOS Big Sur+, jusqu'à 40 pour effets bubbly.
+    public var clampedCornerRadius: CGFloat {
+        CGFloat(max(0, min(40, cornerRadius)))
     }
 }
 
