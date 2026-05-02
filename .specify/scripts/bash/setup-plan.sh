@@ -37,8 +37,12 @@ check_feature_branch "$CURRENT_BRANCH" "$HAS_GIT" || exit 1
 mkdir -p "$FEATURE_DIR"
 
 # Copy plan template if it exists
+# IMPORTANT: ne JAMAIS écraser un plan.md existant (incident 2026-05-02 SPEC-014).
+# Si l'utilisateur veut repartir d'un template, qu'il supprime explicitement le fichier.
 TEMPLATE="$REPO_ROOT/.specify/templates/plan-template.md"
-if [[ -f "$TEMPLATE" ]]; then
+if [[ -f "$IMPL_PLAN" ]]; then
+    echo "[setup-plan] plan.md already exists at $IMPL_PLAN — keeping existing content (no template overwrite)" >&2
+elif [[ -f "$TEMPLATE" ]]; then
     cp "$TEMPLATE" "$IMPL_PLAN"
     echo "Copied plan template to $IMPL_PLAN"
 else
