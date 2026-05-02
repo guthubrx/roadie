@@ -64,6 +64,14 @@ CGError SLSGetWindowEventMask(CGSConnectionID cid, CGWindowID wid, uint32_t *mas
 // Cross-référence Space UUID → CGSSpaceID (pour move_window_to_space).
 // Retourne CFArray d'NSDictionary par display contenant `Spaces[].uuid` et `id64`.
 CFArrayRef SLSCopyManagedDisplaySpaces(CGSConnectionID cid);
+CFArrayRef CGSCopyManagedDisplaySpaces(CGSConnectionID cid);
+
+// Bascule instantanée vers un space cible sur un display donné. Pattern yabai.
+// Doit être appelé depuis le contexte Dock (osax) pour que WindowServer rerender
+// correctement la visibilité des fenêtres.
+void CGSManagedDisplaySetCurrentSpace(CGSConnectionID cid,
+                                      CFStringRef displayUUID,
+                                      CGSSpaceID spaceID);
 
 #ifdef __cplusplus
 }

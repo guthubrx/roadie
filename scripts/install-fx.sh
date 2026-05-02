@@ -48,12 +48,21 @@ echo "→ Build dylibs des modules FX"
 cd "$REPO"
 swift build --configuration release 2>&1 | tail -3
 
-# Étape 3 : install osax (sudo requis)
+# Étape 3 : install osax. Utilise `osascript do shell script with
+# administrator privileges` qui ouvre une popup macOS native demandant le mot
+# de passe — fonctionne quand stdin n'est pas un TTY (cas de make install-fx).
 echo ""
-echo "→ Install osax dans /Library/ScriptingAdditions/ (sudo requis)"
-sudo rm -rf "$OSAX_DST"
-sudo cp -R "$OSAX_SRC" "$OSAX_DST"
-sudo chown -R root:wheel "$OSAX_DST"
+echo "→ Install osax dans /Library/ScriptingAdditions/"
+echo "  (popup macOS va demander le mot de passe administrateur)"
+INSTALL_CMD="rm -rf '$OSAX_DST' && cp -R '$OSAX_SRC' '$OSAX_DST' && chown -R root:wheel '$OSAX_DST'"
+osascript -e "do shell script \"$INSTALL_CMD\" with administrator privileges" \
+    >/dev/null 2>&1 || {
+        echo "  ⚠ popup admin échouée — fallback sudo manuel :"
+        echo "    sudo cp -R '$OSAX_SRC' '$OSAX_DST'"
+        echo "    sudo chown -R root:wheel '$OSAX_DST'"
+        exit 1
+    }
+echo "  ✓ osax installée"
 
 # Étape 4 : copie dylibs
 echo ""

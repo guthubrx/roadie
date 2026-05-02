@@ -105,12 +105,37 @@ public final class Server: @unchecked Sendable {
     /// Mode push : ack + souscription EventBus, chaque event devient une ligne
     /// JSON envoyée immédiatement sur la connexion. La Task se termine quand le
     /// stream se ferme (continuation cancelled au cancel de la connexion).
+    /// Max 16 subscribers concurrents (T049 : limite contractuelle events-stream.md).
     private func startEventStream(on connection: NWConnection, request: Request) {
-        let ack = Response.success(["subscribed": AnyCodable(true)])
-        self.send(ack, on: connection)
+        let typesArg = request.args?["types"] ?? ""
+        let requestedTypes: Set<String> = typesArg.isEmpty
+            ? []
+            : Set(typesArg.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
+
+        // Valider les types demandés
+        let knownTypes: Set<String> = ["desktop_changed", "stage_changed"]
+        if let unknown = requestedTypes.first(where: { !knownTypes.contains($0) }) {
+            let errResp = Response.error(.invalidArgument, "invalid_filter: unknown event type \"\(unknown)\"")
+            self.send(errResp, on: connection)
+            return
+        }
+
         Task { @MainActor [weak self] in
+            guard EventBus.shared.subscriberCount < 16 else {
+                let errResp = Response.error(.internalError, "subscribe_failed: max 16 subscribers reached")
+                self?.send(errResp, on: connection)
+                return
+            }
+            let subID = UUID().uuidString
+            let ack = Response.success([
+                "subscription_id": AnyCodable(subID),
+                "subscribed_types": AnyCodable(requestedTypes.isEmpty ? Array(knownTypes) : Array(requestedTypes)),
+            ])
+            self?.send(ack, on: connection)
             let stream = EventBus.shared.subscribe()
             for await event in stream {
+                // Filtre par type si demandé
+                if !requestedTypes.isEmpty, !requestedTypes.contains(event.name) { continue }
                 let line = event.toJSONLine()
                 guard let data = line.data(using: .utf8) else { continue }
                 self?.sendRaw(data, on: connection)

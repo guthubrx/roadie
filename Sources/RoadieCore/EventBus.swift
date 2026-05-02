@@ -32,9 +32,8 @@ public struct DesktopEvent: Sendable {
     }
 }
 
-/// Pub/sub minimal pour les événements internes (desktop_changed, stage_changed).
-/// Multiple subscribers possibles, tous reçoivent tous les events (pas de coalescing en V2,
-/// cf. contracts/events-stream.md).
+/// Pub/sub minimal pour les événements internes (stage_changed, etc.).
+/// Multiple subscribers possibles, tous reçoivent tous les events.
 @MainActor
 public final class EventBus {
     public static let shared = EventBus()
