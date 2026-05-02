@@ -21,17 +21,23 @@ enum CommandRouter {
     static func route(_ request: Request, daemon: Daemon) async -> Response {
         switch request.command {
         case "windows.list":
+            // SPEC-014 : ajouter app_name pour résoudre l'icône côté rail (NSRunningApplication.localizedName).
+            let runningByPID = Dictionary(uniqueKeysWithValues:
+                NSWorkspace.shared.runningApplications.map { ($0.processIdentifier, $0) })
             let payload: [String: AnyCodable] = [
                 "windows": AnyCodable(daemon.registry.allWindows.map { state -> [String: Any] in
-                    [
+                    let appName: String = runningByPID[state.pid]?.localizedName ?? state.bundleID
+                    return [
                         "id": Int(state.cgWindowID),
                         "pid": Int(state.pid),
                         "bundle": state.bundleID,
+                        "app_name": appName,
                         "title": state.title,
                         "frame": [Int(state.frame.origin.x), Int(state.frame.origin.y),
                                   Int(state.frame.size.width), Int(state.frame.size.height)],
                         "subrole": state.subrole.rawValue,
                         "is_tiled": state.isTileable,
+                        "is_floating": state.isFloating,
                         "is_focused": daemon.registry.focusedWindowID == state.cgWindowID,
                         "stage": state.stageID?.value ?? "",
                     ]

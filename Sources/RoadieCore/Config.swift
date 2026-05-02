@@ -263,6 +263,17 @@ public struct DaemonConfig: Codable, Sendable {
         case logLevel = "log_level"
         case socketPath = "socket_path"
     }
+
+    /// Decode tolérant : un `[daemon]` partiel (ex: seulement `log_level`) ne
+    /// doit pas lever `keyNotFound`. Cohérent avec le pattern des autres configs
+    /// (MouseConfig, DesktopsConfig, Config root). Préserve la rétrocompat sur
+    /// les TOML utilisateurs antérieurs à l'ajout de `socket_path`.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.logLevel = try c.decodeIfPresent(String.self, forKey: .logLevel) ?? "info"
+        self.socketPath = try c.decodeIfPresent(String.self, forKey: .socketPath)
+            ?? "~/.roadies/daemon.sock"
+    }
 }
 
 public struct TilingConfig: Codable, Sendable {
