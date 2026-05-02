@@ -81,10 +81,23 @@ public final class WindowRegistry {
         windows.values.filter { $0.stageID == stage }
     }
 
-    /// Multi-desktop V2 — au `desktop_changed`, marque toutes les fenêtres présentes
-    /// dans le registry comme appartenant au desktop d'arrivée (FR-007).
-    /// Les fenêtres orphelines d'un desktop antérieur conservent leur `desktopUUID`
-    /// existant jusqu'à reapparition (cf. data-model SPEC-003).
+    /// SPEC-011 : retourne les fenêtres assignées à un desktop virtuel donné.
+    public func windows(of desktopID: Int) -> [WindowState] {
+        windows.values.filter { $0.desktopID == desktopID }
+    }
+
+    /// SPEC-011 : met à jour la expectedFrame d'une fenêtre — appelé uniquement
+    /// quand la fenêtre est on-screen (desktopID == currentDesktopID, cf. R-002).
+    public func updateExpectedFrame(_ wid: WindowID, frame: CGRect) {
+        update(wid) { $0.expectedFrame = frame }
+    }
+
+    /// SPEC-011 : assigne une fenêtre à un desktop virtuel.
+    public func assignDesktop(_ wid: WindowID, desktopID: Int) {
+        update(wid) { $0.desktopID = desktopID }
+    }
+
+    /// Legacy SPEC-003 — conservé pour compatibilité transitoire.
     public func applyDesktopUUID(_ uuid: String) {
         for wid in windows.keys {
             update(wid) { $0.desktopUUID = uuid }

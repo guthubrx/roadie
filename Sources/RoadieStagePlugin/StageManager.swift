@@ -37,17 +37,38 @@ public final class StageManager {
 
     /// Dossier de persistance courant. En mode V1, c'est `~/.config/roadies/stages`.
     /// En mode V2 multi-desktop, le DesktopManager swap via `reload(stagesDir:)` pour
-    /// pointer vers `~/.config/roadies/desktops/<uuid>/stages` à chaque transition.
+    /// pointer vers `~/.config/roadies/desktops/<id>/stages` à chaque transition.
     private(set) public var stagesDir: String
+
+    /// Répertoire de base config (~/.config/roadies). Utilisé par reload(forDesktop:)
+    /// pour construire le path `desktops/<id>/stages`. nil = mode V1 (path fixe).
+    private let baseConfigDir: String?
+
+    /// T048 (SPEC-011 US5) : callback optionnel appelé après chaque bascule de stage.
+    /// Le daemon l'utilise pour relayer l'event vers DesktopEventBus sans créer de
+    /// dépendance RoadieDesktops → RoadieStagePlugin.
+    /// Signature : (desktopID: String, fromStageID: String, toStageID: String) -> Void
+    public var onStageChanged: (@MainActor (String, String, String) -> Void)?
 
     public init(registry: WindowRegistry, hideStrategy: HideStrategy = .corner,
                 stagesDir: String = "~/.config/roadies/stages",
+                baseConfigDir: String? = nil,
                 layoutHooks: LayoutHooks? = nil) {
         self.registry = registry
         self.hideStrategy = hideStrategy
         self.layoutHooks = layoutHooks
         self.stagesDir = (stagesDir as NSString).expandingTildeInPath
+        self.baseConfigDir = baseConfigDir.map { ($0 as NSString).expandingTildeInPath }
         try? FileManager.default.createDirectory(atPath: self.stagesDir, withIntermediateDirectories: true)
+    }
+
+    /// Multi-desktop V2 (T030-T031) : bascule le scope du manager vers le desktop `id`.
+    /// Sauvegarde l'état du desktop quitté, charge celui d'arrivée, restaure le stage actif.
+    /// Si `baseConfigDir` est nil (mode V1), cette méthode est sans effet.
+    public func reload(forDesktop id: Int) {
+        guard let base = baseConfigDir else { return }
+        let newDir = "\(base)/desktops/\(id)/stages"
+        reload(stagesDir: newDir)
     }
 
     /// Multi-desktop V2 : swap atomique du dossier de persistance.
@@ -93,11 +114,12 @@ public final class StageManager {
             }
             stages[stage.id] = stage
         }
-        // Active stage
+        // Active stage — ignorer les valeurs vides (saveActive écrit "" pour nil)
         let activePath = "\(stagesDir)/active.toml"
         if let raw = try? String(contentsOfFile: activePath, encoding: .utf8),
            let parsed = try? TOMLDecoder().decode([String: String].self, from: raw),
-           let active = parsed["current_stage"] {
+           let active = parsed["current_stage"],
+           !active.isEmpty {
             currentStageID = StageID(active)
         }
         logInfo("stages loaded", ["count": String(stages.count), "current": currentStageID?.value ?? "nil"])
@@ -240,32 +262,39 @@ public final class StageManager {
         saveStage(target)
         saveActive()
 
-        // Émission event V2 stage_changed (FR-015). desktop_uuid extrait du stagesDir
-        // (.../desktops/<uuid>/stages → uuid). En mode V1, le path est .../stages → ""
-        // et l'event est quand même publié pour les subscribers (filtrable côté client).
-        let desktopUUID = extractDesktopUUID(fromStagesDir: stagesDir)
+        // Émission event V2 stage_changed (FR-015). desktop_id extrait du stagesDir
+        // (.../desktops/<id>/stages → id). En mode V1, le path est .../stages → nil
+        // (M5) et l'event est quand même publié pour les subscribers (filtrable côté client).
+        let desktopID = extractDesktopID(fromStagesDir: stagesDir)
         var payload: [String: String] = [
-            "desktop_uuid": desktopUUID,
             "to": stageID.value,
             "to_name": toName,
         ]
+        if let did = desktopID {
+            payload["desktop_id"] = did
+        }
         if let from = fromID {
             payload["from"] = from.value
             payload["from_name"] = fromName
         }
         EventBus.shared.publish(DesktopEvent(name: "stage_changed", payload: payload))
 
+        // T048 : notifier DesktopEventBus via closure (pas de dépendance directe)
+        let fromStr = fromID?.value ?? ""
+        onStageChanged?(desktopID ?? "", fromStr, stageID.value)
+
         logInfo("stage switched", ["to": stageID.value])
     }
 
-    /// Extrait l'UUID du desktop depuis le path `.../desktops/<uuid>/stages`.
-    /// Retourne "" si le path est `.../stages` (mode V1) ou inattendu.
-    private func extractDesktopUUID(fromStagesDir dir: String) -> String {
+    /// Extrait l'ID du desktop depuis le path `.../desktops/<id>/stages`.
+    /// M5 : retourne nil (et non "") si le path est `.../stages` (mode V1) ou inattendu.
+    /// Les appelants doivent traiter nil comme "desktop inconnu / mode V1".
+    private func extractDesktopID(fromStagesDir dir: String) -> String? {
         let parts = dir.split(separator: "/").map(String.init)
         guard parts.count >= 2,
               parts.last == "stages",
               let desktopIdx = parts.firstIndex(of: "desktops"),
-              parts.indices.contains(desktopIdx + 1) else { return "" }
+              parts.indices.contains(desktopIdx + 1) else { return nil }
         return parts[desktopIdx + 1]
     }
 

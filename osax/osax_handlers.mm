@@ -140,6 +140,38 @@ static NSString *handleSetSticky(NSDictionary *cmd) {
     return err == kCGErrorSuccess ? ok() : errorWithCode(@"cgs_failure");
 }
 
+// Bascule vers un space par UUID (pattern yabai). Utilise le contexte privilégié
+// Dock pour que WindowServer rerender la visibilité des fenêtres (sinon le
+// space change mais les windows restent visibles depuis l'ancien space).
+static NSString *handleSpaceFocus(NSDictionary *cmd) {
+    NSString *uuid = cmd[@"space_uuid"];
+    if (![uuid isKindOfClass:[NSString class]]) {
+        return errorWithCode(@"invalid_parameter");
+    }
+    CFArrayRef displays = CGSCopyManagedDisplaySpaces(conn());
+    if (!displays) return errorWithCode(@"cgs_failure");
+
+    NSString *displayUUID = nil;
+    CGSSpaceID spaceID = 0;
+    for (CFIndex i = 0; i < CFArrayGetCount(displays); i++) {
+        NSDictionary *display = (__bridge NSDictionary *)CFArrayGetValueAtIndex(displays, i);
+        for (NSDictionary *space in display[@"Spaces"]) {
+            if ([space[@"uuid"] isEqualToString:uuid]) {
+                displayUUID = display[@"Display Identifier"];
+                NSNumber *sidNum = space[@"ManagedSpaceID"] ?: space[@"id64"] ?: space[@"id"];
+                spaceID = (CGSSpaceID)[sidNum unsignedLongLongValue];
+                break;
+            }
+        }
+        if (displayUUID) break;
+    }
+    CFRelease(displays);
+
+    if (!displayUUID || spaceID == 0) return errorWithCode(@"not_found");
+    CGSManagedDisplaySetCurrentSpace(conn(), (__bridge CFStringRef)displayUUID, spaceID);
+    return ok();
+}
+
 NSString *ROOSAXHandlers_dispatch(NSString *name, NSDictionary *cmd) {
     if ([name isEqualToString:@"noop"])               return handleNoop(cmd);
     if ([name isEqualToString:@"set_alpha"])          return handleSetAlpha(cmd);
@@ -150,5 +182,6 @@ NSString *ROOSAXHandlers_dispatch(NSString *name, NSDictionary *cmd) {
     if ([name isEqualToString:@"set_frame"])          return handleSetFrame(cmd);
     if ([name isEqualToString:@"move_window_to_space"]) return handleMoveWindowToSpace(cmd);
     if ([name isEqualToString:@"set_sticky"])         return handleSetSticky(cmd);
+    if ([name isEqualToString:@"space_focus"])        return handleSpaceFocus(cmd);
     return errorWithCode(@"unknown_command");
 }

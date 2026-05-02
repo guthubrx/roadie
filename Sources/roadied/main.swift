@@ -4,6 +4,7 @@ import ApplicationServices
 import RoadieCore
 import RoadieTiler
 import RoadieStagePlugin
+import RoadieDesktops
 
 /// Daemon roadied — point d'entrée.
 /// Bootstrap : check Accessibility → load config → init modules → start observers → run loop.
@@ -22,14 +23,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var mouseRaiser: MouseRaiser?
     var periodicScanner: PeriodicScanner?
     var dragWatcher: DragWatcher?
-    /// V2 multi-desktop : nil si `multi_desktop.enabled = false` (compat V1 stricte FR-020).
-    var desktopManager: DesktopManager?
-    /// Override gaps actif sur le desktop courant (US4 — DesktopRule appliquée au switch).
-    /// nil = pas d'override, on utilise `config.tiling.effectiveOuterGaps` global.
-    var currentDesktopGaps: OuterGaps?
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
     /// nil tant que `bootstrap()` n'a pas tourné. Toujours instancié, même en SIP fully on.
     var fxLoader: FXLoader?
+    /// SPEC-011 : registry des desktops virtuels. nil si desktops.enabled=false.
+    var desktopRegistry: DesktopRegistry?
+    /// SPEC-011 : orchestrateur de bascule. nil si desktops.enabled=false.
+    var desktopSwitcher: DesktopSwitcher?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -66,13 +66,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             )
             self.stageManager = StageManager(registry: registry,
                                              hideStrategy: config.stageManager.hideStrategy,
+                                             baseConfigDir: "~/.config/roadies",
                                              layoutHooks: hooks)
         } else {
             self.stageManager = nil
         }
     }
 
-    func bootstrap() throws {
+    func bootstrap() async throws {
         // Permissions Accessibility
         guard AXIsProcessTrusted() else {
             FileHandle.standardError.write("""
@@ -92,36 +93,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         logInfo("roadied starting")
 
-        // V2 multi-desktop : init AVANT load des stages pour pouvoir migrer V1→V2
-        // au premier boot et faire pointer le stagesDir vers le bon desktop.
-        if config.multiDesktop.enabled, let sm = stageManager {
-            try config.validateDesktopRules()
-            let provider = SkyLightDesktopProvider()
-            let dm = DesktopManager(provider: provider,
-                                    backAndForth: config.multiDesktop.backAndForth)
-            self.desktopManager = dm
-            // Migration V1→V2 (FR-023) : si le user vient de V1, mapper ses stages
-            // au desktop courant. No-op les fois suivantes.
-            if let currentUUID = provider.currentDesktopUUID() {
-                _ = DesktopMigration.runIfNeeded(currentUUID: currentUUID)
-            }
-            // Hook de transition : applique le desktop_uuid au registry, swap le
-            // dossier persistance du StageManager, applique la DesktopRule (V4),
-            // ré-applique le layout.
-            dm.onTransition = { [weak self] _, to in
-                guard let self = self else { return }
-                self.registry.applyDesktopUUID(to)
-                let stagesDir = "~/.config/roadies/desktops/\(to)/stages"
-                sm.reload(stagesDir: stagesDir)
-                // V2 US4 : appliquer DesktopRule matching (par index ou label).
-                self.applyDesktopRule(for: to)
-                self.applyLayout()
-            }
-            dm.start()
-        } else {
-            // V1 strict : load global comme avant.
-            stageManager?.loadFromDisk()
-        }
+        stageManager?.loadFromDisk()
 
         // Pre-existing stages from config
         if let sm = stageManager {
@@ -199,6 +171,125 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         self.fxLoader = loader
 
+        // SPEC-011 : init desktops virtuels si activé
+        if config.desktops.enabled {
+            let configDir = URL(fileURLWithPath:
+                (NSString(string: "~/.config/roadies").expandingTildeInPath as String))
+
+            // T054 : Migration au boot (avant DesktopRegistry.load)
+            let desktopsDir = configDir.appendingPathComponent("desktops")
+            let stagesDir = configDir.appendingPathComponent("stages")
+            do {
+                try archiveSpec003LegacyDirs(desktopsDir: desktopsDir)
+                try await migrateV1ToV2(stagesDir: stagesDir, desktopsDir: desktopsDir)
+            } catch {
+                logWarn("migration error (non-fatal)", ["error": "\(error)"])
+            }
+
+            let dRegistry = DesktopRegistry(configDir: configDir, count: config.desktops.count)
+            await dRegistry.load()
+            let dBus = DesktopEventBus()
+            let dMover = AXWindowMover()
+            let dCfg = DesktopSwitcherConfig(
+                count: config.desktops.count,
+                backAndForth: config.desktops.backAndForth,
+                offscreenX: config.desktops.offscreenX,
+                offscreenY: config.desktops.offscreenY
+            )
+            // Câbler le hook stage-reload (T031) : après chaque bascule desktop,
+            // notifier le StageManager pour qu'il switche son scope.
+            // La closure passe sur @MainActor car StageManager est @MainActor.
+            let sm = self.stageManager
+            let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
+                { @Sendable (newDesktopID: Int) async in
+                    await MainActor.run { mgr.reload(forDesktop: newDesktopID) }
+                }
+            }
+            // T048 : câbler onStageChanged → DesktopEventBus (émission stage_changed)
+            let busRef = dBus
+            sm?.onStageChanged = { @MainActor deskID, fromStage, toStage in
+                let event = DesktopChangeEvent(
+                    event: "stage_changed",
+                    from: fromStage,
+                    to: toStage,
+                    desktopID: deskID
+                )
+                Task { await busRef.publish(event) }
+            }
+            let dSwitcher = DesktopSwitcher(
+                registry: dRegistry,
+                mover: dMover,
+                bus: dBus,
+                config: dCfg,
+                onDesktopChanged: stageHook
+            )
+            self.desktopRegistry = dRegistry
+            self.desktopSwitcher = dSwitcher
+
+            // SPEC-011 T-boot : populer le DesktopRegistry avec les fenêtres déjà
+            // enregistrées dans WindowRegistry (bootstrap AX antérieur à l'init
+            // desktops). Les fenêtres offscreen (x < -1000) sont ignorées.
+            let currentDeskID = await dRegistry.currentID
+            for state in registry.allWindows where state.isTileable {
+                guard state.frame.origin.x > -1000 else { continue }
+                let entry = WindowEntry(
+                    cgwid: UInt32(state.cgWindowID),
+                    bundleID: state.bundleID,
+                    title: state.title,
+                    expectedFrame: state.frame,
+                    stageID: 1
+                )
+                do {
+                    try await dRegistry.assignWindow(entry, to: currentDeskID)
+                } catch {
+                    logWarn("boot: desktop assignWindow failed",
+                            ["wid": String(state.cgWindowID), "error": "\(error)"])
+                }
+            }
+            logInfo("boot: windows seeded into desktop",
+                    ["desktop": String(currentDeskID),
+                     "count": String(await dRegistry.windows(of: currentDeskID).count)])
+
+            // T049 : bridge DesktopEventBus → EventBus.shared (RoadieCore).
+            // Le Server utilise EventBus.shared pour les connexions events.subscribe.
+            // Ce bridge garantit que desktop_changed + stage_changed sont servis
+            // aux subscribers, sans modifier Server.swift.
+            Task { @MainActor in
+                let bridge = await dBus.subscribe()
+                for await evt in bridge {
+                    // Relayer vers RoadieCore.EventBus (JSON-line conforme au contrat)
+                    let payload: [String: String]
+                    if evt.event == "stage_changed" {
+                        payload = [
+                            "desktop_id": evt.desktopID,
+                            "from": evt.from,
+                            "to": evt.to,
+                            "ts": String(evt.ts),
+                        ]
+                    } else {
+                        var p: [String: String] = ["from": evt.from, "to": evt.to,
+                                                    "ts": String(evt.ts)]
+                        if !evt.fromLabel.isEmpty { p["from_label"] = evt.fromLabel }
+                        if !evt.toLabel.isEmpty { p["to_label"] = evt.toLabel }
+                        payload = p
+                    }
+                    EventBus.shared.publish(DesktopEvent(name: evt.event, payload: payload))
+                }
+            }
+
+            // T038 : restauration visuelle initiale (show/hide sans event desktop_changed)
+            await dSwitcher.restoreInitialView()
+            // T031 : aligner le StageManager sur le desktop courant restauré
+            let restoredID = await dRegistry.currentID
+            sm?.reload(forDesktop: restoredID)
+
+            logInfo("desktops initialized",
+                    ["count": String(config.desktops.count),
+                     "current": String(await dRegistry.currentID)])
+        } else {
+            logInfo("desktops disabled (desktops.enabled=false)")
+        }
+
         logInfo("roadied ready")
     }
 
@@ -271,91 +362,43 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 registry.setFocus(wid)
             }
         }
+        // SPEC-011 : pont WindowRegistry → DesktopRegistry.
+        // Enregistrer la fenêtre dans le desktop courant si le subsystème est actif.
+        // Les fenêtres offscreen (origin.x < -1000) au moment du boot (déjà déplacées
+        // par un run précédent) ne reçoivent pas d'expectedFrame valide — on les ignore
+        // et on attend une notification AX avec une vraie position.
+        if let dReg = desktopRegistry, frame.origin.x > -1000 {
+            let entry = WindowEntry(
+                cgwid: UInt32(wid),
+                bundleID: bundleID,
+                title: AXReader.title(axWindow),
+                expectedFrame: frame,
+                stageID: 1
+            )
+            Task { @MainActor in
+                let currentDeskID = await dReg.currentID
+                do {
+                    try await dReg.assignWindow(entry, to: currentDeskID)
+                    logInfo("window registered in desktop",
+                            ["wid": String(wid), "desktop": String(currentDeskID)])
+                } catch {
+                    logWarn("desktop assignWindow failed",
+                            ["wid": String(wid), "error": "\(error)"])
+                }
+            }
+        }
         if !isInitial { applyLayout() }
     }
 
     func applyLayout() {
         let area = displayManager.workArea
-        // V2 US4 : si une DesktopRule a posé un override de gaps pour le desktop
-        // courant, l'utiliser à la place du global. Sinon comportement V1 inchangé.
-        let gaps = currentDesktopGaps ?? config.tiling.effectiveOuterGaps
+        let gaps = config.tiling.effectiveOuterGaps
         layoutEngine.apply(rect: area,
                            outerGaps: gaps,
                            gapsInner: CGFloat(config.tiling.gapsInner))
         // Marquer le timestamp pour que les notifs AX déclenchées par notre setBounds
         // soient ignorées par scheduleAdaptResize pendant 200ms (cf. anti-feedback-loop).
         lastApplyTimestamp = Date()
-    }
-
-    /// V2 — reload à chaud de la section [multi_desktop] (FR-019). Active le
-    /// DesktopManager si nécessaire, ou le coupe si l'utilisateur a désactivé.
-    func reconfigureMultiDesktop(newConfig: Config) {
-        let wasEnabled = (desktopManager != nil)
-        let nowEnabled = newConfig.multiDesktop.enabled
-        guard wasEnabled != nowEnabled else {
-            // Mêmes flags : juste mettre à jour back_and_forth si DesktopManager actif.
-            desktopManager?.backAndForth = newConfig.multiDesktop.backAndForth
-            return
-        }
-        if nowEnabled, let sm = stageManager {
-            // Activation à chaud : on duplique la logique de bootstrap.
-            let provider = SkyLightDesktopProvider()
-            let dm = DesktopManager(provider: provider,
-                                    backAndForth: newConfig.multiDesktop.backAndForth)
-            self.desktopManager = dm
-            if let currentUUID = provider.currentDesktopUUID() {
-                _ = DesktopMigration.runIfNeeded(currentUUID: currentUUID)
-            }
-            dm.onTransition = { [weak self] _, to in
-                guard let self = self else { return }
-                self.registry.applyDesktopUUID(to)
-                let stagesDir = "~/.config/roadies/desktops/\(to)/stages"
-                sm.reload(stagesDir: stagesDir)
-                self.applyDesktopRule(for: to)
-                self.applyLayout()
-            }
-            dm.start()
-        } else {
-            // Désactivation à chaud : on lâche le DesktopManager. Le state actuel
-            // (stages dans desktops/<uuid>/) reste sur disque, prêt pour réactivation.
-            self.desktopManager = nil
-            self.currentDesktopGaps = nil
-        }
-    }
-
-    /// V2 US4 — applique la `[[desktops]]` rule matching le desktop d'arrivée :
-    /// override `default_strategy`, `gaps_*`, `default_stage`. No-op si aucune règle ne matche.
-    func applyDesktopRule(for desktopUUID: String) {
-        guard let dm = desktopManager else { return }
-        let info = dm.listDesktops().first(where: { $0.uuid == desktopUUID })
-        let label = dm.label(for: desktopUUID)
-        // Match par index OU par label (mutuellement exclusif, validé au boot par validateDesktopRules).
-        let rule = config.desktops.first { r in
-            if let mi = r.matchIndex, info?.index == mi { return true }
-            if let ml = r.matchLabel, label == ml { return true }
-            return false
-        }
-        guard let rule = rule else {
-            currentDesktopGaps = nil
-            return
-        }
-        // Override stratégie de tiling.
-        if let strat = rule.defaultStrategy {
-            try? layoutEngine.setStrategy(strat)
-        }
-        // Override gaps.
-        if let go = rule.gapsOverride() {
-            currentDesktopGaps = go.resolve(over: config.tiling.effectiveOuterGaps)
-        } else {
-            currentDesktopGaps = nil
-        }
-        // Default stage : appliqué uniquement si aucun stage actif sur ce desktop.
-        if let ds = rule.defaultStage,
-           let sm = stageManager,
-           sm.currentStageID == nil,
-           sm.stages[StageID(ds)] != nil {
-            sm.switchTo(stageID: StageID(ds))
-        }
     }
 
     /// Auto-GC : purge les fenêtres dont le CGWindowID n'existe plus dans le système.
@@ -372,6 +415,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 layoutEngine.removeWindow(state.cgWindowID)
                 stageManager?.handleWindowDestroyed(state.cgWindowID)
                 registry.unregister(state.cgWindowID)
+                removeWindowFromDesktopRegistry(wid: state.cgWindowID)
                 changed = true
                 continue
             }
@@ -392,6 +436,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             }
         }
         if changed { applyLayout() }
+    }
+
+    /// SPEC-011 : retire une fenêtre du DesktopRegistry à sa destruction.
+    /// Fire-and-forget : les erreurs de persistance sont loguées dans removeWindow.
+    private func removeWindowFromDesktopRegistry(wid: WindowID) {
+        guard let dReg = desktopRegistry else { return }
+        Task { await dReg.removeWindow(cgwid: UInt32(wid)) }
     }
 
     private func liveCGWindowIDs() -> Set<WindowID> {
@@ -440,6 +491,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         layoutEngine.removeWindow(wid)
         stageManager?.handleWindowDestroyed(wid)
         registry.unregister(wid)
+        removeWindowFromDesktopRegistry(wid: wid)
         applyLayout()
         logInfo("window destroyed", ["wid": String(wid), "pid": String(pid)])
     }
@@ -574,6 +626,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             layoutEngine.removeWindow(wid)
             stageManager?.handleWindowDestroyed(wid)
             registry.unregister(wid)
+            removeWindowFromDesktopRegistry(wid: wid)
         }
         if !widsToRemove.isEmpty {
             logInfo("app terminated, windows removed", [
@@ -622,11 +675,13 @@ func bootstrap() {
         exit(1)
     }
     AppState.daemon = daemon   // empêcher la désallocation
-    do {
-        try daemon.bootstrap()
-    } catch {
-        FileHandle.standardError.write("roadied: bootstrap error: \(error)\n".data(using: .utf8) ?? Data())
-        exit(1)
+    Task { @MainActor in
+        do {
+            try await daemon.bootstrap()
+        } catch {
+            FileHandle.standardError.write("roadied: bootstrap error: \(error)\n".data(using: .utf8) ?? Data())
+            exit(1)
+        }
     }
 }
 

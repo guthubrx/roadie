@@ -10,6 +10,8 @@ let package = Package(
         .library(name: "RoadieCore", targets: ["RoadieCore"]),
         .library(name: "RoadieTiler", targets: ["RoadieTiler"]),
         .library(name: "RoadieStagePlugin", targets: ["RoadieStagePlugin"]),
+        // SPEC-011 RoadieDesktops — multi-desktop virtuel (pivot AeroSpace)
+        .library(name: "RoadieDesktops", targets: ["RoadieDesktops"]),
         // SPEC-004 fx-framework — chargé runtime via dlopen, JAMAIS lié au daemon
         .library(name: "RoadieFXCore", type: .dynamic, targets: ["RoadieFXCore"]),
         // SPEC-005 RoadieShadowless module opt-in
@@ -52,12 +54,26 @@ let package = Package(
         ),
         .target(
             name: "RoadieStagePlugin",
-            dependencies: ["RoadieCore", "RoadieTiler"],
+            dependencies: ["RoadieCore", "RoadieTiler", "RoadieDesktops"],
             path: "Sources/RoadieStagePlugin"
+        ),
+        // SPEC-011 RoadieDesktops — desktops virtuels (pattern AeroSpace)
+        .target(
+            name: "RoadieDesktops",
+            dependencies: [
+                "RoadieCore",
+                .product(name: "TOMLKit", package: "TOMLKit"),
+            ],
+            path: "Sources/RoadieDesktops"
+        ),
+        .testTarget(
+            name: "RoadieDesktopsTests",
+            dependencies: ["RoadieDesktops", "RoadieCore"],
+            path: "Tests/RoadieDesktopsTests"
         ),
         .executableTarget(
             name: "roadied",
-            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin", "RoadieFXCore"],
+            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin", "RoadieDesktops", "RoadieFXCore"],
             path: "Sources/roadied"
         ),
         .executableTarget(
