@@ -370,18 +370,22 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             logInfo("desktops disabled (desktops.enabled=false)")
         }
 
-        // SPEC-012 T009 US7 : init DisplayRegistry + observer didChangeScreenParameters.
-        // L'observer est dans bootstrap() et non dans l'actor car une notification
-        // ne peut pas être observée proprement depuis un actor Swift.
-        // Le hook recovery (T026-T029) sera câblé en Sprint 2.
+        // SPEC-012 T009/T018 : init DisplayRegistry + observer didChangeScreenParameters.
+        // L'observer est dans bootstrap() car les notifications AppKit ne peuvent pas
+        // être observées proprement depuis un actor Swift.
         let dspRegistry = DisplayRegistry()
         await dspRegistry.refresh()
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
-        ) { [weak dspRegistry] _ in
-            Task { await dspRegistry?.refresh() }
+        ) { [weak self, weak dspRegistry] _ in
+            guard let self, let dspRegistry else { return }
+            Task {
+                await dspRegistry.refresh()
+                // Re-distribuer le layout sur tous les écrans après changement de config.
+                await self.layoutEngine.applyAll(displayRegistry: dspRegistry)
+            }
         }
         self.displayRegistry = dspRegistry
         logInfo("display_registry initialized", ["count": String(await dspRegistry.count)])
@@ -507,14 +511,19 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     }
 
     func applyLayout() {
-        let area = displayManager.workArea
-        let gaps = config.tiling.effectiveOuterGaps
-        layoutEngine.apply(rect: area,
-                           outerGaps: gaps,
-                           gapsInner: CGFloat(config.tiling.gapsInner))
-        // Marquer le timestamp pour que les notifs AX déclenchées par notre setBounds
-        // soient ignorées par scheduleAdaptResize pendant 200ms (cf. anti-feedback-loop).
         lastApplyTimestamp = Date()
+        if let dspRegistry = displayRegistry {
+            // T018 : multi-display → distribuer sur tous les écrans.
+            // applyAll est async, Task détaché pour préserver la surface sync.
+            Task { await self.layoutEngine.applyAll(displayRegistry: dspRegistry) }
+        } else {
+            // Fallback mono-écran (avant que le displayRegistry soit initialisé).
+            let area = displayManager.workArea
+            let gaps = config.tiling.effectiveOuterGaps
+            layoutEngine.apply(rect: area,
+                               outerGaps: gaps,
+                               gapsInner: CGFloat(config.tiling.gapsInner))
+        }
     }
 
     /// Auto-GC : purge les fenêtres dont le CGWindowID n'existe plus dans le système.

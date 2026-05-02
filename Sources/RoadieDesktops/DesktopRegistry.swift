@@ -244,6 +244,21 @@ public actor DesktopRegistry {
         }
     }
 
+    // MARK: - SPEC-012 T022 : mise à jour displayUUID d'une fenêtre
+
+    /// Met à jour le `displayUUID` d'une fenêtre dans un desktop donné (T022, FR-020).
+    /// - Throws: `DesktopRegistryError.unknownDesktop` si le desktop n'existe pas.
+    public func updateWindowDisplayUUID(cgwid: UInt32,
+                                        desktopID: Int,
+                                        displayUUID: String) throws {
+        guard var desktop = desktops[desktopID] else {
+            throw DesktopRegistryError.unknownDesktop(desktopID)
+        }
+        guard let idx = desktop.windows.firstIndex(where: { $0.cgwid == cgwid }) else { return }
+        desktop.windows[idx].displayUUID = displayUUID
+        try save(desktop)
+    }
+
     // MARK: - Helpers internes
 
     private func desktopURL(id: Int) -> URL {

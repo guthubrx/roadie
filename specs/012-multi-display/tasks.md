@@ -39,14 +39,14 @@ Briques de base bloquantes pour toutes les user stories.
 
 **Independent Test** : 2 fenêtres iTerm sur écran 1 + 2 Firefox sur écran 2 → chaque groupe tilé sur son écran.
 
-- [ ] T013 [US1] Refondre `Sources/RoadieTiler/LayoutEngine.swift` : remplacer `rootNode: TilingContainer` unique par `rootsByDisplay: [CGDirectDisplayID: TilingContainer]`. Préserver l'API existante pour mono-écran (clé unique = mainDisplayID).
-- [ ] T014 [US1] Étendre `LayoutEngine` : `func applyAll(displayRegistry:)` itère sur tous les displays connus et appelle `tiler.layout(rect:)` avec leur `visibleFrame` respectif (R-004, FR-006).
-- [ ] T015 [US1] Étendre `LayoutEngine.insertWindow(_ wid:, focusedID:)` : si une fenêtre est insérée, déterminer son écran d'origine via `DisplayRegistry.displayContaining(point:)` (centre de sa frame) et l'insérer dans `rootsByDisplay[displayID]` (FR-005).
-- [ ] T016 [US1] Étendre `LayoutEngine.setLeafVisible(_:_:)` : router vers le bon arbre selon le displayID de la fenêtre.
-- [ ] T017 [US1] Compatibilité mono-écran : si `rootsByDisplay.count == 1`, comportement strictement équivalent à avant (FR-024).
-- [ ] T018 [US1] Mettre à jour `Sources/roadied/main.swift` : injecter `DisplayRegistry` dans `LayoutEngine` au boot. Hooks SPEC-011 `LayoutHooks.applyLayout` doivent désormais appeler `applyAll(displayRegistry:)`.
-- [ ] T019 [US1] Tests `Tests/RoadieTilerTests/LayoutEngineMultiDisplayTests.swift` : 2 mock screens, insérer 2 fenêtres dont 1 sur chaque, applyAll → vérifier que chaque fenêtre a une frame dans le visibleFrame de son écran (SC-001).
-- [ ] T020 [US1] Régression : re-runner la suite SPEC-011 (`Tests/RoadieDesktopsTests/`) avec mono-screen mock, tous tests doivent passer (FR-024, SC-004).
+- [x] T013 [US1] Refondre `Sources/RoadieTiler/LayoutEngine.swift` : remplacer `rootNode: TilingContainer` unique par `rootsByDisplay: [CGDirectDisplayID: TilingContainer]`. Préserver l'API existante pour mono-écran (clé unique = mainDisplayID).
+- [x] T014 [US1] Étendre `LayoutEngine` : `func applyAll(displayRegistry:)` itère sur tous les displays connus et appelle `tiler.layout(rect:)` avec leur `visibleFrame` respectif (R-004, FR-006).
+- [x] T015 [US1] Étendre `LayoutEngine.insertWindow(_ wid:, focusedID:)` : si une fenêtre est insérée, déterminer son écran d'origine via `DisplayRegistry.displayContaining(point:)` (centre de sa frame) et l'insérer dans `rootsByDisplay[displayID]` (FR-005).
+- [x] T016 [US1] Étendre `LayoutEngine.setLeafVisible(_:_:)` : router vers le bon arbre selon le displayID de la fenêtre.
+- [x] T017 [US1] Compatibilité mono-écran : si `rootsByDisplay.count == 1`, comportement strictement équivalent à avant (FR-024).
+- [x] T018 [US1] Mettre à jour `Sources/roadied/main.swift` : injecter `DisplayRegistry` dans `LayoutEngine` au boot. Hooks SPEC-011 `LayoutHooks.applyLayout` doivent désormais appeler `applyAll(displayRegistry:)`.
+- [x] T019 [US1] Tests `Tests/RoadieTilerTests/LayoutEngineMultiDisplayTests.swift` : 2 mock screens, insérer 2 fenêtres dont 1 sur chaque, applyAll → vérifier que chaque fenêtre a une frame dans le visibleFrame de son écran (SC-001).
+- [x] T020 [US1] Régression : re-runner la suite SPEC-011 (`Tests/RoadieDesktopsTests/`) avec mono-screen mock, tous tests doivent passer (FR-024, SC-004).
 
 **Checkpoint US1** : tiling per-écran fonctionnel ; régression mono-écran zéro.
 
