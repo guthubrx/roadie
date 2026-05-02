@@ -114,18 +114,24 @@ private final class CaptureOutputHandler: NSObject, SCStreamOutput {
 
     func stream(_ stream: SCStream, didOutputSampleBuffer buffer: CMSampleBuffer,
                 of type: SCStreamOutputType) {
-        guard type == .screen,
-              let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else { return }
+        // Callback invoqué sur .global(qos: .utility). Sans pool local, les objets
+        // autoreleased (CIImage, NSMutableData, Date, NS/CF bridges) peuvent fuiter
+        // vers le pool main et déclencher un SIGSEGV objc_release au drain de NSApp.run.
+        // Pratique recommandée Apple pour tout callback CoreImage hors main thread.
+        autoreleasepool {
+            guard type == .screen,
+                  let imageBuffer = CMSampleBufferGetImageBuffer(buffer) else { return }
 
-        let ci = CIImage(cvImageBuffer: imageBuffer)
-        guard let cg = ciContext.createCGImage(ci, from: ci.extent) else { return }
+            let ci = CIImage(cvImageBuffer: imageBuffer)
+            guard let cg = ciContext.createCGImage(ci, from: ci.extent) else { return }
 
-        let size = CGSize(width: cg.width, height: cg.height)
-        guard let pngData = encodePNG(cg) else { return }
+            let size = CGSize(width: cg.width, height: cg.height)
+            guard let pngData = encodePNG(cg) else { return }
 
-        let entry = ThumbnailEntry(wid: wid, pngData: pngData, size: size,
-                                   degraded: false, capturedAt: Date())
-        onEntry(entry)
+            let entry = ThumbnailEntry(wid: wid, pngData: pngData, size: size,
+                                       degraded: false, capturedAt: Date())
+            onEntry(entry)
+        }
     }
 
     private func encodePNG(_ image: CGImage) -> Data? {
