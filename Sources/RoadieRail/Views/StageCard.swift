@@ -1,22 +1,37 @@
 import SwiftUI
 
 // SPEC-014 T029 — Carte représentant un stage dans le rail.
-// US1 : onTap est no-op. US2 le connectera au switch.
+// Palette de couleurs alignée sur le legacy yabai_stage_rail.swift (lignes 289-401).
 
 private let maxVisibleChips = 8
+
+// MARK: - Couleurs legacy (constantes nommées, 0 magic number inline)
+
+private let borderActive      = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.78)
+private let borderInactive    = Color.white.opacity(0.10)
+private let bgActive          = Color(red: 0.12, green: 0.20, blue: 0.30).opacity(0.98)
+private let bgInactive        = Color(white: 0.06).opacity(0.86)
+private let badgeBgActive     = Color(red: 0.21, green: 0.34, blue: 0.44)
+private let badgeBgInactive   = Color.white.opacity(0.07)
+private let badgeTextActive   = Color(red: 0.65, green: 0.88, blue: 1.0)
+private let badgeTextInactive = Color.white.opacity(0.56)
+private let dotActive         = Color(red: 0.47, green: 0.90, blue: 0.80)
+private let dotInactive       = Color.white.opacity(0.18)
+private let subtitleColor     = Color.white.opacity(0.46)
+private let promptActive      = Color(red: 0.65, green: 0.88, blue: 1.0).opacity(0.82)
+private let promptInactive    = Color.white.opacity(0.30)
 
 struct StageCard: View {
     let stage: StageVM
     let thumbnails: [CGWindowID: ThumbnailVM]
-    // windows est le dictionnaire global, filtré ici pour ce stage.
     let windows: [CGWindowID: WindowVM]
     var onTap: () -> Void = {}
     // SPEC-014 T052 (US3) : callback de drop, câblé par RailController.
     var onDropAssign: (CGWindowID, String) -> Void = { _, _ in }
     // SPEC-014 T070 (US5) : callbacks menu contextuel.
-    var onRename: (String, String) -> Void = { _, _ in }      // (stageID, newName)
-    var onAddFocused: (String) -> Void = { _ in }             // stageID
-    var onDelete: (String) -> Void = { _ in }                 // stageID
+    var onRename: (String, String) -> Void = { _, _ in }
+    var onAddFocused: (String) -> Void = { _ in }
+    var onDelete: (String) -> Void = { _ in }
     @State private var isDropTargeted: Bool = false
     @State private var renameSheet: Bool = false
     @State private var renameField: String = ""
@@ -28,6 +43,7 @@ struct StageCard: View {
             if !stage.windowIDs.isEmpty {
                 chipRow
             }
+            promptRow
         }
         .padding(12)
         .background(cardBackground)
@@ -36,7 +52,6 @@ struct StageCard: View {
         .onTapGesture { onTap() }
         .dropDestination(for: WindowDragData.self) { items, _ in
             guard let item = items.first else { return false }
-            // FR-020 : skip same-stage no-op.
             if item.sourceStageID == stage.id { return false }
             onDropAssign(item.wid, stage.id)
             return true
@@ -64,7 +79,6 @@ struct StageCard: View {
         Button("Add focused window") { onAddFocused(stage.id) }
         Divider()
         Button("Delete stage", role: .destructive) {
-            // FR-019 : stage 1 immortel — on désactive juste l'option.
             if stage.id != "1" { deleteConfirm = true }
         }.disabled(stage.id == "1")
     }
@@ -101,30 +115,28 @@ struct StageCard: View {
             badgeView
             VStack(alignment: .leading, spacing: 2) {
                 Text(stage.displayName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
                     .lineLimit(1)
                 Text(windowCountLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .regular).monospaced())
+                    .foregroundStyle(subtitleColor)
             }
             Spacer()
-            if stage.isActive {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 8, height: 8)
-            }
+            Circle()
+                .fill(stage.isActive ? dotActive : dotInactive)
+                .frame(width: 8, height: 8)
         }
     }
 
     private var badgeView: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 6)
-                .fill(stage.isActive ? Color.accentColor : Color.secondary.opacity(0.3))
+            RoundedRectangle(cornerRadius: 7)
+                .fill(stage.isActive ? badgeBgActive : badgeBgInactive)
                 .frame(width: 32, height: 22)
             Text(stage.id)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(stage.isActive ? .white : .primary)
+                .font(.system(size: 10, weight: .semibold).monospaced())
+                .foregroundStyle(stage.isActive ? badgeTextActive : badgeTextInactive)
         }
     }
 
@@ -136,18 +148,25 @@ struct StageCard: View {
             ForEach(visible, id: \.self) { wid in
                 WindowChip(
                     wid: wid,
-                    thumbnail: thumbnails[wid],
-                    appName: windows[wid]?.appName ?? "?",
+                    appName: windows[wid]?.appName ?? "",
+                    pid: windows[wid]?.pid ?? 0,
+                    bundleID: windows[wid]?.bundleID ?? "",
                     sourceStageID: stage.id
                 )
             }
             if overflow > 0 {
                 Text("+\(overflow)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .medium).monospaced())
+                    .foregroundStyle(Color.white.opacity(0.56))
                     .padding(.horizontal, 4)
             }
         }
+    }
+
+    private var promptRow: some View {
+        Text(promptText)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(stage.isActive ? promptActive : promptInactive)
     }
 
     // SPEC-014 T052 : surlignage subtil quand un drag survole la carte.
@@ -155,27 +174,34 @@ struct StageCard: View {
     private var dropHighlight: some View {
         if isDropTargeted {
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.accentColor.opacity(0.15))
+                .fill(Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.12))
                 .allowsHitTesting(false)
         }
     }
 
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16)
-            .fill(.regularMaterial)
+            .fill(stage.isActive ? bgActive : bgInactive)
     }
 
     @ViewBuilder
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16)
             .strokeBorder(
-                stage.isActive ? Color.accentColor : Color.secondary.opacity(0.2),
-                lineWidth: stage.isActive ? 1 : 0.5
+                stage.isActive ? borderActive : borderInactive,
+                lineWidth: stage.isActive ? 1.0 : 0.5
             )
     }
 
     private var windowCountLabel: String {
         let n = stage.windowIDs.count
-        return n == 1 ? "1 window" : "\(n) windows"
+        let base = n == 1 ? "1 window" : "\(n) windows"
+        return stage.isActive ? base + " • active" : base
+    }
+
+    private var promptText: String {
+        stage.isActive
+            ? "Active stage — click another to switch"
+            : "Click to switch • drag a window here to move it"
     }
 }

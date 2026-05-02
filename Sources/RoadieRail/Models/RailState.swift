@@ -62,6 +62,9 @@ public final class RailState {
     public var stages: [StageVM] = []
     public var activeStageID: String = "1"
     public var thumbnails: [CGWindowID: ThumbnailVM] = [:]
+    /// SPEC-014 : map wid → métadonnées (pid, bundle, app_name) pour résolution
+    /// d'icône via NSRunningApplication. Peuplée via IPC `windows.list`.
+    public var windows: [CGWindowID: WindowVM] = [:]
     public var connectionState: ConnectionState = .disconnected
     public var displayMode: DisplayMode = .perDisplay
     public var screens: [ScreenInfo] = []

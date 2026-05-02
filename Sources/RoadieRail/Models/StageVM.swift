@@ -23,14 +23,16 @@ public struct StageVM: Identifiable, Equatable {
 /// Représentation d'une fenêtre pour SwiftUI.
 public struct WindowVM: Identifiable, Equatable {
     public let id: CGWindowID
+    public let pid: Int32
     public let bundleID: String
     public let title: String
     public let appName: String
     public let isFloating: Bool
 
-    public init(id: CGWindowID, bundleID: String, title: String,
+    public init(id: CGWindowID, pid: Int32, bundleID: String, title: String,
                 appName: String, isFloating: Bool) {
         self.id = id
+        self.pid = pid
         self.bundleID = bundleID
         self.title = title
         self.appName = appName
