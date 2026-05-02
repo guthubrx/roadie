@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPEC-014 T102 — Template LaunchAgent pour roadie-rail.
+
+  Installation :
+    1. cp scripts/local.roadies.rail.plist.template ~/Library/LaunchAgents/local.roadies.rail.plist
+    2. Remplacer USERNAME par le nom d'utilisateur réel : sed -i '' "s|USERNAME|$USER|g" ~/Library/LaunchAgents/local.roadies.rail.plist
+    3. launchctl load ~/Library/LaunchAgents/local.roadies.rail.plist
+
+  Désinstallation :
+    launchctl unload ~/Library/LaunchAgents/local.roadies.rail.plist
+    rm ~/Library/LaunchAgents/local.roadies.rail.plist
+
+  Note : ce LaunchAgent N'EST PAS installé automatiquement par roadie. L'opt-in
+  est explicite (FR-001 spec.md).
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>local.roadies.rail</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/USERNAME/.local/bin/roadie-rail</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/USERNAME/.local/state/roadies/rail.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/USERNAME/.local/state/roadies/rail.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <key>ProcessType</key>
+    <string>Interactive</string>
+</dict>
+</plist>

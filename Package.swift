@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .executable(name: "roadied", targets: ["roadied"]),
         .executable(name: "roadie", targets: ["roadie"]),
+        // SPEC-014 stage-rail — binaire SwiftUI séparé, opt-in
+        .executable(name: "roadie-rail", targets: ["RoadieRail"]),
         .library(name: "RoadieCore", targets: ["RoadieCore"]),
         .library(name: "RoadieTiler", targets: ["RoadieTiler"]),
         .library(name: "RoadieStagePlugin", targets: ["RoadieStagePlugin"]),
@@ -179,6 +181,20 @@ let package = Package(
             name: "RoadieCrossDesktopTests",
             dependencies: ["RoadieCrossDesktop"],
             path: "Tests/RoadieCrossDesktopTests"
+        ),
+        // SPEC-014 stage-rail — binaire SwiftUI séparé
+        .executableTarget(
+            name: "RoadieRail",
+            dependencies: [
+                "RoadieCore",
+                .product(name: "TOMLKit", package: "TOMLKit"),
+            ],
+            path: "Sources/RoadieRail"
+        ),
+        .testTarget(
+            name: "RoadieRailTests",
+            dependencies: ["RoadieRail"],
+            path: "Tests/RoadieRailTests"
         ),
     ]
 )

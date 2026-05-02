@@ -33,7 +33,16 @@ public enum DesktopMigration {
         // ne pas écraser. L'utilisateur a peut-être démarré V3 avant un V2 leftover.
         if let contents = try? fm.contentsOfDirectory(atPath: target.path),
            !contents.isEmpty {
-            // V3 déjà peuplée → la legacy est leftover, on ne touche pas.
+            // V3 déjà peuplée → la legacy est leftover. On log pour que l'utilisateur
+            // sache qu'il a un dossier `desktops/` orphelin (V2) coexistant avec
+            // `displays/<uuid>/desktops/` (V3) — sinon le state V2 est invisible
+            // jusqu'à un nettoyage manuel.
+            let legacyCount = (try? fm.contentsOfDirectory(atPath: legacyDesktops.path))?
+                .filter { Int($0) != nil }.count ?? 0
+            logWarn("DesktopMigration skipped (V3 already populated, V2 leftover present)",
+                    ["primaryUUID": primaryUUID,
+                     "legacyDesktopsCount": String(legacyCount),
+                     "legacyPath": legacyDesktops.path])
             return 0
         }
 
@@ -50,6 +59,8 @@ public enum DesktopMigration {
         try fm.moveItem(at: legacyDesktops, to: target)
 
         // Migrer current.txt → current.toml dans displays/<primaryUUID>/.
+        // Best-effort : un échec ici ne fait pas tomber la migration principale,
+        // mais doit être loggé (le current legacy est sinon perdu silencieusement).
         let legacyCurrent = target.appendingPathComponent("current.txt")
         let newCurrent = primaryRoot.appendingPathComponent("current.toml")
         if let raw = try? String(contentsOf: legacyCurrent, encoding: .utf8),
@@ -58,8 +69,15 @@ public enum DesktopMigration {
             current_desktop_id = \(savedID)
             last_updated = "\(ISO8601DateFormatter().string(from: Date()))"
             """
-            try? toml.write(to: newCurrent, atomically: true, encoding: .utf8)
-            try? fm.removeItem(at: legacyCurrent)
+            do {
+                try toml.write(to: newCurrent, atomically: true, encoding: .utf8)
+                try fm.removeItem(at: legacyCurrent)
+            } catch {
+                logWarn("DesktopMigration current.toml write failed",
+                        ["primaryUUID": primaryUUID,
+                         "savedID": String(savedID),
+                         "error": "\(error)"])
+            }
         }
 
         return count

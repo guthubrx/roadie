@@ -9,6 +9,10 @@ public final class LayoutEngine {
     private let registry: WindowRegistry
     public private(set) var workspace: Workspace
     public var tiler: any Tiler
+    /// SPEC-014 T080 (US6) : réserve d'edge gauche par display (px), injectée
+    /// dans `outerGaps.left` au moment d'`applyAll`. Mise à jour par
+    /// `tiling.reserve`. Restoration → set 0 (ou supprime l'entrée).
+    public var leftReserveByDisplay: [CGDirectDisplayID: CGFloat] = [:]
 
     public init(registry: WindowRegistry, workspaceID: WorkspaceID = .main, strategy: TilerStrategy = .bsp) throws {
         self.registry = registry
@@ -277,28 +281,118 @@ public final class LayoutEngine {
     /// - Returns: true si un voisin existait et le warp a eu lieu.
     @discardableResult
     public func warp(_ wid: WindowID, direction: Direction) -> Bool {
-        for (_, root) in workspace.rootsByDisplay {
+        for (srcDisplayID, root) in workspace.rootsByDisplay {
             guard let leaf = TreeNode.find(windowID: wid, in: root) else { continue }
-            guard let neighbor = tiler.focusNeighbor(of: leaf, direction: direction, in: root) else {
-                return false
+            // Si la fenêtre touche le BORD du display dans la direction,
+            // saut direct au cross-display (pas de voisin BSP "physiquement" dans
+            // cette direction même si focusNeighbor en trouverait un en remontant
+            // l'arbre — ce qui ferait yoyoter dans le même display sans jamais
+            // sortir).
+            if let displayRect = workspace.lastAppliedRectsByDisplay[srcDisplayID],
+               let leafFrame = leaf.lastFrame,
+               LayoutEngine.isAtEdge(leafFrame, of: displayRect, direction: direction),
+               let dstID = LayoutEngine.adjacentDisplayID(from: srcDisplayID,
+                                                          direction: direction) {
+                logInfo("warp cross-display (edge)", [
+                    "wid": String(wid),
+                    "direction": direction.rawValue,
+                    "from": String(srcDisplayID),
+                    "to": String(dstID),
+                ])
+                return moveWindow(wid, fromDisplay: srcDisplayID, toDisplay: dstID, near: nil)
             }
-            // Le voisin ne doit pas être notre propre feuille (cas pathologique).
-            guard neighbor.windowID != wid else { return false }
-            let wasVisible = leaf.isVisible
-            tiler.remove(leaf: leaf, from: root)
-            // remove() peut détacher la leaf ; réutiliser un nouveau wrapper évite
-            // tout cycle parent obsolète (pattern identique à moveWindow).
-            let newLeaf = WindowLeaf(windowID: wid)
-            newLeaf.isVisible = wasVisible
-            tiler.insert(leaf: newLeaf, near: neighbor, in: root)
-            logInfo("warp", [
-                "wid": String(wid),
-                "direction": direction.rawValue,
-                "near": String(neighbor.windowID),
-            ])
-            return true
+            // Tenter d'abord un voisin BSP intra-display.
+            if let neighbor = tiler.focusNeighbor(of: leaf, direction: direction, in: root),
+               neighbor.windowID != wid {
+                let wasVisible = leaf.isVisible
+                tiler.remove(leaf: leaf, from: root)
+                let newLeaf = WindowLeaf(windowID: wid)
+                newLeaf.isVisible = wasVisible
+                tiler.insert(leaf: newLeaf, near: neighbor, in: root)
+                logInfo("warp", [
+                    "wid": String(wid),
+                    "direction": direction.rawValue,
+                    "near": String(neighbor.windowID),
+                ])
+                return true
+            }
+            // Pas de voisin BSP : tenter un display physiquement adjacent dans
+            // la direction. Pattern yabai `--warp east` cross-display.
+            if let dstID = LayoutEngine.adjacentDisplayID(from: srcDisplayID,
+                                                          direction: direction) {
+                logInfo("warp cross-display", [
+                    "wid": String(wid),
+                    "direction": direction.rawValue,
+                    "from": String(srcDisplayID),
+                    "to": String(dstID),
+                ])
+                return moveWindow(wid, fromDisplay: srcDisplayID, toDisplay: dstID, near: nil)
+            }
+            return false
         }
         return false
+    }
+
+    /// Détecte si `frame` (AX coords, Y top-down) touche le bord du `display`
+    /// (visibleFrame AX) dans la direction donnée. Tolérance 10px pour matcher
+    /// les frames calculées par BSP avec arrondis flottants.
+    private static func isAtEdge(_ frame: CGRect, of display: CGRect,
+                                 direction: Direction) -> Bool {
+        let tol: CGFloat = 10
+        switch direction {
+        case .left:  return frame.minX <= display.minX + tol
+        case .right: return frame.maxX >= display.maxX - tol
+        case .up:    return frame.minY <= display.minY + tol
+        case .down:  return frame.maxY >= display.maxY - tol
+        }
+    }
+
+    /// Cherche le display physiquement adjacent à `srcID` dans la direction donnée
+    /// (NS coords, où Y croît vers le HAUT). Retourne le NSScreenNumber du display
+    /// le plus proche dont l'overlap perpendiculaire est non-nul.
+    /// `direction.right` → display avec X >= srcMaxX et overlap Y > 0 ; etc.
+    private static func adjacentDisplayID(from srcID: CGDirectDisplayID,
+                                          direction: Direction) -> CGDirectDisplayID? {
+        let screens = NSScreen.screens
+        guard let srcScreen = screens.first(where: {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID)
+                == srcID
+        }) else { return nil }
+        let src = srcScreen.frame
+        var best: (distance: CGFloat, id: CGDirectDisplayID)? = nil
+        for screen in screens where screen != srcScreen {
+            let f = screen.frame
+            guard let did = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                as? CGDirectDisplayID else { continue }
+            var dist: CGFloat = -1
+            switch direction {
+            case .right:
+                let yOverlap = max(0, min(f.maxY, src.maxY) - max(f.minY, src.minY))
+                if f.minX >= src.maxX - 1 && yOverlap > 0 {
+                    dist = f.minX - src.maxX
+                }
+            case .left:
+                let yOverlap = max(0, min(f.maxY, src.maxY) - max(f.minY, src.minY))
+                if f.maxX <= src.minX + 1 && yOverlap > 0 {
+                    dist = src.minX - f.maxX
+                }
+            case .up:
+                // NS Y croît vers le haut → up = display avec Y plus grand.
+                let xOverlap = max(0, min(f.maxX, src.maxX) - max(f.minX, src.minX))
+                if f.minY >= src.maxY - 1 && xOverlap > 0 {
+                    dist = f.minY - src.maxY
+                }
+            case .down:
+                let xOverlap = max(0, min(f.maxX, src.maxX) - max(f.minX, src.minX))
+                if f.maxY <= src.minY + 1 && xOverlap > 0 {
+                    dist = src.minY - f.maxY
+                }
+            }
+            if dist >= 0 && (best == nil || dist < best!.distance) {
+                best = (dist, did)
+            }
+        }
+        return best?.id
     }
 
     /// Adapte les `adaptiveWeight` de l'arbre pour refléter une nouvelle frame imposée
@@ -389,7 +483,12 @@ public final class LayoutEngine {
         let primaryHeight = LayoutEngine.primaryScreenHeight()
         for display in displays {
             let visibleFrameAX = LayoutEngine.nsToAx(display.visibleFrame, primaryHeight: primaryHeight)
-            let gaps = outerSides ?? .uniform(display.gapsOuter)
+            var gaps = outerSides ?? .uniform(display.gapsOuter)
+            // SPEC-014 T080 : ajout de la réserve gauche pour ce display.
+            if let reserve = leftReserveByDisplay[display.id], reserve > 0 {
+                gaps = OuterGaps(top: gaps.top, bottom: gaps.bottom,
+                                 left: gaps.left + Int(reserve), right: gaps.right)
+            }
             let usable = applyOuterGaps(visibleFrameAX, outerGaps: gaps)
             let displayRoot = root(for: display.id)
             workspace.lastAppliedRectsByDisplay[display.id] = usable

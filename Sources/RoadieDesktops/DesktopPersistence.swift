@@ -33,15 +33,28 @@ public enum DesktopPersistence {
     }
 
     /// Sauvegarde le current desktop d'un display.
+    /// Les erreurs FS sont loggées (pas levées) : la persistance est best-effort
+    /// pour ne pas bloquer le focus, mais reste diagnosable via les logs.
     public static func saveCurrent(configDir: URL, displayUUID: String, currentID: Int) {
         let dir = configDir.appendingPathComponent("displays/\(displayUUID)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            logWarn("DesktopPersistence.saveCurrent mkdir failed",
+                    ["uuid": displayUUID, "error": "\(error)"])
+            return
+        }
         let toml = """
         current_desktop_id = \(currentID)
         last_updated = "\(ISO8601DateFormatter().string(from: Date()))"
         """
         let target = dir.appendingPathComponent("current.toml")
-        try? toml.write(to: target, atomically: true, encoding: .utf8)
+        do {
+            try toml.write(to: target, atomically: true, encoding: .utf8)
+        } catch {
+            logWarn("DesktopPersistence.saveCurrent write failed",
+                    ["uuid": displayUUID, "currentID": String(currentID), "error": "\(error)"])
+        }
     }
 
     /// Lit le current desktop d'un display ; nil si absent ou corrompu.
@@ -72,7 +85,15 @@ public enum DesktopPersistence {
         let dir = configDir
             .appendingPathComponent("displays/\(displayUUID)")
             .appendingPathComponent("desktops/\(desktopID)")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            logWarn("DesktopPersistence.saveDesktopWindows mkdir failed",
+                    ["uuid": displayUUID,
+                     "desktopID": String(desktopID),
+                     "error": "\(error)"])
+            return
+        }
         var lines: [String] = []
         for w in windows {
             // Escape minimal : titre clamped à 80 chars, antislashes/double-quotes échappés.
@@ -94,11 +115,22 @@ public enum DesktopPersistence {
         }
         let toml = lines.joined(separator: "\n")
         let target = dir.appendingPathComponent("state.toml")
-        try? toml.write(to: target, atomically: true, encoding: .utf8)
+        do {
+            try toml.write(to: target, atomically: true, encoding: .utf8)
+        } catch {
+            logWarn("DesktopPersistence.saveDesktopWindows write failed",
+                    ["uuid": displayUUID,
+                     "desktopID": String(desktopID),
+                     "windowCount": String(windows.count),
+                     "error": "\(error)"])
+        }
     }
 
     /// Lit la liste des fenêtres persistées pour `desktopID` du display.
     /// Parser TOML minimaliste (format propre auto-écrit, pas un cas général).
+    /// Logue un warn récapitulatif si certains blocs `[[windows]]` ont été
+    /// rejetés (cgwid manquant ou expected_frame illisible) — le silence
+    /// rendrait un debug de recovery quasi-impossible.
     public static func loadDesktopWindows(configDir: URL,
                                           displayUUID: String,
                                           desktopID: Int) -> [WindowSnapshot] {
@@ -113,15 +145,23 @@ public enum DesktopPersistence {
         var currentTitle = ""
         var currentFrame = CGRect.zero
         var inWindow = false
-        for line in raw.split(separator: "\n") {
-            let l = line.trimmingCharacters(in: .whitespaces)
-            if l == "[[windows]]" {
-                if inWindow && currentCgwid != 0 {
+        var droppedBlocks = 0
+        func flushBlock() {
+            if inWindow {
+                if currentCgwid != 0 {
                     result.append(WindowSnapshot(cgwid: currentCgwid,
                                                  bundleID: currentBundle,
                                                  titlePrefix: currentTitle,
                                                  expectedFrame: currentFrame))
+                } else {
+                    droppedBlocks += 1
                 }
+            }
+        }
+        for line in raw.split(separator: "\n") {
+            let l = line.trimmingCharacters(in: .whitespaces)
+            if l == "[[windows]]" {
+                flushBlock()
                 inWindow = true
                 currentCgwid = 0
                 currentBundle = ""
@@ -139,11 +179,13 @@ public enum DesktopPersistence {
                 }
             }
         }
-        if inWindow && currentCgwid != 0 {
-            result.append(WindowSnapshot(cgwid: currentCgwid,
-                                         bundleID: currentBundle,
-                                         titlePrefix: currentTitle,
-                                         expectedFrame: currentFrame))
+        flushBlock()
+        if droppedBlocks > 0 {
+            logWarn("DesktopPersistence.loadDesktopWindows skipped malformed blocks",
+                    ["uuid": displayUUID,
+                     "desktopID": String(desktopID),
+                     "dropped": String(droppedBlocks),
+                     "kept": String(result.count)])
         }
         return result
     }
