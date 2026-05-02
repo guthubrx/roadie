@@ -107,7 +107,6 @@ Modules séparés chargés à runtime. Daemon core inchangé. Utilisateur instal
 - [yabai sa.dylib injection pattern](https://github.com/koekeishiya/yabai/tree/master/sa)
 - Constitution projet 002-tiler-stage v1.3.0 (article C' amendé)
 - SPEC-004 fx-framework (famille SIP-off)
-- Plan utilisateur : `~/.claude/plans/fluttering-forging-biscuit.md`
 
 ## Auteurs
 

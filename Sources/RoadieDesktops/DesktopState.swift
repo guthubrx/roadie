@@ -20,14 +20,20 @@ public struct WindowEntry: Codable, Sendable, Equatable {
     public var title: String
     public var expectedFrame: CGRect
     public var stageID: Int
+    /// UUID de l'écran physique d'origine (SPEC-012 FR-020).
+    /// Optionnel pour backward-compatibilité avec les state.toml SPEC-011.
+    /// Si nil au boot, fallback sur l'écran principal.
+    public var displayUUID: String?
 
     public init(cgwid: UInt32, bundleID: String, title: String,
-                expectedFrame: CGRect, stageID: Int) {
+                expectedFrame: CGRect, stageID: Int,
+                displayUUID: String? = nil) {
         self.cgwid = cgwid
         self.bundleID = bundleID
         self.title = title
         self.expectedFrame = expectedFrame
         self.stageID = stageID
+        self.displayUUID = displayUUID
     }
 }
 
