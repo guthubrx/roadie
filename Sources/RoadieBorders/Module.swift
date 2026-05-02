@@ -86,6 +86,8 @@ public final class BordersModule: @unchecked Sendable {
         guard config.enabled else { return }
         switch event.kind {
         case .windowCreated:
+            // Le daemon filtre déjà les non-tileables avant de publier sur
+            // le bus FX (cf main.swift). Ici on accepte tout ce qui arrive.
             if let wid = event.wid, let frame = event.frame {
                 spawnOverlay(wid: wid, frame: frame)
             }
