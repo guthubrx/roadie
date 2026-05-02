@@ -5,7 +5,6 @@ import SwiftUI
 
 struct StageStackView: View {
     @Bindable var state: RailState
-    // Dictionnaire windows : sera peuplé en Phase 5+ (chips drag).
     var windows: [CGWindowID: WindowVM] = [:]
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
     var onTapStage: (String) -> Void = { _ in }
@@ -17,13 +16,14 @@ struct StageStackView: View {
     var onDelete: (String) -> Void = { _ in }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .center, spacing: 0) {
             header
-            Divider().padding(.vertical, 8)
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+            Spacer(minLength: 8)
             stageList
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
         }
-        .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(hudBackground)
     }
@@ -31,28 +31,32 @@ struct StageStackView: View {
     // MARK: - Subviews
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .center, spacing: 2) {
+            Text("Stage Manager")
+                .font(.system(size: 10, weight: .medium).monospaced())
+                .foregroundStyle(Color.white.opacity(0.44))
             Text("Stages")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.primary)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
             Text("Hover left edge. Click to switch • Drag to move.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .regular).monospaced())
+                .foregroundStyle(Color.white.opacity(0.34))
+                .multilineTextAlignment(.center)
         }
     }
 
     @ViewBuilder
     private var stageList: some View {
-        if state.stages.isEmpty {
+        let nonEmpty = state.stages.filter { !$0.windowIDs.isEmpty }
+        if nonEmpty.isEmpty {
             Text("No stages yet")
                 .font(.subheadline)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.white.opacity(0.34))
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 16)
         } else {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 8) {
-                    ForEach(state.stages) { stage in
+                    ForEach(nonEmpty) { stage in
                         StageCard(
                             stage: stage,
                             thumbnails: state.thumbnails,
@@ -65,13 +69,17 @@ struct StageStackView: View {
                         )
                     }
                 }
+                .padding(.horizontal, 12)
             }
         }
     }
 
-    // Fond HUD sombre semi-transparent — look cohérent avec la référence visuelle.
+    // Fond HUD : NSVisualEffectView natif + tint sombre par-dessus.
     private var hudBackground: some View {
-        Color.black.opacity(0.72)
-            .ignoresSafeArea()
+        ZStack {
+            HUDBackground()
+            Color(red: 0.04, green: 0.05, blue: 0.08).opacity(0.78)
+        }
+        .ignoresSafeArea()
     }
 }

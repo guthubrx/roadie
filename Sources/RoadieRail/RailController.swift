@@ -81,6 +81,7 @@ final class RailController {
         startEdgeMonitor()
         startEventStream()
         loadInitialStages()
+        loadWindows()
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -128,6 +129,7 @@ final class RailController {
         case "stage_changed", "window_assigned", "window_unassigned",
              "window_created", "window_destroyed", "stage_renamed":
             loadInitialStages()
+            loadWindows()
         case "desktop_changed":
             if let id = payload["desktop_id"] as? Int { state.currentDesktopID = id }
         case "thumbnail_updated":
@@ -136,6 +138,34 @@ final class RailController {
             }
         default:
             break
+        }
+    }
+
+    /// SPEC-014 : charge le dictionnaire windows (pid, bundle, app_name) pour
+    /// permettre au WindowChip de résoudre l'icône via NSRunningApplication.
+    private func loadWindows() {
+        Task {
+            do {
+                let payload = try await ipc.send(command: "windows.list")
+                guard let list = payload["windows"] as? [[String: Any]] else { return }
+                var dict: [CGWindowID: WindowVM] = [:]
+                for w in list {
+                    guard let idInt = w["id"] as? Int else { continue }
+                    let pid = (w["pid"] as? Int).map { Int32($0) } ?? 0
+                    let vm = WindowVM(
+                        id: CGWindowID(idInt),
+                        pid: pid,
+                        bundleID: w["bundle"] as? String ?? "",
+                        title: w["title"] as? String ?? "",
+                        appName: w["app_name"] as? String ?? "",
+                        isFloating: w["is_floating"] as? Bool ?? false
+                    )
+                    dict[vm.id] = vm
+                }
+                state.windows = dict
+            } catch {
+                logErr("rail: windows.list failed: \(error)")
+            }
         }
     }
 
