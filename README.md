@@ -1,51 +1,51 @@
 # roadie
 
-**[Français](README.md) · [English](README.en.md)**
+🇬🇧 **English** · 🇫🇷 [Français](README.fr.md)
 
-> **Work in progress — projet en évolution active.** Mon objectif est d'en faire mon daily driver. Toutes les remarques sont les bienvenues — voir [Status](#status).
+> **Work in progress — actively evolving project.** My goal is to make this my daily driver. All feedback is welcome — see [Status](#status).
 
-Un petit window manager tiling pour macOS, écrit en Swift, que je polis pour en faire mon poste de travail au quotidien.
+A small tiling window manager for macOS, written in Swift, that I'm polishing into my everyday workstation.
 
-## Pourquoi ce projet
+## Why this project
 
-À l'origine je n'avais pas l'intention d'écrire un window manager. Cela fait des années que [yabai](https://github.com/koekeishiya/yabai) est le support de mon poste de travail — un projet remarquable, taillé au cordeau, dont la stabilité et l'ergonomie ont marqué tous les utilisateurs de tiling sur macOS. Je continue d'y voir la référence, et la dette intellectuelle de roadie envers yabai est totale.
+I never set out to write a window manager. For years, [yabai](https://github.com/koekeishiya/yabai) has been the foundation of my workstation — a remarkable project, sharply built, whose stability and ergonomics have shaped every macOS tiling user. I still see it as the reference, and roadie's intellectual debt to yabai is total.
 
-Le déclencheur a été simple et personnel : je n'ai jamais réussi à faire cohabiter yabai avec **Stage Manager**. Or Stage Manager fait partie intégrante de ma manière de travailler — je veux des groupes de fenêtres nommés, masquables, restaurables, en plus du tiling automatique des fenêtres visibles. Plusieurs tentatives, scripts, contournements, rien n'a tenu durablement chez moi.
+The trigger was simple and personal: I never managed to make yabai cohabit with **Stage Manager**. Yet Stage Manager is part of how I work — I want named, hideable, restorable groups of windows, on top of automatic tiling for the visible ones. Several attempts, scripts, workarounds — none held up over time on my setup.
 
-Plutôt que de continuer à bricoler, j'ai fini par poser le problème à plat et écrire un petit gestionnaire de fenêtres qui réponde précisément à mon besoin :
+Rather than keep tinkering, I eventually flattened the problem and wrote a small window manager that addresses my specific need:
 
-- Tiling BSP / master-stack pour les fenêtres visibles, comme yabai.
-- Un *pseudo* Stage Manager — des "stages" qui sont des groupes de fenêtres masquables au sein d'un même desktop, avec restauration parfaite du layout.
-- Une awareness multi-desktop, sans dépendre des APIs SkyLight d'écriture.
+- BSP / master-stack tiling for visible windows, like yabai.
+- A *pseudo* Stage Manager — "stages" that are hideable groups of windows within a single desktop, with perfect layout restoration.
+- Multi-desktop awareness, without depending on SkyLight write APIs.
 
-**roadie n'a aucune prétention à équivaloir yabai** — la profondeur fonctionnelle, la robustesse, le polissage de yabai sont d'un autre niveau. roadie est volontairement minimaliste, écrit pour mon usage, et je le partage publiquement parce qu'il pourra peut-être servir à des gens dans la même situation que moi.
+**roadie has no pretension of matching yabai** — yabai's functional depth, robustness, and polish are at another level. roadie is intentionally minimalist, written for my own use, and I'm sharing it publicly because it might serve people in the same situation as me.
 
-### Le pivot AeroSpace pour les desktops
+### The AeroSpace pivot for desktops
 
-Le multi-desktop a été le deuxième pivot. Sur macOS Tahoe 26, Apple a verrouillé encore davantage les APIs SkyLight d'écriture (cf [yabai #2656](https://github.com/koekeishiya/yabai/issues/2656), [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md) ici). La voie scripting-addition-dans-Dock, longtemps utilisée par yabai pour gérer les Spaces natifs, est de facto bloquée pour les bundles tiers.
+Multi-desktop was the second pivot. On macOS Tahoe 26, Apple has further locked down the SkyLight write APIs (cf. [yabai #2656](https://github.com/koekeishiya/yabai/issues/2656), [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md) here). The scripting-addition-into-Dock route, long used by yabai to manage native Spaces, is de facto blocked for third-party bundles.
 
-J'ai donc repris l'approche d'[AeroSpace](https://github.com/nikitabobko/AeroSpace) : ne pas toucher aux Spaces natifs du tout, et gérer **N desktops virtuels** entièrement côté roadie, dans un unique Mac Space natif. La bascule de desktop consiste à déplacer hors-écran les fenêtres du desktop quitté et à restaurer celles du desktop d'arrivée à leur position mémorisée. Aucun appel SkyLight d'écriture, pas de scripting addition, pas de SIP désactivé. Là encore, dette intellectuelle entière envers AeroSpace, et je tiens à le dire.
+So I adopted the [AeroSpace](https://github.com/nikitabobko/AeroSpace) approach: don't touch native Spaces at all, manage **N virtual desktops** entirely on roadie's side, within a single native Mac Space. Switching desktops means moving the leaving desktop's windows offscreen and restoring the arriving desktop's windows to their saved positions. No SkyLight write calls, no scripting addition, no SIP disabled. Once again, full intellectual debt to AeroSpace, and I want to acknowledge it explicitly.
 
-roadie est donc un assemblage humble entre un peu de yabai (le tiler, l'AX-only sans SIP) et un peu d'AeroSpace (les desktops virtuels), avec en plus la couche stages que je n'ai pas trouvée chez l'un ou l'autre. Si tu cherches un vrai window manager mature, va vers yabai ou AeroSpace selon tes besoins — ce sont d'excellents projets, taillés pour le grand public.
+So roadie is a humble assembly of a bit of yabai (the tiler, AX-only without SIP) and a bit of AeroSpace (virtual desktops), plus the stages layer that I didn't find in either. If you're looking for a real, mature window manager, head to yabai or AeroSpace depending on your needs — these are excellent projects, built for the wider audience.
 
-## Ce que roadie fait aujourd'hui
+## What roadie does today
 
-| Capacité | État | Source |
+| Capability | State | Source |
 |---|---|---|
-| Tiling BSP + master-stack | OK | SPEC-002 |
-| Stage Manager (groupes nommés ⌥1/⌥2/...) | OK | SPEC-002 |
-| Desktops virtuels (1..16, pivot AeroSpace) | OK | SPEC-011 |
-| Drag-to-adapt (resize manuel propage le tree) | OK | SPEC-002 |
-| Click-to-raise universel | OK (Electron/JetBrains/Cursor) | SPEC-002 |
-| Bordures de fenêtre focused (overlay NSWindow) | OK | SPEC-008 |
-| Effets visuels avancés (animations, blur, opacity, shadowless) | Framework présent, runtime bloqué Tahoe 26 | SPEC-004→010, ADR-005 |
-| 13 raccourcis BTT prêts à l'emploi | OK | SPEC-002 |
+| BSP + master-stack tiling | OK | SPEC-002 |
+| Stage Manager (named groups ⌥1/⌥2/...) | OK | SPEC-002 |
+| Virtual desktops (1..16, AeroSpace pivot) | OK | SPEC-011 |
+| Drag-to-adapt (manual resize propagates the tree) | OK | SPEC-002 |
+| Universal click-to-raise | OK (Electron/JetBrains/Cursor) | SPEC-002 |
+| Focused window borders (NSWindow overlay) | OK | SPEC-008 |
+| Advanced visual effects (animations, blur, opacity, shadowless) | Framework present, runtime blocked on Tahoe 26 | SPEC-004→010, ADR-005 |
+| 13 ready-to-use BTT shortcuts | OK | SPEC-002 |
 
-## Limites connues
+## Known limitations
 
-- **Click-to-raise inter-app** non garanti à 100 % : sans SIP désactivé + injection scripting addition dans Dock.app (le chemin yabai), aucun WM ne peut atteindre 100 % sur macOS récent. AeroSpace a la même limitation par design. roadie fait le choix explicite de ne pas toucher SIP, donc accepte ce plafond.
-- **Effets visuels SIP-off opt-in** (animations Bézier, blur, focus dimming, shadowless) : le framework est livré et les modules `.dylib` se chargent correctement, mais Apple a bloqué silencieusement l'injection des scripting additions tierces dans Dock sur Tahoe 26 — donc l'overlay CGS n'atteint pas les fenêtres tierces. Détail : [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md). Les bordures de fenêtre (overlay NSWindow natif) fonctionnent par contre, sans osax.
-- **Mono-display strict** pour la V2 : multi-display reporté à V3.
+- **Inter-app click-to-raise** not 100% guaranteed: without disabled SIP + scripting addition injection into Dock.app (the yabai path), no WM can reach 100% on recent macOS. AeroSpace has the same limitation by design. roadie explicitly chooses not to touch SIP, so accepts this ceiling.
+- **SIP-off opt-in visual effects** (Bézier animations, blur, focus dimming, shadowless): the framework is shipped and the `.dylib` modules load correctly, but Apple has silently blocked third-party scripting addition injection into Dock on Tahoe 26 — so the CGS overlay doesn't reach third-party windows. Details: [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md). Window borders (native NSWindow overlay) work fine without osax.
+- **Single-display strict** for V2: multi-display deferred to V3.
 
 ## Installation (build from source)
 
@@ -56,7 +56,7 @@ PATH="/usr/bin:/usr/local/bin:/bin" swift build -c release
 make install-app
 ```
 
-Puis dans Réglages Système → Confidentialité et sécurité → Accessibilité, ajouter `~/Applications/roadied.app` et cocher la case.
+Then in System Settings → Privacy & Security → Accessibility, add `~/Applications/roadied.app` and tick the checkbox.
 
 ```bash
 roadied --daemon &
@@ -65,7 +65,7 @@ roadie desktop list   # sanity check
 
 ## Configuration
 
-Tout passe par `~/.config/roadies/roadies.toml`. Exemple minimal :
+Everything goes through `~/.config/roadies/roadies.toml`. Minimal example:
 
 ```toml
 [daemon]
@@ -96,40 +96,40 @@ inactive_color = "#414868"
 focused_only = true
 ```
 
-> Pour éviter les conflits avec les Spaces natifs : dans Réglages Système → Bureau, désactiver « Les écrans utilisent des Spaces séparés » et n'utiliser qu'**un seul Mac Space natif**. Roadie ignore les bascules Mac Space (Ctrl+→/← natifs).
+> To avoid conflicts with native Spaces: in System Settings → Desktop, disable "Displays have separate Spaces" and use **a single native Mac Space**. Roadie ignores native Mac Space switches (native Ctrl+→/←).
 
-## Documentation détaillée
+## Detailed documentation
 
-Le projet est développé en [SpecKit](https://github.com/sergeykish/spec-kit) — une spec par feature majeure, avec plan, recherche, ADRs, tasks et REX d'implémentation.
+The project is developed with [SpecKit](https://github.com/sergeykish/spec-kit) — one spec per major feature, with plan, research, ADRs, tasks, and implementation REX.
 
-### Specs principales
+### Main specs
 
 - [SPEC-002 — Tiler + Stage Manager](specs/002-tiler-stage/spec.md) (V1)
 - [SPEC-011 — Virtual Desktops AeroSpace-style](specs/011-virtual-desktops/spec.md) (V2)
-- [SPEC-004 → 010 — Famille opt-in SIP-off](specs/004-fx-framework/spec.md) (animations, bordures, blur, etc.)
+- [SPEC-004 → 010 — SIP-off opt-in family](specs/004-fx-framework/spec.md) (animations, borders, blur, etc.)
 
-### Décisions architecturales
+### Architecture decisions
 
-- [ADR-001 — AX per-app, pas de SkyLight write](docs/decisions/ADR-001-ax-per-app-no-skylight.md)
-- [ADR-002 — Tree n-aire vs BSP binaire](docs/decisions/ADR-002-tree-naire-vs-bsp-binary.md)
-- [ADR-003 — Hide via corner offscreen](docs/decisions/ADR-003-hide-corner-vs-minimize.md)
-- [ADR-004 — Modules opt-in SIP-off](docs/decisions/ADR-004-sip-off-modules.md)
-- [ADR-005 — Tahoe 26 osax injection bloquée](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md)
+- [ADR-001 — Per-app AX, no SkyLight write](docs/decisions/ADR-001-ax-per-app-no-skylight.md)
+- [ADR-002 — N-ary tree vs binary BSP](docs/decisions/ADR-002-tree-naire-vs-bsp-binary.md)
+- [ADR-003 — Hide via offscreen corner](docs/decisions/ADR-003-hide-corner-vs-minimize.md)
+- [ADR-004 — SIP-off opt-in modules](docs/decisions/ADR-004-sip-off-modules.md)
+- [ADR-005 — Tahoe 26 osax injection blocked](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md)
 
-## Crédits
+## Credits
 
-- **[yabai](https://github.com/koekeishiya/yabai)** par Åke Kullenberg / koekeishiya — la référence du tiling sur macOS, dix ans de production, l'inspiration de tout le pattern AX + `_AXUIElementGetWindow`. Sans yabai, roadie n'existerait pas.
-- **[AeroSpace](https://github.com/nikitabobko/AeroSpace)** par Nikita Bobko — le pivot virtual-desktops sans SkyLight write, démontré en production. Approche reprise telle quelle pour SPEC-011.
-- **[Hyprland](https://github.com/hyprwm/Hyprland)** — l'inspiration du langage de courbes Bézier pour les animations (SPEC-007), même si l'osax bloquée sur Tahoe 26 empêche actuellement leur application aux fenêtres tierces.
+- **[yabai](https://github.com/koekeishiya/yabai)** by Åke Kullenberg / koekeishiya — the macOS tiling reference, ten years in production, the inspiration for the entire AX + `_AXUIElementGetWindow` pattern. Without yabai, roadie wouldn't exist.
+- **[AeroSpace](https://github.com/nikitabobko/AeroSpace)** by Nikita Bobko — the SkyLight-write-free virtual-desktops pivot, demonstrated in production. Approach taken as-is for SPEC-011.
+- **[Hyprland](https://github.com/hyprwm/Hyprland)** — the inspiration for the Bézier curves DSL for animations (SPEC-007), although the blocked osax on Tahoe 26 currently prevents their application to third-party windows.
 
 ## Status
 
-Projet **personnel** et **résolument en cours de travail**. Le code évolue beaucoup en ce moment et continuera de bouger fortement dans les prochaines semaines à mesure que je l'utilise et que je découvre les rugosités sur mon propre poste. Mon objectif est clair : **en faire mon daily driver**, le gestionnaire de fenêtres avec lequel je travaille tous les jours, et donc le polir continûment au fil de l'usage réel.
+A **personal**, **resolutely work-in-progress** project. The code is moving a lot right now and will keep moving significantly in the coming weeks as I use it and discover the rough edges on my own setup. My goal is clear: **make this my daily driver**, the window manager I work with every day, and therefore polish it continuously through real usage.
 
-Toutes les remarques, retours, suggestions, signalements de bugs, idées d'amélioration sont **vraiment** les bienvenus — ouvre une issue sur ce repo, je suis preneur. Pas de promesse de roadmap publique ni de support garanti pour l'instant, mais le projet est ouvert au dialogue et chaque retour fait avancer ma compréhension de ce qui marche ou pas en dehors de mon environnement.
+All feedback, suggestions, bug reports, and improvement ideas are **genuinely** welcome — open an issue on this repo, I'm listening. No promise of a public roadmap or guaranteed support for now, but the project is open to dialogue and every input furthers my understanding of what works or doesn't outside my own environment.
 
-Si tu cherches dès aujourd'hui un WM mature pour ton usage quotidien, regarde [yabai](https://github.com/koekeishiya/yabai) ou [AeroSpace](https://github.com/nikitabobko/AeroSpace) en premier — tu y trouveras une base bien plus stable que ce que roadie peut offrir à ce stade.
+If you're looking for a mature WM for daily use today, head to [yabai](https://github.com/koekeishiya/yabai) or [AeroSpace](https://github.com/nikitabobko/AeroSpace) first — you'll find a much more stable foundation there than what roadie can offer at this stage.
 
 ## License
 
-MIT — voir [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
