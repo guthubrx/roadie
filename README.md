@@ -1,6 +1,8 @@
 # roadie
 
-Un petit window manager tiling pour macOS, écrit en Swift, qui me sert de poste de travail au quotidien.
+> **Work in progress — projet en évolution active.** Mon objectif est d'en faire mon daily driver. Toutes les remarques sont les bienvenues — voir [Status](#status).
+
+Un petit window manager tiling pour macOS, écrit en Swift, que je polis pour en faire mon poste de travail au quotidien.
 
 ## Pourquoi ce projet
 
@@ -120,7 +122,11 @@ Le projet est développé en [SpecKit](https://github.com/sergeykish/spec-kit) �
 
 ## Status
 
-Projet **personnel**, **alpha**, **pas de garantie**, taillé pour mon poste. Tout retour est bienvenu mais je ne promets ni roadmap publique, ni support. Si tu cherches un WM mature pour ton usage quotidien, regarde yabai ou AeroSpace en premier.
+Projet **personnel** et **résolument en cours de travail**. Le code évolue beaucoup en ce moment et continuera de bouger fortement dans les prochaines semaines à mesure que je l'utilise et que je découvre les rugosités sur mon propre poste. Mon objectif est clair : **en faire mon daily driver**, le gestionnaire de fenêtres avec lequel je travaille tous les jours, et donc le polir continûment au fil de l'usage réel.
+
+Toutes les remarques, retours, suggestions, signalements de bugs, idées d'amélioration sont **vraiment** les bienvenus — ouvre une issue sur ce repo, je suis preneur. Pas de promesse de roadmap publique ni de support garanti pour l'instant, mais le projet est ouvert au dialogue et chaque retour fait avancer ma compréhension de ce qui marche ou pas en dehors de mon environnement.
+
+Si tu cherches dès aujourd'hui un WM mature pour ton usage quotidien, regarde [yabai](https://github.com/koekeishiya/yabai) ou [AeroSpace](https://github.com/nikitabobko/AeroSpace) en premier — tu y trouveras une base bien plus stable que ce que roadie peut offrir à ce stade.
 
 ## License
 
