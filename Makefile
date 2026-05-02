@@ -1,4 +1,4 @@
-.PHONY: build install clean test app-bundle install-app build-fx install-fx uninstall-fx verify-no-cgs-write
+.PHONY: build install install-all clean test app-bundle install-app build-fx install-fx uninstall-fx uninstall-all verify-no-cgs-write build-rail install-rail uninstall-rail
 
 PREFIX ?= $(HOME)/.local
 APPDIR ?= $(HOME)/Applications
@@ -93,3 +93,62 @@ verify-no-cgs-write: build
 		nm .build/release/roadied | grep -E 'CGSSetWindowAlpha|CGSSetWindowShadow|CGSSetWindowBlur|CGSSetWindowTransform|CGSAddWindowsToSpaces|CGSSetStickyWindow'; \
 		exit 1; \
 	fi
+
+# === SPEC-014 stage-rail (binaire UI séparé, opt-in) =============
+
+# Build le binaire roadie-rail (release)
+build-rail:
+	export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/Applications/Xcode.app/Contents/Developer/usr/bin"; \
+	swift build --configuration release --product roadie-rail
+	@echo "✓ build : .build/release/roadie-rail"
+
+# Install roadie-rail dans ~/.local/bin
+install-rail: build-rail
+	mkdir -p $(PREFIX)/bin
+	install -m 755 .build/release/roadie-rail $(PREFIX)/bin/roadie-rail
+	@echo "✓ installé : $(PREFIX)/bin/roadie-rail"
+	@echo ""
+	@echo "Lancer : roadie-rail &"
+	@echo "Toggle : roadie rail toggle"
+	@echo "Status : roadie rail status"
+
+# Uninstall roadie-rail
+uninstall-rail:
+	rm -f $(PREFIX)/bin/roadie-rail
+	rm -f $$HOME/.roadies/rail.pid
+	@echo "✓ roadie-rail désinstallé. Daemon roadied non affecté."
+
+# === Tout-en-un : daemon + CLI + rail + bundle .app =========
+# Cible recommandée pour un setup utilisateur fraîche.
+install-all: install install-rail install-app
+	@echo ""
+	@echo "================================================================"
+	@echo "✅ Installation complète OK"
+	@echo "================================================================"
+	@echo ""
+	@echo "Composants installés :"
+	@echo "   • daemon    : $(APPDIR)/$(APP_NAME) (bundle .app pour TCC)"
+	@echo "   • CLI       : $(PREFIX)/bin/roadie"
+	@echo "   • daemon ln : $(PREFIX)/bin/roadied"
+	@echo "   • rail UI   : $(PREFIX)/bin/roadie-rail"
+	@echo ""
+	@echo "Étapes manuelles restantes :"
+	@echo "   1. Réglages Système > Confidentialité > Accessibilité"
+	@echo "      → cocher $(APPDIR)/$(APP_NAME)"
+	@echo "   2. (Recommandé) Réglages Système > Confidentialité > Enregistrement d'écran"
+	@echo "      → cocher $(APPDIR)/$(APP_NAME) (sinon vignettes en fallback)"
+	@echo "   3. Lancer le daemon :"
+	@echo "        roadied --daemon &"
+	@echo "   4. Lancer le rail :"
+	@echo "        roadie rail toggle"
+	@echo "   5. Survoler le bord gauche de l'écran"
+	@echo ""
+
+# Désinstallation complète : retire tout, restaure une machine vierge.
+uninstall-all: uninstall-rail
+	@echo "Désinstallation complète..."
+	-rm -f $(PREFIX)/bin/roadie
+	-rm -f $(PREFIX)/bin/roadied
+	-rm -rf $(APPDIR)/$(APP_NAME)
+	@echo "✓ roadies entièrement désinstallé."
+	@echo "Note : config $$HOME/.config/roadies/ et state $$HOME/.roadies/ préservés."

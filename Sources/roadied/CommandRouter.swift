@@ -233,15 +233,19 @@ enum CommandRouter {
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
+            // SPEC-014 T041 : expose window_ids + is_active pour le rail UI.
+            let currentID = sm.currentStageID?.value ?? ""
             let stages = sm.stages.values.map { stage -> [String: Any] in
                 [
                     "id": stage.id.value,
                     "display_name": stage.displayName,
                     "window_count": stage.memberWindows.count,
+                    "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
+                    "is_active": stage.id.value == currentID,
                 ]
             }
             return .success([
-                "current": AnyCodable(sm.currentStageID?.value ?? ""),
+                "current": AnyCodable(currentID),
                 "stages": AnyCodable(stages),
             ])
 
@@ -267,8 +271,15 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id")
             }
             let stageID = StageID(stageStr)
-            guard let wid = daemon.registry.focusedWindowID else {
-                return .error(.windowNotFound, "no focused window to assign")
+            // SPEC-014 T053 : accepter un wid explicite (drag-drop dans rail UI).
+            // Fallback sur focusedWindowID pour compat ascendante CLI.
+            let wid: WindowID
+            if let widStr = request.args?["wid"], let widInt = UInt32(widStr) {
+                wid = WindowID(widInt)
+            } else if let focused = daemon.registry.focusedWindowID {
+                wid = focused
+            } else {
+                return .error(.windowNotFound, "no wid provided and no focused window")
             }
             // Lazy stages : auto-créer le stage s'il n'existe pas. Évite à
             // l'utilisateur de devoir `stage create N <name>` avant d'assigner.
@@ -276,7 +287,7 @@ enum CommandRouter {
                 _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
             }
             sm.assign(wid: wid, to: stageID)
-            return .success(["created": AnyCodable(true), "stage_id": AnyCodable(stageStr)])
+            return .success(["created": AnyCodable(true), "stage_id": AnyCodable(stageStr), "wid": AnyCodable(Int(wid))])
 
         case "stage.create":
             guard let sm = daemon.stageManager else {
@@ -292,6 +303,30 @@ enum CommandRouter {
             }
             _ = sm.createStage(id: stageID, displayName: displayName)
             return .success(["created": AnyCodable(stageID.value)])
+
+        case "stage.rename":
+            // SPEC-014 T071 (US5) : renomme un stage et émet `stage_renamed`.
+            guard let sm = daemon.stageManager else {
+                return .error(.stageManagerDisabled, "stage manager disabled in config")
+            }
+            guard let stageStr = request.args?["stage_id"],
+                  let newName = request.args?["new_name"] else {
+                return .error(.invalidArgument, "missing stage_id or new_name")
+            }
+            let stageID = StageID(stageStr)
+            guard let oldStage = sm.stages[stageID] else {
+                return .error(.unknownStage, "unknown stage \(stageStr)")
+            }
+            let oldName = oldStage.displayName
+            guard sm.renameStage(id: stageID, newName: newName) else {
+                return .error(.invalidArgument, "rename failed (empty or > 32 chars)")
+            }
+            EventBus.shared.publish(DesktopEvent.stageRenamed(
+                stageID: stageStr, oldName: oldName, newName: newName))
+            return .success([
+                "stage_id": AnyCodable(stageStr),
+                "new_name": AnyCodable(newName),
+            ])
 
         case "stage.delete":
             guard let sm = daemon.stageManager else {
@@ -408,6 +443,47 @@ enum CommandRouter {
 
         case "desktop.back":
             return await handleDesktopBack(daemon: daemon)
+
+        // MARK: - SPEC-014 rail commands
+
+        case "window.thumbnail":
+            return await handleWindowThumbnail(request: request, daemon: daemon)
+
+        case "tiling.reserve":
+            // SPEC-014 T080 (US6) : ajuste leftReserveByDisplay et re-applique le layout.
+            // Args : edge ("left" V1), size (px, 0 pour annuler), display_id (CGDirectDisplayID).
+            let edge = request.args?["edge"] ?? "left"
+            guard let sizeStr = request.args?["size"], let size = Int(sizeStr) else {
+                return .error(.invalidArgument, "missing or invalid size")
+            }
+            // V1 : seul edge "left" supporté.
+            guard edge == "left" else {
+                return .error(.invalidArgument, "only edge=left supported in V1")
+            }
+            // display_id : si manquant, applique au primary.
+            let did: CGDirectDisplayID
+            if let didStr = request.args?["display_id"], let parsed = UInt32(didStr) {
+                did = parsed
+            } else {
+                did = CGMainDisplayID()
+            }
+            if size <= 0 {
+                daemon.layoutEngine.leftReserveByDisplay.removeValue(forKey: did)
+            } else {
+                daemon.layoutEngine.leftReserveByDisplay[did] = CGFloat(size)
+            }
+            daemon.applyLayout()
+            return .success([
+                "edge": AnyCodable(edge),
+                "size": AnyCodable(size),
+                "display_id": AnyCodable(Int(did)),
+            ])
+
+        case "rail.status":
+            return handleRailStatus()
+
+        case "rail.toggle":
+            return handleRailToggle()
 
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")
@@ -686,6 +762,10 @@ enum CommandRouter {
                 did = daemon.layoutEngine.displayIDContainingPoint(expCenter)
             }
             guard let resolvedDid = did, resolvedDid == targetDisplayID else { continue }
+            // BUGFIX : skip les fenêtres non-tilées (dialogs, popovers, modaux
+            // système). Les hide/show les rendrait invisibles alors qu'elles
+            // sont gérées par macOS natif (ex: dialog "Organiser…" Monitors).
+            guard state.isTileable else { continue }
             let shouldShow = state.desktopID == resolvedTarget
             logInfo("desktop.focus per_display window", [
                 "wid": String(state.cgWindowID),
@@ -1013,6 +1093,184 @@ enum CommandRouter {
             "current_id": AnyCodable(currentID),
             "previous_id": AnyCodable(previousID),
         ])
+    }
+
+    // MARK: - SPEC-014 private handlers
+
+    /// Retourne une vignette PNG pour `wid`. Si absente du cache, démarre l'observation
+    /// SCK et retourne un fallback icône d'app (degraded=true).
+    private static func handleWindowThumbnail(request: Request, daemon: Daemon) async -> Response {
+        guard let widStr = request.args?["wid"], let widU = UInt32(widStr) else {
+            return .error(.invalidArgument, "missing or invalid wid")
+        }
+        let wid = CGWindowID(widU)
+        guard daemon.registry.get(wid) != nil else {
+            return .error(.windowNotFound, "wid not found")
+        }
+        if let entry = daemon.thumbnailCache?.get(wid: wid) {
+            return thumbnailResponse(entry)
+        }
+        // Cache miss : démarre observation SCK en fire-and-forget.
+        if let sck = daemon.sckCaptureService {
+            Task { try? await sck.observe(wid: wid) }
+        }
+        return fallbackIconResponse(wid: wid, registry: daemon.registry)
+    }
+
+    private static func thumbnailResponse(_ entry: ThumbnailEntry) -> Response {
+        let iso = iso8601String(entry.capturedAt)
+        return .success([
+            "png_base64": AnyCodable(entry.pngData.base64EncodedString()),
+            "wid": AnyCodable(Int(entry.wid)),
+            "size": AnyCodable([Int(entry.size.width), Int(entry.size.height)]),
+            "degraded": AnyCodable(entry.degraded),
+            "captured_at": AnyCodable(iso),
+        ])
+    }
+
+    private static func fallbackIconResponse(wid: CGWindowID, registry: WindowRegistry) -> Response {
+        let now = iso8601String(Date())
+        guard let state = registry.get(wid),
+              let bundleURL = NSWorkspace.shared.urlForApplication(
+                  withBundleIdentifier: state.bundleID) else {
+            return .error(.windowNotFound, "window not in registry or app not found")
+        }
+        let icon = NSWorkspace.shared.icon(forFile: bundleURL.path)
+        let target = NSSize(width: 128, height: 128)
+        let resized = resizeImage(icon, to: target)
+        let pngData = pngEncode(resized)
+        return .success([
+            "png_base64": AnyCodable(pngData.base64EncodedString()),
+            "wid": AnyCodable(Int(wid)),
+            "size": AnyCodable([128, 128]),
+            "degraded": AnyCodable(true),
+            "captured_at": AnyCodable(now),
+        ])
+    }
+
+    /// Lit `~/.roadies/rail.pid` et vérifie si le processus est vivant.
+    private static func handleRailStatus() -> Response {
+        let pidPath = (NSString(string: "~/.roadies/rail.pid").expandingTildeInPath as String)
+        guard let data = FileManager.default.contents(atPath: pidPath),
+              let pidStr = String(data: data, encoding: .utf8)?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              let pid = Int32(pidStr) else {
+            return .success(["running": AnyCodable(false), "pid": AnyCodable("null"),
+                              "panels_open": AnyCodable(0), "stages_displayed": AnyCodable(0)])
+        }
+        // kill(pid, 0) : retourne 0 si le processus existe, -1 sinon.
+        guard Darwin.kill(pid, 0) == 0 else {
+            return .success(["running": AnyCodable(false), "pid": AnyCodable("null"),
+                              "panels_open": AnyCodable(0), "stages_displayed": AnyCodable(0)])
+        }
+        let ctimeISO = fileCreationISO(pidPath)
+        return .success([
+            "running": AnyCodable(true),
+            "pid": AnyCodable(Int(pid)),
+            "since": AnyCodable(ctimeISO),
+            "panels_open": AnyCodable(0),
+            "screens_visible": AnyCodable([String]()),
+            "current_desktop_id": AnyCodable(0),
+            "stages_displayed": AnyCodable(0),
+        ])
+    }
+
+    /// Toggle rail : si tourne → SIGTERM ; sinon → résout le binaire dans plusieurs paths.
+    /// Ordre de recherche : PATH (which) → ~/.local/bin → /usr/local/bin → /opt/homebrew/bin.
+    /// Permet d'éviter à l'utilisateur de configurer manuellement un path précis.
+    private static func handleRailToggle() -> Response {
+        let pidPath = (NSString(string: "~/.roadies/rail.pid").expandingTildeInPath as String)
+        if let data = FileManager.default.contents(atPath: pidPath),
+           let pidStr = String(data: data, encoding: .utf8)?
+               .trimmingCharacters(in: .whitespacesAndNewlines),
+           let pid = Int32(pidStr), Darwin.kill(pid, 0) == 0 {
+            Darwin.kill(pid, SIGTERM)
+            logInfo("rail.toggle: sent SIGTERM", ["pid": String(pid)])
+            return .success(["action": AnyCodable("stopped"), "killed_pid": AnyCodable(Int(pid))])
+        }
+        guard let railBin = locateRailBinary() else {
+            return .error(.invalidArgument,
+                          "roadie-rail binary not found in PATH, ~/.local/bin, /usr/local/bin, or /opt/homebrew/bin. Run `make install-rail` from the roadies repo.")
+        }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: railBin)
+        proc.arguments = []
+        proc.qualityOfService = .background
+        do {
+            try proc.run()
+        } catch {
+            return .error(.internalError, "failed to spawn roadie-rail: \(error)")
+        }
+        let spawnedPID = Int(proc.processIdentifier)
+        logInfo("rail.toggle: spawned roadie-rail",
+                ["pid": String(spawnedPID), "path": railBin])
+        return .success([
+            "action": AnyCodable("started"),
+            "pid": AnyCodable(spawnedPID),
+            "path": AnyCodable(railBin),
+        ])
+    }
+
+    /// Cherche `roadie-rail` dans les chemins standards (ordre par priorité).
+    private static func locateRailBinary() -> String? {
+        let fm = FileManager.default
+        let home = NSString(string: "~").expandingTildeInPath
+        // 1. PATH via /usr/bin/which (n'introduit pas de dépendance Swift).
+        let which = Process()
+        which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        which.arguments = ["roadie-rail"]
+        let pipe = Pipe()
+        which.standardOutput = pipe
+        which.standardError = Pipe()
+        if (try? which.run()) != nil {
+            which.waitUntilExit()
+            if which.terminationStatus == 0,
+               let data = try? pipe.fileHandleForReading.readToEnd(),
+               let s = String(data: data, encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !s.isEmpty, fm.isExecutableFile(atPath: s) {
+                return s
+            }
+        }
+        // 2. Chemins standards.
+        let candidates = [
+            "\(home)/.local/bin/roadie-rail",
+            "/usr/local/bin/roadie-rail",
+            "/opt/homebrew/bin/roadie-rail",
+        ]
+        return candidates.first { fm.isExecutableFile(atPath: $0) }
+    }
+
+    // MARK: - SPEC-014 utilities
+
+    private static func iso8601String(_ date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        f.timeZone = TimeZone(identifier: "UTC")
+        return f.string(from: date)
+    }
+
+    private static func fileCreationISO(_ path: String) -> String {
+        let attrs = try? FileManager.default.attributesOfItem(atPath: path)
+        let date = attrs?[.creationDate] as? Date ?? Date()
+        return iso8601String(date)
+    }
+
+    private static func resizeImage(_ image: NSImage, to size: NSSize) -> NSImage {
+        let result = NSImage(size: size)
+        result.lockFocus()
+        image.draw(in: NSRect(origin: .zero, size: size))
+        result.unlockFocus()
+        return result
+    }
+
+    private static func pngEncode(_ image: NSImage) -> Data {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else {
+            return Data()
+        }
+        return png
     }
 
 }
