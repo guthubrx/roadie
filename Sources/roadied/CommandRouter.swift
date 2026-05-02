@@ -367,6 +367,9 @@ enum CommandRouter {
         case "window.display":
             return await handleWindowDisplay(request: request, daemon: daemon)
 
+        case "window.desktop":
+            return await handleWindowDesktop(request: request, daemon: daemon)
+
         case "display.list":
             return await handleDisplayList(daemon: daemon)
 
@@ -390,6 +393,12 @@ enum CommandRouter {
         case "desktop.focus":
             guard let selector = request.args?["selector"] else {
                 return .error(.invalidArgument, "missing selector argument")
+            }
+            // SPEC-013 : en mode per_display, scoper le hide/show au display de la
+            // frontmost. En mode global, fallback sur le path V2 (DesktopSwitcher).
+            let mode = await daemon.desktopRegistry?.mode ?? .global
+            if mode == .perDisplay {
+                return await handleDesktopFocusPerDisplay(selector: selector, daemon: daemon)
             }
             return await handleDesktopFocus(selector: selector, daemon: daemon)
 
@@ -417,6 +426,8 @@ enum CommandRouter {
         }
         let currentID = await registry.currentID
         let recentID = await registry.recentID
+        let mode = await registry.mode
+        let currentByDisplay = await registry.currentByDisplay
         let allDesktops = await registry.allDesktops()
         let items: [[String: Any]] = allDesktops.map { d in
             [
@@ -428,7 +439,15 @@ enum CommandRouter {
                 "stages": d.stages.count,
             ]
         }
-        return .success(["desktops": AnyCodable(items)])
+        // SPEC-013 FR-010 : exposer le mode + la map per-display.
+        let perDisplay: [[String: Any]] = currentByDisplay
+            .sorted(by: { $0.key < $1.key })
+            .map { (k, v) in ["display_id": Int(k), "current": v] }
+        return .success([
+            "desktops": AnyCodable(items),
+            "mode": AnyCodable(mode.rawValue),
+            "current_by_display": AnyCodable(perDisplay),
+        ])
     }
 
     private static func handleDesktopCurrent(daemon: Daemon) async -> Response {
@@ -440,13 +459,32 @@ enum CommandRouter {
             return .error(.internalError, "desktop registry not initialized")
         }
         let currentID = await registry.currentID
-        let desktop = await registry.desktop(id: currentID)
-        return .success([
-            "id": AnyCodable(currentID),
+        let mode = await registry.mode
+        // SPEC-013 FR-009 : en perDisplay, retourner aussi le current du display
+        // de la frontmost.
+        var displayID: CGDirectDisplayID? = nil
+        var displayCurrent: Int? = nil
+        if mode == .perDisplay,
+           let frontmost = daemon.registry.focusedWindowID,
+           let state = daemon.registry.get(frontmost) {
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            displayID = daemon.layoutEngine.displayIDContainingPoint(center)
+            if let did = displayID {
+                displayCurrent = await registry.currentID(for: did)
+            }
+        }
+        let desktop = await registry.desktop(id: displayCurrent ?? currentID)
+        var payload: [String: AnyCodable] = [
+            "id": AnyCodable(displayCurrent ?? currentID),
             "label": AnyCodable(desktop?.label ?? ""),
             "active_stage_id": AnyCodable(desktop?.activeStageID ?? 1),
             "windows": AnyCodable(desktop?.windows.count ?? 0),
-        ])
+            "mode": AnyCodable(mode.rawValue),
+        ]
+        if let did = displayID {
+            payload["display_id"] = AnyCodable(Int(did))
+        }
+        return .success(payload)
     }
 
     private static func handleDesktopFocus(selector: String, daemon: Daemon) async -> Response {
@@ -476,6 +514,216 @@ enum CommandRouter {
             "current_id": AnyCodable(currentID),
             "previous_id": AnyCodable(previousID),
             "event_emitted": AnyCodable(!wasNoop && currentID != previousID),
+        ])
+    }
+
+    /// SPEC-013 : envoyer la fenêtre frontmost vers desktop N du display courant.
+    /// Met à jour state.desktopID. Si N != current desktop du display, hide
+    /// la fenêtre offscreen. Sinon (la fenêtre reste visible sur le desktop courant),
+    /// re-applique le layout.
+    private static func handleWindowDesktop(request: Request, daemon: Daemon) async -> Response {
+        guard daemon.config.desktops.enabled else {
+            return .error(.multiDesktopDisabled, "multi_desktop disabled")
+        }
+        guard let registry = daemon.desktopRegistry else {
+            return .error(.internalError, "desktop registry not initialized")
+        }
+        guard let selectorStr = request.args?["selector"],
+              let targetID = Int(selectorStr) else {
+            return .error(.invalidArgument, "missing or invalid selector")
+        }
+        guard targetID >= 1 && targetID <= daemon.config.desktops.count else {
+            return .error(.invalidArgument, "desktop \(targetID) out of range")
+        }
+        guard let wid = daemon.registry.focusedWindowID,
+              let state = daemon.registry.get(wid) else {
+            return .error(.windowNotFound, "no focused window")
+        }
+        // Display de la fenêtre via son centre (frame réel ou expectedFrame fallback).
+        let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+        var displayID = daemon.layoutEngine.displayIDContainingPoint(center)
+        if displayID == nil && state.expectedFrame != .zero {
+            let expCenter = CGPoint(x: state.expectedFrame.midX, y: state.expectedFrame.midY)
+            displayID = daemon.layoutEngine.displayIDContainingPoint(expCenter)
+        }
+        let resolvedDisplayID = displayID ?? CGMainDisplayID()
+        let currentOnDisplay = await registry.currentID(for: resolvedDisplayID)
+        // Mise à jour du desktopID.
+        daemon.registry.update(wid) { $0.desktopID = targetID }
+        // Si target != current du display, hide. Sinon, applyLayout.
+        if targetID != currentOnDisplay {
+            if state.isTileable {
+                daemon.layoutEngine.setLeafVisible(wid, false)
+            }
+            HideStrategyImpl.hide(wid, registry: daemon.registry,
+                                  strategy: daemon.config.stageManager.hideStrategy)
+        }
+        daemon.applyLayout()
+        logInfo("window.desktop: window assigned", [
+            "wid": String(wid),
+            "desktop": String(targetID),
+            "display_id": String(resolvedDisplayID),
+            "current": String(currentOnDisplay),
+        ])
+        return .success([
+            "cgwid": AnyCodable(Int(wid)),
+            "desktop": AnyCodable(targetID),
+            "display_id": AnyCodable(Int(resolvedDisplayID)),
+            "hidden": AnyCodable(targetID != currentOnDisplay),
+        ])
+    }
+
+    /// SPEC-013 T010-T011 : focus desktop scopé au display de la frontmost.
+    /// Cache uniquement les fenêtres dont le centre tombe sur ce display ; restaure
+    /// celles dont le desktopID == targetID. Les autres displays sont intouchés.
+    private static func handleDesktopFocusPerDisplay(selector: String,
+                                                     daemon: Daemon) async -> Response {
+        logInfo("desktop.focus per_display ENTER", ["selector": selector])
+        defer { logInfo("desktop.focus per_display EXIT", ["selector": selector]) }
+        guard daemon.config.desktops.enabled else {
+            return .error(.multiDesktopDisabled,
+                          "multi_desktop disabled, set [desktops] enabled = true in roadies.toml")
+        }
+        guard let registry = daemon.desktopRegistry else {
+            return .error(.internalError, "desktop registry not initialized")
+        }
+        // SPEC-013 fix CRUCIAL : utiliser la position du CURSEUR comme source
+        // de vérité (= où l'utilisateur regarde RÉELLEMENT au moment du
+        // raccourci), pas la frontmost AX qui peut avoir transité ailleurs
+        // entre le clic user et le traitement de la commande. C'est le pattern
+        // yabai/AeroSpace. Fallback frontmost si curseur sur aucun display.
+        var targetDisplayID: CGDirectDisplayID = CGMainDisplayID()
+        let mouseLoc = NSEvent.mouseLocation
+        if let hit = NSScreen.screens.first(where: { $0.frame.contains(mouseLoc) }),
+           let did = hit.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+               as? CGDirectDisplayID {
+            targetDisplayID = did
+        } else if let frontmost = daemon.registry.focusedWindowID,
+                  let state = daemon.registry.get(frontmost) {
+            // Fallback secondaire : centre de la frontmost.
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            if let did = daemon.layoutEngine.displayIDContainingPoint(center) {
+                targetDisplayID = did
+            }
+        }
+        let previousID = await registry.currentID(for: targetDisplayID)
+        guard let targetID = await resolveSelector(
+            selector, registry: registry, count: daemon.config.desktops.count) else {
+            return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
+        }
+        // Same desktop + back-and-forth → bascule vers recent **du display ciblé**
+        // (pas le recent global, qui pourrait pointer sur un desktop d'un autre
+        // écran et faire basculer le mauvais display).
+        var resolvedTarget = targetID
+        if resolvedTarget == previousID {
+            if daemon.config.desktops.backAndForth,
+               let recent = await registry.recentID(for: targetDisplayID) {
+                resolvedTarget = recent
+            } else {
+                // No-op
+                return .success([
+                    "current_id": AnyCodable(previousID),
+                    "previous_id": AnyCodable(previousID),
+                    "display_id": AnyCodable(Int(targetDisplayID)),
+                    "event_emitted": AnyCodable(false),
+                ])
+            }
+        }
+        logInfo("desktop.focus per_display resolved", [
+            "target_display": String(targetDisplayID),
+            "previous_id": String(previousID),
+            "resolved_target": String(resolvedTarget),
+        ])
+        // Mute le current du display ciblé.
+        await registry.setCurrent(resolvedTarget, on: targetDisplayID)
+
+        // SPEC-013 T034/FR-016 : persister le current per-display sur disque pour
+        // restoration au rebranchement.
+        if let displays = await daemon.displayRegistry?.displays,
+           let dst = displays.first(where: { $0.id == targetDisplayID }),
+           !dst.uuid.isEmpty {
+            let configDir = URL(fileURLWithPath:
+                (NSString(string: "~/.config/roadies").expandingTildeInPath as String))
+            DesktopPersistence.saveCurrent(
+                configDir: configDir,
+                displayUUID: dst.uuid,
+                currentID: resolvedTarget
+            )
+            // Snapshot des fenêtres du display ciblé pour le desktop courant.
+            let snapshots: [DesktopPersistence.WindowSnapshot] = daemon.registry.allWindows
+                .compactMap { state in
+                    let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                    guard let did = daemon.layoutEngine.displayIDContainingPoint(center),
+                          did == targetDisplayID,
+                          state.desktopID == resolvedTarget else { return nil }
+                    return DesktopPersistence.WindowSnapshot(
+                        cgwid: UInt32(state.cgWindowID),
+                        bundleID: state.bundleID,
+                        titlePrefix: String(state.title.prefix(80)),
+                        expectedFrame: state.frame
+                    )
+                }
+            DesktopPersistence.saveDesktopWindows(
+                configDir: configDir,
+                displayUUID: dst.uuid,
+                desktopID: resolvedTarget,
+                windows: snapshots
+            )
+        }
+
+        // Hide/show ciblé : pour chaque fenêtre du registry, si son centre tombe
+        // sur le display ciblé, appliquer la visibilité selon son desktopID.
+        // BUGFIX : une fenêtre cachée est offscreen → state.frame.midXY tombe
+        // hors de tous les displays → displayIDContainingPoint retourne nil →
+        // skip → jamais reshown. Fallback sur expectedFrame (pré-hide position).
+        let allWindows = daemon.registry.allWindows
+        for state in allWindows {
+            let frameCenter = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            var did = daemon.layoutEngine.displayIDContainingPoint(frameCenter)
+            if did == nil && state.expectedFrame != .zero {
+                let expCenter = CGPoint(x: state.expectedFrame.midX,
+                                        y: state.expectedFrame.midY)
+                did = daemon.layoutEngine.displayIDContainingPoint(expCenter)
+            }
+            guard let resolvedDid = did, resolvedDid == targetDisplayID else { continue }
+            let shouldShow = state.desktopID == resolvedTarget
+            logInfo("desktop.focus per_display window", [
+                "wid": String(state.cgWindowID),
+                "desktop": String(state.desktopID),
+                "should_show": shouldShow ? "yes" : "no",
+            ])
+            if state.isTileable {
+                daemon.layoutEngine.setLeafVisible(state.cgWindowID, shouldShow)
+            }
+            if shouldShow {
+                HideStrategyImpl.show(state.cgWindowID,
+                                      registry: daemon.registry,
+                                      strategy: daemon.config.stageManager.hideStrategy)
+            } else {
+                HideStrategyImpl.hide(state.cgWindowID,
+                                      registry: daemon.registry,
+                                      strategy: daemon.config.stageManager.hideStrategy)
+            }
+        }
+        daemon.applyLayout()
+
+        // Émet event desktop_changed avec display_id (FR-024).
+        let ts = Int64(Date().timeIntervalSince1970 * 1000)
+        EventBus.shared.publish(DesktopEvent(
+            name: "desktop_changed",
+            payload: [
+                "from": String(previousID),
+                "to": String(resolvedTarget),
+                "display_id": String(targetDisplayID),
+                "mode": "per_display",
+                "ts": String(ts),
+            ]
+        ))
+        return .success([
+            "current_id": AnyCodable(resolvedTarget),
+            "previous_id": AnyCodable(previousID),
+            "display_id": AnyCodable(Int(targetDisplayID)),
+            "event_emitted": AnyCodable(true),
         ])
     }
 
@@ -567,12 +815,20 @@ enum CommandRouter {
         if state.isTileable {
             _ = daemon.layoutEngine.moveWindow(wid, fromDisplay: srcDisplay.id, toDisplay: dstDisplay.id)
         }
-        // Mise à jour du displayUUID dans le DesktopRegistry.
+        // Mise à jour du displayUUID dans le DesktopRegistry. SPEC-013 FR-012 :
+        // en mode per_display, la fenêtre adopte le current desktop du display cible.
         if let dRegistry = daemon.desktopRegistry {
-            let currentDeskID = await dRegistry.currentID
+            let mode = await dRegistry.mode
+            let targetDeskID: Int
+            if mode == .perDisplay {
+                targetDeskID = await dRegistry.currentID(for: dstDisplay.id)
+                daemon.registry.update(wid) { $0.desktopID = targetDeskID }
+            } else {
+                targetDeskID = await dRegistry.currentID
+            }
             try? await dRegistry.updateWindowDisplayUUID(
                 cgwid: UInt32(wid),
-                desktopID: currentDeskID,
+                desktopID: targetDeskID,
                 displayUUID: dstDisplay.uuid
             )
         }
