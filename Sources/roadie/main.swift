@@ -39,6 +39,27 @@ case "move":
     guard args.count >= 3 else { printUsage(); exit(64) }
     sendAndPrint(Request(command: "move", args: ["direction": args[2]]))
 
+case "warp":
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    sendAndPrint(Request(command: "warp", args: ["direction": args[2]]))
+
+case "close":
+    sendAndPrint(Request(command: "window.close"))
+
+case "toggle":
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    switch args[2] {
+    case "floating":
+        sendAndPrint(Request(command: "window.toggle.floating"))
+    case "fullscreen":
+        sendAndPrint(Request(command: "window.toggle.fullscreen"))
+    case "native-fullscreen", "native":
+        sendAndPrint(Request(command: "window.toggle.native-fullscreen"))
+    default:
+        FileHandle.standardError.write("roadie: unknown toggle '\(args[2])'. Valid: floating | fullscreen | native-fullscreen\n".data(using: .utf8) ?? Data())
+        exit(64)
+    }
+
 case "resize":
     guard args.count >= 4 else { printUsage(); exit(64) }
     sendAndPrint(Request(command: "resize",
@@ -76,18 +97,25 @@ case "fx":
 case "window":
     handleWindow(args: args)
 
+case "display":
+    handleDisplay(args: args)
+
 default:
     printUsage()
     exit(64)
 }
 
-/// SPEC-010 : `roadie window space <selector>` / `stick [bool]` / `pin|unpin` / `unstick`.
+/// SPEC-010/012 : `roadie window space|display|stick|pin|unpin`.
 func handleWindow(args: [String]) {
     guard args.count >= 3 else { printUsage(); exit(64) }
     switch args[2] {
     case "space":
         guard args.count >= 4 else { printUsage(); exit(2) }
         sendAndPrint(Request(command: "window.space", args: ["selector": args[3]]))
+    case "display":
+        // SPEC-012 T023 : roadie window display <1..N|prev|next|main>
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "window.display", args: ["selector": args[3]]))
     case "stick":
         let sticky = args.count >= 4 ? args[3] : "true"
         sendAndPrint(Request(command: "window.stick", args: ["sticky": sticky]))
@@ -99,6 +127,71 @@ func handleWindow(args: [String]) {
         sendAndPrint(Request(command: "window.pin", args: ["pinned": "false"]))
     default:
         printUsage(); exit(64)
+    }
+}
+
+/// SPEC-012 T035 : `roadie display list/current/focus`.
+///   roadie display list [--json]
+///   roadie display current [--json]
+///   roadie display focus <1..N|prev|next|main>
+func handleDisplay(args: [String]) {
+    guard args.count >= 3 else { printUsage(); exit(2) }
+    let json = args.contains("--json")
+    switch args[2] {
+    case "list":
+        if json {
+            sendAndPrint(Request(command: "display.list"))
+        } else {
+            sendDisplayListAsTable()
+        }
+    case "current":
+        sendAndPrint(Request(command: "display.current"))
+    case "focus":
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "display.focus", args: ["selector": args[3]]))
+    default:
+        printUsage(); exit(2)
+    }
+}
+
+/// Formatage texte du tableau `display list`.
+/// Colonnes : INDEX  ID  NAME  FRAME  IS_MAIN  IS_ACTIVE  WINDOWS
+func sendDisplayListAsTable() {
+    do {
+        let response = try SocketClient.send(Request(command: "display.list"))
+        if response.status == .error {
+            OutputFormatter.print(response: response)
+            exit(1)
+        }
+        let payload = response.payload ?? [:]
+        let displays = (payload["displays"]?.value as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+        func pad(_ s: String, _ w: Int) -> String {
+            s.count >= w ? s : s + String(repeating: " ", count: w - s.count)
+        }
+        print("\(pad("INDEX", 5))  \(pad("ID", 10))  \(pad("NAME", 24))  \(pad("FRAME", 22))  \(pad("IS_MAIN", 7))  \(pad("ACTIVE", 6))  WINDOWS")
+        if displays.isEmpty {
+            print("(no displays detected)")
+            return
+        }
+        for d in displays {
+            let index = (d["index"] as? Int) ?? 0
+            let id = (d["id"] as? Int) ?? 0
+            let name = (d["name"] as? String) ?? ""
+            let isMain = (d["is_main"] as? Bool) == true ? "*" : ""
+            let isActive = (d["is_active"] as? Bool) == true ? "*" : ""
+            let windows = (d["windows"] as? Int) ?? 0
+            let frameArr = (d["frame"] as? [Any])?.compactMap { $0 as? Int } ?? []
+            let frame = frameArr.count == 4
+                ? "\(frameArr[0]),\(frameArr[1]) \(frameArr[2])x\(frameArr[3])"
+                : "?"
+            print("\(pad(String(index), 5))  \(pad(String(id), 10))  \(pad(name, 24))  \(pad(frame, 22))  \(pad(isMain, 7))  \(pad(isActive, 6))  \(windows)")
+        }
+    } catch SocketClient.Error.daemonNotRunning {
+        FileHandle.standardError.write("roadie: daemon not running\n".data(using: .utf8) ?? Data())
+        exit(3)
+    } catch {
+        FileHandle.standardError.write("roadie: \(error)\n".data(using: .utf8) ?? Data())
+        exit(1)
     }
 }
 
@@ -383,8 +476,11 @@ func printUsage() {
       roadie windows list
       roadie daemon status | reload
       roadie focus <left|right|up|down>
-      roadie move <left|right|up|down>
+      roadie move <left|right|up|down>            # swap avec voisin
+      roadie warp <left|right|up|down>            # split la cellule voisine en 2
       roadie resize <left|right|up|down> <delta>
+      roadie close                                # ferme la fenêtre frontmost
+      roadie toggle <floating|fullscreen|native-fullscreen>
       roadie tiler list                          # liste les stratégies disponibles
       roadie tiler <strategy>                    # change la stratégie active
       roadie stage list
@@ -400,6 +496,10 @@ func printUsage() {
       roadie events --follow [--filter <event>]  # JSON-lines stream sur stdout
       roadie fx status | reload                  # SPEC-004 framework SIP-off opt-in
       roadie window space <prev|next|N|label>    # SPEC-010 déplacer fenêtre cross-desktop
+      roadie window display <1..N|prev|next|main> # SPEC-012 déplacer fenêtre vers écran N
+      roadie display list [--json]               # SPEC-012 lister les écrans physiques
+      roadie display current [--json]            # SPEC-012 écran de la fenêtre frontmost
+      roadie display focus <1..N|prev|next|main> # SPEC-012 focus première fenêtre d'un écran
       roadie window stick [true|false]           # SPEC-010 sticky (visible sur tous desktops)
       roadie window unstick                      # alias de stick false
       roadie window pin | unpin                  # SPEC-010 always-on-top

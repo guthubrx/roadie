@@ -35,6 +35,7 @@ So roadie is a humble assembly of a bit of yabai (the tiler, AX-only without SIP
 | BSP + master-stack tiling | OK | SPEC-002 |
 | Stage Manager (named groups ⌥1/⌥2/...) | OK | SPEC-002 |
 | Virtual desktops (1..16, AeroSpace pivot) | OK | SPEC-011 |
+| Multi-display: independent tiling per screen | OK | SPEC-012 |
 | Drag-to-adapt (manual resize propagates the tree) | OK | SPEC-002 |
 | Universal click-to-raise | OK (Electron/JetBrains/Cursor) | SPEC-002 |
 | Focused window borders (NSWindow overlay) | OK | SPEC-008 |
@@ -45,7 +46,7 @@ So roadie is a humble assembly of a bit of yabai (the tiler, AX-only without SIP
 
 - **Inter-app click-to-raise** not 100% guaranteed: without disabled SIP + scripting addition injection into Dock.app (the yabai path), no WM can reach 100% on recent macOS. AeroSpace has the same limitation by design. roadie explicitly chooses not to touch SIP, so accepts this ceiling.
 - **SIP-off opt-in visual effects** (Bézier animations, blur, focus dimming, shadowless): the framework is shipped and the `.dylib` modules load correctly, but Apple has silently blocked third-party scripting addition injection into Dock on Tahoe 26 — so the CGS overlay doesn't reach third-party windows. Details: [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md). Window borders (native NSWindow overlay) work fine without osax.
-- **Single-display strict** for V2: multi-display deferred to V3.
+- **Multi-display** is supported (SPEC-012 V3): see [Multi-display](#multi-display) below.
 
 ## Installation (build from source)
 
@@ -97,6 +98,33 @@ focused_only = true
 ```
 
 > To avoid conflicts with native Spaces: in System Settings → Desktop, disable "Displays have separate Spaces" and use **a single native Mac Space**. Roadie ignores native Mac Space switches (native Ctrl+→/←).
+
+## Multi-display
+
+roadie handles multiple physical screens transparently (SPEC-012). Each connected display gets its own independent tiling tree — windows on screen 1 and windows on screen 2 tile separately within each screen's visible area.
+
+```bash
+roadie display list                    # enumerate connected screens
+roadie display current                 # screen of the frontmost window
+roadie display focus 2                 # focus first tiled window on screen 2
+roadie display focus next              # cycle to next screen
+
+roadie window display 2                # move frontmost window to screen 2
+roadie window display prev             # move to previous screen
+```
+
+**Branch/unbranch**: when a screen disconnects, its windows migrate automatically to the primary display. When a screen reconnects, it gets a fresh tiling tree. A `display_configuration_changed` event is emitted on each change (subscribe via `roadie events --follow`).
+
+**Per-display config** (optional, in `roadies.toml`):
+
+```toml
+[[displays]]
+match_index = 2
+default_strategy = "masterStack"
+gaps_outer = 0
+```
+
+Match criteria: `match_index`, `match_uuid` (cross-reboot stable), or `match_name` (localized screen name).
 
 ## Detailed documentation
 

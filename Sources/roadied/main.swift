@@ -63,6 +63,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// les 200 ms après un apply proviennent de notre propre setBounds et sont
     /// ignorées. Sans cette garde, adapt → apply → notif → adapt → boucle.
     private var lastApplyTimestamp: Date = .distantPast
+    /// Coalescing applyLayout : true si une Task applyAll est déjà en vol. Évite
+    /// d'empiler 5 applyAll @MainActor consécutifs (chacun ~6 setBounds sync) qui
+    /// saturent le main actor et bloquent les commandes CLI.
+    private var applyLayoutInFlight = false
+    /// Re-trigger demandé pendant un applyLayout en cours.
+    private var applyLayoutNeedsRetrigger = false
 
     init(config: Config) throws {
         self.config = config
@@ -158,9 +164,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Server socket
         server = Server(socketPath: config.daemon.socketPath, handler: self)
         try server?.start()
-
-        // Initial layout
-        applyLayout()
 
         // Auto-assign des fenêtres orphelines au stage courant (migration utilisateurs existants).
         // Si 5 fenêtres n'ont pas de stageID après loadFromDisk, elles atterrissent toutes
@@ -373,22 +376,39 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // SPEC-012 T009/T018 : init DisplayRegistry + observer didChangeScreenParameters.
         // L'observer est dans bootstrap() car les notifications AppKit ne peuvent pas
         // être observées proprement depuis un actor Swift.
-        let dspRegistry = DisplayRegistry()
+        // Transmettre les gaps de [tiling] au DisplayRegistry pour que applyAll
+        // les utilise comme defaults par display (sinon 0/4 hardcodés et les
+        // gaps de la config sont ignorés en multi-display).
+        let dspRegistry = DisplayRegistry(
+            defaultGapsOuter: config.tiling.gapsOuter,
+            defaultGapsInner: config.tiling.gapsInner
+        )
         await dspRegistry.refresh()
+        // T038 : appliquer les règles per-display de la config après chaque refresh.
+        await dspRegistry.applyRules(config.displays)
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self, weak dspRegistry] _ in
             guard let self, let dspRegistry else { return }
-            Task {
+            Task { @MainActor in
+                // T026 : capturer l'état avant refresh pour calculer le diff.
+                let oldDisplays = await dspRegistry.displays
                 await dspRegistry.refresh()
-                // Re-distribuer le layout sur tous les écrans après changement de config.
-                await self.layoutEngine.applyAll(displayRegistry: dspRegistry)
+                // T038 : ré-appliquer les règles per-display après chaque refresh.
+                await dspRegistry.applyRules(self.config.displays)
+                let newDisplays = await dspRegistry.displays
+                await self.handleDisplayConfigurationChange(old: oldDisplays, new: newDisplays)
             }
         }
         self.displayRegistry = dspRegistry
         logInfo("display_registry initialized", ["count": String(await dspRegistry.count)])
+
+        // Initial layout APRÈS init du DisplayRegistry, pour que applyAll prenne
+        // la branche multi-display et tile chaque écran (sinon fallback mono-écran
+        // tile uniquement le primary, les autres écrans restent en placement libre).
+        applyLayout()
 
         logInfo("roadied ready")
     }
@@ -514,8 +534,30 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         lastApplyTimestamp = Date()
         if let dspRegistry = displayRegistry {
             // T018 : multi-display → distribuer sur tous les écrans.
-            // applyAll est async, Task détaché pour préserver la surface sync.
-            Task { await self.layoutEngine.applyAll(displayRegistry: dspRegistry) }
+            // @MainActor obligatoire : applyAll fait des appels AX (AXReader.setBounds)
+            // qui doivent être sur le main thread. Sans @MainActor un AXValue créé sur
+            // un thread bg pollue le pool autorelease du main → SIGSEGV au prochain
+            // pool drain pendant NSApp.run.
+            // Coalescing : si une applyAll est en vol, on ne re-spawn pas (ça empile
+            // sur le main actor et bloque la socket-handler des minutes). On set juste
+            // un flag pour redéclencher une fois la première finie.
+            if applyLayoutInFlight {
+                applyLayoutNeedsRetrigger = true
+                return
+            }
+            applyLayoutInFlight = true
+            let outerSides = config.tiling.effectiveOuterGaps
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                logInfo("applyAll start")
+                await self.layoutEngine.applyAll(displayRegistry: dspRegistry, outerSides: outerSides)
+                logInfo("applyAll done")
+                self.applyLayoutInFlight = false
+                if self.applyLayoutNeedsRetrigger {
+                    self.applyLayoutNeedsRetrigger = false
+                    self.applyLayout()
+                }
+            }
         } else {
             // Fallback mono-écran (avant que le displayRegistry soit initialisé).
             let area = displayManager.workArea
@@ -524,6 +566,76 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                outerGaps: gaps,
                                gapsInner: CGFloat(config.tiling.gapsInner))
         }
+    }
+
+    // MARK: - SPEC-012 T026-T029 : recovery branch/débranch
+
+    /// Diff `old` vs `new` et migre les fenêtres des écrans retirés vers le primary (T027).
+    /// Pour chaque écran ajouté, crée un root vide (T028).
+    /// Émet `display_configuration_changed` si la liste a changé (T029).
+    func handleDisplayConfigurationChange(old: [Display], new: [Display]) async {
+        let oldIDs = Set(old.map(\.id))
+        let newIDs = Set(new.map(\.id))
+        let removed = old.filter { !newIDs.contains($0.id) }
+        let added = new.filter { !oldIDs.contains($0.id) }
+        guard !removed.isEmpty || !added.isEmpty else { return }
+        let primaryID = CGMainDisplayID()
+        let primary = new.first(where: { $0.isMain }) ?? new.first
+        // T027 : migrer les fenêtres des écrans retirés vers le primary.
+        if let primary {
+            for removedDisplay in removed {
+                guard let removedRoot = layoutEngine.workspace.rootsByDisplay[removedDisplay.id] else { continue }
+                let wids = removedRoot.allLeaves.map { $0.windowID }
+                for wid in wids {
+                    guard let state = registry.get(wid) else { continue }
+                    let clamped = clampFrameToVisible(state.frame, in: primary.visibleFrame)
+                    if let element = registry.axElement(for: wid) {
+                        AXReader.setBounds(element, frame: clamped)
+                    }
+                    registry.updateFrame(wid, frame: clamped)
+                    _ = layoutEngine.moveWindow(wid, fromDisplay: removedDisplay.id, toDisplay: primaryID)
+                    if let dRegistry = desktopRegistry {
+                        let currentDeskID = await dRegistry.currentID
+                        try? await dRegistry.updateWindowDisplayUUID(
+                            cgwid: UInt32(wid),
+                            desktopID: currentDeskID,
+                            displayUUID: primary.uuid
+                        )
+                    }
+                }
+                layoutEngine.clearDisplayRoot(for: removedDisplay.id)
+                logInfo("display removed: windows migrated to primary", [
+                    "removed_id": String(removedDisplay.id),
+                    "count": String(wids.count),
+                ])
+            }
+        }
+        // T028 : créer des roots vides pour les écrans ajoutés.
+        for addedDisplay in added {
+            layoutEngine.initDisplayRoot(for: addedDisplay.id)
+            logInfo("display added: root initialized", ["id": String(addedDisplay.id)])
+        }
+        // Ré-appliquer le layout sur tous les écrans.
+        applyLayout()
+        // T029 : émettre display_configuration_changed via le bus RoadieCore.
+        let ts = Int64(Date().timeIntervalSince1970 * 1000)
+        EventBus.shared.publish(DesktopEvent(
+            name: "display_configuration_changed",
+            payload: ["ts": String(ts)]
+        ))
+    }
+
+    /// Ajuste `frame` pour qu'elle tienne dans `visible` (clamp + shift), T027.
+    private func clampFrameToVisible(_ frame: CGRect, in visible: CGRect) -> CGRect {
+        var origin = frame.origin
+        var size = frame.size
+        if size.width > visible.width * 0.95 { size.width = visible.width * 0.8 }
+        if size.height > visible.height * 0.95 { size.height = visible.height * 0.8 }
+        if origin.x < visible.minX { origin.x = visible.minX + 10 }
+        if origin.y < visible.minY { origin.y = visible.minY + 10 }
+        if origin.x + size.width > visible.maxX { origin.x = visible.maxX - size.width - 10 }
+        if origin.y + size.height > visible.maxY { origin.y = visible.maxY - size.height - 10 }
+        return CGRect(origin: origin, size: size)
     }
 
     /// Auto-GC : purge les fenêtres dont le CGWindowID n'existe plus dans le système.
@@ -693,12 +805,41 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     }
 
     /// Appelé par DragWatcher au `leftMouseUp`. Si un wid a été trackée pendant le drag,
-    /// on lit sa frame finale et on adapte les weights de l'arbre en conséquence.
+    /// on lit sa frame finale et on :
+    /// 1) si la fenêtre a traversé un autre écran, on migre l'arbre (FR-013 spec-012)
+    /// 2) sinon, on adapte les weights de l'arbre en conséquence
     func onDragDrop() {
         guard let wid = dragTrackedWid else { return }
         dragTrackedWid = nil
         guard let element = registry.axElement(for: wid),
               let frame = AXReader.bounds(element) else { return }
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        let realDisplayID = layoutEngine.displayIDContainingPoint(center) ?? CGMainDisplayID()
+        let treeDisplayID = layoutEngine.displayIDForWindow(wid)
+        if let src = treeDisplayID, src != realDisplayID {
+            // Migration cross-display : la fenêtre a été draggée d'un écran à l'autre.
+            _ = layoutEngine.moveWindow(wid, fromDisplay: src, toDisplay: realDisplayID)
+            if let dRegistry = desktopRegistry, let dReg = displayRegistry {
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    let currentDeskID = await dRegistry.currentID
+                    let displays = await dReg.displays
+                    if let dst = displays.first(where: { $0.id == realDisplayID }) {
+                        try? await dRegistry.updateWindowDisplayUUID(
+                            cgwid: UInt32(wid),
+                            desktopID: currentDeskID,
+                            displayUUID: dst.uuid
+                        )
+                    }
+                    self.applyLayout()
+                }
+            } else {
+                applyLayout()
+            }
+            logDebug("drag migrated cross-display",
+                     ["wid": String(wid), "from": String(src), "to": String(realDisplayID)])
+            return
+        }
         if layoutEngine.adaptToManualResize(wid, newFrame: frame) {
             logDebug("drag adapted", ["wid": String(wid)])
             applyLayout()
@@ -708,13 +849,45 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Auto-GC : à chaque event de focus, vérifier que les fenêtres connues
         // existent encore (rattrape les Cmd+W que kAXUIElementDestroyed a ratés).
         pruneDeadWindows()
-        // Fallback : si la fenêtre focalisée n'est pas connue, l'enregistrer maintenant.
-        if let wid = axWindowID(of: axWindow), registry.get(wid) == nil {
-            registerWindow(pid: pid, axWindow: axWindow)
+        // Cause root du focus-thrashing : `refreshFromSystem()` re-query
+        // NSWorkspace.frontmostApplication.AXFocusedWindow, qui pour les apps
+        // multi-window peut retourner la *main* window de l'app au lieu de la
+        // fenêtre que macOS vient juste de focaliser (c'est-à-dire l'axWindow
+        // qu'on reçoit ici). Race ⇒ on écrasait le focus du clic. Fix : utiliser
+        // directement l'élément reçu, fallback refreshFromSystem si non résolvable.
+        if let wid = axWindowID(of: axWindow) {
+            if registry.get(wid) == nil {
+                registerWindow(pid: pid, axWindow: axWindow)
+            }
+            registry.setFocus(wid)
+        } else {
+            focusManager.refreshFromSystem()
         }
-        focusManager.refreshFromSystem()
         // windowFocused FX publié automatiquement par registry.onFocusChanged
         // (cf. branchement dans bootstrap()).
+
+        // T042 : recalculer l'écran actif et émettre display_changed si changé.
+        if let dReg = displayRegistry,
+           let wid = axWindowID(of: axWindow),
+           let state = registry.get(wid) {
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            Task { @MainActor in
+                if let newDisplay = await dReg.displayContaining(point: center) {
+                    let changed = await dReg.setActive(id: newDisplay.id)
+                    if changed {
+                        let ts = Int64(Date().timeIntervalSince1970 * 1000)
+                        EventBus.shared.publish(DesktopEvent(
+                            name: "display_changed",
+                            payload: [
+                                "display_index": String(newDisplay.index),
+                                "display_id": String(newDisplay.id),
+                                "ts": String(ts),
+                            ]
+                        ))
+                    }
+                }
+            }
+        }
     }
     /// Scanne les fenêtres d'une app et enregistre celles qui ne le sont pas encore.
     /// Appelé depuis les paths d'activation (NSWorkspace, AX) et le scanner périodique.

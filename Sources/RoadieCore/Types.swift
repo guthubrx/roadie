@@ -116,13 +116,19 @@ public struct WindowState: Sendable {
     /// SPEC-011 : position/taille attendues quand la fenêtre est on-screen sur son desktop.
     /// Mise à jour uniquement quand desktopID == currentDesktopID (R-002).
     public var expectedFrame: CGRect
+    /// Toggle fullscreen non-natif (zoom-fullscreen yabai-style) : la fenêtre prend
+    /// tout le visibleFrame du display courant en restant dans la même Space.
+    /// `preZoomFrame` mémorise sa position pré-zoom pour la restoration.
+    public var isZoomed: Bool
+    public var preZoomFrame: CGRect?
 
     public init(cgWindowID: WindowID, pid: pid_t, bundleID: String,
                 title: String, frame: CGRect, subrole: AXSubrole,
                 isFloating: Bool, isMinimized: Bool = false, isFullscreen: Bool = false,
                 workspaceID: WorkspaceID = .main, stageID: StageID? = nil,
                 desktopUUID: String? = nil, desktopID: Int = 1,
-                expectedFrame: CGRect = .zero) {
+                expectedFrame: CGRect = .zero,
+                isZoomed: Bool = false, preZoomFrame: CGRect? = nil) {
         self.cgWindowID = cgWindowID
         self.pid = pid
         self.bundleID = bundleID
@@ -137,9 +143,11 @@ public struct WindowState: Sendable {
         self.desktopUUID = desktopUUID
         self.desktopID = desktopID
         self.expectedFrame = expectedFrame == .zero ? frame : expectedFrame
+        self.isZoomed = isZoomed
+        self.preZoomFrame = preZoomFrame
     }
 
     public var isTileable: Bool {
-        !isFloating && !isMinimized && !isFullscreen && subrole == .standard
+        !isFloating && !isMinimized && !isFullscreen && !isZoomed && subrole == .standard
     }
 }

@@ -2,6 +2,23 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/). Versions majeures alignées sur les SPEC.
 
+## [Unreleased] — branche `012-multi-display`
+
+### Added (SPEC-012 Multi-Display)
+
+- Tiling indépendant par écran physique : chaque display obtient son propre arbre `TilingContainer` dans `LayoutEngine.rootsByDisplay`.
+- `roadie window display <1..N|prev|next|main>` : déplace la fenêtre frontmost vers un autre écran, recalcule et applique les frames sur les deux écrans.
+- `roadie display list [--json]` : liste tous les écrans connectés (index, id, uuid, nom, frame, fenêtres).
+- `roadie display current [--json]` : écran contenant la fenêtre frontmost.
+- `roadie display focus <selector>` : focus la première fenêtre tilée de l'écran cible.
+- Recovery automatique branch/débranch : à la déconnexion d'un écran, ses fenêtres migrent vers le primary en < 500 ms. À la reconnexion, root vide créé.
+- Event `display_configuration_changed` émis à chaque changement de topologie d'écrans.
+- Event `display_changed` émis à chaque changement de focus d'écran actif (observable via `roadie events --follow`).
+- Per-display config : section `[[displays]]` dans `roadies.toml` avec `match_index/uuid/name`, `default_strategy`, `gaps_outer`, `gaps_inner`.
+- `DisplayRegistry` (actor Swift, 201 LOC effectives) : source de vérité des écrans, refresh automatique sur `NSApplication.didChangeScreenParametersNotification`.
+- `DisplayProvider` protocol + `MockDisplayProvider` pour tests sans dépendance à `NSScreen.screens`.
+- 0 import SkyLight/CGS/SLS dans les fichiers Display* (vérifié par `Tests/StaticChecks/no-cgs.sh`).
+
 ## [Unreleased] — branche `011-virtual-desktops`
 
 ### Added (SPEC-011 Roadie Virtual Desktops)

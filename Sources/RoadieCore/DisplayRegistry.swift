@@ -1,4 +1,5 @@
 import CoreGraphics
+import AppKit
 
 // MARK: - DisplayRegistry (SPEC-012 R-001..R-003, FR-001..FR-003, FR-005)
 
@@ -67,6 +68,10 @@ public actor DisplayRegistry {
             ))
         }
         displays = next
+        // Cleanup zombie activeID : si l'écran référencé a disparu, le retirer.
+        if let aid = activeID, !displays.contains(where: { $0.id == aid }) {
+            activeID = nil
+        }
     }
 
     // MARK: Accesseurs (FR-001..FR-003)
@@ -101,12 +106,50 @@ public actor DisplayRegistry {
 
     // MARK: Mutations
 
-    /// Positionne l'écran actif (appelé par le focus observer, T041+).
-    public func setActive(id: CGDirectDisplayID) {
+    /// Positionne l'écran actif (appelé par le focus observer, T042).
+    /// Retourne `true` si l'id a changé (pour permettre l'émission d'un event).
+    @discardableResult
+    public func setActive(id: CGDirectDisplayID) -> Bool {
+        let changed = activeID != id
         activeID = id
+        return changed
+    }
+
+    // MARK: Per-display config (SPEC-012 T038, FR-019)
+
+    /// Applique les overrides de config `[[displays]]` sur les `Display` déjà chargés.
+    /// Pour chaque display, cherche la première règle qui matche (index > uuid > name)
+    /// et copie les overrides dans une nouvelle instance `Display`.
+    public func applyRules(_ rules: [DisplayRule]) {
+        guard !rules.isEmpty else { return }
+        displays = displays.map { d in
+            guard let rule = rules.first(where: { matches(rule: $0, display: d) }) else {
+                return d
+            }
+            let strategy = rule.defaultStrategy.map { TilerStrategy(rawValue: $0) } ?? d.tilerStrategy
+            return Display(
+                id: d.id,
+                index: d.index,
+                uuid: d.uuid,
+                name: d.name,
+                frame: d.frame,
+                visibleFrame: d.visibleFrame,
+                isMain: d.isMain,
+                isActive: d.isActive,
+                tilerStrategy: strategy,
+                gapsOuter: rule.gapsOuter ?? d.gapsOuter,
+                gapsInner: rule.gapsInner ?? d.gapsInner
+            )
+        }
+    }
+
+    /// Teste si une `DisplayRule` correspond à un `Display`.
+    /// La priorité est : matchIndex, puis matchUUID, puis matchName.
+    private func matches(rule: DisplayRule, display: Display) -> Bool {
+        if let idx = rule.matchIndex { return idx == display.index }
+        if let uuid = rule.matchUUID { return uuid == display.uuid }
+        if let name = rule.matchName { return name == display.name }
+        return false
     }
 }
 
-// MARK: - Import AppKit conditionnel pour NSDeviceDescriptionKey dans refresh()
-
-import AppKit
