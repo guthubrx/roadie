@@ -2,6 +2,28 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/). Versions majeures alignées sur les SPEC.
 
+## [Unreleased] — branche `013-desktop-per-display`
+
+### Added (SPEC-013 Desktop par Display)
+
+- Mode au choix dans `[desktops] mode = "global" | "per_display"` (défaut `global`, compat V2 stricte).
+- `DesktopRegistry.currentByDisplay: [CGDirectDisplayID: Int]` : current desktop par écran physique. En mode global toutes les entries sont synchronisées. En `per_display` chacune est indépendante.
+- `DesktopRegistry.setCurrent(_:on:)` + `setMode(_:)` + `currentID(for:)` + `syncCurrentByDisplay(presentIDs:)`.
+- En mode `per_display`, `roadie desktop focus N` cache/montre uniquement les fenêtres dont le centre tombe sur le display de la frontmost ; les autres écrans gardent leur desktop courant.
+- En mode `per_display`, drag manuel cross-écran et `roadie window display N` font adopter à la fenêtre le current desktop du display cible (cohérent avec AeroSpace).
+- Persistance per-display dans `~/.config/roadies/displays/<displayUUID>/{current.toml, desktops/<id>/state.toml}`.
+- `DesktopPersistence` : helpers `saveCurrent / loadCurrent / saveDesktopWindows / loadDesktopWindows` avec parser TOML minimaliste (5 lignes par fenêtre).
+- Recovery rebranchement écran : restoration du current desktop + des fenêtres précédemment assignées (matching N1 cgwid > N2 bundleID + title prefix). Process tué entre temps → ignoré silencieusement.
+- Migration V2 → V3 idempotente au boot : déplace `~/.config/roadies/desktops/` vers `displays/<primaryUUID>/desktops/`. Préserve tous les fichiers state.toml.
+- `roadie desktop list` retourne `mode` et `current_by_display: [{display_id, current}]` dans la réponse JSON.
+- `roadie desktop current` retourne `mode` et `display_id` quand pertinent.
+- Event `desktop_changed` enrichi : payload contient `display_id` et `mode` (FR-024). Compat ascendante : les events SPEC-011/012 existants sont préservés.
+- 4 nouveaux fichiers de tests : `ConfigDesktopsModeTests`, `DesktopRegistryPerDisplayTests`, `DesktopMigrationTests`, `DesktopPersistenceTests` (37 suites au total, 0 fail).
+
+### Fixed (bug pré-existant SPEC-011)
+
+- `DesktopSwitcher.performSwitch` : si le desktop d'arrivée n'avait pas d'`activeStageID` sauvegardé (premier visit), aucun stage n'était activé → fenêtres restaient hidden, l'utilisateur devait créer une nouvelle fenêtre pour déclencher un layout. Fallback ajouté sur le premier stage du desktop.
+
 ## [Unreleased] — branche `012-multi-display`
 
 ### Added (SPEC-012 Multi-Display)
