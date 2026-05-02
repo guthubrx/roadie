@@ -1,6 +1,7 @@
 import Foundation
 import Cocoa
 import ApplicationServices
+import CoreGraphics
 import RoadieCore
 import RoadieTiler
 import RoadieStagePlugin
@@ -67,6 +68,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// Pas de réaction pendant le drag — comportement déterministe, zéro travail
     /// pendant le mouvement.
     private var dragTrackedWid: WindowID?
+    /// SPEC-018 : true si la migration V1→V2 a échoué au boot (disque plein, permission refusée).
+    /// Exposé dans `daemon.status` pour debug. Ne bloque pas le boot.
+    var migrationPending: Bool = false
     /// Anti-feedback-loop : timestamp du dernier applyLayout. Les notifs reçues dans
     /// les 200 ms après un apply proviennent de notre propre setBounds et sont
     /// ignorées. Sans cette garde, adapt → apply → notif → adapt → boucle.
@@ -310,6 +314,43 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
 
+            // SPEC-018 T030 : migration silencieuse V1→V2 (stages globaux → scoped per_display).
+            // Déclenché uniquement en mode per_display, avant l'init du StageManager V2.
+            // Sur erreur : flag migrationPending = true, boot continue en mode flat (V1).
+            if config.desktops.mode == .perDisplay,
+               let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+                   ?? NSScreen.main,
+               let displayID = primaryScreen.deviceDescription[
+                   NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+               let cfUUID = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() {
+                let mainUUID = CFUUIDCreateString(nil, cfUUID) as String? ?? ""
+                if !mainUUID.isEmpty {
+                    let stagesDirPath = (NSString(string: "~/.config/roadies/stages")
+                        .expandingTildeInPath as String)
+                    let migrator = MigrationV1V2(stagesDir: stagesDirPath, mainDisplayUUID: mainUUID)
+                    do {
+                        if let report = try migrator.runIfNeeded() {
+                            logInfo("migration_v1_to_v2 completed", [
+                                "migrated_count": String(report.migratedCount),
+                                "backup_path": report.backupPath,
+                                "target_display_uuid": report.targetDisplayUUID,
+                                "duration_ms": String(report.durationMs),
+                            ])
+                            EventBus.shared.publish(DesktopEvent.migrationV1V2(
+                                migratedCount: report.migratedCount,
+                                backupPath: report.backupPath,
+                                targetUUID: report.targetDisplayUUID,
+                                durationMs: report.durationMs
+                            ))
+                            self.migrationPending = false
+                        }
+                    } catch {
+                        logError("migration_v1_to_v2 failed", ["error": "\(error)"])
+                        self.migrationPending = true
+                    }
+                }
+            }
+
             let dRegistry = DesktopRegistry(
                 configDir: configDir,
                 count: config.desktops.count,
@@ -336,6 +377,18 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 mgr.setPersistence(dbPersistence)
                 logInfo("stage_persistence: switched to DesktopRegistry-backed",
                         ["desktop": String(currentDeskID)])
+
+                // SPEC-018 : configurer la persistence V2 (scopée) selon le mode.
+                let stagesDir = (NSString(string: "~/.config/roadies/stages")
+                    .expandingTildeInPath as String)
+                let stageMode: StageMode = config.desktops.mode == .perDisplay
+                    ? .perDisplay : .global
+                let persistenceV2: any StagePersistenceV2 = stageMode == .global
+                    ? FlatStagePersistence(stagesDir: stagesDir)
+                    : NestedStagePersistence(stagesDir: stagesDir)
+                mgr.setMode(stageMode, persistence: persistenceV2)
+                logInfo("stage_manager: mode set",
+                        ["stage_mode": stageMode.rawValue])
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
@@ -1380,6 +1433,44 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Auto-GC avant chaque commande pour rattraper les destroyed-notifications ratés.
         pruneDeadWindows()
         return await CommandRouter.route(request, daemon: self)
+    }
+
+    // MARK: - SPEC-018 : résolution du scope courant
+
+    /// Résout le StageScope correspondant à l'emplacement courant (curseur → frontmost → primary).
+    /// Retourne `.global(StageID(""))` en mode global (stageID placeholder, complété par le caller).
+    /// En mode per_display, résout displayUUID + desktopID et retourne un scope partiel
+    /// (stageID == StageID("")) que le caller complète avec l'ID réel avant lookup.
+    func currentStageScope() async -> StageScope {
+        guard config.desktops.mode == .perDisplay else {
+            return .global(StageID(""))
+        }
+        // Priorité 1 : position du curseur (source de vérité, cohérent avec desktop.focus).
+        let mouseLoc = NSEvent.mouseLocation
+        if let display = await displayRegistry?.displayContaining(point: mouseLoc) {
+            let desktopID = await desktopRegistry?.currentID(for: display.id) ?? 1
+            return StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+        }
+        // Priorité 2 : fenêtre frontmost.
+        if let wid = registry.focusedWindowID,
+           let state = registry.get(wid) {
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            if let display = await displayRegistry?.displayContaining(point: center) {
+                let desktopID = await desktopRegistry?.currentID(for: display.id) ?? 1
+                return StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+            }
+        }
+        // Fallback : display principal.
+        let primaryID = CGMainDisplayID()
+        let uuid = resolveDisplayUUID(primaryID)
+        let desktopID = await desktopRegistry?.currentID(for: primaryID) ?? 1
+        return StageScope(displayUUID: uuid, desktopID: desktopID, stageID: StageID(""))
+    }
+
+    /// Convertit un CGDirectDisplayID en UUID stable cross-reboot.
+    private func resolveDisplayUUID(_ id: CGDirectDisplayID) -> String {
+        guard let cfUUID = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return "" }
+        return CFUUIDCreateString(nil, cfUUID) as String? ?? ""
     }
 }
 

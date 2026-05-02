@@ -45,7 +45,7 @@ final class StageRailPanel: NSPanel {
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         isMovableByWindowBackground = false
-        hasShadow = true
+        hasShadow = false  // pas d'ombre sur le panel lui-même (fond transparent)
         backgroundColor = .clear
         isOpaque = false
         alphaValue = 0

@@ -77,27 +77,41 @@ final class RailIPCClient {
                             }
                             return
                         }
-                        connection?.receive(
-                            minimumIncompleteLength: 1,
-                            maximumLength: 131_072
-                        ) { data, _, _, error in
-                            guard !responded else { return }
-                            responded = true
-                            connection?.cancel()
-                            if let error = error {
-                                continuation.resume(throwing: error)
-                                return
+                        // Réponse potentiellement multi-chunk (PNG base64 ~45 KB).
+                        // Lire en boucle jusqu'à newline final ou EOF.
+                        var buffer = Data()
+                        func readMore() {
+                            connection?.receive(
+                                minimumIncompleteLength: 1,
+                                maximumLength: 65536
+                            ) { data, _, isComplete, error in
+                                guard !responded else { return }
+                                if let error = error {
+                                    responded = true
+                                    connection?.cancel()
+                                    continuation.resume(throwing: error)
+                                    return
+                                }
+                                if let data = data { buffer.append(data) }
+                                let hasNewline = buffer.last == 0x0A
+                                if isComplete || hasNewline {
+                                    responded = true
+                                    connection?.cancel()
+                                    guard let obj = try? JSONSerialization.jsonObject(
+                                            with: buffer) as? [String: Any]
+                                    else {
+                                        continuation.resume(throwing: RailIPCError.invalidResponse(
+                                            detail: "decode failed (buffer=\(buffer.count) bytes)"))
+                                        return
+                                    }
+                                    let payload = obj["payload"] as? [String: Any] ?? obj
+                                    continuation.resume(returning: payload)
+                                } else {
+                                    readMore()
+                                }
                             }
-                            guard let data = data,
-                                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-                            else {
-                                continuation.resume(throwing: RailIPCError.invalidResponse(detail: "decode failed"))
-                                return
-                            }
-                            // Extraire le payload de la réponse roadie/1.
-                            let payload = obj["payload"] as? [String: Any] ?? obj
-                            continuation.resume(returning: payload)
                         }
+                        readMore()
                     })
                 case .failed(let err):
                     guard !responded else { return }
