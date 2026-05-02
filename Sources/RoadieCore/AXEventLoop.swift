@@ -159,10 +159,15 @@ public enum AXReader {
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &posRaw) == .success,
               AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRaw) == .success
         else { return nil }
+        // Guard les casts : en cas de fenêtre zombie ou mauvais type, retourner nil
+        // au lieu de trap (`as!` est un crash hard).
+        guard let pRaw = posRaw, CFGetTypeID(pRaw) == AXValueGetTypeID(),
+              let sRaw = sizeRaw, CFGetTypeID(sRaw) == AXValueGetTypeID()
+        else { return nil }
         var pos = CGPoint.zero
         var size = CGSize.zero
-        AXValueGetValue(posRaw as! AXValue, .cgPoint, &pos)
-        AXValueGetValue(sizeRaw as! AXValue, .cgSize, &size)
+        AXValueGetValue((pRaw as! AXValue), .cgPoint, &pos)
+        AXValueGetValue((sRaw as! AXValue), .cgSize, &size)
         return CGRect(origin: pos, size: size)
     }
 
@@ -203,6 +208,23 @@ public enum AXReader {
 
     public static func setMinimized(_ element: AXUIElement, _ value: Bool) {
         AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, value as CFBoolean)
+    }
+
+    /// Toggle fullscreen natif macOS (la fenêtre va sur son propre Space).
+    public static func setFullscreen(_ element: AXUIElement, _ value: Bool) {
+        AXUIElementSetAttributeValue(element, "AXFullScreen" as CFString, value as CFBoolean)
+    }
+
+    /// Ferme la fenêtre via le close button AX (équivalent ⌘W mais via API).
+    /// Retourne true si le bouton a pu être pressé.
+    @discardableResult
+    public static func close(_ element: AXUIElement) -> Bool {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXCloseButtonAttribute as CFString, &raw) == .success,
+              let value = raw, CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return false }
+        let btn = value as! AXUIElement
+        return AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success
     }
 
     public static func raise(_ element: AXUIElement) {

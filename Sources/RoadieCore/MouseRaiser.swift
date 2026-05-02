@@ -53,12 +53,22 @@ public final class MouseRaiser {
     }
 
     private func handleClick(at nsScreenLocation: CGPoint) {
-        // NSEvent.mouseLocation est en coords NSScreen (origin bottom-left).
-        // CGWindowList retourne des bounds en coords AX (origin top-left).
-        guard let screen = NSScreen.main else { return }
+        // NSEvent.mouseLocation est en coords NSScreen GLOBAL (origin = bottom-left
+        // du PRIMARY, Y bottom-up, valeurs absolues qui dépassent la hauteur du
+        // primary quand on est sur un écran "au-dessus").
+        // CGWindowList retourne des bounds en coords CG (origin top-left du primary,
+        // Y top-down).
+        // ⚠ NSScreen.main = écran avec la frontmost window, PAS le primary. Utiliser
+        // sa height pour flipper Y casse la conversion sur les écrans non-primary :
+        // clic sur le bas d'un écran "au-dessus" se mappe alors dans le primary →
+        // mauvaise fenêtre détectée. Le bon référentiel = l'écran à origin == .zero.
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let primary else { return }
         let cgPoint = CGPoint(
             x: nsScreenLocation.x,
-            y: screen.frame.height - nsScreenLocation.y
+            y: primary.frame.height - nsScreenLocation.y
         )
 
         // Liste des fenêtres on-screen, ordre Z (frontmost en premier).

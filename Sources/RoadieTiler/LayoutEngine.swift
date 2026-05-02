@@ -36,14 +36,36 @@ public final class LayoutEngine {
         return createRoot(for: displayID)
     }
 
+    /// Cherche dans quel arbre `rootsByDisplay` le `wid` est inséré. Utilisé pour
+    /// la migration cross-display déclenchée par un drag manuel : on compare le
+    /// display calculé via la frame réelle vs celui dans lequel l'arbre stocke le wid.
+    public func displayIDForWindow(_ wid: WindowID) -> CGDirectDisplayID? {
+        for (id, root) in workspace.rootsByDisplay {
+            if TreeNode.find(windowID: wid, in: root) != nil { return id }
+        }
+        return nil
+    }
+
+    /// Variante publique de `displayIDContaining(point:)` pour usage externe
+    /// (ex: drag handler dans le daemon). Le point doit être en coords AX.
+    public func displayIDContainingPoint(_ axPoint: CGPoint) -> CGDirectDisplayID? {
+        return displayIDContaining(point: axPoint)
+    }
+
     /// Détermine le displayID contenant un point en coords AX (top-left).
     /// Utilise NSScreen.screens directement (sync — incompatible avec async actor).
     /// Fallback : CGMainDisplayID si aucun écran ne contient le point.
     private func displayIDContaining(point axPoint: CGPoint) -> CGDirectDisplayID? {
         let screens = NSScreen.screens
         guard !screens.isEmpty else { return nil }
-        // Conversion AX (top-left) → NS (bottom-left) via la hauteur de l'écran principal.
-        let mainH = screens[0].frame.height
+        // Conversion AX (top-left) → NS (bottom-left) via la hauteur du PRIMARY
+        // (celui qui a frame.origin == .zero — pas garanti d'être screens[0] sur
+        // configuration multi-display avec écran externe glissé en main dans
+        // Réglages Système).
+        let primary = screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? screens[0]
+        let mainH = primary.frame.height
         let nsPoint = CGPoint(x: axPoint.x, y: mainH - axPoint.y)
         let hit = screens.first { $0.frame.contains(nsPoint) }
         return hit.flatMap {
@@ -122,6 +144,26 @@ public final class LayoutEngine {
         return CGMainDisplayID()
     }
 
+    /// Supprime le root d'un display du workspace (T027 recovery).
+    /// Appelé après migration de toutes les fenêtres de cet écran.
+    /// Refuse explicitement de supprimer le primary : son root est un invariant
+    /// du `Workspace.rootNode` (compat mono-écran FR-024). Pour le primary, on
+    /// re-crée un container vide à la place.
+    public func clearDisplayRoot(for displayID: CGDirectDisplayID) {
+        if displayID == CGMainDisplayID() {
+            workspace.rootsByDisplay[displayID] = TilingContainer(orientation: .horizontal)
+            return
+        }
+        workspace.rootsByDisplay[displayID] = nil
+    }
+
+    /// Crée un root vide pour un display s'il n'en a pas déjà un (T028 recovery).
+    public func initDisplayRoot(for displayID: CGDirectDisplayID) {
+        if workspace.rootsByDisplay[displayID] == nil {
+            workspace.rootsByDisplay[displayID] = TilingContainer(orientation: .horizontal)
+        }
+    }
+
     public func removeWindow(_ wid: WindowID) {
         for (_, root) in workspace.rootsByDisplay {
             if let leaf = TreeNode.find(windowID: wid, in: root) {
@@ -132,11 +174,15 @@ public final class LayoutEngine {
     }
 
     /// Déplace un wid de l'arbre `src` vers l'arbre `dst` (T021, R-005).
+    /// - Parameter nearWid: target d'insertion BSP côté dst. Si nil, on prend
+    ///   la première leaf existante de dst (≠ wid) pour que le BSP splitte cette
+    ///   cellule au lieu de faire un append horizontal au root (= 3+ colonnes flat).
     /// - Returns: true si le wid existait dans l'arbre src et a été transféré.
     @discardableResult
     public func moveWindow(_ wid: WindowID,
                            fromDisplay src: CGDirectDisplayID,
-                           toDisplay dst: CGDirectDisplayID) -> Bool {
+                           toDisplay dst: CGDirectDisplayID,
+                           near nearWid: WindowID? = nil) -> Bool {
         guard let srcRoot = workspace.rootsByDisplay[src],
               let leaf = TreeNode.find(windowID: wid, in: srcRoot) else { return false }
         // Conserver l'état de visibilité avant de retirer la leaf.
@@ -149,11 +195,18 @@ public final class LayoutEngine {
         let newLeaf = WindowLeaf(windowID: wid)
         newLeaf.isVisible = wasVisible
         let dstTiler = currentTiler(for: dst)
-        dstTiler.insert(leaf: newLeaf, near: nil, in: dstRoot)
+        // Choisir un target d'insertion BSP-friendly : near explicite > première leaf
+        // existante du dst. nil → BSP fait un append horizontal au root, ce qui
+        // produit 3+ colonnes flat et casse le BSP idiomatique.
+        let nearLeaf: WindowLeaf? = nearWid
+            .flatMap { TreeNode.find(windowID: $0, in: dstRoot) }
+            ?? dstRoot.allLeaves.first(where: { $0.windowID != wid })
+        dstTiler.insert(leaf: newLeaf, near: nearLeaf, in: dstRoot)
         logInfo("moveWindow", [
             "wid": String(wid),
             "from": String(src),
             "to": String(dst),
+            "near": nearLeaf.map { String($0.windowID) } ?? "nil",
         ])
         return true
     }
@@ -216,6 +269,36 @@ public final class LayoutEngine {
             }
         }
         return nil
+    }
+
+    /// Warp `wid` vers la cellule voisine `direction` : retire la feuille de sa
+    /// cellule actuelle puis la réinsère `near` la voisine, ce qui demande au tiler
+    /// (BSP) de splitter la cellule cible en 2. Différent du `move` qui swap.
+    /// - Returns: true si un voisin existait et le warp a eu lieu.
+    @discardableResult
+    public func warp(_ wid: WindowID, direction: Direction) -> Bool {
+        for (_, root) in workspace.rootsByDisplay {
+            guard let leaf = TreeNode.find(windowID: wid, in: root) else { continue }
+            guard let neighbor = tiler.focusNeighbor(of: leaf, direction: direction, in: root) else {
+                return false
+            }
+            // Le voisin ne doit pas être notre propre feuille (cas pathologique).
+            guard neighbor.windowID != wid else { return false }
+            let wasVisible = leaf.isVisible
+            tiler.remove(leaf: leaf, from: root)
+            // remove() peut détacher la leaf ; réutiliser un nouveau wrapper évite
+            // tout cycle parent obsolète (pattern identique à moveWindow).
+            let newLeaf = WindowLeaf(windowID: wid)
+            newLeaf.isVisible = wasVisible
+            tiler.insert(leaf: newLeaf, near: neighbor, in: root)
+            logInfo("warp", [
+                "wid": String(wid),
+                "direction": direction.rawValue,
+                "near": String(neighbor.windowID),
+            ])
+            return true
+        }
+        return false
     }
 
     /// Adapte les `adaptiveWeight` de l'arbre pour refléter une nouvelle frame imposée
@@ -294,13 +377,20 @@ public final class LayoutEngine {
 
     /// Applique le layout sur tous les displays connus du registry.
     /// Itère sur chaque Display, utilise son visibleFrame et ses gaps propres.
-    public func applyAll(displayRegistry: DisplayRegistry) async {
+    /// `Display.visibleFrame` vient de `NSScreen` (coords NS, Y bottom-up). On
+    /// convertit en AX (Y top-down) avant tiling, sinon `AXReader.setBounds`
+    /// place les fenêtres avec un référentiel décalé sur les écrans non-primary.
+    /// - Parameter outerSides: marges externes par côté. Si nil, fallback sur
+    ///   `display.gapsOuter` uniforme (legacy). Si fourni, prend le pas — utile
+    ///   pour appliquer les overrides `gaps_outer_top/bottom/left/right` du toml.
+    public func applyAll(displayRegistry: DisplayRegistry,
+                         outerSides: OuterGaps? = nil) async {
         let displays = await displayRegistry.displays
+        let primaryHeight = LayoutEngine.primaryScreenHeight()
         for display in displays {
-            let usable = applyOuterGaps(
-                display.visibleFrame,
-                outerGaps: .uniform(display.gapsOuter)
-            )
+            let visibleFrameAX = LayoutEngine.nsToAx(display.visibleFrame, primaryHeight: primaryHeight)
+            let gaps = outerSides ?? .uniform(display.gapsOuter)
+            let usable = applyOuterGaps(visibleFrameAX, outerGaps: gaps)
             let displayRoot = root(for: display.id)
             workspace.lastAppliedRectsByDisplay[display.id] = usable
             let displayTiler = currentTiler(for: display.id)
@@ -313,6 +403,26 @@ public final class LayoutEngine {
                 registry.updateFrame(wid, frame: innerFrame)
             }
         }
+    }
+
+    // MARK: - NS↔AX conversion
+
+    /// Hauteur du primary screen (origine NS = (0,0)). Utilisée pour convertir NS↔AX.
+    private static func primaryScreenHeight() -> CGFloat {
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        return primary?.frame.height ?? 0
+    }
+
+    /// Convertit un rect NS (Y bottom-up, origine = primary bottom-left) vers AX
+    /// (Y top-down, origine = primary top-left). Pour `(x, y, w, h)` NS :
+    /// `y_AX = primaryHeight - y_NS - h`.
+    private static func nsToAx(_ ns: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(x: ns.origin.x,
+               y: primaryHeight - ns.origin.y - ns.height,
+               width: ns.width,
+               height: ns.height)
     }
 
     // MARK: - Helper gaps
@@ -359,8 +469,9 @@ public struct Workspace {
     // MARK: Compat mono-écran (FR-024)
 
     /// Getter/setter de compatibilité : lit et écrit l'arbre du primary display.
-    /// Le root primary est toujours présent (créé dans init), ce getter ne peut
-    /// donc pas retourner nil. Le `!` est sûr par invariant de init.
+    /// Le root primary est garanti présent par l'init du Workspace + le contrat
+    /// de `LayoutEngine.clearDisplayRoot(for:)` qui REFUSE de supprimer le
+    /// primary (cf. assertion). Le `!` reste sûr par cet invariant.
     public var rootNode: TilingContainer {
         get { rootsByDisplay[CGMainDisplayID()]! }
         set { rootsByDisplay[CGMainDisplayID()] = newValue }

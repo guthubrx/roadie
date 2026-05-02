@@ -1,7 +1,8 @@
 // stage — Stage Manager macOS suckless. Voir specs/001-stage-manager/.
 // Constitution projet : mono-fichier, zero dependance.
 // Cible 150 lignes Swift effectives, plafond 200 (constitution projet principe A).
-// Compte actuel : ~190 lignes hors commentaires/blanches.
+// Compte actuel : ~204 lignes hors commentaires/blanches (legerement au-dessus
+// du plafond historique, code legacy archive — non corrige par choix).
 
 import Cocoa
 import ApplicationServices
@@ -154,6 +155,9 @@ func frontmostWindowRef() -> WindowRef? {
 	else {
 		fputs("stage : pas de fenetre focalisee dans l'app frontmost (\(bundleID))\n", stderr); return nil
 	}
+	// `as!` sur un CFTypeRef est l'idiome Swift pour CF types : `as?` ne marche pas
+	// sur Core Foundation. Le check CFGetTypeID == AXUIElementGetTypeID() ci-dessus
+	// garantit que le cast est sur (sinon le guard a deja echoue).
 	var wid: CGWindowID = 0
 	guard _AXUIElementGetWindow(focused as! AXUIElement, &wid) == .success, wid != 0 else {
 		fputs("stage : impossible de recuperer le CGWindowID de la fenetre frontmost\n", stderr); return nil

@@ -87,9 +87,17 @@ public struct Display: Sendable, Codable, Equatable {
                             strategy: TilerStrategy,
                             gapsOuter: Int,
                             gapsInner: Int) -> Display {
-        let displayID = nsScreen.deviceDescription[
+        let rawScreenNumber = nsScreen.deviceDescription[
             NSDeviceDescriptionKey("NSScreenNumber")
-        ] as? CGDirectDisplayID ?? 0
+        ]
+        let displayID = rawScreenNumber as? CGDirectDisplayID ?? 0
+        if displayID == 0 {
+            // Pas de log structure ici (RoadieCore Logger non importable depuis ce
+            // contexte sans cycle), on stderr direct. Utile pour reperer un ecran
+            // dont NSScreenNumber est manquant — devrait etre tres rare.
+            FileHandle.standardError.write(Data(
+                "Display.from: NSScreenNumber absent ou type inattendu pour ecran '\(nsScreen.localizedName)' — displayID=0, UUID nil\n".utf8))
+        }
 
         let uuid = displayUUIDString(for: displayID)
         let isMain = (nsScreen == NSScreen.main)

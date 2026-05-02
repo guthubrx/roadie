@@ -7,17 +7,22 @@ public struct Config: Codable, Sendable {
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
     public var desktops: DesktopsConfig
+    // SPEC-012 T037 : règles de config per-écran (section [[displays]] dans roadies.toml)
+
+    public var displays: [DisplayRule]
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
                 stageManager: StageManagerConfig = .init(),
                 exclusions: ExclusionsConfig = .init(),
-                desktops: DesktopsConfig = .init()) {
+                desktops: DesktopsConfig = .init(),
+                displays: [DisplayRule] = []) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
         self.exclusions = exclusions
         self.desktops = desktops
+        self.displays = displays
     }
 
     enum CodingKeys: String, CodingKey {
@@ -26,6 +31,7 @@ public struct Config: Codable, Sendable {
         case stageManager = "stage_manager"
         case exclusions
         case desktops
+        case displays
     }
 
     /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
@@ -39,6 +45,7 @@ public struct Config: Codable, Sendable {
         self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? .init()
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? .init()
         self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? .init()
+        self.displays = try c.decodeIfPresent([DisplayRule].self, forKey: .displays) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -48,6 +55,51 @@ public struct Config: Codable, Sendable {
         try c.encode(stageManager, forKey: .stageManager)
         try c.encode(exclusions, forKey: .exclusions)
         try c.encode(desktops, forKey: .desktops)
+        if !displays.isEmpty {
+            try c.encode(displays, forKey: .displays)
+        }
+    }
+}
+
+// MARK: - DisplayRule (SPEC-012 T037, R-008, FR-018)
+
+/// Override de configuration per-écran. Défini en TOML via la section `[[displays]]`.
+/// Le premier match (matchIndex | matchUUID | matchName) remporte.
+public struct DisplayRule: Codable, Sendable, Equatable {
+    /// Match par index 1-based dans `NSScreen.screens`.
+    public var matchIndex: Int?
+    /// Match par UUID stable cross-reboot (`CGDisplayCreateUUIDFromDisplayID`).
+    public var matchUUID: String?
+    /// Match par nom localisé (`NSScreen.localizedName`).
+    public var matchName: String?
+    /// Stratégie de tiling pour cet écran ("bsp" / "master_stack").
+    public var defaultStrategy: String?
+    /// Marge extérieure px — override de la valeur globale.
+    public var gapsOuter: Int?
+    /// Espacement interne px — override de la valeur globale.
+    public var gapsInner: Int?
+
+    public init(matchIndex: Int? = nil,
+                matchUUID: String? = nil,
+                matchName: String? = nil,
+                defaultStrategy: String? = nil,
+                gapsOuter: Int? = nil,
+                gapsInner: Int? = nil) {
+        self.matchIndex = matchIndex
+        self.matchUUID = matchUUID
+        self.matchName = matchName
+        self.defaultStrategy = defaultStrategy
+        self.gapsOuter = gapsOuter
+        self.gapsInner = gapsInner
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case matchIndex = "match_index"
+        case matchUUID = "match_uuid"
+        case matchName = "match_name"
+        case defaultStrategy = "default_strategy"
+        case gapsOuter = "gaps_outer"
+        case gapsInner = "gaps_inner"
     }
 }
 

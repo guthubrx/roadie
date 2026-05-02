@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import RoadieCore
 import RoadieTiler
 import RoadieStagePlugin
@@ -87,6 +88,18 @@ enum CommandRouter {
             daemon.applyLayout()
             return .success(["moved": AnyCodable(moved)])
 
+        case "warp":
+            guard let dirStr = request.args?["direction"],
+                  let direction = Direction(rawValue: dirStr) else {
+                return .error(.invalidArgument, "missing or invalid direction")
+            }
+            guard let wid = daemon.registry.focusedWindowID else {
+                return .error(.windowNotFound, "no focused window")
+            }
+            let warped = daemon.layoutEngine.warp(wid, direction: direction)
+            daemon.applyLayout()
+            return .success(["warped": AnyCodable(warped)])
+
         case "resize":
             guard let dirStr = request.args?["direction"],
                   let direction = Direction(rawValue: dirStr),
@@ -100,6 +113,83 @@ enum CommandRouter {
             daemon.layoutEngine.resize(wid, direction: direction, delta: CGFloat(delta))
             daemon.applyLayout()
             return .success()
+
+        case "window.close":
+            guard let wid = daemon.registry.focusedWindowID,
+                  let element = daemon.registry.axElement(for: wid) else {
+                return .error(.windowNotFound, "no focused window")
+            }
+            let ok = AXReader.close(element)
+            return .success(["closed": AnyCodable(ok)])
+
+        case "window.toggle.floating":
+            guard let wid = daemon.registry.focusedWindowID,
+                  let state = daemon.registry.get(wid) else {
+                return .error(.windowNotFound, "no focused window")
+            }
+            let newFloating = !state.isFloating
+            daemon.registry.update(wid) { $0.isFloating = newFloating }
+            if newFloating {
+                daemon.layoutEngine.removeWindow(wid)
+            } else {
+                daemon.layoutEngine.insertWindow(wid, focusedID: nil)
+            }
+            daemon.applyLayout()
+            return .success(["floating": AnyCodable(newFloating)])
+
+        case "window.toggle.fullscreen":
+            // Zoom-fullscreen yabai-style : la fenêtre prend tout le visibleFrame
+            // du display courant en restant dans la même Space. Pas de toucher AX.
+            guard let wid = daemon.registry.focusedWindowID,
+                  let state = daemon.registry.get(wid),
+                  let element = daemon.registry.axElement(for: wid) else {
+                return .error(.windowNotFound, "no focused window")
+            }
+            let newZoom = !state.isZoomed
+            if newZoom {
+                // Sauvegarder la frame actuelle, calculer le visibleFrame AX du display.
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                let displayID = daemon.layoutEngine.displayIDContainingPoint(center) ?? CGMainDisplayID()
+                guard let dReg = daemon.displayRegistry else {
+                    return .error(.invalidArgument, "no display registry")
+                }
+                let displays = await dReg.displays
+                guard let dst = displays.first(where: { $0.id == displayID }) else {
+                    return .error(.invalidArgument, "display not found")
+                }
+                let primaryHeight = NSScreen.screens.first(where: { $0.frame.origin == .zero })?.frame.height ?? 0
+                let vfNS = dst.visibleFrame
+                let vfAX = CGRect(x: vfNS.origin.x,
+                                  y: primaryHeight - vfNS.origin.y - vfNS.height,
+                                  width: vfNS.width, height: vfNS.height)
+                daemon.registry.update(wid) {
+                    $0.preZoomFrame = state.frame
+                    $0.isZoomed = true
+                }
+                AXReader.setBounds(element, frame: vfAX)
+            } else {
+                if let pre = state.preZoomFrame {
+                    AXReader.setBounds(element, frame: pre)
+                }
+                daemon.registry.update(wid) {
+                    $0.isZoomed = false
+                    $0.preZoomFrame = nil
+                }
+                daemon.applyLayout()
+            }
+            return .success(["zoomed": AnyCodable(newZoom)])
+
+        case "window.toggle.native-fullscreen":
+            guard let wid = daemon.registry.focusedWindowID,
+                  let element = daemon.registry.axElement(for: wid),
+                  let state = daemon.registry.get(wid) else {
+                return .error(.windowNotFound, "no focused window")
+            }
+            let isFs = AXReader.isFullscreen(element)
+            AXReader.setFullscreen(element, !isFs)
+            daemon.registry.update(wid) { $0.isFullscreen = !isFs }
+            _ = state
+            return .success(["native_fullscreen": AnyCodable(!isFs)])
 
         case "tiler.set":
             guard let strategyStr = request.args?["strategy"] else {
@@ -272,10 +362,22 @@ enum CommandRouter {
             }
             return .success(["wid": AnyCodable(Int(frontmost)), "pinned": AnyCodable(pinned)])
 
-        // MARK: - SPEC-012 window.display
+        // MARK: - SPEC-012 window.display + display.*
 
         case "window.display":
             return await handleWindowDisplay(request: request, daemon: daemon)
+
+        case "display.list":
+            return await handleDisplayList(daemon: daemon)
+
+        case "display.current":
+            return await handleDisplayCurrent(daemon: daemon)
+
+        case "display.focus":
+            guard let selector = request.args?["selector"] else {
+                return .error(.invalidArgument, "missing selector")
+            }
+            return await handleDisplayFocus(selector: selector, daemon: daemon)
 
         // MARK: - SPEC-011 desktop.*
 
@@ -405,6 +507,232 @@ enum CommandRouter {
             ? "desktop \(currentID) label removed"
             : "desktop \(currentID) labeled as \"\(name)\""
         return .success(["message": AnyCodable(msg), "id": AnyCodable(currentID)])
+    }
+
+    // MARK: - SPEC-012 display handlers (T022)
+
+    private static func handleWindowDisplay(request: Request, daemon: Daemon) async -> Response {
+        guard let dReg = daemon.displayRegistry else {
+            return .error(.invalidArgument, "display_registry not initialized")
+        }
+        guard let selectorStr = request.args?["selector"] else {
+            return .error(.invalidArgument, "missing selector")
+        }
+        guard let wid = daemon.registry.focusedWindowID else {
+            return .error(.windowNotFound, "no focused window")
+        }
+        guard let state = daemon.registry.get(wid) else {
+            return .error(.windowNotFound, "wid not registered")
+        }
+        let count = await dReg.count
+        guard let dstDisplay = await resolveDisplaySelector(
+            selectorStr,
+            registry: dReg,
+            count: count,
+            currentWindowFrame: state.frame
+        ) else {
+            return .error(.unknownDesktop, "unknown display selector \"\(selectorStr)\"")
+        }
+        // Résoudre le display source via le centre de la frame de la fenêtre.
+        let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+        let srcDisplay = await dReg.displayContaining(point: center) ?? dstDisplay
+        // No-op si même écran.
+        if srcDisplay.id == dstDisplay.id {
+            return .success([
+                "cgwid": AnyCodable(Int(wid)),
+                "from": AnyCodable(srcDisplay.index),
+                "to": AnyCodable(dstDisplay.index),
+            ])
+        }
+        // Calculer la nouvelle frame : centrer dans visibleFrame dst, clamp si dépasse.
+        // CRITIQUE : `Display.visibleFrame` est en coords NS (origin bottom-left)
+        // mais `AXReader.setBounds` attend des coords AX (origin top-left).
+        // Sans conversion, une fenêtre déplacée vers un écran positionné EN HAUT
+        // du primary atterrit hors-écran et macOS la clamp → reste sur l'origine.
+        let dstVisAX = nsToAxRect(dstDisplay.visibleFrame)
+        var newSize = state.frame.size
+        if newSize.width > dstVisAX.width * 0.95 { newSize.width = dstVisAX.width * 0.8 }
+        if newSize.height > dstVisAX.height * 0.95 { newSize.height = dstVisAX.height * 0.8 }
+        let newOrigin = CGPoint(
+            x: dstVisAX.midX - newSize.width / 2,
+            y: dstVisAX.midY - newSize.height / 2
+        )
+        let newFrame = CGRect(origin: newOrigin, size: newSize)
+        // Appliquer via AX.
+        if let element = daemon.registry.axElement(for: wid) {
+            AXReader.setBounds(element, frame: newFrame)
+        }
+        daemon.registry.updateFrame(wid, frame: newFrame)
+        // Mise à jour de l'arbre (uniquement si tileable).
+        if state.isTileable {
+            _ = daemon.layoutEngine.moveWindow(wid, fromDisplay: srcDisplay.id, toDisplay: dstDisplay.id)
+        }
+        // Mise à jour du displayUUID dans le DesktopRegistry.
+        if let dRegistry = daemon.desktopRegistry {
+            let currentDeskID = await dRegistry.currentID
+            try? await dRegistry.updateWindowDisplayUUID(
+                cgwid: UInt32(wid),
+                desktopID: currentDeskID,
+                displayUUID: dstDisplay.uuid
+            )
+        }
+        // Re-appliquer le layout sur tous les écrans.
+        daemon.applyLayout()
+        return .success([
+            "cgwid": AnyCodable(Int(wid)),
+            "from": AnyCodable(srcDisplay.index),
+            "to": AnyCodable(dstDisplay.index),
+            "new_frame": AnyCodable([
+                Int(newFrame.origin.x), Int(newFrame.origin.y),
+                Int(newFrame.size.width), Int(newFrame.size.height),
+            ]),
+        ])
+    }
+
+    // MARK: - SPEC-012 T032 : display.list
+
+    private static func handleDisplayList(daemon: Daemon) async -> Response {
+        guard let dReg = daemon.displayRegistry else {
+            return .error(.invalidArgument, "display_registry not initialized")
+        }
+        let displays = await dReg.displays
+        let activeID = await dReg.activeID
+        let payload: [[String: Any]] = displays.map { d in
+            let leafCount = daemon.layoutEngine.workspace.rootsByDisplay[d.id]?.allLeaves.count ?? 0
+            return [
+                "index": d.index,
+                "id": Int(d.id),
+                "uuid": d.uuid,
+                "name": d.name,
+                "frame": [Int(d.frame.origin.x), Int(d.frame.origin.y),
+                          Int(d.frame.size.width), Int(d.frame.size.height)],
+                "visible_frame": [Int(d.visibleFrame.origin.x), Int(d.visibleFrame.origin.y),
+                                  Int(d.visibleFrame.size.width), Int(d.visibleFrame.size.height)],
+                "is_main": d.isMain,
+                "is_active": d.id == activeID,
+                "windows": leafCount,
+            ]
+        }
+        return .success(["displays": AnyCodable(payload)])
+    }
+
+    // MARK: - SPEC-012 T033 : display.current
+
+    private static func handleDisplayCurrent(daemon: Daemon) async -> Response {
+        guard let dReg = daemon.displayRegistry else {
+            return .error(.invalidArgument, "display_registry not initialized")
+        }
+        // Résoudre via la fenêtre focusée, sinon fallback sur le display principal.
+        let display: Display?
+        if let wid = daemon.registry.focusedWindowID,
+           let state = daemon.registry.get(wid) {
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            display = await dReg.displayContaining(point: center)
+        } else {
+            let allDisplays = await dReg.displays
+            display = allDisplays.first { $0.isMain } ?? allDisplays.first
+        }
+        guard let d = display else {
+            return .error(.invalidArgument, "no display available")
+        }
+        return .success([
+            "index": AnyCodable(d.index),
+            "id": AnyCodable(Int(d.id)),
+            "uuid": AnyCodable(d.uuid),
+            "name": AnyCodable(d.name),
+        ])
+    }
+
+    // MARK: - SPEC-012 T034 : display.focus
+
+    private static func handleDisplayFocus(selector: String, daemon: Daemon) async -> Response {
+        guard let dReg = daemon.displayRegistry else {
+            return .error(.invalidArgument, "display_registry not initialized")
+        }
+        let count = await dReg.count
+        guard count > 0 else {
+            return .error(.invalidArgument, "no displays available")
+        }
+        // Résoudre le selector sans frame courante (aucune fenêtre n'est nécessaire ici).
+        let dst: Display?
+        if let n = Int(selector) {
+            guard (1...count).contains(n) else {
+                return .error(.unknownDesktop, "unknown display selector \"\(selector)\"")
+            }
+            dst = await dReg.display(at: n)
+        } else {
+            let activeID = await dReg.activeID
+            let currentIndex = (await dReg.displays.first { $0.id == activeID })?.index ?? 1
+            switch selector {
+            case "main":
+                dst = await dReg.displays.first { $0.isMain }
+            case "next":
+                dst = await dReg.display(at: (currentIndex % count) + 1)
+            case "prev":
+                dst = await dReg.display(at: currentIndex <= 1 ? count : currentIndex - 1)
+            default:
+                return .error(.unknownDesktop, "unknown display selector \"\(selector)\"")
+            }
+        }
+        guard let d = dst else {
+            return .error(.unknownDesktop, "unknown display selector \"\(selector)\"")
+        }
+        // Focus la première leaf tilée de l'écran cible.
+        if let root = daemon.layoutEngine.workspace.rootsByDisplay[d.id],
+           let firstLeaf = root.allLeaves.first(where: { $0.isVisible }) {
+            daemon.focusManager.setFocus(to: firstLeaf.windowID)
+            return .success([
+                "display": AnyCodable(d.index),
+                "focused": AnyCodable(Int(firstLeaf.windowID)),
+            ])
+        }
+        return .success([
+            "display": AnyCodable(d.index),
+            "focused": AnyCodable(""),
+        ])
+    }
+
+    /// Convertit un rect NSScreen (origin bottom-left, Quartz) en rect AX (origin top-left).
+    /// macOS AXUIElement attend des coordonnées top-left, NSScreen donne bottom-left.
+    /// La hauteur de référence est celle du primary screen (NSScreen.screens[0].frame.height).
+    private static func nsToAxRect(_ ns: CGRect) -> CGRect {
+        let mainHeight = NSScreen.screens.first?.frame.height ?? 0
+        return CGRect(
+            x: ns.origin.x,
+            y: mainHeight - (ns.origin.y + ns.height),
+            width: ns.width,
+            height: ns.height
+        )
+    }
+
+    /// Résout un selector d'écran (`1..N`, `prev`, `next`, `main`) vers un `Display`.
+    /// Le selector numérique est 1-based. `prev`/`next` sont relatifs à l'écran
+    /// contenant la fenêtre courante.
+    private static func resolveDisplaySelector(
+        _ selector: String,
+        registry: DisplayRegistry,
+        count: Int,
+        currentWindowFrame: CGRect
+    ) async -> Display? {
+        if let n = Int(selector) {
+            guard (1...count).contains(n) else { return nil }
+            return await registry.display(at: n)
+        }
+        let center = CGPoint(x: currentWindowFrame.midX, y: currentWindowFrame.midY)
+        let current = await registry.displayContaining(point: center)
+        let currentIndex = current?.index ?? 1
+        switch selector {
+        case "main":
+            return await registry.displays.first { $0.isMain }
+        case "next":
+            let nextIndex = (currentIndex % count) + 1
+            return await registry.display(at: nextIndex)
+        case "prev":
+            let prevIndex = currentIndex <= 1 ? count : currentIndex - 1
+            return await registry.display(at: prevIndex)
+        default:
+            return nil
+        }
     }
 
     private static func handleDesktopBack(daemon: Daemon) async -> Response {
