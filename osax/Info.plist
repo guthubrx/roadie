@@ -16,21 +16,14 @@
     <string>osax</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
     <key>NSHumanReadableCopyright</key>
     <string>roadie scripting addition — local install only.</string>
-    <key>OSAScriptingDefinition</key>
-    <string>roadied.sdef</string>
-    <key>NSAppleScriptEnabled</key>
-    <true/>
-    <key>NSPrincipalClass</key>
-    <string>ROHooks</string>
-    <key>OSARequiresOSAX</key>
-    <true/>
+    <key>OSAXHandlers</key>
+    <dict>
+    </dict>
 </dict>
 </plist>

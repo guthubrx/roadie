@@ -14,9 +14,14 @@ if pgrep -x roadied >/dev/null; then
 fi
 
 echo ""
-echo "→ Retire osax de /Library/ScriptingAdditions/ (sudo requis)"
+echo "→ Retire osax de /Library/ScriptingAdditions/"
+echo "  (popup macOS va demander le mot de passe administrateur)"
 if [ -d "$OSAX_DST" ]; then
-    sudo rm -rf "$OSAX_DST"
+    osascript -e "do shell script \"rm -rf '$OSAX_DST'\" with administrator privileges" \
+        >/dev/null 2>&1 || {
+            echo "  ⚠ popup admin échouée — fallback : sudo rm -rf '$OSAX_DST'"
+            exit 1
+        }
     echo "  ✓ Supprimé"
 else
     echo "  (déjà absent)"

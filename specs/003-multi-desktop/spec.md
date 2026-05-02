@@ -1,9 +1,12 @@
-# Feature Specification: Multi-desktop awareness (roadies V2)
+# Feature Specification: Multi-desktop awareness (roadies V2) — DEPRECATED
 
 **Feature Branch**: `003-multi-desktop`
 **Created**: 2026-05-01
-**Status**: Draft
+**Status**: **DEPRECATED 2026-05-02** — remplacée par [SPEC-011 Virtual Desktops](../011-virtual-desktops/spec.md).
 **Dependencies**: SPEC-002-tiler-stage (V1 tiler + Stage Manager opérationnels)
+
+> ⚠️ **Cette spec est abandonnée**. Le mécanisme de bascule via `CGSManagedDisplaySetCurrentSpace` (1 Roadie Desktop = 1 Mac Space natif) est cassé par une régression macOS Tahoe 26 documentée (yabai issue #2656) : le state interne change mais WindowServer ne rerender plus les fenêtres. Pivot vers le pattern AeroSpace dans [SPEC-011](../011-virtual-desktops/spec.md) — desktops virtuels gérés intégralement par roadie dans **un seul** Mac Space natif, sans aucun appel SkyLight pour la bascule.
+
 **Input**: User description: "Multi-desktop awareness pour Roadie. Le daemon doit suivre le desktop macOS actif (Mission Control) et persister un état séparé par UUID de desktop : stages, tree BSP, layout per-desktop, gaps, assignments fenêtres-stage. Les stages V1 (raccourcis ⌥1/⌥2) sont préservés tels quels — un stage reste un groupe de fenêtres dans un même desktop, équivalent fonctionnel d'Apple Stage Manager. Le multi-desktop ajoute une dimension orthogonale. Détection du desktop courant via API SkyLight stable sans SIP désactivé. Pas de création/destruction/réordonnancement de desktops macOS. Nouvelles commandes CLI : roadie desktop list/focus/current/label, roadie events --follow. Compat ascendante stricte via multi_desktop.enabled = false par défaut. Multi-display reporté en V3."
 
 ---

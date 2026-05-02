@@ -1,0 +1,22 @@
+{
+  "findings": [
+    {"id": "C1", "severity": "critical", "category": "quality", "description": "EventBus.swift cleanup closure Sendable violation Swift 6 strict — restructuré pour éviter [weak self] non-Sendable"},
+    {"id": "H1", "severity": "high", "category": "robustness", "description": "DesktopSwitcher.swift try? await registry.saveCurrentID() silencieusement échoue — remplacé par do/catch + logWarn"},
+    {"id": "H2", "severity": "high", "category": "robustness", "description": "DesktopRegistry parent dir race entre saveCurrentID et save — createDirectory ajouté dans init()"},
+    {"id": "H3", "severity": "high", "category": "robustness", "description": "Migration.swift parent path manquant peut faire échouer save silencieusement — createDirectory explicite + propagation erreur"},
+    {"id": "H4", "severity": "high", "category": "robustness", "description": "WindowMover cache AX sans invalidation — méthode invalidate(cgwid:) + documentation contrat"},
+    {"id": "M1", "severity": "medium", "category": "robustness", "description": "EventBus.publish ignore yield() failures — YieldResult.dropped tracking + retrait continuations mortes"},
+    {"id": "M2", "severity": "medium", "category": "quality", "description": "DesktopRegistry updateExpectedFrame/assignWindow silencieux sur ID inconnu — throw DesktopRegistryError.unknownDesktop"},
+    {"id": "M3", "severity": "medium", "category": "robustness", "description": "Parser TOML escape incomplet — ajout \\n \\t \\r \\0 \\b \\f"},
+    {"id": "M4", "severity": "medium", "category": "quality", "description": "DesktopSwitcher pendingTarget collapse non documenté — doc-comment FR-025 ajouté (pas de changement comportemental)"},
+    {"id": "M5", "severity": "medium", "category": "quality", "description": "StageManager extractDesktopUUID retourne string vide en V1 — renommé extractDesktopID retournant nil"}
+  ],
+  "summary": {
+    "critical": 1,
+    "high": 4,
+    "medium": 5,
+    "low": 0,
+    "info": 0,
+    "total": 10
+  }
+}

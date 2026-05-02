@@ -41,9 +41,12 @@ clang++ \
 cp "$OSAX_DIR/Info.plist" "$CONTENTS/Info.plist"
 cp "$OSAX_DIR/roadied.sdef" "$RESOURCES_DIR/roadied.sdef"
 
-# Signature ad-hoc (acceptable pour usage perso ; SIP partial off requis pour
-# que Dock charge la scripting addition non-Apple-signed).
-codesign --force --sign - --options runtime "$BUNDLE"
+# Signature ad-hoc SANS hardened runtime. `--options runtime` (hardened
+# runtime) bloque le chargement par Dock pour les scripting additions tiers
+# non-Apple-signed. Sur macOS récent (14+), le scripting addition doit avoir
+# un runtime non-hardened pour être chargé via `osascript ... load scripting
+# additions`.
+codesign --force --sign - "$BUNDLE"
 
 echo ""
 echo "✓ Built: $BUNDLE"

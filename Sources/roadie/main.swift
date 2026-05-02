@@ -213,31 +213,41 @@ func handleDesktop(args: [String]) {
 }
 
 /// V2 events stream (FR-014..FR-016).
-///   roadie events --follow [--filter <event-name>]...
+///   roadie events --follow [--types T1,T2]   (contrat events-stream.md)
+///   roadie events --follow [--filter <event>]  (legacy, conservé pour compatibilité)
 func handleEvents(args: [String]) {
     let isFollow = args.contains("--follow")
     guard isFollow else {
-        FileHandle.standardError.write("usage: roadie events --follow [--filter <event>]\n".data(using: .utf8) ?? Data())
+        FileHandle.standardError.write(
+            "usage: roadie events --follow [--types desktop_changed,stage_changed]\n"
+                .data(using: .utf8) ?? Data())
         exit(2)
     }
-    // Collecte des filtres : --filter peut être répété.
-    var filters: Set<String> = []
+    // --types T1,T2 (contrat) ou --filter T (legacy répétable)
+    var types: Set<String> = []
     var i = 0
     while i < args.count {
-        if args[i] == "--filter", i + 1 < args.count {
-            filters.insert(args[i + 1])
+        if args[i] == "--types", i + 1 < args.count {
+            let list = args[i + 1].split(separator: ",").map {
+                String($0).trimmingCharacters(in: .whitespaces)
+            }
+            types.formUnion(list)
+            i += 2
+        } else if args[i] == "--filter", i + 1 < args.count {
+            types.insert(args[i + 1])
             i += 2
         } else {
             i += 1
         }
     }
-    streamEventsToStdout(filters: filters)
+    streamEventsToStdout(types: types)
 }
 
 /// Connexion persistante au daemon via le socket Unix : envoie la commande
-/// `events.subscribe`, lit l'ack, puis boucle en relayant chaque ligne reçue
-/// vers stdout (auto-flush). Termine sur Ctrl+C ou perte du daemon (exit 3).
-func streamEventsToStdout(filters: Set<String>) {
+/// `events.subscribe` avec filtre types optionnel, lit l'ack, puis boucle en
+/// relayant chaque ligne reçue vers stdout (auto-flush).
+/// Exit 0 sur Ctrl+C, exit 3 si daemon indisponible (contrat events-stream.md).
+func streamEventsToStdout(types: Set<String>) {
     let socketPath = (NSString(string: "~/.roadies/daemon.sock").expandingTildeInPath as String)
     guard FileManager.default.fileExists(atPath: socketPath) else {
         FileHandle.standardError.write("roadie: daemon not running\n".data(using: .utf8) ?? Data())
@@ -255,15 +265,9 @@ func streamEventsToStdout(filters: Set<String>) {
             let line = buffer.subdata(in: 0..<nl)
             buffer.removeSubrange(0...nl)
             if line.isEmpty { continue }
-            // Filtre : si filtres non vides, ne keep que les events matching.
-            if !filters.isEmpty {
-                if let dict = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
-                   let name = dict["event"] as? String,
-                   !filters.contains(name) {
-                    continue
-                }
-                // Si pas d'event field (ack), on laisse passer en lecture brute.
-            }
+            // La première ligne est l'ack de souscription — la propager aussi (debug utile).
+            // Les lignes suivantes sont les events. Pas de filtre client-side :
+            // le filtre est délégué au daemon via le champ "types" de la requête.
             FileHandle.standardOutput.write(line)
             FileHandle.standardOutput.write(Data([0x0A]))
         }
@@ -272,7 +276,11 @@ func streamEventsToStdout(filters: Set<String>) {
     connection.stateUpdateHandler = { state in
         switch state {
         case .ready:
-            let req = Request(command: "events.subscribe")
+            // Envoyer types dans les args si filtre demandé (contrat events-stream.md)
+            let reqArgs: [String: String]? = types.isEmpty
+                ? nil
+                : ["types": types.sorted().joined(separator: ",")]
+            let req = Request(command: "events.subscribe", args: reqArgs)
             guard var data = try? JSONEncoder().encode(req) else { exit(1) }
             data.append(0x0A)
             connection.send(content: data, completion: .contentProcessed { _ in })
@@ -316,8 +324,9 @@ func streamEventsToStdout(filters: Set<String>) {
     exit(3)
 }
 
-/// Formattage texte du tableau `desktop list` (T069).
-/// Colonnes : INDEX UUID(8) LABEL CURRENT STAGES WINDOWS
+/// Formattage texte du tableau `desktop list` (T069, SPEC-011).
+/// Colonnes : ID  LABEL  CURRENT  RECENT  WINDOWS  STAGES
+/// Schéma JSON daemon : {"desktops": [{id, label, current, recent, windows, stages}, ...]}
 func sendDesktopListAsTable() {
     do {
         let response = try SocketClient.send(Request(command: "desktop.list"))
@@ -326,27 +335,25 @@ func sendDesktopListAsTable() {
             exit(response.errorCode == "multi_desktop_disabled" ? 4 : 1)
         }
         let payload = response.payload ?? [:]
-        let currentUUID = (payload["current_uuid"]?.value as? String) ?? ""
         let desktops = (payload["desktops"]?.value as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
-        if desktops.isEmpty {
-            print("INDEX  UUID                                   LABEL  CURRENT  STAGES  WINDOWS")
-            print("(no desktops detected)")
-            return
-        }
-        // Header — pad manuel car String(format: %s) attend un C-string et crash
-        // sur les String Swift natives (SIGSEGV).
+        // Pad manuel : String(format: %s) crash sur String Swift natives (SIGSEGV).
         func pad(_ s: String, _ w: Int) -> String {
             s.count >= w ? s : s + String(repeating: " ", count: w - s.count)
         }
-        print("\(pad("INDEX", 5))  \(pad("UUID", 36))  \(pad("LABEL", 8))  \(pad("CURRENT", 7))  \(pad("STAGES", 6))  WINDOWS")
+        print("\(pad("ID", 3))  \(pad("LABEL", 8))  \(pad("CURRENT", 7))  \(pad("RECENT", 6))  \(pad("WINDOWS", 7))  STAGES")
+        if desktops.isEmpty {
+            print("(no desktops detected)")
+            return
+        }
         for d in desktops {
-            let idx = (d["index"] as? Int) ?? 0
-            let uuid = (d["uuid"] as? String) ?? ""
-            let label = (d["label"] as? String) ?? ""
-            let isCurrent = uuid == currentUUID ? "*" : ""
-            let stages = (d["stage_count"] as? Int) ?? 0
-            let windows = (d["window_count"] as? Int) ?? 0
-            print("\(pad(String(idx), 5))  \(pad(uuid, 36))  \(pad(label, 8))  \(pad(isCurrent, 7))  \(pad(String(stages), 6))  \(windows)")
+            let id = (d["id"] as? Int) ?? 0
+            let rawLabel = (d["label"] as? String) ?? ""
+            let label = rawLabel.isEmpty ? "(none)" : rawLabel
+            let isCurrent = (d["current"] as? Bool) == true ? "*" : ""
+            let isRecent = (d["recent"] as? Bool) == true ? "*" : ""
+            let windows = (d["windows"] as? Int) ?? 0
+            let stages = (d["stages"] as? Int) ?? 0
+            print("\(pad(String(id), 3))  \(pad(label, 8))  \(pad(isCurrent, 7))  \(pad(isRecent, 6))  \(pad(String(windows), 7))  \(stages)")
         }
     } catch SocketClient.Error.daemonNotRunning {
         FileHandle.standardError.write(
