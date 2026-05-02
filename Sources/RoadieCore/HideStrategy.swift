@@ -64,28 +64,36 @@ public enum HideStrategyImpl {
     /// Utilisé pour détecter les fenêtres déjà cachées via moveOffScreen.
     @MainActor
     private static func isOnScreen(_ frameAX: CGRect) -> Bool {
+        guard screenContaining(frameAX: frameAX) != nil else { return false }
+        // Seuil minimal pour rejeter les frames dégénérées (collapsed AX, x20px
+        // fantômes) sans exclure toolbars/widgets légitimes (Notes Reminder etc.
+        // peuvent descendre sous 100px). 20 = empiriquement sain : moveOffScreen
+        // utilisé sur fenêtre offscreen donne typiquement height < 5.
+        return frameAX.size.height >= 20
+    }
+
+    /// Résout le `NSScreen` contenant le centre d'un `CGRect` exprimé en
+    /// coordonnées AX (Y top-down). Retourne nil si aucun écran ne contient
+    /// le centre. Utilisé par `isOnScreen` et `moveOffScreen` (déduplication).
+    @MainActor
+    private static func screenContaining(frameAX: CGRect) -> NSScreen? {
         guard let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
-            ?? NSScreen.main else { return false }
+            ?? NSScreen.main else { return nil }
         let primaryHeight = primary.frame.height
         let centerNS = CGPoint(x: frameAX.midX,
                                y: primaryHeight - frameAX.midY)
-        return NSScreen.screens.contains { $0.frame.contains(centerNS) }
-            && frameAX.size.height >= 100
+        return NSScreen.screens.first(where: { $0.frame.contains(centerNS) })
     }
 
     @MainActor
     private static func moveOffScreen(_ element: AXUIElement) {
         guard let frame = AXReader.bounds(element) else { return }
-        // Résoudre le screen qui contient la fenêtre via son centre AX.
         let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
             ?? NSScreen.main
         guard let primary else { return }
         let primaryHeight = primary.frame.height
-        // Convertir center AX (Y top-down) → NS (Y bottom-up) pour matcher NSScreen.frame.
-        let centerAX = CGPoint(x: frame.midX, y: frame.midY)
-        let centerNS = CGPoint(x: centerAX.x, y: primaryHeight - centerAX.y)
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(centerNS) })
-            ?? primary
+        // Résoudre le screen contenant la fenêtre, fallback primary.
+        let screen = screenContaining(frameAX: frame) ?? primary
         // Conversion visibleFrame du SCREEN contenant la fenêtre (NS BL) → AX (TL).
         let visible = screen.visibleFrame
         let visibleAX = CGRect(

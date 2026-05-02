@@ -10,19 +10,23 @@ public struct Config: Codable, Sendable {
     // SPEC-012 T037 : règles de config per-écran (section [[displays]] dans roadies.toml)
 
     public var displays: [DisplayRule]
+    /// SPEC-015 : config souris (drag/resize avec modifier).
+    public var mouse: MouseConfig
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
                 stageManager: StageManagerConfig = .init(),
                 exclusions: ExclusionsConfig = .init(),
                 desktops: DesktopsConfig = .init(),
-                displays: [DisplayRule] = []) {
+                displays: [DisplayRule] = [],
+                mouse: MouseConfig = .init()) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
         self.exclusions = exclusions
         self.desktops = desktops
         self.displays = displays
+        self.mouse = mouse
     }
 
     enum CodingKeys: String, CodingKey {
@@ -32,6 +36,7 @@ public struct Config: Codable, Sendable {
         case exclusions
         case desktops
         case displays
+        case mouse
     }
 
     /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
@@ -46,6 +51,7 @@ public struct Config: Codable, Sendable {
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? .init()
         self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? .init()
         self.displays = try c.decodeIfPresent([DisplayRule].self, forKey: .displays) ?? []
+        self.mouse = try c.decodeIfPresent(MouseConfig.self, forKey: .mouse) ?? .init()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -58,6 +64,83 @@ public struct Config: Codable, Sendable {
         if !displays.isEmpty {
             try c.encode(displays, forKey: .displays)
         }
+        try c.encode(mouse, forKey: .mouse)
+    }
+}
+
+// MARK: - MouseConfig (SPEC-015)
+
+/// Modifier clavier pour activer drag/resize souris.
+public enum ModifierKey: String, Codable, Sendable, Equatable {
+    case ctrl
+    case alt
+    case cmd
+    case shift
+    case hyper   // ctrl+alt+cmd+shift
+    case none
+}
+
+/// Action déclenchée par un bouton souris + modifier.
+public enum MouseAction: String, Codable, Sendable, Equatable {
+    case move
+    case resize
+    case none
+}
+
+/// Configuration souris (section `[mouse]` du TOML).
+public struct MouseConfig: Codable, Sendable, Equatable {
+    public var modifier: ModifierKey
+    public var actionLeft: MouseAction
+    public var actionRight: MouseAction
+    public var actionMiddle: MouseAction
+    public var edgeThreshold: Int
+
+    public init(modifier: ModifierKey = .ctrl,
+                actionLeft: MouseAction = .move,
+                actionRight: MouseAction = .resize,
+                actionMiddle: MouseAction = .none,
+                edgeThreshold: Int = 30) {
+        self.modifier = modifier
+        self.actionLeft = actionLeft
+        self.actionRight = actionRight
+        self.actionMiddle = actionMiddle
+        self.edgeThreshold = max(5, min(200, edgeThreshold))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case modifier
+        case actionLeft = "action_left"
+        case actionRight = "action_right"
+        case actionMiddle = "action_middle"
+        case edgeThreshold = "edge_threshold"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // FR-002 : valeur invalide → fallback ctrl + warn (caller log).
+        if let raw = try c.decodeIfPresent(String.self, forKey: .modifier) {
+            self.modifier = ModifierKey(rawValue: raw) ?? .ctrl
+        } else {
+            self.modifier = .ctrl
+        }
+        // FR-003 : valeur invalide → fallback default (move pour left, resize pour right, none pour middle).
+        if let raw = try c.decodeIfPresent(String.self, forKey: .actionLeft) {
+            self.actionLeft = MouseAction(rawValue: raw) ?? .move
+        } else {
+            self.actionLeft = .move
+        }
+        if let raw = try c.decodeIfPresent(String.self, forKey: .actionRight) {
+            self.actionRight = MouseAction(rawValue: raw) ?? .resize
+        } else {
+            self.actionRight = .resize
+        }
+        if let raw = try c.decodeIfPresent(String.self, forKey: .actionMiddle) {
+            self.actionMiddle = MouseAction(rawValue: raw) ?? .none
+        } else {
+            self.actionMiddle = .none
+        }
+        let rawEdge = try c.decodeIfPresent(Int.self, forKey: .edgeThreshold) ?? 30
+        self.edgeThreshold = max(5, min(200, rawEdge))
     }
 }
 

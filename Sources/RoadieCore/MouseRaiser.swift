@@ -16,9 +16,13 @@ import IOKit.hid
 public final class MouseRaiser {
     private let registry: WindowRegistry
     private var monitor: Any?
+    /// SPEC-015 : si non-nil, MouseRaiser skip son raise quand ce modifier est
+    /// pressé (= drag/resize prioritaire pour éviter le double-trigger raise+drag).
+    public var skipWhenModifier: ModifierKey?
 
-    public init(registry: WindowRegistry) {
+    public init(registry: WindowRegistry, skipWhenModifier: ModifierKey? = nil) {
         self.registry = registry
+        self.skipWhenModifier = skipWhenModifier
     }
 
     public func start() {
@@ -40,6 +44,11 @@ public final class MouseRaiser {
             // Le monitor fire sur un thread non-main. Dispatch vers MainActor pour
             // accéder au registry en sécurité.
             let location = NSEvent.mouseLocation
+            // SPEC-015 FR-030 : si modifier configuré pressé, skip raise (drag prioritaire).
+            if let mod = self?.skipWhenModifier, mod != .none {
+                let active = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if active.isSuperset(of: mod.nsFlags) { return }
+            }
             Task { @MainActor in self?.handleClick(at: location) }
         }
         logInfo("MouseRaiser started")

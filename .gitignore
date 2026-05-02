@@ -35,3 +35,6 @@ osax/build/
 
 # Rapports d'audit générés par /audit (locaux, pas versionnés)
 audits/
+
+# ADR de travail interne (gap analysis vs yabai, non engagement public)
+docs/decisions/ADR-006-yabai-feature-gap-analysis.md

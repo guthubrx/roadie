@@ -42,6 +42,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var axEventLoop: AXEventLoop?
     var server: Server?
     var mouseRaiser: MouseRaiser?
+    /// SPEC-015 : drag/resize avec modifier + clic souris.
+    var mouseDragHandler: MouseDragHandler?
     var periodicScanner: PeriodicScanner?
     var dragWatcher: DragWatcher?
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
@@ -53,6 +55,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var desktopSwitcher: DesktopSwitcher?
     /// SPEC-012 : registry des écrans physiques.
     var displayRegistry: DisplayRegistry?
+    /// SPEC-014 : cache LRU des vignettes fenêtres (capacité 50).
+    var thumbnailCache: ThumbnailCache?
+    /// SPEC-014 : service de capture ScreenCaptureKit (0.5 Hz par fenêtre observée).
+    var sckCaptureService: SCKCaptureService?
+    /// SPEC-014 : watcher click wallpaper → event wallpaper_click.
+    var wallpaperClickWatcher: WallpaperClickWatcher?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -103,6 +111,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         } else {
             self.stageManager = nil
         }
+        self.thumbnailCache = ThumbnailCache(capacity: 50)
     }
 
     func bootstrap() async throws {
@@ -182,8 +191,32 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
 
         // Click-to-raise universel : ramène toute fenêtre cliquée au-dessus,
         // indépendamment du tiling. Comble le trou laissé par AeroSpace.
-        mouseRaiser = MouseRaiser(registry: registry)
+        // SPEC-015 : skip le raise quand le modifier mouse-drag est pressé pour
+        // éviter le double-trigger raise+drag (= raise actif uniquement sur clic
+        // simple).
+        mouseRaiser = MouseRaiser(
+            registry: registry,
+            skipWhenModifier: config.mouse.modifier
+        )
         mouseRaiser?.start()
+
+        // SPEC-015 : drag/resize de fenêtre via modifier + clic. Lifecycle géré
+        // ici, callbacks branchent vers la logique daemon (drop cross-display
+        // SPEC-013, retire-from-tile, adaptResize).
+        let mdh = MouseDragHandler(registry: registry, config: config.mouse)
+        mdh.removeFromTile = { [weak self] wid in
+            self?.layoutEngine.removeWindow(wid)
+        }
+        mdh.adaptResize = { [weak self] wid, finalFrame in
+            guard let self = self else { return }
+            _ = self.layoutEngine.adaptToManualResize(wid, newFrame: finalFrame)
+            self.applyLayout()
+        }
+        mdh.onDragDrop = { [weak self] _ in
+            self?.onDragDrop()
+        }
+        mdh.start()
+        self.mouseDragHandler = mdh
 
         // Drag-to-resize : adapte le tree quand l'utilisateur lâche après avoir
         // dragué un bord ou la barre de titre d'une fenêtre tilée.
@@ -550,6 +583,37 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // tile uniquement le primary, les autres écrans restent en placement libre).
         applyLayout()
 
+        // SPEC-014 : init SCKCaptureService + WallpaperClickWatcher.
+        let sck = SCKCaptureService()
+        let thumbCacheRef = self.thumbnailCache
+        sck.onCapture = { [weak self] entry in
+            thumbCacheRef?.put(entry)
+            EventBus.shared.publish(DesktopEvent.thumbnailUpdated(wid: entry.wid))
+            _ = self // keep alive
+        }
+        self.sckCaptureService = sck
+
+        if AXIsProcessTrusted() {
+            let watcher = WallpaperClickWatcher(registry: registry)
+            // SPEC-014 T060 (US4) : câbler le coordinator si stage manager présent.
+            if let sm = self.stageManager {
+                let coordinator = WallpaperStageCoordinator(registry: registry, stageManager: sm)
+                watcher.onWallpaperClick = { point in
+                    coordinator.handleClick(at: point)
+                }
+            } else {
+                // Fallback : juste publier l'event si stage manager désactivé.
+                watcher.onWallpaperClick = { point in
+                    EventBus.shared.publish(DesktopEvent.wallpaperClick(
+                        x: Int(point.x), y: Int(point.y), displayID: CGMainDisplayID()))
+                }
+            }
+            watcher.start()
+            self.wallpaperClickWatcher = watcher
+        } else {
+            logWarn("wallpaper_watcher: AX not trusted, watcher skipped")
+        }
+
         logInfo("roadied ready")
     }
 
@@ -910,6 +974,10 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
               let state = registry.get(wid) else { return }
         let mode = await dReg.mode
         guard mode == .perDisplay else { return }
+        // BUGFIX : ne pas réagir aux dialogs/popovers (subrole != standard).
+        // Un dialog peut prendre le focus juste après ouverture, ce qui ferait
+        // basculer le desktop entier sans raison. macOS gère leur visibilité.
+        guard state.isTileable else { return }
         // Identifier le display où la fenêtre est censée vivre.
         // state.frame est offscreen quand cachée → fallback expectedFrame.
         var displayID: CGDirectDisplayID?
@@ -941,10 +1009,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 did = layoutEngine.displayIDContainingPoint(c2)
             }
             guard let resolvedDid = did, resolvedDid == resolvedDisplay else { continue }
+            // BUGFIX : skip non-tileable (dialogs, popovers système). Sinon on
+            // les cache offscreen alors que macOS les gère en floating natif.
+            guard s.isTileable else { continue }
             let shouldShow = s.desktopID == targetDesktop
-            if s.isTileable {
-                layoutEngine.setLeafVisible(s.cgWindowID, shouldShow)
-            }
+            layoutEngine.setLeafVisible(s.cgWindowID, shouldShow)
             if shouldShow {
                 HideStrategyImpl.show(s.cgWindowID, registry: registry,
                                       strategy: config.stageManager.hideStrategy)
