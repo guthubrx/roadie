@@ -214,19 +214,21 @@ enum CommandRouter {
         case "fx.status":
             // SPEC-004 : retourne l'état SIP + osax + modules chargés.
             // Toujours répond, même si fxLoader nil (= aucun module, vanilla).
+            // - sip : état csrutil
+            // - osax : "loaded" si le socket /var/tmp/roadied-osax.sock existe
+            //   (= scripting addition active dans Dock), "absent" sinon
+            // - modules : "name@version" séparés par virgule, format plat pour
+            //   éviter le bug d'affichage CLI sur les arrays de dicts AnyCodable
             let sipState = FXLoader.detectSIP().rawValue
-            let osax = (daemon.fxLoader?.modules.contains(where: { _ in true }) ?? false) ? "loaded" : "absent"
-            let modules: [[String: AnyCodable]] = (daemon.fxLoader?.modules ?? []).map { m in
-                [
-                    "name": AnyCodable(m.name),
-                    "version": AnyCodable(m.version),
-                    "loaded_at": AnyCodable(ISO8601DateFormatter().string(from: m.loadedAt))
-                ]
-            }
+            let osaxConnected = FileManager.default.fileExists(atPath: "/var/tmp/roadied-osax.sock")
+            let osaxState = osaxConnected ? "loaded" : "absent"
+            let modulesList = (daemon.fxLoader?.modules ?? [])
+                .map { "\($0.name)@\($0.version)" }
+                .joined(separator: ", ")
             return .success([
                 "sip": AnyCodable(sipState),
-                "osax": AnyCodable(osax),
-                "modules": AnyCodable(modules)
+                "osax": AnyCodable(osaxState),
+                "modules": AnyCodable(modulesList.isEmpty ? "[]" : "[\(modulesList)]")
             ])
 
         case "fx.reload":

@@ -101,10 +101,16 @@ public final class FXLoader: @unchecked Sendable {
     /// `libRoadieCrossDesktop.dylib` → `roadie_fx_init_crossdesktop`.
     /// Si le pattern ne match pas, retourne `module_init` (fallback historique).
     static func expectedSymbolName(forDylibAt path: String) -> String {
-        let basename = (path as NSString).lastPathComponent
-        let stripped = basename
-            .replacingOccurrences(of: "lib", with: "")
-            .replacingOccurrences(of: ".dylib", with: "")
+        // Bug fix : retirer d'abord le suffixe `.dylib` PUIS le préfixe `lib`.
+        // Sinon `replacingOccurrences("lib")` retire aussi le `lib` dans
+        // `.dylib` et produit "Animations.dy" → symbole invalide.
+        var stripped = (path as NSString).lastPathComponent
+        if stripped.hasSuffix(".dylib") {
+            stripped = String(stripped.dropLast(".dylib".count))
+        }
+        if stripped.hasPrefix("lib") {
+            stripped = String(stripped.dropFirst("lib".count))
+        }
         guard stripped.hasPrefix("Roadie") else { return "module_init" }
         let moduleName = String(stripped.dropFirst("Roadie".count)).lowercased()
         return "roadie_fx_init_\(moduleName)"

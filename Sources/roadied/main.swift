@@ -226,6 +226,30 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             self.desktopRegistry = dRegistry
             self.desktopSwitcher = dSwitcher
 
+            // SPEC-011 T-boot : populer le DesktopRegistry avec les fenêtres déjà
+            // enregistrées dans WindowRegistry (bootstrap AX antérieur à l'init
+            // desktops). Les fenêtres offscreen (x < -1000) sont ignorées.
+            let currentDeskID = await dRegistry.currentID
+            for state in registry.allWindows where state.isTileable {
+                guard state.frame.origin.x > -1000 else { continue }
+                let entry = WindowEntry(
+                    cgwid: UInt32(state.cgWindowID),
+                    bundleID: state.bundleID,
+                    title: state.title,
+                    expectedFrame: state.frame,
+                    stageID: 1
+                )
+                do {
+                    try await dRegistry.assignWindow(entry, to: currentDeskID)
+                } catch {
+                    logWarn("boot: desktop assignWindow failed",
+                            ["wid": String(state.cgWindowID), "error": "\(error)"])
+                }
+            }
+            logInfo("boot: windows seeded into desktop",
+                    ["desktop": String(currentDeskID),
+                     "count": String(await dRegistry.windows(of: currentDeskID).count)])
+
             // T049 : bridge DesktopEventBus → EventBus.shared (RoadieCore).
             // Le Server utilise EventBus.shared pour les connexions events.subscribe.
             // Ce bridge garantit que desktop_changed + stage_changed sont servis
