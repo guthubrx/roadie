@@ -171,13 +171,38 @@ public actor DesktopRegistry {
         desktops[desktopID]?.windows.first(where: { $0.cgwid == cgwid })?.expectedFrame
     }
 
+    /// Retourne l'ID du desktop contenant la fenêtre, ou nil si inconnue (FR-005).
+    public func desktopID(for cgwid: UInt32) -> Int? {
+        for (id, desktop) in desktops {
+            if desktop.windows.contains(where: { $0.cgwid == cgwid }) { return id }
+        }
+        return nil
+    }
+
     /// Assigne une fenêtre à un desktop et un stage (pour future US window assign).
     /// - Throws: `DesktopRegistryError.unknownDesktop` si le desktop n'existe pas (M2).
     public func assignWindow(_ entry: WindowEntry, to desktopID: Int) throws {
         guard var desktop = desktops[desktopID] else {
             throw DesktopRegistryError.unknownDesktop(desktopID)
         }
-        // Éviter les doublons par cgwid
+        // Une fenêtre appartient à exactement un desktop : retirer des autres
+        // d'abord pour éviter qu'elle apparaisse simultanément dans plusieurs.
+        // Sans cette étape : à chaque ré-enregistrement (boot, focus changed,
+        // etc.) le cgwid s'accumulait dans tous les desktops visités → fenêtres
+        // fantômes qui surgissent au mauvais endroit lors de la bascule.
+        for otherID in desktops.keys where otherID != desktopID {
+            guard var other = desktops[otherID] else { continue }
+            let before = other.windows.count
+            other.windows.removeAll { $0.cgwid == entry.cgwid }
+            for i in other.stages.indices {
+                other.stages[i].windows.removeAll { $0 == entry.cgwid }
+            }
+            if other.windows.count != before {
+                desktops[otherID] = other
+                try? save(other)
+            }
+        }
+        // Éviter les doublons par cgwid sur le desktop target.
         desktop.windows.removeAll { $0.cgwid == entry.cgwid }
         desktop.windows.append(entry)
         // Enregistrer dans le stage par défaut (id == entry.stageID)

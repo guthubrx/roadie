@@ -20,11 +20,17 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 # Compilation : Objective-C++ + Cocoa + framework privé SkyLight pour les CGS.
+# Target `arm64e` (Pointer Authentication Codes) impératif sur Apple Silicon :
+# Dock est compilé en arm64e, et même avec SIP fully disabled + boot-arg
+# `-arm64e_preview_abi`, dyld refuse silencieusement de charger une dylib
+# arm64 (non-e) dans un process arm64e. Réfs : yabai issue #1766, SpecterOps
+# blog "ARM64 dylib injection on macOS" (2025-08-21).
 clang++ \
     -bundle \
     -fobjc-arc \
     -fmodules \
     -std=c++17 \
+    -target arm64e-apple-macos14 \
     -mmacosx-version-min=14.0 \
     -F /System/Library/PrivateFrameworks \
     -framework Foundation \
