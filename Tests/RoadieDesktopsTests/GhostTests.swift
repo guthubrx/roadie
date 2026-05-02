@@ -3,15 +3,9 @@ import CoreGraphics
 @testable import RoadieDesktops
 import RoadieCore
 
-/// Vérifie qu'une position est hors de la zone visible, quel que soit le setup d'écrans.
-/// - Fallback headless : x ≤ -1000
-/// - Mode dynamique multi-display : x ≥ 3000 (hors du bounding box global)
-private func isOffscreenCoordX(_ x: CGFloat) -> Bool {
-    x <= -1000 || x >= 3000
-}
-
-/// Test anti-fantôme : après 100 bascules, aucune fenêtre n'est laissée offscreen
-/// à tort — les fenêtres du desktop courant sont toujours à leur expectedFrame (SC-002).
+/// Test anti-fantôme (SC-002) : après 100 bascules, la séquence deactivateAll + activate
+/// est respectée à chaque switch — invariant "aucune fenêtre fantôme" garanti par
+/// le fait que HideStrategy (via StageManager) gère l'hide/show de manière atomique.
 final class GhostTests: XCTestCase {
 
     private var tmpDir: URL!
@@ -61,48 +55,53 @@ final class GhostTests: XCTestCase {
             try await registry.save(d)
         }
 
-        let mover = MockWindowMover()
+        let stageOps = MockStageOps()
         let bus = DesktopEventBus()
         let cfg = DesktopSwitcherConfig(count: 3, backAndForth: false)
         let switcher = DesktopSwitcher(
-            registry: registry, mover: mover, bus: bus, config: cfg
+            registry: registry, stageOps: stageOps, bus: bus, config: cfg
         )
 
         // 100 bascules entre desktops 1, 2, 3
+        var effectiveSwitches = 0
         for i in 0..<100 {
             let target = (i % 3) + 1
             let currentID = await registry.currentID
             if target == currentID { continue }
             try await switcher.switch(to: target)
+            effectiveSwitches += 1
         }
 
-        // Après stabilisation, vérifier que les fenêtres du desktop courant
-        // ne sont PAS offscreen (leur dernière position doit être leur expectedFrame)
-        let finalCurrentID = await registry.currentID
-        let finalDesktop = await registry.desktop(id: finalCurrentID)
-        let moves = await mover.moves
-        let offscreenThreshold: CGFloat = -10000
+        // Invariant anti-fantôme : chaque bascule effective appelle deactivateAll
+        // exactement une fois, puis activate exactement une fois, dans cet ordre.
+        // Vérifier que le nombre de deactivateAll == nombre d'activate == effectiveSwitches.
+        let calls = await stageOps.calls
+        let deactivateCount = calls.filter { $0 == .deactivateAll }.count
+        let activateCount = calls.filter {
+            if case .activate = $0 { return true }
+            return false
+        }.count
 
-        for win in finalDesktop?.windows ?? [] {
-            let lastPos = moves.last(where: { $0.cgwid == win.cgwid })?.point
-            if let pos = lastPos {
-                XCTAssertGreaterThan(pos.x, offscreenThreshold,
-                    "Window \(win.cgwid) of current desktop \(finalCurrentID) is offscreen at x=\(pos.x)")
-                XCTAssertGreaterThan(pos.y, offscreenThreshold,
-                    "Window \(win.cgwid) of current desktop \(finalCurrentID) is offscreen at y=\(pos.y)")
-            }
-        }
+        XCTAssertEqual(deactivateCount, effectiveSwitches,
+            "deactivateAll doit être appelé exactement une fois par bascule effective")
+        XCTAssertEqual(activateCount, effectiveSwitches,
+            "activate doit être appelé exactement une fois par bascule effective")
 
-        // Vérifier que les fenêtres des autres desktops SONT offscreen.
-        // Invariant display-agnostique : x très négatif (fallback) OU très positif
-        // (calcul dynamique). Cf. isOffscreenCoordX pour les seuils.
-        for (id, wins) in desktops where id != finalCurrentID {
-            for win in wins {
-                let lastPos = moves.last(where: { $0.cgwid == win.cgwid })?.point
-                if let pos = lastPos {
-                    XCTAssertTrue(isOffscreenCoordX(pos.x),
-                        "Window \(win.cgwid) of desktop \(id) should be offscreen, got x=\(pos.x)")
-                }
+        // Vérifier l'ordre strict deactivate → activate dans la séquence.
+        // Chaque paire (deactivateAll, activate) doit être consécutive et dans le bon ordre.
+        var expectDeactivate = true
+        for call in calls {
+            switch call {
+            case .deactivateAll:
+                XCTAssertTrue(expectDeactivate,
+                    "deactivateAll inattendu (attendait activate)")
+                expectDeactivate = false
+            case .activate:
+                XCTAssertFalse(expectDeactivate,
+                    "activate inattendu (attendait deactivateAll)")
+                expectDeactivate = true
+            case .currentStageID:
+                break
             }
         }
     }

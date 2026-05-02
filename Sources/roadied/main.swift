@@ -6,6 +6,27 @@ import RoadieTiler
 import RoadieStagePlugin
 import RoadieDesktops
 
+// MARK: - StageOpsBridge
+
+/// Adaptateur StageManager (@MainActor) → DesktopStageOps (async actor-safe).
+/// Vit dans roadied pour éviter une dépendance RoadieDesktops → RoadieStagePlugin.
+/// SPEC-011 refactor.
+struct StageOpsBridge: DesktopStageOps {
+    let manager: StageManager
+
+    func currentStageID() async -> Int? {
+        await MainActor.run { manager.currentStageID.flatMap { Int($0.value) } }
+    }
+
+    func deactivateAll() async {
+        await MainActor.run { manager.deactivateAll() }
+    }
+
+    func activate(_ stageID: Int) async {
+        await MainActor.run { manager.activate(stageID: StageID(String(stageID))) }
+    }
+}
+
 /// Daemon roadied — point d'entrée.
 /// Bootstrap : check Accessibility → load config → init modules → start observers → run loop.
 
@@ -103,6 +124,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     _ = sm.createStage(id: id, displayName: stageDef.displayName)
                 }
             }
+            // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
+            sm.ensureDefaultStage()
         }
 
         // Observers
@@ -136,6 +159,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
 
         // Initial layout
         applyLayout()
+
+        // Auto-assign des fenêtres orphelines au stage courant (migration utilisateurs existants).
+        // Si 5 fenêtres n'ont pas de stageID après loadFromDisk, elles atterrissent toutes
+        // dans le stage 1 du desktop courant. Sans effet si stageManager est nil (mode V1 strict).
+        if let sm = stageManager, let currentStage = sm.currentStageID {
+            for state in registry.allWindows where state.isTileable && state.stageID == nil {
+                sm.assign(wid: state.cgWindowID, to: currentStage)
+            }
+        }
 
         // Initialiser le focus avec la fenêtre frontmost réelle.
         focusManager.refreshFromSystem()
@@ -171,6 +203,30 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         self.fxLoader = loader
 
+        // SPEC-004 : replay des fenêtres existantes vers le bus FX. Au bootstrap,
+        // `registerWindow(isInitial:true)` tournait AVANT que `fxLoader` soit assigné,
+        // donc les modules opt-in (Borders, etc.) ne recevaient aucun `windowCreated`
+        // pour les fenêtres déjà ouvertes. On les rejoue ici, une fois.
+        for state in registry.allWindows {
+            loader.bus.publish(FXEvent(kind: .windowCreated,
+                                       wid: CGWindowID(state.cgWindowID),
+                                       bundleID: state.bundleID,
+                                       frame: state.frame,
+                                       isFloating: state.isFloating))
+        }
+        if let focusedWID = registry.focusedWindowID {
+            loader.bus.publish(FXEvent(kind: .windowFocused,
+                                       wid: CGWindowID(focusedWID)))
+        }
+        // Pont focus : tout changement de `registry.focusedWindowID` (depuis AX
+        // notifications, MouseRaiser, click-to-raise, manual) publie un
+        // windowFocused sur le bus FX. Évite que le module Borders rate des focus
+        // changes qui n'ont pas transité par axDidChangeFocusedWindow (apps Electron).
+        registry.onFocusChanged = { [weak loader] wid in
+            guard let wid = wid else { return }
+            loader?.bus.publish(FXEvent(kind: .windowFocused, wid: CGWindowID(wid)))
+        }
+
         // SPEC-011 : init desktops virtuels si activé
         if config.desktops.enabled {
             let configDir = URL(fileURLWithPath:
@@ -189,20 +245,34 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             let dRegistry = DesktopRegistry(configDir: configDir, count: config.desktops.count)
             await dRegistry.load()
             let dBus = DesktopEventBus()
-            let dMover = AXWindowMover()
             let dCfg = DesktopSwitcherConfig(
                 count: config.desktops.count,
-                backAndForth: config.desktops.backAndForth,
-                offscreenX: config.desktops.offscreenX,
-                offscreenY: config.desktops.offscreenY
+                backAndForth: config.desktops.backAndForth
             )
-            // Câbler le hook stage-reload (T031) : après chaque bascule desktop,
-            // notifier le StageManager pour qu'il switche son scope.
-            // La closure passe sur @MainActor car StageManager est @MainActor.
+
+            // SPEC-011 unification sources : substituer la persistence V1 (fichiers) par
+            // DesktopBackedStagePersistence (DesktopRegistry). À partir de ce point, toutes
+            // les lectures/écritures de stages passent par state.toml via DesktopRegistry.
+            // Le currentID du registry est la source de vérité pour l'ID de desktop courant.
             let sm = self.stageManager
+            if let mgr = sm {
+                let currentDeskID = await dRegistry.currentID
+                let dbPersistence = DesktopBackedStagePersistence(
+                    registry: dRegistry,
+                    desktopID: currentDeskID
+                )
+                mgr.setPersistence(dbPersistence)
+                logInfo("stage_persistence: switched to DesktopRegistry-backed",
+                        ["desktop": String(currentDeskID)])
+            }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
-                    await MainActor.run { mgr.reload(forDesktop: newDesktopID) }
+                    await MainActor.run {
+                        mgr.reload(forDesktop: newDesktopID)
+                        // Garantir stage 1 + stage actif sur le desktop d'arrivée.
+                        // Si le desktop n'a jamais eu de stages persistés, crée stage 1 et l'active.
+                        mgr.ensureDefaultStage()
+                    }
                 }
             }
             // T048 : câbler onStageChanged → DesktopEventBus (émission stage_changed)
@@ -216,9 +286,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 )
                 Task { await busRef.publish(event) }
             }
+            // SPEC-011 refactor : bridge StageManager (MainActor) → DesktopStageOps (async).
+            // Adaptateur qui traduit les appels async actor-isolated en @MainActor.
+            let dStageOps: (any DesktopStageOps)? = sm.map { mgr in
+                StageOpsBridge(manager: mgr)
+            }
             let dSwitcher = DesktopSwitcher(
                 registry: dRegistry,
-                mover: dMover,
+                stageOps: dStageOps,
                 bus: dBus,
                 config: dCfg,
                 onDesktopChanged: stageHook
@@ -227,46 +302,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             self.desktopSwitcher = dSwitcher
 
             // SPEC-011 T-boot : populer le DesktopRegistry avec les fenêtres déjà
-            // enregistrées dans WindowRegistry. Recovery : si une fenêtre est
-            // physiquement offscreen (laissée hors-écran par un daemon précédent
-            // tué pendant une bascule), on la ramène à une position visible avant
-            // de l'enregistrer. Sans ça, l'expectedFrame est offscreen et toute
-            // bascule la rendrait invisible définitivement.
+            // enregistrées dans WindowRegistry.
+            // Les fenêtres sont toutes on-screen au boot (HideStrategy via StageManager
+            // garantit qu'aucune fenêtre n'est laissée offscreen — plus besoin de recovery).
             let currentDeskID = await dRegistry.currentID
-            // Bounding visible : union des visibleFrame (NS) → AX top-left.
-            let nsScreens = NSScreen.screens
-            let mainHeight = nsScreens.first?.frame.height ?? 0
-            let visibleAX: [CGRect] = nsScreens.map { ns in
-                let v = ns.visibleFrame
-                return CGRect(x: v.origin.x,
-                              y: mainHeight - (v.origin.y + v.height),
-                              width: v.width, height: v.height)
-            }
-            func isOnScreen(_ rect: CGRect) -> Bool {
-                visibleAX.contains { $0.intersects(rect) }
-            }
-            // Position de fallback pour fenêtre offscreen au boot : coin haut-gauche
-            // du primary screen, marge 80 px.
-            let fallback = CGPoint(x: 80, y: 80)
             for state in registry.allWindows where state.isTileable {
-                var frame = state.frame
-                if !isOnScreen(frame) {
-                    // Recovery visuelle + state propre.
-                    frame.origin = fallback
-                    if let element = registry.axElement(for: state.cgWindowID) {
-                        AXReader.setBounds(element, frame: frame)
-                    }
-                    registry.updateFrame(state.cgWindowID, frame: frame)
-                    logInfo("boot: recovered offscreen window",
-                            ["wid": String(state.cgWindowID),
-                             "from_x": String(format: "%.0f", state.frame.origin.x),
-                             "from_y": String(format: "%.0f", state.frame.origin.y)])
-                }
                 let entry = WindowEntry(
                     cgwid: UInt32(state.cgWindowID),
                     bundleID: state.bundleID,
                     title: state.title,
-                    expectedFrame: frame,
+                    expectedFrame: state.frame,
                     stageID: 1
                 )
                 do {
@@ -307,11 +352,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
 
-            // T038 : restauration visuelle initiale (show/hide sans event desktop_changed)
-            await dSwitcher.restoreInitialView()
             // T031 : aligner le StageManager sur le desktop courant restauré
             let restoredID = await dRegistry.currentID
             sm?.reload(forDesktop: restoredID)
+            // Le reload swap le stagesDir et reset currentStageID. Re-garantir
+            // le stage 1 + stage actif (sinon ensureDefaultStage du boot est
+            // perdu — currentStageID redevient nil et la bascule de desktop
+            // ne fait plus rien).
+            sm?.ensureDefaultStage()
 
             logInfo("desktops initialized",
                     ["count": String(config.desktops.count),
@@ -417,7 +465,21 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
         }
+        // Auto-assign la fenêtre au stage actif. Sans effet si stageManager nil ou
+        // si la fenêtre n'est pas tileable (floating, modale).
+        if state.isTileable, let sm = stageManager, let stageID = sm.currentStageID {
+            sm.assign(wid: state.cgWindowID, to: stageID)
+        }
+
         if !isInitial { applyLayout() }
+
+        // SPEC-004 : pont vers le bus FX. Les modules opt-in (RoadieBorders, etc.)
+        // s'abonnent à `windowCreated` pour spawner leurs overlays.
+        fxLoader?.bus.publish(FXEvent(kind: .windowCreated,
+                                      wid: CGWindowID(wid),
+                                      bundleID: bundleID,
+                                      frame: frame,
+                                      isFloating: state.isFloating))
     }
 
     func applyLayout() {
@@ -524,6 +586,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         removeWindowFromDesktopRegistry(wid: wid)
         applyLayout()
         logInfo("window destroyed", ["wid": String(wid), "pid": String(pid)])
+        fxLoader?.bus.publish(FXEvent(kind: .windowDestroyed, wid: CGWindowID(wid)))
     }
     func axDidMoveWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
@@ -531,6 +594,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
         propagateExpectedFrame(wid: wid, frame: frame)
+        fxLoader?.bus.publish(FXEvent(kind: .windowMoved,
+                                      wid: CGWindowID(wid), frame: frame))
     }
     func axDidResizeWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
@@ -538,6 +603,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
         propagateExpectedFrame(wid: wid, frame: frame)
+        fxLoader?.bus.publish(FXEvent(kind: .windowResized,
+                                      wid: CGWindowID(wid), frame: frame))
     }
 
     /// SPEC-011 FR-005 : propage la nouvelle frame au DesktopRegistry pour que la
@@ -613,6 +680,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             registerWindow(pid: pid, axWindow: axWindow)
         }
         focusManager.refreshFromSystem()
+        // windowFocused FX publié automatiquement par registry.onFocusChanged
+        // (cf. branchement dans bootstrap()).
     }
     /// Scanne les fenêtres d'une app et enregistre celles qui ne le sont pas encore.
     /// Appelé depuis les paths d'activation (NSWorkspace, AX) et le scanner périodique.

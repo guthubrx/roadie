@@ -1,7 +1,6 @@
 import Foundation
 import ApplicationServices
 import Cocoa
-import RoadieCore
 
 /// Implémentation des stratégies de masquage de fenêtres pour le stage manager.
 /// Voir ADR-003.

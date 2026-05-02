@@ -30,14 +30,16 @@ public final class BorderOverlay {
         CGWindowID(window.windowNumber)
     }
 
-    public init(wid: CGWindowID, frame: CGRect, thickness: Int, color: NSColor) {
+    public init(wid: CGWindowID, frame: CGRect, thickness: Int, color: NSColor,
+                cornerRadius: CGFloat = 10) {
         self.trackedWID = wid
         self.trackedFrame = frame
         self.thickness = thickness
         self.color = color
 
         let pad = CGFloat(thickness)
-        let overlayFrame = frame.insetBy(dx: -pad, dy: -pad)
+        let axInset = frame.insetBy(dx: -pad, dy: -pad)
+        let overlayFrame = Self.axToQuartz(axInset)
         let win = NSWindow(
             contentRect: overlayFrame,
             styleMask: .borderless,
@@ -57,7 +59,10 @@ public final class BorderOverlay {
         let l = CALayer()
         l.borderWidth = CGFloat(thickness)
         l.borderColor = color.cgColor
-        l.cornerRadius = 0
+        // Le rayon de l'overlay = rayon de la fenêtre tracked + padding (thickness),
+        // pour que le contour épouse les coins arrondis de la fenêtre dessous.
+        l.cornerRadius = cornerRadius + CGFloat(thickness)
+        l.cornerCurve = .continuous
         l.frame = view.bounds
         view.layer = l
         win.contentView = view
@@ -71,9 +76,25 @@ public final class BorderOverlay {
     public func updateFrame(_ frame: CGRect) {
         trackedFrame = frame
         let pad = CGFloat(thickness)
-        let overlayFrame = frame.insetBy(dx: -pad, dy: -pad)
+        let overlayFrame = Self.axToQuartz(frame.insetBy(dx: -pad, dy: -pad))
         window.setFrame(overlayFrame, display: true, animate: false)
         layer.frame = CGRect(origin: .zero, size: overlayFrame.size)
+    }
+
+    /// Convertit un frame en coords AX (origin Y=0 en haut du primary, descend)
+    /// vers coords Quartz (origin Y=0 en bas du primary, monte) attendues par
+    /// `NSWindow.setFrame`. Le primary est l'écran avec `frame.origin == .zero`
+    /// — pas forcément `NSScreen.screens[0]` en multi-display.
+    private static func axToQuartz(_ axFrame: CGRect) -> CGRect {
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let p = primary else { return axFrame }
+        let h = p.frame.height
+        return CGRect(x: axFrame.origin.x,
+                      y: h - axFrame.origin.y - axFrame.height,
+                      width: axFrame.width,
+                      height: axFrame.height)
     }
 
     /// Change la couleur de la bordure. Préfère `CALayer.borderColor` direct
@@ -100,6 +121,14 @@ public final class BorderOverlay {
         anim.duration = duration
         anim.timingFunction = CAMediaTimingFunction(name: .easeOut)
         layer.add(anim, forKey: "pulse")
+    }
+
+    /// Cache ou montre l'overlay sans le détruire. Utilisé par `focused_only`
+    /// pour n'afficher que la bordure de la fenêtre focused tout en gardant
+    /// les frames synchronisés des autres overlays.
+    public func setHidden(_ hidden: Bool) {
+        if hidden { window.orderOut(nil) }
+        else { window.orderFront(nil) }
     }
 
     /// Ferme l'overlay et libère la NSWindow.

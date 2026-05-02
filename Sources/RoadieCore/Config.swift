@@ -60,21 +60,15 @@ public struct DesktopsConfig: Codable, Sendable {
     public var count: Int
     public var defaultFocus: Int
     public var backAndForth: Bool
-    public var offscreenX: Int
-    public var offscreenY: Int
 
     public init(enabled: Bool = true,
                 count: Int = 10,
                 defaultFocus: Int = 1,
-                backAndForth: Bool = true,
-                offscreenX: Int = -30000,
-                offscreenY: Int = -30000) {
+                backAndForth: Bool = true) {
         self.enabled = enabled
         self.count = count
         self.defaultFocus = defaultFocus
         self.backAndForth = backAndForth
-        self.offscreenX = offscreenX
-        self.offscreenY = offscreenY
     }
 
     enum CodingKeys: String, CodingKey {
@@ -82,8 +76,6 @@ public struct DesktopsConfig: Codable, Sendable {
         case count
         case defaultFocus = "default_focus"
         case backAndForth = "back_and_forth"
-        case offscreenX = "offscreen_x"
-        case offscreenY = "offscreen_y"
     }
 
     public init(from decoder: Decoder) throws {
@@ -98,8 +90,6 @@ public struct DesktopsConfig: Codable, Sendable {
         self.count = rawCount
         self.defaultFocus = try c.decodeIfPresent(Int.self, forKey: .defaultFocus) ?? 1
         self.backAndForth = try c.decodeIfPresent(Bool.self, forKey: .backAndForth) ?? true
-        self.offscreenX = try c.decodeIfPresent(Int.self, forKey: .offscreenX) ?? -30000
-        self.offscreenY = try c.decodeIfPresent(Int.self, forKey: .offscreenY) ?? -30000
     }
 }
 

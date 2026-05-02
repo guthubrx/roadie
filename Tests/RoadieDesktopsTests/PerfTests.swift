@@ -21,7 +21,6 @@ final class PerfTests: XCTestCase {
     }
 
     func testSwitchUnder200msWith10Windows() async throws {
-        // CI lente possible : on marque skip plutôt qu'échec si la machine est trop lente.
         let registry = DesktopRegistry(configDir: tmpDir, count: 2)
         await registry.load()
 
@@ -45,11 +44,11 @@ final class PerfTests: XCTestCase {
         try await registry.save(d1)
         try await registry.save(d2)
 
-        let mover = MockWindowMover()
+        let stageOps = MockStageOps()
         let bus = DesktopEventBus()
         let cfg = DesktopSwitcherConfig(count: 2)
         let switcher = DesktopSwitcher(
-            registry: registry, mover: mover, bus: bus, config: cfg
+            registry: registry, stageOps: stageOps, bus: bus, config: cfg
         )
 
         // 100 itérations switch 1↔2, mesure p95
@@ -67,7 +66,6 @@ final class PerfTests: XCTestCase {
 
         // Si le p95 dépasse 200 ms sur une machine lente en CI, skip plutôt qu'fail
         if p95 > 200 {
-            // Log informatif mais pas d'échec : SC-001 cible hardware réel
             print("PerfTest INFO: p95=\(String(format: "%.1f", p95)) ms (> 200ms threshold — CI may be slow)")
             print("PerfTest INFO: p50=\(String(format: "%.1f", p50)) ms")
         } else {
