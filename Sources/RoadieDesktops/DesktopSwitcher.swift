@@ -127,16 +127,24 @@ public actor DesktopSwitcher {
         // (d) Notifier les modules scopés au desktop (ex : StageManager — T031)
         await onDesktopChanged?(targetID)
 
-        // (e) Activer le stage du desktop d'arrivée
+        // (e) Activer le stage du desktop d'arrivée.
+        // FIX : si activeStageID est nil (cas notamment du desktop quitté SANS save
+        // par une transition incomplète, ou du desktop jamais visité dont les stages
+        // viennent juste d'être rechargés), fallback sur le PREMIER stage du desktop.
+        // Sans ce fallback, les fenêtres restent hidden et l'utilisateur doit créer
+        // une nouvelle fenêtre pour déclencher un layout (re-show).
         if let ops = stageOps {
             let toDesktop = await registry.desktop(id: targetID)
-            let activeInTo = toDesktop?.activeStageID
-            if let stageID = activeInTo {
+            var stageToActivate: Int? = toDesktop?.activeStageID
+            if stageToActivate == nil, let first = toDesktop?.stages.first {
+                stageToActivate = first.id
+            }
+            if let stageID = stageToActivate {
                 await ops.activate(stageID)
             }
         }
 
-        // (f) Émettre l'event desktop_changed
+        // (f) Émettre l'event desktop_changed (SPEC-013 FR-024 : payload étendu).
         let fromLabel = await registry.desktop(id: fromID)?.label ?? ""
         let toDesktop = await registry.desktop(id: targetID)
         let toLabel = toDesktop?.label ?? ""
@@ -148,6 +156,20 @@ public actor DesktopSwitcher {
             toLabel: toLabel
         )
         await bus.publish(event)
+        // SPEC-013 FR-024 : event additionnel via EventBus.shared avec display_id
+        // (= primary en mode global) et mode pour SketchyBar et autres consumers.
+        let ts = Int64(Date().timeIntervalSince1970 * 1000)
+        let primaryID = CGMainDisplayID()
+        await EventBus.shared.publish(DesktopEvent(
+            name: "desktop_changed",
+            payload: [
+                "from": String(fromID),
+                "to": String(targetID),
+                "display_id": String(primaryID),
+                "mode": "global",
+                "ts": String(ts),
+            ]
+        ))
 
         // FR-025 : si une bascule a été mise en attente pendant cette exécution
         if let next = pendingTarget {

@@ -69,6 +69,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     private var applyLayoutInFlight = false
     /// Re-trigger demandé pendant un applyLayout en cours.
     private var applyLayoutNeedsRetrigger = false
+    /// SPEC-013 : timestamp du dernier follow AltTab pour anti-feedback (évite
+    /// les bascules en cascade quand un focus event suit une bascule).
+    private var lastAltTabFollowTimestamp: Date = .distantPast
 
     init(config: Config) throws {
         self.config = config
@@ -247,7 +250,38 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logWarn("migration error (non-fatal)", ["error": "\(error)"])
             }
 
-            let dRegistry = DesktopRegistry(configDir: configDir, count: config.desktops.count)
+            // SPEC-013 T009 : migration V2 → V3 transparente. Ne rien faire si déjà
+            // migrée ou si pas de layout legacy. primaryUUID résolu depuis NSScreen
+            // primary à ce stade (pas encore de DisplayRegistry).
+            // Si plusieurs écrans connectés, on prend l'écran à origin (0,0) =
+            // primary canonical. En cas d'absence d'UUID stable (cas rare),
+            // skip — la migration sera retentée au prochain boot.
+            if let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+                ?? NSScreen.main,
+               let displayID = primaryScreen.deviceDescription[
+                   NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
+               let cfUUID = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() {
+                let primaryUUID = CFUUIDCreateString(nil, cfUUID) as String? ?? ""
+                if !primaryUUID.isEmpty {
+                    do {
+                        let migrated = try DesktopMigration.runIfNeeded(
+                            configDir: configDir, primaryUUID: primaryUUID)
+                        if migrated > 0 {
+                            logInfo("migration v2->v3 completed",
+                                    ["count": String(migrated), "target_uuid": primaryUUID])
+                        }
+                    } catch {
+                        logWarn("migration v2->v3 failed (non-fatal)",
+                                ["error": "\(error)"])
+                    }
+                }
+            }
+
+            let dRegistry = DesktopRegistry(
+                configDir: configDir,
+                count: config.desktops.count,
+                mode: config.desktops.mode
+            )
             await dRegistry.load()
             let dBus = DesktopEventBus()
             let dCfg = DesktopSwitcherConfig(
@@ -386,6 +420,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         await dspRegistry.refresh()
         // T038 : appliquer les règles per-display de la config après chaque refresh.
         await dspRegistry.applyRules(config.displays)
+        // SPEC-013 : seed currentByDisplay du DesktopRegistry avec la liste des
+        // displays présents pour que `desktop list` expose la map dès le boot.
+        if let dRegistry = self.desktopRegistry {
+            let presentIDs = await dspRegistry.displays.map(\.id)
+            await dRegistry.syncCurrentByDisplay(presentIDs: presentIDs)
+        }
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -404,6 +444,106 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         self.displayRegistry = dspRegistry
         logInfo("display_registry initialized", ["count": String(await dspRegistry.count)])
+
+        // SPEC-013 nettoyage pré-recovery : retirer du BSP les leaves avec frame
+        // dégénérée. Ces leaves sont issues de drags ou restaurations corrompues.
+        // Si on ne les retire pas, applyLayout va re-calculer des cellules x20px
+        // pour elles et écraser le recovery.
+        for state in registry.allWindows {
+            if state.frame.size.height < 100 || state.frame.size.height > 100_000 {
+                layoutEngine.removeWindow(state.cgWindowID)
+                logInfo("boot: degenerate leaf removed from BSP tree", [
+                    "wid": String(state.cgWindowID),
+                    "frame_h": String(Int(state.frame.size.height)),
+                ])
+            }
+        }
+
+        // SPEC-013 recovery au boot : ramener à l'écran les fenêtres dont la frame
+        // est offscreen (Y < -1000 typiquement, ou hors de tous les displays).
+        // Cause : un cycle hide/show précédent a corrompu state.frame via les
+        // events axDidMoveWindow déclenchés par moveOffScreen, sans que le show
+        // ne soit correctement appliqué. Recovery = pour chaque fenêtre orpheline,
+        // setBounds à expectedFrame (si valide) ou centrer sur le primary.
+        let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+        if let primaryScreen {
+            let primaryHeight = primaryScreen.frame.height
+            for state in registry.allWindows {
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                let onScreen = NSScreen.screens.contains { screen in
+                    let nsCenter = CGPoint(x: center.x,
+                                           y: primaryHeight - center.y)
+                    return screen.frame.contains(nsCenter)
+                }
+                // Détection orphan élargie :
+                //  - center hors de tous les displays (cas 1)
+                //  - OU frame degenerate (height < 100 ou y < -500) — cas où
+                //    HideStrategy.moveOffScreen a placé la fenêtre dans un coin
+                //    extrême sans qu'un show postérieur ne soit appliqué.
+                let isDegenerate = state.frame.size.height < 100
+                    || state.frame.origin.y < -500
+                let needsRecovery = !onScreen || isDegenerate
+                if needsRecovery, let element = registry.axElement(for: state.cgWindowID) {
+                    // AVANT toute action : vérifier si CGWindowList rapporte une
+                    // taille radicalement différente de l'AX bounds. C'est un
+                    // mismatch connu sur certaines apps (iTerm tabs, Firefox
+                    // Netflix) où kAXSize retourne 20px alors que la fenêtre
+                    // physique fait 2000+. Si le CG bounds est sain, on adopte
+                    // simplement cette valeur dans state.frame et on skip la
+                    // recovery (la fenêtre est déjà bien placée à l'écran).
+                    if let cgInfo = liveCGBounds(for: state.cgWindowID),
+                       cgInfo.size.height >= 100 {
+                        registry.updateFrame(state.cgWindowID, frame: cgInfo)
+                        registry.update(state.cgWindowID) { $0.expectedFrame = cgInfo }
+                        logInfo("recovery: AX/CG mismatch fixed", [
+                            "wid": String(state.cgWindowID),
+                            "ax_frame": "\(Int(state.frame.size.width))x\(Int(state.frame.size.height))",
+                            "cg_frame": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))",
+                        ])
+                        continue
+                    }
+                    let target: CGRect
+                    if state.expectedFrame != .zero
+                        && state.expectedFrame.size.height >= 100 {
+                        target = state.expectedFrame
+                    } else {
+                        // Centre sur le primary (visibleFrame AX).
+                        let pf = primaryScreen.visibleFrame
+                        let pfAX = CGRect(
+                            x: pf.origin.x,
+                            y: primaryHeight - pf.origin.y - pf.height,
+                            width: pf.width, height: pf.height)
+                        target = CGRect(
+                            x: pfAX.midX - 400, y: pfAX.midY - 300,
+                            width: 800, height: 600)
+                    }
+                    // Réveiller la fenêtre AX-collapsed avant setBounds. Une fenêtre
+                    // dans le coin "AeroSpace hide" peut être en état où setBounds
+                    // est silencieusement ignoré ; un setMinimized(false) +
+                    // setFullscreen(false) + setBounds répétés débloquent.
+                    AXReader.setMinimized(element, false)
+                    AXReader.setFullscreen(element, false)
+                    AXReader.raise(element)
+                    AXReader.setBounds(element, frame: target)
+                    AXReader.setBounds(element, frame: target)  // 2e passe : certaines apps refusent le 1er setBounds après wake
+                    registry.updateFrame(state.cgWindowID, frame: target)
+                    registry.update(state.cgWindowID) { $0.expectedFrame = target }
+                    logInfo("recovery: orphaned offscreen window restored", [
+                        "wid": String(state.cgWindowID),
+                        "old_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
+                        "new_frame": "\(Int(target.origin.x)),\(Int(target.origin.y))",
+                    ])
+                }
+            }
+        }
+
+        // SPEC-013 : balance les weights des arbres BSP au boot. Cause des frames
+        // x20 absurdes : drags antérieurs ont affaissé les weights vers 0.001.
+        // Reset à 1.0 = équivalent `yabai -m space --balance` au boot.
+        for (_, root) in layoutEngine.workspace.rootsByDisplay {
+            balanceWeights(root)
+        }
 
         // Initial layout APRÈS init du DisplayRegistry, pour que applyAll prenne
         // la branche multi-display et tile chaque écran (sinon fallback mono-écran
@@ -615,6 +755,85 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             layoutEngine.initDisplayRoot(for: addedDisplay.id)
             logInfo("display added: root initialized", ["id": String(addedDisplay.id)])
         }
+        // SPEC-013 T031-T032 : restoration au rebranchement.
+        // Pour chaque écran ajouté qui a un historique sur disque, restorer son
+        // current desktop + ses fenêtres précédemment assignées.
+        if let dRegistry = desktopRegistry {
+            let configDir = URL(fileURLWithPath:
+                (NSString(string: "~/.config/roadies").expandingTildeInPath as String))
+            for addedDisplay in added {
+                let uuid = addedDisplay.uuid
+                guard !uuid.isEmpty else { continue }
+                // Restore current per-display.
+                if let saved = DesktopPersistence.loadCurrent(
+                    configDir: configDir, displayUUID: uuid) {
+                    await dRegistry.setCurrent(saved, on: addedDisplay.id)
+                    logInfo("display rebranched: current restored", [
+                        "uuid": uuid, "desktop": String(saved),
+                    ])
+                }
+                // Restore fenêtres assignées (matching N1 cgwid > N2 bundle/title).
+                for desktopID in 1...config.desktops.count {
+                    let snapshots = DesktopPersistence.loadDesktopWindows(
+                        configDir: configDir, displayUUID: uuid, desktopID: desktopID)
+                    var restoredCount = 0
+                    for snap in snapshots {
+                        // N1 : matching par cgwid encore vivant.
+                        if let state = registry.get(WindowID(snap.cgwid)) {
+                            // Bouger vers ce display + ajuster expectedFrame.
+                            if let element = registry.axElement(for: state.cgWindowID) {
+                                AXReader.setBounds(element, frame: snap.expectedFrame)
+                            }
+                            registry.updateFrame(state.cgWindowID, frame: snap.expectedFrame)
+                            registry.update(state.cgWindowID) { $0.desktopID = desktopID }
+                            // Re-router dans l'arbre du display.
+                            if state.isTileable {
+                                if let curDisplay = layoutEngine.displayIDForWindow(state.cgWindowID),
+                                   curDisplay != addedDisplay.id {
+                                    _ = layoutEngine.moveWindow(state.cgWindowID,
+                                                                fromDisplay: curDisplay,
+                                                                toDisplay: addedDisplay.id)
+                                }
+                            }
+                            restoredCount += 1
+                            continue
+                        }
+                        // N2 : matching par bundleID + title prefix (cas process redémarré).
+                        let candidates = registry.allWindows.filter {
+                            $0.bundleID == snap.bundleID
+                                && (!snap.titlePrefix.isEmpty
+                                    && $0.title.hasPrefix(snap.titlePrefix))
+                        }
+                        if candidates.count == 1 {
+                            let cand = candidates[0]
+                            if let element = registry.axElement(for: cand.cgWindowID) {
+                                AXReader.setBounds(element, frame: snap.expectedFrame)
+                            }
+                            registry.updateFrame(cand.cgWindowID, frame: snap.expectedFrame)
+                            registry.update(cand.cgWindowID) { $0.desktopID = desktopID }
+                            if cand.isTileable,
+                               let curDisplay = layoutEngine.displayIDForWindow(cand.cgWindowID),
+                               curDisplay != addedDisplay.id {
+                                _ = layoutEngine.moveWindow(cand.cgWindowID,
+                                                            fromDisplay: curDisplay,
+                                                            toDisplay: addedDisplay.id)
+                            }
+                            restoredCount += 1
+                        }
+                        // FR-020 : N1+N2 fail → ignore silencieusement.
+                    }
+                    if restoredCount > 0 {
+                        logInfo("display rebranched: windows restored", [
+                            "uuid": uuid,
+                            "desktop": String(desktopID),
+                            "count": String(restoredCount),
+                        ])
+                    }
+                }
+            }
+            // Sync currentByDisplay avec la liste des displays présents.
+            await dRegistry.syncCurrentByDisplay(presentIDs: new.map(\.id))
+        }
         // Ré-appliquer le layout sur tous les écrans.
         applyLayout()
         // T029 : émettre display_configuration_changed via le bus RoadieCore.
@@ -680,6 +899,86 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     private func removeWindowFromDesktopRegistry(wid: WindowID) {
         guard let dReg = desktopRegistry else { return }
         Task { await dReg.removeWindow(cgwid: UInt32(wid)) }
+    }
+
+    /// SPEC-013 : suit le focus d'une fenêtre cachée (déclenchée par AltTab,
+    /// Cmd-Tab, ou tout autre raise programmatique) en basculant le desktop du
+    /// display où la fenêtre vit. Sans ça, l'app remonte au front mais sa
+    /// fenêtre reste invisible (offscreen via HideStrategy).
+    func followAltTabFocus(_ wid: WindowID) async {
+        guard let dReg = desktopRegistry,
+              let state = registry.get(wid) else { return }
+        let mode = await dReg.mode
+        guard mode == .perDisplay else { return }
+        // Identifier le display où la fenêtre est censée vivre.
+        // state.frame est offscreen quand cachée → fallback expectedFrame.
+        var displayID: CGDirectDisplayID?
+        let frameCenter = CGPoint(x: state.frame.midX, y: state.frame.midY)
+        displayID = layoutEngine.displayIDContainingPoint(frameCenter)
+        if displayID == nil && state.expectedFrame != .zero {
+            let expCenter = CGPoint(x: state.expectedFrame.midX,
+                                    y: state.expectedFrame.midY)
+            displayID = layoutEngine.displayIDContainingPoint(expCenter)
+        }
+        guard let resolvedDisplay = displayID else { return }
+        let currentOnDisplay = await dReg.currentID(for: resolvedDisplay)
+        // No-op si la fenêtre est déjà sur le desktop courant du display.
+        guard state.desktopID != currentOnDisplay else { return }
+        let targetDesktop = state.desktopID
+        // Anti-feedback : si on a déjà basculé pour ce wid très récemment, skip.
+        let now = Date()
+        if now.timeIntervalSince(lastAltTabFollowTimestamp) < 0.3 { return }
+        lastAltTabFollowTimestamp = now
+
+        // Bascule : appliquer hide/show ciblé pour ce display.
+        await dReg.setCurrent(targetDesktop, on: resolvedDisplay)
+        let allWindows = registry.allWindows
+        for s in allWindows {
+            let c1 = CGPoint(x: s.frame.midX, y: s.frame.midY)
+            var did = layoutEngine.displayIDContainingPoint(c1)
+            if did == nil && s.expectedFrame != .zero {
+                let c2 = CGPoint(x: s.expectedFrame.midX, y: s.expectedFrame.midY)
+                did = layoutEngine.displayIDContainingPoint(c2)
+            }
+            guard let resolvedDid = did, resolvedDid == resolvedDisplay else { continue }
+            let shouldShow = s.desktopID == targetDesktop
+            if s.isTileable {
+                layoutEngine.setLeafVisible(s.cgWindowID, shouldShow)
+            }
+            if shouldShow {
+                HideStrategyImpl.show(s.cgWindowID, registry: registry,
+                                      strategy: config.stageManager.hideStrategy)
+            } else {
+                HideStrategyImpl.hide(s.cgWindowID, registry: registry,
+                                      strategy: config.stageManager.hideStrategy)
+            }
+        }
+        applyLayout()
+        logInfo("alttab follow: desktop switched", [
+            "wid": String(wid),
+            "display_id": String(resolvedDisplay),
+            "desktop": String(targetDesktop),
+        ])
+    }
+
+    /// SPEC-013 : retourne les bounds réels d'une fenêtre via CGWindowList
+    /// (= source de vérité système), utilisé pour détecter le mismatch AX/CG
+    /// sur certaines apps (iTerm tabs, Firefox plein écran AX-collapsed).
+    private func liveCGBounds(for wid: WindowID) -> CGRect? {
+        guard let arr = CGWindowListCopyWindowInfo([.optionAll, .excludeDesktopElements],
+                                                    kCGNullWindowID)
+            as? [[String: Any]] else { return nil }
+        for info in arr {
+            guard let n = info[kCGWindowNumber as String] as? WindowID, n == wid else { continue }
+            guard let bounds = info[kCGWindowBounds as String] as? [String: CGFloat] else { return nil }
+            return CGRect(
+                x: bounds["X"] ?? 0,
+                y: bounds["Y"] ?? 0,
+                width: bounds["Width"] ?? 0,
+                height: bounds["Height"] ?? 0
+            )
+        }
+        return nil
     }
 
     private func liveCGWindowIDs() -> Set<WindowID> {
@@ -822,12 +1121,22 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             if let dRegistry = desktopRegistry, let dReg = displayRegistry {
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
-                    let currentDeskID = await dRegistry.currentID
+                    let mode = await dRegistry.mode
+                    // SPEC-013 FR-011 : en mode per_display, la fenêtre adopte le
+                    // current desktop du display cible. En global, garde son desktopID
+                    // (compat V2, FR-013).
+                    let newDesktopID: Int
+                    if mode == .perDisplay {
+                        newDesktopID = await dRegistry.currentID(for: realDisplayID)
+                        self.registry.update(wid) { $0.desktopID = newDesktopID }
+                    } else {
+                        newDesktopID = await dRegistry.currentID
+                    }
                     let displays = await dReg.displays
                     if let dst = displays.first(where: { $0.id == realDisplayID }) {
                         try? await dRegistry.updateWindowDisplayUUID(
                             cgwid: UInt32(wid),
-                            desktopID: currentDeskID,
+                            desktopID: newDesktopID,
                             displayUUID: dst.uuid
                         )
                     }
@@ -860,6 +1169,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 registerWindow(pid: pid, axWindow: axWindow)
             }
             registry.setFocus(wid)
+            // SPEC-013 : AltTab/Cmd-Tab raise une fenêtre cachée (= sur un autre
+            // desktop roadie). Détecter le mismatch et auto-basculer le desktop
+            // du display où la fenêtre vit pour la révéler.
+            if config.desktops.enabled {
+                Task { @MainActor [weak self] in
+                    await self?.followAltTabFocus(wid)
+                }
+            }
         } else {
             focusManager.refreshFromSystem()
         }
