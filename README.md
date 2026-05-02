@@ -1,67 +1,127 @@
-# roadies — Tiler + Stage Manager macOS
+# roadie
 
-Window manager macOS modulaire en Swift, inspiré de yabai et AeroSpace, sans nécessiter SIP désactivé.
+Un petit window manager tiling pour macOS, écrit en Swift, qui me sert de poste de travail au quotidien.
 
-- **Tiler pluggable** : BSP par défaut, Master-Stack disponible, architecture extensible.
-- **Stage manager opt-in** : groupes nommés de fenêtres masquables avec préservation du layout.
-- **Click-to-focus fiable** : différenciateur vs AeroSpace, fonctionne sur Electron/JetBrains/Cursor.
-- **Sans SIP** : uniquement AX public + `_AXUIElementGetWindow` privé stable depuis 10.7.
+## Pourquoi ce projet
 
-## Documentation
+À l'origine je n'avais pas l'intention d'écrire un window manager. Cela fait des années que [yabai](https://github.com/koekeishiya/yabai) est le support de mon poste de travail — un projet remarquable, taillé au cordeau, dont la stabilité et l'ergonomie ont marqué tous les utilisateurs de tiling sur macOS. Je continue d'y voir la référence, et la dette intellectuelle de roadie envers yabai est totale.
 
-### V1 — Tiler + Stage Manager (mono-desktop)
+Le déclencheur a été simple et personnel : je n'ai jamais réussi à faire cohabiter yabai avec **Stage Manager**. Or Stage Manager fait partie intégrante de ma manière de travailler — je veux des groupes de fenêtres nommés, masquables, restaurables, en plus du tiling automatique des fenêtres visibles. Plusieurs tentatives, scripts, contournements, rien n'a tenu durablement chez moi.
 
-- [Quickstart V1](specs/002-tiler-stage/quickstart.md) — install + premier run en 10 minutes
-- [Spécification V1](specs/002-tiler-stage/spec.md) — 4 user stories, 23 FR, 10 SC
-- [Plan technique V1](specs/002-tiler-stage/plan.md) — architecture 4 modules
-- [ADR](docs/decisions/) — 3 décisions architecturales
-- [Implementation log + REX V1](specs/002-tiler-stage/implementation.md)
+Plutôt que de continuer à bricoler, j'ai fini par poser le problème à plat et écrire un petit gestionnaire de fenêtres qui réponde précisément à mon besoin :
 
-### V2 — Virtual Desktops (pattern AeroSpace)
+- Tiling BSP / master-stack pour les fenêtres visibles, comme yabai.
+- Un *pseudo* Stage Manager — des "stages" qui sont des groupes de fenêtres masquables au sein d'un même desktop, avec restauration parfaite du layout.
+- Une awareness multi-desktop, sans dépendre des APIs SkyLight d'écriture.
 
-Roadie gère **N desktops virtuels** (1..16, défaut 10) entièrement côté roadie, dans **un seul** Mac Space natif. La bascule consiste à déplacer les fenêtres du desktop quitté hors-écran et restaurer celles du desktop d'arrivée à leur position attendue. Aucun appel SkyLight pour la bascule, aucune scripting addition Dock requise, pas de SIP off requis. **Stages V1 (⌥1/⌥2) inchangés** et scopés au desktop courant. Migration V1→V2 automatique au premier boot. Opt-in via `[desktops] enabled = true` (défaut).
+**roadie n'a aucune prétention à équivaloir yabai** — la profondeur fonctionnelle, la robustesse, le polissage de yabai sont d'un autre niveau. roadie est volontairement minimaliste, écrit pour mon usage, et je le partage publiquement parce qu'il pourra peut-être servir à des gens dans la même situation que moi.
 
-> ℹ️ Pour éviter les conflits avec les Mac Spaces natifs, **désactive « Les écrans utilisent des Spaces séparés »** dans Réglages Système → Bureau et utilise un seul Mac Space natif. Roadie ignore les bascules Mac Space (Ctrl+→/← natifs).
+### Le pivot AeroSpace pour les desktops
 
-- [Spec SPEC-011 Virtual Desktops](specs/011-virtual-desktops/spec.md) — 7 user stories, 25 FR, 10 SC
-- [Plan SPEC-011](specs/011-virtual-desktops/plan.md) + [research](specs/011-virtual-desktops/research.md)
-- [Quickstart](specs/011-virtual-desktops/quickstart.md)
-- [Contrats CLI](specs/011-virtual-desktops/contracts/cli-desktop.md) + [events stream](specs/011-virtual-desktops/contracts/events-stream.md)
+Le multi-desktop a été le deuxième pivot. Sur macOS Tahoe 26, Apple a verrouillé encore davantage les APIs SkyLight d'écriture (cf [yabai #2656](https://github.com/koekeishiya/yabai/issues/2656), [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md) ici). La voie scripting-addition-dans-Dock, longtemps utilisée par yabai pour gérer les Spaces natifs, est de facto bloquée pour les bundles tiers.
 
-> SPEC-003 (multi-desktop V2 historique, basé sur Mac Space natif via SkyLight) est [DEPRECATED](specs/003-multi-desktop/spec.md) depuis 2026-05-02 — mécanisme cassé par macOS Tahoe 26 (yabai #2656).
+J'ai donc repris l'approche d'[AeroSpace](https://github.com/nikitabobko/AeroSpace) : ne pas toucher aux Spaces natifs du tout, et gérer **N desktops virtuels** entièrement côté roadie, dans un unique Mac Space natif. La bascule de desktop consiste à déplacer hors-écran les fenêtres du desktop quitté et à restaurer celles du desktop d'arrivée à leur position mémorisée. Aucun appel SkyLight d'écriture, pas de scripting addition, pas de SIP désactivé. Là encore, dette intellectuelle entière envers AeroSpace, et je tiens à le dire.
 
-Nouvelles commandes V2 :
-```
-roadie desktop list / current / focus <selector> / label <name> / back
-roadie events --follow [--types desktop_changed,stage_changed]
-```
+roadie est donc un assemblage humble entre un peu de yabai (le tiler, l'AX-only sans SIP) et un peu d'AeroSpace (les desktops virtuels), avec en plus la couche stages que je n'ai pas trouvée chez l'un ou l'autre. Si tu cherches un vrai window manager mature, va vers yabai ou AeroSpace selon tes besoins — ce sont d'excellents projets, taillés pour le grand public.
 
-## Build minimal
+## Ce que roadie fait aujourd'hui
+
+| Capacité | État | Source |
+|---|---|---|
+| Tiling BSP + master-stack | OK | SPEC-002 |
+| Stage Manager (groupes nommés ⌥1/⌥2/...) | OK | SPEC-002 |
+| Desktops virtuels (1..16, pivot AeroSpace) | OK | SPEC-011 |
+| Drag-to-adapt (resize manuel propage le tree) | OK | SPEC-002 |
+| Click-to-raise universel | OK (Electron/JetBrains/Cursor) | SPEC-002 |
+| Bordures de fenêtre focused (overlay NSWindow) | OK | SPEC-008 |
+| Effets visuels avancés (animations, blur, opacity, shadowless) | Framework présent, runtime bloqué Tahoe 26 | SPEC-004→010, ADR-005 |
+| 13 raccourcis BTT prêts à l'emploi | OK | SPEC-002 |
+
+## Limites connues
+
+- **Click-to-raise inter-app** non garanti à 100 % : sans SIP désactivé + injection scripting addition dans Dock.app (le chemin yabai), aucun WM ne peut atteindre 100 % sur macOS récent. AeroSpace a la même limitation par design. roadie fait le choix explicite de ne pas toucher SIP, donc accepte ce plafond.
+- **Effets visuels SIP-off opt-in** (animations Bézier, blur, focus dimming, shadowless) : le framework est livré et les modules `.dylib` se chargent correctement, mais Apple a bloqué silencieusement l'injection des scripting additions tierces dans Dock sur Tahoe 26 — donc l'overlay CGS n'atteint pas les fenêtres tierces. Détail : [ADR-005](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md). Les bordures de fenêtre (overlay NSWindow natif) fonctionnent par contre, sans osax.
+- **Mono-display strict** pour la V2 : multi-display reporté à V3.
+
+## Installation (build from source)
 
 ```bash
+git clone https://github.com/guthubrx/roadie.git
+cd roadie
 PATH="/usr/bin:/usr/local/bin:/bin" swift build -c release
 make install-app
-# Puis Réglages Système → Accessibilité → ajouter ~/Applications/roadied.app et cocher
-roadied
 ```
 
-## État
+Puis dans Réglages Système → Confidentialité et sécurité → Accessibilité, ajouter `~/Applications/roadied.app` et cocher la case.
 
-V1 : daemon + CLI compilent, 32 tests unitaires PASS, runtime non validé (audit B+, voir scoring).
+```bash
+roadied --daemon &
+roadie desktop list   # sanity check
+```
 
-Validation runtime à effectuer au premier passage utilisateur — voir REX dans implementation.md.
+## Configuration
 
-## Limitations connues
+Tout passe par `~/.config/roadies/roadies.toml`. Exemple minimal :
 
-### Click-to-raise inter-app : non garanti à 100%
+```toml
+[daemon]
+log_level = "info"
+socket_path = "~/.roadies/daemon.sock"
 
-Le combo `kAXRaiseAction` + `kAXMain/Focused` + `_SLPSSetFrontProcessWithOptions` (SkyLight)
-+ `NSRunningApplication.activate` couvre la majorité des cas, mais certaines paires d'apps
-restent intermittentes (ex : iTerm2 source, Finder cible) sur macOS Sonoma+/Sequoia/Tahoe.
+[tiling]
+default_strategy = "bsp"
+gaps_outer = 8
+gaps_inner = 6
 
-Cause : Apple a serré le pattern `yieldActivation` et un bug système Tahoe documenté empêche
-le bring-to-front même en clic natif (cf. [Apple Community thread](https://discussions.apple.com/thread/256162304)).
-Sans SIP désactivé + injection scripting addition dans Dock.app (chemin yabai), aucun WM
-ne peut atteindre 100%. **AeroSpace a la même limitation par design.**
+[desktops]
+enabled = true
+count = 10
+back_and_forth = true
 
-roadies fait le choix explicite de **ne pas désactiver SIP**, donc on accepte ce plafond.
+[stage_manager]
+enabled = true
+hide_strategy = "corner"
+default_stage = "1"
+
+[fx.borders]
+enabled = true
+thickness = 2
+corner_radius = 10
+active_color = "#7AA2F7"
+inactive_color = "#414868"
+focused_only = true
+```
+
+> Pour éviter les conflits avec les Spaces natifs : dans Réglages Système → Bureau, désactiver « Les écrans utilisent des Spaces séparés » et n'utiliser qu'**un seul Mac Space natif**. Roadie ignore les bascules Mac Space (Ctrl+→/← natifs).
+
+## Documentation détaillée
+
+Le projet est développé en [SpecKit](https://github.com/sergeykish/spec-kit) — une spec par feature majeure, avec plan, recherche, ADRs, tasks et REX d'implémentation.
+
+### Specs principales
+
+- [SPEC-002 — Tiler + Stage Manager](specs/002-tiler-stage/spec.md) (V1)
+- [SPEC-011 — Virtual Desktops AeroSpace-style](specs/011-virtual-desktops/spec.md) (V2)
+- [SPEC-004 → 010 — Famille opt-in SIP-off](specs/004-fx-framework/spec.md) (animations, bordures, blur, etc.)
+
+### Décisions architecturales
+
+- [ADR-001 — AX per-app, pas de SkyLight write](docs/decisions/ADR-001-ax-per-app-no-skylight.md)
+- [ADR-002 — Tree n-aire vs BSP binaire](docs/decisions/ADR-002-tree-naire-vs-bsp-binary.md)
+- [ADR-003 — Hide via corner offscreen](docs/decisions/ADR-003-hide-corner-vs-minimize.md)
+- [ADR-004 — Modules opt-in SIP-off](docs/decisions/ADR-004-sip-off-modules.md)
+- [ADR-005 — Tahoe 26 osax injection bloquée](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md)
+
+## Crédits
+
+- **[yabai](https://github.com/koekeishiya/yabai)** par Åke Kullenberg / koekeishiya — la référence du tiling sur macOS, dix ans de production, l'inspiration de tout le pattern AX + `_AXUIElementGetWindow`. Sans yabai, roadie n'existerait pas.
+- **[AeroSpace](https://github.com/nikitabobko/AeroSpace)** par Nikita Bobko — le pivot virtual-desktops sans SkyLight write, démontré en production. Approche reprise telle quelle pour SPEC-011.
+- **[Hyprland](https://github.com/hyprwm/Hyprland)** — l'inspiration du langage de courbes Bézier pour les animations (SPEC-007), même si l'osax bloquée sur Tahoe 26 empêche actuellement leur application aux fenêtres tierces.
+
+## Status
+
+Projet **personnel**, **alpha**, **pas de garantie**, taillé pour mon poste. Tout retour est bienvenu mais je ne promets ni roadmap publique, ni support. Si tu cherches un WM mature pour ton usage quotidien, regarde yabai ou AeroSpace en premier.
+
+## License
+
+MIT — voir [LICENSE](LICENSE).
