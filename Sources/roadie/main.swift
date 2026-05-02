@@ -116,6 +116,11 @@ func handleWindow(args: [String]) {
         // SPEC-012 T023 : roadie window display <1..N|prev|next|main>
         guard args.count >= 4 else { printUsage(); exit(2) }
         sendAndPrint(Request(command: "window.display", args: ["selector": args[3]]))
+    case "desktop":
+        // SPEC-013 : roadie window desktop <N> — assigner la fenêtre frontmost
+        // au desktop N du display courant. Hide si N != current.
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "window.desktop", args: ["selector": args[3]]))
     case "stick":
         let sticky = args.count >= 4 ? args[3] : "true"
         sendAndPrint(Request(command: "window.stick", args: ["sticky": sticky]))

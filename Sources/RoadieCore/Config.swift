@@ -103,7 +103,15 @@ public struct DisplayRule: Codable, Sendable, Equatable {
     }
 }
 
-// MARK: - DesktopsConfig (SPEC-011)
+// MARK: - DesktopsConfig (SPEC-011 + SPEC-013)
+
+/// Mode de gestion des desktops sur configuration multi-écran (SPEC-013 FR-001).
+/// - `global` : un seul current desktop pour tous les écrans (V2, défaut).
+/// - `perDisplay` : chaque écran maintient son current desktop indépendamment.
+public enum DesktopMode: String, Codable, Sendable, Equatable {
+    case global
+    case perDisplay = "per_display"
+}
 
 /// Configuration de la feature multi-desktop virtuel (pivot AeroSpace).
 /// Validation : count ∈ 1..16 (FR-001, FR-018).
@@ -112,15 +120,19 @@ public struct DesktopsConfig: Codable, Sendable {
     public var count: Int
     public var defaultFocus: Int
     public var backAndForth: Bool
+    /// SPEC-013 FR-001 : `global` (V2 compat, défaut) ou `per_display`.
+    public var mode: DesktopMode
 
     public init(enabled: Bool = true,
                 count: Int = 10,
                 defaultFocus: Int = 1,
-                backAndForth: Bool = true) {
+                backAndForth: Bool = true,
+                mode: DesktopMode = .global) {
         self.enabled = enabled
         self.count = count
         self.defaultFocus = defaultFocus
         self.backAndForth = backAndForth
+        self.mode = mode
     }
 
     enum CodingKeys: String, CodingKey {
@@ -128,6 +140,7 @@ public struct DesktopsConfig: Codable, Sendable {
         case count
         case defaultFocus = "default_focus"
         case backAndForth = "back_and_forth"
+        case mode
     }
 
     public init(from decoder: Decoder) throws {
@@ -142,6 +155,14 @@ public struct DesktopsConfig: Codable, Sendable {
         self.count = rawCount
         self.defaultFocus = try c.decodeIfPresent(Int.self, forKey: .defaultFocus) ?? 1
         self.backAndForth = try c.decodeIfPresent(Bool.self, forKey: .backAndForth) ?? true
+        // FR-002 : valeur invalide pour `mode` → fallback global + warn (caller-side).
+        // Codable lèverait une erreur typée pour valeur inconnue ; on attrape ici en
+        // décodant en String d'abord, puis en mappant manuellement.
+        if let raw = try c.decodeIfPresent(String.self, forKey: .mode) {
+            self.mode = DesktopMode(rawValue: raw) ?? .global
+        } else {
+            self.mode = .global
+        }
     }
 }
 

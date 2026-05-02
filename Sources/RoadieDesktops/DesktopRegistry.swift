@@ -17,20 +17,41 @@ public enum DesktopRegistryError: Error {
 /// Source de vérité in-memory ; persistance write-then-rename par desktop (FR-011).
 public actor DesktopRegistry {
     private var desktops: [Int: RoadieDesktop] = [:]
+    /// Current desktop global (legacy, mode `global` ou fallback initial). En mode
+    /// `perDisplay`, `currentByDisplay` est la source de vérité ; `currentID` reflète
+    /// la valeur du primary par convention pour les call-sites legacy non-migrés.
     public private(set) var currentID: Int = 1
     public private(set) var recentID: Int? = nil
     public private(set) var count: Int
 
+    /// SPEC-013 FR-004 : current desktop par display physique.
+    /// En mode `global`, toutes les entries sont synchronisées (FR-005).
+    /// En mode `perDisplay`, chaque entry est mutée indépendamment (FR-006).
+    public private(set) var currentByDisplay: [CGDirectDisplayID: Int] = [:]
+
+    /// SPEC-013 fix : recent desktop par display. En mode per_display, le
+    /// back-and-forth utilise cette map au lieu du `recentID` global, sinon
+    /// le back d'un display tape sur le recent d'un autre.
+    public private(set) var recentByDisplay: [CGDirectDisplayID: Int] = [:]
+
+    /// SPEC-013 FR-001 : mode runtime (settable via setMode).
+    public private(set) var mode: DesktopMode = .global
+
     private let configDir: URL
 
-    public init(configDir: URL, count: Int = 10) {
+    public init(configDir: URL, count: Int = 10, mode: DesktopMode = .global) {
         self.configDir = configDir
         self.count = count
+        self.mode = mode
         // H2 : créer le répertoire desktops/ dès l'init pour éviter les échecs
         // de saveCurrentID() si appelé avant tout save(_:).
         let desktopsDir = configDir.appendingPathComponent("desktops")
         try? FileManager.default.createDirectory(
             at: desktopsDir, withIntermediateDirectories: true)
+        // SPEC-013 : créer aussi le dossier displays/ (T001).
+        let displaysDir = configDir.appendingPathComponent("displays")
+        try? FileManager.default.createDirectory(
+            at: displaysDir, withIntermediateDirectories: true)
     }
 
     // MARK: - Chargement (FR-012)
@@ -119,10 +140,102 @@ public actor DesktopRegistry {
     }
 
     /// Met à jour currentID et recentID.
+    /// En mode `global`, propage la même valeur à toutes les entries
+    /// `currentByDisplay` connues (FR-005). En mode `perDisplay`, ne touche que
+    /// le primary par défaut — utiliser `setCurrent(_:on:)` pour cibler un display.
     public func setCurrent(id: Int) {
         guard id != currentID else { return }
         recentID = currentID
         currentID = id
+        if mode == .global {
+            // FR-005 : sync toutes les entries.
+            for k in currentByDisplay.keys { currentByDisplay[k] = id }
+        } else {
+            // perDisplay : mute l'entry du primary par défaut. Les autres displays
+            // gardent leur valeur.
+            let primaryID = CGMainDisplayID()
+            currentByDisplay[primaryID] = id
+        }
+    }
+
+    // MARK: - SPEC-013 (per-display mode)
+
+    /// SPEC-013 FR-007/FR-008 : mute le current d'un display spécifique.
+    /// En mode global, la mutation se propage à TOUTES les entries (et currentID).
+    /// En mode perDisplay, seule la cible est mutée.
+    public func setCurrent(_ desktopID: Int, on displayID: CGDirectDisplayID) {
+        let oldGlobalID = currentID
+        switch mode {
+        case .global:
+            recentID = currentID
+            currentID = desktopID
+            for k in currentByDisplay.keys {
+                if let old = currentByDisplay[k] { recentByDisplay[k] = old }
+                currentByDisplay[k] = desktopID
+            }
+            currentByDisplay[displayID] = desktopID
+        case .perDisplay:
+            // Recent par display (utile pour `desktop back` scopé).
+            if let old = currentByDisplay[displayID], old != desktopID {
+                recentByDisplay[displayID] = old
+                recentID = old   // pour les call-sites legacy
+            }
+            currentByDisplay[displayID] = desktopID
+            // Maintenir currentID en cohérence avec primary pour les legacy callers.
+            let primaryID = CGMainDisplayID()
+            if displayID == primaryID {
+                currentID = desktopID
+            }
+        }
+        _ = oldGlobalID
+    }
+
+    /// SPEC-013 : recent desktop d'un display. Fallback sur `recentID` global
+    /// si pas encore d'historique pour ce display.
+    public func recentID(for displayID: CGDirectDisplayID?) -> Int? {
+        if let did = displayID, let v = recentByDisplay[did] { return v }
+        return recentID
+    }
+
+    /// SPEC-013 FR-009 : retourne le current d'un display, fallback primary, fallback 1.
+    public func currentID(for displayID: CGDirectDisplayID?) -> Int {
+        if let did = displayID, let v = currentByDisplay[did] { return v }
+        let primaryID = CGMainDisplayID()
+        return currentByDisplay[primaryID] ?? currentID
+    }
+
+    /// Switch de mode à chaud (FR-003). Synchronise `currentByDisplay` selon les
+    /// transitions documentées dans data-model.md (R6).
+    public func setMode(_ newMode: DesktopMode) {
+        guard newMode != mode else { return }
+        let primaryID = CGMainDisplayID()
+        switch (mode, newMode) {
+        case (.global, .perDisplay):
+            // Chaque display garde son current actuel (déjà tous égaux). Aucune action.
+            break
+        case (.perDisplay, .global):
+            // Synchroniser tout sur la valeur du primary.
+            let primaryCurrent = currentByDisplay[primaryID] ?? currentID
+            for k in currentByDisplay.keys { currentByDisplay[k] = primaryCurrent }
+            currentID = primaryCurrent
+        case (.global, .global), (.perDisplay, .perDisplay):
+            break
+        }
+        mode = newMode
+    }
+
+    /// Initialise/synchronise `currentByDisplay` pour la liste de displays présents.
+    /// Appelé au boot et à chaque `displays_changed`. Les displays nouveaux héritent
+    /// du `currentID` global (mode global) ou de la valeur 1 par défaut (perDisplay).
+    public func syncCurrentByDisplay(presentIDs: [CGDirectDisplayID]) {
+        // Retirer les entries des displays absents.
+        for k in currentByDisplay.keys where !presentIDs.contains(k) {
+            currentByDisplay.removeValue(forKey: k)
+        }
+        // Ajouter les entries manquantes pour les displays présents.
+        for id in presentIDs where currentByDisplay[id] == nil {
+            currentByDisplay[id] = mode == .global ? currentID : 1
+        }
     }
 
     /// Retourne les CGWindowIDs des fenêtres d'un desktop.
