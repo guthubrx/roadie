@@ -2,6 +2,15 @@ import XCTest
 import CoreGraphics
 @testable import RoadieDesktops
 
+/// Vérifie qu'une position est hors de la zone visible, quel que soit le setup d'écrans.
+/// - Fallback headless : x ou y très négatif (≤ -1000)
+/// - Mode dynamique multi-display : x très positif (≥ 3000, hors du bounding box)
+/// Aucune fenêtre applicative réelle n'a |x| > 1000 dans un setup normal.
+private func isOffscreenPosition(_ point: CGPoint?) -> Bool {
+    guard let p = point else { return false }
+    return p.x <= -1000 || p.x >= 3000 || p.y <= -1000
+}
+
 /// Tests de la state machine DesktopSwitcher (T023, FR-002, FR-006, FR-023, FR-025).
 final class DesktopSwitcherTests: XCTestCase {
 
@@ -82,12 +91,15 @@ final class DesktopSwitcherTests: XCTestCase {
         let recentID = await registry.recentID
         XCTAssertEqual(recentID, 1)
 
-        // Vérifier que les fenêtres desktop 1 sont offscreen
+        // Vérifier que les fenêtres desktop 1 sont offscreen.
+        // L'invariant est display-agnostique : x très négatif (fallback headless)
+        // OU x très positif (calcul dynamique multi-display).
+        // Aucune fenêtre visible n'a |x| > 1000 dans un setup réaliste.
         let moves = await mover.moves
         let wid100Pos = moves.last(where: { $0.cgwid == 100 })?.point
         let wid200Pos = moves.last(where: { $0.cgwid == 200 })?.point
-        XCTAssertEqual(wid100Pos?.x, -30000)
-        XCTAssertEqual(wid200Pos?.x, -30000)
+        XCTAssertTrue(isOffscreenPosition(wid100Pos), "wid100 should be offscreen, got \(String(describing: wid100Pos))")
+        XCTAssertTrue(isOffscreenPosition(wid200Pos), "wid200 should be offscreen, got \(String(describing: wid200Pos))")
 
         // Fenêtres desktop 2 restaurées à leur expectedFrame
         let wid300Pos = moves.last(where: { $0.cgwid == 300 })?.point
@@ -180,8 +192,8 @@ final class DesktopSwitcherTests: XCTestCase {
         // mouvement enregistré (sérialisation correcte, pas de fenêtre orpheline).
         let moves = await mover.moves
         let lastPos100 = moves.last(where: { $0.cgwid == 100 })?.point
-        XCTAssertEqual(lastPos100?.x, CGFloat(-30000),
-                       "Window 100 (desktop 1) doit être offscreen après bascule")
+        XCTAssertTrue(isOffscreenPosition(lastPos100),
+                      "Window 100 (desktop 1) doit être offscreen après bascule, got \(String(describing: lastPos100))")
     }
 
     // MARK: - testBackNoRecentThrows
