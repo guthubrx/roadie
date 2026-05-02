@@ -105,9 +105,12 @@ if grep -q '^\[multi_desktop\]' "$HOME/.config/roadies/roadies.toml" 2>/dev/null
 fi
 
 # Étape 5 : relancer le daemon en background, log dans /tmp/roadied.log
+# NSZombieEnabled+MallocStackLogging activés temporairement pour capturer le SIGSEGV
+# pool drain : sans ces flags, le crash report ne donne pas l'allocation site de
+# l'objet zombie. À retirer une fois le bug compris (impact mémoire ~2x).
 echo ""
 echo "→ start daemon"
-nohup "$APP_BIN" --daemon > "$LOG" 2>&1 &
+nohup env NSZombieEnabled=YES MallocStackLogging=1 "$APP_BIN" --daemon > "$LOG" 2>&1 &
 DAEMON_PID=$!
 disown "$DAEMON_PID" 2>/dev/null || true
 
