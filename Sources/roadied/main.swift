@@ -207,7 +207,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // `registerWindow(isInitial:true)` tournait AVANT que `fxLoader` soit assigné,
         // donc les modules opt-in (Borders, etc.) ne recevaient aucun `windowCreated`
         // pour les fenêtres déjà ouvertes. On les rejoue ici, une fois.
-        for state in registry.allWindows {
+        for state in registry.allWindows where state.isTileable {
             loader.bus.publish(FXEvent(kind: .windowCreated,
                                        wid: CGWindowID(state.cgWindowID),
                                        bundleID: state.bundleID,
@@ -475,11 +475,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
 
         // SPEC-004 : pont vers le bus FX. Les modules opt-in (RoadieBorders, etc.)
         // s'abonnent à `windowCreated` pour spawner leurs overlays.
-        fxLoader?.bus.publish(FXEvent(kind: .windowCreated,
-                                      wid: CGWindowID(wid),
-                                      bundleID: bundleID,
-                                      frame: frame,
-                                      isFloating: state.isFloating))
+        // Filtre : ne publie que pour les fenêtres tileables réelles. Les
+        // sous-éléments AX (toolbars, search fields, palettes flottantes
+        // d'iTerm/Cursor/etc.) sont exclus pour ne pas créer de bordures
+        // fantômes sur les UI internes des apps.
+        if state.isTileable {
+            fxLoader?.bus.publish(FXEvent(kind: .windowCreated,
+                                          wid: CGWindowID(wid),
+                                          bundleID: bundleID,
+                                          frame: frame,
+                                          isFloating: state.isFloating))
+        }
     }
 
     func applyLayout() {
