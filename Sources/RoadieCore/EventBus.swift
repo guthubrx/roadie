@@ -96,6 +96,24 @@ public extension DesktopEvent {
             "wid": String(wid),
         ])
     }
+
+    // MARK: - SPEC-018
+
+    /// Émis au premier boot V2 après migration silencieuse V1 → V2.
+    /// Payload : migrated_count, backup_path, target_display_uuid, duration_ms.
+    static func migrationV1V2(
+        migratedCount: Int,
+        backupPath: String,
+        targetUUID: String,
+        durationMs: Int
+    ) -> DesktopEvent {
+        DesktopEvent(name: "migration_v1_to_v2", payload: [
+            "migrated_count": String(migratedCount),
+            "backup_path": backupPath,
+            "target_display_uuid": targetUUID,
+            "duration_ms": String(durationMs),
+        ])
+    }
 }
 
 /// Formatter ISO8601 partagé (millisecondes UTC, conforme contracts).

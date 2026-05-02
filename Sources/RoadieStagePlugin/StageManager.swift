@@ -25,6 +25,22 @@ public protocol StageHideOverride: AnyObject {
     func show(wid: WindowID, isTileable: Bool)
 }
 
+// MARK: - StageMode (SPEC-018)
+
+/// Mode de stockage des stages : global (V1 flat, compat) ou per_display (V2 hiérarchique).
+public enum StageMode: String, Sendable {
+    case global
+    case perDisplay = "per_display"
+}
+
+/// Filtre de portée pour `stages(in:)`.
+public enum ScopeFilter: Sendable {
+    case all
+    case display(String)
+    case displayDesktop(String, Int)
+    case exact(StageScope)
+}
+
 @MainActor
 public final class StageManager {
     private let registry: WindowRegistry
@@ -40,6 +56,19 @@ public final class StageManager {
     /// Mode V1 (défaut) : FileBackedStagePersistence.
     /// Mode V2 multi-desktop : DesktopBackedStagePersistence (injecté par le daemon).
     private var persistence: any StagePersistence
+
+    // MARK: SPEC-018 : persistence V2 + mode
+
+    /// Persistence orientée scope (SPEC-018 Phase 2).
+    /// Non nil si le daemon a appelé `setMode(_:persistence:)` au boot.
+    private var persistenceV2: (any StagePersistenceV2)?
+
+    /// Mode courant : global (défaut, compat V1) ou perDisplay (SPEC-018).
+    private(set) public var stageMode: StageMode = .global
+
+    /// Vue scopée des stages (SPEC-018). Synchronisée lors des chargements
+    /// et mutations quand `persistenceV2` est actif.
+    private(set) public var stagesV2: [StageScope: Stage] = [:]
 
     /// Dossier de persistance courant. Conservé pour `extractDesktopID` (mode V1).
     /// En mode V2 ce champ est ignoré pour la lecture/écriture (le persistence s'en charge).
@@ -92,6 +121,68 @@ public final class StageManager {
         persistence = newPersistence
         stages.removeAll()
         currentStageID = nil
+    }
+
+    // MARK: SPEC-018 API publique V2
+
+    /// Configure le mode per_display (SPEC-018).
+    /// Appelé par le daemon au boot selon `config.desktops.mode`.
+    /// Invalide le cache en mémoire ; l'appelant doit appeler `loadFromDisk()` ensuite.
+    public func setMode(_ mode: StageMode, persistence pv2: any StagePersistenceV2) {
+        stageMode = mode
+        persistenceV2 = pv2
+        stagesV2.removeAll()
+    }
+
+    /// Retourne les stages filtrés par scope (SPEC-018).
+    /// En mode global, `ScopeFilter.all` retourne les mêmes stages que `stages.values`.
+    public func stages(in filter: ScopeFilter) -> [Stage] {
+        switch filter {
+        case .all:
+            return Array(stagesV2.values)
+        case .display(let uuid):
+            return stagesV2.compactMap { scope, stage in
+                scope.displayUUID == uuid ? stage : nil
+            }
+        case .displayDesktop(let uuid, let desktopID):
+            return stagesV2.compactMap { scope, stage in
+                scope.displayUUID == uuid && scope.desktopID == desktopID ? stage : nil
+            }
+        case .exact(let target):
+            return stagesV2[target].map { [$0] } ?? []
+        }
+    }
+
+    /// Overload scopé de createStage (SPEC-018).
+    /// Compat ascendante : `createStage(id:displayName:)` appelle cette méthode
+    /// avec `.global(id)` quand persistenceV2 est nil.
+    @discardableResult
+    public func createStage(id: StageID, displayName: String, scope: StageScope) -> Stage {
+        let stage = Stage(id: id, displayName: displayName)
+        stagesV2[scope] = stage
+        if let pv2 = persistenceV2 {
+            try? pv2.save(stage, at: scope)
+        }
+        // En mode global, maintenir aussi le dict V1 pour compat.
+        if scope.isGlobal || stageMode == .global {
+            stages[id] = stage
+            persistence.saveStage(stage)
+        }
+        return stage
+    }
+
+    /// Overload scopé de deleteStage (SPEC-018).
+    public func deleteStage(scope: StageScope) {
+        if scope.stageID.value == "1" { return }
+        stagesV2.removeValue(forKey: scope)
+        if let pv2 = persistenceV2 {
+            try? pv2.delete(at: scope)
+        }
+        if scope.isGlobal || stageMode == .global {
+            stages.removeValue(forKey: scope.stageID)
+            persistence.deleteStage(scope.stageID)
+            if currentStageID == scope.stageID { currentStageID = nil; saveActive() }
+        }
     }
 
     /// Multi-desktop V2 (T030-T031) : bascule le scope du manager vers le desktop `id`.
@@ -170,7 +261,17 @@ public final class StageManager {
             stages[stage.id] = stage
         }
         currentStageID = persistence.loadActiveStage()
-        logInfo("stages loaded", ["count": String(stages.count), "current": currentStageID?.value ?? "nil"])
+        // SPEC-018 : synchroniser stagesV2 si la persistence V2 est active.
+        if let pv2 = persistenceV2,
+           let all = try? pv2.loadAll() {
+            stagesV2 = all
+        } else if stageMode == .global {
+            // Miroir en mode global : chaque stage V1 → scope .global.
+            stagesV2 = Dictionary(uniqueKeysWithValues: stages.map { id, stage in
+                (StageScope.global(id), stage)
+            })
+        }
+        logInfo("stages_loaded", ["count": String(stages.count), "current": currentStageID?.value ?? "nil"])
     }
 
     public func saveStage(_ stage: Stage) {
@@ -201,6 +302,8 @@ public final class StageManager {
 
     /// SPEC-014 T071 (US5) : renomme un stage. Persiste sur disque et notifie.
     /// Le caller (CommandRouter) émet l'event `stage_renamed` après succès.
+    /// SPEC-018 : en mode per_display, synchronise aussi stagesV2 pour tous les
+    /// scopes qui partagent cet stageID (même ID, displays/desktops différents).
     @discardableResult
     public func renameStage(id: StageID, newName: String) -> Bool {
         guard var stage = stages[id] else { return false }
@@ -210,6 +313,13 @@ public final class StageManager {
         stage.displayName = trimmed
         stages[id] = stage
         saveStage(stage)
+        // SPEC-018 : synchroniser stagesV2 si mode per_display.
+        if stageMode == .perDisplay {
+            for scope in stagesV2.keys where scope.stageID == id {
+                stagesV2[scope] = stage
+                try? persistenceV2?.save(stage, at: scope)
+            }
+        }
         return true
     }
 
@@ -255,6 +365,50 @@ public final class StageManager {
         stages[stageID] = target
         saveStage(target)
         registry.update(wid) { $0.stageID = stageID }
+    }
+
+    /// SPEC-018 : overload scope-aware. Écrit dans `stagesV2` au tuple complet
+    /// `(displayUUID, desktopID, stageID)` et synchronise le dict V1 par compat.
+    /// La wid est retirée de tout autre scope où elle figurerait.
+    public func assign(wid: WindowID, to scope: StageScope) {
+        guard let state = registry.get(wid) else { return }
+        // Retirer la wid de tous les autres scopes V2.
+        var emptiedScopes: [StageScope] = []
+        for (s, stage) in stagesV2 where s != scope {
+            var updated = stage
+            updated.memberWindows.removeAll { $0.cgWindowID == wid }
+            stagesV2[s] = updated
+            if updated.memberWindows.isEmpty && s.stageID.value != "1" {
+                emptiedScopes.append(s)
+            } else {
+                try? persistenceV2?.save(updated, at: s)
+            }
+        }
+        for s in emptiedScopes {
+            stagesV2.removeValue(forKey: s)
+            try? persistenceV2?.delete(at: s)
+        }
+        // Ajouter au scope cible.
+        guard var target = stagesV2[scope] else {
+            logWarn("assign: unknown stage in scope", [
+                "stage": scope.stageID.value,
+                "display": scope.displayUUID,
+                "desktop": String(scope.desktopID),
+            ])
+            return
+        }
+        if !target.memberWindows.contains(where: { $0.cgWindowID == wid }) {
+            target.memberWindows.append(StageMember(
+                cgWindowID: wid, bundleID: state.bundleID, titleHint: state.title,
+                savedFrame: SavedRect(state.frame)))
+        }
+        target.lastActiveAt = Date()
+        stagesV2[scope] = target
+        try? persistenceV2?.save(target, at: scope)
+        // Sync V1 dict pour que `switchTo(stageID:)` et autres APIs V1 trouvent la stage.
+        stages[scope.stageID] = target
+        persistence.saveStage(target)
+        registry.update(wid) { $0.stageID = scope.stageID }
     }
 
     // MARK: - API desktop (SPEC-011 refactor)

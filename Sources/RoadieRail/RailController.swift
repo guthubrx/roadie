@@ -12,7 +12,7 @@ struct RailConfig {
     var enabled: Bool = true
     var reclaimHorizontalSpace: Bool = false
     var wallpaperClickToStage: Bool = true
-    var panelWidth: CGFloat = 408
+    var panelWidth: CGFloat = 320
     var edgeWidth: CGFloat = 8
     var fadeDurationMs: Int = 200
     // SPEC-014 T090 (US7) : mode display ("per_display" ou "global").
@@ -70,6 +70,8 @@ final class RailController {
         fetcher = ThumbnailFetcher(ipc: ipc)
     }
 
+    private var thumbnailRefreshTimer: Timer?
+
     func start() {
         config = RailConfig.load()
         guard config.enabled else {
@@ -77,17 +79,50 @@ final class RailController {
             return
         }
         edgeMonitor.edgeWidth = config.edgeWidth
+        edgeMonitor.activeZoneWidth = config.panelWidth
         buildPanels()
         startEdgeMonitor()
         startEventStream()
         loadInitialStages()
         loadWindows()
+        startThumbnailRefresh()
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in self?.rebuildPanels() }
+        }
+    }
+
+    /// SPEC-014 : refresh des vignettes ScreenCaptureKit toutes les 2 s.
+    /// Le daemon coupe l'observation après 30 s sans requête, donc tant que le
+    /// rail tourne il maintient le flux. Pas de polling si le panel n'est pas visible.
+    private func startThumbnailRefresh() {
+        thumbnailRefreshTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.refreshThumbnails() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        thumbnailRefreshTimer = timer
+        // Premier fetch immédiat pour ne pas attendre 2 s.
+        Task { @MainActor in self.refreshThumbnails() }
+    }
+
+    private func refreshThumbnails() {
+        // Collecte des wid affichées dans des stages non vides.
+        let visibleWids = Set(state.stages.flatMap { $0.windowIDs })
+        debugLog("refreshThumbnails: \(visibleWids.count) visible wids")
+        for wid in visibleWids {
+            fetcher.invalidate(wid: wid)
+            Task {
+                if let vm = await fetcher.fetch(wid: wid) {
+                    state.thumbnails[wid] = vm
+                    debugLog("thumbnail set for wid=\(wid) degraded=\(vm.degraded) bytes=\(vm.pngData.count)")
+                } else {
+                    debugLog("thumbnail FETCH FAILED for wid=\(wid)")
+                }
+            }
         }
     }
 
@@ -147,7 +182,11 @@ final class RailController {
         Task {
             do {
                 let payload = try await ipc.send(command: "windows.list")
-                guard let list = payload["windows"] as? [[String: Any]] else { return }
+                debugLog("loadWindows: payload keys = \(payload.keys.sorted())")
+                guard let list = payload["windows"] as? [[String: Any]] else {
+                    debugLog("loadWindows: payload[\"windows\"] cast FAILED. raw = \(String(describing: payload["windows"]))")
+                    return
+                }
                 var dict: [CGWindowID: WindowVM] = [:]
                 for w in list {
                     guard let idInt = w["id"] as? Int else { continue }
@@ -163,7 +202,10 @@ final class RailController {
                     dict[vm.id] = vm
                 }
                 state.windows = dict
+                debugLog("loadWindows: loaded \(dict.count) windows. sample wid+pid+name: " +
+                         dict.prefix(3).map { "\($0.key)→pid=\($0.value.pid),app=\($0.value.appName)" }.joined(separator: "; "))
             } catch {
+                debugLog("loadWindows: FAILED \(error)")
                 logErr("rail: windows.list failed: \(error)")
             }
         }
@@ -375,4 +417,22 @@ final class RailController {
 
 private func logErr(_ msg: String) {
     FileHandle.standardError.write(Data((msg + "\n").utf8))
+}
+
+/// Debug temporaire : append une ligne dans /tmp/roadie-rail-debug.log
+/// (le rail est spawné par le daemon, son stderr part dans le néant ; ce log
+/// permet de tracer ce qui se passe côté rail). À supprimer une fois OK.
+@MainActor
+private func debugLog(_ msg: String) {
+    let path = "/tmp/roadie-rail-debug.log"
+    let line = "[\(Date())] \(msg)\n"
+    if let data = line.data(using: .utf8) {
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile()
+            fh.write(data)
+            try? fh.close()
+        } else {
+            try? data.write(to: URL(fileURLWithPath: path))
+        }
+    }
 }
