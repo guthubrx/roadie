@@ -1,8 +1,14 @@
 import Foundation
 import Network
+import Darwin
 import RoadieCore
 
 /// CLI client roadie. Encode la commande, envoie au daemon via socket, affiche la réponse.
+
+// SIGPIPE → ignore. Sinon `roadie events --follow | sketchybar -m ...` reçoit
+// SIGPIPE quand le consumer ferme et le shell tue le process avant que les
+// errno -EPIPE puissent être gérés côté code.
+signal(SIGPIPE, SIG_IGN)
 
 let args = CommandLine.arguments
 guard args.count >= 2 else {
@@ -265,11 +271,17 @@ func streamEventsToStdout(types: Set<String>) {
             let line = buffer.subdata(in: 0..<nl)
             buffer.removeSubrange(0...nl)
             if line.isEmpty { continue }
-            // La première ligne est l'ack de souscription — la propager aussi (debug utile).
-            // Les lignes suivantes sont les events. Pas de filtre client-side :
-            // le filtre est délégué au daemon via le champ "types" de la requête.
-            FileHandle.standardOutput.write(line)
-            FileHandle.standardOutput.write(Data([0x0A]))
+            // POSIX write direct (pas NSFileHandle) : si le pipe parent
+            // ferme (SketchyBar quit), write() retourne -1 + EPIPE sans
+            // exception ObjC (qui faisait crasher le process — cf crash
+            // report roadie-2026-05-02-091514.ips). On exit proprement.
+            let ok = line.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> Bool in
+                let n = Darwin.write(1, buf.baseAddress, buf.count)
+                if n <= 0 { return false }
+                let nl: UInt8 = 0x0A
+                return Darwin.write(1, [nl], 1) > 0
+            }
+            if !ok { exitOnDaemonGone.signal(); return }
         }
     }
 

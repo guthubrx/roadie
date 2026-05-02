@@ -174,6 +174,50 @@ final class DesktopRegistryTests: XCTestCase {
         XCTAssertEqual(stageCount, 1)
     }
 
+    // MARK: - updateExpectedFrame persiste la nouvelle frame (FR-005)
+
+    func testUpdateExpectedFramePersistsNewFrame() async throws {
+        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        await registry.load()
+
+        let initial = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let updated = CGRect(x: 200, y: 200, width: 1000, height: 700)
+        let entry = WindowEntry(
+            cgwid: 11, bundleID: "com.example.iterm", title: "iTerm2",
+            expectedFrame: initial, stageID: 1
+        )
+        try await registry.assignWindow(entry, to: 1)
+
+        // Mise à jour de la frame après déplacement/redimensionnement utilisateur
+        try await registry.updateExpectedFrame(cgwid: 11, desktopID: 1, frame: updated)
+
+        // Save + reload : la nouvelle frame doit survivre à la persistance
+        let registry2 = DesktopRegistry(configDir: tmpDir, count: 3)
+        await registry2.load()
+
+        let loaded = await registry2.expectedFrame(cgwid: 11, desktopID: 1)
+        XCTAssertEqual(loaded, updated, "expectedFrame doit être la frame mise à jour, pas l'initiale")
+    }
+
+    // MARK: - desktopID(for:) retourne l'ID correct (FR-005 lookup inverse)
+
+    func testDesktopIDForCgwid() async throws {
+        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        await registry.load()
+
+        let entry = WindowEntry(
+            cgwid: 77, bundleID: "com.apple.safari", title: "Safari",
+            expectedFrame: .zero, stageID: 1
+        )
+        try await registry.assignWindow(entry, to: 2)
+
+        let found = await registry.desktopID(for: 77)
+        XCTAssertEqual(found, 2)
+
+        let notFound = await registry.desktopID(for: 999)
+        XCTAssertNil(notFound)
+    }
+
     // MARK: - removeWindow retire la fenêtre de tous les desktops (pont destruction SPEC-011)
 
     func testRemoveWindowCleansAllDesktops() async throws {
