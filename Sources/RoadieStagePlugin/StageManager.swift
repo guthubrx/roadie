@@ -68,7 +68,34 @@ public final class StageManager {
     private let registry: WindowRegistry
     private(set) public var hideStrategy: HideStrategy
     private(set) public var stages: [StageID: Stage] = [:]
-    private(set) public var currentStageID: StageID?
+    /// SPEC-022 T010 — computed property. En mode perDisplay avec currentDesktopKey non-nil,
+    /// dérivée de `activeStageByDesktop[currentDesktopKey]`. En mode global (V1) ou si
+    /// currentDesktopKey est nil, retombe sur `_currentStageIDV1` (compat backward).
+    public var currentStageID: StageID? {
+        get {
+            if stageMode == .perDisplay {
+                guard let key = currentDesktopKey else {
+                    // T015 : cas pathologique — perDisplay mais key pas encore settée au boot.
+                    logWarn("currentStageID_derived_nil", ["reason": "currentDesktopKey_not_set"])
+                    return _currentStageIDV1
+                }
+                return activeStageByDesktop[key]
+            }
+            return _currentStageIDV1
+        }
+        set {
+            if stageMode == .perDisplay, let key = currentDesktopKey {
+                if let v = newValue { activeStageByDesktop[key] = v }
+                else { activeStageByDesktop.removeValue(forKey: key) }
+            } else {
+                _currentStageIDV1 = newValue
+            }
+        }
+    }
+
+    /// Source V1 (mode global / currentDesktopKey nil). Ne pas accéder directement —
+    /// passer par `currentStageID`. SPEC-022 : remplacé par activeStageByDesktop en mode perDisplay.
+    private var _currentStageIDV1: StageID?
     private let layoutHooks: LayoutHooks?
     /// SPEC-006 : si non nil, override les hide/show via le module RoadieOpacity.
     public weak var hideOverride: StageHideOverride?
@@ -555,8 +582,12 @@ public final class StageManager {
         persistence.saveStage(stage)
     }
 
+    /// SPEC-022 T013 : en mode perDisplay, `active.toml` global est deprecated.
+    /// La persistence per-(display, desktop) est gérée via `persistenceV2?.saveActiveStage(scope)`
+    /// dans `switchTo` et `activate`. En mode V1 (global), délègue à V1 persistence.
     private func saveActive() {
-        persistence.saveActiveStage(currentStageID)
+        guard stageMode == .global else { return }
+        persistence.saveActiveStage(_currentStageIDV1)
     }
 
     // MARK: - API publique
@@ -790,6 +821,84 @@ public final class StageManager {
         currentStageID = stageID
         saveStage(updated)
         saveActive()
+    }
+
+    /// SPEC-022 — switchTo scopé. Si `scope` correspond au `currentDesktopKey` actuel,
+    /// délègue à `switchTo(stageID:)` (comportement complet : hide/show, layout, global).
+    /// Sinon : ne mute QUE `activeStageByDesktop[scope]` et persiste `_active.toml` du
+    /// scope cible — pas d'effet sur le scope visible courant. C'est le fix multi-display
+    /// du bug "click sur stage du panel display X → switch view de display Y".
+    public func switchTo(stageID: StageID, scope: StageScope) {
+        let targetKey = DesktopKey(displayUUID: scope.displayUUID, desktopID: scope.desktopID)
+        // Cas A : le scope cible EST le scope visible courant → comportement legacy complet.
+        if let cur = currentDesktopKey, cur == targetKey {
+            switchTo(stageID: stageID)
+            return
+        }
+        // Cas B : scope distant. Ne pas toucher au layout/hide/show de l'utilisateur courant.
+        // Vérifier que la stage cible existe (lazy auto-create si non, cohérent avec stage.assign).
+        let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                   desktopID: scope.desktopID, stageID: stageID)
+        if stagesV2[fullScope] == nil {
+            _ = createStage(id: stageID, displayName: "stage \(stageID.value)",
+                            scope: fullScope)
+        }
+        // T022 — hide/show scope-aware : seules les wids du scope (displayUUID, desktopID)
+        // cible sont affectées. Le scope courant de l'utilisateur n'est pas touché.
+        // FR-006 : WindowState n'expose pas displayUUID → itérer stagesV2 du scope cible.
+        var widsToHide: Set<WindowID> = []
+        for (s, stage) in stagesV2 where s.displayUUID == scope.displayUUID
+                                      && s.desktopID == scope.desktopID
+                                      && s.stageID != stageID {
+            for member in stage.memberWindows { widsToHide.insert(member.cgWindowID) }
+        }
+        for wid in widsToHide {
+            let isTileable = registry.get(wid)?.isTileable ?? false
+            if let override = hideOverride {
+                override.hide(wid: wid, isTileable: isTileable)
+            } else {
+                HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
+            }
+        }
+        if let targetStage = stagesV2[fullScope] {
+            for member in targetStage.memberWindows {
+                let wid = member.cgWindowID
+                let isTileable = registry.get(wid)?.isTileable ?? false
+                if let override = hideOverride {
+                    override.show(wid: wid, isTileable: isTileable)
+                } else {
+                    HideStrategyImpl.show(wid, registry: registry, strategy: hideStrategy)
+                }
+            }
+        }
+        // T023 : layoutHooks?.setActiveStage + applyLayout uniquement si scope courant.
+        // Ici scope != currentDesktopKey (Cas B), donc pas d'appel layout.
+
+        // Capturer l'ancienne active pour l'event "from" avant mutation.
+        let previousActive = activeStageByDesktop[targetKey]
+        // Mémoriser comme stage active du scope cible. Persiste _active.toml.
+        activeStageByDesktop[targetKey] = stageID
+        try? persistenceV2?.saveActiveStage(fullScope)
+        logInfo("stage_switched_scoped", [
+            "stage": stageID.value,
+            "display_uuid": scope.displayUUID,
+            "desktop_id": String(scope.desktopID),
+            "current_visible_scope_unchanged": "true",
+        ])
+        // Émettre stage_changed enrichi pour que le rail panel du display cible
+        // re-render et marque cette stage comme active dans son state local.
+        // Pas de "from" : on ne sait pas quelle était l'active du scope distant
+        // (c'est le rail qui maintient ce state local).
+        var payload: [String: String] = [
+            "to": stageID.value,
+            "to_name": stagesV2[fullScope]?.displayName ?? stageID.value,
+            "desktop_id": String(scope.desktopID),
+            "display_uuid": scope.displayUUID,
+        ]
+        if let prev = previousActive, prev != stageID {
+            payload["from"] = prev.value
+        }
+        EventBus.shared.publish(DesktopEvent(name: "stage_changed", payload: payload))
     }
 
     public func switchTo(stageID: StageID) {

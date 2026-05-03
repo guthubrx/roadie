@@ -68,11 +68,7 @@ private struct StackedPreviewsView: View {
     private var windows:     [CGWindowID: WindowVM]        { context.windows }
 
     var body: some View {
-        haloed(content: ZStack(alignment: .bottomLeading) {
-            stackedPreviews
-            appIconBadge
-                .offset(x: -8, y: -8)
-        })
+        haloed(content: content)
         .overlay(alignment: .center) { dropHighlight }
         .contentShape(Rectangle())
         .onTapGesture { callbacks.onTap() }
@@ -95,6 +91,35 @@ private struct StackedPreviewsView: View {
         .padding(.leading,  CGFloat(context.leadingPadding))
         .padding(.trailing, CGFloat(context.trailingPadding))
         .padding(.vertical, CGFloat(context.verticalPadding))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if stage.windowIDs.isEmpty {
+            // SPEC-022 : stage vide → rien rendu (cellule reste cliquable via la VStack parent).
+            EmptyView()
+        } else {
+            ZStack(alignment: .bottomLeading) {
+                stackedPreviews
+                appIconBadge
+                    .offset(x: -8, y: -8)
+            }
+        }
+    }
+
+    // MARK: - Placeholder (SPEC-022 : not rendered, kept for potential debug mode)
+
+    private var emptyPlaceholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "square.on.square")
+                .resizable().scaledToFit()
+                .frame(width: 32, height: 32)
+                .foregroundStyle(Color.white.opacity(0.25))
+            Text("Empty stage")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.white.opacity(0.35))
+        }
+        .frame(width: 220, height: 140)
     }
 
     @ViewBuilder

@@ -81,14 +81,9 @@ private struct IconsOnlyView: View {
     private var iconRow: some View {
         let known = stage.windowIDs.compactMap { wid -> WindowVM? in windows[wid] }
         if known.isEmpty {
-            HStack(spacing: 8) {
-                Image(systemName: "square.dashed")
-                    .resizable().scaledToFit()
-                    .frame(width: iconSize, height: iconSize)
-                    .foregroundStyle(Color.white.opacity(0.30))
-                Text("Empty")
-                    .font(.system(size: 11)).foregroundStyle(Color.white.opacity(0.40))
-            }
+            // SPEC-022 : stage vide → rien rendu. La cellule conserve son hit-testing
+            // dans la VStack parent pour le tap-to-activate et le drop-to-assign.
+            EmptyView()
         } else {
             HStack(spacing: 6) {
                 ForEach(Array(known.prefix(maxVisible).enumerated()), id: \.offset) { _, win in
