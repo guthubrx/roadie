@@ -937,13 +937,24 @@ public final class StageManager {
         }
 
         // Masquer les wids des autres stages.
-        // SPEC-019 fix : en mode per_display, source de vérité = registry. Toute wid
-        // dont state.stageID != stageID cible doit être hidée. Plus robuste que
-        // d'itérer stages V1 dict (qui peut être désynchro après reassign cross-scope).
+        // SPEC-022 fix critique : en mode per_display, restreindre le hide aux wids
+        // du SCOPE COURANT (currentDesktopKey.displayUUID). Sans ça, switcher la stage
+        // du display X hide aussi les windows des autres displays → "tout descend
+        // sur le petit écran" (bug observé). Ownership wid→display dérivée de stagesV2
+        // (un wid appartient à la stage qui le contient via memberWindows).
         let widsToHide: Set<WindowID>
         if stageMode == .perDisplay {
+            var widDisplay: [WindowID: String] = [:]
+            for (s, stage) in stagesV2 {
+                for m in stage.memberWindows { widDisplay[m.cgWindowID] = s.displayUUID }
+            }
+            let curUUID = currentDesktopKey?.displayUUID ?? ""
             widsToHide = Set(registry.allWindows
-                .filter { $0.stageID != nil && $0.stageID != stageID }
+                .filter { state in
+                    state.stageID != nil
+                        && state.stageID != stageID
+                        && (widDisplay[state.cgWindowID] ?? "") == curUUID
+                }
                 .map { $0.cgWindowID })
         } else {
             var s: Set<WindowID> = []
