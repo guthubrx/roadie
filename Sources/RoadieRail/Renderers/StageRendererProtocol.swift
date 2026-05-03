@@ -13,19 +13,36 @@ public struct StageRenderContext {
     public let haloColorHex:  String
     public let haloIntensity: Double
     public let haloRadius:    Double
+    // SPEC-019 — paramètres scatter pour StackedPreviewsRenderer (ignorés par
+    // les autres renderers). Configurables via [fx.rail.stacked] TOML.
+    public let stackedOffsetX:  Double
+    public let stackedOffsetY:  Double
+    public let stackedRotation: Double
+    public let stackedScale:    Double
+    public let stackedOpacity:  Double
 
     public init(stage: StageVM,
                 windows: [CGWindowID: WindowVM] = [:],
                 thumbnails: [CGWindowID: ThumbnailVM] = [:],
                 haloColorHex: String = "#34C759",
                 haloIntensity: Double = 0.75,
-                haloRadius: Double = 18) {
+                haloRadius: Double = 18,
+                stackedOffsetX: Double = 60,
+                stackedOffsetY: Double = 80,
+                stackedRotation: Double = 12,
+                stackedScale: Double = 0.06,
+                stackedOpacity: Double = 0.10) {
         self.stage = stage
         self.windows = windows
         self.thumbnails = thumbnails
         self.haloColorHex = haloColorHex
         self.haloIntensity = haloIntensity
         self.haloRadius = haloRadius
+        self.stackedOffsetX = stackedOffsetX
+        self.stackedOffsetY = stackedOffsetY
+        self.stackedRotation = stackedRotation
+        self.stackedScale = stackedScale
+        self.stackedOpacity = stackedOpacity
     }
 }
 
