@@ -1480,26 +1480,30 @@ enum CommandRouter {
 
     // MARK: - SPEC-014 private handlers
 
-    /// Retourne une vignette PNG pour `wid`. Si absente du cache, démarre l'observation
-    /// SCK et retourne un fallback icône d'app (degraded=true).
+    /// Retourne une vignette PNG pour `wid` via capture lazy on-demand
+    /// (`CGWindowListCreateImage` à la demande, pattern AltTab).
+    /// - Cache hit → réutilise l'image récente.
+    /// - Cache miss → capture synchrone, met en cache, retourne.
+    /// - Échec capture (DRM strict, fenêtre disparue) → fallback icône d'app.
+    /// Plus de SCStream, plus d'observation continue, plus d'indicateur 🟣
+    /// macOS sur les fenêtres observées.
     private static func handleWindowThumbnail(request: Request, daemon: Daemon) async -> Response {
         guard let widStr = request.args?["wid"], let widU = UInt32(widStr) else {
             return .error(.invalidArgument, "missing or invalid wid")
         }
         let wid = CGWindowID(widU)
-        guard let state = daemon.registry.get(wid) else {
+        guard daemon.registry.get(wid) != nil else {
             return .error(.windowNotFound, "wid not found")
         }
         if let entry = daemon.thumbnailCache?.get(wid: wid) {
             return thumbnailResponse(entry)
         }
-        // Cache miss : démarre observation SCK en fire-and-forget.
-        // Pré-filtre DRM via le bundleID du registry — évite que SCShareableContent.current
-        // (qu'observe() appellerait) signale au DRM Netflix une intent de capture, ce qui
-        // coupe la lecture sur macOS 26+. Le caller connaît le bundleID, le passe explicitement.
-        if let sck = daemon.sckCaptureService {
-            let bid = state.bundleID
-            Task { try? await sck.observe(wid: wid, bundleID: bid) }
+        // Capture immédiate. Coût ~5-15 ms — acceptable dans le path d'une
+        // requête IPC. Si nil (DRM strict ou fenêtre off-screen), fallback.
+        if let sck = daemon.sckCaptureService,
+           let entry = sck.captureNow(wid: wid) {
+            daemon.thumbnailCache?.put(entry)
+            return thumbnailResponse(entry)
         }
         return fallbackIconResponse(wid: wid, registry: daemon.registry)
     }
