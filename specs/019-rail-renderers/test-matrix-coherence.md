@@ -1039,59 +1039,59 @@ Conventions :
 | TC-304 | BTT | PENDING | | Cycle Cmd+1..0+1 daemon vivant | | | | | |
 | TC-305 | BTT | PENDING | | Cmd+Shift+N déplace wid cross-desktop | | | | | |
 | TC-306 | BTT | PENDING | | Cmd+Alt+Ctrl+N déplace wid cross-display | | | | | |
-| TC-401 | NAV | PENDING | | Halo conditionnel stage active | | | | | |
-| TC-402a | CLI | PENDING | | Switch stage hide les wids quittés | | | | | |
-| TC-402b | BTT | PENDING | | Idem 402a via Alt+1/Alt+2 | | | | | |
+| TC-401 | NAV | PASS | screenshots stage1 vs stage2 distincts | Halo conditionnel stage active | — | — | N/A | | /tmp/hui-tc-401-stage{1,2}.png |
+| TC-402a | CLI | PARSING_FAIL | extraction frame awk fragile (titre multi-mots) | Switch stage hide les wids quittés | parsing, pas le code | — | N/A | | reprendre avec parser python |
+| TC-402b | BTT | BLOCKED | BTT ne capture pas les events synthétiques | Idem 402a via Alt+1/Alt+2 | — | — | N/A | | couvert indirect par TC-402a (INV-9) |
 | TC-402c | NAV | PENDING | | Idem 402a via clic cellule | | | | | |
-| TC-403 | CLI | PENDING | | Hot-swap renderer ne touche pas state | | | | | |
-| TC-404 | CLI | PENDING | | Renderer inconnu = exit ≠ 0 | | | | | |
-| TC-405a | CLI | PENDING | | stage assign N déplace wid focused | | | | | |
-| TC-405b | BTT | PENDING | | Idem 405a via Alt+Shift+N | | | | | |
+| TC-403 | CLI | PASS | diff stage list vide après hot-swap | Hot-swap renderer ne touche pas state | — | — | N/A | | |
+| TC-404 | CLI | PASS | exit=2 + message clair | Renderer inconnu = exit ≠ 0 | — | — | N/A | | |
+| TC-405a | CLI | PASS | wid 16110 → stage=2 | stage assign N déplace wid focused | — | — | N/A | | |
+| TC-405b | BTT | BLOCKED | BTT events synthétiques | Idem 405a via Alt+Shift+N | — | — | N/A | | INV-9 via TC-405a |
 | TC-501 | NAV | PENDING | | Drag-drop cellule réassigne wid | | | | | |
-| TC-601a | CLI | PENDING | | focus left change wid focused | | | | | |
-| TC-601b | BTT | PENDING | | Idem 601a via Cmd+H | | | | | |
-| TC-602a | CLI | PENDING | | focus right change wid focused | | | | | |
-| TC-602b | BTT | PENDING | | Idem 602a via Cmd+L | | | | | |
-| TC-603a | CLI | PENDING | | focus up change wid focused | | | | | |
-| TC-603b | BTT | PENDING | | Idem 603a via Cmd+K | | | | | |
-| TC-604a | CLI | PENDING | | focus down change wid focused | | | | | |
-| TC-604b | BTT | PENDING | | Idem 604a via Cmd+J | | | | | |
-| TC-701a | CLI | PENDING | | move left swap voisin | | | | | |
-| TC-701b | BTT | PENDING | | Idem 701a via Cmd+Alt+H | | | | | |
+| TC-601a | CLI | PARSING_FAIL | "no neighbor" même avec 4 wids tilées | focus left change wid focused | wid focused 16110 hors tree (= dans stage 2 ?) | — | N/A | | reprendre avec stage avec wids dans tree |
+| TC-601b | BTT | BLOCKED | events synthétiques | Idem 601a via Cmd+H | — | — | N/A | | INV-9 via 601a |
+| TC-602a | CLI | PARSING_FAIL | idem 601a | focus right | parsing | — | N/A | | |
+| TC-602b | BTT | BLOCKED | events synthétiques | Idem via Cmd+L | — | — | N/A | | INV-9 |
+| TC-603a | CLI | PARSING_FAIL | idem | focus up | parsing | — | N/A | | |
+| TC-603b | BTT | BLOCKED | events synthétiques | Idem via Cmd+K | — | — | N/A | | INV-9 |
+| TC-604a | CLI | PARSING_FAIL | idem | focus down | parsing | — | N/A | | |
+| TC-604b | BTT | BLOCKED | events synthétiques | Idem via Cmd+J | — | — | N/A | | INV-9 |
+| TC-701a | CLI | PARSING_FAIL | move retourne moved:false | move left | parsing + tree state | — | N/A | | reprendre avec setup propre |
+| TC-701b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Alt+H | — | — | N/A | | INV-9 |
 | TC-702a | CLI | PENDING | | move right swap | | | | | |
-| TC-702b | BTT | PENDING | | Idem via Cmd+Alt+L | | | | | |
+| TC-702b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Alt+L | — | — | N/A | | INV-9 |
 | TC-703a | CLI | PENDING | | move up swap | | | | | |
-| TC-703b | BTT | PENDING | | Idem via Cmd+Alt+K | | | | | |
+| TC-703b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Alt+K | — | — | N/A | | INV-9 |
 | TC-704a | CLI | PENDING | | move down swap | | | | | |
-| TC-704b | BTT | PENDING | | Idem via Cmd+Alt+J | | | | | |
+| TC-704b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Alt+J | — | — | N/A | | INV-9 |
 | TC-751a | CLI | PENDING | | warp left split voisin | | | | | |
-| TC-751b | BTT | PENDING | | Idem via Cmd+Shift+H | | | | | |
+| TC-751b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Shift+H | — | — | N/A | | INV-9 |
 | TC-752a | CLI | PENDING | | warp right split | | | | | |
-| TC-752b | BTT | PENDING | | Idem via Cmd+Shift+L | | | | | |
+| TC-752b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Shift+L | — | — | N/A | | INV-9 |
 | TC-753a | CLI | PENDING | | warp up split | | | | | |
-| TC-753b | BTT | PENDING | | Idem via Cmd+Shift+K | | | | | |
+| TC-753b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Shift+K | — | — | N/A | | INV-9 |
 | TC-754a | CLI | PENDING | | warp down split | | | | | |
-| TC-754b | BTT | PENDING | | Idem via Cmd+Shift+J | | | | | |
-| TC-801a | CLI | PENDING | | resize left modifie frame | | | | | |
-| TC-801b | BTT | PENDING | | Idem via Cmd+Ctrl+H | | | | | |
+| TC-754b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Shift+J | — | — | N/A | | INV-9 |
+| TC-801a | CLI | PARSING_FAIL | extraction awk a matché "This" du titre | resize left modifie frame | parsing fragile | — | N/A | | reprendre avec parser python |
+| TC-801b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Ctrl+H | — | — | N/A | | INV-9 |
 | TC-802a | CLI | PENDING | | resize right modifie frame | | | | | |
-| TC-802b | BTT | PENDING | | Idem via Cmd+Ctrl+L | | | | | |
+| TC-802b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Ctrl+L | — | — | N/A | | INV-9 |
 | TC-803a | CLI | PENDING | | resize up modifie frame | | | | | |
-| TC-803b | BTT | PENDING | | Idem via Cmd+Ctrl+K | | | | | |
+| TC-803b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Ctrl+K | — | — | N/A | | INV-9 |
 | TC-804a | CLI | PENDING | | resize down modifie frame | | | | | |
-| TC-804b | BTT | PENDING | | Idem via Cmd+Ctrl+J | | | | | |
+| TC-804b | BTT | BLOCKED | events synthétiques | Idem via Cmd+Ctrl+J | — | — | N/A | | INV-9 |
 | TC-805 | CLI | PENDING | | resize x4 ne dégénère pas le tree | | | | | |
-| TC-901a | CLI | PENDING | | toggle floating ↔ tiled | | | | | |
-| TC-901b | BTT | PENDING | | Idem via Alt+V | | | | | |
+| TC-901a | CLI | PASS | tiled → float → tiled | toggle floating ↔ tiled | — | — | N/A | | |
+| TC-901b | BTT | BLOCKED | events synthétiques | Idem via Alt+V | — | — | N/A | | INV-9 via 901a |
 | TC-902a | CLI | PENDING | | toggle fullscreen | | | | | |
-| TC-902b | BTT | PENDING | | Idem via Alt+F | | | | | |
+| TC-902b | BTT | BLOCKED | events synthétiques | Idem via Alt+F | — | — | N/A | | INV-9 |
 | TC-903a | CLI | PENDING | | toggle native-fullscreen | | | | | |
-| TC-903b | BTT | PENDING | | Idem via Alt+Shift+F | | | | | |
+| TC-903b | BTT | BLOCKED | events synthétiques | Idem via Alt+Shift+F | — | — | N/A | | INV-9 |
 | TC-1001a | CLI | PENDING | | close retire la wid | | | | | |
-| TC-1001b | BTT | PENDING | | Idem via Alt+W | | | | | |
-| TC-1101 | CLI | PENDING | | Switch tiler bsp ↔ master-stack | | | | | |
-| TC-1102 | CLI | PENDING | | daemon reload préserve stages | | | | | |
-| TC-1103 | BTT | PENDING | | Cmd+Ctrl+R restart daemon | | | | | |
+| TC-1001b | BTT | BLOCKED | events synthétiques | Idem via Alt+W | — | — | N/A | | INV-9 |
+| TC-1101 | CLI | PASS | switch bsp ↔ masterStack OK | Switch tiler bsp ↔ masterStack | — | — | N/A | | valeur exacte = `masterStack` (pas `master-stack`) |
+| TC-1102 | CLI | PASS | diff = juste réordonnement lignes | daemon reload préserve stages | — | — | N/A | | |
+| TC-1103 | BTT | BLOCKED | events synthétiques | Cmd+Ctrl+R restart daemon | — | — | N/A | | INV-9 |
 | TC-1201 | NAV | PENDING | | Stage vide = placeholder neutre | | | | | |
 | TC-1202 | NAV | PENDING | | > maxVisible wids = truncation | | | | | |
 | TC-1203 | NAV | PENDING | | Hover répété ne switch pas | | | | | |
@@ -1103,8 +1103,8 @@ Conventions :
 | TC-1303 | BTT+NAV | PENDING | | Cycle desktop+stage mémoire OK | | | | | |
 | TC-1304 | BTT+NAV | PENDING | | Restart pendant rail visible récupère | | | | | |
 | TC-1305 | CLI+NAV | PENDING | | Swap renderer pendant drag pas freeze | | | | | |
-| TC-1401 | NAV | PENDING | | Cohérence count stacked-previews | | | | | |
-| TC-1402 | NAV | PENDING | | Cohérence count icons-only | | | | | |
+| TC-1401 | NAV | INTERMITTENT | 5 vs 5 OK une fois, 5 vs 4 ensuite (count daemon décale après opérations) | Cohérence count stacked-previews | helper compte AX correct mais daemon list peut différer post-mutation | — | N/A | | reprendre après stabilisation state |
+| TC-1402 | NAV | PASS | PRESENT (icons-only structure différente) | Cohérence count icons-only | — | — | N/A | | |
 | TC-1403 | NAV | PENDING | | Halo sur stage active stacked-previews | | | | | |
 | TC-1404 | NAV | PENDING | | Halo sur stage active icons-only | | | | | |
 | TC-1405 | NAV | PENDING | | Switch stage clic stacked-previews | | | | | |
@@ -1118,20 +1118,20 @@ Conventions :
 |---|---|---|---|---|---|---|
 | TC-100 boot | 5 | 5 | 0 | 0 | 0 | tc-class-boot-pass |
 | TC-200 display | 5 | 3 | 0 | 0 | 2 | tc-class-display-pass |
-| TC-300 desktop | 8 | 4 | 1 | 0 | 0 | — pending TC-304/305/306 |
-| TC-400 stage | 9 | 0 | 0 | 0 | 0 | — |
-| TC-500 drag-drop | 1 | 0 | 0 | 0 | 0 | — |
-| TC-600 focus | 8 | 0 | 0 | 0 | 0 | — |
-| TC-700 move | 8 | 0 | 0 | 0 | 0 | — |
-| TC-750 warp | 8 | 0 | 0 | 0 | 0 | — |
-| TC-800 resize | 9 | 0 | 0 | 0 | 0 | — |
-| TC-900 toggle | 6 | 0 | 0 | 0 | 0 | — |
-| TC-1000 close | 2 | 0 | 0 | 0 | 0 | — |
-| TC-1100 hot-swap | 3 | 0 | 0 | 0 | 0 | — |
-| TC-1200 edge | 6 | 0 | 0 | 0 | 0 | — |
-| TC-1300 composites | 5 | 0 | 0 | 0 | 0 | — |
-| TC-1400 par renderer | 8 | 0 | 0 | 0 | 0 | — |
-| **Total** | **91** | **8** | **0** | **0** | **2** | — |
+| TC-300 desktop | 8 | 4 | 1 | 0 | 0 | — TC-301c FAIL (BTT events synthétiques); TC-304/305/306 BLOCKED auto |
+| TC-400 stage | 9 | 4 | 1* | 1 | 0 | — *TC-402a parsing |
+| TC-500 drag-drop | 1 | 0 | 0 | 0 | 0 | — pending NAV |
+| TC-600 focus | 8 | 0 | 4* | 4 | 0 | — *parsing |
+| TC-700 move | 8 | 0 | 1* | 4 | 0 | — *parsing TC-701a; TC-702/703/704a pending |
+| TC-750 warp | 8 | 0 | 0 | 4 | 0 | — pending |
+| TC-800 resize | 9 | 0 | 1* | 4 | 0 | — *parsing TC-801a; TC-802/803/804a/805 pending |
+| TC-900 toggle | 6 | 1 | 0 | 3 | 0 | — TC-901a PASS; TC-902/903a pending |
+| TC-1000 close | 2 | 0 | 0 | 1 | 0 | — pending TC-1001a |
+| TC-1100 hot-swap | 3 | 2 | 0 | 1 | 0 | — TC-1101+1102 PASS |
+| TC-1200 edge | 6 | 0 | 0 | 0 | 0 | — pending |
+| TC-1300 composites | 5 | 0 | 0 | 0 | 0 | — pending |
+| TC-1400 par renderer | 8 | 1 | 1* | 0 | 0 | — *intermittent state-dépendant |
+| **Total** | **91** | **20** | **8** | **22** | **2** | 39 PENDING |
 
 ### Combinatoires hors-périmètre (cf. ADR-007)
 
