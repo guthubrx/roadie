@@ -28,14 +28,16 @@ public struct WindowVM: Identifiable, Equatable {
     public let title: String
     public let appName: String
     public let isFloating: Bool
+    public let isFocused: Bool
 
     public init(id: CGWindowID, pid: Int32, bundleID: String, title: String,
-                appName: String, isFloating: Bool) {
+                appName: String, isFloating: Bool, isFocused: Bool = false) {
         self.id = id
         self.pid = pid
         self.bundleID = bundleID
         self.title = title
         self.appName = appName
         self.isFloating = isFloating
+        self.isFocused = isFocused
     }
 }

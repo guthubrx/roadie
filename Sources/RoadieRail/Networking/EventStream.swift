@@ -9,7 +9,8 @@ final class EventStream {
     private static let defaultTypes = [
         "stage_changed", "desktop_changed", "window_assigned", "window_unassigned",
         "window_created", "window_destroyed", "wallpaper_click", "stage_renamed",
-        "thumbnail_updated",
+        "stage_created", "stage_deleted", "stage_assigned",
+        "thumbnail_updated", "config_reloaded", "window_focused",
     ].joined(separator: ",")
 
     var onEvent: ((String, [String: Any]) -> Void)?
