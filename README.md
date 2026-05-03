@@ -1,3 +1,15 @@
+<div align="center">
+
+# 🚧 UNDER CONSTRUCTION · EN CONSTRUCTION 🚧
+
+**This project is a work in progress. Expect breaking changes, rough edges, and incomplete features.**
+
+**Ce projet est en cours de construction. Attendez-vous à des changements cassants, des aspérités et des fonctionnalités incomplètes.**
+
+</div>
+
+---
+
 # roadie
 
 🇬🇧 **English** · 🇫🇷 [Français](README.fr.md)
