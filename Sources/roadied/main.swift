@@ -1479,7 +1479,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         let mouseLoc = NSEvent.mouseLocation
         if let display = await displayRegistry?.displayContaining(point: mouseLoc) {
             let desktopID = await desktopRegistry?.currentID(for: display.id) ?? 1
-            return StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+            let scope = StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+            logInfo("scope_inferred_from", [
+                "source": "cursor",
+                "display_uuid": display.uuid,
+                "desktop_id": String(desktopID),
+            ])
+            return scope
         }
         // Priorité 2 : fenêtre frontmost.
         if let wid = registry.focusedWindowID,
@@ -1487,13 +1493,24 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
             if let display = await displayRegistry?.displayContaining(point: center) {
                 let desktopID = await desktopRegistry?.currentID(for: display.id) ?? 1
-                return StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+                let scope = StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+                logInfo("scope_inferred_from", [
+                    "source": "frontmost",
+                    "display_uuid": display.uuid,
+                    "desktop_id": String(desktopID),
+                ])
+                return scope
             }
         }
         // Fallback : display principal.
         let primaryID = CGMainDisplayID()
         let uuid = resolveDisplayUUID(primaryID)
         let desktopID = await desktopRegistry?.currentID(for: primaryID) ?? 1
+        logInfo("scope_inferred_from", [
+            "source": "primary",
+            "display_uuid": uuid,
+            "desktop_id": String(desktopID),
+        ])
         return StageScope(displayUUID: uuid, desktopID: desktopID, stageID: StageID(""))
     }
 

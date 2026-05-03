@@ -93,6 +93,10 @@ public enum ErrorCode: String, Codable, Sendable {
     case multiDesktopDisabled = "multi_desktop_disabled"
     /// V2 : selector desktop introuvable (exit 5 CLI).
     case unknownDesktop = "unknown_desktop"
+    /// SPEC-018 US4 : selector display invalide (index hors range ou UUID inconnu).
+    case unknownDisplay = "unknown_display"
+    /// SPEC-018 US4 : id desktop hors range 1..N.
+    case desktopOutOfRange = "desktop_out_of_range"
 }
 
 // MARK: - WindowState
