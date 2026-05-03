@@ -79,22 +79,46 @@ final class MigrationV1V2Tests: XCTestCase {
     }
 
     // MARK: - testRecoveryBackupPresent
+    //
+    // SPEC-018 fix 2026-05-03 (commit `dfa8938`) : le comportement a changé.
+    // Avant : backup présent → skip silently (return nil), V1 source non touché.
+    //   Risque : si V1 source contient des members non migrés vers V2 (V2 cible
+    //   créée vide par boot précédent ratée), perte de données silencieuse.
+    // Après : backup présent ET V1 source non vide → archive backup ancien
+    //   horodaté + force nouvelle migration. Backup ancien jamais perdu.
+    // Après : backup présent ET V1 source vide → vraiment idempotent (skip).
+    //
+    // Ce test couvre maintenant les 2 sous-cas.
 
-    func test_backup_already_present_returns_nil_and_does_not_modify() throws {
-        // Créer le backup manuellement (simule migration déjà faite)
+    func test_backup_present_and_v1_empty_returns_nil_idempotent() throws {
+        // Backup présent ET V1 source vide (vraie idempotence)
         let backupPath = tmpDir! + ".v1.bak"
         try FileManager.default.createDirectory(atPath: backupPath, withIntermediateDirectories: true)
 
-        // Créer aussi des fichiers flat (qui ne doivent PAS être déplacés)
+        // PAS de createFlatTOMLFiles ici : V1 source vide (déjà migré).
+        let result = try makeMigration().runIfNeeded()
+        XCTAssertNil(result, "Backup présent + V1 vide → nil (vraie idempotence)")
+    }
+
+    func test_backup_present_and_v1_nonempty_archives_backup_and_migrates() throws {
+        // Backup présent ET V1 source non vide → archive le backup ancien + force migration
+        let backupPath = tmpDir! + ".v1.bak"
+        try FileManager.default.createDirectory(atPath: backupPath, withIntermediateDirectories: true)
+
+        // V1 source contient des fichiers à migrer (cas pathologique réel : V2 cible
+        // créée vide par boot précédent → V1 source restauré → backup encore présent)
         createFlatTOMLFiles(count: 2)
 
         let result = try makeMigration().runIfNeeded()
-        XCTAssertNil(result, "Backup présent → nil retourné")
+        XCTAssertNotNil(result, "Backup présent + V1 non vide → migration force-relancée")
+        XCTAssertEqual(result?.migratedCount, 2, "Les 2 fichiers V1 doivent être migrés")
 
-        // Vérifier que les fichiers flat sont TOUJOURS dans tmpDir (pas déplacés)
-        let remaining = (try? FileManager.default.contentsOfDirectory(atPath: tmpDir!)) ?? []
-        let tomlFiles = remaining.filter { $0.hasSuffix(".toml") }
-        XCTAssertEqual(tomlFiles.count, 2, "Les fichiers flat ne doivent pas avoir été déplacés")
+        // Backup ancien doit avoir été archivé horodaté (préservé, jamais perdu)
+        let parent = (tmpDir! as NSString).deletingLastPathComponent
+        let baseName = (tmpDir! as NSString).lastPathComponent + ".v1.bak.archived-"
+        let siblings = (try? FileManager.default.contentsOfDirectory(atPath: parent)) ?? []
+        XCTAssertTrue(siblings.contains(where: { $0.hasPrefix(baseName) }),
+                      "Backup ancien archivé horodaté présent")
     }
 
     // MARK: - testNoMigrationIfEmpty
