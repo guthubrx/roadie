@@ -14,12 +14,14 @@ public struct LayoutHooks: Sendable {
     /// Déplace la wid du tree de son ancienne stage vers le tree de la nouvelle stage.
     public let reassignToStage: @MainActor (WindowID, StageID) -> Void
     /// Définit la stage active dans le LayoutEngine (change le tree utilisé par applyLayout).
-    public let setActiveStage: @MainActor (StageID?) -> Void
+    /// SPEC-022 : displayUUID optionnel — si fourni, scope la mutation à ce display
+    /// uniquement (mode perDisplay). Si nil, comportement legacy (apply à tous).
+    public let setActiveStage: @MainActor (StageID?, String?) -> Void
 
     public init(setLeafVisible: @escaping @MainActor (WindowID, Bool) -> Void,
                 applyLayout: @escaping @MainActor () -> Void,
                 reassignToStage: @escaping @MainActor (WindowID, StageID) -> Void,
-                setActiveStage: @escaping @MainActor (StageID?) -> Void) {
+                setActiveStage: @escaping @MainActor (StageID?, String?) -> Void) {
         self.setLeafVisible = setLeafVisible
         self.applyLayout = applyLayout
         self.reassignToStage = reassignToStage
@@ -732,7 +734,7 @@ public final class StageManager {
         }
         currentStageID = nil
         saveActive()
-        layoutHooks?.setActiveStage(nil)
+        layoutHooks?.setActiveStage(nil, currentDesktopKey?.displayUUID)
         layoutHooks?.applyLayout()
     }
 
@@ -761,7 +763,7 @@ public final class StageManager {
                 }
             }
         }
-        layoutHooks?.setActiveStage(stageID)
+        layoutHooks?.setActiveStage(stageID, currentDesktopKey?.displayUUID)
         layoutHooks?.applyLayout()
         var updated = target
         updated.lastActiveAt = Date()
@@ -854,34 +856,79 @@ public final class StageManager {
         // au début. Sans ce full sync, switchTo n'a pas de visibilité sur les wids
         // d'autres stages V2 (ex: stage 2 contenant Grayjay) → ne les hide pas →
         // elles restent visibles à l'écran malgré le switch.
-        if stageMode == .perDisplay {
-            for (scope, stage) in stagesV2 {
+        // SPEC-022 — sync V1 dict UNIQUEMENT depuis stagesV2 du SCOPE COURANT
+        // (currentDesktopKey). Avant : sync depuis TOUS les scopes → collision sur
+        // stageID, last write wins → V1 dict pouvait contenir le stage du mauvais
+        // display. Conséquence : show des members du mauvais display + perte de
+        // savedFrame du bon scope.
+        if stageMode == .perDisplay, let key = currentDesktopKey {
+            for (scope, stage) in stagesV2 where scope.displayUUID == key.displayUUID
+                                              && scope.desktopID == key.desktopID {
                 stages[scope.stageID] = stage
             }
         }
+        // SPEC-022 — targetStage depuis stagesV2 du scope courant en perDisplay
+        // pour ne pas dépendre de l'ordre d'iteration du dict V1.
         let targetStage: Stage
-        if let s = stages[stageID] {
+        if stageMode == .perDisplay, let key = currentDesktopKey {
+            let scope = StageScope(displayUUID: key.displayUUID,
+                                    desktopID: key.desktopID, stageID: stageID)
+            guard let s = stagesV2[scope] else {
+                logWarn("switch: unknown stage in current scope", [
+                    "stage": stageID.value, "display": key.displayUUID,
+                    "desktop": String(key.desktopID),
+                ])
+                return
+            }
             targetStage = s
         } else {
-            logWarn("switch: unknown stage", ["stage": stageID.value])
-            return
+            guard let s = stages[stageID] else {
+                logWarn("switch: unknown stage", ["stage": stageID.value])
+                return
+            }
+            targetStage = s
         }
         // Capturer le from + name pour l'event stage_changed (V2 FR-015).
         let fromID = currentStageID
-        let fromName = fromID.flatMap { stages[$0]?.displayName } ?? ""
+        let fromName: String = {
+            if stageMode == .perDisplay, let key = currentDesktopKey, let fid = fromID {
+                let s = StageScope(displayUUID: key.displayUUID,
+                                    desktopID: key.desktopID, stageID: fid)
+                return stagesV2[s]?.displayName ?? ""
+            }
+            return fromID.flatMap { stages[$0]?.displayName } ?? ""
+        }()
         let toName = targetStage.displayName
 
-        // Capturer les frames actuelles des fenêtres du stage actuel pour restauration future.
-        if let current = currentStageID, var stage = stages[current] {
-            for i in 0..<stage.memberWindows.count {
-                let wid = stage.memberWindows[i].cgWindowID
-                if let element = registry.axElement(for: wid),
-                   let frame = AXReader.bounds(element) {
-                    stage.memberWindows[i].savedFrame = SavedRect(frame)
+        // Capturer les frames actuelles des fenêtres du stage SORTANT pour restauration future.
+        // SPEC-022 — récupérer depuis stagesV2 du scope courant en perDisplay.
+        if let current = currentStageID {
+            if stageMode == .perDisplay, let key = currentDesktopKey {
+                let scope = StageScope(displayUUID: key.displayUUID,
+                                        desktopID: key.desktopID, stageID: current)
+                if var stage = stagesV2[scope] {
+                    for i in 0..<stage.memberWindows.count {
+                        let wid = stage.memberWindows[i].cgWindowID
+                        if let element = registry.axElement(for: wid),
+                           let frame = AXReader.bounds(element) {
+                            stage.memberWindows[i].savedFrame = SavedRect(frame)
+                        }
+                    }
+                    stagesV2[scope] = stage
+                    stages[current] = stage  // sync V1 mirror
+                    try? persistenceV2?.save(stage, at: scope)
                 }
+            } else if var stage = stages[current] {
+                for i in 0..<stage.memberWindows.count {
+                    let wid = stage.memberWindows[i].cgWindowID
+                    if let element = registry.axElement(for: wid),
+                       let frame = AXReader.bounds(element) {
+                        stage.memberWindows[i].savedFrame = SavedRect(frame)
+                    }
+                }
+                stages[current] = stage
+                saveStage(stage)
             }
-            stages[current] = stage
-            saveStage(stage)
         }
 
         // Masquer les wids des autres stages.
@@ -927,7 +974,20 @@ public final class StageManager {
         // - Tilée : (1) setLeafVisible(true), (2) le applyLayout qui suit la replacera
         //   à la bonne position dans le tree.
         // - Flottante : show AX + restaurer frame sauvegardée.
-        guard var target = stages[stageID] else { return }
+        // SPEC-022 fix critique : en perDisplay, target depuis stagesV2 du SCOPE courant
+        // (currentDesktopKey + stageID), PAS du V1 dict stages[stageID] qui collapse
+        // les scopes (last write wins). Sans ça, on showait les members d'un autre
+        // display → wids physiquement étrangères au scope local apparaissaient.
+        var target: Stage
+        if stageMode == .perDisplay, let key = currentDesktopKey {
+            let scope = StageScope(displayUUID: key.displayUUID,
+                                    desktopID: key.desktopID, stageID: stageID)
+            guard let scoped = stagesV2[scope] else { return }
+            target = scoped
+        } else {
+            guard let v1 = stages[stageID] else { return }
+            target = v1
+        }
         for member in target.memberWindows {
             let wid = member.cgWindowID
             let isTileable = registry.get(wid)?.isTileable ?? false
@@ -948,7 +1008,7 @@ public final class StageManager {
         }
         // Activer la stage dans le LayoutEngine AVANT applyLayout pour que le tiler
         // utilise le tree (stageID, displayID) correspondant à la nouvelle stage.
-        layoutHooks?.setActiveStage(stageID)
+        layoutHooks?.setActiveStage(stageID, currentDesktopKey?.displayUUID)
         // Re-layout pour propager les changements de visibilité aux fenêtres tilées.
         layoutHooks?.applyLayout()
 
