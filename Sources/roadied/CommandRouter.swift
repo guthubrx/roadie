@@ -24,7 +24,6 @@ enum CommandRouter {
         case "windows.list":
             // SPEC-018 : normalise les state.stageID qui référencent des stages
             // inexistantes (héritage persistance desktop). Cheap : O(N windows).
-            daemon.stageManager?.reconcileStageOwnership()
             // SPEC-014 : ajouter app_name pour résoudre l'icône côté rail (NSRunningApplication.localizedName).
             let runningByPID = Dictionary(uniqueKeysWithValues:
                 NSWorkspace.shared.runningApplications.map { ($0.processIdentifier, $0) })
@@ -306,7 +305,6 @@ enum CommandRouter {
         case "stage.list":
             // SPEC-018 : reconcile avant lecture (évite que des wid avec stageID
             // périmé apparaissent dans la mauvaise stage ou nulle part).
-            daemon.stageManager?.reconcileStageOwnership()
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
@@ -329,7 +327,10 @@ enum CommandRouter {
             if sm.stageMode == .global {
                 // Mode global : compat V1 — liste plate, currentStageID direct.
                 currentID = sm.currentStageID?.value ?? ""
-                scopedStages = sm.stages.values.map { stage -> [String: Any] in
+                let sortedStages = sm.stages.values.sorted { lhs, rhs in
+                    lhs.id.value.localizedStandardCompare(rhs.id.value) == .orderedAscending
+                }
+                scopedStages = sortedStages.map { stage -> [String: Any] in
                     [
                         "id": stage.id.value,
                         "display_name": stage.displayName,
@@ -352,7 +353,14 @@ enum CommandRouter {
                 let scopedKey = DesktopKey(displayUUID: scope.displayUUID,
                                             desktopID: scope.desktopID)
                 currentID = sm.activeStageByDesktop[scopedKey]?.value ?? ""
-                scopedStages = filtered.map { (scopeKey, stage) -> [String: Any] in
+                // SPEC-022 — tri stable par stage.id pour que le rail panel n'inverse pas
+                // les vignettes d'un poll au suivant (Dictionary.filter retourne dans
+                // un ordre non-déterministe).
+                let sortedFiltered = filtered.sorted { lhs, rhs in
+                    lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
+                        == .orderedAscending
+                }
+                scopedStages = sortedFiltered.map { (scopeKey, stage) -> [String: Any] in
                     [
                         "id": stage.id.value,
                         "display_name": stage.displayName,

@@ -160,6 +160,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         logInfo("roadied starting")
 
         stageManager?.loadFromDisk()
+        // SPEC-021 T021 : brancher le service locator pour que WindowState.stageID
+        // (computed) puisse déléguer à stageManager sans dépendance circulaire.
+        StageManagerLocator.shared = stageManager
 
         // Pre-existing stages from config
         if let sm = stageManager {
@@ -256,7 +259,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // persistée vers le registry. Sans ce passage, les wids présentes sur disque
         // sont vues comme `state.stageID == nil` et sont écrasées vers `currentStage`
         // par la boucle ci-dessous → perte de la mémoire de l'attribution.
-        stageManager?.reconcileStageOwnership()
         // Auto-assign des fenêtres orphelines au stage courant (migration utilisateurs existants).
         // Si 5 fenêtres n'ont pas de stageID après loadFromDisk, elles atterrissent toutes
         // dans le stage 1 du desktop courant. Sans effet si stageManager est nil (mode V1 strict).
@@ -326,7 +328,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // vraiment mortes sont nettoyées en continu via handleWindowDestroyed.
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s pour laisser scan AX peupler
-            self?.stageManager?.reconcileStageOwnership()  // sync state.stageID ↔ memberWindows V1+V2
+            // SPEC-021 : reconcileStageOwnership supprimée (single source of truth via widToScope).
             // SPEC-018 fix : ré-insertion défensive — assure que toutes les wid tilées du
             // registry sont dans le tree BSP (cas observé : après stage switch + reswitch
             // le tree était vide, focus/move/swap retournaient "no neighbor"). Idempotent.
@@ -561,6 +563,10 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     mgr.setCurrentDesktopKey(
                         DesktopKey(displayUUID: primaryUUID, desktopID: 1))
                 }
+                // SPEC-021 T031 : reconstruire l'index inverse widToScope/widToStageV1
+                // depuis memberWindows persistés. Source unique de vérité pour l'API
+                // scopeOf(wid:)/stageIDOf(wid:). Coût O(stages × members) une fois.
+                mgr.rebuildWidToScopeIndex()
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
@@ -909,19 +915,10 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // `LayoutEngine.stageID(for:)` fallback sur `activeStageID` (= "1" au boot),
         // et la wid est insérée dans le mauvais tree → applyAll la layoute comme une
         // wid de stage 1 visible, contredit la persistance.
-        if let sm = stageManager, sm.stageMode == .perDisplay {
-            if let owningScope = sm.stagesV2.first(where: { _, st in
-                st.memberWindows.contains { $0.cgWindowID == wid }
-            })?.key {
-                registry.update(wid) { $0.stageID = owningScope.stageID }
-            }
-        } else if let sm = stageManager {
-            if let owningStage = sm.stages.values.first(where: { st in
-                st.memberWindows.contains { $0.cgWindowID == wid }
-            }) {
-                registry.update(wid) { $0.stageID = owningStage.id }
-            }
-        }
+        // SPEC-021 : block obsolete. state.stageID est maintenant computed via
+        // widToScope (rebuilt au boot par rebuildWidToScopeIndex). Inutile de
+        // re-propager au register d'une wid : si elle est dans memberWindows,
+        // l'index pointera correctement.
         if state.isTileable {
             let targetID = registry.insertionTarget(for: wid)
             logInfo("insert decision", [
@@ -1541,6 +1538,35 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                             desktopID: newDesktopID,
                             displayUUID: dst.uuid
                         )
+                        // SPEC-022 fix : migrer aussi l'ownership stagesV2. Sans ça, la wid
+                        // reste membre de la stage du display source → rail panel source affiche
+                        // toujours la vignette alors que la window est physiquement sur le
+                        // display cible. assign(wid:to:scope:) retire la wid de tous les
+                        // autres scopes et l'ajoute au scope cible (active stage du nouveau
+                        // (display, desktop)).
+                        if let sm = self.stageManager, sm.stageMode == .perDisplay {
+                            let targetKey = DesktopKey(displayUUID: dst.uuid,
+                                                        desktopID: newDesktopID)
+                            let targetStageID = sm.activeStageByDesktop[targetKey]
+                                                ?? StageID("1")
+                            let targetScope = StageScope(displayUUID: dst.uuid,
+                                                          desktopID: newDesktopID,
+                                                          stageID: targetStageID)
+                            // Garantir que la stage cible existe (lazy create si absent).
+                            if sm.stagesV2[targetScope] == nil {
+                                _ = sm.createStage(id: targetStageID,
+                                                    displayName: targetStageID.value,
+                                                    scope: targetScope)
+                            }
+                            sm.assign(wid: wid, to: targetScope)
+                            // Notifier les rails (les 2 panels concernés vont resync).
+                            EventBus.shared.publish(DesktopEvent(
+                                name: "window_assigned",
+                                payload: ["wid": String(wid),
+                                          "stage_id": targetStageID.value,
+                                          "display_uuid": dst.uuid,
+                                          "desktop_id": String(newDesktopID)]))
+                        }
                     }
                     self.applyLayout()
                 }
