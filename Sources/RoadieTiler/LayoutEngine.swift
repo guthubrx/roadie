@@ -42,14 +42,25 @@ public final class LayoutEngine {
 
     /// Définit la stage active. Utilisé par StageManager via LayoutHooks.
     /// SPEC-019 (hotfix switchTo) : garantit aussi que le tree (stageID, primaryDisplay)
-    /// SPEC-022 — pure setter. Réconciliation tree retirée car display-blind
-    /// (utilisait CGMainDisplayID + filter state.stageID, polluait les autres
-    /// displays). La réconciliation est désormais responsabilité du caller via
-    /// `ensureTreePopulated(with:displayID:)` per-display avec wids résolues
-    /// depuis widToScope (single source of truth SPEC-021).
+    /// SPEC-022 — pure setter legacy (applique à TOUS les displays, compat).
+    /// Préférer `setActiveStage(_:displayID:)` qui scope par display.
     public func setActiveStage(_ stageID: StageID?) {
         workspace.activeStageID = stageID
         logInfo("layout_engine_active_stage", ["stage": stageID?.value ?? "nil"])
+    }
+
+    /// SPEC-022 — setter per-display. Source de vérité scope-aware. Chaque
+    /// display peut afficher une stage différente.
+    public func setActiveStage(_ stageID: StageID?, displayID: CGDirectDisplayID) {
+        if let v = stageID {
+            workspace.activeStageByDisplay[displayID] = v
+        } else {
+            workspace.activeStageByDisplay.removeValue(forKey: displayID)
+        }
+        logInfo("layout_engine_active_stage_display", [
+            "stage": stageID?.value ?? "nil",
+            "display": String(displayID),
+        ])
     }
 
     /// SPEC-022 — garantit que toutes les `wids` passées sont présentes dans le tree
@@ -535,13 +546,17 @@ public final class LayoutEngine {
 
     // MARK: - Apply multi-display (T014)
 
-    /// Applique le layout sur tous les displays, pour la stage active uniquement.
+    /// Applique le layout sur tous les displays, chacun selon SA stage active.
+    /// SPEC-022 — utilise `activeStageByDisplay[display.id]` (per-display) au lieu
+    /// d'un scalaire global. Permet à chaque display d'afficher une stage différente
+    /// simultanément.
     public func applyAll(displayRegistry: DisplayRegistry,
                          outerSides: OuterGaps? = nil) async {
         let displays = await displayRegistry.displays
         let primaryHeight = LayoutEngine.primaryScreenHeight()
-        let activeSID = workspace.activeStageID ?? StageID("1")
         for display in displays {
+            // Stage active spécifique à ce display. Fallback "1" si jamais set.
+            let activeSID = workspace.activeStageByDisplay[display.id] ?? StageID("1")
             let visibleFrameAX = LayoutEngine.nsToAx(display.visibleFrame, primaryHeight: primaryHeight)
             var gaps = outerSides ?? .uniform(display.gapsOuter)
             if let reserve = leftReserveByDisplay[display.id], reserve > 0 {
@@ -612,9 +627,30 @@ public struct Workspace {
 
     // MARK: Stage active
 
-    /// Stage dont le tree est utilisé par `applyAll` et les opérations de navigation.
-    /// Nil uniquement entre deux desktops (transition deactivateAll → activate).
-    public var activeStageID: StageID?
+    /// SPEC-022 — stage active **par display**. Source de vérité du tree à layouter
+    /// pour chaque display. Avant : scalaire global → tous les displays affichaient
+    /// le tree de la même stage, ce qui faussait le rendu multi-display.
+    public var activeStageByDisplay: [CGDirectDisplayID: StageID] = [:]
+
+    /// Compat ascendante : retourne la première stage active trouvée (legacy
+    /// callers qui n'ont pas encore migré vers per-display). Setter applique
+    /// à TOUS les displays connus (compat avec switchTo legacy global).
+    public var activeStageID: StageID? {
+        get { activeStageByDisplay.values.first }
+        set {
+            if let v = newValue {
+                // Si on a déjà des entries, mettre à jour toutes les valeurs;
+                // sinon initialiser primary display.
+                if activeStageByDisplay.isEmpty {
+                    activeStageByDisplay[CGMainDisplayID()] = v
+                } else {
+                    for k in activeStageByDisplay.keys { activeStageByDisplay[k] = v }
+                }
+            } else {
+                activeStageByDisplay.removeAll()
+            }
+        }
+    }
 
     // MARK: Multi-stage × Multi-display
 
