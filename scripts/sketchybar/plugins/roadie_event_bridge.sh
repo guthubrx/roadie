@@ -27,9 +27,15 @@ while true; do
     # Stream les events. À chaque ligne reçue, déclencher le re-render.
     # Pas besoin de parser le JSON : on déclenche un re-render générique qui
     # interroge l'état complet via les CLIs.
+    # SPEC-023 — debounce BSD-compatible (pas de date %N en macOS) :
+    # le lockfile côté handler suffit déjà à empêcher les concurrents.
+    # On ajoute en plus un sleep 0.2s entre 2 invocations pour grouper les bursts.
     "$ROADIE" events --follow --types "$TYPES" 2>/dev/null | \
     while IFS= read -r _line; do
-        "$SKETCHYBAR" --trigger roadie_state_changed
+        # Bypass --trigger : SketchyBar n'exécute pas toujours le script d'un
+        # item subscribed à un event custom. Handler appelé en direct, détaché.
+        ( bash "${PLUGIN_DIR:-$HOME/.config/sketchybar/sketchybar/plugins}/roadie_panel.sh" 2>/dev/null & )
+        sleep 0.2
     done
 
     # Reconnect après 2s si le stream meurt (daemon down, etc.).

@@ -262,7 +262,10 @@ func handleDaemon(verb: String) {
         sendAndPrint(Request(command: "daemon.reload"))
     case "audit":
         // SPEC-021 T080 — audit read-only des invariants stage/desktop ownership.
-        sendAndPrint(Request(command: "daemon.audit"))
+        // SPEC-022 — `--fix` pour aussi auto-corriger les drifts physiques.
+        let fix = args.contains("--fix")
+        sendAndPrint(Request(command: "daemon.audit",
+                             args: fix ? ["fix": "true"] : nil))
     default:
         printUsage(); exit(64)
     }

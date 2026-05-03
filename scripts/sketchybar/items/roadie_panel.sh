@@ -15,5 +15,6 @@ sketchybar --add item roadie.sink left \
                               script="$PLUGIN_DIR/roadie_panel.sh" \
            --subscribe roadie.sink roadie_state_changed system_woke
 
-# Render initial via trigger.
-sketchybar --trigger roadie_state_changed
+# SPEC-023 — Render initial : bypass trigger SketchyBar (observé instable sur
+# certaines configs), on appelle le handler en direct. Le bridge fait pareil.
+bash "$PLUGIN_DIR/roadie_panel.sh" 2>/dev/null &

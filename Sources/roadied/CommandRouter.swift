@@ -69,12 +69,27 @@ enum CommandRouter {
 
         case "daemon.audit":
             // SPEC-021 T080 — audit read-only des invariants stage/desktop ownership.
-            // Retourne la liste des violations détectées, vide = sain.
+            // SPEC-022 — étendu : si arg `fix=true`, lance aussi l'integrity check
+            // physique (frames degenerate, wids offscreen-active, leafs misplaced)
+            // ET applique les corrections.
             let violations = daemon.stageManager?.auditOwnership() ?? []
+            let fix = (request.args?["fix"] ?? "false") == "true"
+            var integrity: [String: AnyCodable] = [:]
+            if let reconciler = daemon.windowDesktopReconciler {
+                let report = await reconciler.runIntegrityCheck(autoFix: fix)
+                integrity = [
+                    "degenerate_frames": AnyCodable(report.degenerateFrames),
+                    "offscreen_with_active_scope": AnyCodable(report.offscreenWithActiveScope),
+                    "tree_leaf_wrong_display": AnyCodable(report.treeLeafWrongDisplay),
+                    "fixed_count": AnyCodable(fix ? report.fixedCount : 0),
+                ]
+            }
             let payload: [String: AnyCodable] = [
                 "violations": AnyCodable(violations),
                 "count": AnyCodable(violations.count),
-                "healthy": AnyCodable(violations.isEmpty),
+                "healthy": AnyCodable(violations.isEmpty && integrity.isEmpty),
+                "integrity": AnyCodable(integrity),
+                "fix_applied": AnyCodable(fix),
             ]
             return .success(payload)
 
