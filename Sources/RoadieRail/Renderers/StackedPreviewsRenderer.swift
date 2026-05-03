@@ -19,15 +19,38 @@ public final class StackedPreviewsRenderer: StageRenderer {
     }
 }
 
-// MARK: - Constantes locales (identiques à l'ex-WindowStack)
+// MARK: - Constantes locales
 
 private let maxVisible:    Int     = 5
-private let stackOffsetXY: CGFloat = 6
-private let stackScale:    CGFloat = 0.02
-private let stackOpacity:  CGFloat = 0.10
+/// Amplitude max du décalage pseudo-random par couche (en px). idx=0 reste
+/// centré (= la vignette « hero » n'a pas d'offset), idx>=1 reçoit un offset
+/// déterministe par hash(wid) borné à ±maxOffset → effet « polaroïds éparpillés ».
+private let maxOffsetX:    CGFloat = 28
+private let maxOffsetY:    CGFloat = 36
+/// Rotation max par couche (degrés). idx=0 sans rotation, idx>=1 reçoit ±maxRotation.
+private let maxRotation:   Double  = 5.0
+/// Scale dégressive douce pour donner de la profondeur sans rétrécir trop.
+private let stackScale:    CGFloat = 0.04
+/// Opacité dégressive : la couche du fond reste visible pour qu'on reconnaisse
+/// la fenêtre (vs ancienne valeur 0.10 qui gommait trop les couches arrière).
+private let stackOpacity:  CGFloat = 0.06
 
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
 private let appIconSize:        CGFloat = 24
+
+/// Pseudo-random déterministe : retourne un offset (dx, dy) et un angle stable
+/// pour une wid donnée. La même wid donne TOUJOURS le même décalage → la vignette
+/// ne saute pas à chaque refresh (toutes les 2 s). Indépendant de la position
+/// dans la cascade (idx) → si l'ordre des wids change (ex: focus change), chaque
+/// vignette garde sa signature visuelle.
+private func scatterFor(wid: CGWindowID) -> (dx: CGFloat, dy: CGFloat, angle: Double) {
+    // Hash bête mais reproductible. Évite Random qui donnerait des sauts.
+    let h = UInt64(wid &* 2654435761)
+    let dx  = CGFloat(Int(h % 1000)        ) / 1000 * (maxOffsetX * 2) - maxOffsetX
+    let dy  = CGFloat(Int((h / 1000)  % 1000)) / 1000 * (maxOffsetY * 2) - maxOffsetY
+    let ang = Double( Int((h / 1000000) % 1000)) / 1000 * (maxRotation * 2) - maxRotation
+    return (dx, dy, ang)
+}
 
 // MARK: - View
 
@@ -100,9 +123,14 @@ private struct StackedPreviewsView: View {
     @ViewBuilder
     private var stackedPreviews: some View {
         let wids = visibleWids
-        ZStack(alignment: .topLeading) {
+        ZStack(alignment: .center) {
             ForEach(Array(wids.enumerated()), id: \.element) { idx, wid in
                 let depth = idx
+                // idx=0 = vignette « hero » centrée, sans rotation, opacité pleine.
+                // idx>=1 = polaroïds éparpillés derrière, offset + rotation déterministes
+                // par wid (stable au refresh).
+                let scatter = depth == 0 ? (dx: CGFloat(0), dy: CGFloat(0), angle: 0.0)
+                                          : scatterFor(wid: wid)
                 WindowPreview(
                     wid: wid,
                     thumbnail: thumbnails[wid],
@@ -111,16 +139,16 @@ private struct StackedPreviewsView: View {
                     bundleID: windows[wid]?.bundleID ?? "",
                     sourceStageID: stage.id
                 )
-                .offset(x: CGFloat(depth) * stackOffsetXY,
-                        y: CGFloat(depth) * stackOffsetXY)
-                .scaleEffect(1.0 - CGFloat(depth) * stackScale,
-                             anchor: .topLeading)
+                .rotationEffect(.degrees(scatter.angle))
+                .scaleEffect(1.0 - CGFloat(depth) * stackScale)
                 .opacity(1.0 - CGFloat(depth) * stackOpacity)
-                .zIndex(Double(wids.count - idx))
+                .offset(x: scatter.dx, y: scatter.dy)
+                .zIndex(Double(wids.count - idx))   // hero (idx=0) sur le dessus
             }
         }
-        .padding(.trailing, CGFloat(maxVisible) * stackOffsetXY)
-        .padding(.bottom,   CGFloat(maxVisible) * stackOffsetXY)
+        // Padding suffisant pour que les polaroïds décalés ne soient pas clippés.
+        .padding(.horizontal, maxOffsetX + 4)
+        .padding(.vertical,   maxOffsetY + 4)
     }
 
     @ViewBuilder
