@@ -244,15 +244,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         periodicScanner?.start()
 
-        // SPEC-018 : purge des wids orphelines après le scan AX initial. Les stages
-        // chargées du disque peuvent référencer des wids des sessions précédentes
-        // (process killed) → à nettoyer pour que le rail UI ne montre que des stages
-        // avec des fenêtres réelles, et que `stage.switch` puisse re-tile correctement.
+        // SPEC-018 : reconcile state.stageID ↔ stage.memberWindows après le scan AX
+        // initial. PAS de purgeOrphanWindows ici : le scan AX peut être incomplet à
+        // T+1.5s (apps lentes type iTerm avec plusieurs fenêtres), purger des wid
+        // légitimes encore en cours de scan vide les stages persistées. Les wid
+        // vraiment mortes sont nettoyées en continu via handleWindowDestroyed.
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s pour laisser scan AX peupler
-            self?.stageManager?.reconcileStageOwnership()  // 1) sync state.stageID ← stage.memberWindows
-            self?.stageManager?.purgeOrphanWindows()       // 2) puis purge wids vraiment mortes
-            // 3) re-tile pour que les wids assignées à des stages non-actives soient cachées
+            self?.stageManager?.reconcileStageOwnership()  // sync state.stageID ↔ memberWindows V1+V2
+            // Re-tile pour que les wids assignées à des stages non-actives soient cachées
             self?.applyLayout()
         }
 
