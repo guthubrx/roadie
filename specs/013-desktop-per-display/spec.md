@@ -2,7 +2,7 @@
 
 **Feature Branch**: `013-desktop-per-display`
 **Created**: 2026-05-02
-**Status**: Draft
+**Status**: Implemented (post-livraison fixes 2026-05-03 — DesktopRegistry V3 paths + DesktopMigration archive auto)
 **Dependencies**: SPEC-011 (virtual-desktops), SPEC-012 (multi-display)
 **Input**: User description : « pouvoir avoir le choix en paramétrage soit mode global, soit mode séparé. Drag = la fenêtre adopte le desktop cible. Débranchement écran → migration vers primary, mais l'état de l'écran absent reste persisté ; au rebranchement, les fenêtres qui y étaient avant retournent dessus à leur expectedFrame. »
 
