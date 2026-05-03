@@ -329,7 +329,10 @@ enum CommandRouter {
             if sm.stageMode == .global {
                 // Mode global : compat V1 — liste plate, currentStageID direct.
                 currentID = sm.currentStageID?.value ?? ""
-                scopedStages = sm.stages.values.map { stage -> [String: Any] in
+                let sortedStages = sm.stages.values.sorted { lhs, rhs in
+                    lhs.id.value.localizedStandardCompare(rhs.id.value) == .orderedAscending
+                }
+                scopedStages = sortedStages.map { stage -> [String: Any] in
                     [
                         "id": stage.id.value,
                         "display_name": stage.displayName,
@@ -352,7 +355,14 @@ enum CommandRouter {
                 let scopedKey = DesktopKey(displayUUID: scope.displayUUID,
                                             desktopID: scope.desktopID)
                 currentID = sm.activeStageByDesktop[scopedKey]?.value ?? ""
-                scopedStages = filtered.map { (scopeKey, stage) -> [String: Any] in
+                // SPEC-022 — tri stable par stage.id pour que le rail panel n'inverse pas
+                // les vignettes d'un poll au suivant (Dictionary.filter retourne dans
+                // un ordre non-déterministe).
+                let sortedFiltered = filtered.sorted { lhs, rhs in
+                    lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
+                        == .orderedAscending
+                }
+                scopedStages = sortedFiltered.map { (scopeKey, stage) -> [String: Any] in
                     [
                         "id": stage.id.value,
                         "display_name": stage.displayName,
