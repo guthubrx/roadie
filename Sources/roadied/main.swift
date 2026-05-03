@@ -563,6 +563,10 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     mgr.setCurrentDesktopKey(
                         DesktopKey(displayUUID: primaryUUID, desktopID: 1))
                 }
+                // SPEC-021 T031 : reconstruire l'index inverse widToScope/widToStageV1
+                // depuis memberWindows persistés. Source unique de vérité pour l'API
+                // scopeOf(wid:)/stageIDOf(wid:). Coût O(stages × members) une fois.
+                mgr.rebuildWidToScopeIndex()
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
