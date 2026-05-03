@@ -17,9 +17,10 @@ struct RailConfig {
     var fadeDurationMs: Int = 200
     // SPEC-014 T090 (US7) : mode display ("per_display" ou "global").
     var displayMode: String = "per_display"
-    // SPEC-018 polish — halo de la stage active. Default vert système Apple #34C759 à 0.65.
+    // SPEC-018 polish — halo de la stage active. Default vert système Apple #34C759.
     var haloColor: String = "#34C759"
-    var haloIntensity: Double = 0.65
+    var haloIntensity: Double = 0.75
+    var haloRadius: Double = 18
 
     var fadeDuration: TimeInterval { TimeInterval(fadeDurationMs) / 1000 }
 
@@ -42,6 +43,8 @@ struct RailConfig {
             if let v = rail["halo_color"]?.string { cfg.haloColor = v }
             if let v = rail["halo_intensity"]?.double { cfg.haloIntensity = max(0.0, min(1.0, v)) }
             else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
+            if let v = rail["halo_radius"]?.double { cfg.haloRadius = max(0.0, min(80.0, v)) }
+            else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
         }
         // SPEC-014 T090 : [desktops] mode informe si rails per_display ou global.
         if let desktops = root["desktops"]?.table,
@@ -277,6 +280,7 @@ final class RailController {
                 state: state,
                 haloColorHex: config.haloColor,
                 haloIntensity: config.haloIntensity,
+                haloRadius: config.haloRadius,
                 onTapStage: onTap,
                 onDropAssign: onDrop,
                 onRename: onRename,

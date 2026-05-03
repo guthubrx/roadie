@@ -19,9 +19,10 @@ struct WindowStack: View {
     let stage:      StageVM
     let thumbnails: [CGWindowID: ThumbnailVM]
     let windows:    [CGWindowID: WindowVM]
-    // SPEC-018 polish — halo paramétrique (couleur hex + intensité 0..1) lus depuis [fx.rail].
+    // SPEC-018 polish — halo paramétrique lu depuis [fx.rail] (color/intensity/radius).
     var haloColorHex:  String                       = "#34C759"
-    var haloIntensity: Double                       = 0.65
+    var haloIntensity: Double                       = 0.75
+    var haloRadius:    Double                       = 18
     var onTap:         () -> Void         = {}
     var onDropAssign:  (CGWindowID, String) -> Void = { _, _ in }
     var onRename:      (String, String) -> Void     = { _, _ in }
@@ -34,19 +35,11 @@ struct WindowStack: View {
     @State private var deleteConfirm:  Bool  = false
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        haloed(content: ZStack(alignment: .bottomLeading) {
             stackedPreviews
             appIconBadge
                 .offset(x: -8, y: -8)
-        }
-        // Pas de dot vert (redondant avec le halo).
-        // SPEC-018 polish — halo paramétrique [fx.rail] halo_color/halo_intensity.
-        .shadow(
-            color: stage.isActive ? Color(hex: haloColorHex).opacity(haloIntensity) : .clear,
-            radius: 14,
-            x: 0,
-            y: 0
-        )
+        })
         .overlay(alignment: .center) { dropHighlight }
         .onTapGesture { onTap() }
         .dropDestination(for: WindowDragData.self) { items, _ in
@@ -63,6 +56,24 @@ struct WindowStack: View {
             Button("Delete", role: .destructive) { onDelete(stage.id) }
         } message: {
             Text("Windows will be moved back to stage 1.")
+        }
+    }
+
+    // SPEC-018 polish — halo conditionnel, n'applique le .shadow QUE si la stage est active.
+    // Fix : `.shadow(color: .clear)` semble malgré tout dessiner sur certains rendus
+    // SwiftUI (visuel halo persistant sur stage non-active observée). Le if explicite
+    // garantit qu'aucun shadow n'est posé quand inactive.
+    @ViewBuilder
+    private func haloed<Content: View>(content: Content) -> some View {
+        if stage.isActive {
+            content.shadow(
+                color: Color(hex: haloColorHex).opacity(haloIntensity),
+                radius: haloRadius,
+                x: 0,
+                y: 0
+            )
+        } else {
+            content
         }
     }
 
