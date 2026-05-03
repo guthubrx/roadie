@@ -23,22 +23,19 @@ LOCKDIR=/tmp/roadie-sketchybar.lock.d
 # `sketchybar --query default_items` ne retourne pas la liste, donc on track
 # nous-mêmes les items créés. En cas de fichier corrompu, brute-force fallback.
 remove_all_roadie_items() {
+    # SPEC-023 — utilise UNIQUEMENT le ITEMS_FILE (track persistant).
+    # Le brute-force des 100 patterns possibles saturait l'IPC SketchyBar
+    # (observé : crash au clic sous burst de --remove).
     if [ -f "$ITEMS_FILE" ]; then
+        # Batch SketchyBar : 1 seule commande avec multiples --remove.
+        local args=()
         while IFS= read -r item; do
-            [ -n "$item" ] && sketchybar --remove "$item" 2>/dev/null
+            [ -n "$item" ] && args+=(--remove "$item")
         done < "$ITEMS_FILE"
+        if [ ${#args[@]} -gt 0 ]; then
+            sketchybar "${args[@]}" 2>/dev/null
+        fi
     fi
-    # Fallback : brute-force sur les patterns connus (cap supérieur).
-    for did in $(seq 1 10); do
-        sketchybar --remove "roadie.desktop.$did" 2>/dev/null
-        sketchybar --remove "roadie.add.$did" 2>/dev/null
-        for sid in $(seq 1 9); do
-            sketchybar --remove "roadie.stage.$did.$sid" 2>/dev/null
-        done
-    done
-    sketchybar --remove roadie.overflow 2>/dev/null
-    sketchybar --remove roadie.daemon_down 2>/dev/null
-    sketchybar --remove roadie.empty 2>/dev/null
     : > "$ITEMS_FILE"
 }
 
