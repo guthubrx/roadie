@@ -139,11 +139,11 @@ Le projet est développé en [SpecKit](https://github.com/sergeykish/spec-kit) �
 
 ### Décisions architecturales
 
-- [ADR-001 — AX per-app, pas de SkyLight write](docs/decisions/ADR-001-ax-per-app-no-skylight.md)
-- [ADR-002 — Tree n-aire vs BSP binaire](docs/decisions/ADR-002-tree-naire-vs-bsp-binary.md)
-- [ADR-003 — Hide via corner offscreen](docs/decisions/ADR-003-hide-corner-vs-minimize.md)
-- [ADR-004 — Modules opt-in SIP-off](docs/decisions/ADR-004-sip-off-modules.md)
-- [ADR-005 — Tahoe 26 osax injection bloquée](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.md)
+- [ADR-001 — AX per-app, pas de SkyLight write](docs/decisions/ADR-001-ax-per-app-no-skylight.fr.md)
+- [ADR-002 — Tree n-aire vs BSP binaire](docs/decisions/ADR-002-tree-naire-vs-bsp-binary.fr.md)
+- [ADR-003 — Hide via corner offscreen](docs/decisions/ADR-003-hide-corner-vs-minimize.fr.md)
+- [ADR-004 — Modules opt-in SIP-off](docs/decisions/ADR-004-sip-off-modules.fr.md)
+- [ADR-005 — Tahoe 26 osax injection bloquée](docs/decisions/ADR-005-tahoe-26-osax-injection-blocked.fr.md)
 
 ## Crédits
 

@@ -1,110 +1,112 @@
-# ADR-008 — Stratégie signature de code, permissions Accessibility et distribution
+# ADR-008 — Code signing, Accessibility permissions, and distribution strategy
 
-**Date** : 2026-05-03 | **Statut** : Accepté pour la phase dev. Ouvert pour les phases beta/release.
+🇬🇧 **English** · 🇫🇷 [Français](ADR-008-signing-distribution-strategy.fr.md)
 
-## Contexte
+**Date**: 2026-05-03 | **Status**: Accepted for the dev phase. Open for beta/release phases.
 
-Le développement de roadie a fait apparaître un problème récurrent : à chaque rebuild du daemon, la permission **Accessibility** (TCC) est silencieusement révoquée par macOS, ce qui empêche le daemon de démarrer (`AXIsProcessTrusted` retourne false → exit 2). Le launchd `KeepAlive` re-spawn en boucle, log `permission Accessibility manquante`, sans solution évidente côté UI Réglages Système puisque sur macOS Sonoma+ le Prefpane refuse l'ajout d'un binaire qui n'est pas dans une `.app`.
+## Context
 
-Trois sous-problèmes distincts à clarifier en une seule décision :
+Developing roadie surfaced a recurring problem: after every daemon rebuild, the **Accessibility** permission (TCC) is silently revoked by macOS, preventing the daemon from starting (`AXIsProcessTrusted` returns false → exit 2). The launchd `KeepAlive` re-spawns in a loop, logging `Accessibility permission missing`, with no obvious UI-side fix since on macOS Sonoma+ the Privacy & Security pane rejects adding a bare binary (drag-and-drop or `+` are rejected).
 
-1. **Le binaire doit être dans une `.app` bundle.** Sur Sonoma/Sequoia, le panneau Accessibility refuse les binaires nus (drag-and-drop ou `+` rejetés). Apple DTS (Quinn the Eskimo) a confirmé publiquement que faire tourner un daemon « comme un user » est non-supporté ; la pattern officielle est de wrapper le binaire dans un bundle.
-2. **TCC ancre la permission à la signature de code, pas au chemin.** À chaque `swift build`, la signature ad-hoc change → TCC traite le binaire comme un nouveau programme et drop la grant existante. Solution canonique (yabai + AeroSpace + d'autres) : signer avec un certificat self-signed stable, identique à chaque rebuild, ce qui maintient l'identité TCC.
-3. **Au moins deux installs de roadie coexistaient sur la machine dev** (`/Applications/Roadie.app` + `~/Applications/roadied.app`), avec des binaires différents pointés par un launchd plist d'un côté et un symlink `~/.local/bin/roadied` de l'autre. Quand un crash survenait, l'auto-restart launchd redémarrait l'ancienne build pendant que les `cp` du workflow dev modifiaient l'autre. Source de désync persistance disque ↔ binaire en mémoire.
+Three distinct sub-problems to clarify in a single decision:
 
-## Décision
+1. **The binary must be inside a `.app` bundle.** On Sonoma/Sequoia, the Accessibility pane rejects bare binaries. Apple DTS (Quinn the Eskimo) has publicly confirmed that running a daemon "like a user" is unsupported; the official pattern is to wrap the binary in a bundle.
+2. **TCC anchors the permission to the code signature, not the path.** Every `swift build` produces a different ad-hoc signature → TCC treats the binary as a new program and drops the existing grant. The canonical solution (yabai, AeroSpace, and others): sign with a stable self-signed certificate, identical across rebuilds, which preserves the TCC identity.
+3. **At least two roadie installs coexisted on the dev machine** (`/Applications/Roadie.app` + `~/Applications/roadied.app`), with different binaries: one pointed to by a launchd plist, the other by a `~/.local/bin/roadied` symlink. When a crash occurred, launchd auto-restarted the old build while `cp` commands from the dev workflow were updating the other. Source of persistent disk-state ↔ in-memory binary desync.
 
-### 1. Architecture d'installation **dev** (machine du mainteneur)
+## Decision
 
-Une seule install canonique :
+### 1. **Dev** installation architecture (maintainer's machine)
 
-| Élément | Chemin | Rôle |
+A single canonical install:
+
+| Element | Path | Role |
 |---|---|---|
-| Binaire daemon (réel, fichier) | `~/Applications/roadied.app/Contents/MacOS/roadied` | Seul exécutable lancé. TCC ancré ici. |
-| Symlink dev | `~/.local/bin/roadied` → bundle ci-dessus | Pour `cp .build/debug/roadied ~/.local/bin/` qui dérefère et MAJ le bundle. Sécurise le workflow dev existant. |
-| Binaire CLI client | `~/.local/bin/roadie` (fichier réel) | Client IPC. Signé aussi pour cohérence. |
-| Binaire rail | `~/.local/bin/roadie-rail` (fichier réel) | Lancé manuellement par `install-dev.sh`, pas par launchd. |
-| LaunchAgent | `~/Library/LaunchAgents/com.roadie.roadie.plist` | `RunAtLoad=true`, `KeepAlive.Crashed=true`, pointe vers `~/Applications/roadied.app/Contents/MacOS/roadied`. |
-| Certificat dev | `roadied-cert` (login keychain, type Code Signing, Self Signed Root) | Identité stable. Créé une fois via Keychain Access > Certificate Assistant. |
+| Daemon binary (real file) | `~/Applications/roadied.app/Contents/MacOS/roadied` | The only executed binary. TCC anchored here. |
+| Dev symlink | `~/.local/bin/roadied` → bundle above | So `cp .build/debug/roadied ~/.local/bin/` dereferences and updates the bundle. Preserves the existing dev workflow. |
+| CLI client binary | `~/.local/bin/roadie` (real file) | IPC client. Also signed for consistency. |
+| Rail binary | `~/.local/bin/roadie-rail` (real file) | Launched manually by `install-dev.sh`, not by launchd. |
+| LaunchAgent | `~/Library/LaunchAgents/com.roadie.roadie.plist` | `RunAtLoad=true`, `KeepAlive.Crashed=true`, points to `~/Applications/roadied.app/Contents/MacOS/roadied`. |
+| Dev certificate | `roadied-cert` (login keychain, Code Signing type, Self Signed Root) | Stable identity. Created once via Keychain Access > Certificate Assistant. |
 
-Tout autre `.app` de roadie est interdit (les bundles `/Applications/Roadie.app` orphelins doivent être supprimés à la première détection).
+Any other roadie `.app` is forbidden (orphan `/Applications/Roadie.app` bundles must be deleted on first detection).
 
-### 2. Workflow dev unique : `scripts/install-dev.sh`
+### 2. Single dev workflow: `scripts/install-dev.sh`
 
-Ce script est **le seul** point d'entrée pour propager une nouvelle build vers le système :
+This script is **the only** entry point for propagating a new build to the system:
 
-1. `swift build` (PATH override anaconda — règle MEMORY.md projet).
-2. `launchctl bootout` du daemon courant + `pkill` sur rail et events --follow zombies.
-3. `cp .build/debug/{roadied,roadie-rail,roadie}` aux 3 cibles.
-4. Crée le `Info.plist` du bundle si absent (CFBundleExecutable=roadied, LSUIElement=true).
-5. **`codesign -fs roadied-cert`** sur chacun des 3 binaires (préserve la grant Accessibility).
-6. `launchctl bootstrap` du LaunchAgent + relance manuelle de roadie-rail.
+1. `swift build` (anaconda PATH override — project MEMORY.md rule).
+2. `launchctl bootout` of the current daemon + `pkill` of rail and `events --follow` zombies.
+3. `cp .build/debug/{roadied,roadie-rail,roadie}` to the 3 targets.
+4. Creates the bundle `Info.plist` if absent (CFBundleExecutable=roadied, LSUIElement=true).
+5. **`codesign -fs roadied-cert`** on each of the 3 binaries (preserves the Accessibility grant).
+6. `launchctl bootstrap` of the LaunchAgent + manual relaunch of roadie-rail.
 
-Toute autre méthode de mise à jour des binaires (édition manuelle, `cp` direct, `brew install`, etc.) est interdite tant qu'on est en phase dev — elle invaliderait soit le path stable, soit la signature TCC, soit les deux.
+Any other binary update method (manual editing, direct `cp`, `brew install`, etc.) is forbidden during the dev phase — it would invalidate either the stable path, the TCC signature, or both.
 
-### 3. Identité TCC pérenne
+### 3. Persistent TCC identity
 
-Le certificat `roadied-cert` est self-signed root, type Code Signing, dans le login keychain. Il est partagé entre les 3 binaires (daemon, rail, CLI). Il ne contient **aucune information personnelle** (juste un nom de cert), n'est jamais commité dans le repo. Il est créé manuellement par chaque développeur du projet — son contenu n'a pas besoin d'être identique entre développeurs, c'est une convention de nom uniquement.
+The `roadied-cert` certificate is a self-signed root, Code Signing type, in the login keychain. It is shared across the 3 binaries (daemon, rail, CLI). It contains **no personal information** (just a certificate name), is never committed to the repo. Each project developer creates it manually — its content does not need to be identical across developers; it is a naming convention only.
 
-Conséquences :
-- Permission Accessibility donnée **une seule fois** au binaire `~/Applications/roadied.app/Contents/MacOS/roadied`. Elle survit à tous les rebuilds.
-- Si le cert est supprimé du keychain ou expiré, il faut en re-générer un (même nom) et re-cocher la grant. C'est un événement rare (cert sans expiration explicite par défaut).
-- Si un développeur change le nom du cert (`ROADIE_CERT=foo ./scripts/install-dev.sh`), il devra re-cocher la grant pour ce nouvel identifiant TCC.
+Consequences:
+- Accessibility permission granted **once** to the binary `~/Applications/roadied.app/Contents/MacOS/roadied`. It survives all rebuilds.
+- If the cert is deleted from the keychain or expires, a new one must be generated (same name) and the grant re-ticked. This is a rare event (cert with no explicit expiration by default).
+- If a developer changes the cert name (`ROADIE_CERT=foo ./scripts/install-dev.sh`), they must re-tick the grant for that new TCC identifier.
 
-### 4. Stratégie de distribution **end-user** (phase ultérieure, non immédiate)
+### 4. **End-user** distribution strategy (future phase, not immediate)
 
-Trois chemins possibles, choix à figer plus tard :
+Three possible paths, to be locked in later:
 
-| Chemin | Coût mainteneur | Friction utilisateur | Compatible HypRoadie SIP-off (SPEC-004+) ? |
+| Path | Maintainer cost | User friction | Compatible with HypRoadie SIP-off (SPEC-004+)? |
 |---|---|---|---|
-| **A. Notarization Apple** | 99 $/an Apple Developer Program + soumission notarization à chaque release | Zéro warning, seule la perm Accessibility reste manuelle | **Non** — Apple refuse de notariser le code qui touche au Dock |
-| **B. Developer ID signé non-notarisé** (modèle AeroSpace) | 99 $/an Apple Developer Program (cert renouvelé à expiration) | Faible : Homebrew cask strip auto le `com.apple.quarantine` xattr ; utilisateur coche Accessibility une fois | **Oui** pour le core, en gardant les modules SIP-off dans une distribution séparée |
-| **C. Self-sign user-side** (modèle yabai) | 0 $ | **Élevée** : chaque utilisateur génère son cert local, exécute `codesign -fs` après chaque upgrade brew | **Oui** sans contrainte |
+| **A. Apple Notarization** | $99/year Apple Developer Program + notarization submission per release | Zero warning, only the Accessibility perm remains manual | **No** — Apple refuses to notarize code that touches Dock |
+| **B. Developer ID signed, non-notarized** (AeroSpace model) | $99/year Apple Developer Program (cert renewed at expiration) | Low: Homebrew cask auto-strips the `com.apple.quarantine` xattr; user ticks Accessibility once | **Yes** for the core, keeping SIP-off modules in a separate distribution |
+| **C. User-side self-sign** (yabai model) | $0 | **High**: each user generates their local cert, runs `codesign -fs` after every brew upgrade | **Yes** with no constraint |
 
-Décision pour roadie :
+Decision for roadie:
 
-- **Core roadie** (SPEC-001/002/003 et famille) → cible chemin B (Developer ID + Homebrew cask). Public visé : tous utilisateurs macOS, friction quasi-nulle. Active à partir du moment où le projet a son premier release publique.
-- **HypRoadie modules opt-in** (SPEC-004+) → chemin C (self-sign user-side) avec un script séparé `install-fx.sh`. Public visé : power-users qui ont volontairement désactivé SIP. Conforme à la position non-négociable de l'utilisateur (« compartimentation totale », plan SIP-off § P1).
+- **Core roadie** (SPEC-001/002/003 and family) → targets path B (Developer ID + Homebrew cask). Target audience: all macOS users, near-zero friction. Activates at the project's first public release.
+- **HypRoadie opt-in modules** (SPEC-004+) → path C (user-side self-sign) with a separate `install-fx.sh` script. Target audience: power users who have deliberately disabled SIP. Consistent with the user's non-negotiable position ("full compartmentalization", SIP-off plan § P1).
 
-Le chemin A est **explicitement rejeté** dès le départ : il interdirait toute évolution future vers HypRoadie, ce qui est non négociable.
+Path A is **explicitly rejected** from the outset: it would foreclose any future HypRoadie evolution, which is non-negotiable.
 
-## Conséquences
+## Consequences
 
-### Positives
+### Positive
 
-- **Plus de pertes de grant Accessibility entre rebuilds** : la signature stable garantit l'identité TCC. Le mainteneur ne re-coche jamais.
-- **Workflow dev déterministe** : `./scripts/install-dev.sh` est le seul point d'entrée, le résultat est reproductible.
-- **Élimination du désync « 2 installs roadie »** : un seul .app, un seul launchd, un seul cert.
-- **Distribution future préparée sans dette technique** : le bundle structure est déjà conforme à Developer ID / Homebrew cask. Le jour où on switch vers le programme Apple, il suffit de remplacer `roadied-cert` par le Developer ID dans le script.
-- **HypRoadie SIP-off resté possible** : la décision n'enferme pas le projet dans la notarization.
+- **No more Accessibility grant losses between rebuilds**: the stable signature guarantees TCC identity. The maintainer never re-ticks.
+- **Deterministic dev workflow**: `./scripts/install-dev.sh` is the single entry point; the result is reproducible.
+- **Elimination of the "2 roadie installs" desync**: one `.app`, one launchd, one cert.
+- **Distribution future prepared without technical debt**: the bundle structure is already conformant to Developer ID / Homebrew cask. When the time comes to switch to the Apple program, just replace `roadied-cert` with the Developer ID in the script.
+- **HypRoadie SIP-off remains possible**: the decision doesn't lock the project into notarization.
 
-### Négatives
+### Negative
 
-- **Création manuelle du cert** : chaque développeur (et chaque user yabai-style si chemin C activé pour le core) doit exécuter une démarche GUI dans Keychain Access pour créer le cert. Pas automatisable. Documenté dans le README dev.
-- **Accessibility manuelle reste obligatoire** : l'API TCC ne permet PAS d'ajouter programmatiquement un binaire à la liste Accessibility (Apple DTS confirmé). C'est une limite OS, pas du projet.
-- **Le cert dev expirera un jour** (par défaut Self Signed Root sans validité explicite = ~365 jours selon Keychain Access). À ce moment, re-création + re-grant. Acceptable pour un solo dev, à documenter pour la phase équipe.
-- **`scripts/install-dev.sh` doit rester maintenu en miroir de la convention bundle** : si on déplace le path du bundle, ou si on renomme le cert, ou si on touche à la structure Info.plist, le script doit suivre — c'est la single source of truth de l'install dev.
+- **Manual cert creation**: each developer (and each yabai-style user if path C is activated for the core) must perform a GUI step in Keychain Access to create the cert. Not automatable. Documented in the dev README.
+- **Manual Accessibility grant remains required**: the TCC API does NOT allow programmatically adding a binary to the Accessibility list (Apple DTS confirmed). This is an OS constraint, not a project one.
+- **The dev cert will eventually expire** (Self Signed Root with no explicit validity = ~365 days per Keychain Access by default). At that point: re-create + re-grant. Acceptable for a solo dev; to be documented for the team phase.
+- **`scripts/install-dev.sh` must stay in sync with the bundle convention**: if the bundle path moves, the cert is renamed, or the `Info.plist` structure changes, the script must follow — it is the single source of truth for the dev install.
 
-### Neutres
+### Neutral
 
-- Pas d'impact sur les SPECs en cours (SPEC-014/018/019). C'est une couche infra orthogonale.
-- Pas d'impact sur la roadmap HypRoadie (SPEC-004+). Au contraire, la décision la prépare proprement.
+- No impact on in-progress SPECs (SPEC-014/018/019). This is an orthogonal infrastructure layer.
+- No impact on the HypRoadie roadmap (SPEC-004+). On the contrary, the decision prepares it cleanly.
 
-## Alternatives considérées
+## Alternatives considered
 
-1. **Signer avec `codesign --force --sign -`** (signature ad-hoc explicite, pas de cert). Rejeté : produit une signature aléatoire à chaque rebuild → identique au comportement non-signé, drop TCC.
-2. **Désactiver TCC partiellement via `tccutil`**. Rejeté : nécessite SIP off complet, hors scope core, atteint la posture sécurité de la machine bien au-delà du nécessaire.
-3. **Faire tourner le daemon comme `LaunchDaemon` system (root)** au lieu de `LaunchAgent` user. Rejeté : Apple DTS explicitement déconseille la pattern « daemon root + UserName=user pour faire semblant d'être en session », et `roadied` a besoin de l'AX API qui requiert une session GUI.
-4. **Embarquer le daemon dans un `.xpc` service signé par la `.app` GUI**. Rejeté : roadie n'a pas (encore) d'app GUI propriétaire, et ce serait sur-architecturer pour un outil CLI.
-5. **Distribuer en chemin A direct (notarization Apple)**. Rejeté : interdit l'évolution HypRoadie, c'est dealbreaker per la position utilisateur.
+1. **Sign with `codesign --force --sign -`** (explicit ad-hoc signature, no cert). Rejected: produces a different signature on every rebuild → identical to unsigned behavior, drops TCC.
+2. **Partially disable TCC via `tccutil`**. Rejected: requires full SIP off, out of core scope, pushes the machine's security posture far beyond what is necessary.
+3. **Run the daemon as a system `LaunchDaemon` (root)** instead of a user `LaunchAgent`. Rejected: Apple DTS explicitly advises against the "root daemon + UserName=user to fake a session" pattern, and `roadied` needs the AX API which requires a GUI session.
+4. **Embed the daemon in a `.xpc` service signed by a GUI `.app`**. Rejected: roadie does not (yet) have a proprietary GUI app, and this would be over-engineering for a CLI tool.
+5. **Distribute via path A directly (Apple notarization)**. Rejected: blocks HypRoadie evolution — a dealbreaker per the user's position.
 
 ## Sources
 
 - [Apple Developer Forums — daemons are unable to access files (Quinn the Eskimo, DTS)](https://developer.apple.com/forums/thread/118508)
 - [Chris Paynter — *What to do when your macOS daemon gets blocked by TCC dialogues*](https://chrispaynter.medium.com/what-to-do-when-your-macos-daemon-gets-blocked-by-tcc-dialogues-d3a1b991151f)
-- [yabai wiki — *Installing yabai (from HEAD)*](https://github.com/koekeishiya/yabai/wiki/Installing-yabai-(from-HEAD)) (workflow `codesign -fs yabai-cert` qui inspire `roadied-cert`)
-- [AeroSpace README](https://github.com/nikitabobko/AeroSpace) (modèle Developer ID non-notarisé + Homebrew cask qui strip quarantine)
+- [yabai wiki — *Installing yabai (from HEAD)*](https://github.com/koekeishiya/yabai/wiki/Installing-yabai-(from-HEAD)) (`codesign -fs yabai-cert` workflow that inspired `roadied-cert`)
+- [AeroSpace README](https://github.com/nikitabobko/AeroSpace) (Developer ID non-notarized + Homebrew cask that strips quarantine model)
 - [Apple Developer — Signing Mac Software with Developer ID](https://developer.apple.com/developer-id/)
-- [Apple Developer — Developer ID](https://developer.apple.com/support/developer-id/) (programme 99 $/an)
-- [rsms — *macOS distribution gist*](https://gist.github.com/rsms/929c9c2fec231f0cf843a1a746a416f5) (vue panoramique signing/notarization/quarantine)
-- [Apple Developer Forums — *Add application to accessibility list*](https://developer.apple.com/forums/thread/119373) (impossibilité d'automatiser l'ajout Accessibility)
+- [Apple Developer — Developer ID](https://developer.apple.com/support/developer-id/) ($99/year program)
+- [rsms — *macOS distribution gist*](https://gist.github.com/rsms/929c9c2fec231f0cf843a1a746a416f5) (panoramic view of signing/notarization/quarantine)
+- [Apple Developer Forums — *Add application to accessibility list*](https://developer.apple.com/forums/thread/119373) (impossibility of automating the Accessibility grant)

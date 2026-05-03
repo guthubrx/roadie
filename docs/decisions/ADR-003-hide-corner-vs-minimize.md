@@ -1,62 +1,64 @@
-# ADR-003 — Stratégie de masquage : coin écran (vs minimize, vs Spaces)
+# ADR-003 — Hide strategy: offscreen corner (vs minimize, vs Spaces)
 
-**Date** : 2026-05-01 | **Statut** : Accepté
+🇬🇧 **English** · 🇫🇷 [Français](ADR-003-hide-corner-vs-minimize.fr.md)
 
-## Contexte
+**Date**: 2026-05-01 | **Status**: Accepted
 
-Le stage manager (plugin opt-in) doit pouvoir masquer les fenêtres d'un stage non-actif sans les perdre, et les restaurer fidèlement à la bascule.
+## Context
 
-Options :
+The stage manager (opt-in plugin) must be able to hide the windows of an inactive stage without losing them, and restore them faithfully on switch.
 
-1. **yabai-style** : utiliser les Spaces macOS. Chaque stage = un Space. Bascule = `yabai -m space --focus N` via scripting addition. Nécessite **SIP partiellement off**.
+Options:
 
-2. **AeroSpace-style** : déplacer les fenêtres hors écran, à `(-100000, -100000)`. Conserver leur frame d'origine en mémoire pour restauration. Pas de Spaces, pas de SIP.
+1. **yabai-style**: use macOS Spaces. Each stage = one Space. Switching = `yabai -m space --focus N` via scripting addition. Requires **SIP partially off**.
 
-3. **stage SPEC-001** : minimisation native via `kAXMinimizedAttribute = true`. Pas de Spaces, pas de SIP, mais animation Dock visible et yabai/JankyBorders ré-tilent à la dé-min (clignotement vu en SPEC-001).
+2. **AeroSpace-style**: move windows offscreen to `(-100000, -100000)`. Keep their original frame in memory for restoration. No Spaces, no SIP.
 
-## Décision
+3. **stage SPEC-001**: native minimize via `kAXMinimizedAttribute = true`. No Spaces, no SIP, but a visible Dock animation occurs and yabai/JankyBorders re-tile on un-minimize (flicker observed in SPEC-001).
 
-**Option 2 (coin écran) en stratégie principale**, avec **option 3 (minimize) disponible via config** pour les utilisateurs qui préfèrent.
+## Decision
 
-Justification :
-- Option 1 exclue par FR-005 (pas de SIP désactivé).
-- Option 2 = AeroSpace, validée 2 ans en prod, pas de clignotement parce que les fenêtres restent dans la même Space sans changement d'état AX significatif.
-- Option 3 fournie en fallback configurable car certains utilisateurs préfèrent l'animation Dock pour avoir une indication visuelle.
+**Option 2 (offscreen corner) as the primary strategy**, with **option 3 (minimize) available via config** for users who prefer it.
 
-Limitation **identifiée** d'option 2 : les fenêtres déplacées en coin restent dans la liste Cmd+Tab. AeroSpace original ignore ce problème ; nous ajoutons un mode `"hybrid"` (corner + minimize natif) en option pour mitiger.
+Rationale:
+- Option 1 is excluded by FR-005 (no SIP disabled).
+- Option 2 = AeroSpace, validated 2 years in production, no flicker because windows stay in the same Space with no significant AX state change.
+- Option 3 provided as a configurable fallback because some users prefer the Dock animation as a visual indicator.
 
-## Spécification HideStrategy
+**Identified limitation** of option 2: windows moved to the corner remain in the Cmd+Tab list. The original AeroSpace ignores this issue; we add a `"hybrid"` mode (corner + native minimize) as an option to mitigate it.
+
+## HideStrategy specification
 
 ```swift
 enum HideStrategy: String, Codable {
-    case corner    // déplace à (-100000, -100000), sauvegarde la frame
+    case corner    // move to (-100000, -100000), save the frame
     case minimize  // kAXMinimizedAttribute = true
-    case hybrid    // corner + minimize (résout Cmd+Tab)
+    case hybrid    // corner + minimize (resolves Cmd+Tab)
 }
 ```
 
-## Conséquences
+## Consequences
 
-### Positives
+### Positive
 
-- **Bascule rapide** (~50 ms par fenêtre AX setPosition vs ~250 ms animation minimize).
-- **Pas de SIP** requis.
-- **Pas d'interférence** avec d'autres tilers en cours (yabai/AeroSpace ne tournent pas en parallèle de toute façon).
-- **Configurable** : l'utilisateur choisit son trade-off Cmd+Tab.
+- **Fast switching** (~50 ms per window via AX setPosition vs ~250 ms minimize animation).
+- **No SIP** required.
+- **No interference** with other running tilers (yabai/AeroSpace don't run in parallel anyway).
+- **Configurable**: the user chooses their Cmd+Tab trade-off.
 
-### Négatives
+### Negative
 
-- Mode `corner` = fenêtres "ghost" dans Cmd+Tab. Acceptable pour beaucoup d'utilisateurs (idem AeroSpace).
-- Mode `hybrid` ajoute la latence minimize (250 ms) et l'animation Dock pour les fenêtres masquées. À évaluer empiriquement.
+- `corner` mode = "ghost" windows in Cmd+Tab. Acceptable for many users (same as AeroSpace).
+- `hybrid` mode adds the minimize latency (250 ms) and the Dock animation for hidden windows. To be evaluated empirically.
 
-## Alternatives rejetées
+## Rejected alternatives
 
-- **Suppression / ré-ouverture** des fenêtres : casserait l'état applicatif (documents non sauvegardés, etc.). Inacceptable.
-- **Hidden Space créé à la volée** : nécessiterait CGSGetSpaces (privé), proche de SkyLight, hors scope V1.
+- **Destroying/reopening** windows: would break application state (unsaved documents, etc.). Unacceptable.
+- **Hidden Space created on the fly**: would require `CGSGetSpaces` (private), close to SkyLight, out of V1 scope.
 
-## Références
+## References
 
-- AeroSpace : `Sources/AppBundle/tree/MacWindow.swift` — `hideInCorner` / `unhideFromCorner`
-- yabai : `src/space_manager.c` — `space_manager_set_active_space`
-- SPEC-001 : `stage.swift` cmdSwitch (minimize natif)
-- research.md §3 (stratégies masquage)
+- AeroSpace: `Sources/AppBundle/tree/MacWindow.swift` — `hideInCorner` / `unhideFromCorner`
+- yabai: `src/space_manager.c` — `space_manager_set_active_space`
+- SPEC-001: `stage.swift` cmdSwitch (native minimize)
+- research.md §3 (hide strategies)

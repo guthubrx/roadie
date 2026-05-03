@@ -41,11 +41,22 @@ public final class WindowCaptureService {
         guard let cg = CGWindowListCreateImage(
             .null, .optionIncludingWindow, wid,
             [.nominalResolution, .boundsIgnoreFraming]
-        ) else { return nil }
-
+        ) else {
+            logWarn("captureNow: CGWindowListCreateImage returned nil",
+                    ["wid": String(wid)])
+            return nil
+        }
+        guard cg.width > 0 && cg.height > 0 else {
+            logWarn("captureNow: CGImage zero size",
+                    ["wid": String(wid),
+                     "w": String(cg.width), "h": String(cg.height)])
+            return nil
+        }
         let size = CGSize(width: cg.width, height: cg.height)
-        guard let pngData = Self.encodePNG(cg) else { return nil }
-
+        guard let pngData = Self.encodePNG(cg) else {
+            logWarn("captureNow: encodePNG failed", ["wid": String(wid)])
+            return nil
+        }
         let entry = ThumbnailEntry(wid: wid, pngData: pngData, size: size,
                                    degraded: false, capturedAt: Date())
         onCapture?(entry)
