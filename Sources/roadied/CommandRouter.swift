@@ -444,20 +444,53 @@ enum CommandRouter {
             }
             // Lazy stages : auto-créer le stage s'il n'existe pas.
             // SPEC-018 : en mode per_display, créer ET assign dans le scope courant (ou overridé).
+            // SPEC-022 : si --display absent, le scope cible est dérivé du DISPLAY PHYSIQUE
+            // de la wid (frame center → display), PAS du curseur. Sinon "Shift+Alt+2"
+            // sur une fenêtre du LG alors que le curseur est sur built-in assignait
+            // logiquement la wid au built-in → cascade de moves cross-display foireux.
+            // assignedScope est capturé pour l'auto-switch suivant (assign_follows_focus).
+            var assignedScope: StageScope? = nil
             if sm.stageMode == .perDisplay {
-                var scopeError: Response? = nil
-                guard let baseScope = await resolveScope(request: request, daemon: daemon,
-                                                         errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                let baseScope: StageScope
+                let hasExplicitDisplay = request.args?["display"] != nil
+                if hasExplicitDisplay {
+                    var scopeError: Response? = nil
+                    guard let resolved = await resolveScope(request: request, daemon: daemon,
+                                                             errorOut: &scopeError) else {
+                        return scopeError ?? .error(.internalError, "scope resolution failed")
+                    }
+                    baseScope = resolved
+                } else {
+                    // Inférer depuis le display physique de la wid.
+                    if let state = daemon.registry.get(wid),
+                       let dReg = daemon.displayRegistry,
+                       let dskReg = daemon.desktopRegistry {
+                        let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                        let displays = await dReg.displays
+                        // 1. Display contenant le centre. 2. Sinon scope existant
+                        //    de la wid via widToScope. 3. Fallback scope curseur.
+                        if let display = displays.first(where: { $0.frame.contains(center) }) {
+                            let desktopID = await dskReg.currentID(for: display.id)
+                            baseScope = StageScope(displayUUID: display.uuid,
+                                                    desktopID: desktopID,
+                                                    stageID: StageID(""))
+                        } else if let known = sm.scopeOf(wid: wid) {
+                            baseScope = known
+                        } else {
+                            baseScope = await daemon.currentStageScope()
+                        }
+                    } else {
+                        baseScope = await daemon.currentStageScope()
+                    }
                 }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID, stageID: stageID)
+                let fullScope = StageScope(displayUUID: baseScope.displayUUID,
+                                           desktopID: baseScope.desktopID, stageID: stageID)
                 if sm.stagesV2[fullScope] == nil {
                     _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
                                        scope: fullScope)
                 }
                 sm.assign(wid: wid, to: fullScope)  // overload V2 scope-aware
+                assignedScope = fullScope
             } else {
                 if sm.stages[stageID] == nil {
                     _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
@@ -472,7 +505,14 @@ enum CommandRouter {
             //     (utile pour dispatcher plusieurs fenêtres avant de bouger).
             if let current = sm.currentStageID, current != stageID {
                 if daemon.config.focus.assignFollowsFocus {
-                    sm.switchTo(stageID: stageID)
+                    // SPEC-022 : utiliser le scope ciblé par l'assign (display physique
+                    // de la wid), pas le scope courant du curseur. Sinon le switch
+                    // s'applique au mauvais display → cascade de hides cross-display.
+                    if let scope = assignedScope {
+                        sm.switchTo(stageID: stageID, scope: scope)
+                    } else {
+                        sm.switchTo(stageID: stageID)
+                    }
                 } else if let state = daemon.registry.get(wid) {
                     if state.isTileable {
                         daemon.layoutEngine.setLeafVisible(wid, false)
