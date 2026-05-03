@@ -1,6 +1,8 @@
 import Foundation
 import TOMLKit
 import RoadieCore
+import AppKit
+import ApplicationServices
 
 /// Module opt-in : gère les groupes nommés de fenêtres.
 /// Closure type pour décorréler le module Stage du module Tiler. Le daemon injecte
@@ -145,6 +147,13 @@ public final class StageManager {
     /// dépendance RoadieDesktops → RoadieStagePlugin.
     /// Signature : (desktopID: String, fromStageID: String, toStageID: String) -> Void
     public var onStageChanged: (@MainActor (String, String, String) -> Void)?
+
+    // SPEC-021 : index inverse wid → scope (mode V2 perDisplay).
+    // Mis à jour incrémentalement par assign/removeWindow/deleteStage.
+    // Reconstruit au boot via rebuildWidToScopeIndex().
+    private var widToScope: [WindowID: StageScope] = [:]
+    // SPEC-021 : index inverse wid → stageID (mode V1 global).
+    private var widToStageV1: [WindowID: StageID] = [:]
 
     /// Initialisation mode V1 (fallback fichiers stages/*.toml).
     /// Conservé pour la compatibilité descendante et les tests existants.
@@ -389,105 +398,14 @@ public final class StageManager {
         loadFromPersistence()
     }
 
-    /// SPEC-018 : réconcilie state.stageID ↔ stage.memberWindows dans les 2 sens.
-    /// Sens 1 : pour chaque wid dans stage.memberWindows, set state.stageID = stage.id
-    ///          (récupère l'assignation persistée que le scan AX a écrasée).
-    /// Sens 2 : pour chaque wid du registry avec state.stageID = X, l'ajouter à
-    ///          stage[X].memberWindows si elle n'y est pas déjà
-    ///          (rattrape les fenêtres trackées au scan mais absentes du disque).
-    public func reconcileStageOwnership() {
-        var fixed1 = 0, fixed2 = 0
-        // Sens 1 : memberWindows → state.stageID
-        // Couvre V1 (stages) ET V2 (stagesV2 SPEC-018) — sinon les members persistés
-        // au format per-display ne synchronisent jamais leur state.stageID après le
-        // scan AX (qui écrase la valeur restaurée du disque).
-        for (id, stage) in stages {
-            for member in stage.memberWindows {
-                let wid = member.cgWindowID
-                guard let state = registry.get(wid) else { continue }
-                if state.stageID != id {
-                    registry.update(wid) { $0.stageID = id }
-                    fixed1 += 1
-                }
-            }
-        }
-        for (scope, stage) in stagesV2 {
-            for member in stage.memberWindows {
-                let wid = member.cgWindowID
-                guard let state = registry.get(wid) else { continue }
-                if state.stageID != scope.stageID {
-                    registry.update(wid) { $0.stageID = scope.stageID }
-                    fixed1 += 1
-                }
-            }
-        }
-        // Sens 2 : registry → stage.memberWindows
-        let defaultID = StageID("1")
-        for state in registry.allWindows {
-            // Skip helpers (utility/popup/tooltip <100×100). Sans ce skip, le fallback
-            // `stageExists(defaultID)` ci-dessous force stage=1 sur tous les helpers et les
-            // écrit dans memberWindows → ils repolluent le navrail à chaque appel à
-            // windows.list (qui appelle reconcileStageOwnership en pré-amble).
-            if state.isHelperWindow { continue }
-            // Fall-back vers stage 1 si state.stageID pointe vers stage inexistante.
-            // En mode per_display, "existe" = présence dans stagesV2 (n'importe quel
-            // scope). En mode global, présence dans stages V1.
-            let targetID: StageID
-            let stageExists: (StageID) -> Bool = { [stagesV2, stages, stageMode] sid in
-                if stageMode == .perDisplay {
-                    return stagesV2.contains { $0.key.stageID == sid }
-                } else {
-                    return stages[sid] != nil
-                }
-            }
-            if let sid = state.stageID, stageExists(sid) {
-                targetID = sid
-            } else if stageExists(defaultID) {
-                targetID = defaultID
-                registry.update(state.cgWindowID) { $0.stageID = defaultID }
-            } else {
-                continue
-            }
-            // SPEC-018 fix : en mode per_display, opérer DIRECTEMENT sur stagesV2
-            // (pas via stages V1 qui peut être désynchronisé/vide). Sinon le sync
-            // v1→v2 écrase le V2 file (avec ses members persistés) par le V1 stage
-            // (potentiellement vide), résultat : V2 file vidé au reload.
-            if stageMode == .perDisplay {
-                guard let scope = stagesV2.keys.first(where: { $0.stageID == targetID }),
-                      var stage = stagesV2[scope]
-                else { continue }
-                if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
-                    stage.memberWindows.append(StageMember(
-                        cgWindowID: state.cgWindowID,
-                        bundleID: state.bundleID,
-                        titleHint: state.title,
-                        savedFrame: SavedRect(state.frame)))
-                    stagesV2[scope] = stage
-                    try? persistenceV2?.save(stage, at: scope)
-                    fixed2 += 1
-                }
-            } else {
-                guard var stage = stages[targetID] else { continue }
-                let stageID = targetID
-                if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
-                    stage.memberWindows.append(StageMember(
-                        cgWindowID: state.cgWindowID,
-                        bundleID: state.bundleID,
-                        titleHint: state.title,
-                        savedFrame: SavedRect(state.frame)))
-                    stages[stageID] = stage
-                    saveStage(stage)
-                    fixed2 += 1
-                }
-            }
-        }
-        if fixed1 + fixed2 > 0 {
-            logInfo("reconcile_stage_ownership",
-                    ["state_to_stage": String(fixed1), "stage_to_state": String(fixed2)])
-        }
-    }
+    /// SPEC-021 T028 : `reconcileStageOwnership` supprimée. Devenue sans objet :
+    /// `widToScope` (resp. `widToStageV1`) est l'unique source de vérité — pas de
+    /// double state à synchroniser. Le sens "memberWindows → state.stageID" disparaît
+    /// (state.stageID est computed). Le sens "registry → memberWindows" pour les
+    /// fenêtres scannées AX absentes du disque est désormais traité au boot par
+    /// `purgeOrphanWindows` + auto-assign explicite côté daemon, plus juste.
 
-    /// SPEC-018 : retire les wids orphelines (= pas dans le registry) de toutes les
+        /// SPEC-018 : retire les wids orphelines (= pas dans le registry) de toutes les
     /// stages. À appeler au boot après scan AX initial pour éviter que des wids
     /// mortes des sessions précédentes restent référencées dans memberWindows.
     /// Aussi appelé sur handleWindowDestroyed pour nettoyer en continu.
@@ -527,8 +445,9 @@ public final class StageManager {
         // Clear state.stageID des helpers : sinon `windows.list` continue à rapporter
         // `stage=1` pour ces wids et le navrail les ré-injecte au prochain refresh.
         var registryCleared = 0
+        // SPEC-021 : registry.update { $0.stageID = nil } supprimé (computed).
+        // Les helpers n'apparaissent pas dans widToScope donc stageID retourne nil automatiquement.
         for state in registry.allWindows where state.isHelperWindow && state.stageID != nil {
-            registry.update(state.cgWindowID) { $0.stageID = nil }
             registryCleared += 1
         }
         // SPEC-019 — purger les stages persistées de sessions précédentes qui sont
@@ -592,6 +511,17 @@ public final class StageManager {
 
     // MARK: - API publique
 
+    // SPEC-021 — API publique index inverse
+
+    /// Résout le scope complet (displayUUID, desktopID, stageID) d'une wid en O(1).
+    /// Source unique de vérité pour le desktop-aware stage ownership (mode V2).
+    public func scopeOf(wid: WindowID) -> StageScope? {
+        widToScope[wid]
+    }
+
+    // stageIDOf(wid:) est déclaré dans l'extension StageManager: StageManagerProtocol
+    // en bas du fichier (nonisolated, pour appel depuis WindowState.stageID computed).
+
     public func createStage(id: StageID, displayName: String) -> Stage {
         let stage = Stage(id: id, displayName: displayName)
         stages[id] = stage
@@ -603,6 +533,17 @@ public final class StageManager {
         // Stage 1 immortel : stage par défaut de chaque desktop, jamais détruit.
         // L'auto-destroy on-empty (assign / handleWindowDestroyed) saute ce cas.
         if id.value == "1" { return }
+        // SPEC-021 T017 : nettoyer l'index inverse pour toutes les wids du stage supprimé.
+        if let stage = stages[id] {
+            for member in stage.memberWindows {
+                widToStageV1.removeValue(forKey: member.cgWindowID)
+            }
+        }
+        for (scope, stage) in stagesV2 where scope.stageID == id {
+            for member in stage.memberWindows {
+                widToScope.removeValue(forKey: member.cgWindowID)
+            }
+        }
         stages.removeValue(forKey: id)
         persistence.deleteStage(id)
         if currentStageID == id { currentStageID = nil; saveActive() }
@@ -679,6 +620,8 @@ public final class StageManager {
             }
         }
         for id in emptied { deleteStage(id: id) }
+        // SPEC-021 T016 : index inverse V1 mis à jour.
+        widToStageV1[wid] = stageID
         // Ajouter au stage cible
         guard var target = stages[stageID] else {
             logWarn("assign: unknown stage", ["stage": stageID.value])
@@ -692,7 +635,8 @@ public final class StageManager {
         target.lastActiveAt = Date()
         stages[stageID] = target
         saveStage(target)
-        registry.update(wid) { $0.stageID = stageID }
+        // SPEC-021 : registry.update { $0.stageID = } supprimé (computed via widToStageV1).
+        widToStageV1[wid] = stageID
         // Déplacer la wid dans le tree BSP de la nouvelle stage.
         layoutHooks?.reassignToStage(wid, stageID)
     }
@@ -719,6 +663,8 @@ public final class StageManager {
             stagesV2.removeValue(forKey: s)
             try? persistenceV2?.delete(at: s)
         }
+        // SPEC-021 T015 : index inverse mis à jour avant mutation stagesV2.
+        widToScope[wid] = scope
         // Ajouter au scope cible.
         guard var target = stagesV2[scope] else {
             logWarn("assign: unknown stage in scope", [
@@ -739,7 +685,9 @@ public final class StageManager {
         // Sync V1 dict pour que `switchTo(stageID:)` et autres APIs V1 trouvent la stage.
         stages[scope.stageID] = target
         persistence.saveStage(target)
-        registry.update(wid) { $0.stageID = scope.stageID }
+        // SPEC-021 : registry.update { $0.stageID = } supprimé (computed via widToScope).
+        widToScope[wid] = scope
+        widToStageV1[wid] = scope.stageID  // sync pour compat lecture V1.
         // Déplacer la wid dans le tree BSP de la nouvelle stage (via scope.stageID).
         layoutHooks?.reassignToStage(wid, scope.stageID)
     }
@@ -937,13 +885,24 @@ public final class StageManager {
         }
 
         // Masquer les wids des autres stages.
-        // SPEC-019 fix : en mode per_display, source de vérité = registry. Toute wid
-        // dont state.stageID != stageID cible doit être hidée. Plus robuste que
-        // d'itérer stages V1 dict (qui peut être désynchro après reassign cross-scope).
+        // SPEC-022 fix critique : en mode per_display, restreindre le hide aux wids
+        // du SCOPE COURANT (currentDesktopKey.displayUUID). Sans ça, switcher la stage
+        // du display X hide aussi les windows des autres displays → "tout descend
+        // sur le petit écran" (bug observé). Ownership wid→display dérivée de stagesV2
+        // (un wid appartient à la stage qui le contient via memberWindows).
         let widsToHide: Set<WindowID>
         if stageMode == .perDisplay {
+            var widDisplay: [WindowID: String] = [:]
+            for (s, stage) in stagesV2 {
+                for m in stage.memberWindows { widDisplay[m.cgWindowID] = s.displayUUID }
+            }
+            let curUUID = currentDesktopKey?.displayUUID ?? ""
             widsToHide = Set(registry.allWindows
-                .filter { $0.stageID != nil && $0.stageID != stageID }
+                .filter { state in
+                    state.stageID != nil
+                        && state.stageID != stageID
+                        && (widDisplay[state.cgWindowID] ?? "") == curUUID
+                }
                 .map { $0.cgWindowID })
         } else {
             var s: Set<WindowID> = []
@@ -1074,5 +1033,65 @@ public final class StageManager {
         }
         // Lazy stages : auto-destroy si vidé par la destruction de fenêtre.
         for id in emptied { deleteStage(id: id) }
+    }
+}
+
+// SPEC-021 T013 — conformance au protocol du service locator (RoadieCore).
+// `nonisolated` : le protocol n'est pas actor-isolated pour permettre l'appel
+// depuis la computed property nonisolated de WindowState.
+// Le daemon étant single-threaded sur MainActor, c'est sûr en pratique.
+extension StageManager: StageManagerProtocol {
+    nonisolated public func stageIDOf(wid: WindowID) -> StageID? {
+        // Accès aux champs MainActor depuis nonisolated : assumeIsolated est la voie
+        // correcte dans Swift 5.9+ pour les contextes où on sait être sur MainActor.
+        MainActor.assumeIsolated {
+            if stageMode == .perDisplay {
+                return widToScope[wid]?.stageID
+            }
+            return widToStageV1[wid]
+        }
+    }
+}
+
+// SPEC-021 T014 — reconstruction de l'index inverse au boot.
+extension StageManager {
+    /// Reconstruit widToScope/widToStageV1 depuis memberWindows (source de vérité).
+    /// À appeler après loadFromPersistence(). O(stages × members).
+    public func rebuildWidToScopeIndex() {
+        widToScope.removeAll(keepingCapacity: true)
+        widToStageV1.removeAll(keepingCapacity: true)
+        if stageMode == .perDisplay {
+            for (scope, stage) in stagesV2 {
+                for member in stage.memberWindows {
+                    widToScope[member.cgWindowID] = scope
+                }
+            }
+        } else {
+            for (sid, stage) in stages {
+                for member in stage.memberWindows {
+                    widToStageV1[member.cgWindowID] = sid
+                }
+            }
+        }
+        logInfo("widToScope_index_rebuilt", [
+            "v2_entries": String(widToScope.count),
+            "v1_entries": String(widToStageV1.count),
+        ])
+    }
+
+    // SPEC-021 T018 — retire une wid des index + memberWindows.
+    public func removeWindow(_ wid: WindowID) {
+        widToScope.removeValue(forKey: wid)
+        widToStageV1.removeValue(forKey: wid)
+        for (id, stage) in stages {
+            var s = stage
+            s.memberWindows.removeAll { $0.cgWindowID == wid }
+            stages[id] = s
+        }
+        for (scope, stage) in stagesV2 {
+            var s = stage
+            s.memberWindows.removeAll { $0.cgWindowID == wid }
+            stagesV2[scope] = s
+        }
     }
 }

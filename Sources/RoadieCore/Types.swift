@@ -112,7 +112,12 @@ public struct WindowState: Sendable {
     public var isMinimized: Bool
     public var isFullscreen: Bool
     public var workspaceID: WorkspaceID
-    public var stageID: StageID?
+    /// SPEC-021 : computed read-only. Source unique de vérité = StageManager.widToScope.
+    /// Toute écriture `state.stageID = X` est un compile error (intention : supprimer le drift).
+    /// Pour attribuer une wid à un stage : `stageManager.assign(wid:to:)`.
+    public var stageID: StageID? {
+        StageManagerLocator.shared?.stageIDOf(wid: cgWindowID)
+    }
     /// UUID du desktop macOS (Mission Control) — legacy SPEC-003, conservé pour compat.
     public var desktopUUID: String?
     /// SPEC-011 : identifiant du desktop virtuel roadie (1..count). Défaut 1.
@@ -129,7 +134,7 @@ public struct WindowState: Sendable {
     public init(cgWindowID: WindowID, pid: pid_t, bundleID: String,
                 title: String, frame: CGRect, subrole: AXSubrole,
                 isFloating: Bool, isMinimized: Bool = false, isFullscreen: Bool = false,
-                workspaceID: WorkspaceID = .main, stageID: StageID? = nil,
+                workspaceID: WorkspaceID = .main,
                 desktopUUID: String? = nil, desktopID: Int = 1,
                 expectedFrame: CGRect = .zero,
                 isZoomed: Bool = false, preZoomFrame: CGRect? = nil) {
@@ -143,7 +148,6 @@ public struct WindowState: Sendable {
         self.isMinimized = isMinimized
         self.isFullscreen = isFullscreen
         self.workspaceID = workspaceID
-        self.stageID = stageID
         self.desktopUUID = desktopUUID
         self.desktopID = desktopID
         self.expectedFrame = expectedFrame == .zero ? frame : expectedFrame
