@@ -80,12 +80,67 @@ public extension DesktopEvent {
     }
 
     /// Émis quand un stage est renommé via le menu contextuel du rail.
-    /// Payload : stage_id, old_name, new_name.
-    static func stageRenamed(stageID: String, oldName: String, newName: String) -> DesktopEvent {
+    /// Payload : stage_id, old_name, new_name, display_uuid, desktop_id.
+    /// Mode global : display_uuid = "", desktop_id = "0" (sentinel SPEC-018 FR-017).
+    static func stageRenamed(
+        stageID: String,
+        oldName: String,
+        newName: String,
+        displayUUID: String = "",
+        desktopID: Int = 0
+    ) -> DesktopEvent {
         DesktopEvent(name: "stage_renamed", payload: [
             "stage_id": stageID,
             "old_name": oldName,
             "new_name": newName,
+            "display_uuid": displayUUID,
+            "desktop_id": String(desktopID),
+        ])
+    }
+
+    /// Émis sur stage.create ou lazy-create via stage.assign (SPEC-018 FR-017).
+    /// Mode global : display_uuid = "", desktop_id = "0".
+    static func stageCreated(
+        stageID: String,
+        displayName: String,
+        displayUUID: String = "",
+        desktopID: Int = 0
+    ) -> DesktopEvent {
+        DesktopEvent(name: "stage_created", payload: [
+            "stage_id": stageID,
+            "display_name": displayName,
+            "display_uuid": displayUUID,
+            "desktop_id": String(desktopID),
+        ])
+    }
+
+    /// Émis sur stage.delete (SPEC-018 FR-017).
+    /// Mode global : display_uuid = "", desktop_id = "0".
+    static func stageDeleted(
+        stageID: String,
+        displayUUID: String = "",
+        desktopID: Int = 0
+    ) -> DesktopEvent {
+        DesktopEvent(name: "stage_deleted", payload: [
+            "stage_id": stageID,
+            "display_uuid": displayUUID,
+            "desktop_id": String(desktopID),
+        ])
+    }
+
+    /// Émis sur stage.assign quand une fenêtre est assignée à une stage (SPEC-018 FR-017).
+    /// Mode global : display_uuid = "", desktop_id = "0".
+    static func stageAssigned(
+        wid: Int,
+        stageID: String,
+        displayUUID: String = "",
+        desktopID: Int = 0
+    ) -> DesktopEvent {
+        DesktopEvent(name: "stage_assigned", payload: [
+            "wid": String(wid),
+            "stage_id": stageID,
+            "display_uuid": displayUUID,
+            "desktop_id": String(desktopID),
         ])
     }
 

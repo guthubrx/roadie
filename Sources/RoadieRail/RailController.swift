@@ -17,6 +17,9 @@ struct RailConfig {
     var fadeDurationMs: Int = 200
     // SPEC-014 T090 (US7) : mode display ("per_display" ou "global").
     var displayMode: String = "per_display"
+    // SPEC-018 polish — halo de la stage active. Default vert système Apple #34C759 à 0.65.
+    var haloColor: String = "#34C759"
+    var haloIntensity: Double = 0.65
 
     var fadeDuration: TimeInterval { TimeInterval(fadeDurationMs) / 1000 }
 
@@ -36,6 +39,9 @@ struct RailConfig {
             if let v = rail["panel_width"]?.int { cfg.panelWidth = CGFloat(v) }
             if let v = rail["edge_width"]?.int { cfg.edgeWidth = CGFloat(v) }
             if let v = rail["fade_duration_ms"]?.int { cfg.fadeDurationMs = v }
+            if let v = rail["halo_color"]?.string { cfg.haloColor = v }
+            if let v = rail["halo_intensity"]?.double { cfg.haloIntensity = max(0.0, min(1.0, v)) }
+            else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
         }
         // SPEC-014 T090 : [desktops] mode informe si rails per_display ou global.
         if let desktops = root["desktops"]?.table,
@@ -162,11 +168,27 @@ final class RailController {
     func handleEvent(_ name: String, _ payload: [String: Any]) {
         switch name {
         case "stage_changed", "window_assigned", "window_unassigned",
-             "window_created", "window_destroyed", "stage_renamed":
+             "window_created", "window_destroyed", "stage_renamed",
+             "stage_created", "stage_deleted", "stage_assigned":
+            // SPEC-018 T062 : filtre côté client en mode per_display.
+            // Si l'event porte un display_uuid non vide, vérifier qu'il correspond
+            // à l'un des panels de ce rail. Sinon l'event vient d'un autre display → ignorer.
+            // Si display_uuid est vide (mode global ou events sans scope), on passe toujours.
+            if config.displayMode == "per_display" {
+                let evtUUID = payload["display_uuid"] as? String ?? ""
+                if !evtUUID.isEmpty && !panelBelongsToUUID(evtUUID) { return }
+                // Filtre desktop_id : si l'event cible un desktop précis, ne recharger
+                // que si c'est le desktop courant du rail (state.currentDesktopID).
+                if let evtDesktop = payload["desktop_id"] as? Int, evtDesktop != 0 {
+                    guard evtDesktop == state.currentDesktopID else { return }
+                }
+            }
             loadInitialStages()
             loadWindows()
         case "desktop_changed":
             if let id = payload["desktop_id"] as? Int { state.currentDesktopID = id }
+            // Après changement de desktop, resync les stages du nouveau desktop.
+            loadInitialStages()
         case "thumbnail_updated":
             if let widRaw = payload["wid"] as? Int {
                 fetcher.invalidate(wid: CGWindowID(widRaw))
@@ -174,6 +196,12 @@ final class RailController {
         default:
             break
         }
+    }
+
+    /// Retourne true si l'UUID correspond à l'un des panels de ce rail.
+    /// Utilisé pour le filtre display_uuid des events stage_* (SPEC-018 T062).
+    private func panelBelongsToUUID(_ uuid: String) -> Bool {
+        state.screens.contains { $0.displayUUID == uuid }
     }
 
     /// SPEC-014 : charge le dictionnaire windows (pid, bundle, app_name) pour
@@ -247,6 +275,8 @@ final class RailController {
             let id = displayID(for: screen)
             let view = StageStackView(
                 state: state,
+                haloColorHex: config.haloColor,
+                haloIntensity: config.haloIntensity,
                 onTapStage: onTap,
                 onDropAssign: onDrop,
                 onRename: onRename,

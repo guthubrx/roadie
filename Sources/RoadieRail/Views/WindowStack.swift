@@ -19,6 +19,9 @@ struct WindowStack: View {
     let stage:      StageVM
     let thumbnails: [CGWindowID: ThumbnailVM]
     let windows:    [CGWindowID: WindowVM]
+    // SPEC-018 polish — halo paramétrique (couleur hex + intensité 0..1) lus depuis [fx.rail].
+    var haloColorHex:  String                       = "#34C759"
+    var haloIntensity: Double                       = 0.65
     var onTap:         () -> Void         = {}
     var onDropAssign:  (CGWindowID, String) -> Void = { _, _ in }
     var onRename:      (String, String) -> Void     = { _, _ in }
@@ -37,8 +40,9 @@ struct WindowStack: View {
                 .offset(x: -8, y: -8)
         }
         // Pas de dot vert (redondant avec le halo).
+        // SPEC-018 polish — halo paramétrique [fx.rail] halo_color/halo_intensity.
         .shadow(
-            color: stage.isActive ? .accentColor.opacity(0.55) : .clear,
+            color: stage.isActive ? Color(hex: haloColorHex).opacity(haloIntensity) : .clear,
             radius: 14,
             x: 0,
             y: 0
@@ -214,5 +218,35 @@ struct WindowStack: View {
         )
         fallback.size = NSSize(width: appIconSize, height: appIconSize)
         return fallback
+    }
+}
+
+// MARK: - Color(hex:) helper
+
+// SPEC-018 polish — parsing hex "#RRGGBB" ou "#RRGGBBAA". Fallback gris neutre si malformé.
+// Tolérant : accepte avec ou sans #, lowercase ou uppercase.
+extension Color {
+    init(hex: String) {
+        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6 || s.count == 8,
+              let value = UInt64(s, radix: 16)
+        else {
+            self = Color(red: 0.5, green: 0.5, blue: 0.5)
+            return
+        }
+        let r, g, b, a: Double
+        if s.count == 6 {
+            r = Double((value >> 16) & 0xFF) / 255.0
+            g = Double((value >>  8) & 0xFF) / 255.0
+            b = Double( value        & 0xFF) / 255.0
+            a = 1.0
+        } else {
+            r = Double((value >> 24) & 0xFF) / 255.0
+            g = Double((value >> 16) & 0xFF) / 255.0
+            b = Double((value >>  8) & 0xFF) / 255.0
+            a = Double( value        & 0xFF) / 255.0
+        }
+        self = Color(red: r, green: g, blue: b, opacity: a)
     }
 }
