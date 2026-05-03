@@ -21,11 +21,11 @@ Tous les chemins relatifs à la racine du repo `<repo-root>` (worktree `.worktre
 
 ## Phase 1 — Setup (Foundational, P0)
 
-- [ ] T001 [SETUP] Vérifier état branche `016-yabai-parity-tier1` à jour avec main, working tree propre. (Aucune création de target SwiftPM neuve : tout vit dans `RoadieCore`/`RoadieTiler`/`roadied`/`roadie` existants.)
-- [ ] T002 [SETUP] [P] Créer les 2 sous-dossiers `Sources/RoadieCore/Rules/` et `Sources/RoadieCore/Signals/` (conventions cohérentes avec `Watchers/`, `ScreenCapture/` déjà en place).
-- [ ] T003 [SETUP] [P] Créer fichiers vides skeleton `Sources/RoadieCore/Rules/{RuleDef,RuleParser,RuleEngine}.swift`, `Sources/RoadieCore/Signals/{SignalDef,SignalDispatcher,SignalEnvironment}.swift`, `Sources/RoadieCore/Watchers/MouseFollowFocusWatcher.swift`, `Sources/RoadieCore/MouseInputCoordinator.swift`, `Sources/RoadieCore/InsertHintRegistry.swift` — chaque fichier avec en-tête `// SPEC-016 — <responsabilité>` et imports minimaux.
-- [ ] T004 [SETUP] Smoke test : `swift build` clean après création des fichiers vides (vérifie que SwiftPM les détecte automatiquement, sans modification de Package.swift).
-- [ ] T005 [SETUP] Vérifier que `swift test` continue de passer (toutes les SPECs précédentes restent vertes).
+- [X] T001 [SETUP] Vérifier état branche `016-yabai-parity-tier1` à jour avec main, working tree propre. (Aucune création de target SwiftPM neuve : tout vit dans `RoadieCore`/`RoadieTiler`/`roadied`/`roadie` existants.)
+- [X] T002 [SETUP] [P] Créer les 2 sous-dossiers `Sources/RoadieCore/Rules/` et `Sources/RoadieCore/Signals/` (conventions cohérentes avec `Watchers/`, `ScreenCapture/` déjà en place).
+- [X] T003 [SETUP] [P] Créer fichiers vides skeleton `Sources/RoadieCore/Rules/{RuleDef,RuleParser,RuleEngine}.swift`, `Sources/RoadieCore/Signals/{SignalDef,SignalDispatcher,SignalEnvironment}.swift`, `Sources/RoadieCore/Watchers/MouseFollowFocusWatcher.swift`, `Sources/RoadieCore/MouseInputCoordinator.swift`, `Sources/RoadieCore/InsertHintRegistry.swift` — chaque fichier avec en-tête `// SPEC-016 — <responsabilité>` et imports minimaux.
+- [X] T004 [SETUP] Smoke test : `swift build` clean après création des fichiers vides (vérifie que SwiftPM les détecte automatiquement, sans modification de Package.swift).
+- [X] T005 [SETUP] Vérifier que `swift test` continue de passer (toutes les SPECs précédentes restent vertes).
 
 **Critère de fin Phase 1** : `swift build` + `swift test` clean ✓, structure de fichiers prête.
 
