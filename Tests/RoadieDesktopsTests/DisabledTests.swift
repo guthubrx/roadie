@@ -41,7 +41,7 @@ final class DisabledTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let registry = DesktopRegistry(configDir: tmpDir, count: 5)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
         await registry.load()
 
         // En mode enabled=false, le router court-circuite avant d'appeler resolveSelector.
@@ -61,7 +61,7 @@ final class DisabledTests: XCTestCase {
         try? FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmpDir) }
 
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         let result = await resolveSelector("nonexistent-label", registry: registry, count: 3)

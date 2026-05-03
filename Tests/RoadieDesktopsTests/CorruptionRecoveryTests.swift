@@ -70,7 +70,7 @@ final class CorruptionRecoveryTests: XCTestCase {
         try writeValidDesktop(d3)
 
         // Boot : ne doit pas throw
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()   // FR-013 : silencieux sur corruption
 
         // Desktop 2 = vierge
@@ -104,7 +104,7 @@ final class CorruptionRecoveryTests: XCTestCase {
             )
         }
 
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         // Tous vierges, mais tous présents
@@ -120,7 +120,7 @@ final class CorruptionRecoveryTests: XCTestCase {
 
     func testMissingDesktopLoadsBlank() async {
         // Aucun fichier écrit, juste créer le registry
-        let registry = DesktopRegistry(configDir: tmpDir, count: 2)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 2)
         await registry.load()
 
         let d1 = await registry.desktop(id: 1)
@@ -141,7 +141,7 @@ final class CorruptionRecoveryTests: XCTestCase {
         try writeValidDesktop(d1)
         // Pas de current.txt
 
-        let registry = DesktopRegistry(configDir: tmpDir, count: 2)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 2)
         await registry.load()
 
         let currentID = await registry.currentID

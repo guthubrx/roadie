@@ -27,7 +27,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// SPEC-013 US1 acceptance #1 : mode per_display, frontmost sur LG, focus 2
     /// → seul LG bascule, built-in inchangé. SC-001 vérifié sur registry.
     func testPerDisplayFocusOnlyAffectsTargetDisplay() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
 
@@ -41,7 +41,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
 
     /// SPEC-013 US1 acceptance #3 : mode global, focus 2 → tous les écrans basculent.
     func testGlobalFocusPropagatesToAllDisplays() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
 
@@ -56,7 +56,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// déjà sur 1) ne doit PAS basculer vers le recent du built-in. Bug fix
     /// commit 386da56 — testé via recentByDisplay vs recentID global.
     func testBackAndForthIsScopedPerDisplay() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
 
@@ -77,7 +77,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// built-in (desktop 3) → la fenêtre adopte desktop 3 (current du target display).
     /// Test du contract du registry — le handler onDragDrop fait registry.update + updateWindowDisplayUUID.
     func testWindowAdoptsTargetDisplayCurrentInPerDisplay() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
         await registry.setCurrent(1, on: displayLG)
@@ -92,7 +92,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// préservé (compat V2). Test du contract — le handler onDragDrop ne met
     /// PAS à jour state.desktopID en mode global.
     func testGlobalDragDoesNotChangeWindowDesktop() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
         await registry.setCurrent(2, on: displayLG)
@@ -107,7 +107,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// SPEC-013 fallback : si frontmost introuvable / display inconnu, currentID(for:)
     /// retourne le primary ou le currentID global. Edge case documenté spec.md.
     func testCurrentIDForUnknownDisplayFallsBackToPrimary() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [CGMainDisplayID()])
         await registry.setCurrent(4, on: CGMainDisplayID())
@@ -119,7 +119,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// FR-016 : persister à chaque focus change. Test du contract :
     /// après setCurrent + saveCurrent, loadCurrent retourne la valeur.
     func testFocusChangeIsPersisted() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG])
         await registry.setCurrent(3, on: displayLG)
@@ -135,7 +135,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// pour des displays absents (sinon recentID(for:) peut retourner du stale
     /// si un CGDirectDisplayID est réattribué).
     func testRecentByDisplayCleanedOnDisplayRemoval() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         let lgID: CGDirectDisplayID = 999
         let primaryID = CGMainDisplayID()
@@ -155,7 +155,7 @@ final class DesktopFocusPerDisplaySemanticsTests: XCTestCase {
     /// SPEC-013 fix F15 (additional cycle) : setCurrent(id:) maintient aussi
     /// recentByDisplay pour cohérence avec setCurrent(_:on:).
     func testSetCurrentLegacyMaintainsRecentByDisplay() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         await registry.syncCurrentByDisplay(presentIDs: [displayLG, displayBuiltin])
 

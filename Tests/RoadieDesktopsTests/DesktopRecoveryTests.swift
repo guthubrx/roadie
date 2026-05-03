@@ -42,7 +42,7 @@ final class DesktopRecoveryTests: XCTestCase {
 
         // Simulate débranchement : runtime registry retire l'entry mais le disque
         // est intact (FR-019).
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         let lgID: CGDirectDisplayID = 999
         await registry.syncCurrentByDisplay(presentIDs: []) // no display
@@ -92,7 +92,7 @@ final class DesktopRecoveryTests: XCTestCase {
     /// US3 acceptance #4 : mode global, débranchement → comportement V2 (state
     /// global non lié à un display, pas de restoration spéciale).
     func testGlobalModeNoPerDisplayRestore() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         // En mode global, setCurrent(_:on:) propage à toutes les entries.
         let did1: CGDirectDisplayID = 100

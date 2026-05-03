@@ -23,7 +23,7 @@ final class PersistenceTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeRegistry(count: Int = 3) -> DesktopRegistry {
-        DesktopRegistry(configDir: tmpDir, count: count)
+        DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: count)
     }
 
     private func makeDesktop1() -> RoadieDesktop {

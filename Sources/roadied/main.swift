@@ -99,6 +99,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             // leaves invisibles au tiler sans dépendance directe vers RoadieTiler.
             let engine = self.layoutEngine
             let display = self.displayManager
+            let registryRef = self.registry  // capture pour usage dans closures (self pas init)
             let outerGaps = config.tiling.effectiveOuterGaps
             let gapsInner = CGFloat(config.tiling.gapsInner)
             let hooks = LayoutHooks(
@@ -108,7 +109,20 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                  outerGaps: outerGaps, gapsInner: gapsInner)
                 },
                 reassignToStage: { wid, stageID in engine.reassignWindow(wid, toStage: stageID) },
-                setActiveStage: { stageID in engine.setActiveStage(stageID) }
+                // SPEC-018 fix : à chaque stage switch, restaurer le tree depuis les
+                // wid du registry dont `state.stageID == stageID && state.isTileable`.
+                // Pas d'accès à self.stageManager (pas encore init au moment de la création
+                // de la closure). Idempotent via ensureTreePopulated.
+                setActiveStage: { stageID in
+                    engine.setActiveStage(stageID)
+                    guard let stageID = stageID else { return }
+                    let wids = registryRef.allWindows
+                        .filter { $0.stageID == stageID && $0.isTileable }
+                        .map { $0.cgWindowID }
+                    if !wids.isEmpty {
+                        engine.ensureTreePopulated(with: wids)
+                    }
+                }
             )
             self.stageManager = StageManager(registry: registry,
                                              hideStrategy: config.stageManager.hideStrategy,
@@ -380,8 +394,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
 
+            // SPEC-018 fix : passer le primaryUUID pour que DesktopRegistry utilise
+            // les paths V3 display-scoped au lieu du legacy V2 (cf. refactor V3 paths).
             let dRegistry = DesktopRegistry(
                 configDir: configDir,
+                displayUUID: resolveDisplayUUID(CGMainDisplayID()),
                 count: config.desktops.count,
                 mode: config.desktops.mode
             )

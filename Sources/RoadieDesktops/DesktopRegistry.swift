@@ -38,17 +38,14 @@ public actor DesktopRegistry {
     public private(set) var mode: DesktopMode = .global
 
     private let configDir: URL
+    private let displayUUID: String
 
-    public init(configDir: URL, count: Int = 10, mode: DesktopMode = .global) {
+    public init(configDir: URL, displayUUID: String, count: Int = 10, mode: DesktopMode = .global) {
         self.configDir = configDir
+        self.displayUUID = displayUUID
         self.count = count
         self.mode = mode
-        // H2 : créer le répertoire desktops/ dès l'init pour éviter les échecs
-        // de saveCurrentID() si appelé avant tout save(_:).
-        let desktopsDir = configDir.appendingPathComponent("desktops")
-        try? FileManager.default.createDirectory(
-            at: desktopsDir, withIntermediateDirectories: true)
-        // SPEC-013 : créer aussi le dossier displays/ (T001).
+        // SPEC-013 : créer le dossier displays/ au boot (V3 path).
         let displaysDir = configDir.appendingPathComponent("displays")
         try? FileManager.default.createDirectory(
             at: displaysDir, withIntermediateDirectories: true)
@@ -56,7 +53,7 @@ public actor DesktopRegistry {
 
     // MARK: - Chargement (FR-012)
 
-    /// Charge tous les desktops depuis `<configDir>/desktops/<id>/state.toml`.
+    /// Charge tous les desktops depuis `<configDir>/displays/<uuid>/desktops/<id>/state.toml`.
     /// Les desktops absents ou corrompus sont initialisés vierges (FR-013).
     public func load() async {
         let fm = FileManager.default
@@ -77,8 +74,9 @@ public actor DesktopRegistry {
                 desktops[id] = .blank(id: id)
             }
         }
-        // Charger le currentID persisté
-        let curURL = configDir.appendingPathComponent("desktops/current.txt")
+        // Charger le currentID persisté (V3 : current.toml dans le dossier display)
+        let curURL = configDir
+            .appendingPathComponent("displays/\(displayUUID)/current.toml")
         if let raw = try? String(contentsOf: curURL, encoding: .utf8),
            let savedID = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)),
            (1...count).contains(savedID) {
@@ -88,9 +86,10 @@ public actor DesktopRegistry {
 
     // MARK: - Persistance (FR-011)
 
-    /// Persiste un desktop en write-then-rename atomique.
+    /// Persiste un desktop en write-then-rename atomique (V3 : displays/<uuid>/desktops/<id>/).
     public func save(_ desktop: RoadieDesktop) throws {
-        let dir = configDir.appendingPathComponent("desktops/\(desktop.id)")
+        let dir = configDir
+            .appendingPathComponent("displays/\(displayUUID)/desktops/\(desktop.id)")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         } catch {
@@ -123,11 +122,11 @@ public actor DesktopRegistry {
         try saveCurrentID()
     }
 
-    /// Persiste le currentID sur disque pour restauration au prochain boot.
+    /// Persiste le currentID sur disque pour restauration au prochain boot (V3 : current.toml).
     public func saveCurrentID() throws {
-        let dir = configDir.appendingPathComponent("desktops")
+        let dir = configDir.appendingPathComponent("displays/\(displayUUID)")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = configDir.appendingPathComponent("desktops/current.txt")
+        let url = dir.appendingPathComponent("current.toml")
         try String(currentID).write(to: url, atomically: true, encoding: .utf8)
     }
 
@@ -387,6 +386,7 @@ public actor DesktopRegistry {
     // MARK: - Helpers internes
 
     private func desktopURL(id: Int) -> URL {
-        configDir.appendingPathComponent("desktops/\(id)/state.toml")
+        configDir
+            .appendingPathComponent("displays/\(displayUUID)/desktops/\(id)/state.toml")
     }
 }
