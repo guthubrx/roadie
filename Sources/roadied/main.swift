@@ -525,8 +525,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         mgr.setCurrentDesktopKey(
                             DesktopKey(displayUUID: primaryUUID, desktopID: newDesktopID))
                         // Garantir stage 1 + stage actif sur le desktop d'arrivée.
-                        // Si le desktop n'a jamais eu de stages persistés, crée stage 1 et l'active.
-                        mgr.ensureDefaultStage()
+                        // SPEC-019 INV-3 : passer le scope explicite pour matérialiser
+                        // stage 1 dans `stagesV2[(uuid, newDesktopID, "1")]` et créer le
+                        // dossier disque correspondant. Sans le scope, l'API V1 fallback
+                        // ne crée rien dans stagesV2 → desktop neuf reste sans stage 1.
+                        let arrivalScope = StageScope(displayUUID: primaryUUID,
+                                                       desktopID: newDesktopID,
+                                                       stageID: StageID("1"))
+                        mgr.ensureDefaultStage(scope: arrivalScope)
                     }
                 }
             }

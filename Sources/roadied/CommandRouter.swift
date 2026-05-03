@@ -1062,6 +1062,22 @@ enum CommandRouter {
         // Mute le current du display ciblé.
         await registry.setCurrent(resolvedTarget, on: targetDisplayID)
 
+        // SPEC-019 INV-3 — matérialiser stage 1 sur le (display, desktop) d'arrivée
+        // si jamais visité. Sans ce passage, `handleDesktopFocusPerDisplay` ne passe
+        // PAS par DesktopSwitcher.performSwitch (qui appelle onDesktopChanged →
+        // ensureDefaultStage), donc desktop neuf reste sans stage 1 sur disque.
+        if let sm = daemon.stageManager, sm.stageMode == .perDisplay,
+           let displays = await daemon.displayRegistry?.displays,
+           let dst = displays.first(where: { $0.id == targetDisplayID }),
+           !dst.uuid.isEmpty {
+            let arrivalScope = StageScope(displayUUID: dst.uuid,
+                                           desktopID: resolvedTarget,
+                                           stageID: StageID("1"))
+            sm.ensureDefaultStage(scope: arrivalScope)
+            sm.setCurrentDesktopKey(DesktopKey(displayUUID: dst.uuid,
+                                                desktopID: resolvedTarget))
+        }
+
         // SPEC-013 T034/FR-016 : persister le current per-display sur disque pour
         // restoration au rebranchement.
         if let displays = await daemon.displayRegistry?.displays,
