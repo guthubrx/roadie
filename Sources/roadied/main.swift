@@ -160,14 +160,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // (computed) puisse déléguer à stageManager sans dépendance circulaire.
         StageManagerLocator.shared = stageManager
 
-        // Pre-existing stages from config
-        if let sm = stageManager {
+        // Pre-existing stages from config (mode global uniquement — en perDisplay
+        // les stages sont matérialisées par scope plus loin via ensureDefaultStage).
+        if let sm = stageManager, sm.stageMode == .global {
             for stageDef in config.stageManager.workspaces {
                 let id = StageID(stageDef.id)
                 if sm.stages[id] == nil {
                     _ = sm.createStage(id: id, displayName: stageDef.displayName)
                 }
             }
+        }
+        if let sm = stageManager {
             // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
             // SPEC-018 : en mode per_display, créer aussi dans stagesV2 au scope primary.
             // PAS `CGMainDisplayID()` qui est dynamique (suit le focus) — au boot le focus
