@@ -116,19 +116,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                  outerGaps: outerGaps, gapsInner: gapsInner)
                 },
                 reassignToStage: { wid, stageID in engine.reassignWindow(wid, toStage: stageID) },
-                // SPEC-018 fix : à chaque stage switch, restaurer le tree depuis les
-                // wid du registry dont `state.stageID == stageID && state.isTileable`.
-                // Pas d'accès à self.stageManager (pas encore init au moment de la création
-                // de la closure). Idempotent via ensureTreePopulated.
+                // SPEC-022 — closure simplifiée. La réconciliation tree (jadis ici)
+                // était display-blind et polluait les autres displays en mode multi-écran.
+                // Désormais : juste set le marqueur. La réconciliation per-display est faite
+                // explicitement par le caller (bootstrap, ou switchTo + post-assign) qui a
+                // accès à widToScope.
                 setActiveStage: { stageID in
                     engine.setActiveStage(stageID)
-                    guard let stageID = stageID else { return }
-                    let wids = registryRef.allWindows
-                        .filter { $0.stageID == stageID && $0.isTileable }
-                        .map { $0.cgWindowID }
-                    if !wids.isEmpty {
-                        engine.ensureTreePopulated(with: wids)
-                    }
                 }
             )
             self.stageManager = StageManager(registry: registry,
@@ -291,8 +285,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                             displayName: activeStage.value, scope: scope)
                     }
                     sm.assign(wid: state.cgWindowID, to: scope)
+                    // SPEC-022 : assign() ne migre PAS le BSP tree. Et la wid peut être
+                    // présente dans plusieurs trees (boot insert built-in + auto-assign LG).
+                    // Nettoyer agressivement (removeWindow purge TOUS les trees), puis
+                    // insérer dans le tree cible (display + stage actifs).
+                    let cgwid = state.cgWindowID
+                    self.layoutEngine.removeWindow(cgwid)
+                    self.layoutEngine.insertWindow(cgwid, focusedID: nil, displayID: did)
+                    self.applyLayout()
                     logInfo("auto_assign_orphan_to_display", [
-                        "wid": String(state.cgWindowID),
+                        "wid": String(cgwid),
                         "display_uuid": uuid,
                         "desktop_id": String(desktopID),
                         "stage": activeStage.value,
@@ -370,9 +372,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             // SPEC-018 fix : ré-insertion défensive — assure que toutes les wid tilées du
             // registry sont dans le tree BSP (cas observé : après stage switch + reswitch
             // le tree était vide, focus/move/swap retournaient "no neighbor"). Idempotent.
+            // SPEC-022 — réconciliation tree per-display (plus globale).
             if let self = self {
-                let tileableWids = self.registry.tileableWindows.map { $0.cgWindowID }
-                self.layoutEngine.ensureTreePopulated(with: tileableWids)
+                Task { @MainActor [weak self] in
+                    await self?.rebuildAllTrees()
+                }
             }
             // Purge des helpers persistés par les sessions précédentes (Firefox WebExtension
             // frames 66×20, Grayjay/Electron tooltips, iTerm popovers). Sans ce passage, les
@@ -1077,7 +1081,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                                         displayName: activeStage.value, scope: scope)
                                 }
                                 sm.assign(wid: cgwid, to: scope)
-                                _ = self  // silence unused capture warning
+                                // SPEC-022 : nettoyage agressif tree (peut être dans
+                                // plusieurs trees si insertion antérieure pollue).
+                                self.layoutEngine.removeWindow(cgwid)
+                                self.layoutEngine.insertWindow(cgwid, focusedID: nil,
+                                                                displayID: did)
+                                self.applyLayout()
                             }
                         }
                     }
@@ -1635,7 +1644,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         guard let element = registry.axElement(for: wid),
               let frame = AXReader.bounds(element) else { return }
         let center = CGPoint(x: frame.midX, y: frame.midY)
-        let realDisplayID = layoutEngine.displayIDContainingPoint(center) ?? CGMainDisplayID()
+        // SPEC-022 fix : si frame center offscreen (Netflix fullscreen, window
+        // hidée par stage switch, etc.), NE PAS faker realDisplayID = main.
+        // Le fallback CGMainDisplayID() forçait une migration vers built-in à
+        // chaque mouvement offscreen → toutes les wids LG migraient vers built-in.
+        // Skip la migration : la wid garde son scope d'origine, sera ré-évaluée
+        // quand AX reportera une frame valide.
+        guard let realDisplayID = layoutEngine.displayIDContainingPoint(center) else {
+            // Adapt manual resize si la frame est valide mais offscreen (cas dock).
+            _ = layoutEngine.adaptToManualResize(wid, newFrame: frame)
+            return
+        }
         let treeDisplayID = layoutEngine.displayIDForWindow(wid)
         if let src = treeDisplayID, src != realDisplayID {
             // Migration cross-display : la fenêtre a été draggée d'un écran à l'autre.
@@ -1912,6 +1931,41 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     private func resolveDisplayUUID(_ id: CGDirectDisplayID) -> String {
         guard let cfUUID = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return "" }
         return CFUUIDCreateString(nil, cfUUID) as String? ?? ""
+    }
+
+    /// SPEC-022 — réconciliation BSP tree per-display, basée sur widToScope (single
+    /// source of truth SPEC-021). Pour chaque display physique : retire les wids du
+    /// tree qui ne devraient pas y être, et insère celles qui devraient y être.
+    /// Élimine la pollution cross-display en mode multi-écran.
+    func rebuildAllTrees() async {
+        guard let sm = stageManager, sm.stageMode == .perDisplay,
+              let dReg = displayRegistry else { return }
+        let displays = await dReg.displays
+        for display in displays {
+            let activeStage = sm.activeStageByDesktop[
+                DesktopKey(displayUUID: display.uuid, desktopID: 1)] ?? StageID("1")
+            // Wids attendues sur ce tree : celles dont widToScope pointe vers
+            // (display.uuid, *, *). Cross-stage handled : seules celles de la stage
+            // active du display seront visibles, les autres présentes en tree mais
+            // marquées invisible par switchTo.
+            let expectedWids = registry.allWindows.compactMap { state -> WindowID? in
+                guard state.isTileable else { return nil }
+                guard let scope = sm.scopeOf(wid: state.cgWindowID) else { return nil }
+                guard scope.displayUUID == display.uuid else { return nil }
+                return state.cgWindowID
+            }
+            // Nettoyer toute wid présente dans ce tree mais pas attendue.
+            let key = StageDisplayKey(stageID: activeStage, displayID: display.id)
+            if let root = layoutEngine.workspace.rootsByStageDisplay[key] {
+                let presentWids = root.allLeaves.map { $0.windowID }
+                for wid in presentWids where !expectedWids.contains(wid) {
+                    layoutEngine.removeWindow(wid)
+                }
+            }
+            // Insérer les attendues manquantes.
+            _ = layoutEngine.ensureTreePopulated(with: expectedWids, displayID: display.id)
+        }
+        logInfo("rebuild_all_trees_done", ["displays": String(displays.count)])
     }
 }
 

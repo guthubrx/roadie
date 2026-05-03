@@ -42,64 +42,40 @@ public final class LayoutEngine {
 
     /// Définit la stage active. Utilisé par StageManager via LayoutHooks.
     /// SPEC-019 (hotfix switchTo) : garantit aussi que le tree (stageID, primaryDisplay)
-    /// contient TOUTES les wids tilées du registry dont state.stageID == stageID, et
-    /// les marque visible. Sans ça, switch sur une stage dont les wids n'avaient pas
-    /// été insérées dans le tree donnait un applyLayout no-op (= fenêtres restent à
-    /// leur dernière position cachée).
+    /// SPEC-022 — pure setter. Réconciliation tree retirée car display-blind
+    /// (utilisait CGMainDisplayID + filter state.stageID, polluait les autres
+    /// displays). La réconciliation est désormais responsabilité du caller via
+    /// `ensureTreePopulated(with:displayID:)` per-display avec wids résolues
+    /// depuis widToScope (single source of truth SPEC-021).
     public func setActiveStage(_ stageID: StageID?) {
         workspace.activeStageID = stageID
         logInfo("layout_engine_active_stage", ["stage": stageID?.value ?? "nil"])
-        guard let stageID = stageID else { return }
-        // Réconcilier tree (stageID, primaryDisplay) avec registry pour cette stage.
-        let primaryID = CGMainDisplayID()
-        let key = StageDisplayKey(stageID: stageID, displayID: primaryID)
-        let target = root(for: key)
-        let presentWids = Set(target.allLeaves.map { $0.windowID })
-        let expectedWids = registry.allWindows
-            .filter { $0.stageID == stageID && $0.isTileable }
-            .map { $0.cgWindowID }
-        // Ajouter les manquantes
-        var inserted = 0
-        for wid in expectedWids where !presentWids.contains(wid) {
-            let leaf = WindowLeaf(windowID: wid)
-            leaf.isVisible = true
-            tiler.insert(leaf: leaf, near: target.allLeaves.first, in: target)
-            inserted += 1
-        }
-        // Force toutes les leaves expected à isVisible = true
-        let expectedSet = Set(expectedWids)
-        for leaf in target.allLeaves where expectedSet.contains(leaf.windowID) {
-            leaf.isVisible = true
-        }
-        if inserted > 0 {
-            logInfo("layout_engine_tree_repopulated",
-                    ["stage": stageID.value, "inserted": String(inserted)])
-        }
     }
 
-    /// SPEC-018 fix : garantit que toutes les `wids` passées sont présentes dans le tree
-    /// de la stage active du primary display. Utile au boot et après stage switch quand
-    /// le scan AX a peuplé le registry mais le tree est resté vide (cas observé : tree
-    /// se vidait après stage switch + reswitch, rendant focus/move/swap inopérants).
+    /// SPEC-022 — garantit que toutes les `wids` passées sont présentes dans le tree
+    /// `(activeStageID, displayID)`. Le caller passe un `displayID` explicite (plus
+    /// de fallback CGMainDisplayID qui faussait les autres displays).
     /// Idempotent : ne ré-insère pas une wid déjà présente.
     /// - Returns: nb de wids effectivement insérées.
     @discardableResult
-    public func ensureTreePopulated(with wids: [WindowID]) -> Int {
-        let primaryID = CGMainDisplayID()
+    public func ensureTreePopulated(with wids: [WindowID],
+                                     displayID: CGDirectDisplayID) -> Int {
         let sid = workspace.activeStageID ?? StageID("1")
-        let key = StageDisplayKey(stageID: sid, displayID: primaryID)
-        let primaryRoot = root(for: key)
-        let existing = Set(primaryRoot.allLeaves.map { $0.windowID })
+        let key = StageDisplayKey(stageID: sid, displayID: displayID)
+        let displayRoot = root(for: key)
+        let existing = Set(displayRoot.allLeaves.map { $0.windowID })
         var inserted = 0
         var lastInserted: WindowID?
         for wid in wids where !existing.contains(wid) {
-            insertWindow(wid, focusedID: lastInserted)
+            insertWindow(wid, focusedID: lastInserted, displayID: displayID)
             lastInserted = wid
             inserted += 1
         }
         if inserted > 0 {
-            logInfo("ensure_tree_populated",
-                    ["stage": sid.value, "inserted": String(inserted), "total": String(wids.count)])
+            logInfo("ensure_tree_populated", [
+                "stage": sid.value, "display": String(displayID),
+                "inserted": String(inserted), "total": String(wids.count),
+            ])
         }
         return inserted
     }
@@ -287,11 +263,15 @@ public final class LayoutEngine {
         }
     }
 
+    /// SPEC-022 : retire la wid de TOUS les trees où elle pourrait apparaître.
+    /// Avant le fix, retournait après le 1er retrait → wids polluant plusieurs
+    /// trees (ex: insérée built-in stage 1 au boot, puis assign vers LG sans
+    /// nettoyage built-in) restaient dans le tree d'origine et faussaient le
+    /// tiling de l'autre display.
     public func removeWindow(_ wid: WindowID) {
         for (_, root) in workspace.rootsByStageDisplay {
-            if let leaf = TreeNode.find(windowID: wid, in: root) {
+            while let leaf = TreeNode.find(windowID: wid, in: root) {
                 tiler.remove(leaf: leaf, from: root)
-                return
             }
         }
     }

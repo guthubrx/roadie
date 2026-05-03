@@ -302,13 +302,10 @@ enum CommandRouter {
             return .success()
 
         case "rebuild":
-            // SPEC-018 fix : si le tree est vide (cas observé après stage switches),
-            // rebuildTree ne pouvait rien reconstruire (lit les oldLeaves du root, qui
-            // est vide). On garantit d'abord la présence des wid tilées via
-            // ensureTreePopulated (depuis le registry qui est la source de vérité),
-            // puis on flatten + reinsert via rebuildTree pour un layout BSP propre.
-            let tileableWids = daemon.registry.tileableWindows.map { $0.cgWindowID }
-            daemon.layoutEngine.ensureTreePopulated(with: tileableWids)
+            // SPEC-022 — rebuild per-display + per-stage actif. Pour chaque display,
+            // injecter les wids dont widToScope pointe vers (uuid, currentDesktop, *)
+            // dans le tree de leur stage active. Plus de pollution cross-display.
+            await daemon.rebuildAllTrees()
             daemon.layoutEngine.rebuildTree()
             daemon.applyLayout()
             return .success()

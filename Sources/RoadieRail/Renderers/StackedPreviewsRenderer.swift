@@ -134,9 +134,12 @@ private struct StackedPreviewsView: View {
     }
 
     private var visibleWids: [CGWindowID] {
-        let known = stage.windowIDs.filter { wid in
-            windows[wid] != nil || thumbnails[wid] != nil
-        }
+        // Aligné sur Hero/Mosaic/Parallax : ne rendre QUE les wids dont on a la
+        // metadata `windows[wid]`. Sans ce strict filter, les wids fantômes (présents
+        // dans le cache thumbnails mais absents de `windows`) étaient rendus avec
+        // pid=0/bundleID="" → WindowPreview tombait sur son fallback icône → effet
+        // « icone » au lieu d'un vrai preview. Single source de vérité = state.windows.
+        let known = stage.windowIDs.filter { windows[$0] != nil }
         let sorted = known.sorted { a, b in
             // SPEC-019 — priorité 1 : la fenêtre focused devient la « hero » (idx=0
             // → centrée, pleinement visible, sans rotation/offset).
@@ -161,33 +164,38 @@ private struct StackedPreviewsView: View {
         let mxY = CGFloat(context.stackedOffsetY)
         ZStack(alignment: .center) {
             ForEach(Array(wids.enumerated()), id: \.element) { idx, wid in
-                let depth = idx
-                // idx=0 = vignette « hero » centrée. idx>=1 = polaroïds éparpillés.
-                let scatter = depth == 0 ? (dx: CGFloat(0), dy: CGFloat(0), angle: 0.0)
-                                          : scatterFor(wid: wid,
-                                                       idx: depth,
-                                                       mode: context.stackedScatterMode,
-                                                       maxOffsetX: mxX,
-                                                       maxOffsetY: mxY,
-                                                       maxRotation: context.stackedRotation)
-                WindowPreview(
-                    wid: wid,
-                    thumbnail: thumbnails[wid],
-                    appName: windows[wid]?.appName ?? "",
-                    pid: windows[wid]?.pid ?? 0,
-                    bundleID: windows[wid]?.bundleID ?? "",
-                    sourceStageID: stage.id,
-                    previewWidth: CGFloat(context.previewWidth),
-                    previewHeight: CGFloat(context.previewHeight),
-                    borderColor: Color(hex: context.resolvedBorderColor()),
-                    borderWidth: CGFloat(context.borderWidth),
-                    borderStyle: context.borderStyle
-                )
-                .rotationEffect(.degrees(scatter.angle))
-                .scaleEffect(1.0 - CGFloat(depth) * CGFloat(context.stackedScale))
-                .opacity(1.0 - CGFloat(depth) * CGFloat(context.stackedOpacity))
-                .offset(x: scatter.dx, y: scatter.dy)
-                .zIndex(Double(wids.count - idx))
+                // Aligné sur Hero/Mosaic/Parallax : `if let win = windows[wid]` pour
+                // passer les vraies metadata (pid, bundleID, appName) à WindowPreview.
+                // Sans ce wrap, les fallback "" / 0 cassaient le rendu PNG.
+                if let win = windows[wid] {
+                    let depth = idx
+                    // idx=0 = vignette « hero » centrée. idx>=1 = polaroïds éparpillés.
+                    let scatter = depth == 0 ? (dx: CGFloat(0), dy: CGFloat(0), angle: 0.0)
+                                              : scatterFor(wid: wid,
+                                                           idx: depth,
+                                                           mode: context.stackedScatterMode,
+                                                           maxOffsetX: mxX,
+                                                           maxOffsetY: mxY,
+                                                           maxRotation: context.stackedRotation)
+                    WindowPreview(
+                        wid: wid,
+                        thumbnail: thumbnails[wid],
+                        appName: win.appName,
+                        pid: win.pid,
+                        bundleID: win.bundleID,
+                        sourceStageID: stage.id,
+                        previewWidth: CGFloat(context.previewWidth),
+                        previewHeight: CGFloat(context.previewHeight),
+                        borderColor: Color(hex: context.resolvedBorderColor()),
+                        borderWidth: CGFloat(context.borderWidth),
+                        borderStyle: context.borderStyle
+                    )
+                    .rotationEffect(.degrees(scatter.angle))
+                    .scaleEffect(1.0 - CGFloat(depth) * CGFloat(context.stackedScale))
+                    .opacity(1.0 - CGFloat(depth) * CGFloat(context.stackedOpacity))
+                    .offset(x: scatter.dx, y: scatter.dy)
+                    .zIndex(Double(wids.count - idx))
+                }
             }
         }
         // Padding adapté à l'amplitude max du scatter.
