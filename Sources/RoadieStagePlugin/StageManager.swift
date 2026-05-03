@@ -68,7 +68,34 @@ public final class StageManager {
     private let registry: WindowRegistry
     private(set) public var hideStrategy: HideStrategy
     private(set) public var stages: [StageID: Stage] = [:]
-    private(set) public var currentStageID: StageID?
+    /// SPEC-022 T010 — computed property. En mode perDisplay avec currentDesktopKey non-nil,
+    /// dérivée de `activeStageByDesktop[currentDesktopKey]`. En mode global (V1) ou si
+    /// currentDesktopKey est nil, retombe sur `_currentStageIDV1` (compat backward).
+    public var currentStageID: StageID? {
+        get {
+            if stageMode == .perDisplay {
+                guard let key = currentDesktopKey else {
+                    // T015 : cas pathologique — perDisplay mais key pas encore settée au boot.
+                    logWarn("currentStageID_derived_nil", ["reason": "currentDesktopKey_not_set"])
+                    return _currentStageIDV1
+                }
+                return activeStageByDesktop[key]
+            }
+            return _currentStageIDV1
+        }
+        set {
+            if stageMode == .perDisplay, let key = currentDesktopKey {
+                if let v = newValue { activeStageByDesktop[key] = v }
+                else { activeStageByDesktop.removeValue(forKey: key) }
+            } else {
+                _currentStageIDV1 = newValue
+            }
+        }
+    }
+
+    /// Source V1 (mode global / currentDesktopKey nil). Ne pas accéder directement —
+    /// passer par `currentStageID`. SPEC-022 : remplacé par activeStageByDesktop en mode perDisplay.
+    private var _currentStageIDV1: StageID?
     private let layoutHooks: LayoutHooks?
     /// SPEC-006 : si non nil, override les hide/show via le module RoadieOpacity.
     public weak var hideOverride: StageHideOverride?
@@ -555,8 +582,12 @@ public final class StageManager {
         persistence.saveStage(stage)
     }
 
+    /// SPEC-022 T013 : en mode perDisplay, `active.toml` global est deprecated.
+    /// La persistence per-(display, desktop) est gérée via `persistenceV2?.saveActiveStage(scope)`
+    /// dans `switchTo` et `activate`. En mode V1 (global), délègue à V1 persistence.
     private func saveActive() {
-        persistence.saveActiveStage(currentStageID)
+        guard stageMode == .global else { return }
+        persistence.saveActiveStage(_currentStageIDV1)
     }
 
     // MARK: - API publique
@@ -812,6 +843,37 @@ public final class StageManager {
             _ = createStage(id: stageID, displayName: "stage \(stageID.value)",
                             scope: fullScope)
         }
+        // T022 — hide/show scope-aware : seules les wids du scope (displayUUID, desktopID)
+        // cible sont affectées. Le scope courant de l'utilisateur n'est pas touché.
+        // FR-006 : WindowState n'expose pas displayUUID → itérer stagesV2 du scope cible.
+        var widsToHide: Set<WindowID> = []
+        for (s, stage) in stagesV2 where s.displayUUID == scope.displayUUID
+                                      && s.desktopID == scope.desktopID
+                                      && s.stageID != stageID {
+            for member in stage.memberWindows { widsToHide.insert(member.cgWindowID) }
+        }
+        for wid in widsToHide {
+            let isTileable = registry.get(wid)?.isTileable ?? false
+            if let override = hideOverride {
+                override.hide(wid: wid, isTileable: isTileable)
+            } else {
+                HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
+            }
+        }
+        if let targetStage = stagesV2[fullScope] {
+            for member in targetStage.memberWindows {
+                let wid = member.cgWindowID
+                let isTileable = registry.get(wid)?.isTileable ?? false
+                if let override = hideOverride {
+                    override.show(wid: wid, isTileable: isTileable)
+                } else {
+                    HideStrategyImpl.show(wid, registry: registry, strategy: hideStrategy)
+                }
+            }
+        }
+        // T023 : layoutHooks?.setActiveStage + applyLayout uniquement si scope courant.
+        // Ici scope != currentDesktopKey (Cas B), donc pas d'appel layout.
+
         // Capturer l'ancienne active pour l'event "from" avant mutation.
         let previousActive = activeStageByDesktop[targetKey]
         // Mémoriser comme stage active du scope cible. Persiste _active.toml.
