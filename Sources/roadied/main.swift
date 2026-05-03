@@ -1944,6 +1944,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         for display in displays {
             let activeStage = sm.activeStageByDesktop[
                 DesktopKey(displayUUID: display.uuid, desktopID: 1)] ?? StageID("1")
+            // SPEC-022 — déclarer la stage active per-display. Sans ça, applyAll
+            // utiliserait le fallback global "1" pour tous les displays.
+            layoutEngine.setActiveStage(activeStage, displayID: display.id)
             // Wids attendues sur ce tree : celles dont widToScope pointe vers
             // (display.uuid, *, *). Cross-stage handled : seules celles de la stage
             // active du display seront visibles, les autres présentes en tree mais
