@@ -59,7 +59,13 @@ public struct ThumbnailVM: Equatable {
 @Observable
 public final class RailState {
     public var currentDesktopID: Int = 1
+    /// Liste plate des stages — TOUS displays confondus. Conservé pour compat
+    /// (tests, IPC fallback), mais le rail utilise désormais `stagesByDisplay` pour
+    /// que chaque panel affiche STRICTEMENT les stages de son écran.
     public var stages: [StageVM] = []
+    /// SPEC-019 — stages indexées par UUID de display. Chaque panel rail lit
+    /// `stagesByDisplay[panelDisplayUUID]` pour ne montrer que ses stages.
+    public var stagesByDisplay: [String: [StageVM]] = [:]
     public var activeStageID: String = "1"
     public var thumbnails: [CGWindowID: ThumbnailVM] = [:]
     /// SPEC-014 : map wid → métadonnées (pid, bundle, app_name) pour résolution

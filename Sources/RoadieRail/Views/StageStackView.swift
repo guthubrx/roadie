@@ -9,10 +9,17 @@ private let hintOpacity:  CGFloat = 0.28
 
 struct StageStackView: View {
     @Bindable var state: RailState
+    /// SPEC-019 — UUID du display sur lequel ce panel est posé. Utilisé pour
+    /// piocher `state.stagesByDisplay[displayUUID]`. Vide → fallback `state.stages`
+    /// (compat). Sans cette donnée par-panel, les 2 panels affichaient le même
+    /// `state.stages` partagé (bug observé avec 2 écrans).
+    var displayUUID:   String                       = ""
     // SPEC-018 polish — halo de la stage active (couleur + intensité + radius lus depuis [fx.rail]).
     var haloColorHex:  String                       = "#34C759"
     var haloIntensity: Double                       = 0.75
     var haloRadius:    Double                       = 18
+    // SPEC-019 — id du renderer actif (lu depuis [fx.rail].renderer). nil → fallback default.
+    var rendererID:    String?                      = nil
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
     var onTapStage:   (String) -> Void              = { _ in }
     // SPEC-014 T052 (US3) : callback de drop, (wid, target_stage_id).
@@ -38,54 +45,63 @@ struct StageStackView: View {
 
     @ViewBuilder
     private var stageList: some View {
-        let nonEmpty = state.stages.filter { !$0.windowIDs.isEmpty }
-        if nonEmpty.isEmpty {
+        // Invariant utilisateur : si le daemon a au moins une stage, le rail DOIT
+        // l'afficher — peu importe que les wids du rail (state.windows/thumbnails)
+        // soient déjà arrivées en async ou non. Le double-filtre précédent créait
+        // une fenêtre de race au boot où "No stages yet" s'affichait alors que
+        // stage 1 existait pourtant. Le renderer gère le placeholder pour stage vide.
+        // SPEC-019 — chaque panel lit ses propres stages via son UUID display.
+        // Fallback sur `state.stages` (compat) si UUID vide ou pas encore peuplé
+        // dans `stagesByDisplay`.
+        let allStages: [StageVM] = {
+            if !displayUUID.isEmpty, let scoped = state.stagesByDisplay[displayUUID] {
+                return scoped
+            }
+            return state.stages
+        }()
+        if allStages.isEmpty {
+            // Cas pathologique : daemon n'a pas encore répondu OU stages réellement
+            // vides. Stage 1 est immortelle côté daemon donc ce cas est transitoire.
             Text("No stages yet")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(Color.white.opacity(0.34))
                 .frame(maxWidth: .infinity, alignment: .center)
         } else {
-            // Filtrage des stages virtuellement vides (wids orphelines toutes absentes).
-            let visible = nonEmpty.filter { stage in
-                stage.windowIDs.contains { wid in
-                    state.windows[wid] != nil || state.thumbnails[wid] != nil
-                }
-            }
-            if visible.isEmpty {
-                Text("No stages yet")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.34))
-                    .frame(maxWidth: .infinity, alignment: .center)
-            } else {
-                // GeometryReader + frame(minHeight:alignment:) : quand peu de stacks,
-                // le VStack occupe toute la hauteur visible et est centré verticalement.
-                // Quand le contenu dépasse, le ScrollView prend le relais naturellement.
-                GeometryReader { geo in
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: stackSpacing) {
-                            ForEach(visible) { stage in
-                                WindowStack(
-                                    stage: stage,
-                                    thumbnails: state.thumbnails,
-                                    windows: state.windows,
-                                    haloColorHex: haloColorHex,
-                                    haloIntensity: haloIntensity,
-                                    haloRadius: haloRadius,
-                                    onTap: { onTapStage(stage.id) },
-                                    onDropAssign: onDropAssign,
-                                    onRename: onRename,
-                                    onAddFocused: onAddFocused,
-                                    onDelete: onDelete
-                                )
-                                // Aligner à gauche (vs centre) — demande utilisateur.
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            }
+            // GeometryReader + frame(minHeight:alignment:) : quand peu de stacks,
+            // le VStack occupe toute la hauteur visible et est centré verticalement.
+            // Quand le contenu dépasse, le ScrollView prend le relais naturellement.
+            GeometryReader { geo in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: stackSpacing) {
+                        ForEach(allStages) { stage in
+                            // SPEC-019 — délégation au renderer actif (récupéré depuis le registre
+                            // via l'id [fx.rail].renderer, fallback "stacked-previews"). Le consommateur
+                            // ne connaît pas la stratégie concrète du rendu de cellule.
+                            let renderer = StageRendererRegistry.makeOrFallback(id: rendererID)
+                            let context = StageRenderContext(
+                                stage: stage,
+                                windows: state.windows,
+                                thumbnails: state.thumbnails,
+                                haloColorHex: haloColorHex,
+                                haloIntensity: haloIntensity,
+                                haloRadius: haloRadius
+                            )
+                            let cb = StageRendererCallbacks(
+                                onTap:        { onTapStage(stage.id) },
+                                onDropAssign: onDropAssign,
+                                onRename:     onRename,
+                                onAddFocused: onAddFocused,
+                                onDelete:     onDelete
+                            )
+                            renderer.render(context: context, callbacks: cb)
+                            // Aligner à gauche (vs centre) — demande utilisateur.
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(.leading, 8)    // proche du bord gauche
-                        .padding(.trailing, 16)
-                        .padding(.vertical, 20)
-                        .frame(minHeight: geo.size.height, alignment: .center)
                     }
+                    .padding(.leading, 8)    // proche du bord gauche
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 20)
+                    .frame(minHeight: geo.size.height, alignment: .center)
                 }
             }
         }

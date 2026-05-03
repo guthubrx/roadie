@@ -21,6 +21,8 @@ struct RailConfig {
     var haloColor: String = "#34C759"
     var haloIntensity: Double = 0.75
     var haloRadius: Double = 18
+    // SPEC-019 — id du renderer actif. nil → fallback "stacked-previews" via le registry.
+    var rendererID: String? = nil
 
     var fadeDuration: TimeInterval { TimeInterval(fadeDurationMs) / 1000 }
 
@@ -45,6 +47,8 @@ struct RailConfig {
             else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
             if let v = rail["halo_radius"]?.double { cfg.haloRadius = max(0.0, min(80.0, v)) }
             else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
+            // SPEC-019 — clé optionnelle [fx.rail].renderer = "<id>" pour switch de rendu.
+            if let v = rail["renderer"]?.string, !v.isEmpty { cfg.rendererID = v }
         }
         // SPEC-014 T090 : [desktops] mode informe si rails per_display ou global.
         if let desktops = root["desktops"]?.table,
@@ -77,6 +81,10 @@ final class RailController {
         edgeMonitor = EdgeMonitor()
         fade = FadeAnimator()
         fetcher = ThumbnailFetcher(ipc: ipc)
+        // SPEC-019 — enregistrer les renderers livrés AVANT que les panels ne soient créés.
+        // Le default `stacked-previews` DOIT être présent dans le registre, sinon
+        // `StageRendererRegistry.makeOrFallback` trap fail-loud (cf. registry contract).
+        registerBuiltinRenderers()
     }
 
     private var thumbnailRefreshTimer: Timer?
@@ -201,16 +209,33 @@ final class RailController {
             loadWindows()
         case "desktop_changed":
             if let id = payload["desktop_id"] as? Int { state.currentDesktopID = id }
-            // Après changement de desktop, resync les stages du nouveau desktop.
+            // Après changement de desktop, full resync : stages ET windows du nouveau
+            // scope. Sans loadWindows, state.windows reste celui de l'ancien desktop
+            // → WindowStack filtre les wids du nouveau desktop comme "orphelines".
+            // Aussi : invalider les thumbnails locales pour refetch les nouvelles wids.
             loadInitialStages()
+            loadWindows()
+            state.thumbnails.removeAll()
         case "thumbnail_updated":
             if let widRaw = payload["wid"] as? Int {
                 fetcher.invalidate(wid: CGWindowID(widRaw))
+            }
+        case "config_reloaded":
+            // SPEC-019 — relire la config TOML (notamment [fx.rail].renderer)
+            // et reconstruire les panels pour que le rail bascule sur le nouveau
+            // renderer en moins d'une seconde, sans perdre l'état des stages.
+            let oldRenderer = config.rendererID ?? StageRendererRegistry.defaultID
+            config = RailConfig.load()
+            let newRenderer = config.rendererID ?? StageRendererRegistry.defaultID
+            if oldRenderer != newRenderer {
+                debugLog("renderer_changed from=\(oldRenderer) to=\(newRenderer)")
+                rebuildPanels()
             }
         default:
             break
         }
     }
+
 
     /// Retourne true si l'UUID correspond à l'un des panels de ce rail.
     /// Utilisé pour le filtre display_uuid des events stage_* (SPEC-018 T062).
@@ -267,14 +292,10 @@ final class RailController {
         } else {
             targetScreens = NSScreen.screens
         }
-        // SPEC-014 T041 : injecte switchToStage via closure capturée faiblement.
-        let onTap: (String) -> Void = { [weak self] id in
-            Task { @MainActor [weak self] in self?.switchToStage(id) }
-        }
-        // SPEC-014 T053 (US3) : drop chip → assign window à la stage cible.
-        let onDrop: (CGWindowID, String) -> Void = { [weak self] wid, target in
-            Task { @MainActor [weak self] in self?.assignWindow(wid, to: target) }
-        }
+        // SPEC-019 — capturer le displayUUID de chaque panel pour les callbacks scopés.
+        // Le switch IPC envoie alors `--display <uuid>` au daemon, qui résout dans
+        // le bon scope au lieu de retomber sur l'inférence curseur (qui peut différer
+        // si la souris a bougé entre la liste et le clic).
         // SPEC-014 T070-T073 (US5) : menu contextuel.
         let onRename: (String, String) -> Void = { [weak self] sid, name in
             Task { @MainActor [weak self] in self?.renameStage(sid, to: name) }
@@ -287,13 +308,26 @@ final class RailController {
         }
         for screen in targetScreens {
             let id = displayID(for: screen)
+            let panelUUID = displayUUID(for: screen)
+            // SPEC-019 — callbacks scopés par panel. Le tap/drop IPC porte le display
+            // explicite : le daemon résout dans CE scope, plus dans l'inférence curseur.
+            let onTapScoped: (String) -> Void = { [weak self] sid in
+                Task { @MainActor [weak self] in self?.switchToStage(sid, displayUUID: panelUUID) }
+            }
+            let onDropScoped: (CGWindowID, String) -> Void = { [weak self] wid, target in
+                Task { @MainActor [weak self] in
+                    self?.assignWindow(wid, to: target, displayUUID: panelUUID)
+                }
+            }
             let view = StageStackView(
                 state: state,
+                displayUUID: panelUUID,
                 haloColorHex: config.haloColor,
                 haloIntensity: config.haloIntensity,
                 haloRadius: config.haloRadius,
-                onTapStage: onTap,
-                onDropAssign: onDrop,
+                rendererID: config.rendererID,
+                onTapStage: onTapScoped,
+                onDropAssign: onDropScoped,
                 onRename: onRename,
                 onAddFocused: onAddFocused,
                 onDelete: onDelete
@@ -328,17 +362,53 @@ final class RailController {
     }
 
     private func loadInitialStages() {
+        // SPEC-019 — charger les stages PAR DISPLAY pour que chaque panel affiche
+        // strictement les stages de son écran (et pas le scope inferré curseur,
+        // qui mixait les 2 displays dans `state.stages`).
+        let uuids = panels.keys.compactMap { id -> String? in
+            guard let cf = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue()
+            else { return nil }
+            return CFUUIDCreateString(nil, cf) as String?
+        }
         Task {
-            do {
-                let payload = try await ipc.send(command: "stage.list")
-                let stages = parseStages(from: payload)
-                state.stages = stages
-                state.connectionState = .connected
-            } catch RailIPCError.daemonNotRunning {
-                state.connectionState = .offline(reason: "daemon not running")
-            } catch {
-                state.connectionState = .offline(reason: "\(error)")
+            // Compat fallback : si aucun panel encore créé OU UUIDs vides, retomber
+            // sur `stage.list` sans override (= scope curseur).
+            if uuids.isEmpty {
+                do {
+                    let payload = try await ipc.send(command: "stage.list")
+                    state.stages = parseStages(from: payload)
+                    state.connectionState = .connected
+                } catch RailIPCError.daemonNotRunning {
+                    state.connectionState = .offline(reason: "daemon not running")
+                } catch {
+                    state.connectionState = .offline(reason: "\(error)")
+                }
+                return
             }
+            // Une requête par display, en parallèle.
+            for uuid in uuids {
+                do {
+                    let payload = try await ipc.send(command: "stage.list",
+                                                     args: ["display": uuid])
+                    let stages = parseStages(from: payload)
+                    state.stagesByDisplay[uuid] = stages
+                    state.connectionState = .connected
+                } catch RailIPCError.daemonNotRunning {
+                    state.connectionState = .offline(reason: "daemon not running")
+                } catch {
+                    // Une erreur sur un display ne tue pas les autres.
+                    logErr("rail: stage.list display=\(uuid) failed: \(error)")
+                }
+            }
+            // Conserver `state.stages` à plat pour les call-sites legacy : union de tous
+            // les scopes (déduplication par id n'est pas nécessaire — les stage IDs
+            // sont uniques par scope mais peuvent coexister entre displays avec valeurs
+            // équivalentes ; la flat list garde tout, dernier écrit gagne par id).
+            var flat: [String: StageVM] = [:]
+            for (_, list) in state.stagesByDisplay {
+                for s in list { flat[s.id] = s }
+            }
+            state.stages = Array(flat.values)
         }
     }
 
@@ -364,7 +434,7 @@ final class RailController {
 
     /// Envoie `stage.assign` au daemon avec wid + cible. Update optimiste local.
     /// Le daemon émet ensuite `window_assigned` qui re-sync via loadInitialStages.
-    func assignWindow(_ wid: CGWindowID, to stageID: String) {
+    func assignWindow(_ wid: CGWindowID, to stageID: String, displayUUID: String = "") {
         // Update optimiste : retire wid de tout stage, l'ajoute à la cible.
         state.stages = state.stages.map { stage in
             var ids = stage.windowIDs.filter { $0 != wid }
@@ -375,8 +445,11 @@ final class RailController {
         }
         Task {
             do {
-                _ = try await ipc.send(command: "stage.assign",
-                                       args: ["stage_id": stageID, "wid": String(wid)])
+                // SPEC-019 — override `--display` explicite pour que le daemon
+                // résolve le scope dans le bon écran (pas via inférence curseur).
+                var args: [String: String] = ["stage_id": stageID, "wid": String(wid)]
+                if !displayUUID.isEmpty { args["display"] = displayUUID }
+                _ = try await ipc.send(command: "stage.assign", args: args)
             } catch {
                 logErr("rail: stage.assign \(wid)→\(stageID) failed: \(error)")
                 loadInitialStages()
@@ -424,10 +497,20 @@ final class RailController {
 
     /// Envoie `stage.switch` au daemon. Optimiste : pré-update activeStageID
     /// localement pour réactivité visuelle, le `stage_changed` event confirme.
-    func switchToStage(_ id: String) {
-        // Pas de re-trigger si déjà active (FR-018).
-        if state.stages.first(where: { $0.id == id })?.isActive == true { return }
-        // Update optimiste : marque la cible active immédiatement.
+    func switchToStage(_ id: String, displayUUID: String = "") {
+        // SPEC-019 — la stage cible peut être active dans le scope du panel d'origine
+        // mais pas dans state.stages (= état partagé qui peut refléter un autre scope).
+        // On lève le no-op : le daemon est seul juge, il fera no-op si déjà active.
+        // Update optimiste : marque la cible active dans `stagesByDisplay[uuid]` ET
+        // dans `state.stages` (pour les call-sites qui n'utilisent pas le scope).
+        if !displayUUID.isEmpty, var scoped = state.stagesByDisplay[displayUUID] {
+            scoped = scoped.map { stage in
+                StageVM(id: stage.id, displayName: stage.displayName,
+                        isActive: stage.id == id,
+                        windowIDs: stage.windowIDs, desktopID: stage.desktopID)
+            }
+            state.stagesByDisplay[displayUUID] = scoped
+        }
         state.stages = state.stages.map { stage in
             StageVM(id: stage.id, displayName: stage.displayName,
                     isActive: stage.id == id,
@@ -436,10 +519,11 @@ final class RailController {
         state.activeStageID = id
         Task {
             do {
-                _ = try await ipc.send(command: "stage.switch", args: ["stage_id": id])
+                var args: [String: String] = ["stage_id": id]
+                if !displayUUID.isEmpty { args["display"] = displayUUID }
+                _ = try await ipc.send(command: "stage.switch", args: args)
             } catch {
                 logErr("rail: stage.switch \(id) failed: \(error)")
-                // Re-sync depuis le daemon en cas d'échec.
                 loadInitialStages()
             }
         }
@@ -451,6 +535,14 @@ final class RailController {
 
     private func displayID(for screen: NSScreen) -> CGDirectDisplayID {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) ?? 0
+    }
+
+    /// SPEC-019 — UUID stable du display pour ce screen (utilisé en override `--display`
+    /// dans les requêtes IPC scopées). Vide si la résolution AX échoue.
+    private func displayUUID(for screen: NSScreen) -> String {
+        let id = displayID(for: screen)
+        guard let cf = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return "" }
+        return CFUUIDCreateString(nil, cf) as String? ?? ""
     }
 
     private func screenInfo(from screen: NSScreen) -> ScreenInfo {

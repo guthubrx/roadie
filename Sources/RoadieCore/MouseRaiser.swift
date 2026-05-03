@@ -20,6 +20,14 @@ public final class MouseRaiser {
     /// pressé (= drag/resize prioritaire pour éviter le double-trigger raise+drag).
     public var skipWhenModifier: ModifierKey?
 
+    /// Callback optionnel invoqué quand le clic cible une fenêtre dont le `state.stageID`
+    /// diffère du stage actif. Le caller décide quoi faire (typiquement : switcher vers
+    /// le stage de la fenêtre cliquée plutôt que de juste raise en aveugle, ce qui sort
+    /// la fenêtre du hide offscreen sans switcher → incohérence visuelle).
+    /// Retourne `true` si le caller a pris en charge l'action (et MouseRaiser doit skip
+    /// son raise par défaut), `false` pour comportement standard.
+    public var onClickInOtherStage: (@MainActor (WindowID, StageID) -> Bool)?
+
     public init(registry: WindowRegistry, skipWhenModifier: ModifierKey? = nil) {
         self.registry = registry
         self.skipWhenModifier = skipWhenModifier
@@ -104,6 +112,16 @@ public final class MouseRaiser {
             if let element = registry.axElement(for: wid),
                let state = registry.get(wid),
                registry.focusedWindowID != wid {
+                // Si la fenêtre appartient à un autre stage que le stage actif, déléguer
+                // au caller (qui doit switcher avant de raise — sinon on remet on-screen
+                // une fenêtre qui devrait rester hidden, créant l'incohérence visuelle
+                // "Grayjay visible alors que stage 2 inactif").
+                if let stageID = state.stageID, let cb = onClickInOtherStage,
+                   cb(wid, stageID) {
+                    logInfo("click-to-raise: delegated to stage switch",
+                            ["wid": String(wid), "stage": stageID.value])
+                    return
+                }
                 // Combo complet (yabai-style) pour défaire les protections d'activation
                 // Sonoma+/Sequoia/Tahoe. Aucune sous-étape ne suffit seule selon les apps :
                 //   1. kAXRaiseAction : z-order intra-app

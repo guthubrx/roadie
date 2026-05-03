@@ -50,6 +50,19 @@ public enum ScopeFilter: Sendable {
     case exact(StageScope)
 }
 
+/// SPEC-018 audit-cohérence F5 : clé d'un (display, desktop) sans stage. Permet
+/// d'indexer le **stage actif par desktop** indépendamment des stages elles-mêmes
+/// (qui sont déjà indexées par `StageScope = (display, desktop, stage)`).
+public struct DesktopKey: Hashable, Sendable {
+    public let displayUUID: String
+    public let desktopID: Int
+
+    public init(displayUUID: String, desktopID: Int) {
+        self.displayUUID = displayUUID
+        self.desktopID = desktopID
+    }
+}
+
 @MainActor
 public final class StageManager {
     private let registry: WindowRegistry
@@ -78,6 +91,19 @@ public final class StageManager {
     /// Vue scopée des stages (SPEC-018). Synchronisée lors des chargements
     /// et mutations quand `persistenceV2` est actif.
     private(set) public var stagesV2: [StageScope: Stage] = [:]
+
+    /// SPEC-018 audit-cohérence F5 : stage actif **par (display, desktop)**. Le
+    /// scalaire `currentStageID` reste comme legacy/compat ; en mode `.perDisplay`
+    /// il mirror la valeur de ce dict pour le `currentDesktopKey` actif. Sans ce dict,
+    /// un aller-retour desktop 1→2→1 perdait la mémoire du stage en cours sur
+    /// chaque desktop ; sur 2 displays il était impossible de retenir 2 stages
+    /// actives simultanément.
+    private(set) public var activeStageByDesktop: [DesktopKey: StageID] = [:]
+
+    /// Scope desktop courant tel que vu par les call-sites (résolu via curseur ou
+    /// frontmost par le daemon, qui appelle `setCurrentDesktopKey` à chaque
+    /// transition). En mode `.global`, peut rester `nil` (legacy).
+    private(set) public var currentDesktopKey: DesktopKey?
 
     /// Dossier de persistance courant. Conservé pour `extractDesktopID` (mode V1).
     /// En mode V2 ce champ est ignoré pour la lecture/écriture (le persistence s'en charge).
@@ -141,6 +167,66 @@ public final class StageManager {
         stageMode = mode
         persistenceV2 = pv2
         stagesV2.removeAll()
+        activeStageByDesktop.removeAll()
+        // SPEC-018 audit-cohérence F5/F6 : recharger depuis disque maintenant que la
+        // persistence V2 est branchée. Sans ce reload, les stages V2 chargées au boot
+        // (avant setMode) sont vides et activeStageByDesktop reste vide → on perd la
+        // mémoire des stages persistées et le current-stage-par-desktop.
+        loadFromPersistence()
+    }
+
+    // MARK: SPEC-018 audit-cohérence F5/F6 — stage actif par (display, desktop)
+
+    /// Mis à jour par le daemon à chaque transition de scope (boot, desktop_changed,
+    /// display_changed, ou résolution implicite via curseur). En mode `.perDisplay`,
+    /// synchronise `currentStageID` (legacy scalaire) au stage actif du nouveau
+    /// desktop **sans rien purger** des structures en mémoire — les autres desktops
+    /// gardent leur état exactement.
+    public func setCurrentDesktopKey(_ key: DesktopKey?) {
+        currentDesktopKey = key
+        guard stageMode == .perDisplay, let key = key else { return }
+        // Sync `stages` V1 dict avec les stages V2 du SCOPE COURANT uniquement.
+        // Sans ce sync, deactivateAll/activate (utilisés par DesktopSwitcher au
+        // desktop_changed) itèrent sur stages V1 = état d'un autre (display, desktop)
+        // → cachent/montrent les mauvaises wids → Grayjay reste visible alors qu'il
+        // devrait être hidden (observé après desktop 1→2→1).
+        stages.removeAll()
+        for (scope, stage) in stagesV2
+            where scope.displayUUID == key.displayUUID && scope.desktopID == key.desktopID {
+            stages[scope.stageID] = stage
+        }
+        // Stage actif mémorisé pour ce (display, desktop) ; fallback "1" pour un
+        // (display, desktop) jamais visité.
+        let active = activeStageByDesktop[key] ?? StageID("1")
+        // Update legacy scalaire pour que les call-sites V1 voient le bon stage.
+        currentStageID = active
+        // NE PAS appeler `layoutHooks?.setActiveStage(active)` ici. Ce hook itère sur
+        // toutes les wids `state.stageID == active` SANS filtrer par desktop → en mode
+        // multi-desktop, ça remontre les wids de TOUS les desktops avec ce stageID,
+        // contredisant le deactivateAll qui vient de cacher tout. Le call-site approprié
+        // (boot ou activate par DesktopSwitcher) appellera setActiveStage explicitement.
+    }
+
+    /// Stage actif pour un (display, desktop) donné. Retourne nil si jamais visité.
+    public func activeStage(for key: DesktopKey) -> StageID? {
+        activeStageByDesktop[key]
+    }
+
+    /// Charge depuis disque le stage actif de chaque (display, desktop) connu.
+    /// Appelé après `loadFromPersistence` — peuple `activeStageByDesktop`.
+    private func loadActiveStagesByDesktop() {
+        guard stageMode == .perDisplay,
+              let pv2 = persistenceV2 as? NestedStagePersistence else { return }
+        // Toutes les paires (display, desktop) qui ont au moins une stage persistée.
+        let knownDesktops = Set(stagesV2.keys.map {
+            DesktopKey(displayUUID: $0.displayUUID, desktopID: $0.desktopID)
+        })
+        for key in knownDesktops {
+            if let scope = pv2.loadActiveStage(forDisplay: key.displayUUID,
+                                                desktop: key.desktopID) {
+                activeStageByDesktop[key] = scope.stageID
+            }
+        }
     }
 
     /// Retourne les stages filtrés par scope (SPEC-018).
@@ -202,20 +288,33 @@ public final class StageManager {
         // Sauvegarder l'état du desktop quitté.
         flushCurrentFrames()
         persistence.saveActiveStage(currentStageID)
+        // SPEC-018 audit-cohérence F6 : en mode V2, NE PAS purger stages/stagesV2 ni
+        // reset currentStageID à nil. Toutes les stages des autres desktops sont
+        // déjà chargées en mémoire dans stagesV2 et doivent y rester. Le legacy V1
+        // dict est resync depuis stagesV2 par cohérence.
+        if stageMode == .perDisplay {
+            persistence.setDesktopID(id)
+            if let base = baseConfigDir {
+                self.stagesDir = ("\(base)/desktops/\(id)/stages" as NSString).expandingTildeInPath
+            }
+            // Le caller (main.swift) est responsable d'appeler `setCurrentDesktopKey`
+            // après reload pour resynchroniser currentStageID au stage actif du
+            // (display, desktop) entrant. Sans ce hook, on garde le stage du desktop
+            // précédent — comportement de moindre surprise (l'app a juste switché
+            // de desktop sans changer de stage de référence). Mieux : main.swift
+            // appelle setCurrentDesktopKey en aval immédiat.
+            return
+        }
+        // Mode V1 (legacy) : swap de dossier physique, donc purge nécessaire.
         stages.removeAll()
         currentStageID = nil
-        // Notifier la persistence du nouvel ID (no-op V1, essentiel V2).
         persistence.setDesktopID(id)
         if let base = baseConfigDir {
             let newDir = ("\(base)/desktops/\(id)/stages" as NSString).expandingTildeInPath
             if persistence.requiresPhysicalDirSwap {
-                // Mode V1 : créer une nouvelle FileBackedStagePersistence pour le nouveau
-                // dossier. La persistence V1 ne supporte pas le hot-swap de dossier — elle
-                // lit toujours depuis le path donné à l'init.
                 self.stagesDir = newDir
                 self.persistence = FileBackedStagePersistence(stagesDir: newDir)
             } else {
-                // Mode V2 : mettre à jour uniquement pour extractDesktopID (events).
                 self.stagesDir = newDir
             }
         }
@@ -298,6 +397,11 @@ public final class StageManager {
         // Sens 2 : registry → stage.memberWindows
         let defaultID = StageID("1")
         for state in registry.allWindows {
+            // Skip helpers (utility/popup/tooltip <100×100). Sans ce skip, le fallback
+            // `stageExists(defaultID)` ci-dessous force stage=1 sur tous les helpers et les
+            // écrit dans memberWindows → ils repolluent le navrail à chaque appel à
+            // windows.list (qui appelle reconcileStageOwnership en pré-amble).
+            if state.isHelperWindow { continue }
             // Fall-back vers stage 1 si state.stageID pointe vers stage inexistante.
             // En mode per_display, "existe" = présence dans stagesV2 (n'importe quel
             // scope). En mode global, présence dans stages V1.
@@ -362,11 +466,18 @@ public final class StageManager {
     /// Aussi appelé sur handleWindowDestroyed pour nettoyer en continu.
     public func purgeOrphanWindows() {
         var purgedCount = 0
+        // Critère : wid orpheline (absente du registry) OU helper (frame < seuil utile).
+        // Cf. `WindowState.isHelperWindow` pour le rationnel. Un seul passage couvre les
+        // deux pollutions persistées (wids mortes + utility windows).
+        let shouldPurge: (WindowID) -> Bool = { [registry] wid in
+            guard let state = registry.get(wid) else { return true }
+            return state.isHelperWindow
+        }
         // V1 dict
         for (id, stage) in stages {
             var s = stage
             let before = s.memberWindows.count
-            s.memberWindows.removeAll { registry.get($0.cgWindowID) == nil }
+            s.memberWindows.removeAll { shouldPurge($0.cgWindowID) }
             let removed = before - s.memberWindows.count
             if removed > 0 {
                 stages[id] = s
@@ -378,7 +489,7 @@ public final class StageManager {
         for (scope, stage) in stagesV2 {
             var s = stage
             let before = s.memberWindows.count
-            s.memberWindows.removeAll { registry.get($0.cgWindowID) == nil }
+            s.memberWindows.removeAll { shouldPurge($0.cgWindowID) }
             let removed = before - s.memberWindows.count
             if removed > 0 {
                 stagesV2[scope] = s
@@ -386,8 +497,29 @@ public final class StageManager {
                 purgedCount += removed
             }
         }
-        if purgedCount > 0 {
-            logInfo("purge_orphan_windows", ["count": String(purgedCount)])
+        // Clear state.stageID des helpers : sinon `windows.list` continue à rapporter
+        // `stage=1` pour ces wids et le navrail les ré-injecte au prochain refresh.
+        var registryCleared = 0
+        for state in registry.allWindows where state.isHelperWindow && state.stageID != nil {
+            registry.update(state.cgWindowID) { $0.stageID = nil }
+            registryCleared += 1
+        }
+        // SPEC-019 — purger les stages persistées de sessions précédentes qui sont
+        // restées vides (ex: `roadie stage create 2 Personal` sans drag-drop ensuite).
+        // Stage 1 est immortelle (cf. deleteStage). Cleanup défensif au boot uniquement.
+        var emptyStagesPurged = 0
+        for (scope, stage) in stagesV2
+            where stage.memberWindows.isEmpty && scope.stageID.value != "1" {
+            stagesV2.removeValue(forKey: scope)
+            try? persistenceV2?.delete(at: scope)
+            stages.removeValue(forKey: scope.stageID)
+            emptyStagesPurged += 1
+        }
+        if purgedCount > 0 || registryCleared > 0 || emptyStagesPurged > 0 {
+            logInfo("purge_orphan_windows",
+                    ["members": String(purgedCount),
+                     "registry_cleared": String(registryCleared),
+                     "empty_stages": String(emptyStagesPurged)])
         }
     }
 
@@ -408,7 +540,15 @@ public final class StageManager {
                 (StageScope.global(id), stage)
             })
         }
-        logInfo("stages_loaded", ["count": String(stages.count), "current": currentStageID?.value ?? "nil"])
+        // SPEC-018 audit-cohérence F5 : peupler activeStageByDesktop depuis disque
+        // après que stagesV2 soit chargé. Permet à `setCurrentDesktopKey` de retrouver
+        // le bon stage actif au boot et après desktop_changed.
+        loadActiveStagesByDesktop()
+        logInfo("stages_loaded", [
+            "count": String(stages.count),
+            "current": currentStageID?.value ?? "nil",
+            "active_by_desktop": String(activeStageByDesktop.count),
+        ])
     }
 
     public func saveStage(_ stage: Stage) {
@@ -479,6 +619,21 @@ public final class StageManager {
 
     public func assign(wid: WindowID, to stageID: StageID) {
         guard let state = registry.get(wid) else { return }
+        // Refus catégorique d'assigner un helper window (utility/popup/tooltip <100×100).
+        // C'est la seule garantie en amont contre la pollution des stages : sans ce guard,
+        // une fenêtre helper créée pendant la session se retrouve assignée au stage actif
+        // puis persistée sur disque, et resurgit à chaque boot.
+        guard !state.isHelperWindow else { return }
+        // SPEC-018 audit-cohérence F11 : en mode per_display, déléguer à l'overload V2
+        // pour que stagesV2 soit correctement nettoyé. Sans cette délégation, l'API V1
+        // ne nettoie QUE le dict V1 → la wid se retrouve dans 2 entrées de stagesV2
+        // simultanément (cf. observation : Grayjay 22089 dans 1.toml ET 2.toml).
+        if stageMode == .perDisplay, let key = currentDesktopKey {
+            let scope = StageScope(displayUUID: key.displayUUID,
+                                   desktopID: key.desktopID, stageID: stageID)
+            assign(wid: wid, to: scope)
+            return
+        }
         // Retirer de tout autre stage. Lazy stages : un stage qui devient vide
         // suite à ce retrait est auto-détruit (UX "le stage existe par son contenu").
         var emptied: [StageID] = []
@@ -516,6 +671,7 @@ public final class StageManager {
     /// La wid est retirée de tout autre scope où elle figurerait.
     public func assign(wid: WindowID, to scope: StageScope) {
         guard let state = registry.get(wid) else { return }
+        guard !state.isHelperWindow else { return }
         // Retirer la wid de tous les autres scopes V2.
         var emptiedScopes: [StageScope] = []
         for (s, stage) in stagesV2 where s != scope {
@@ -637,7 +793,19 @@ public final class StageManager {
     }
 
     public func switchTo(stageID: StageID) {
-        guard let targetStage = stages[stageID] else {
+        // SPEC-019 fix : en mode per_display, sync FULL stagesV2 → stages V1 dict
+        // au début. Sans ce full sync, switchTo n'a pas de visibilité sur les wids
+        // d'autres stages V2 (ex: stage 2 contenant Grayjay) → ne les hide pas →
+        // elles restent visibles à l'écran malgré le switch.
+        if stageMode == .perDisplay {
+            for (scope, stage) in stagesV2 {
+                stages[scope.stageID] = stage
+            }
+        }
+        let targetStage: Stage
+        if let s = stages[stageID] {
+            targetStage = s
+        } else {
             logWarn("switch: unknown stage", ["stage": stageID.value])
             return
         }
@@ -659,26 +827,31 @@ public final class StageManager {
             saveStage(stage)
         }
 
-        // Masquer les autres stages.
-        // - Fenêtre tilée : (1) marquer la leaf invisible (tiler la skip au layout,
-        //   espace redistribué aux voisines), (2) hide AX physique (offscreen) car
-        //   sans ça la fenêtre reste visible à sa dernière position.
-        // - Fenêtre flottante : hide AX physique seulement.
-        // SPEC-006 : si un override `hideOverride` est posé (ex : RoadieOpacity en
-        // mode α=0), il prend le pas sur HideStrategyImpl pour les fenêtres
-        // floating et appliquer α=0 au lieu d'offscreen.
-        for (id, stage) in stages where id != stageID {
-            for member in stage.memberWindows {
-                let wid = member.cgWindowID
-                let isTileable = registry.get(wid)?.isTileable ?? false
-                if isTileable, let hooks = layoutHooks {
-                    hooks.setLeafVisible(wid, false)
-                }
-                if let override = hideOverride {
-                    override.hide(wid: wid, isTileable: isTileable)
-                } else {
-                    HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
-                }
+        // Masquer les wids des autres stages.
+        // SPEC-019 fix : en mode per_display, source de vérité = registry. Toute wid
+        // dont state.stageID != stageID cible doit être hidée. Plus robuste que
+        // d'itérer stages V1 dict (qui peut être désynchro après reassign cross-scope).
+        let widsToHide: Set<WindowID>
+        if stageMode == .perDisplay {
+            widsToHide = Set(registry.allWindows
+                .filter { $0.stageID != nil && $0.stageID != stageID }
+                .map { $0.cgWindowID })
+        } else {
+            var s: Set<WindowID> = []
+            for (id, stage) in stages where id != stageID {
+                for member in stage.memberWindows { s.insert(member.cgWindowID) }
+            }
+            widsToHide = s
+        }
+        for wid in widsToHide {
+            let isTileable = registry.get(wid)?.isTileable ?? false
+            if isTileable, let hooks = layoutHooks {
+                hooks.setLeafVisible(wid, false)
+            }
+            if let override = hideOverride {
+                override.hide(wid: wid, isTileable: isTileable)
+            } else {
+                HideStrategyImpl.hide(wid, registry: registry, strategy: hideStrategy)
             }
         }
 
@@ -717,16 +890,38 @@ public final class StageManager {
         saveStage(target)
         saveActive()
 
+        // SPEC-018 audit-cohérence F5 : mémoriser ce stage comme actif pour le
+        // (display, desktop) courant. Persisté via _active.toml du scope. Permet
+        // qu'un retour sur ce desktop restaure ce stage (au lieu de retomber sur "1").
+        if stageMode == .perDisplay, let key = currentDesktopKey {
+            activeStageByDesktop[key] = stageID
+            let scope = StageScope(displayUUID: key.displayUUID,
+                                   desktopID: key.desktopID, stageID: stageID)
+            try? persistenceV2?.saveActiveStage(scope)
+        }
+
         // Émission event V2 stage_changed (FR-015). desktop_id extrait du stagesDir
-        // (.../desktops/<id>/stages → id). En mode V1, le path est .../stages → nil
-        // (M5) et l'event est quand même publié pour les subscribers (filtrable côté client).
-        let desktopID = extractDesktopID(fromStagesDir: stagesDir)
+        // (.../desktops/<id>/stages → id). En mode V1, le path est .../stages → nil.
+        // SPEC-019 fix : en mode per_display (V2), extractDesktopID retourne nil car
+        // le stagesDir est plat. On retombe sur stagesV2 pour trouver le scope (desktop_id
+        // + display_uuid) qui contient ce stageID — payload enrichi pour que le rail
+        // puisse filtrer correctement par display+desktop.
+        var desktopID = extractDesktopID(fromStagesDir: stagesDir)
+        var displayUUID: String? = nil
+        if stageMode == .perDisplay,
+           let scope = stagesV2.first(where: { $0.key.stageID == stageID })?.key {
+            desktopID = String(scope.desktopID)
+            displayUUID = scope.displayUUID
+        }
         var payload: [String: String] = [
             "to": stageID.value,
             "to_name": toName,
         ]
         if let did = desktopID {
             payload["desktop_id"] = did
+        }
+        if let uuid = displayUUID {
+            payload["display_uuid"] = uuid
         }
         if let from = fromID {
             payload["from"] = from.value

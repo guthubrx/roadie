@@ -1,7 +1,7 @@
 # Implementation Plan — SPEC-018 Stages-per-display
 
-**Branch**: `018-stages-per-display` | **Date**: 2026-05-02 | **Spec**: [spec.md](spec.md)
-**Status**: Draft
+**Branch**: `018-stages-per-display` | **Date**: 2026-05-02 (Phase 9 audit-coherence ajoutée 2026-05-03) | **Spec**: [spec.md](spec.md)
+**Status**: Implemented + Phase 9 cohérence display×desktop×stage (voir [audit-coherence.md](audit-coherence.md))
 
 ## Vue d'ensemble
 
@@ -18,6 +18,9 @@ Refactor du `StageManager` pour indexer les stages par tuple `(displayUUID, desk
 | Persistance V2 | Arborescence nested `~/.config/roadies/stages/<displayUUID>/<desktopID>/<stageID>.toml` | Reflète le scope dans l'arborescence, facile à backup |
 | Persistance V1 (compat global) | Arborescence flat `~/.config/roadies/stages/<stageID>.toml` | Identique SPEC-002, 0 régression |
 | Migration V1 → V2 | One-shot au boot, idempotent, backup automatique | Préserve le travail utilisateur, recovery manuelle possible |
+| **Active stage par desktop (Phase 9)** | `activeStageByDesktop: [DesktopKey: StageID]` où `DesktopKey = (displayUUID, desktopID)` | Mémoriser quel stage était actif sur chaque (display, desktop) — sans ce dict, currentStageID scalaire global perd le contexte au desktop_changed |
+| **Persistance active per scope (Phase 9)** | `_active.toml` par scope `<stagesDir>/<displayUUID>/<desktopID>/_active.toml` | Survie aux reboots, déjà supporté par `NestedStagePersistence.saveActiveStage(scope:)` |
+| **Helper window invariant (Phase 9)** | `WindowState.minimumUsefulDimension = 100` + `isHelperWindow` computed | Filtre les utility windows (Firefox WebExtension 66×20, Grayjay/Electron tooltips, iTerm popovers) qui s'enregistrent comme `AXStandardWindow` sans en être |
 
 ### Dépendances inter-spec
 
