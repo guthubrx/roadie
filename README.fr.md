@@ -65,14 +65,31 @@ roadie est donc un assemblage humble entre un peu de yabai (le tiler, l'AX-only 
 
 ## Installation (build from source)
 
+### Dépendances
+
+| Outil | Requis | Installation | Utilité |
+|---|---|---|---|
+| Xcode Command Line Tools (`swift`, `codesign`) | oui | `xcode-select --install` | build, signature |
+| `terminal-notifier` | oui | `brew install terminal-notifier` | notification cliquable quand TCC drop |
+| `sketchybar` | optionnel | `brew install FelixKratz/formulae/sketchybar` | panneau barre du haut desktops × stages (SPEC-023) |
+| `jq` | optionnel | `brew install jq` | parsing JSON dans le bridge SketchyBar |
+| Certificat code-signing self-signed `roadied-cert` | oui | Keychain Access → Certificate Assistant → Create a Certificate (Self Signed Root, Code Signing) | préserve les permissions TCC entre rebuilds (cf [ADR-008](docs/decisions/ADR-008-signing-distribution-strategy.md)) |
+
+Si tu ne veux pas le panneau SketchyBar : `ROADIE_WITH_SKETCHYBAR=0 ./scripts/install-dev.sh`.
+
+### Build & install
+
 ```bash
 git clone https://github.com/guthubrx/roadie.git
 cd roadie
-PATH="/usr/bin:/usr/local/bin:/bin" swift build -c release
-make install-app
+./scripts/install-dev.sh        # build + sign + deploy + setup launchd
 ```
 
-Puis dans Réglages Système → Confidentialité et sécurité → Accessibilité, ajouter `~/Applications/roadied.app` et cocher la case.
+Le script vérifie toutes les dépendances, build, signe chaque binaire avec `roadied-cert`, déploie dans `~/Applications/roadied.app/`, configure launchd. À relancer après chaque `swift build` pour pousser le binaire frais sans perdre les grants TCC.
+
+Ensuite dans Réglages Système → Confidentialité et sécurité :
+- **Accessibilité** : ajouter `~/Applications/roadied.app/Contents/MacOS/roadied` et cocher
+- **Enregistrement d'écran** : ajouter le même chemin (nécessaire pour `roadie-rail` qui capture les thumbnails)
 
 ```bash
 roadied --daemon &

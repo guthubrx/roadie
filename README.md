@@ -67,14 +67,31 @@ So roadie is a humble assembly of a bit of yabai (the tiler, AX-only without SIP
 
 ## Installation (build from source)
 
+### Dependencies
+
+| Tool | Required | Install | Used for |
+|---|---|---|---|
+| Xcode Command Line Tools (`swift`, `codesign`) | yes | `xcode-select --install` | build, code signing |
+| `terminal-notifier` | yes | `brew install terminal-notifier` | clickable native macOS notification when TCC drops |
+| `sketchybar` | optional | `brew install FelixKratz/formulae/sketchybar` | top-bar plugin showing desktops × stages (SPEC-023) |
+| `jq` | optional | `brew install jq` | JSON parsing in the SketchyBar bridge |
+| Self-signed code-signing certificate `roadied-cert` | yes | Keychain Access → Certificate Assistant → Create a Certificate (Self Signed Root, Code Signing) | preserves TCC permissions across rebuilds (cf [ADR-008](docs/decisions/ADR-008-signing-distribution-strategy.md)) |
+
+If you don't want the SketchyBar panel: `ROADIE_WITH_SKETCHYBAR=0 ./scripts/install-dev.sh`.
+
+### Build & install
+
 ```bash
 git clone https://github.com/guthubrx/roadie.git
 cd roadie
-PATH="/usr/bin:/usr/local/bin:/bin" swift build -c release
-make install-app
+./scripts/install-dev.sh        # build + sign + deploy + launchd setup
 ```
 
-Then in System Settings → Privacy & Security → Accessibility, add `~/Applications/roadied.app` and tick the checkbox.
+The script checks all dependencies, builds, signs every binary with `roadied-cert`, deploys to `~/Applications/roadied.app/`, and configures launchd. Re-run after every `swift build` to refresh the deployed binary while keeping TCC grants.
+
+Then in System Settings → Privacy & Security:
+- **Accessibility** : add `~/Applications/roadied.app/Contents/MacOS/roadied` and tick the checkbox
+- **Screen Recording** : add the same path (needed by `roadie-rail` for thumbnails)
 
 ```bash
 roadied --daemon &

@@ -24,13 +24,29 @@ DST_DIR="$HOME/.config/sketchybar/sketchybar"
 SKETCHYBARRC="$HOME/.config/sketchybar/sketchybarrc"
 TS="$(date +%s)"
 
-# Pré-requis : SketchyBar installé.
-if ! command -v sketchybar >/dev/null; then
-    echo "ERROR: sketchybar non installé. Faire 'brew install FelixKratz/formulae/sketchybar'."
+# Pré-requis : check toutes les dépendances en un seul passage.
+MISSING=()
+check_dep() {
+    local cmd="$1" hint="$2"
+    if ! command -v "$cmd" >/dev/null; then
+        MISSING+=("  - $cmd : $hint")
+    fi
+}
+check_dep sketchybar         "brew install FelixKratz/formulae/sketchybar"
+check_dep jq                 "brew install jq"
+check_dep terminal-notifier  "brew install terminal-notifier (notification cliquable quand TCC drop)"
+check_dep awk                "préinstallé sur macOS — anomalie si absent"
+check_dep codesign           "préinstallé sur macOS via Xcode CLI tools"
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "ERROR: dépendances manquantes :"
+    printf '%s\n' "${MISSING[@]}"
+    echo
+    echo "Installe-les puis relance ce script."
     exit 1
 fi
 if [ ! -d "$DST_DIR" ]; then
-    echo "ERROR: $DST_DIR n'existe pas. Configure d'abord SketchyBar."
+    echo "ERROR: $DST_DIR n'existe pas. Démarre d'abord SketchyBar (sketchybar -d) ou crée le dir."
     exit 1
 fi
 

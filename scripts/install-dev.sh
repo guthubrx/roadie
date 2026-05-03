@@ -26,6 +26,46 @@ CLI_BIN="$HOME/.local/bin/roadie"
 # PATH override pour eviter ld shadow par anaconda (cf MEMORY.md projet).
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:$PATH"
 
+# Pre-requis : check des dependances. Liste exhaustive pour qu'un dev fresh
+# checkout sache exactement ce qu'il manque.
+MISSING=()
+check_dep() {
+    local cmd="$1" hint="$2"
+    command -v "$cmd" >/dev/null || MISSING+=("  - $cmd : $hint")
+}
+check_dep swift              "Xcode Command Line Tools (xcode-select --install)"
+check_dep codesign           "Xcode Command Line Tools (xcode-select --install)"
+check_dep launchctl          "macOS natif"
+check_dep terminal-notifier  "brew install terminal-notifier (notification quand TCC drop)"
+# SketchyBar deps optionnelles : seulement check si user veut le panneau barre.
+if [[ "${ROADIE_WITH_SKETCHYBAR:-1}" = "1" ]]; then
+    check_dep sketchybar     "brew install FelixKratz/formulae/sketchybar (panneau desktops x stages)"
+    check_dep jq             "brew install jq (parsing JSON dans le bridge SketchyBar)"
+fi
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "ERROR: dependances manquantes :"
+    printf '%s\n' "${MISSING[@]}"
+    echo
+    echo "Installe-les puis relance. Si tu n'utilises pas SketchyBar :"
+    echo "    ROADIE_WITH_SKETCHYBAR=0 ./scripts/install-dev.sh"
+    exit 1
+fi
+
+# Cert codesigning : verifier qu'il existe dans le keychain (cf ADR-008).
+if ! security find-certificate -c "$CERT" >/dev/null 2>&1; then
+    echo "ERROR: certificat codesign '$CERT' introuvable dans login keychain."
+    echo
+    echo "Cree-le une fois via Keychain Access :"
+    echo "    Menu > Certificate Assistant > Create a Certificate..."
+    echo "    Name           : $CERT"
+    echo "    Identity Type  : Self Signed Root"
+    echo "    Certificate Type : Code Signing"
+    echo
+    echo "Puis relance ce script. Cf docs/decisions/ADR-008-signing-distribution-strategy.md."
+    exit 1
+fi
+
 if [[ "${1:-}" != "--no-build" ]]; then
   echo "==> swift build (release-debug, host arch)"
   cd "$REPO_ROOT"

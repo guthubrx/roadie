@@ -36,6 +36,10 @@ remove_all_roadie_items() {
             sketchybar "${args[@]}" 2>/dev/null
         fi
     fi
+    # SPEC-023 — toujours retirer les items "alerte" même s'ils ne sont pas dans
+    # le fichier (cas : daemon_down créé pendant un crash sans tracking).
+    sketchybar --remove roadie.daemon_down 2>/dev/null
+    sketchybar --remove roadie.empty 2>/dev/null
     : > "$ITEMS_FILE"
 }
 
@@ -102,9 +106,11 @@ remove_all_roadie_items
 # Daemon down (avec retry) : afficher juste un indicateur, sortir.
 if ! roadie_daemon_alive_retry; then
     sketchybar --add item roadie.daemon_down left \
-               --set roadie.daemon_down label="🔴 roadie down" \
+               --set roadie.daemon_down label="🔴 roadie down — re-cocher Accessibilité" \
                                          icon.padding_left=8 \
-                                         label.color=0xfff7768e
+                                         label.color=0xfff7768e \
+                                         click_script="open 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility' &" \
+               --subscribe roadie.daemon_down mouse.clicked
     track_item roadie.daemon_down
     exit 0
 fi
