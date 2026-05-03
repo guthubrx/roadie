@@ -146,6 +146,14 @@ func handleWindow(args: [String]) {
         sendAndPrint(Request(command: "window.pin", args: ["pinned": "true"]))
     case "unpin":
         sendAndPrint(Request(command: "window.pin", args: ["pinned": "false"]))
+    case "swap":
+        // SPEC-018 US1a : roadie window swap <left|right|up|down>
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "window.swap", args: ["direction": args[3]]))
+    case "insert":
+        // SPEC-018 US4 : roadie window insert <north|south|east|west|stack>
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "window.insert", args: ["direction": args[3]]))
     default:
         printUsage(); exit(64)
     }

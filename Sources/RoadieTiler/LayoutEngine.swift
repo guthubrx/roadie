@@ -46,6 +46,33 @@ public final class LayoutEngine {
         logInfo("layout_engine_active_stage", ["stage": stageID?.value ?? "nil"])
     }
 
+    /// SPEC-018 fix : garantit que toutes les `wids` passées sont présentes dans le tree
+    /// de la stage active du primary display. Utile au boot et après stage switch quand
+    /// le scan AX a peuplé le registry mais le tree est resté vide (cas observé : tree
+    /// se vidait après stage switch + reswitch, rendant focus/move/swap inopérants).
+    /// Idempotent : ne ré-insère pas une wid déjà présente.
+    /// - Returns: nb de wids effectivement insérées.
+    @discardableResult
+    public func ensureTreePopulated(with wids: [WindowID]) -> Int {
+        let primaryID = CGMainDisplayID()
+        let sid = workspace.activeStageID ?? StageID("1")
+        let key = StageDisplayKey(stageID: sid, displayID: primaryID)
+        let primaryRoot = root(for: key)
+        let existing = Set(primaryRoot.allLeaves.map { $0.windowID })
+        var inserted = 0
+        var lastInserted: WindowID?
+        for wid in wids where !existing.contains(wid) {
+            insertWindow(wid, focusedID: lastInserted)
+            lastInserted = wid
+            inserted += 1
+        }
+        if inserted > 0 {
+            logInfo("ensure_tree_populated",
+                    ["stage": sid.value, "inserted": String(inserted), "total": String(wids.count)])
+        }
+        return inserted
+    }
+
     // MARK: - Helpers multi-display / multi-stage
 
     /// Retourne le root pour une clé (stageID, displayID), en le créant si absent.

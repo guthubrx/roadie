@@ -252,6 +252,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s pour laisser scan AX peupler
             self?.stageManager?.reconcileStageOwnership()  // sync state.stageID ↔ memberWindows V1+V2
+            // SPEC-018 fix : ré-insertion défensive — assure que toutes les wid tilées du
+            // registry sont dans le tree BSP (cas observé : après stage switch + reswitch
+            // le tree était vide, focus/move/swap retournaient "no neighbor"). Idempotent.
+            if let self = self {
+                let tileableWids = self.registry.tileableWindows.map { $0.cgWindowID }
+                self.layoutEngine.ensureTreePopulated(with: tileableWids)
+            }
             // Re-tile pour que les wids assignées à des stages non-actives soient cachées
             self?.applyLayout()
         }
