@@ -1381,26 +1381,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         guard let resolvedDisplay = displayID else { return }
         let currentOnDisplay = await dReg.currentID(for: resolvedDisplay)
 
-        // SPEC-021 T050 : cross-check SkyLight avant le switch desktop.
-        // Si le scope OS diverge du scope persisté (drift Mission Control),
-        // corriger le scope persisté d'abord pour que le switch soit cohérent.
-        if let sm = stageManager,
-           let osSpaceID = SkyLightBridge.currentSpaceID(for: wid),
-           let osScope = await dReg.scopeForSpaceID(osSpaceID),
-           let persistedScope = sm.scopeOf(wid: wid),
-           (osScope.displayUUID != persistedScope.displayUUID || osScope.desktopID != persistedScope.desktopID) {
-            let correctedScope = StageScope(
-                displayUUID: osScope.displayUUID,
-                desktopID: osScope.desktopID,
-                stageID: persistedScope.stageID
-            )
-            sm.assign(wid: wid, to: correctedScope)
-            logInfo("alttab_scope_corrected", [
-                "wid": String(wid),
-                "from": "\(persistedScope.displayUUID):\(persistedScope.desktopID)",
-                "to": "\(osScope.displayUUID):\(osScope.desktopID)",
-            ])
-        }
+        // SPEC-022 — re-étiquetage automatique via SkyLight DÉSACTIVÉ.
+        // Le modèle utilisateur : l'étiquette (widToScope) est pilotée par les
+        // décisions explicites (drag manuel, raccourci, drag rail). Le système ne
+        // doit PAS re-étiqueter sur la position physique macOS observée. Sinon :
+        // - Click sur thumb → switchTo → focus change → followAltTabFocus →
+        //   SkyLight observe la wid (peut-être sur Space différent à cause d'un
+        //   fullscreen Netflix transient) → re-assign → la thumb migre vers
+        //   l'autre écran « sans raison ».
+        // Le drift éventuel sera corrigé par l'user via drag explicite. Si on veut
+        // un audit/réconciliation, ce sera un outil séparé pas un effet de bord.
+        _ = SkyLightBridge.self  // ref maintenue pour ne pas casser l'import si non utilisé ailleurs
 
         // No-op si la fenêtre est déjà sur le desktop courant du display.
         guard state.desktopID != currentOnDisplay else { return }

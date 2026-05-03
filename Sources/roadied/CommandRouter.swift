@@ -1366,6 +1366,27 @@ enum CommandRouter {
                 desktopID: targetDeskID,
                 displayUUID: dstDisplay.uuid
             )
+            // SPEC-022 — re-étiqueter aussi widToScope (StageManager). Sinon la
+            // fenêtre est physiquement sur dst mais le rail panel src continue de
+            // l'afficher (étiquette logique inchangée). C'est l'action explicite
+            // de l'user (raccourci `window display N`) → re-étiquetage légitime.
+            if let sm = daemon.stageManager, sm.stageMode == .perDisplay {
+                let activeStage = sm.activeStageByDesktop[
+                    DesktopKey(displayUUID: dstDisplay.uuid, desktopID: targetDeskID)] ?? StageID("1")
+                let targetScope = StageScope(displayUUID: dstDisplay.uuid,
+                                              desktopID: targetDeskID, stageID: activeStage)
+                if sm.stagesV2[targetScope] == nil {
+                    _ = sm.createStage(id: activeStage, displayName: activeStage.value,
+                                        scope: targetScope)
+                }
+                sm.assign(wid: wid, to: targetScope)
+                EventBus.shared.publish(DesktopEvent(
+                    name: "window_assigned",
+                    payload: ["wid": String(wid),
+                              "stage_id": activeStage.value,
+                              "display_uuid": dstDisplay.uuid,
+                              "desktop_id": String(targetDeskID)]))
+            }
         }
         // Re-appliquer le layout sur tous les écrans.
         daemon.applyLayout()
