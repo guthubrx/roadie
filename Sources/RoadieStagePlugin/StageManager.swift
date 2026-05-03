@@ -272,12 +272,25 @@ public final class StageManager {
     public func reconcileStageOwnership() {
         var fixed1 = 0, fixed2 = 0
         // Sens 1 : memberWindows → state.stageID
+        // Couvre V1 (stages) ET V2 (stagesV2 SPEC-018) — sinon les members persistés
+        // au format per-display ne synchronisent jamais leur state.stageID après le
+        // scan AX (qui écrase la valeur restaurée du disque).
         for (id, stage) in stages {
             for member in stage.memberWindows {
                 let wid = member.cgWindowID
                 guard let state = registry.get(wid) else { continue }
                 if state.stageID != id {
                     registry.update(wid) { $0.stageID = id }
+                    fixed1 += 1
+                }
+            }
+        }
+        for (scope, stage) in stagesV2 {
+            for member in stage.memberWindows {
+                let wid = member.cgWindowID
+                guard let state = registry.get(wid) else { continue }
+                if state.stageID != scope.stageID {
+                    registry.update(wid) { $0.stageID = scope.stageID }
                     fixed1 += 1
                 }
             }
@@ -304,24 +317,37 @@ public final class StageManager {
             } else {
                 continue
             }
-            guard var stage = stages[targetID] else { continue }
-            let stageID = targetID
-            if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
-                stage.memberWindows.append(StageMember(
-                    cgWindowID: state.cgWindowID,
-                    bundleID: state.bundleID,
-                    titleHint: state.title,
-                    savedFrame: SavedRect(state.frame)))
-                stages[stageID] = stage
-                saveStage(stage)
-                // Sync stagesV2 si mode per_display.
-                if stageMode == .perDisplay {
-                    for (scope, _) in stagesV2 where scope.stageID == stageID {
-                        stagesV2[scope] = stage
-                        try? persistenceV2?.save(stage, at: scope)
-                    }
+            // SPEC-018 fix : en mode per_display, opérer DIRECTEMENT sur stagesV2
+            // (pas via stages V1 qui peut être désynchronisé/vide). Sinon le sync
+            // v1→v2 écrase le V2 file (avec ses members persistés) par le V1 stage
+            // (potentiellement vide), résultat : V2 file vidé au reload.
+            if stageMode == .perDisplay {
+                guard let scope = stagesV2.keys.first(where: { $0.stageID == targetID }),
+                      var stage = stagesV2[scope]
+                else { continue }
+                if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
+                    stage.memberWindows.append(StageMember(
+                        cgWindowID: state.cgWindowID,
+                        bundleID: state.bundleID,
+                        titleHint: state.title,
+                        savedFrame: SavedRect(state.frame)))
+                    stagesV2[scope] = stage
+                    try? persistenceV2?.save(stage, at: scope)
+                    fixed2 += 1
                 }
-                fixed2 += 1
+            } else {
+                guard var stage = stages[targetID] else { continue }
+                let stageID = targetID
+                if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
+                    stage.memberWindows.append(StageMember(
+                        cgWindowID: state.cgWindowID,
+                        bundleID: state.bundleID,
+                        titleHint: state.title,
+                        savedFrame: SavedRect(state.frame)))
+                    stages[stageID] = stage
+                    saveStage(stage)
+                    fixed2 += 1
+                }
             }
         }
         if fixed1 + fixed2 > 0 {
