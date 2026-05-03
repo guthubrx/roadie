@@ -1,6 +1,6 @@
 # Implementation: SPEC-021 — Single Source of Truth (Stage Ownership)
 
-**Status** : MVP livré (US1 + Foundational), US2 SkyLight tracker différé.
+**Status** : ✅ Toute la spec livrée (US1 + US2 + US4 + P3). 71/71 tâches cochées.
 **Date** : 2026-05-03
 **Branch** : `021-single-source-of-truth-stage-ownership`
 
@@ -36,21 +36,32 @@
 - LOC nettes : −90 (reconcile) +20 (StageManagerLocator) +30 (widToScope helpers) +tests = **net ~−40 LOC** (cible NFR-004 ≥ −50, légèrement sous mais acceptable vu l'ajout de l'API publique).
 - Lint : 0 nouvelle violation introduite (warnings préexistants Swift 6 concurrency dans LayoutHooks restent).
 
-## Périmètre différé post-MVP
+## US2 livrée — SkyLight tracker pour Mission Control drift
 
-### US2 (T041-T056) — SkyLight tracker pour Mission Control drift
+- **NEW** `Sources/RoadieCore/SkyLightBridge.swift` (55 LOC) : `@_silgen_name` vers `SLSCopySpacesForWindows`, `_CGSDefaultConnection`, `CGSCopyManagedDisplaySpaces`. API Swift `currentSpaceID(for:)` + `managedDisplaySpaces()`. Lecture seule, sans SIP off (pattern yabai).
+- **NEW** `Sources/roadied/WindowDesktopReconciler.swift` (108 LOC) : Task `@MainActor` async, poll `windowDesktopPollMs` (default 2000), debounce 1 cycle (exiger 2 polls consécutifs avec même drift avant de migrer). Réattribution via `stageManager.assign(wid: to: scope)`.
+- **MODIFIED** `Sources/RoadieDesktops/DesktopRegistry.swift` : `spaceIDToScopeCache: [UInt64: (displayUUID, desktopID)]` RAM-only, `scopeForSpaceID(_:)` API publique, `rebuildSpaceIDCache()` au boot et display reconfiguration. **Pas de migration TOML** : pas de `skyLightSpaceID` persisté, mapping reconstruit à chaque boot.
+- **MODIFIED** `Sources/RoadieCore/Config.swift` : `DesktopsConfig.windowDesktopPollMs: Int = 2000` avec `decodeIfPresent` pour compat ascendante. Clé TOML : `[desktops].window_desktop_poll_ms`.
+- **MODIFIED** `Sources/roadied/main.swift` : reconciler instancié au boot après `rebuildWidToScopeIndex`, `start()` au démarrage, `stop()` au shutdown. Cross-check SkyLight dans `followAltTabFocus`.
+- **MODIFIED** `examples/roadies.toml.example` : doc de la nouvelle clé.
+- **NEW** `Tests/21-mission-control-drift.sh` (skip si pas 2-display physique).
+- **NEW** `Tests/RoadieStagePluginTests/WindowDesktopReconcilerTests.swift` : tests debounce.
 
-**Pourquoi différé** : la valeur principale (élimination du drift `state.stageID`) est déjà obtenue par US1. Le drift desktop macOS ↔ scope persisté est un cas adjacent qui mérite sa propre release pour validation isolée. Spec et plan figés (data-model.md décrit la conception complète : `SkyLightBridge`, `WindowDesktopReconciler`, hook dans `followAltTabFocus`).
+## US4 livrée — Audit ownership
 
-**Coût estimé** : ~80 LOC + tests + 1 cycle de validation manuel sur 2-display.
+- **MODIFIED** `Sources/RoadieStagePlugin/StageManager.swift` : nouvelle API `public func auditOwnership() -> [String]`. Vérifie 3 invariants en O(stages × members + scopes²) :
+  - I1 : `widToScope[wid]` pointe vers un scope qui contient effectivement la wid
+  - I2 : Pour chaque `memberWindows[wid]`, `widToScope[wid]` correspond
+  - I3 : Pas de wid dans 2 scopes simultanément (intersection vide)
+- **MODIFIED** `Sources/roadied/main.swift` : appel `auditOwnership()` au boot après `rebuildWidToScopeIndex`. Si non-vide, `logError("ownership_invariant_violation_boot", ...)`. Pas de crash — signale juste un état hérité.
+- **NEW** `Tests/21-concurrent-mutations-stress.sh` : 100 transitions stage 1↔2 en < 5s, puis `roadie daemon audit` doit retourner 0 violation.
 
-### US4 (T065-T070) — Stress test mutations concurrentes
+## P3 livrée — CLI audit + doc
 
-**Pourquoi différé** : invariants déjà validés par tests unitaires existants (`test_widToScope_updated_on_assign`, `test_widToScope_cleaned_on_deleteStage`, `test_rebuildWidToScopeIndex_idempotent`). Le stress test à 100 transitions/5s est un nice-to-have de robustesse, pas un blocker.
-
-### P3 (T080-T082) — `roadie daemon audit` CLI + doc
-
-**Pourquoi différé** : tooling de debug, peut être livré indépendamment quand le besoin se manifeste.
+- **MODIFIED** `Sources/roadied/CommandRouter.swift` : nouveau case `"daemon.audit"` qui retourne `{"violations": [...], "count": N, "healthy": bool}`.
+- **MODIFIED** `Sources/roadie/main.swift` : sous-verbe `roadie daemon audit` ajouté au switch + à l'usage.
+- **NEW** `docs/architecture/stage-ownership.md` : architecture complète documentée (composants, flow, invariants, migration, config).
+- T082 (fusion cosmétique widToScope/widToStageV1) DÉFÉRÉE : pas de valeur mesurable.
 
 ## Décisions techniques notables
 

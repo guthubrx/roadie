@@ -212,17 +212,22 @@ public struct DesktopsConfig: Codable, Sendable {
     public var backAndForth: Bool
     /// SPEC-013 FR-001 : `global` (V2 compat, défaut) ou `per_display`.
     public var mode: DesktopMode
+    /// SPEC-021 T047 : intervalle de poll du reconciler desktop (ms). 0 = désactivé.
+    /// Clé TOML : [desktops].window_desktop_poll_ms
+    public var windowDesktopPollMs: Int
 
     public init(enabled: Bool = true,
                 count: Int = 10,
                 defaultFocus: Int = 1,
                 backAndForth: Bool = true,
-                mode: DesktopMode = .global) {
+                mode: DesktopMode = .global,
+                windowDesktopPollMs: Int = 2000) {
         self.enabled = enabled
         self.count = count
         self.defaultFocus = defaultFocus
         self.backAndForth = backAndForth
         self.mode = mode
+        self.windowDesktopPollMs = windowDesktopPollMs
     }
 
     enum CodingKeys: String, CodingKey {
@@ -231,6 +236,7 @@ public struct DesktopsConfig: Codable, Sendable {
         case defaultFocus = "default_focus"
         case backAndForth = "back_and_forth"
         case mode
+        case windowDesktopPollMs = "window_desktop_poll_ms"
     }
 
     public init(from decoder: Decoder) throws {
@@ -253,6 +259,8 @@ public struct DesktopsConfig: Codable, Sendable {
         } else {
             self.mode = .global
         }
+        self.windowDesktopPollMs = try c.decodeIfPresent(Int.self,
+                                        forKey: .windowDesktopPollMs) ?? 2000
     }
 }
 
