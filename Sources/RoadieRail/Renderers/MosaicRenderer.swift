@@ -67,13 +67,14 @@ private struct MosaicView: View {
     @ViewBuilder
     private var content: some View {
         if stage.windowIDs.isEmpty {
-            emptyPlaceholder
+            // SPEC-022 : stage vide → rien rendu (cellule reste cliquable via la VStack parent).
+            EmptyView()
         } else {
             mosaicGrid
         }
     }
 
-    // MARK: - Placeholder
+    // MARK: - Placeholder (SPEC-022 : not rendered, kept for potential debug mode)
 
     private var emptyPlaceholder: some View {
         VStack(spacing: 8) {

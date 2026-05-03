@@ -58,7 +58,8 @@ private struct HeroPreviewView: View {
     @ViewBuilder
     private var content: some View {
         if stage.windowIDs.isEmpty {
-            emptyPlaceholder
+            // SPEC-022 : stage vide → rien rendu (cellule reste cliquable via la VStack parent).
+            EmptyView()
         } else {
             VStack(spacing: 6) {
                 heroPreview
@@ -68,7 +69,7 @@ private struct HeroPreviewView: View {
         }
     }
 
-    // MARK: - Placeholder stage vide
+    // MARK: - Placeholder stage vide (SPEC-022 : not rendered, kept for potential debug mode)
 
     private var emptyPlaceholder: some View {
         VStack(spacing: 8) {

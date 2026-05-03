@@ -792,6 +792,53 @@ public final class StageManager {
         saveActive()
     }
 
+    /// SPEC-022 — switchTo scopé. Si `scope` correspond au `currentDesktopKey` actuel,
+    /// délègue à `switchTo(stageID:)` (comportement complet : hide/show, layout, global).
+    /// Sinon : ne mute QUE `activeStageByDesktop[scope]` et persiste `_active.toml` du
+    /// scope cible — pas d'effet sur le scope visible courant. C'est le fix multi-display
+    /// du bug "click sur stage du panel display X → switch view de display Y".
+    public func switchTo(stageID: StageID, scope: StageScope) {
+        let targetKey = DesktopKey(displayUUID: scope.displayUUID, desktopID: scope.desktopID)
+        // Cas A : le scope cible EST le scope visible courant → comportement legacy complet.
+        if let cur = currentDesktopKey, cur == targetKey {
+            switchTo(stageID: stageID)
+            return
+        }
+        // Cas B : scope distant. Ne pas toucher au layout/hide/show de l'utilisateur courant.
+        // Vérifier que la stage cible existe (lazy auto-create si non, cohérent avec stage.assign).
+        let fullScope = StageScope(displayUUID: scope.displayUUID,
+                                   desktopID: scope.desktopID, stageID: stageID)
+        if stagesV2[fullScope] == nil {
+            _ = createStage(id: stageID, displayName: "stage \(stageID.value)",
+                            scope: fullScope)
+        }
+        // Capturer l'ancienne active pour l'event "from" avant mutation.
+        let previousActive = activeStageByDesktop[targetKey]
+        // Mémoriser comme stage active du scope cible. Persiste _active.toml.
+        activeStageByDesktop[targetKey] = stageID
+        try? persistenceV2?.saveActiveStage(fullScope)
+        logInfo("stage_switched_scoped", [
+            "stage": stageID.value,
+            "display_uuid": scope.displayUUID,
+            "desktop_id": String(scope.desktopID),
+            "current_visible_scope_unchanged": "true",
+        ])
+        // Émettre stage_changed enrichi pour que le rail panel du display cible
+        // re-render et marque cette stage comme active dans son state local.
+        // Pas de "from" : on ne sait pas quelle était l'active du scope distant
+        // (c'est le rail qui maintient ce state local).
+        var payload: [String: String] = [
+            "to": stageID.value,
+            "to_name": stagesV2[fullScope]?.displayName ?? stageID.value,
+            "desktop_id": String(scope.desktopID),
+            "display_uuid": scope.displayUUID,
+        ]
+        if let prev = previousActive, prev != stageID {
+            payload["from"] = prev.value
+        }
+        EventBus.shared.publish(DesktopEvent(name: "stage_changed", payload: payload))
+    }
+
     public func switchTo(stageID: StageID) {
         // SPEC-019 fix : en mode per_display, sync FULL stagesV2 → stages V1 dict
         // au début. Sans ce full sync, switchTo n'a pas de visibilité sur les wids
