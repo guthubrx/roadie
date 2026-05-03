@@ -106,7 +106,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 applyLayout: {
                     engine.apply(rect: display.workArea,
                                  outerGaps: outerGaps, gapsInner: gapsInner)
-                }
+                },
+                reassignToStage: { wid, stageID in engine.reassignWindow(wid, toStage: stageID) },
+                setActiveStage: { stageID in engine.setActiveStage(stageID) }
             )
             self.stageManager = StageManager(registry: registry,
                                              hideStrategy: config.stageManager.hideStrategy,
@@ -149,7 +151,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
             // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
-            sm.ensureDefaultStage()
+            // SPEC-018 : en mode per_display, créer aussi dans stagesV2 au scope primary.
+            let defaultScope: StageScope?
+            if config.desktops.mode == .perDisplay {
+                let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+                defaultScope = StageScope(displayUUID: primaryUUID, desktopID: 1, stageID: StageID("1"))
+            } else {
+                defaultScope = nil
+            }
+            sm.ensureDefaultStage(scope: defaultScope)
         }
 
         // Observers
@@ -233,6 +243,18 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             self?.periodicScan()
         }
         periodicScanner?.start()
+
+        // SPEC-018 : purge des wids orphelines après le scan AX initial. Les stages
+        // chargées du disque peuvent référencer des wids des sessions précédentes
+        // (process killed) → à nettoyer pour que le rail UI ne montre que des stages
+        // avec des fenêtres réelles, et que `stage.switch` puisse re-tile correctement.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)  // 1.5s pour laisser scan AX peupler
+            self?.stageManager?.reconcileStageOwnership()  // 1) sync state.stageID ← stage.memberWindows
+            self?.stageManager?.purgeOrphanWindows()       // 2) puis purge wids vraiment mortes
+            // 3) re-tile pour que les wids assignées à des stages non-actives soient cachées
+            self?.applyLayout()
+        }
 
         // SPEC-004 : init FX loader (gracieux même si SIP fully on ou aucun module).
         // Le daemon reste 100 % fonctionnel sans modules. Si SIP partial off + dylibs
@@ -389,6 +411,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 mgr.setMode(stageMode, persistence: persistenceV2)
                 logInfo("stage_manager: mode set",
                         ["stage_mode": stageMode.rawValue])
+                // SPEC-018 : matérialiser stage 1 dans stagesV2 maintenant que le mode V2 est actif.
+                // Sans ça, `stage list` filtré par scope retourne vide et `stage 1` échoue
+                // avec "unknown_stage in current scope" (la stage 1 V1 du boot n'a pas migré).
+                if stageMode == .perDisplay {
+                    let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+                    let scope = StageScope(displayUUID: primaryUUID, desktopID: 1, stageID: StageID("1"))
+                    mgr.ensureDefaultStage(scope: scope)
+                }
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
