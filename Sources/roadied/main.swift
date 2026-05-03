@@ -256,15 +256,51 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         server = Server(socketPath: config.daemon.socketPath, handler: self)
         try server?.start()
 
-        // CAUSE RACINE Grayjay (suite) : reconcileStageOwnership AVANT l'auto-assign
-        // des orphelines. Sens 1 (stagesV2 → state.stageID) propage l'attribution
-        // persistée vers le registry. Sans ce passage, les wids présentes sur disque
-        // sont vues comme `state.stageID == nil` et sont écrasées vers `currentStage`
-        // par la boucle ci-dessous → perte de la mémoire de l'attribution.
-        // Auto-assign des fenêtres orphelines au stage courant (migration utilisateurs existants).
-        // Si 5 fenêtres n'ont pas de stageID après loadFromDisk, elles atterrissent toutes
-        // dans le stage 1 du desktop courant. Sans effet si stageManager est nil (mode V1 strict).
-        if let sm = stageManager, let currentStage = sm.currentStageID {
+        // SPEC-022 — auto-assign des fenêtres orphelines au scope (display, desktop)
+        // de leur position physique. Avant : toutes les wids orphelines atterrissaient
+        // sur `currentStage` (1 seul scope), quel que soit leur display réel → en
+        // multi-display Firefox sur LG se retrouvait dans built-in stage 1.
+        // Maintenant : chaque wid résolue sur SON display via frame center.
+        // Skip silencieusement les wids à frame anormale (offscreen, fullscreen Space)
+        // — elles seront auto-assignées plus tard via axDidMoveWindow quand AX
+        // reportera une frame valide.
+        if let sm = stageManager, sm.stageMode == .perDisplay {
+            let dskReg = desktopRegistry
+            for state in registry.allWindows
+                where state.isTileable && sm.scopeOf(wid: state.cgWindowID) == nil {
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                guard let did = layoutEngine.displayIDContainingPoint(center) else {
+                    logInfo("auto_assign_skip_offscreen", [
+                        "wid": String(state.cgWindowID),
+                        "frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y)) "
+                                + "\(Int(state.frame.width))x\(Int(state.frame.height))",
+                    ])
+                    continue
+                }
+                let uuid = resolveDisplayUUID(did)
+                guard !uuid.isEmpty else { continue }
+                Task { @MainActor [weak self, weak sm] in
+                    guard let self = self, let sm = sm else { return }
+                    let desktopID = await dskReg?.currentID(for: did) ?? 1
+                    let activeStage = sm.activeStageByDesktop[
+                        DesktopKey(displayUUID: uuid, desktopID: desktopID)] ?? StageID("1")
+                    let scope = StageScope(displayUUID: uuid, desktopID: desktopID,
+                                            stageID: activeStage)
+                    if sm.stagesV2[scope] == nil {
+                        _ = sm.createStage(id: activeStage,
+                                            displayName: activeStage.value, scope: scope)
+                    }
+                    sm.assign(wid: state.cgWindowID, to: scope)
+                    logInfo("auto_assign_orphan_to_display", [
+                        "wid": String(state.cgWindowID),
+                        "display_uuid": uuid,
+                        "desktop_id": String(desktopID),
+                        "stage": activeStage.value,
+                    ])
+                }
+            }
+        } else if let sm = stageManager, let currentStage = sm.currentStageID {
+            // Mode global (V1 compat) : comportement legacy = tout dans currentStage.
             for state in registry.allWindows where state.isTileable && state.stageID == nil {
                 sm.assign(wid: state.cgWindowID, to: currentStage)
             }
@@ -1003,7 +1039,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // cette ré-assignation à stagesV2 + disque → la mémoire de l'attribution serait
         // perdue. La wid recevra son state.stageID correct via reconcileStageOwnership
         // au boot (sens stagesV2 → state.stageID).
-        if state.isTileable, let sm = stageManager, let stageID = sm.currentStageID {
+        if state.isTileable, let sm = stageManager {
             let alreadyAssigned: Bool = {
                 if sm.stageMode == .perDisplay {
                     return sm.stagesV2.values.contains { stage in
@@ -1016,7 +1052,40 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }()
             if !alreadyAssigned {
-                sm.assign(wid: state.cgWindowID, to: stageID)
+                // SPEC-022 : en perDisplay, assigner au scope du display PHYSIQUE de
+                // la wid (frame center → displayUUID). Sinon (V1 global), legacy
+                // currentStageID. Sans cette résolution, toutes les wids scannées
+                // partaient sur le scope courant (= built-in) quel que soit leur
+                // display réel → tout finissait dans built-in stage 1 en multi-display.
+                if sm.stageMode == .perDisplay {
+                    let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                    if let did = layoutEngine.displayIDContainingPoint(center) {
+                        let uuid = resolveDisplayUUID(did)
+                        if !uuid.isEmpty {
+                            // Résoudre le current desktop pour ce display.
+                            let dskReg = desktopRegistry
+                            let cgwid = state.cgWindowID
+                            Task { @MainActor [weak self, weak sm] in
+                                guard let self = self, let sm = sm else { return }
+                                let desktopID = await dskReg?.currentID(for: did) ?? 1
+                                let activeStage = sm.activeStageByDesktop[
+                                    DesktopKey(displayUUID: uuid, desktopID: desktopID)] ?? StageID("1")
+                                let scope = StageScope(displayUUID: uuid, desktopID: desktopID,
+                                                        stageID: activeStage)
+                                if sm.stagesV2[scope] == nil {
+                                    _ = sm.createStage(id: activeStage,
+                                                        displayName: activeStage.value, scope: scope)
+                                }
+                                sm.assign(wid: cgwid, to: scope)
+                                _ = self  // silence unused capture warning
+                            }
+                        }
+                    }
+                    // Sinon : frame offscreen / display introuvable → laisser orphelin,
+                    // sera ré-évalué par axDidMoveWindow plus tard.
+                } else if let stageID = sm.currentStageID {
+                    sm.assign(wid: state.cgWindowID, to: stageID)
+                }
             }
         }
 
