@@ -30,19 +30,35 @@ public enum DesktopMigration {
         guard fm.fileExists(atPath: legacyDesktops.path) else { return 0 }
 
         // Idempotence stricte : si la cible existe déjà ET contient des state.toml,
-        // ne pas écraser. L'utilisateur a peut-être démarré V3 avant un V2 leftover.
+        // V3 est la source de vérité. Le V2 leftover doit être archivé pour éviter
+        // qu'il pollue les autres consumers (ex: desktop list qui lirait à tort le
+        // legacy avec ses fantômes de sessions précédentes — incident 2026-05-03 :
+        // legacy contenait 50+ windows et 3 stages dont une "Stage 13" fantôme,
+        // alors que V3 ne voyait qu'1 window et 0 stages).
+        //
+        // Action : déplacer le V2 leftover vers `desktops.legacy.archived-<unixts>/`
+        // pour préserver la donnée historique sans laisser le code la lire.
         if let contents = try? fm.contentsOfDirectory(atPath: target.path),
            !contents.isEmpty {
-            // V3 déjà peuplée → la legacy est leftover. On log pour que l'utilisateur
-            // sache qu'il a un dossier `desktops/` orphelin (V2) coexistant avec
-            // `displays/<uuid>/desktops/` (V3) — sinon le state V2 est invisible
-            // jusqu'à un nettoyage manuel.
             let legacyCount = (try? fm.contentsOfDirectory(atPath: legacyDesktops.path))?
                 .filter { Int($0) != nil }.count ?? 0
-            logWarn("DesktopMigration skipped (V3 already populated, V2 leftover present)",
-                    ["primaryUUID": primaryUUID,
-                     "legacyDesktopsCount": String(legacyCount),
-                     "legacyPath": legacyDesktops.path])
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let archive = configDir.appendingPathComponent("desktops.legacy.archived-\(timestamp)")
+            do {
+                try fm.moveItem(at: legacyDesktops, to: archive)
+                logInfo("DesktopMigration archived V2 leftover (V3 is source of truth)",
+                        ["primaryUUID": primaryUUID,
+                         "legacyDesktopsCount": String(legacyCount),
+                         "archivedTo": archive.path])
+            } catch {
+                // Si le move échoue (perm, fs), on log warn et on laisse le legacy
+                // (comportement antérieur). Pas blocant : V3 reste fonctionnel.
+                logWarn("DesktopMigration: archive of V2 leftover failed",
+                        ["primaryUUID": primaryUUID,
+                         "legacyDesktopsCount": String(legacyCount),
+                         "legacyPath": legacyDesktops.path,
+                         "error": "\(error)"])
+            }
             return 0
         }
 
