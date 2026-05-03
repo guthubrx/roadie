@@ -21,7 +21,7 @@ public struct ThumbnailEntry: Sendable {
 
 /// Cache LRU des vignettes côté daemon.
 /// Capacité par défaut : 50 entrées. Eviction de la moins récemment utilisée.
-/// Thread-safety : non-actor — à appeler uniquement depuis @MainActor (CommandRouter, SCKCaptureService).
+/// Thread-safety : non-actor — à appeler uniquement depuis @MainActor (CommandRouter, WindowCaptureService).
 /// Invariants : entries.count <= capacity, accessOrder.count == entries.count.
 public final class ThumbnailCache {
     public let capacity: Int
