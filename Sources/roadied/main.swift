@@ -116,12 +116,18 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                  outerGaps: outerGaps, gapsInner: gapsInner)
                 },
                 reassignToStage: { wid, stageID in engine.reassignWindow(wid, toStage: stageID) },
-                // SPEC-022 — closure simplifiée. La réconciliation tree (jadis ici)
-                // était display-blind et polluait les autres displays en mode multi-écran.
-                // Désormais : juste set le marqueur. La réconciliation per-display est faite
-                // explicitement par le caller (bootstrap, ou switchTo + post-assign) qui a
-                // accès à widToScope.
-                setActiveStage: { stageID in
+                // SPEC-022 — closure scope-aware. Si displayUUID fourni, scope la
+                // mutation à ce display uniquement (utilise activeStageByDisplay).
+                // Sinon, comportement legacy (apply à tous, pour mode global).
+                setActiveStage: { stageID, displayUUID in
+                    if let uuid = displayUUID, !uuid.isEmpty,
+                       let cfUUID = CFUUIDCreateFromString(nil, uuid as CFString) {
+                        let did = CGDisplayGetDisplayIDFromUUID(cfUUID)
+                        if did != 0 {
+                            engine.setActiveStage(stageID, displayID: did)
+                            return
+                        }
+                    }
                     engine.setActiveStage(stageID)
                 }
             )
