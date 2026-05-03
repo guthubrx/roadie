@@ -4,11 +4,13 @@ import AppKit
 // SPEC-014 — Vignette pleine d'une seule fenêtre (~200×130 pt).
 // Remplace WindowChip dans le nouveau design "Stage Manager natif".
 
-private let previewWidth:    CGFloat = 200
-private let previewHeight:   CGFloat = 130
-private let previewRadius:   CGFloat = 8
-private let borderOpacity:   CGFloat = 0.15
-private let borderWidth:     CGFloat = 0.5
+// SPEC-019 — dimensions par défaut, override possibles via le constructeur
+// (les renderers passent context.previewWidth/Height lus depuis [fx.rail.preview]).
+private let defaultPreviewWidth:  CGFloat = 200
+private let defaultPreviewHeight: CGFloat = 130
+private let previewRadius:        CGFloat = 8
+private let defaultBorderColor:   Color   = Color.white.opacity(0.15)
+private let defaultBorderWidth:   CGFloat = 0.5
 
 struct WindowPreview: View {
     let wid:          CGWindowID
@@ -17,6 +19,12 @@ struct WindowPreview: View {
     let pid:          Int32
     let bundleID:     String
     let sourceStageID: String
+    var previewWidth:  CGFloat = defaultPreviewWidth
+    var previewHeight: CGFloat = defaultPreviewHeight
+    // SPEC-019 — bordure paramétrable (per-renderer via [fx.rail.<id>]).
+    var borderColor:   Color   = defaultBorderColor
+    var borderWidth:   CGFloat = defaultBorderWidth
+    var borderStyle:   String  = "solid"  // "solid" | "dashed" | "dotted"
 
     var body: some View {
         ZStack {
@@ -24,12 +32,29 @@ struct WindowPreview: View {
         }
         .frame(width: previewWidth, height: previewHeight)
         .clipShape(RoundedRectangle(cornerRadius: previewRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: previewRadius)
-                .strokeBorder(Color.white.opacity(borderOpacity), lineWidth: borderWidth)
-        )
+        .overlay(borderShape)
         .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
         .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID))
+    }
+
+    /// Bordure : tracé continu, pointillé long, ou pointillé fin selon `borderStyle`.
+    @ViewBuilder
+    private var borderShape: some View {
+        let shape = RoundedRectangle(cornerRadius: previewRadius)
+        switch borderStyle {
+        case "dashed":
+            shape.strokeBorder(borderColor,
+                               style: StrokeStyle(lineWidth: borderWidth,
+                                                  lineCap: .butt,
+                                                  dash: [borderWidth * 8, borderWidth * 4]))
+        case "dotted":
+            shape.strokeBorder(borderColor,
+                               style: StrokeStyle(lineWidth: borderWidth,
+                                                  lineCap: .round,
+                                                  dash: [0.1, borderWidth * 3]))
+        default:
+            shape.strokeBorder(borderColor, lineWidth: borderWidth)
+        }
     }
 
     // MARK: - Contenu

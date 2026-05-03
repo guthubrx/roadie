@@ -84,6 +84,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// SPEC-013 : timestamp du dernier follow AltTab pour anti-feedback (évite
     /// les bascules en cascade quand un focus event suit une bascule).
     private var lastAltTabFollowTimestamp: Date = .distantPast
+    /// Anti-feedback pour `followFocusToStageAndDesktop`. Sans ce guard, un
+    /// switchTo programmatique rend la wid cible visible et focused, ce qui
+    /// re-déclenche onFocusChanged → re-follow → oscillation entre 2 stages
+    /// chacun ayant une wid focused (boucle observée 5×/300ms).
+    private var lastFocusFollowTimestamp: Date = .distantPast
 
     init(config: Config) throws {
         self.config = config
@@ -166,9 +171,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             }
             // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
             // SPEC-018 : en mode per_display, créer aussi dans stagesV2 au scope primary.
+            // PAS `CGMainDisplayID()` qui est dynamique (suit le focus) — au boot le focus
+            // peut être sur n'importe quel display → pollution du « mauvais » écran avec un
+            // stage par défaut. On prend l'écran à origin (0,0) = primary stable au sens
+            // macOS, qui correspond au choix utilisateur dans Réglages > Écrans.
             let defaultScope: StageScope?
             if config.desktops.mode == .perDisplay {
-                let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+                let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+                    ?? NSScreen.main
+                let primaryDisplayID: CGDirectDisplayID
+                if let s = primaryScreen,
+                   let did = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                       as? CGDirectDisplayID {
+                    primaryDisplayID = did
+                } else {
+                    primaryDisplayID = CGMainDisplayID()
+                }
+                let primaryUUID = resolveDisplayUUID(primaryDisplayID)
                 defaultScope = StageScope(displayUUID: primaryUUID, desktopID: 1, stageID: StageID("1"))
             } else {
                 defaultScope = nil
@@ -354,9 +373,28 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // notifications, MouseRaiser, click-to-raise, manual) publie un
         // windowFocused sur le bus FX. Évite que le module Borders rate des focus
         // changes qui n'ont pas transité par axDidChangeFocusedWindow (apps Electron).
-        registry.onFocusChanged = { [weak loader] wid in
+        registry.onFocusChanged = { [weak loader, weak self] wid in
             guard let wid = wid else { return }
             loader?.bus.publish(FXEvent(kind: .windowFocused, wid: CGWindowID(wid)))
+            // Bridge IPC : le rail (et tout subscriber `events --follow`) reçoit aussi
+            // l'event pour pouvoir promouvoir la vignette focused en hero (SPEC-019).
+            Task { @MainActor in
+                EventBus.shared.publish(DesktopEvent(
+                    name: "window_focused",
+                    payload: ["wid": String(wid)]
+                ))
+            }
+            // Auto-switch stage/desktop sur le focus de la fenêtre cible. Branché ici
+            // (et pas dans axDidChangeFocusedWindow) parce qu'AltTab/Cmd-Tab peut router
+            // le focus via plusieurs chemins (kAXFocusedWindowChanged direct, ou
+            // kAXApplicationActivated → refreshFromSystem) — onFocusChanged est le seul
+            // point central qui fire pour TOUTES les sources. Idempotent via
+            // currentStageID != targetStage.
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                guard self.config.focus.stageFollowsFocus else { return }
+                self.followFocusToStageAndDesktop(wid: wid)
+            }
         }
 
         // SPEC-011 : init desktops virtuels si activé
@@ -1255,6 +1293,53 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         ])
     }
 
+    /// Auto-switch stage + desktop pour révéler la fenêtre nouvellement focused.
+    /// Idempotent : ne fait rien si stage/desktop courants matchent déjà.
+    /// Anti-parasite via `state.isTileable` (filtre dialogs/popovers/helpers).
+    /// PAS de filtre sur la position : une wid cachée par HideStrategy est offscreen
+    /// (origin.x ≈ -100000), c'est précisément le cas qu'on veut suivre.
+    func followFocusToStageAndDesktop(wid: WindowID) {
+        guard let state = registry.get(wid), state.isTileable else { return }
+        // Anti-feedback : si on a déjà fait un follow récent (< 500ms), skip.
+        // switchTo() rend la wid cible visible/focused, ce qui re-fire onFocusChanged
+        // sur cette wid puis sur l'ancienne (effet ping-pong). Sans ce guard, on
+        // oscille entre 2 stages tant que les 2 ont une wid focused.
+        let now = Date()
+        if now.timeIntervalSince(lastFocusFollowTimestamp) < 0.5 { return }
+        // 1. Desktop (mode per_display uniquement, géré dans followAltTabFocus).
+        if config.desktops.enabled {
+            Task { @MainActor [weak self] in
+                await self?.followAltTabFocus(wid)
+            }
+        }
+        // 2. Stage : switcher si différent et que la stage cible existe.
+        if let sm = stageManager,
+           let targetStage = state.stageID,
+           sm.currentStageID != targetStage {
+            let stageExists: Bool = {
+                if sm.stageMode == .perDisplay {
+                    return sm.stagesV2.contains { $0.key.stageID == targetStage }
+                }
+                return sm.stages[targetStage] != nil
+            }()
+            if stageExists {
+                logInfo("focus_follow stage switch", [
+                    "wid": String(wid),
+                    "from": sm.currentStageID?.value ?? "nil",
+                    "to": targetStage.value,
+                ])
+                lastFocusFollowTimestamp = now
+                sm.switchTo(stageID: targetStage)
+            } else {
+                logWarn("focus_follow_skipped", [
+                    "wid": String(wid),
+                    "want_stage": targetStage.value,
+                    "reason": "stage_missing",
+                ])
+            }
+        }
+    }
+
     /// SPEC-013 : retourne les bounds réels d'une fenêtre via CGWindowList
     /// (= source de vérité système), utilisé pour détecter le mismatch AX/CG
     /// sur certaines apps (iTerm tabs, Firefox plein écran AX-collapsed).
@@ -1475,50 +1560,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 registerWindow(pid: pid, axWindow: axWindow)
             }
             registry.setFocus(wid)
-            // SPEC-013 : AltTab/Cmd-Tab raise une fenêtre cachée (= sur un autre
-            // desktop roadie). Détecter le mismatch et auto-basculer le desktop
-            // du display où la fenêtre vit pour la révéler.
-            if config.desktops.enabled {
-                Task { @MainActor [weak self] in
-                    await self?.followAltTabFocus(wid)
-                }
-            }
-            // Pendant pour les stages : si le focus part vers une fenêtre dont le stage
-            // n'est pas l'actif, switcher au stage cible. Sans ça, un Cmd+Tab vers une
-            // fenêtre hidden offscreen la maintient invisible mais focused.
-            //
-            // SPEC-019 — F4 doit être strictement conservateur, sinon n'importe quel
-            // focus change parasite (hover sur navrail, popovers, dialogs) fait sauter
-            // le stage actif → le user perçoit "toutes les fenêtres effacées".
-            // Conditions cumulatives :
-            //   1. La wid a un state.stageID non nil
-            //   2. Différent du current
-            //   3. La stage cible EXISTE bel et bien dans le scope courant (sinon
-            //      state.stageID est stale — la stage a été supprimée — et pousser un
-            //      switchTo sur une stage fantôme provoque un comportement erratique)
-            //   4. La wid a une frame on-screen (= l'utilisateur a effectivement un
-            //      contact visuel avec elle, vs focus AX spurieux sur fenêtre offscreen)
-            if let sm = stageManager,
-               let state = registry.get(wid),
-               let targetStage = state.stageID,
-               sm.currentStageID != targetStage {
-                let stageExists: Bool = {
-                    if sm.stageMode == .perDisplay {
-                        return sm.stagesV2.contains { $0.key.stageID == targetStage }
-                    }
-                    return sm.stages[targetStage] != nil
-                }()
-                let isOnScreen = state.frame.origin.x > -1000 && state.frame.size.width >= 100
-                if stageExists && isOnScreen {
-                    sm.switchTo(stageID: targetStage)
-                } else {
-                    logWarn("focus_follow_skipped", [
-                        "wid": String(wid),
-                        "want_stage": targetStage.value,
-                        "reason": stageExists ? "offscreen_focus" : "stage_missing",
-                    ])
-                }
-            }
+            // L'auto-switch stage/desktop est branché sur registry.onFocusChanged
+            // (cf. bootstrap()), couvrant toutes les sources de focus change y compris
+            // les paths qui ne passent pas par cette callback AX directe.
         } else {
             focusManager.refreshFromSystem()
         }

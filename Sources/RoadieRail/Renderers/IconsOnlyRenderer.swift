@@ -60,11 +60,15 @@ private struct IconsOnlyView: View {
             Button("Delete stage", role: .destructive) { callbacks.onDelete(stage.id) }
                 .disabled(stage.id == "1")
         }
+        // SPEC-019 — paddings outer driven by context (override via [fx.rail.icons-only]).
+        .padding(.leading,  CGFloat(context.leadingPadding))
+        .padding(.trailing, CGFloat(context.trailingPadding))
+        .padding(.vertical, CGFloat(context.verticalPadding))
     }
 
     @ViewBuilder
     private func haloed<Content: View>(content: Content) -> some View {
-        if stage.isActive {
+        if context.shouldApplyHalo {
             content.shadow(
                 color: Color(hex: context.haloColorHex).opacity(context.haloIntensity),
                 radius: context.haloRadius, x: 0, y: 0)

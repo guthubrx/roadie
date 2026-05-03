@@ -37,6 +37,7 @@ SWIFT_CONFIG="debug"
 BUILD_DIR=".build/debug"
 SKIP_BUILD=0
 SAW_TARGET=0
+ZOMBIE=0  # NSZombie + Malloc instrumentation : off par défaut, --zombie pour réactiver.
 
 usage() {
     cat <<EOF >&2
@@ -52,12 +53,17 @@ BUILD_CONFIG (mutex) :
   --release
   --no-build
 
+DEBUG :
+  --zombie       active NSZombieEnabled + MallocStackLogging + MallocScribble
+                 (overhead mémoire 2-3x, perf -10/-20%). Pour traquer un over-release.
+
 Exemples :
-  $0                          # daemon + CLI, debug
+  $0                          # daemon + CLI, debug, sans zombie
   $0 --rail                   # rail seul, debug
   $0 --all                    # tout, debug
   $0 --all --release          # tout, release
   $0 --rail --no-build        # rail seul, skip build
+  $0 --daemon --zombie        # daemon avec instrumentation NSZombie
 EOF
 }
 
@@ -69,6 +75,7 @@ for arg in "$@"; do
         --release)  SWIFT_CONFIG="release"; BUILD_DIR=".build/release"; SKIP_BUILD=0 ;;
         --no-build) SWIFT_CONFIG="";        BUILD_DIR=".build/debug";   SKIP_BUILD=1 ;;
         --debug|debug|"") SWIFT_CONFIG="debug"; BUILD_DIR=".build/debug"; SKIP_BUILD=0 ;;
+        --zombie)   ZOMBIE=1 ;;
         --help|-h)  usage; exit 0 ;;
         *) echo "✗ flag inconnu : $arg" >&2; usage; exit 2 ;;
     esac
@@ -151,15 +158,22 @@ fi
 
 if [ "$RESTART_DAEMON" -eq 1 ]; then
     echo "→ stop daemon en cours"
-    if pgrep -f "roadied --daemon" >/dev/null 2>&1; then
-        pkill -f "roadied --daemon" || true
+    # `pkill -x roadied` matche le NOM du process (basename de l'exec), pas les
+    # args ni le path — capture donc les daemons lancés d'ailleurs (ex.
+    # ~/.local/bin/roadied d'une session précédente). Le ciblage par args
+    # (`-f "roadied --daemon"`) ratait ces zombies → 2 daemons en parallèle =
+    # AX events doublés + layout race condition.
+    if pgrep -x roadied >/dev/null 2>&1; then
+        N=$(pgrep -x roadied | wc -l | tr -d ' ')
+        [ "$N" -gt 1 ] && echo "  ⚠ $N daemons détectés, kill all"
+        pkill -x roadied || true
         for _ in 1 2 3 4 5; do
-            if ! pgrep -f "roadied --daemon" >/dev/null 2>&1; then break; fi
+            if ! pgrep -x roadied >/dev/null 2>&1; then break; fi
             sleep 0.3
         done
-        if pgrep -f "roadied --daemon" >/dev/null 2>&1; then
+        if pgrep -x roadied >/dev/null 2>&1; then
             echo "  daemon ne s'est pas arrêté, force kill"
-            pkill -9 -f "roadied --daemon" || true
+            pkill -9 -x roadied || true
             sleep 0.5
         fi
         echo "  ✓ daemon stoppé"
@@ -210,23 +224,29 @@ fi
 # Étape 5 : start (daemon d'abord — le rail dépend du socket daemon).
 # ============================================================================
 # Instrumentation crash SIGSEGV pool drain (objc_release dans autoreleasePoolPop).
+# Off par défaut depuis la fix `0c41ff1` (autoreleasepool dans SCKCaptureService).
+# Réactiver via --zombie si un nouveau crash NSWindow release apparaît.
 # - NSZombieEnabled              : transforme dealloc en zombie pour intercepter le double-release
 # - MallocStackLogging           : enregistre le site d'allocation
 # - MallocStackLoggingNoCompact  : stacks complètes (sinon tronquées, illisibles)
 # - MallocScribble               : remplit la mémoire libérée de 0x55 → crash plus tôt et plus net
 # - NSAutoreleaseFreedObjectCheckEnabled : vérifie chaque release dans le pool drain
-# Ces flags rendent le prochain crash report exploitable. À retirer une fois le bug compris
-# (impact mémoire ~2-3x, perf -10 à -20%).
+# Impact mémoire ~2-3x, perf -10 à -20%.
 if [ "$RESTART_DAEMON" -eq 1 ]; then
     echo ""
-    echo "→ start daemon"
-    nohup env \
-        NSZombieEnabled=YES \
-        MallocStackLogging=1 \
-        MallocStackLoggingNoCompact=1 \
-        MallocScribble=1 \
-        NSAutoreleaseFreedObjectCheckEnabled=YES \
-        "$APP_BIN" --daemon > "$LOG" 2>&1 &
+    if [ "$ZOMBIE" -eq 1 ]; then
+        echo "→ start daemon (NSZombie ON)"
+        nohup env \
+            NSZombieEnabled=YES \
+            MallocStackLogging=1 \
+            MallocStackLoggingNoCompact=1 \
+            MallocScribble=1 \
+            NSAutoreleaseFreedObjectCheckEnabled=YES \
+            "$APP_BIN" --daemon > "$LOG" 2>&1 &
+    else
+        echo "→ start daemon"
+        nohup "$APP_BIN" --daemon > "$LOG" 2>&1 &
+    fi
     DAEMON_PID=$!
     disown "$DAEMON_PID" 2>/dev/null || true
 

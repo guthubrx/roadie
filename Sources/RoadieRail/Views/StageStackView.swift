@@ -27,6 +27,28 @@ struct StageStackView: View {
     var stackedRotation:  Double = 12
     var stackedScale:     Double = 0.06
     var stackedOpacity:   Double = 0.10
+    var stackedScatterMode: String = "compass"
+    // SPEC-019 — paramètres renderer "parallax-45", lus depuis [fx.rail.parallax].
+    var parallaxRotation: Double = 35
+    var parallaxOffsetX:  Double = 18
+    var parallaxOffsetY:  Double = 8
+    var parallaxScale:    Double = 0.05
+    var parallaxOpacity:  Double = 0.10
+    // SPEC-019 — taille vignettes et distance bord gauche, lus depuis [fx.rail.preview].
+    var previewWidth:    Double = 200
+    var previewHeight:   Double = 130
+    var leadingPadding:  Double = 8
+    var trailingPadding: Double = 16
+    var verticalPadding: Double = 20
+    // SPEC-019 — bordure des vignettes, paramétrable par renderer.
+    var borderColor: String = "#FFFFFF26"
+    var borderColorInactive: String = "#80808033"
+    var borderWidth: Double = 0.5
+    var borderStyle: String = "solid"
+    var stageBorderOverrides: [String: String] = [:]
+    var haloEnabled: Bool = true
+    // SPEC-019 — assombrissement par couche pour parallax.
+    var parallaxDarkenPerLayer: Double = 0.0
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
     var onTapStage:   (String) -> Void              = { _ in }
     // SPEC-014 T052 (US3) : callback de drop, (wid, target_stage_id).
@@ -96,7 +118,25 @@ struct StageStackView: View {
                                 stackedOffsetY: stackedOffsetY,
                                 stackedRotation: stackedRotation,
                                 stackedScale: stackedScale,
-                                stackedOpacity: stackedOpacity
+                                stackedOpacity: stackedOpacity,
+                                stackedScatterMode: stackedScatterMode,
+                                parallaxRotation: parallaxRotation,
+                                parallaxOffsetX: parallaxOffsetX,
+                                parallaxOffsetY: parallaxOffsetY,
+                                parallaxScale: parallaxScale,
+                                parallaxOpacity: parallaxOpacity,
+                                previewWidth: previewWidth,
+                                previewHeight: previewHeight,
+                                leadingPadding: leadingPadding,
+                                trailingPadding: trailingPadding,
+                                verticalPadding: verticalPadding,
+                                borderColor: borderColor,
+                                borderColorInactive: borderColorInactive,
+                                borderWidth: borderWidth,
+                                borderStyle: borderStyle,
+                                stageBorderOverrides: stageBorderOverrides,
+                                haloEnabled: haloEnabled,
+                                parallaxDarkenPerLayer: parallaxDarkenPerLayer
                             )
                             let cb = StageRendererCallbacks(
                                 onTap:        { onTapStage(stage.id) },
@@ -110,9 +150,9 @@ struct StageStackView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .padding(.leading, 8)    // proche du bord gauche
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 20)
+                    // SPEC-019 — pas de padding ici : chaque renderer gère son propre
+                    // padding via context.leadingPadding/trailingPadding/verticalPadding
+                    // (résolus avec overrides per-renderer). Évite le double-padding.
                     .frame(minHeight: geo.size.height, alignment: .center)
                 }
             }

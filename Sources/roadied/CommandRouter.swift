@@ -92,6 +92,9 @@ enum CommandRouter {
             let knownRenderers: [(id: String, displayName: String)] = [
                 ("stacked-previews", "Stacked previews"),
                 ("icons-only",       "Icons only"),
+                ("hero-preview",     "Hero preview"),
+                ("mosaic",           "Mosaic"),
+                ("parallax-45",      "Parallax 45\u{00B0}"),
             ]
             let currentRenderer = readCurrentRendererID() ?? "stacked-previews"
             let payload: [String: AnyCodable] = [
@@ -107,7 +110,7 @@ enum CommandRouter {
             guard let id = request.args?["id"], !id.isEmpty else {
                 return .error(.invalidArgument, "missing renderer id")
             }
-            let knownIDs = ["stacked-previews", "icons-only"]
+            let knownIDs = ["stacked-previews", "icons-only", "hero-preview", "mosaic", "parallax-45"]
             guard knownIDs.contains(id) else {
                 return .error(.invalidArgument,
                               "renderer '\(id)' not found. Available: \(knownIDs.joined(separator: ", "))")
@@ -375,23 +378,25 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id")
             }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier dans stagesV2 que le stage
-            // existe dans le scope courant avant de switcher.
+            // Lazy auto-create : si la stage n'existe pas dans le scope courant,
+            // la créer vide puis switcher dessus. Cohérent avec stage.assign qui
+            // est déjà lazy. Évite l'échec silencieux quand l'utilisateur tape
+            // Alt+N avant d'avoir jamais peuplé la stage N.
             if sm.stageMode == .perDisplay {
                 var scopeError: Response? = nil
                 guard let baseScope = await resolveScope(request: request, daemon: daemon,
                                                          errorOut: &scopeError) else {
                     return scopeError ?? .error(.internalError, "scope resolution failed")
                 }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID, stageID: stageID)
-                guard sm.stagesV2[fullScope] != nil else {
-                    return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
+                let fullScope = StageScope(displayUUID: baseScope.displayUUID,
+                                           desktopID: baseScope.desktopID, stageID: stageID)
+                if sm.stagesV2[fullScope] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
+                                       scope: fullScope)
                 }
             } else {
-                guard sm.stages[stageID] != nil else {
-                    return .error(.unknownStage, "unknown stage \(stageStr)")
+                if sm.stages[stageID] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
                 }
             }
             sm.switchTo(stageID: stageID)
@@ -437,17 +442,22 @@ enum CommandRouter {
                 }
                 sm.assign(wid: wid, to: stageID)  // API V1
             }
-            // Si la stage cible n'est pas la stage active, la fenêtre doit être
-            // cachée (elle vient de quitter la stage visible). Sinon le tiler
-            // doit re-distribuer la stage active sans elle. Dans les deux cas,
-            // applyLayout résout.
-            if let current = sm.currentStageID, current != stageID,
-               let state = daemon.registry.get(wid) {
-                if state.isTileable {
-                    daemon.layoutEngine.setLeafVisible(wid, false)
+            // Si la stage cible n'est pas la stage active, deux comportements
+            // possibles selon `[focus] assign_follows_focus` :
+            //   - true (défaut, yabai-style) : switcher sur la stage cible →
+            //     l'utilisateur voit immédiatement le résultat de son assign.
+            //   - false : cacher la fenêtre, l'utilisateur reste sur la courante
+            //     (utile pour dispatcher plusieurs fenêtres avant de bouger).
+            if let current = sm.currentStageID, current != stageID {
+                if daemon.config.focus.assignFollowsFocus {
+                    sm.switchTo(stageID: stageID)
+                } else if let state = daemon.registry.get(wid) {
+                    if state.isTileable {
+                        daemon.layoutEngine.setLeafVisible(wid, false)
+                    }
+                    HideStrategyImpl.hide(wid, registry: daemon.registry,
+                                          strategy: daemon.config.stageManager.hideStrategy)
                 }
-                HideStrategyImpl.hide(wid, registry: daemon.registry,
-                                      strategy: daemon.config.stageManager.hideStrategy)
             }
             daemon.applyLayout()
             // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).

@@ -29,13 +29,26 @@ private let appIconSize:        CGFloat = 24
 /// → la vignette ne saute pas à chaque refresh (toutes les 2 s). Bornes passées
 /// en paramètre pour permettre la configuration via [fx.rail.stacked] TOML.
 private func scatterFor(wid: CGWindowID,
+                        idx: Int,
+                        mode: String,
                         maxOffsetX: CGFloat,
                         maxOffsetY: CGFloat,
                         maxRotation: Double) -> (dx: CGFloat, dy: CGFloat, angle: Double) {
     let h = UInt64(wid &* 2654435761)
+    let ang = Double(Int((h / 1000000) % 1000)) / 1000 * (maxRotation * 2) - maxRotation
+    if mode == "compass" {
+        // 4 quadrants cardinaux : chaque vignette idx=1..4 va dans un coin distinct.
+        // Cela maximise la portion visible de chaque thumbnail (la « hero » centrée
+        // reste pleinement visible, les 4 autres ne se recouvrent que partiellement).
+        // idx=0 est traité par l'appelant (vignette hero centrée, dx=dy=0).
+        // Ordre : BR, BL, TL, TR (sens horaire à partir du coin bas-droite).
+        let quadrants: [(CGFloat, CGFloat)] = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
+        let q = quadrants[max(0, (idx - 1)) % 4]
+        return (q.0 * maxOffsetX, q.1 * maxOffsetY, ang)
+    }
+    // mode "random" : hash-based, position imprévisible mais déterministe par wid.
     let dx  = CGFloat(Int(h % 1000)        ) / 1000 * (maxOffsetX * 2) - maxOffsetX
     let dy  = CGFloat(Int((h / 1000)  % 1000)) / 1000 * (maxOffsetY * 2) - maxOffsetY
-    let ang = Double( Int((h / 1000000) % 1000)) / 1000 * (maxRotation * 2) - maxRotation
     return (dx, dy, ang)
 }
 
@@ -78,11 +91,15 @@ private struct StackedPreviewsView: View {
         } message: {
             Text("Windows will be moved back to stage 1.")
         }
+        // SPEC-019 — paddings outer driven by context (override possible via [fx.rail.stacked]).
+        .padding(.leading,  CGFloat(context.leadingPadding))
+        .padding(.trailing, CGFloat(context.trailingPadding))
+        .padding(.vertical, CGFloat(context.verticalPadding))
     }
 
     @ViewBuilder
     private func haloed<Content: View>(content: Content) -> some View {
-        if stage.isActive {
+        if context.shouldApplyHalo {
             content.shadow(
                 color: Color(hex: context.haloColorHex).opacity(context.haloIntensity),
                 radius: context.haloRadius, x: 0, y: 0)
@@ -96,6 +113,11 @@ private struct StackedPreviewsView: View {
             windows[wid] != nil || thumbnails[wid] != nil
         }
         let sorted = known.sorted { a, b in
+            // SPEC-019 — priorité 1 : la fenêtre focused devient la « hero » (idx=0
+            // → centrée, pleinement visible, sans rotation/offset).
+            let fa = windows[a]?.isFocused ?? false
+            let fb = windows[b]?.isFocused ?? false
+            if fa != fb { return fa }
             let ta = !(windows[a]?.isFloating ?? false)
             let tb = !(windows[b]?.isFloating ?? false)
             if ta != tb { return ta }
@@ -118,6 +140,8 @@ private struct StackedPreviewsView: View {
                 // idx=0 = vignette « hero » centrée. idx>=1 = polaroïds éparpillés.
                 let scatter = depth == 0 ? (dx: CGFloat(0), dy: CGFloat(0), angle: 0.0)
                                           : scatterFor(wid: wid,
+                                                       idx: depth,
+                                                       mode: context.stackedScatterMode,
                                                        maxOffsetX: mxX,
                                                        maxOffsetY: mxY,
                                                        maxRotation: context.stackedRotation)
@@ -127,7 +151,12 @@ private struct StackedPreviewsView: View {
                     appName: windows[wid]?.appName ?? "",
                     pid: windows[wid]?.pid ?? 0,
                     bundleID: windows[wid]?.bundleID ?? "",
-                    sourceStageID: stage.id
+                    sourceStageID: stage.id,
+                    previewWidth: CGFloat(context.previewWidth),
+                    previewHeight: CGFloat(context.previewHeight),
+                    borderColor: Color(hex: context.resolvedBorderColor()),
+                    borderWidth: CGFloat(context.borderWidth),
+                    borderStyle: context.borderStyle
                 )
                 .rotationEffect(.degrees(scatter.angle))
                 .scaleEffect(1.0 - CGFloat(depth) * CGFloat(context.stackedScale))

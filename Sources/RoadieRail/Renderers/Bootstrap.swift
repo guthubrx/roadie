@@ -15,4 +15,16 @@ public func registerBuiltinRenderers() {
         id: IconsOnlyRenderer.rendererID,
         factory: { IconsOnlyRenderer() }
     )
+    StageRendererRegistry.register(
+        id: HeroPreviewRenderer.rendererID,
+        factory: { HeroPreviewRenderer() }
+    )
+    StageRendererRegistry.register(
+        id: MosaicRenderer.rendererID,
+        factory: { MosaicRenderer() }
+    )
+    StageRendererRegistry.register(
+        id: Parallax45Renderer.rendererID,
+        factory: { Parallax45Renderer() }
+    )
 }
