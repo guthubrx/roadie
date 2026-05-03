@@ -1487,15 +1487,19 @@ enum CommandRouter {
             return .error(.invalidArgument, "missing or invalid wid")
         }
         let wid = CGWindowID(widU)
-        guard daemon.registry.get(wid) != nil else {
+        guard let state = daemon.registry.get(wid) else {
             return .error(.windowNotFound, "wid not found")
         }
         if let entry = daemon.thumbnailCache?.get(wid: wid) {
             return thumbnailResponse(entry)
         }
         // Cache miss : démarre observation SCK en fire-and-forget.
+        // Pré-filtre DRM via le bundleID du registry — évite que SCShareableContent.current
+        // (qu'observe() appellerait) signale au DRM Netflix une intent de capture, ce qui
+        // coupe la lecture sur macOS 26+. Le caller connaît le bundleID, le passe explicitement.
         if let sck = daemon.sckCaptureService {
-            Task { try? await sck.observe(wid: wid) }
+            let bid = state.bundleID
+            Task { try? await sck.observe(wid: wid, bundleID: bid) }
         }
         return fallbackIconResponse(wid: wid, registry: daemon.registry)
     }

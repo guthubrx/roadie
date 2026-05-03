@@ -73,9 +73,23 @@ public final class SCKCaptureService {
     }
 
     /// Démarre la capture périodique de la fenêtre `wid`. No-op si déjà observée.
-    /// Throws si ScreenCaptureKit ne peut pas localiser la fenêtre ou si permission absente.
-    public func observe(wid: CGWindowID) async throws {
-        guard streams[wid] == nil else { return }
+    /// Le `bundleID` (optionnel) permet de filtrer les apps DRM AVANT tout appel
+    /// ScreenCaptureKit. macOS 26 (Tahoe) signale au DRM dès `SCShareableContent.current`
+    /// → on doit pré-filtrer côté caller.
+    public func observe(wid: CGWindowID, bundleID: String? = nil) async throws {
+        guard streams[wid] == nil, drmTimers[wid] == nil else { return }
+
+        // Pré-filtre DRM SANS toucher à ScreenCaptureKit — sinon SCShareableContent.current
+        // suffit pour signaler au système une intent de capture, ce qui coupe la lecture
+        // Netflix sur macOS 26 Tahoe.
+        if let bundleID = bundleID, excludedBundles.contains(bundleID) {
+            logInfo("sck: DRM bundle (pre-filter) — no SCK call, no snapshot to avoid lecture cut", [
+                "wid": String(wid), "bundle": bundleID,
+            ])
+            // Sur macOS 26+ Apple coupe même sur CGWindowListCreateImage si le DRM est strict.
+            // Mode safe : pas de capture du tout, le rail tombe sur l'icône d'app.
+            return
+        }
 
         let content: SCShareableContent
         do {
@@ -91,18 +105,14 @@ public final class SCKCaptureService {
             return
         }
 
-        // Refus DRM : Netflix, Apple TV, Disney+, etc. blackoutent la lecture
-        // dès qu'un SCStream est actif sur leur fenêtre (FairPlay). On bascule
-        // sur des snapshots ponctuels CGWindowListCreateImage (pattern AltTab) :
-        // pas de stream continu détecté par le DRM, vignette quand même rendue
-        // dans le navrail (rafraîchissement toutes les drmSnapshotInterval s).
+        // Filet de sécurité : si le bundleID n'a pas été passé en pré-filtre par le caller,
+        // on filtre quand même ici. Sur Tahoe ça arrive trop tard (DRM déjà alerté), mais
+        // ça reste utile sur macOS antérieur.
         if let bundleID = scWindow.owningApplication?.bundleIdentifier,
            excludedBundles.contains(bundleID) {
-            logInfo("sck: DRM bundle — fallback snapshot loop", [
+            logInfo("sck: DRM bundle (post-filter) — skip", [
                 "wid": String(wid), "bundle": bundleID,
-                "interval_s": String(format: "%.0f", drmSnapshotInterval),
             ])
-            startDRMSnapshotLoop(wid: wid)
             return
         }
 
