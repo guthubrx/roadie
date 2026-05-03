@@ -141,6 +141,11 @@ private final class CaptureOutputHandler: NSObject, SCStreamOutput {
         else { return nil }
         CGImageDestinationAddImage(dest, image, nil)
         guard CGImageDestinationFinalize(dest) else { return nil }
-        return data as Data
+        // FIX NSZombie : `data as Data` est un toll-free bridging (wrap, pas copie).
+        // Le NSMutableData vit dans l'autoreleasepool du callback SCStream ; à la
+        // sortie du pool il est release. Le Data retourné devient zombie au prochain
+        // accès depuis main thread → crash récurrent à uptime ≈ 140s (~70 frames).
+        // Solution : copier les bytes dans un buffer Swift indépendant.
+        return Data(bytes: data.bytes, count: data.length)
     }
 }

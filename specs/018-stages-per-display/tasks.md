@@ -1,9 +1,10 @@
 # Tasks — SPEC-018 Stages-per-display
 
-**Status**: Draft
+**Status**: Implemented + 8 fixes post-livraison cohérence display×desktop×stage (2026-05-03)
 **Spec**: [spec.md](spec.md)
 **Plan**: [plan.md](plan.md)
-**Last updated**: 2026-05-02
+**Audit cohérence**: [audit-coherence.md](audit-coherence.md)
+**Last updated**: 2026-05-03
 
 ## Format
 
@@ -140,6 +141,70 @@ Pré-requis bloquants pour TOUTES les user stories.
 
 ---
 
+## Phase 9 — Fixes post-livraison cohérence display × desktop × stage (2026-05-03)
+
+**Goal** : éliminer toutes les incohérences observées après livraison (Grayjay visible alors que stage 2 inactif, état stage perdu au desktop_changed, etc.). Détails dans `audit-coherence.md`.
+
+### Helpers windows et hide
+
+- [X] T080 Ajouter `WindowState.minimumUsefulDimension = 100` + `isHelperWindow` computed dans `Sources/RoadieCore/Types.swift` (F1)
+- [X] T081 Étendre `isTileable` pour exclure `isHelperWindow` (Types.swift, F1)
+- [X] T082 Garde `isHelperWindow` dans `assign(wid:to: stageID:)` et `assign(wid:to: scope:)` de `Sources/RoadieStagePlugin/StageManager.swift` (F1)
+- [X] T083 `purgeOrphanWindows` étendu pour purger les helpers (StageManager.swift, F1)
+- [X] T084 `reconcileStageOwnership` Sens 2 skip helpers (StageManager.swift, F1)
+- [X] T085 `Sources/roadied/main.swift` Task post-boot appelle `sm.switchTo(currentStageID)` pour propager hide initial (F2)
+
+### Respect du scope par MouseRaiser et focus AX
+
+- [X] T090 Callback `onClickInOtherStage` dans `Sources/RoadieCore/MouseRaiser.swift` (F3)
+- [X] T091 Branchement du callback dans `Sources/roadied/main.swift` → `sm.switchTo(targetStage)` (F3)
+- [X] T092 Hook stage dans `axDidChangeFocusedWindow` de `Sources/roadied/main.swift` — Cmd+Tab vers wid d'un autre stage déclenche switchTo (F4)
+
+### Active stage par (display, desktop)
+
+- [X] T100 `DesktopKey` struct Hashable dans `Sources/RoadieStagePlugin/StageManager.swift` (F5)
+- [X] T101 Dict `activeStageByDesktop: [DesktopKey: StageID]` privé sur StageManager (F5)
+- [X] T102 API publique `setCurrentDesktopKey`, `activeStage(for:)`, `loadActiveStagesByDesktop` (F5)
+- [X] T103 `switchTo(stageID:)` met à jour `activeStageByDesktop` + persiste via `persistenceV2.saveActiveStage(scope)` (F5)
+- [X] T104 `setMode(perDisplay)` rappelle `loadFromPersistence()` pour peupler stagesV2 + activeStageByDesktop (F5)
+- [X] T105 `reload(forDesktop:)` en mode V2 ne purge plus stagesV2 (F6)
+- [X] T106 Hook `stageHook` dans `main.swift` appelle `setCurrentDesktopKey(...)` après `reload(forDesktop:)` (F5+F6)
+
+### Anti-double-attribution V1↔V2
+
+- [X] T110 `assign(wid:to: stageID:)` V1 délègue à V2 quand mode `.perDisplay` (StageManager.swift, F11)
+
+### Boot timing (cause racine Grayjay)
+
+- [X] T120 Précharger `setMode V2 + setCurrentDesktopKey` AVANT `registerExistingWindows` dans `Sources/roadied/main.swift` (F12)
+- [X] T121 `registerWindow` propage `state.stageID` depuis `stagesV2.memberWindows` AVANT `insertWindow` pour que `LayoutEngine.stageID(for:)` choisisse le bon tree (F13)
+- [X] T122 `registerWindow` skip `sm.assign(...)` si la wid est déjà persistée dans une stage (F14)
+- [X] T123 `bootstrap` appelle `reconcileStageOwnership` AVANT auto-assign des orphelines (F15)
+
+### Synchronisation rail
+
+- [X] T130 Émettre `window_created` event sur DesktopEvent bus dans `axDidCreateWindow` (F16)
+- [X] T131 Émettre `window_destroyed` event sur DesktopEvent bus dans `axDidDestroyWindow` (F16)
+
+### Synchronisation stages V1↔V2 et desktop switch
+
+- [X] T140 `setCurrentDesktopKey` resync `stages` V1 dict avec stages V2 du scope courant (F17)
+- [X] T141 `setCurrentDesktopKey` ne fait plus `setActiveStage` (causait re-show des wids cross-desktop) (F18)
+- [X] T142 `desktop.focus per_display` (CommandRouter.swift) filtre `shouldShow` par `activeStageOnTarget` — un desktop n'affiche plus toutes ses wids mais seulement celles du stage actif (F19)
+
+### Validation finale
+
+- [X] T150 Validation visuelle par 8 screenshots dans `/tmp/roadie-debug/` couvrant Boot, switch stage 1↔2, desktop 1↔2, retour avec mémoire stage actif
+- [X] T151 Document `specs/018-stages-per-display/audit-coherence.md` listant les 19 findings, 15 fixes appliqués, 4 TODO mineurs documentés
+- [ ] T152 [TODO] F7 — `LayoutEngine.workspace.activeStageByDisplay` (multi-display réel : un display = un tree actif différent en simultané) — refonte plus invasive, session dédiée
+- [ ] T153 [TODO] F8 — `windows.list` retourne `display_uuid` + `desktop_id` en plus de `stage`
+- [ ] T154 [TODO] F9 — `WallpaperStageCoordinator.handleClick` utilise l'API V2 `assign(wid:to: scope:)`
+- [ ] T155 [TODO] F10 — `registerWindow` desktopID dynamique au lieu de `1` hardcodé
+
+**Critère de fin Phase 9** : Grayjay reste hidden offscreen quand son stage est inactif (validé visuellement), mémoire stage active conservée par desktop, pas de double-attribution sur disque.
+
+---
+
 ## Dependencies (DAG)
 
 ```
@@ -177,10 +242,13 @@ Tâches sur `Sources/RoadieStagePlugin/StageManager.swift` (T016) doivent être 
 
 ## Total
 
-- **77 tâches** réparties sur 8 phases
+- **77 tâches initiales** réparties sur 8 phases
+- **+25 tâches Phase 9** (T080-T155) fixes post-livraison cohérence display×desktop×stage
 - **MVP** = T001-T042 (47 tâches) couvrant US1 + US2 + US3
 - **V1.1** = +T050-T053 (4 tâches) override CLI
 - **V1.2** = +T060-T063 (4 tâches) rail coherence
 - **Polish** = +T070-T076 (7 tâches)
+- **Phase 9** = +T080-T155 (25 tâches, 21 cochées + 4 TODO mineurs F7/F8/F9/F10)
 
-**Effort total estimé** : ~12-15 heures pour développeur Swift, hors tests acceptance manuels nécessitant 2 écrans physiques.
+**Effort total estimé initial** : ~12-15 heures pour développeur Swift, hors tests acceptance manuels nécessitant 2 écrans physiques.
+**Effort Phase 9 réel** : ~6 heures (audit + 15 fixes + 8 screenshots de validation).

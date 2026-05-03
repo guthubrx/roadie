@@ -5,6 +5,7 @@ import RoadieTiler
 import RoadieStagePlugin
 import RoadieFXCore
 import RoadieDesktops
+import TOMLKit
 
 /// SPEC-010 : OSAXBridge partagé entre le daemon et les modules FX. Permet au
 /// daemon d'envoyer directement des commandes osax (move_window_to_space,
@@ -75,10 +76,57 @@ enum CommandRouter {
                     Logger.shared.setMinLevel(level)
                 }
                 logInfo("config reloaded")
+                // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
+                // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
+                EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
                 return .success()
             } catch {
                 return .error(.invalidArgument, "config reload failed: \(error)")
             }
+
+        case "rail.renderer.list":
+            // SPEC-019 — liste des renderers connus côté daemon (manifest hardcoded,
+            // miroir de Sources/RoadieRail/Renderers/Bootstrap.swift) + le `current`
+            // lu depuis le TOML utilisateur. La liste réelle des renderers compilés
+            // dans le binaire roadie-rail est connaissance partagée constante.
+            let knownRenderers: [(id: String, displayName: String)] = [
+                ("stacked-previews", "Stacked previews"),
+                ("icons-only",       "Icons only"),
+            ]
+            let currentRenderer = readCurrentRendererID() ?? "stacked-previews"
+            let payload: [String: AnyCodable] = [
+                "default": AnyCodable("stacked-previews"),
+                "current": AnyCodable(currentRenderer),
+                "renderers": AnyCodable(knownRenderers.map { r -> [String: Any] in
+                    ["id": r.id, "display_name": r.displayName]
+                }),
+            ]
+            return .success(payload)
+
+        case "rail.renderer.set":
+            guard let id = request.args?["id"], !id.isEmpty else {
+                return .error(.invalidArgument, "missing renderer id")
+            }
+            let knownIDs = ["stacked-previews", "icons-only"]
+            guard knownIDs.contains(id) else {
+                return .error(.invalidArgument,
+                              "renderer '\(id)' not found. Available: \(knownIDs.joined(separator: ", "))")
+            }
+            let previous = readCurrentRendererID() ?? "stacked-previews"
+            do {
+                try writeRendererID(id)
+            } catch {
+                return .error(.internalError, "failed to write TOML: \(error)")
+            }
+            // Reload config + signaler au rail.
+            if let newConfig = try? ConfigLoader.load() {
+                daemon.config = newConfig
+            }
+            EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
+            return .success([
+                "previous": AnyCodable(previous),
+                "current": AnyCodable(id),
+            ])
 
         case "focus":
             guard let dirStr = request.args?["direction"],
@@ -1053,6 +1101,18 @@ enum CommandRouter {
         // BUGFIX : une fenêtre cachée est offscreen → state.frame.midXY tombe
         // hors de tous les displays → displayIDContainingPoint retourne nil →
         // skip → jamais reshown. Fallback sur expectedFrame (pré-hide position).
+        // SPEC-018 audit-cohérence : intersecter aussi avec le stage actif du desktop
+        // cible. Sans ça, entrer un desktop affiche TOUTES ses wids (peu importe le
+        // stage), contredisant le concept même de stage. Si le mode est global ou si
+        // le desktop cible n'a jamais eu de stage actif mémorisé, fallback : show all.
+        let activeStageOnTarget: StageID? = await {
+            guard let sm = daemon.stageManager, sm.stageMode == .perDisplay else { return nil }
+            guard let displays = await daemon.displayRegistry?.displays,
+                  let target = displays.first(where: { $0.id == targetDisplayID }),
+                  !target.uuid.isEmpty else { return nil }
+            let key = DesktopKey(displayUUID: target.uuid, desktopID: resolvedTarget)
+            return sm.activeStage(for: key)
+        }()
         let allWindows = daemon.registry.allWindows
         for state in allWindows {
             let frameCenter = CGPoint(x: state.frame.midX, y: state.frame.midY)
@@ -1067,10 +1127,16 @@ enum CommandRouter {
             // système). Les hide/show les rendrait invisibles alors qu'elles
             // sont gérées par macOS natif (ex: dialog "Organiser…" Monitors).
             guard state.isTileable else { continue }
-            let shouldShow = state.desktopID == resolvedTarget
+            let stageMatches: Bool = {
+                guard let active = activeStageOnTarget else { return true }
+                return state.stageID == active
+            }()
+            let shouldShow = state.desktopID == resolvedTarget && stageMatches
             logInfo("desktop.focus per_display window", [
                 "wid": String(state.cgWindowID),
                 "desktop": String(state.desktopID),
+                "stage": state.stageID?.value ?? "nil",
+                "active_stage": activeStageOnTarget?.value ?? "any",
                 "should_show": shouldShow ? "yes" : "no",
             ])
             if state.isTileable {
@@ -1555,6 +1621,67 @@ enum CommandRouter {
         let attrs = try? FileManager.default.attributesOfItem(atPath: path)
         let date = attrs?[.creationDate] as? Date ?? Date()
         return iso8601String(date)
+    }
+
+    /// SPEC-019 — lecture de la clé `[fx.rail].renderer` depuis le TOML utilisateur.
+    /// Retourne nil si absente, vide ou TOML illisible.
+    private static func readCurrentRendererID() -> String? {
+        let path = (NSString(string: "~/.config/roadies/roadies.toml")
+            .expandingTildeInPath as String)
+        guard let data = FileManager.default.contents(atPath: path),
+              let toml = String(data: data, encoding: .utf8),
+              let root = try? TOMLTable(string: toml),
+              let fx = root["fx"]?.table,
+              let rail = fx["rail"]?.table,
+              let v = rail["renderer"]?.string,
+              !v.isEmpty
+        else { return nil }
+        return v
+    }
+
+    /// SPEC-019 — écriture idempotente de `[fx.rail].renderer = "<id>"`. Préserve
+    /// le reste de la section et du fichier. Crée le fichier + section si absent.
+    private static func writeRendererID(_ id: String) throws {
+        let path = (NSString(string: "~/.config/roadies/roadies.toml")
+            .expandingTildeInPath as String)
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir,
+                                                  withIntermediateDirectories: true)
+        var lines: [String]
+        if let data = FileManager.default.contents(atPath: path),
+           let content = String(data: data, encoding: .utf8) {
+            lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        } else {
+            lines = []
+        }
+        // Trouver la section [fx.rail], y mettre/remplacer la clé renderer.
+        var inFxRail = false
+        var rendererLineIdx: Int? = nil
+        var fxRailHeaderIdx: Int? = nil
+        for (idx, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") {
+                inFxRail = (trimmed == "[fx.rail]")
+                if inFxRail { fxRailHeaderIdx = idx }
+                continue
+            }
+            if inFxRail, trimmed.hasPrefix("renderer") {
+                rendererLineIdx = idx
+                break
+            }
+        }
+        let newLine = "renderer = \"\(id)\""
+        if let i = rendererLineIdx {
+            lines[i] = newLine
+        } else if let h = fxRailHeaderIdx {
+            lines.insert(newLine, at: h + 1)
+        } else {
+            if !lines.isEmpty && !(lines.last?.isEmpty ?? true) { lines.append("") }
+            lines.append("[fx.rail]")
+            lines.append(newLine)
+        }
+        try lines.joined(separator: "\n").write(toFile: path,
+                                                atomically: true, encoding: .utf8)
     }
 
     private static func resizeImage(_ image: NSImage, to size: NSSize) -> NSImage {
