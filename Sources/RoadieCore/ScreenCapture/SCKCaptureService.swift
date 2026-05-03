@@ -20,6 +20,14 @@ import UniformTypeIdentifiers
 @MainActor
 public final class SCKCaptureService {
     private var streams: [CGWindowID: SCStream] = [:]
+    /// Timers de snapshot one-shot pour fenêtres DRM (CGWindowListCreateImage).
+    /// Les bundles DRM (Netflix etc.) refusent la lecture si SCStream actif → on
+    /// se rabat sur des snapshots ponctuels qui ne sont pas détectés comme stream.
+    private var drmTimers: [CGWindowID: Timer] = [:]
+    /// Intervalle de rafraîchissement des snapshots DRM (en secondes).
+    /// Compromis : trop court → CPU + risque que macOS détecte le pattern,
+    /// trop long → vignette pas à jour. 15s = 1 frame/15s, suffisant pour le rail.
+    public var drmSnapshotInterval: TimeInterval = 15
 
     /// Callback déclenché à chaque frame capturée. Le caller câble vers ThumbnailCache.put.
     public var onCapture: ((ThumbnailEntry) -> Void)?
@@ -84,12 +92,17 @@ public final class SCKCaptureService {
         }
 
         // Refus DRM : Netflix, Apple TV, Disney+, etc. blackoutent la lecture
-        // dès qu'un SCStream est actif sur leur fenêtre (FairPlay). Skip silencieux.
+        // dès qu'un SCStream est actif sur leur fenêtre (FairPlay). On bascule
+        // sur des snapshots ponctuels CGWindowListCreateImage (pattern AltTab) :
+        // pas de stream continu détecté par le DRM, vignette quand même rendue
+        // dans le navrail (rafraîchissement toutes les drmSnapshotInterval s).
         if let bundleID = scWindow.owningApplication?.bundleIdentifier,
            excludedBundles.contains(bundleID) {
-            logInfo("sck: capture refused (DRM bundle excluded)", [
+            logInfo("sck: DRM bundle — fallback snapshot loop", [
                 "wid": String(wid), "bundle": bundleID,
+                "interval_s": String(format: "%.0f", drmSnapshotInterval),
             ])
+            startDRMSnapshotLoop(wid: wid)
             return
         }
 
@@ -122,7 +135,13 @@ public final class SCKCaptureService {
     }
 
     /// Stoppe l'observation d'une fenêtre. No-op si non observée.
+    /// Couvre les 2 modes : SCStream et timer DRM snapshot.
     public func unobserve(wid: CGWindowID) async {
+        if let timer = drmTimers.removeValue(forKey: wid) {
+            timer.invalidate()
+            logInfo("sck: DRM snapshot loop stopped", ["wid": String(wid)])
+            return
+        }
         guard let stream = streams.removeValue(forKey: wid) else { return }
         do {
             try await stream.stopCapture()
@@ -130,6 +149,55 @@ public final class SCKCaptureService {
             logWarn("sck: stopCapture error (non-fatal)", ["wid": String(wid), "error": "\(error)"])
         }
         logInfo("sck: observe stopped", ["wid": String(wid)])
+    }
+
+    /// Démarre une boucle de snapshots one-shot pour une fenêtre DRM.
+    /// Capture immédiate puis Timer périodique tant que la fenêtre est observée.
+    /// Pattern repris d'AltTab : `CGWindowListCreateImage` ne déclenche pas
+    /// FairPlay parce qu'il n'y a pas de stream actif, juste un read ponctuel.
+    private func startDRMSnapshotLoop(wid: CGWindowID) {
+        captureDRMSnapshot(wid: wid)
+        let timer = Timer.scheduledTimer(withTimeInterval: drmSnapshotInterval,
+                                          repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.captureDRMSnapshot(wid: wid)
+            }
+        }
+        drmTimers[wid] = timer
+    }
+
+    /// Capture one-shot via API legacy. Encodage PNG identique au SCStream path.
+    private func captureDRMSnapshot(wid: CGWindowID) {
+        // .nominalResolution : taille logique (pas Retina x2). .boundsIgnoreFraming :
+        // exclut la barre de titre/ombre, on ne capture que le contenu.
+        guard let cg = CGWindowListCreateImage(
+            .null, .optionIncludingWindow, wid,
+            [.nominalResolution, .boundsIgnoreFraming]
+        ) else {
+            // Sur macOS récent, le DRM peut bloquer même CGWindowListCreateImage.
+            // Pas d'erreur — la prochaine itération du timer retentera.
+            return
+        }
+        let size = CGSize(width: cg.width, height: cg.height)
+        guard let pngData = Self.encodePNG(cg) else { return }
+        let entry = ThumbnailEntry(wid: wid, pngData: pngData, size: size,
+                                   degraded: true,  // marquer pour distinction côté rail
+                                   capturedAt: Date())
+        onCapture?(entry)
+    }
+
+    /// Helper PNG partagé entre SCStream et DRM snapshot path.
+    /// Cf. note NSZombie : `Data(bytes:count:)` copie indépendamment du
+    /// NSMutableData source pour survivre aux drains autoreleasepool.
+    /// `nonisolated` : appelable depuis SCStream callback sur queue background.
+    fileprivate nonisolated static func encodePNG(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(
+            data as CFMutableData, UTType.png.identifier as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(dest, image, nil)
+        guard CGImageDestinationFinalize(dest) else { return nil }
+        return Data(bytes: data.bytes, count: data.length)
     }
 }
 
@@ -169,17 +237,7 @@ private final class CaptureOutputHandler: NSObject, SCStreamOutput {
     }
 
     private func encodePNG(_ image: CGImage) -> Data? {
-        let data = NSMutableData()
-        guard let dest = CGImageDestinationCreateWithData(
-            data as CFMutableData, UTType.png.identifier as CFString, 1, nil)
-        else { return nil }
-        CGImageDestinationAddImage(dest, image, nil)
-        guard CGImageDestinationFinalize(dest) else { return nil }
-        // FIX NSZombie : `data as Data` est un toll-free bridging (wrap, pas copie).
-        // Le NSMutableData vit dans l'autoreleasepool du callback SCStream ; à la
-        // sortie du pool il est release. Le Data retourné devient zombie au prochain
-        // accès depuis main thread → crash récurrent à uptime ≈ 140s (~70 frames).
-        // Solution : copier les bytes dans un buffer Swift indépendant.
-        return Data(bytes: data.bytes, count: data.length)
+        // Délégué au helper static partagé (DRM path utilise le même encodage).
+        SCKCaptureService.encodePNG(image)
     }
 }
