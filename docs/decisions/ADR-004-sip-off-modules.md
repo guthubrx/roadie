@@ -1,113 +1,115 @@
-# ADR-004 — Autoriser SIP-off via modules opt-in séparés
+# ADR-004 — Allow SIP-off via separate opt-in modules
 
-**Date** : 2026-05-01
-**Status** : Accepted
-**Spec déclencheuse** : SPEC-004 fx-framework
-**Famille concernée** : SPEC-004 → SPEC-010 (framework + 6 modules)
+🇬🇧 **English** · 🇫🇷 [Français](ADR-004-sip-off-modules.fr.md)
 
-## Contexte
+**Date**: 2026-05-01
+**Status**: Accepted
+**Triggering spec**: SPEC-004 fx-framework
+**Affected family**: SPEC-004 → SPEC-010 (framework + 6 modules)
 
-L'utilisateur a exprimé la demande explicite (revue branche `/branch` du 2026-05-01) de pouvoir activer des fonctionnalités esthétiques et de manipulation cross-desktop type Hyprland :
+## Context
 
-- Suppression / customisation de l'ombre des fenêtres tierces
-- Focus dimming (alpha non focused)
-- Animations Bézier 60-120 FPS sur ouverture/fermeture/switch
-- Bordures colorées autour de la fenêtre focused
-- Frosted glass blur derrière fenêtres
-- Déplacement programmatique fenêtre cross-desktop (FR-024 SPEC-003 DEFER V3)
+The user expressed an explicit request (branch review `/branch` on 2026-05-01) to enable Hyprland-style aesthetic and cross-desktop manipulation features:
 
-Toutes ces fonctionnalités requièrent l'écriture sur les APIs privées SkyLight (`CGSSetWindowAlpha`, `CGSSetWindowShadow*`, `CGSSetWindowBackgroundBlur`, `CGSSetWindowTransform`, `CGSAddWindowsToSpaces`, etc.) qui ne sont accessibles que via le **process owner de la fenêtre cible**.
+- Suppression / customization of third-party window shadows
+- Focus dimming (alpha on unfocused windows)
+- Bézier animations at 60–120 FPS on open/close/switch
+- Colored borders around the focused window
+- Frosted glass blur behind windows
+- Programmatic cross-desktop window movement (FR-024 SPEC-003 DEFER V3)
 
-Pour atteindre les fenêtres tierces, le pattern industriel (yabai 10 ans de prod) est :
-1. SIP partiellement désactivé (`csrutil enable --without fs --without debug --without nvram` sur macOS 14+)
-2. Scripting addition Cocoa déposée dans `/Library/ScriptingAdditions/`
-3. Injection dans Dock via `osascript -e 'tell app "Dock" to load scripting additions'`
-4. Le code injecté tourne dans Dock (process privilégié avec connection master) et expose les CGS via socket Unix
+All of these features require writing to private SkyLight APIs (`CGSSetWindowAlpha`, `CGSSetWindowShadow*`, `CGSSetWindowBackgroundBlur`, `CGSSetWindowTransform`, `CGSAddWindowsToSpaces`, etc.) which are only accessible via the **process owner of the target window**.
 
-Or l'article C' constitution-002 v1.2.0 stipulait :
-> « **`SLS*`/SkyLight et scripting addition Dock interdits** (FR-005). »
+To reach third-party windows, the industry-standard pattern (yabai, 10 years in production) is:
+1. SIP partially disabled (`csrutil enable --without fs --without debug --without nvram` on macOS 14+)
+2. Cocoa scripting addition placed in `/Library/ScriptingAdditions/`
+3. Injection into Dock via `osascript -e 'tell app "Dock" to load scripting additions'`
+4. The injected code runs inside Dock (a privileged process with master connection) and exposes CGS calls via a Unix socket
 
-Cet article bloque toute la famille SPEC-004+. Il faut donc l'amender, **mais étroitement**, pour préserver l'invariant qui a fait la robustesse de SPEC-001/002/003 : **aucune dépendance privée fragile dans le core**.
+The constitution-002 article C' v1.2.0 stated:
+> "**`SLS*`/SkyLight and Dock scripting addition are forbidden** (FR-005)."
 
-## Décision
+This clause blocks the entire SPEC-004+ family. It must therefore be amended — but **narrowly** — to preserve the invariant that made SPEC-001/002/003 robust: **no fragile private dependency in the core**.
 
-Amender l'article C' vers la version 1.3.0 pour autoriser SkyLight write + scripting addition **uniquement dans des modules opt-in** chargés à runtime via `dlopen`, à **6 conditions cumulatives strictes** :
+## Decision
 
-1. **Daemon core fonctionnel sans module** : un utilisateur "vanilla" (SIP intact, aucun module installé) DOIT avoir une expérience complète et excellente. Tests SPEC-002 + SPEC-003 régression à 100 %.
-2. **Module = target `.dynamicLibrary` séparé** : jamais lié statiquement au daemon. Vérification automatique : `nm roadied | grep CGSSetWindow* | wc -l == 0` (gate ajoutée).
-3. **Pas de crash si SIP fully on** : le daemon démarre normalement, les modules font no-op gracieux (osax non chargée par Dock = OSAXBridge log warning, jamais d'exception).
-4. **Installation osax manuelle** : par script utilisateur (`scripts/install-fx.sh`), jamais par roadie automatiquement. L'utilisateur consent explicitement.
-5. **SPEC dédiée par module** : chaque module a sa spec, son audit sécurité, son plafond LOC. Pas de "ajout discret" qui contournerait la revue.
-6. **Désactivable via config** : flag `[fx.<module_name>] enabled = false` désactive le module sans le retirer.
+Amend article C' to version 1.3.0 to allow SkyLight write + scripting addition **exclusively in opt-in modules** loaded at runtime via `dlopen`, subject to **6 strict cumulative conditions**:
 
-L'amendement est cadré par cet ADR et la nouvelle spec SPEC-004.
+1. **Core daemon fully functional without any module**: a "vanilla" user (SIP intact, no module installed) MUST have a complete and excellent experience. SPEC-002 + SPEC-003 regression tests at 100%.
+2. **Module = separate `.dynamicLibrary` target**: never statically linked into the daemon. Automatic gate: `nm roadied | grep CGSSetWindow* | wc -l == 0`.
+3. **No crash when SIP is fully on**: the daemon starts normally; modules gracefully no-op (osax not loaded by Dock = OSAXBridge logs a warning, never throws an exception).
+4. **Manual osax installation**: via a user-run script (`scripts/install-fx.sh`), never done automatically by roadie. The user gives explicit consent.
+5. **Dedicated spec per module**: each module has its own spec, security audit, and LOC budget. No "quiet addition" that bypasses review.
+6. **Disableable via config**: the flag `[fx.<module_name>] enabled = false` disables the module without removing it.
 
-## Alternatives considérées
+The amendment is scoped by this ADR and the new SPEC-004.
 
-### A. Refus pur et simple
+## Alternatives considered
 
-Garder C' v1.2.0 strict, refuser la demande utilisateur.
+### A. Flat refusal
 
-**Rejet** : la demande est légitime et la voie technique est éprouvée (yabai 10 ans). Le refus serait dogmatique sans bénéfice.
+Keep C' v1.2.0 strict, reject the user request.
 
-### B. Autorisation totale dans le daemon core
+**Rejected**: the request is legitimate and the technical path is proven (yabai, 10 years). Refusal would be dogmatic with no benefit.
 
-Linker directement les SkyLight write dans `roadied`.
+### B. Full authorization in the daemon core
 
-**Rejet** : viole la philosophie suckless du projet, expose tous les utilisateurs à la fragilité macOS .X+1 même ceux qui ne veulent pas les effets visuels. Surface d'attaque (SIP off) imposée à tous.
+Directly link SkyLight writes into `roadied`.
 
-### C. Modules statiques avec flag de build
+**Rejected**: violates the project's suckless philosophy, exposes all users to macOS .X+1 fragility — including those who don't want visual effects. SIP-off attack surface imposed on everyone.
 
-Compiler 2 versions du daemon : une "vanilla" sans CGS, une "fx" avec.
+### C. Static modules with a build flag
 
-**Rejet** : fragmente la distribution (2 binaires), complique les tests CI (qui n'existent pas mais bon), force un choix au build time alors que l'utilisateur peut vouloir essayer/désactiver à chaud.
+Compile 2 daemon variants: one "vanilla" without CGS, one "fx" with it.
 
-### D. Modules opt-in via `.dynamicLibrary` (RETENU)
+**Rejected**: fragments distribution (2 binaries), complicates CI testing, forces a build-time choice when the user may want to try or disable features at runtime.
 
-Modules séparés chargés à runtime. Daemon core inchangé. Utilisateur installe ce qu'il veut.
+### D. Opt-in modules via `.dynamicLibrary` (SELECTED)
 
-**Adopté** : combine pragmatisme (la voie est éprouvée yabai-style) et préservation des invariants (core suckless intact).
+Separate modules loaded at runtime. Core daemon unchanged. User installs what they want.
 
-## Conséquences
+**Adopted**: combines pragmatism (the path is proven yabai-style) with invariant preservation (suckless core intact).
 
-### Positives
+## Consequences
 
-- **Daemon vanilla strictement préservé** : aucune régression possible pour les utilisateurs qui ne touchent pas à SIP
-- **Compartimentation totale** : suppression d'un `.dylib` ou de l'osax = retour 100 % vanilla
-- **Audit modulaire** : chaque module fait l'objet d'une SPEC + audit dédié, pas de cumul de risque
-- **LOC plafonds séparés** : core ≤ 4 000 (G' inchangé), opt-in cumulé ≤ 2 720 (nouveau plafond famille SPEC-004+)
-- **Sécurité explicite** : l'utilisateur consent par installation manuelle de l'osax + désactivation SIP
+### Positive
 
-### Négatives
+- **Vanilla daemon strictly preserved**: no possible regression for users who don't touch SIP
+- **Full compartmentalization**: removing a `.dylib` or the osax = 100% vanilla restore
+- **Modular auditing**: each module has a dedicated SPEC + audit, no risk accumulation
+- **Separate LOC budgets**: core ≤ 4,000 (G' unchanged), opt-in cumulative ≤ 2,720 (new SPEC-004+ family budget)
+- **Explicit security consent**: the user consents via manual osax installation + SIP disabling
 
-- **SIP partial off** ouvre une vraie surface d'attaque pour les utilisateurs qui activent les modules. Documentation utilisateur explicite : "as-is, no warranty".
-- **Fragilité macOS .X+1** : chaque update majeure peut casser le pattern (cf yabai 1-4 semaines de retard typique). Plan de mitigation : monitor yabai upstream, doc utilisateur claire.
-- **Complexité legèrement accrue** du build : 1 target dynamicLibrary supplémentaire (`RoadieFXCore`) + bundle Cocoa séparé (`roadied.osax`). Géré par `scripts/install-fx.sh`.
-- **Non-distribution App Store** : impossible avec scripting addition tiers. Acceptable car le projet n'a jamais visé l'App Store (déjà incompatible avec Accessibility daemon-style).
+### Negative
 
-### Neutres
+- **Partial SIP off** opens a real attack surface for users who activate the modules. Explicit user documentation: "as-is, no warranty".
+- **macOS .X+1 fragility**: each major update may break the pattern (cf. yabai's typical 1–4 week lag). Mitigation plan: monitor yabai upstream, clear user documentation.
+- **Slightly increased build complexity**: 1 additional dynamicLibrary target (`RoadieFXCore`) + separate Cocoa bundle (`roadied.osax`). Managed by `scripts/install-fx.sh`.
+- **No App Store distribution**: impossible with third-party scripting additions. Acceptable as the project never targeted the App Store (already incompatible with Accessibility daemon-style).
 
-- **Pas de retro-incompatibilité** : les utilisateurs SPEC-001/002/003 actuels ne voient aucune différence avant d'installer manuellement les modules.
-- **Constitution évolution naturelle** : C' était dur à 1.0.0 par prudence, s'adapte à 1.3.0 maintenant que les invariants sont éprouvés.
+### Neutral
 
-## Conditions de garde (rappelées)
+- **No backward incompatibility**: current SPEC-001/002/003 users see no difference until they manually install the modules.
+- **Natural constitution evolution**: C' was strict at 1.0.0 out of caution; it adapts to 1.3.0 now that the invariants are proven.
 
-| # | Condition | Vérification automatique |
+## Guard conditions (recalled)
+
+| # | Condition | Automatic verification |
 |---|---|---|
-| 1 | Daemon core 100 % fonctionnel sans module | Tests SPEC-002 + SPEC-003 (régression) + SC-007 SPEC-004 |
-| 2 | Modules `.dynamicLibrary` séparés | `nm roadied | grep CGSSetWindow* | wc -l == 0` |
-| 3 | Pas de crash si SIP fully on | Test intégration `11-fx-vanilla.sh` |
-| 4 | Osax installation manuelle | Code review : aucun appel `osascript ... load scripting additions` dans le daemon |
-| 5 | SPEC dédiée par module | Vérifié par revue avant merge |
-| 6 | Flag config désactive | Test : config `[fx.X] enabled=false` → module no-op vérifié |
+| 1 | Core daemon 100% functional without module | SPEC-002 + SPEC-003 tests (regression) + SC-007 SPEC-004 |
+| 2 | Modules as separate `.dynamicLibrary` | `nm roadied | grep CGSSetWindow* | wc -l == 0` |
+| 3 | No crash with SIP fully on | Integration test `11-fx-vanilla.sh` |
+| 4 | Manual osax installation | Code review: no `osascript ... load scripting additions` call in the daemon |
+| 5 | Dedicated spec per module | Verified by review before merge |
+| 6 | Config flag disables | Test: config `[fx.X] enabled=false` → module no-op verified |
 
-## Références
+## References
 
 - [Disabling SIP — yabai Wiki](https://github.com/koekeishiya/yabai/wiki/Disabling-System-Integrity-Protection)
 - [yabai sa.dylib injection pattern](https://github.com/koekeishiya/yabai/tree/master/sa)
-- Constitution projet 002-tiler-stage v1.3.0 (article C' amendé)
-- SPEC-004 fx-framework (famille SIP-off)
+- Project constitution 002-tiler-stage v1.3.0 (amended article C')
+- SPEC-004 fx-framework (SIP-off family)
 
-## Auteurs
+## Authors
 
-Projet roadies, branche `004-fx-framework`, 2026-05-01
+Project roadies, branch `004-fx-framework`, 2026-05-01

@@ -1,45 +1,47 @@
-# ADR-001 — AX Observer par application, sans SkyLight ni SIP
+# ADR-001 — Per-app AX Observer, no SkyLight, no SIP
 
-**Date** : 2026-05-01 | **Statut** : Accepté
+🇬🇧 **English** · 🇫🇷 [Français](ADR-001-ax-per-app-no-skylight.fr.md)
 
-## Contexte
+**Date**: 2026-05-01 | **Status**: Accepted
 
-Le daemon doit observer les events fenêtre macOS en temps réel : création, destruction, déplacement, resize, focus. Deux options :
+## Context
 
-1. **yabai-style** : combiner `AXObserver` (par app) + notifications SkyLight `SLSRequestNotificationsForWindows` (privées, nécessitent injection scripting addition dans Dock.app, donc SIP partiellement désactivé).
-2. **AeroSpace-style** : `AXObserver` par app uniquement, avec `Task { @MainActor }` pour synchroniser. Pas de SkyLight, pas de SIP off.
+The daemon must observe macOS window events in real time: creation, destruction, move, resize, focus. Two options:
 
-## Décision
+1. **yabai-style**: combine `AXObserver` (per app) + SkyLight notifications `SLSRequestNotificationsForWindows` (private, require scripting addition injection into Dock.app, hence SIP partially disabled).
+2. **AeroSpace-style**: `AXObserver` per app only, with `Task { @MainActor }` for synchronization. No SkyLight, no SIP off.
 
-**Option 2 (AeroSpace-style) avec un ajout** : abonnement à `kAXApplicationActivatedNotification` en plus des events fenêtre standards. Cet ajout (absent d'AeroSpace original) corrige le bug click-to-focus sur Electron/JetBrains.
+## Decision
 
-Concrètement :
-- Pour chaque `NSRunningApplication`, créer un thread dédié avec `CFRunLoop`.
-- `AXObserverCreate` + 6 notifications : `kAXWindowCreatedNotification`, `kAXWindowMovedNotification`, `kAXWindowResizedNotification`, `kAXFocusedWindowChangedNotification`, `kAXUIElementDestroyedNotification`, **`kAXApplicationActivatedNotification`**.
-- Dans le callback, `Task { @MainActor in ... }` pour dispatcher vers la machine d'état.
+**Option 2 (AeroSpace-style) with one addition**: subscribe to `kAXApplicationActivatedNotification` on top of the standard window events. This addition (absent from the original AeroSpace) fixes the click-to-focus bug on Electron/JetBrains apps.
 
-## Conséquences
+Concretely:
+- For each `NSRunningApplication`, create a dedicated thread with a `CFRunLoop`.
+- `AXObserverCreate` + 6 notifications: `kAXWindowCreatedNotification`, `kAXWindowMovedNotification`, `kAXWindowResizedNotification`, `kAXFocusedWindowChangedNotification`, `kAXUIElementDestroyedNotification`, **`kAXApplicationActivatedNotification`**.
+- In the callback, `Task { @MainActor in ... }` to dispatch to the state machine.
 
-### Positives
+## Consequences
 
-- **Pas de dépendance SIP** → installation triviale, pas de procédure complexe.
-- **Pas de scripting addition** → robustesse face aux mises à jour macOS.
-- **Click-to-focus fiable** sur les apps Electron/JetBrains (différenciateur vs AeroSpace).
-- **Code Swift moderne** avec Concurrency, lisible et testable.
+### Positive
 
-### Négatives
+- **No SIP dependency** → trivial installation, no complex setup procedure.
+- **No scripting addition** → robust against macOS updates.
+- **Reliable click-to-focus** on Electron/JetBrains apps (differentiator vs AeroSpace).
+- **Modern Swift code** with Concurrency, readable and testable.
 
-- Pas d'accès aux events SkyLight (ordering changes, etc.) → certaines régressions yabai connues seront difficiles à reproduire si elles dépendent de ces events. Acceptable pour le périmètre V1.
-- Un thread par app peut sembler coûteux en théorie — en pratique, ces threads sont en attente passive sur leur RunLoop, coût mémoire ~64 KB/thread.
+### Negative
 
-## Alternatives rejetées
+- No access to SkyLight events (ordering changes, etc.) → certain known yabai regressions will be hard to reproduce if they depend on these events. Acceptable for the V1 scope.
+- One thread per app may seem costly in theory — in practice, these threads block passively on their RunLoop, memory cost ~64 KB/thread.
 
-- **Polling périodique** (100 ms) : consommation batterie inacceptable, latence visible.
-- **Notification distribuée NSWorkspace seule** : trop pauvre, ne couvre pas window-level events.
-- **Hybride yabai+AeroSpace** : complexité disproportionnée.
+## Rejected alternatives
 
-## Références
+- **Periodic polling** (100 ms): unacceptable battery consumption, visible latency.
+- **NSWorkspace distributed notifications alone**: too coarse-grained, does not cover window-level events.
+- **yabai+AeroSpace hybrid**: disproportionate complexity.
 
-- yabai : `src/application.c` — `application_observe()`
-- AeroSpace : `Sources/AppBundle/tree/MacApp.swift`, `Sources/AppBundle/util/AxSubscription.swift`
-- research.md §1 (event loop) et §4 (click-to-focus)
+## References
+
+- yabai: `src/application.c` — `application_observe()`
+- AeroSpace: `Sources/AppBundle/tree/MacApp.swift`, `Sources/AppBundle/util/AxSubscription.swift`
+- research.md §1 (event loop) and §4 (click-to-focus)

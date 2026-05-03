@@ -1,234 +1,236 @@
-# ADR-007 — Test matrix cohérence navrail × tiling pour validation par agent
+# ADR-007 — Navrail × tiling coherence test matrix for agent-driven validation
 
-**Date** : 2026-05-03 | **Statut** : Accepté
+🇬🇧 **English** · 🇫🇷 [Français](ADR-007-test-matrix-coherence-navrail-tiling.fr.md)
 
-## Contexte
+**Date**: 2026-05-03 | **Status**: Accepted
 
-Plusieurs bugs successifs sur la cohérence navrail ↔ tiling (SPEC-018 puis SPEC-019) ont révélé que les axes de variation du système (display × desktop × stage × tiler × renderer) se croisent sans qu'il existe de matrice de test exhaustive permettant de valider qu'une régression n'a pas été introduite. Les bugs récents incluent : navrail montrant le même contenu sur 2 écrans, hover effaçant les fenêtres, clic sur stage sans effet, stages fantômes vides, helpers 66×20 polluant les vignettes, double-attribution wid disque, mémoire stage actif perdue au desktop_changed, etc.
+## Context
 
-Chaque bug a été corrigé empiriquement, mais sans suite de tests systématique chaque fix peut casser un autre cas que personne n'a re-validé. Par ailleurs, certains tests ne sont pas automatisables côté Swift (validation visuelle) et exigent une interaction GUI réelle (hover, drag-drop, resize).
+A series of coherence bugs between navrail and tiling (SPEC-018 then SPEC-019) revealed that the system's axes of variation (display × desktop × stage × tiler × renderer) interact without any exhaustive test matrix to verify that no regression has been introduced. Recent bugs include: navrail showing the same content on 2 screens, hover erasing windows, clicking a stage with no effect, empty ghost stages, 66×20 helpers polluting thumbnails, double wid assignment on disk, active stage memory lost on desktop_changed, etc.
 
-Trois besoins :
+Each bug was fixed empirically, but without a systematic test suite any fix can break another case that nobody has re-validated. Furthermore, some tests cannot be automated on the Swift side (visual validation) and require real GUI interaction (hover, drag-drop, resize).
 
-1. **Exhaustivité** : couvrir TOUTES les combinatoires des axes du système, pas juste les chemins heureux.
-2. **Format consommable par un agent intelligent** : la suite doit être passée par un agent (Claude Code + skill `gui` pour interaction souris) qui exécute chaque test case sans ambiguïté, ni oubli, ni interprétation.
-3. **Reporting consolidé** : éviter d'avoir 600 fichiers de résultats — une seule grille avec une ligne par test, indiquant le verdict, l'écart observé, la correction appliquée et le statut post-correction.
+Three requirements:
 
-## Décision
+1. **Exhaustiveness**: cover ALL combinatorics of the system's axes, not just the happy paths.
+2. **Consumable by an intelligent agent**: the suite must be driven by an agent (Claude Code + `gui` skill for mouse interaction) that executes each test case unambiguously, with no omission or free interpretation.
+3. **Consolidated reporting**: avoid 600 result files — a single grid with one row per test, recording the verdict, the observed deviation, the applied fix, and the post-fix status.
 
-### Périmètre — axes de combinatoire couverts
+## Decision
 
-| Axe | Valeurs |
+### Scope — combinatoric axes covered
+
+| Axis | Values |
 |---|---|
-| **Displays** | 1 écran (built-in seul) / 2 écrans (built-in + LG externe) / branchement-débranchement à chaud |
-| **Desktops** | 1, 2, …, N par display (mode `per_display`) + mode `global` |
-| **Stages** | 1 (immortelle) / 2+ par scope (display, desktop) / stage vide / stage avec > maxVisible wids |
+| **Displays** | 1 screen (built-in only) / 2 screens (built-in + external LG) / hot plug/unplug |
+| **Desktops** | 1, 2, …, N per display (`per_display` mode) + `global` mode |
+| **Stages** | 1 (immortal) / 2+ per scope (display, desktop) / empty stage / stage with > maxVisible wids |
 | **Tilers** | BSP / Master-Stack |
-| **Renderers navrail** | `stacked-previews` (livré) / `icons-only` (livré) / `hero-preview`, `mosaic`, `parallax-45` (TODO SPEC-019 US3-US5) |
-| **Types de fenêtres** | tilées / floating / fullscreen natif / minimisées / helpers (66×20) / Electron |
+| **Navrail renderers** | `stacked-previews` (shipped) / `icons-only` (shipped) / `hero-preview`, `mosaic`, `parallax-45` (TODO SPEC-019 US3–US5) |
+| **Window types** | tiled / floating / native fullscreen / minimized / helpers (66×20) / Electron |
 
-### Périmètre — interactions couvertes
+### Scope — interactions covered
 
-**Observation passive** : à un instant donné, le navrail montre-t-il ce qui est tilé à l'écran ?
+**Passive observation**: at a given instant, does the navrail show what is tiled on screen?
 
-**Interactions actives** :
-- Clic sur vignette navrail → switch stage
-- Drag-drop fenêtre entre 2 vignettes → réassignation cross-stage
-- Resize fenêtre tilée (split, ratio)
-- Move (focus voisin / swap)
-- Cmd+Tab vers fenêtre d'un autre stage / desktop
-- Click-to-raise sur fenêtre cachée
-- Création / destruction de fenêtre
-- Switch desktop (Ctrl+→ / `roadie desktop focus`)
-- Switch display (curseur / frontmost)
-- Création / suppression / renommage stage (CLI + wallpaper-click + menu contextuel rail)
-- Hot-swap de tiler (`roadie tiler bsp` ↔ `master-stack`)
-- Hot-swap de renderer (`roadie rail renderer …`)
-- Reload daemon
-- Branchement / débranchement écran à chaud
+**Active interactions**:
+- Click on navrail thumbnail → stage switch
+- Drag-drop window between 2 thumbnails → cross-stage reassignment
+- Resize tiled window (split, ratio)
+- Move (focus neighbor / swap)
+- Cmd+Tab to window in another stage / desktop
+- Click-to-raise on hidden window
+- Window creation / destruction
+- Desktop switch (Ctrl+→ / `roadie desktop focus`)
+- Display switch (cursor / frontmost)
+- Stage creation / deletion / rename (CLI + wallpaper-click + rail context menu)
+- Hot-swap tiler (`roadie tiler bsp` ↔ `master-stack`)
+- Hot-swap renderer (`roadie rail renderer …`)
+- Daemon reload
+- Screen hot plug / unplug
 
-### Invariants à vérifier (référencés `INV-N` dans les test cases)
+### Invariants to verify (referenced as `INV-N` in test cases)
 
-1. **INV-1** Le navrail d'un panel montre les stages de **son** écran (pas un autre)
-2. **INV-2** Le contenu visible à l'écran correspond aux wids du stage actif du scope
-3. **INV-3** Stage 1 toujours présente sur chaque (display, desktop) — jamais « No stages yet »
-4. **INV-4** 1 wid = 1 stage max (pas de double-attribution disque ou mémoire)
-5. **INV-5** Pas de helper window 66×20 dans aucune stage
-6. **INV-6** Hide/show correct au switch (offscreen `frame.x < -1000` vs on-screen `frame.x ≥ 0`)
-7. **INV-7** La mémoire stage actif par (display, desktop) est conservée à l'aller-retour
-8. **INV-8** Les actions du panel propagent au scope **du panel**, pas à l'inférence curseur
+1. **INV-1** The navrail of a panel shows the stages of **its own** screen (not another's)
+2. **INV-2** The visible content on screen matches the wids of the active stage for the scope
+3. **INV-3** Stage 1 is always present on each (display, desktop) — never "No stages yet"
+4. **INV-4** 1 wid = 1 stage max (no double assignment on disk or in memory)
+5. **INV-5** No 66×20 helper window in any stage
+6. **INV-6** Correct hide/show on switch (offscreen `frame.x < -1000` vs on-screen `frame.x ≥ 0`)
+7. **INV-7** Active stage memory per (display, desktop) is preserved through a round-trip
+8. **INV-8** Panel actions propagate to the **panel's** scope, not the cursor-inferred scope
 
-### Edge cases à inclure systématiquement
+### Edge cases to include systematically
 
-- Stage vide (placeholder neutre du renderer)
-- Stage avec > maxVisible wids (truncation lisible « +N »)
-- Hot reload pendant drag-drop
-- App qui crashe alors qu'elle est tilée
-- Fullscreen natif macOS
-- Wallpaper-click (création stage par clic bureau)
-- Curseur traversant entre 2 écrans pendant un switch
-- Fenêtre offscreen qui reçoit focus (Cmd+Tab)
-- Renderer inconnu dans TOML (faute de frappe) → fallback `stacked-previews` + warn
-- Daemon non démarré → rail affiche état offline cohérent
+- Empty stage (renderer's neutral placeholder)
+- Stage with > maxVisible wids (legible truncation "+N")
+- Hot reload during drag-drop
+- App crash while it is tiled
+- Native macOS fullscreen
+- Wallpaper-click (stage creation by clicking the desktop)
+- Cursor crossing between 2 screens during a switch
+- Offscreen window receiving focus (Cmd+Tab)
+- Unknown renderer in TOML (typo) → fallback to `stacked-previews` + warn
+- Daemon not running → rail shows a coherent offline state
 
-### Combinatoires hors-périmètre (déclarées impossibles ou non testées)
+### Out-of-scope combinatorics (declared impossible or untested)
 
-- **Mode `global` × 2 displays** : par construction le rail n'expose qu'un seul panel sur primary → pas de test cross-display.
-- **Renderer `mosaic` × stage avec 0 wid** : passé US4 si jamais livré ; aujourd'hui marquer SKIP.
-- **Tiler ≠ BSP/Master-Stack** : aucun autre tiler livré, pas de test.
-- **Branchement écran sans permissions Accessibility** : prérequis du daemon, hors scope test fonctionnel.
-- **Multi-utilisateurs simultanés sur même daemon** : pas supporté (PID lock SPEC-001).
+- **`global` mode × 2 displays**: by construction, the rail exposes only one panel on the primary → no cross-display test.
+- **`mosaic` renderer × stage with 0 wids**: deferred past US4 if ever shipped; mark as SKIP today.
+- **Tiler ≠ BSP/Master-Stack**: no other tiler shipped, no test.
+- **Screen hot-plug without Accessibility permissions**: daemon precondition, out of functional test scope.
+- **Multiple simultaneous users on the same daemon**: not supported (PID lock SPEC-001).
 
-Ces cas DOIVENT figurer en table à part dans le test matrix avec mention `IMPOSSIBLE` ou `OUT_OF_SCOPE` pour traçabilité.
+These cases MUST appear in a separate table in the test matrix with the label `IMPOSSIBLE` or `OUT_OF_SCOPE` for traceability.
 
-### Ce que la suite ne fait PAS
+### What the suite does NOT do
 
-- Pas de code de test automatisé Swift (XCTest) — la suite est passée manuellement ou par agent + skill `gui`.
-- Pas de modification du code source pendant la passe (sauf via section « Fix applied » de la grille, où le commit/fichier corrigé est référencé après coup).
-- Pas d'exécution implicite — l'agent qui passe la suite n'enchaîne pas les tests automatiquement, il itère un test à la fois et remplit la grille.
+- No automated Swift test code (XCTest) — the suite is driven manually or by agent + `gui` skill.
+- No source code modification during a run (except via the "Fix applied" column in the grid, where the corrected commit/file is referenced after the fact).
+- No implicit chaining — the agent running the suite does not chain tests automatically; it iterates one test at a time and fills in the grid.
 
-Produire **un seul fichier markdown** : `specs/019-rail-renderers/test-matrix-coherence.md`, structuré en 3 sections :
+Produce **a single markdown file**: `specs/019-rail-renderers/test-matrix-coherence.md`, structured in 3 sections:
 
-### Section 1 — En-tête contextuel (lecture par l'agent)
+### Section 1 — Context header (read by the agent)
 
-- Objectif de la suite, périmètre, prérequis matériels (1 ou 2 écrans), prérequis logiciels (`cliclick`, daemon vivant, rail vivant, écrans détectés).
-- Liste des invariants à vérifier par chaque test (référencés par numéro `INV-N` dans les test cases).
-- Glossaire minimal (scope, panel, vignette, frame on-screen, etc.).
-- Mode opératoire : ordre des tests, dépendances entre tests, modalité de récupération en cas de crash daemon en cours de suite.
+- Suite objective, scope, hardware prerequisites (1 or 2 screens), software prerequisites (`cliclick`, daemon alive, rail alive, screens detected).
+- List of invariants verified by each test (referenced by number `INV-N` in the test cases).
+- Minimal glossary (scope, panel, thumbnail, on-screen frame, etc.).
+- Operating procedure: test order, dependencies between tests, recovery mode if daemon crashes mid-suite.
 
 ### Section 2 — Test cases
 
-Chaque test case suit un format structuré strict :
+Each test case follows a strict structured format:
 
 ```
-### TC-XXX — <titre court>
+### TC-XXX — <short title>
 
-- **Catégorie** : <observation passive | interaction active | edge case | hot-swap>
-- **Axes touchés** : display=<…> desktop=<…> stage=<…> tiler=<…> renderer=<…>
-- **Invariants vérifiés** : INV-1, INV-3, INV-7
-- **Préconditions** :
-  - <commande shell vérifiable>
-  - <état attendu daemon>
-- **Action** :
-  - <séquence ordonnée de commandes shell + skill gui>
-- **Résultat attendu** :
-  - **Daemon state** : <ce que `roadie X` doit retourner>
-  - **Tiling visuel** : <ce qui doit être à l'écran après>
-  - **Navrail visuel** : <ce qui doit apparaître dans le panel>
-- **Notes** : <pièges connus, timing, etc.>
+- **Category**: <passive observation | active interaction | edge case | hot-swap>
+- **Axes**: display=<…> desktop=<…> stage=<…> tiler=<…> renderer=<…>
+- **Invariants verified**: INV-1, INV-3, INV-7
+- **Preconditions**:
+  - <verifiable shell command>
+  - <expected daemon state>
+- **Action**:
+  - <ordered sequence of shell commands + gui skill>
+- **Expected result**:
+  - **Daemon state**: <what `roadie X` must return>
+  - **Visual tiling**: <what must be on screen after>
+  - **Navrail visual**: <what must appear in the panel>
+- **Notes**: <known pitfalls, timing, etc.>
 ```
 
-Numérotation `TC-NNN` continue. Groupement thématique par préfixe (TC-100 = display, TC-200 = desktop, TC-300 = stage, TC-400 = drag-drop, TC-500 = resize, TC-600 = hot-swap, TC-700 = edge case).
+Continuous `TC-NNN` numbering. Thematic grouping by prefix (TC-100 = display, TC-200 = desktop, TC-300 = stage, TC-400 = drag-drop, TC-500 = resize, TC-600 = hot-swap, TC-700 = edge case).
 
-### Section 3 — Grille d'évaluation unique
+### Section 3 — Single evaluation grid
 
-Une **table markdown unique** en bas du fichier, avec une **ligne par test case**. L'agent remplit chaque ligne après exécution :
+A **single markdown table** at the bottom of the file, with **one row per test case**. The agent fills each row after execution:
 
-| Colonne | Contenu |
+| Column | Content |
 |---|---|
-| `TC` | TC-XXX (clé primaire) |
-| `Status` | `PASS` / `FAIL` / `BLOCKED` (précondition non remplie) / `SKIP` (matériel manquant, ex: 2e écran) |
-| `Observed` | Ce que l'agent a vu (max 2 lignes) |
-| `Expected` | Rappel court de l'attendu |
-| `Gap` | Si FAIL : nature de l'écart (1 phrase) |
-| `Fix applied` | Référence vers le commit/fichier corrigé (vide si PASS) |
-| `Post-fix status` | `PASS` après correction / `STILL_FAIL` / `N/A` |
-| `Evidence` | Chemin vers screenshot `/tmp/hui-tc-XXX-*.png` ou log extrait |
+| `TC` | TC-XXX (primary key) |
+| `Status` | `PASS` / `FAIL` / `BLOCKED` (precondition not met) / `SKIP` (hardware missing, e.g. 2nd screen) |
+| `Observed` | What the agent saw (max 2 lines) |
+| `Expected` | Short reminder of the expected outcome |
+| `Gap` | If FAIL: nature of the deviation (1 sentence) |
+| `Fix applied` | Reference to the corrected commit/file (empty if PASS) |
+| `Post-fix status` | `PASS` after correction / `STILL_FAIL` / `N/A` |
+| `Evidence` | Path to screenshot `/tmp/hui-tc-XXX-*.png` or extracted log |
 
-Cette table est **la seule source de vérité** du run. Lecture humaine en 30 secondes : compter les `FAIL` non encore en `Post-fix=PASS`.
+This table is **the single source of truth** for the run. Human reading in 30 seconds: count `FAIL` entries not yet at `Post-fix=PASS`.
 
-### Format pour l'agent
+### Format for the agent
 
-L'agent qui passera les tests reçoit le fichier comme prompt. Conventions imposées :
+The agent that runs the tests receives the file as a prompt. Enforced conventions:
 
-- Toutes les actions sont des commandes shell **exécutables littéralement** (pas de pseudo-code, pas de "cliquer ici").
-- Les coordonnées GUI sont en absolu (origine 0,0 = haut-gauche écran principal). Si écran secondaire, coordonnées explicites avec offset.
-- Chaque action visuelle est suivie d'un screenshot stockant le PNG sous `/tmp/hui-tc-XXX-<étape>.png` pour traçabilité.
-- Les vérifications daemon sont des `roadie ...` dont la sortie attendue est citée mot-pour-mot ou par `grep`.
-- Aucune interprétation libre : si un test attend "stage 1 visible plein écran et stage 2 caché offscreen", le résultat attendu est vérifié par `roadie windows list` retournant `frame.x ≥ 0` pour wid stage 1 et `frame.x < -1000` pour wid stage 2.
+- All actions are shell commands **literally executable** (no pseudo-code, no "click here").
+- GUI coordinates are absolute (origin 0,0 = top-left of primary screen). For the secondary screen, explicit coordinates with offset.
+- Each visual action is followed by a screenshot stored as PNG under `/tmp/hui-tc-XXX-<step>.png` for traceability.
+- Daemon verifications are `roadie ...` commands whose expected output is quoted word-for-word or via `grep`.
+- No free interpretation: if a test expects "stage 1 visible full screen and stage 2 hidden offscreen", the expected result is verified by `roadie windows list` returning `frame.x ≥ 0` for stage 1 wids and `frame.x < -1000` for stage 2 wids.
 
-## Conséquences
+## Consequences
 
-### Positives
+### Positive
 
-- **Exécutable par un agent** sans ambiguïté → reproductibilité 100 %.
-- **Reporting unique** → un coup d'œil sur la grille indique l'état complet de la suite.
-- **Régression facile à détecter** : ré-exécuter la suite après tout fix produit la même grille à comparer.
-- **Couverture explicite** : la matrice rend visible les combinatoires non testées (= cellule vide ou SKIP).
-- **Périmètre auto-documenté** : les invariants centralisés évitent les définitions divergentes entre fichiers.
+- **Executable by an agent** unambiguously → 100% reproducibility.
+- **Single reporting** → one look at the grid shows the full suite state.
+- **Easy regression detection**: re-running the suite after any fix produces the same grid to compare.
+- **Explicit coverage**: the matrix makes untested combinatorics visible (= empty cell or SKIP).
+- **Self-documenting scope**: centralized invariants prevent divergent definitions across files.
 
-### Négatives
+### Negative
 
-- **Coût de passage** : la suite complète peut prendre 30-60 minutes manuellement (estimation à raffiner après rédaction).
-- **Maintenance** : ajouter un renderer (US3-US5) ou un tiler nouveau impose d'étendre la matrice — non automatique.
-- **Tests visuels subjectifs** : certains résultats reposent sur la capture d'écran + lecture par l'agent, susceptible à des erreurs si rendering varie (ex: dpi). Mitigation : tolérance pixel-à-pixel à 1 % (cf. SPEC-019 SC-002).
-- **Pas de CI** : la suite n'est pas câblée à un pipeline GitHub Actions (impossible : besoin de macOS + 2 écrans + permissions Accessibility). Reste manuelle ou semi-manuelle via agent local.
+- **Run cost**: the full suite may take 30–60 minutes manually (estimate to refine after writing).
+- **Maintenance**: adding a renderer (US3–US5) or a new tiler requires extending the matrix — not automatic.
+- **Subjective visual tests**: some results rely on screenshot capture + agent reading, susceptible to errors if rendering varies (e.g. DPI). Mitigation: 1% pixel-to-pixel tolerance (cf. SPEC-019 SC-002).
+- **No CI**: the suite is not wired to a GitHub Actions pipeline (impossible: requires macOS + 2 screens + Accessibility permissions). Remains manual or semi-manual via local agent.
 
-### Articulation test ↔ correction (mode opératoire imposé à l'agent)
+### Test ↔ fix articulation (operating mode imposed on the agent)
 
-**Choix** : boucle hybride par classe (Option C), avec garde-fous explicites.
+**Choice**: class-by-class hybrid loop (Option C), with explicit guard-rails.
 
-**Rationale** :
-- Les classes de tests (display, desktop, stage, drag-drop, resize, hot-swap, edge-case) recouvrent typiquement **un module Swift dédié** → un fix touche un seul fichier, le risque de casser une autre classe est faible **dans la classe courante**.
-- Une passe complète sans fix (Option A) accumule des FAIL en cascade quand une classe N+1 dépend d'un fix de classe N.
-- Un test↔fix immédiat par TC (Option B) charge le contexte de raisonnement avec à la fois la perspective test et la perspective code, augmentant le risque d'erreur.
-- La boucle par classe préserve la séparation cognitive (un mode à la fois) tout en gardant des cycles courts.
+**Rationale**:
+- Test classes (display, desktop, stage, drag-drop, resize, hot-swap, edge-case) typically map to **a dedicated Swift module** → a fix touches one file, the risk of breaking another class is low **within the current class**.
+- A full pass without fixing (Option A) accumulates cascading FAILs when class N+1 depends on a fix from class N.
+- Immediate test↔fix per TC (Option B) loads the reasoning context with both testing and coding concerns simultaneously, increasing error risk.
+- The class loop preserves cognitive separation (one mode at a time) while keeping cycles short.
 
-**Phases imposées** :
+**Imposed phases**:
 
 ```
-PHASE 1 — Setup (1 fois)
-  ├─ Vérifier prérequis : daemon vivant, rail vivant, écrans détectés,
-  │  permissions Accessibility, cliclick installé
-  └─ STOP et escalade si non OK (pas de fix infrastructure par l'agent)
+PHASE 1 — Setup (once)
+  ├─ Verify prerequisites: daemon alive, rail alive, screens detected,
+  │  Accessibility permissions, cliclick installed
+  └─ STOP and escalate if not OK (no infrastructure fixes by the agent)
 
-PHASE 2 — Boucle par classe, dans l'ordre TC-100 → TC-700
-  Pour chaque classe :
-    Étape A — Passe lecture seule
-      Passer tous les TC de la classe, remplir colonne Status
-    Étape B — Si FAIL > 0 dans la classe
-      1. Diagnostic empirique OBLIGATOIRE : logs daemon, screenshots,
-         état runtime (`roadie windows list`, `roadie stage list …`).
-         JAMAIS de fix sans données runtime observées.
-      2. Identifier la cause racine (1 fix peut résoudre N FAIL connexes)
-      3. Appliquer fix sur le code source
-      4. Noter dans la grille : commit hash + fichier modifié +
-         1 phrase rationale (colonne Fix applied)
-      5. Re-passer SEULEMENT les TC FAIL → noter Post-fix status
-      6. Si encore FAIL → 2e cycle de fix (UN SEUL DE PLUS)
-      7. Si encore FAIL après 2 cycles → STOP, escalade humaine
-    Étape C — Si toute la classe = PASS ou Post-fix=PASS
-      Tag commit `git tag tc-class-<name>-pass` + classe suivante
+PHASE 2 — Class loop, in order TC-100 → TC-700
+  For each class:
+    Step A — Read-only pass
+      Run all TCs in the class, fill Status column
+    Step B — If FAIL > 0 in the class
+      1. Mandatory empirical diagnosis: daemon logs, screenshots,
+         runtime state (`roadie windows list`, `roadie stage list …`).
+         NEVER fix without observed runtime data.
+      2. Identify root cause (1 fix may resolve N related FAILs)
+      3. Apply fix to source code
+      4. Record in grid: commit hash + modified file +
+         1-sentence rationale (Fix applied column)
+      5. Re-run ONLY the FAIL TCs → record Post-fix status
+      6. If still FAIL → 2nd fix cycle (ONE more only)
+      7. If still FAIL after 2 cycles → STOP, human escalation
+    Step C — If entire class = PASS or Post-fix=PASS
+      Tag commit `git tag tc-class-<name>-pass` + next class
 
-PHASE 3 — Régression complète (1 fois, après toutes les classes vertes)
-  ├─ Re-passer la suite TC-100 → TC-799 en LECTURE SEULE
-  ├─ Toute différence vs passe initiale (PASS → FAIL ou Post-fix=PASS → FAIL)
-  │  = régression cross-classe
-  └─ Si régression : mode "fix dirigé" SEULEMENT sur le TC qui a bougé,
-     puis re-passe phase 3 entière (max 2 itérations)
+PHASE 3 — Full regression (once, after all classes are green)
+  ├─ Re-run suite TC-100 → TC-799 in READ-ONLY mode
+  ├─ Any difference vs initial pass (PASS → FAIL or Post-fix=PASS → FAIL)
+  │  = cross-class regression
+  └─ If regression: "targeted fix" mode ONLY on the TC that changed,
+     then re-run phase 3 entirely (max 2 iterations)
 ```
 
-**Garde-fous critiques (dérogation interdite à l'agent)** :
+**Critical guard-rails (agent deviation forbidden)**:
 
-| Garde-fou | Justification |
+| Guard-rail | Justification |
 |---|---|
-| **Diagnostic empirique obligatoire avant tout fix** | Mémoire projet `feedback_no_workarounds.md` + règle anti-tunnel CLAUDE.md ligne « 2 tentatives, sinon observer données runtime » |
-| **Maximum 2 cycles fix par classe** | Au-delà, l'hypothèse de cause est statistiquement fausse — escalade plutôt que fix tunnel |
-| **Chaque fix tracé dans la grille** (commit + fichier + rationale 1 phrase) | Le humain doit pouvoir auditer toutes les modifications de la passe en 1 minute |
-| **Tag commit par classe verte** | Réversibilité : si phase 3 révèle régression, retour au dernier tag stable possible |
-| **Phase 3 obligatoire** | Détection régression cross-classe — sans elle, un fix tardif peut casser une classe précoce sans qu'on le sache |
-| **L'agent ne modifie jamais les TC eux-mêmes** | Sinon il pourrait subtilement adapter un test à un bug qu'il vient de coder. Matrice = lecture seule, grille = écriture seule |
-| **L'agent ne saute pas un TC sauf si SKIP justifié** | Un TC `BLOCKED` doit avoir une cause documentée (matériel manquant, daemon down) — pas une cause de confort (« semble difficile à automatiser ») |
+| **Mandatory empirical diagnosis before any fix** | Project memory `feedback_no_workarounds.md` + CLAUDE.md anti-tunnel rule "2 attempts, then observe runtime data" |
+| **Maximum 2 fix cycles per class** | Beyond that, the root cause hypothesis is statistically wrong — escalate rather than tunnel-fix |
+| **Every fix traced in the grid** (commit + file + 1-sentence rationale) | The human must be able to audit all changes from the run in 1 minute |
+| **Commit tag per green class** | Reversibility: if phase 3 reveals a regression, roll back to the last stable tag |
+| **Phase 3 is mandatory** | Cross-class regression detection — without it, a late fix can silently break an early class |
+| **The agent never modifies TCs themselves** | Otherwise it could subtly adapt a test to a bug it just introduced. Matrix = read-only, grid = write-only |
+| **The agent never skips a TC unless SKIP is justified** | A `BLOCKED` TC must have a documented cause (missing hardware, daemon down) — not a comfort cause ("seems hard to automate") |
 
-### Convention de mise à jour
+### Update convention
 
-- Ajout d'un nouveau test case → préfixe TC dans la bonne section, ligne ajoutée dans la grille avec `Status=PENDING`.
-- Modification d'un test case existant → garder le même TC-XXX, incrémenter une note `Modified: YYYY-MM-DD <reason>` dans le test case.
-- Retrait d'un test case obsolète → `Status=DEPRECATED` dans la grille, ne pas supprimer (traçabilité).
-- L'agent qui passe la suite **ne doit pas modifier** les test cases (lecture seule), seulement la grille.
+- Adding a new test case → prefix TC in the right section, add row to grid with `Status=PENDING`.
+- Modifying an existing test case → keep the same TC-XXX, append a note `Modified: YYYY-MM-DD <reason>` in the test case.
+- Removing an obsolete test case → `Status=DEPRECATED` in the grid, do not delete (traceability).
+- The agent running the suite **must not modify** the test cases (read-only), only the grid.
 
-## Liens
+## Links
 
-- [SPEC-018 audit-coherence.md](../../specs/018-stages-per-display/audit-coherence.md) — 19 findings cohérence dont 15 fixés, qui motivent cette suite
-- [SPEC-019 spec.md](../../specs/019-rail-renderers/spec.md) — modularité renderers, dépendance directe pour les TC renderers
-- [Test matrix](../../specs/019-rail-renderers/test-matrix-coherence.md) — livrable de cette ADR
+- [SPEC-018 audit-coherence.md](../../specs/018-stages-per-display/audit-coherence.md) — 19 coherence findings of which 15 are fixed, motivating this suite
+- [SPEC-019 spec.md](../../specs/019-rail-renderers/spec.md) — renderer modularity, direct dependency for renderer TCs
+- [Test matrix](../../specs/019-rail-renderers/test-matrix-coherence.md) — deliverable of this ADR
