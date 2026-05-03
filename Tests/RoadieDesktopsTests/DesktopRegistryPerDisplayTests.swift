@@ -17,7 +17,7 @@ final class DesktopRegistryPerDisplayTests: XCTestCase {
     }
 
     func testGlobalModeSetCurrentSyncsAllDisplays() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         let did1: CGDirectDisplayID = 100
         let did2: CGDirectDisplayID = 200
@@ -31,7 +31,7 @@ final class DesktopRegistryPerDisplayTests: XCTestCase {
     }
 
     func testPerDisplayModeSetCurrentIsLocal() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         let did1: CGDirectDisplayID = 100
         let did2: CGDirectDisplayID = 200
@@ -45,7 +45,7 @@ final class DesktopRegistryPerDisplayTests: XCTestCase {
     }
 
     func testSetModeGlobalToPerDisplayPreservesValues() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .global)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .global)
         await registry.load()
         let did1: CGDirectDisplayID = 100
         let did2: CGDirectDisplayID = 200
@@ -67,7 +67,7 @@ final class DesktopRegistryPerDisplayTests: XCTestCase {
     }
 
     func testSetModePerDisplayToGlobalSyncsToPrimary() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         let primaryID = CGMainDisplayID()
         let did2: CGDirectDisplayID = 200
@@ -83,7 +83,7 @@ final class DesktopRegistryPerDisplayTests: XCTestCase {
     }
 
     func testCurrentIDForDisplayFallback() async {
-        let registry = DesktopRegistry(configDir: tempDir, count: 5, mode: .perDisplay)
+        let registry = DesktopRegistry(configDir: tempDir, displayUUID: "TEST-UUID-0001", count: 5, mode: .perDisplay)
         await registry.load()
         let primaryID = CGMainDisplayID()
         await registry.syncCurrentByDisplay(presentIDs: [primaryID])

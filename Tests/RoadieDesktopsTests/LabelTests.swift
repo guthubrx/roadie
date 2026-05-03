@@ -14,7 +14,7 @@ final class LabelTests: XCTestCase {
         tmpDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-label-tests-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: true)
-        registry = DesktopRegistry(configDir: tmpDir, count: 5)
+        registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
     }
 
     override func tearDown() {
@@ -67,7 +67,7 @@ final class LabelTests: XCTestCase {
         try await registry.setLabel("code", for: 1)
 
         // Relire depuis disque
-        let registry2 = DesktopRegistry(configDir: tmpDir, count: 5)
+        let registry2 = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
         await registry2.load()
         let desktop = await registry2.desktop(id: 1)
         XCTAssertEqual(desktop?.label, "code")
@@ -78,7 +78,7 @@ final class LabelTests: XCTestCase {
         try await registry.setLabel("code", for: 1)
         try await registry.setLabel(nil, for: 1)
 
-        let registry2 = DesktopRegistry(configDir: tmpDir, count: 5)
+        let registry2 = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
         await registry2.load()
         let desktop = await registry2.desktop(id: 1)
         XCTAssertNil(desktop?.label)

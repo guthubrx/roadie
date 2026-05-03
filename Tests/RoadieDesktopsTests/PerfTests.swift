@@ -21,7 +21,7 @@ final class PerfTests: XCTestCase {
     }
 
     func testSwitchUnder200msWith10Windows() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 2)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 2)
         await registry.load()
 
         // 5 fenêtres sur desktop 1, 5 sur desktop 2

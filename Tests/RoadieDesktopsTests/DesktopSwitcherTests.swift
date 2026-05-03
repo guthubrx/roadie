@@ -64,7 +64,7 @@ final class DesktopSwitcherTests: XCTestCase {
         backAndForth: Bool = true,
         stageOps: MockStageOps? = nil
     ) async -> (DesktopSwitcher, MockStageOps, DesktopRegistry, DesktopEventBus) {
-        let registry = DesktopRegistry(configDir: tmpDir, count: count)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: count)
         await registry.load()
 
         // Peupler desktop 1 avec 2 fenêtres, desktop 2 avec 2 fenêtres

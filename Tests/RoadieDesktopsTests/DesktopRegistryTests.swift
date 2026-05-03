@@ -21,7 +21,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - Load / Save round-trip (T018)
 
     func testLoadSaveRoundTrip() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
 
         let desktop = RoadieDesktop(
             id: 2, label: "comm", layout: .bsp,
@@ -34,7 +34,7 @@ final class DesktopRegistryTests: XCTestCase {
         try await registry.save(desktop)
 
         // Nouveau registry depuis le même configDir
-        let registry2 = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry2 = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry2.load()
 
         let loaded = await registry2.desktop(id: 2)
@@ -47,7 +47,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - setCurrent met à jour recentID (T018)
 
     func testSetCurrentUpdatesRecentID() async {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 5)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
         await registry.load()
 
         await registry.setCurrent(id: 3)
@@ -66,7 +66,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - setCurrent avec même ID = pas de changement recentID
 
     func testSetCurrentSameIDIsNoop() async {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 5)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 5)
         await registry.load()
 
         await registry.setCurrent(id: 3)
@@ -90,7 +90,7 @@ final class DesktopRegistryTests: XCTestCase {
         let url = dir.appendingPathComponent("state.toml")
         try "label = \"orphan\"\nlayout = \"bsp\"\n".write(to: url, atomically: true, encoding: .utf8)
 
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()   // ne doit pas throw
 
         let d2 = await registry.desktop(id: 2)
@@ -102,7 +102,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - windows(of:) retourne les cgwids corrects
 
     func testWindowsOfDesktop() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 2)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 2)
 
         let desktop = RoadieDesktop(
             id: 1, stages: [DesktopStage(id: 1, windows: [10, 20])],
@@ -122,7 +122,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - Desktop absent → blank (load sans fichier)
 
     func testMissingFileLoadsBlank() async {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
         let d3 = await registry.desktop(id: 3)
         XCTAssertNotNil(d3)
@@ -132,7 +132,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - assignWindow enregistre dans windows[] et stages[].windows (pont daemon SPEC-011)
 
     func testAssignWindowPopulatesWindowsAndStage() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         let entry = WindowEntry(
@@ -157,7 +157,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - assignWindow évite les doublons
 
     func testAssignWindowNoDuplicate() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         let entry = WindowEntry(
@@ -177,7 +177,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - updateExpectedFrame persiste la nouvelle frame (FR-005)
 
     func testUpdateExpectedFramePersistsNewFrame() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         let initial = CGRect(x: 100, y: 100, width: 800, height: 600)
@@ -192,7 +192,7 @@ final class DesktopRegistryTests: XCTestCase {
         try await registry.updateExpectedFrame(cgwid: 11, desktopID: 1, frame: updated)
 
         // Save + reload : la nouvelle frame doit survivre à la persistance
-        let registry2 = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry2 = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry2.load()
 
         let loaded = await registry2.expectedFrame(cgwid: 11, desktopID: 1)
@@ -202,7 +202,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - desktopID(for:) retourne l'ID correct (FR-005 lookup inverse)
 
     func testDesktopIDForCgwid() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         let entry = WindowEntry(
@@ -221,7 +221,7 @@ final class DesktopRegistryTests: XCTestCase {
     // MARK: - removeWindow retire la fenêtre de tous les desktops (pont destruction SPEC-011)
 
     func testRemoveWindowCleansAllDesktops() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         // Enregistrer la même fenêtre dans desktop 1 et 2

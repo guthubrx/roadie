@@ -1,6 +1,7 @@
 import Foundation
 import TOMLKit
 import CoreGraphics
+import ApplicationServices
 import RoadieCore
 
 // MARK: - Migration SPEC-011 (US6, T052-T053, FR-021-FR-022)
@@ -110,8 +111,16 @@ public func migrateV1ToV2(stagesDir: URL, desktopsDir: URL) async throws {
     } catch {
         throw DesktopRegistryError.saveFailure("migration mkdir failed: \(error)")
     }
+    // SPEC-018 fix : DesktopRegistry attend un displayUUID (V3 paths). Pour la
+    // migration V1→V2, on utilise le primary display au moment de la migration.
+    let primaryUUID: String = {
+        guard let cfUUID = CGDisplayCreateUUIDFromDisplayID(CGMainDisplayID())?.takeRetainedValue()
+        else { return "" }
+        return CFUUIDCreateString(nil, cfUUID) as String? ?? ""
+    }()
     let registry = DesktopRegistry(
         configDir: desktopsDir.deletingLastPathComponent(),
+        displayUUID: primaryUUID,
         count: 1
     )
     try await registry.save(desktop)

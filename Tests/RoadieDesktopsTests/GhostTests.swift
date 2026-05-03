@@ -23,7 +23,7 @@ final class GhostTests: XCTestCase {
     }
 
     func testNoGhostWindowsAfter100Switches() async throws {
-        let registry = DesktopRegistry(configDir: tmpDir, count: 3)
+        let registry = DesktopRegistry(configDir: tmpDir, displayUUID: "TEST-UUID-0001", count: 3)
         await registry.load()
 
         // 3 desktops avec 2 fenêtres chacun
