@@ -1031,11 +1031,11 @@ Conventions :
 | TC-203 | NAV | SKIP | 1 écran seulement | Chaque panel = stages distincts | — | — | N/A | | matériel manquant |
 | TC-204 | CLI | PARTIAL_PASS | scope retourné cohérent sur primary | stage list reflète scope curseur | 2nd écran absent → pas de diff cross-display | — | N/A | | /tmp/hui-tc-204-primary.txt |
 | TC-205 | CLI | SKIP | 1 écran seulement | display focus N change display courant | — | — | N/A | | matériel manquant |
-| TC-301a | CLI | PENDING | | Mémoire stage à l'aller-retour D1↔D2 | | | | | |
-| TC-301b | BTT | PENDING | | Idem 301a via Cmd+1/Cmd+2 | | | | | |
-| TC-301c | BTT | PENDING | | Alt+Shift+N incrémente desktop | | | | | |
-| TC-302 | CLI | PENDING | | Wids D1 hidden offscreen sur D2 | | | | | |
-| TC-303 | CLI | PENDING | | Stage 1 auto-créée sur desktop neuf | | | | | |
+| TC-301a | CLI | PASS | current_stage=2 après D1→D2→D1 | Mémoire stage à l'aller-retour D1↔D2 | — | — | N/A | | |
+| TC-301b | BTT | PASS | current_stage=2 après séquence Cmd+1/Cmd+2 (cliclick t:1, t:2) | Idem 301a via Cmd+1/Cmd+2 | — | — | N/A | | |
+| TC-301c | BTT | FAIL | Desktop 1→1 inchangé après Alt+Shift+N | Alt+Shift+N incrémente desktop | hotkey BTT non capturé via cliclick (clavier fr ?) | — | STILL_FAIL | | escalade clavier fr — kp: ne supporte pas lettres |
+| TC-302 | CLI | PASS | wid 24355 frame=-949,1252 (offscreen) | Wids D1 hidden offscreen sur D2 | — | — | N/A | | |
+| TC-303 | CLI | PASS | dossier desktop 8/ + 1.toml créé | Stage 1 auto-créée sur desktop neuf | initialement FAIL — fix appliqué | `c13d106` CommandRouter.swift:handleDesktopFocusPerDisplay + ensureDefaultStage(scope:) — INV-3 sur path per_display | PASS | | |
 | TC-304 | BTT | PENDING | | Cycle Cmd+1..0+1 daemon vivant | | | | | |
 | TC-305 | BTT | PENDING | | Cmd+Shift+N déplace wid cross-desktop | | | | | |
 | TC-306 | BTT | PENDING | | Cmd+Alt+Ctrl+N déplace wid cross-display | | | | | |
@@ -1118,7 +1118,7 @@ Conventions :
 |---|---|---|---|---|---|---|
 | TC-100 boot | 5 | 5 | 0 | 0 | 0 | tc-class-boot-pass |
 | TC-200 display | 5 | 3 | 0 | 0 | 2 | tc-class-display-pass |
-| TC-300 desktop | 8 | 0 | 0 | 0 | 0 | — |
+| TC-300 desktop | 8 | 4 | 1 | 0 | 0 | — pending TC-304/305/306 |
 | TC-400 stage | 9 | 0 | 0 | 0 | 0 | — |
 | TC-500 drag-drop | 1 | 0 | 0 | 0 | 0 | — |
 | TC-600 focus | 8 | 0 | 0 | 0 | 0 | — |
