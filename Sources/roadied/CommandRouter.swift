@@ -24,7 +24,6 @@ enum CommandRouter {
         case "windows.list":
             // SPEC-018 : normalise les state.stageID qui référencent des stages
             // inexistantes (héritage persistance desktop). Cheap : O(N windows).
-            daemon.stageManager?.reconcileStageOwnership()
             // SPEC-014 : ajouter app_name pour résoudre l'icône côté rail (NSRunningApplication.localizedName).
             let runningByPID = Dictionary(uniqueKeysWithValues:
                 NSWorkspace.shared.runningApplications.map { ($0.processIdentifier, $0) })
@@ -306,7 +305,6 @@ enum CommandRouter {
         case "stage.list":
             // SPEC-018 : reconcile avant lecture (évite que des wid avec stageID
             // périmé apparaissent dans la mauvaise stage ou nulle part).
-            daemon.stageManager?.reconcileStageOwnership()
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
