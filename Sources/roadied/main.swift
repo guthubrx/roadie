@@ -152,6 +152,36 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             Chemin attendu : ~/Applications/roadied.app
 
             """.data(using: .utf8) ?? Data())
+            // SPEC-023 — alerte UX visible : notification macOS native cliquable
+            // via terminal-notifier (brew install terminal-notifier). Le -open URL
+            // ouvre direct les Réglages Système au clic. Fallback `open` si
+            // terminal-notifier absent.
+            // Anti-spam : 1 alerte toutes les 60s via marker file (sinon launchd
+            // KeepAlive déclenche un spam — daemon mort/relancé chaque seconde).
+            let marker = "/tmp/roadied-tcc-notif.last"
+            let now = Int(Date().timeIntervalSince1970)
+            let last = (try? String(contentsOfFile: marker)).flatMap(Int.init) ?? 0
+            if now - last >= 60 {
+                let prefURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+                let tn = "/opt/homebrew/bin/terminal-notifier"
+                let p = Process()
+                if FileManager.default.fileExists(atPath: tn) {
+                    p.launchPath = tn
+                    p.arguments = [
+                        "-title", "🔴 roadie : permission manquante",
+                        "-message", "Re-cocher Accessibilité dans Réglages Système (clic).",
+                        "-open", prefURL,
+                        "-sound", "Funk",
+                    ]
+                } else {
+                    // Fallback : ouvre Réglages direct si pas de terminal-notifier.
+                    p.launchPath = "/usr/bin/open"
+                    p.arguments = [prefURL]
+                }
+                try? p.run()
+                p.waitUntilExit()
+                try? "\(now)".write(toFile: marker, atomically: true, encoding: .utf8)
+            }
             exit(2)
         }
 
