@@ -43,6 +43,13 @@ osascript -e 'tell application "BetterTouchTool" to get_triggers' \
   | python3 -c "import json,sys; [print(t.get('BTTLayoutIndependentChar','?'), '→', t.get('BTTShellTaskActionScript','')) for t in json.load(sys.stdin) if 'roadie' in t.get('BTTShellTaskActionScript','')]" \
   > /tmp/btt-roadie-map.txt
 wc -l /tmp/btt-roadie-map.txt   # attendu : 58 lignes (cf. ADR-007)
+
+# 8. Helper de cohérence rail (compteur AX vs daemon) — sauvé dans /tmp/rail-coherence-check.sh
+# Usage : /tmp/rail-coherence-check.sh <display_uuid> <renderer_id>
+# Retourne "COHERENT" / "PRESENT" / "INCOHERENT". Exit 0 si cohérent, 1 sinon.
+# Compte les AXImage du panel rail (= 1 vignette par wid en stacked-previews)
+# vs sum_over_stages(min(maxVisible, wids.count)) côté daemon.
+test -x /tmp/rail-coherence-check.sh && echo "coherence-check OK" || echo "coherence-check missing"
 ```
 
 **STOP et escalade humaine si l'une des étapes échoue.** L'agent ne corrige pas l'infrastructure.
@@ -194,18 +201,22 @@ Quand une action est testée par plusieurs chemins, ils sont déclinés en `TC-X
   ```
 - **Attendu (Navrail)** : `after.png` montre des vignettes dans `x ∈ [0,320]`, `before.png` non.
 
-#### TC-202 — Le panel primary affiche les stages du primary
+#### TC-202 — Le panel primary affiche les stages du primary (count cohérent)
 
 - **Chemin** : [NAV]
-- **Invariants** : INV-1
+- **Invariants** : INV-1, INV-2
 - **Action** :
   ```bash
   PRIMARY_UUID=$(./.build/debug/roadie display list --json 2>&1 | grep -oE '"uuid": "[^"]+"' | head -1 | cut -d'"' -f4)
   ./.build/debug/roadie stage list --display "$PRIMARY_UUID" 2>&1 > /tmp/hui-tc-202-state.txt
-  cliclick -e 600 m:0,500 ; sleep 2
+  cliclick -e 600 m:160,640 ; sleep 2
   screencapture -x -R0,0,400,1280 /tmp/hui-tc-202-rail.png
+  /tmp/rail-coherence-check.sh "$PRIMARY_UUID" stacked-previews > /tmp/hui-tc-202-coherence.txt
+  cat /tmp/hui-tc-202-coherence.txt
   ```
-- **Attendu** : nombre de cellules visibles dans `rail.png` == nombre de stages dans `state.txt`.
+- **Attendu** :
+  - `coherence.txt` retourne `COHERENT` (= sum(min(5, wids)) sur stages == nb AXImage rendus dans le rail).
+  - Exit code helper = 0.
 
 #### TC-203 — Avec 2 écrans, chaque panel affiche ses propres stages
 
@@ -813,6 +824,113 @@ Similaires avec respectivement `⌘+⌥+L`, `⌘+⌥+K`, `⌘+⌥+J`. 6 sous-TC 
 
 ---
 
+### Classe TC-1400 — Couverture par renderer
+
+> Décline les invariants visuels critiques sur **chaque renderer livré** (`stacked-previews`, `icons-only`). Quand US3-US5 livreront `hero-preview`, `mosaic`, `parallax-45`, ajouter les TC correspondants.
+
+#### TC-1401 — Cohérence count × stacked-previews
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-1, INV-2
+- **Action** :
+  ```bash
+  PRIMARY_UUID=$(./.build/debug/roadie display list --json 2>&1 | grep -oE '"uuid": "[^"]+"' | head -1 | cut -d'"' -f4)
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1 ; sleep 1
+  /tmp/rail-coherence-check.sh "$PRIMARY_UUID" stacked-previews
+  ```
+- **Attendu** : `COHERENT` + exit 0. AXImage count == sum(min(5, wids per stage)).
+
+#### TC-1402 — Cohérence count × icons-only
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-1, INV-2
+- **Action** :
+  ```bash
+  PRIMARY_UUID=$(./.build/debug/roadie display list --json 2>&1 | grep -oE '"uuid": "[^"]+"' | head -1 | cut -d'"' -f4)
+  ./.build/debug/roadie rail renderer icons-only 2>&1 ; sleep 2
+  /tmp/rail-coherence-check.sh "$PRIMARY_UUID" icons-only
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1
+  ```
+- **Attendu** : `PRESENT` + exit 0 (vérification souple — la structure AX d'icons-only diffère de stacked).
+
+#### TC-1403 — Halo sur stage active × stacked-previews
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-2
+- **Action** :
+  ```bash
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1 ; sleep 1
+  ./.build/debug/roadie stage 1 2>&1 ; sleep 0.5
+  cliclick -e 600 m:160,640 ; sleep 2
+  screencapture -x -R0,0,400,1280 /tmp/hui-tc-1403.png
+  ```
+- **Attendu** : visuel (lecture humaine) — halo coloré sur la cellule de stage 1 uniquement.
+
+#### TC-1404 — Halo sur stage active × icons-only
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-2
+- **Action** :
+  ```bash
+  ./.build/debug/roadie rail renderer icons-only 2>&1 ; sleep 2
+  ./.build/debug/roadie stage 1 2>&1 ; sleep 0.5
+  cliclick -e 600 m:160,640 ; sleep 2
+  screencapture -x -R0,0,400,1280 /tmp/hui-tc-1404.png
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1
+  ```
+- **Attendu** : halo visible sur cellule active (même invariant que TC-1403, autre rendu).
+
+#### TC-1405 — Switch stage via clic × stacked-previews
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-9
+- **Action** :
+  ```bash
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1 ; sleep 1
+  ./.build/debug/roadie stage 1 2>&1 ; sleep 0.5
+  cliclick -e 600 m:160,640 ; sleep 2
+  cliclick c:160,800 ; sleep 1   # cellule 2nde verticalement
+  ./.build/debug/roadie daemon status 2>&1 | grep current_stage
+  ```
+- **Attendu** : `current_stage` a changé.
+
+#### TC-1406 — Switch stage via clic × icons-only
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-9
+- **Action** :
+  ```bash
+  ./.build/debug/roadie rail renderer icons-only 2>&1 ; sleep 2
+  ./.build/debug/roadie stage 1 2>&1 ; sleep 0.5
+  cliclick -e 600 m:160,640 ; sleep 2
+  cliclick c:160,800 ; sleep 1
+  ./.build/debug/roadie daemon status 2>&1 | grep current_stage
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1
+  ```
+- **Attendu** : `current_stage` a changé.
+
+#### TC-1407 — Drag-drop fonctionne × stacked-previews
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-4, INV-9
+- Référence TC-501. Idem mais explicit avec stacked-previews actif au moment du drag.
+
+#### TC-1408 — Drag-drop fonctionne × icons-only
+
+- **Chemin** : [NAV]
+- **Invariants** : INV-4, INV-9
+- **Action** :
+  ```bash
+  ./.build/debug/roadie rail renderer icons-only 2>&1 ; sleep 2
+  cliclick -e 600 m:160,640 ; sleep 2
+  cliclick -e 800 dd:160,800 m:160,500 du:160,300 ; sleep 1
+  ./.build/debug/roadie windows list 2>&1 | grep "stage="
+  ./.build/debug/roadie rail renderer stacked-previews 2>&1
+  ```
+- **Attendu** : drag-drop a fait migrer une wid (changement détectable sur stage list).
+
+---
+
 ### Classe TC-1300 — Composites multi-chemins
 
 > Vérifient INV-9 (équivalence des chemins) sur des séquences réalistes.
@@ -985,6 +1103,14 @@ Conventions :
 | TC-1303 | BTT+NAV | PENDING | | Cycle desktop+stage mémoire OK | | | | | |
 | TC-1304 | BTT+NAV | PENDING | | Restart pendant rail visible récupère | | | | | |
 | TC-1305 | CLI+NAV | PENDING | | Swap renderer pendant drag pas freeze | | | | | |
+| TC-1401 | NAV | PENDING | | Cohérence count stacked-previews | | | | | |
+| TC-1402 | NAV | PENDING | | Cohérence count icons-only | | | | | |
+| TC-1403 | NAV | PENDING | | Halo sur stage active stacked-previews | | | | | |
+| TC-1404 | NAV | PENDING | | Halo sur stage active icons-only | | | | | |
+| TC-1405 | NAV | PENDING | | Switch stage clic stacked-previews | | | | | |
+| TC-1406 | NAV | PENDING | | Switch stage clic icons-only | | | | | |
+| TC-1407 | NAV | PENDING | | Drag-drop stacked-previews | | | | | |
+| TC-1408 | NAV | PENDING | | Drag-drop icons-only | | | | | |
 
 ### Synthèse par classe
 
@@ -1004,7 +1130,8 @@ Conventions :
 | TC-1100 hot-swap | 3 | 0 | 0 | 0 | 0 | — |
 | TC-1200 edge | 6 | 0 | 0 | 0 | 0 | — |
 | TC-1300 composites | 5 | 0 | 0 | 0 | 0 | — |
-| **Total** | **83** | **0** | **0** | **0** | **0** | — |
+| TC-1400 par renderer | 8 | 0 | 0 | 0 | 0 | — |
+| **Total** | **91** | **8** | **0** | **0** | **2** | — |
 
 ### Combinatoires hors-périmètre (cf. ADR-007)
 
