@@ -260,6 +260,9 @@ func handleDaemon(verb: String) {
         sendAndPrint(Request(command: "daemon.status"))
     case "reload":
         sendAndPrint(Request(command: "daemon.reload"))
+    case "audit":
+        // SPEC-021 T080 — audit read-only des invariants stage/desktop ownership.
+        sendAndPrint(Request(command: "daemon.audit"))
     default:
         printUsage(); exit(64)
     }
@@ -554,7 +557,7 @@ func printUsage() {
     let usage = """
     usage:
       roadie windows list
-      roadie daemon status | reload
+      roadie daemon status | reload | audit
       roadie focus <left|right|up|down>
       roadie move <left|right|up|down>            # swap avec voisin
       roadie warp <left|right|up|down>            # split la cellule voisine en 2

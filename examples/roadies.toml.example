@@ -53,6 +53,10 @@ display_name = "Personal"
 [multi_desktop]
 enabled = false                 # passer à true pour activer V2 multi-desktop
 back_and_forth = true           # `roadie desktop focus N` quand on est déjà sur N → bascule vers recent
+# SPEC-021 : intervalle de poll du reconciler Mission Control (ms). 0 = désactivé.
+# Le reconciler détecte les fenêtres déplacées via Mission Control (Cmd+drag) et
+# ré-attribue automatiquement leur scope persisté. Actif uniquement en mode per_display.
+# window_desktop_poll_ms = 2000
 
 # ---------------------------------------------------------------------------
 # Section [[desktops]] — règles statiques par desktop (V2, optionnelles)

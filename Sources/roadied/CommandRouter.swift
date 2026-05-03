@@ -67,6 +67,17 @@ enum CommandRouter {
             ]
             return .success(payload)
 
+        case "daemon.audit":
+            // SPEC-021 T080 — audit read-only des invariants stage/desktop ownership.
+            // Retourne la liste des violations détectées, vide = sain.
+            let violations = daemon.stageManager?.auditOwnership() ?? []
+            let payload: [String: AnyCodable] = [
+                "violations": AnyCodable(violations),
+                "count": AnyCodable(violations.count),
+                "healthy": AnyCodable(violations.isEmpty),
+            ]
+            return .success(payload)
+
         case "daemon.reload":
             do {
                 let newConfig = try ConfigLoader.load()

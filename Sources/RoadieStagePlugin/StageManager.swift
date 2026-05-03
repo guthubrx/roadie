@@ -1057,6 +1057,71 @@ extension StageManager: StageManagerProtocol {
 extension StageManager {
     /// Reconstruit widToScope/widToStageV1 depuis memberWindows (source de vérité).
     /// À appeler après loadFromPersistence(). O(stages × members).
+    /// SPEC-021 T068 (US4) — audit read-only des invariants de propriété.
+    /// Vérifie 3 propriétés :
+    ///   I1. Pour chaque entrée widToScope[wid] = scope, la wid figure dans
+    ///       stagesV2[scope].memberWindows.
+    ///   I2. Pour chaque (scope, stage) dans stagesV2, pour chaque member,
+    ///       widToScope[member.cgWindowID] == scope.
+    ///   I3. Pour chaque paire (s1, s2) avec s1 ≠ s2, l'intersection des
+    ///       memberWindows est vide (une wid ne figure que dans un scope).
+    /// Retourne la liste des violations (vide = sain). Read-only, pas de mutation.
+    public func auditOwnership() -> [String] {
+        var violations: [String] = []
+        if stageMode == .perDisplay {
+            // I1 : widToScope → memberWindows
+            for (wid, scope) in widToScope {
+                guard let stage = stagesV2[scope] else {
+                    violations.append("widToScope[\(wid)] points to unknown scope \(scope.stageID.value)@\(scope.displayUUID)/\(scope.desktopID)")
+                    continue
+                }
+                if !stage.memberWindows.contains(where: { $0.cgWindowID == wid }) {
+                    violations.append("wid \(wid) in widToScope[\(scope.stageID.value)] but not in memberWindows")
+                }
+            }
+            // I2 : memberWindows → widToScope
+            for (scope, stage) in stagesV2 {
+                for member in stage.memberWindows {
+                    if widToScope[member.cgWindowID] != scope {
+                        violations.append("wid \(member.cgWindowID) member of \(scope.stageID.value)@\(scope.displayUUID)/\(scope.desktopID) but widToScope says \(widToScope[member.cgWindowID]?.stageID.value ?? "nil")")
+                    }
+                }
+            }
+            // I3 : pas de wid dans 2 scopes simultanément
+            let scopes = Array(stagesV2.keys)
+            for i in 0..<scopes.count {
+                for j in (i + 1)..<scopes.count {
+                    let s1 = scopes[i], s2 = scopes[j]
+                    let m1 = Set(stagesV2[s1]?.memberWindows.map { $0.cgWindowID } ?? [])
+                    let m2 = Set(stagesV2[s2]?.memberWindows.map { $0.cgWindowID } ?? [])
+                    let inter = m1.intersection(m2)
+                    for wid in inter {
+                        violations.append("wid \(wid) in 2 scopes : \(s1.stageID.value)@\(s1.displayUUID)/\(s1.desktopID) AND \(s2.stageID.value)@\(s2.displayUUID)/\(s2.desktopID)")
+                    }
+                }
+            }
+        } else {
+            // V1 : équivalent simplifié sur stages
+            for (wid, sid) in widToStageV1 {
+                guard let stage = stages[sid] else {
+                    violations.append("widToStageV1[\(wid)] points to unknown stage \(sid.value)")
+                    continue
+                }
+                if !stage.memberWindows.contains(where: { $0.cgWindowID == wid }) {
+                    violations.append("wid \(wid) in widToStageV1[\(sid.value)] but not in memberWindows")
+                }
+            }
+            for (sid, stage) in stages {
+                for member in stage.memberWindows {
+                    if widToStageV1[member.cgWindowID] != sid {
+                        violations.append("wid \(member.cgWindowID) member of stage \(sid.value) but widToStageV1 says \(widToStageV1[member.cgWindowID]?.value ?? "nil")")
+                    }
+                }
+            }
+        }
+        return violations
+    }
+
     public func rebuildWidToScopeIndex() {
         widToScope.removeAll(keepingCapacity: true)
         widToStageV1.removeAll(keepingCapacity: true)
