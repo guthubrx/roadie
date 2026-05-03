@@ -36,6 +36,7 @@ So roadie is a humble assembly of a bit of yabai (the tiler, AX-only without SIP
 | Stage Manager (named groups ⌥1/⌥2/...) | OK | SPEC-002 |
 | Virtual desktops (1..16, AeroSpace pivot) | OK | SPEC-011 |
 | Multi-display: independent tiling per screen | OK | SPEC-012 |
+| Stages scoped per display x desktop | OK | SPEC-018 |
 | Drag-to-adapt (manual resize propagates the tree) | OK | SPEC-002 |
 | Universal click-to-raise | OK (Electron/JetBrains/Cursor) | SPEC-002 |
 | Focused window borders (NSWindow overlay) | OK | SPEC-008 |
@@ -125,6 +126,28 @@ gaps_outer = 0
 ```
 
 Match criteria: `match_index`, `match_uuid` (cross-reboot stable), or `match_name` (localized screen name).
+
+## Stages per display x desktop
+
+SPEC-018 extends Stage Manager with a per-display x per-desktop scope. In `mode = "per_display"`, each (display UUID, desktop ID) pair gets its own independent set of stages. Stages created on Display 1 are not visible from Display 2, and switching virtual desktops gives a fresh stage context.
+
+Scope is resolved automatically from the cursor position (fallback: frontmost window, then primary display). Power-user scripts can bypass automatic resolution with `--display` and `--desktop` flags:
+
+```bash
+roadie stage list --display 1 --desktop 2
+roadie stage create "Work" --display 2
+```
+
+To activate, add to `~/.config/roadies/roadies.toml`:
+
+```toml
+[desktops]
+mode = "per_display"
+```
+
+Existing stages (mode `global`) are migrated silently on first boot: a `stages.v1.bak/` backup is created, then stages are moved into `<displayUUID>/1/`. Migration status is visible via `roadie daemon status --json`.
+
+See [specs/018-stages-per-display/spec.md](specs/018-stages-per-display/spec.md) for full design details.
 
 ## Detailed documentation
 

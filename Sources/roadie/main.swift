@@ -248,34 +248,65 @@ func handleDaemon(verb: String) {
     }
 }
 
+/// Extrait les flags `--display <selector>` et `--desktop <id>` d'un tableau d'args.
+/// Retourne un dict prêt à merger dans Request.args. Les flags sont consommés
+/// (non-positionnels) et ignorés dans le reste du parsing.
+private func extractScopeOverrides(from args: [String]) -> [String: String] {
+    var overrides: [String: String] = [:]
+    var i = 0
+    while i < args.count {
+        if args[i] == "--display", i + 1 < args.count {
+            overrides["display"] = args[i + 1]
+            i += 2
+        } else if args[i] == "--desktop", i + 1 < args.count {
+            overrides["desktop"] = args[i + 1]
+            i += 2
+        } else {
+            i += 1
+        }
+    }
+    return overrides
+}
+
 func handleStage(args: [String]) {
-    // roadie stage <stage_id>            → switch
-    // roadie stage list                  → list
-    // roadie stage assign <stage_id>     → assign frontmost
-    // roadie stage create <id> <name>    → create
-    // roadie stage delete <id>           → delete
+    // roadie stage <stage_id>                                     → switch
+    // roadie stage list [--display <sel>] [--desktop <id>]       → list
+    // roadie stage assign <stage_id> [--display <sel>] [...]     → assign frontmost
+    // roadie stage create <id> <name> [--display <sel>] [...]    → create
+    // roadie stage delete <id> [--display <sel>] [...]           → delete
+    // roadie stage rename <id> <new_name> [--display <sel>] [...] → rename
     guard args.count >= 3 else { printUsage(); exit(64) }
     let arg2 = args[2]
+    let scopeOverrides = extractScopeOverrides(from: args)
+
     switch arg2 {
     case "list":
-        sendAndPrint(Request(command: "stage.list"))
+        sendAndPrint(Request(command: "stage.list", args: scopeOverrides.isEmpty ? nil : scopeOverrides))
     case "assign":
         guard args.count >= 4 else { printUsage(); exit(64) }
-        sendAndPrint(Request(command: "stage.assign", args: ["stage_id": args[3]]))
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        sendAndPrint(Request(command: "stage.assign", args: reqArgs))
     case "create":
         guard args.count >= 5 else { printUsage(); exit(64) }
-        sendAndPrint(Request(command: "stage.create",
-                             args: ["stage_id": args[3], "display_name": args[4]]))
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        reqArgs["display_name"] = args[4]
+        sendAndPrint(Request(command: "stage.create", args: reqArgs))
     case "delete":
         guard args.count >= 4 else { printUsage(); exit(64) }
-        sendAndPrint(Request(command: "stage.delete", args: ["stage_id": args[3]]))
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        sendAndPrint(Request(command: "stage.delete", args: reqArgs))
     case "rename":
         // SPEC-014 T071 : `roadie stage rename <id> <new_name>`
         guard args.count >= 5 else { printUsage(); exit(64) }
-        sendAndPrint(Request(command: "stage.rename",
-                             args: ["stage_id": args[3], "new_name": args[4]]))
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        reqArgs["new_name"] = args[4]
+        sendAndPrint(Request(command: "stage.rename", args: reqArgs))
     default:
-        // arg2 est le stage_id pour switch
+        // arg2 est le stage_id pour switch (pas de scope override pour switch)
         sendAndPrint(Request(command: "stage.switch", args: ["stage_id": arg2]))
     }
 }
@@ -292,6 +323,8 @@ func sendAndPrint(_ request: Request) {
             case "invalid_argument": exit(2)
             case "multi_desktop_disabled": exit(4)
             case "unknown_desktop", "unknown_stage", "window_not_found": exit(5)
+            // SPEC-018 US4 : erreurs de scope override.
+            case "unknown_display", "desktop_out_of_range": exit(5)
             default: exit(1)
             }
         }
@@ -509,12 +542,12 @@ func printUsage() {
       roadie toggle <floating|fullscreen|native-fullscreen>
       roadie tiler list                          # liste les stratégies disponibles
       roadie tiler <strategy>                    # change la stratégie active
-      roadie stage list
-      roadie stage <stage_id>                    # switch to stage
-      roadie stage assign <stage_id>             # assign frontmost
-      roadie stage create <stage_id> <name>      # create new stage
-      roadie stage delete <stage_id>             # delete stage
-      roadie stage rename <stage_id> <new_name>  # SPEC-014 rename stage
+      roadie stage list [--display <sel>] [--desktop <id>]    # SPEC-018 scope override
+      roadie stage <stage_id>                              # switch to stage
+      roadie stage assign <stage_id> [--display <sel>] [--desktop <id>]
+      roadie stage create <stage_id> <name> [--display <sel>] [--desktop <id>]
+      roadie stage delete <stage_id> [--display <sel>] [--desktop <id>]
+      roadie stage rename <stage_id> <new_name> [--display <sel>] [--desktop <id>]
       roadie desktop list [--json]               # V2 multi-desktop
       roadie desktop current [--json]
       roadie desktop focus <prev|next|recent|first|last|N|label>
