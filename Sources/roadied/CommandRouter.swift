@@ -254,9 +254,20 @@ enum CommandRouter {
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
-            // SPEC-018 : en mode per_display, filtrer par (displayUUID, desktopID) du scope courant.
+            // SPEC-018 : en mode per_display, filtrer par (displayUUID, desktopID) du scope.
+            // US4 : si request.args["display"] ou ["desktop"] présents, override le scope implicite.
             // En mode global, comportement V1 identique (toutes les stages).
-            let scope = await daemon.currentStageScope()
+            var scopeError: Response? = nil
+            let scope: StageScope
+            if sm.stageMode == .perDisplay {
+                guard let resolved = await resolveScope(request: request, daemon: daemon,
+                                                        errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                scope = resolved
+            } else {
+                scope = await daemon.currentStageScope()
+            }
             let currentID: String
             let scopedStages: [[String: Any]]
             if sm.stageMode == .global {
@@ -314,7 +325,12 @@ enum CommandRouter {
             // SPEC-018 : en mode per_display, vérifier dans stagesV2 que le stage
             // existe dans le scope courant avant de switcher.
             if sm.stageMode == .perDisplay {
-                let scope = await daemon.currentStageScope()
+                var scopeError: Response? = nil
+                guard let baseScope = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                let scope = baseScope
                 let fullScope = StageScope(displayUUID: scope.displayUUID,
                                            desktopID: scope.desktopID, stageID: stageID)
                 guard sm.stagesV2[fullScope] != nil else {
@@ -347,9 +363,14 @@ enum CommandRouter {
                 return .error(.windowNotFound, "no wid provided and no focused window")
             }
             // Lazy stages : auto-créer le stage s'il n'existe pas.
-            // SPEC-018 : en mode per_display, créer ET assign dans le scope courant.
+            // SPEC-018 : en mode per_display, créer ET assign dans le scope courant (ou overridé).
             if sm.stageMode == .perDisplay {
-                let scope = await daemon.currentStageScope()
+                var scopeError: Response? = nil
+                guard let baseScope = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                let scope = baseScope
                 let fullScope = StageScope(displayUUID: scope.displayUUID,
                                            desktopID: scope.desktopID, stageID: stageID)
                 if sm.stagesV2[fullScope] == nil {
@@ -376,14 +397,22 @@ enum CommandRouter {
                                       strategy: daemon.config.stageManager.hideStrategy)
             }
             daemon.applyLayout()
-            // SPEC-014/018 : émettre window_assigned pour que le rail refresh sa liste.
-            EventBus.shared.publish(DesktopEvent(
-                name: "window_assigned",
-                payload: [
-                    "wid": String(wid),
-                    "stage_id": stageStr,
-                ]
-            ))
+            // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).
+            let assignUUID: String
+            let assignDesktopID: Int
+            if sm.stageMode == .perDisplay {
+                var assignScopeError: Response? = nil
+                let sc = await resolveScope(request: request, daemon: daemon,
+                                            errorOut: &assignScopeError)
+                assignUUID = sc?.displayUUID ?? ""
+                assignDesktopID = sc?.desktopID ?? 0
+            } else {
+                assignUUID = ""
+                assignDesktopID = 0
+            }
+            EventBus.shared.publish(DesktopEvent.stageAssigned(
+                wid: Int(wid), stageID: stageStr,
+                displayUUID: assignUUID, desktopID: assignDesktopID))
             return .success(["created": AnyCodable(true), "stage_id": AnyCodable(stageStr), "wid": AnyCodable(Int(wid))])
 
         case "stage.create":
@@ -395,21 +424,36 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id or display_name")
             }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier l'unicité dans le scope courant.
+            // SPEC-018 : en mode per_display, vérifier l'unicité dans le scope courant (ou overridé).
+            let createUUID: String
+            let createDesktopID: Int
             if sm.stageMode == .perDisplay {
-                let scope = await daemon.currentStageScope()
+                var scopeError: Response? = nil
+                guard let baseScope = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                let scope = baseScope
                 let fullScope = StageScope(displayUUID: scope.displayUUID,
                                            desktopID: scope.desktopID, stageID: stageID)
                 if sm.stagesV2[fullScope] != nil {
                     return .error(.invalidArgument, "stage already exists in current scope")
                 }
                 _ = sm.createStage(id: stageID, displayName: displayName, scope: fullScope)
+                createUUID = scope.displayUUID
+                createDesktopID = scope.desktopID
             } else {
                 if sm.stages[stageID] != nil {
                     return .error(.invalidArgument, "stage already exists")
                 }
                 _ = sm.createStage(id: stageID, displayName: displayName)
+                createUUID = ""
+                createDesktopID = 0
             }
+            // SPEC-018 FR-017 : émettre stage_created enrichi (display_uuid + desktop_id).
+            EventBus.shared.publish(DesktopEvent.stageCreated(
+                stageID: stageID.value, displayName: displayName,
+                displayUUID: createUUID, desktopID: createDesktopID))
             return .success(["created": AnyCodable(stageID.value)])
 
         case "stage.rename":
@@ -422,27 +466,40 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id or new_name")
             }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier l'existence dans le scope courant.
+            // SPEC-018 : en mode per_display, vérifier l'existence dans le scope (ou overridé).
             let oldName: String
+            let renameUUID: String
+            let renameDesktopID: Int
             if sm.stageMode == .perDisplay {
-                let scope = await daemon.currentStageScope()
+                var scopeError: Response? = nil
+                guard let baseScope = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                let scope = baseScope
                 let fullScope = StageScope(displayUUID: scope.displayUUID,
                                            desktopID: scope.desktopID, stageID: stageID)
                 guard let existing = sm.stagesV2[fullScope] else {
                     return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
                 }
                 oldName = existing.displayName
+                renameUUID = scope.displayUUID
+                renameDesktopID = scope.desktopID
             } else {
                 guard let oldStage = sm.stages[stageID] else {
                     return .error(.unknownStage, "unknown stage \(stageStr)")
                 }
                 oldName = oldStage.displayName
+                renameUUID = ""
+                renameDesktopID = 0
             }
             guard sm.renameStage(id: stageID, newName: newName) else {
                 return .error(.invalidArgument, "rename failed (empty or > 32 chars)")
             }
+            // SPEC-018 FR-017 : émettre stage_renamed enrichi (display_uuid + desktop_id).
             EventBus.shared.publish(DesktopEvent.stageRenamed(
-                stageID: stageStr, oldName: oldName, newName: newName))
+                stageID: stageStr, oldName: oldName, newName: newName,
+                displayUUID: renameUUID, desktopID: renameDesktopID))
             return .success([
                 "stage_id": AnyCodable(stageStr),
                 "new_name": AnyCodable(newName),
@@ -458,16 +515,30 @@ enum CommandRouter {
             if stageStr == "1" {
                 return .error(.invalidArgument, "cannot delete default stage 1")
             }
-            // SPEC-018 : en mode per_display, supprimer dans le scope courant uniquement.
+            // SPEC-018 : en mode per_display, supprimer dans le scope courant (ou overridé).
+            let deleteUUID: String
+            let deleteDesktopID: Int
             if sm.stageMode == .perDisplay {
-                let scope = await daemon.currentStageScope()
+                var scopeError: Response? = nil
+                guard let baseScope = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                let scope = baseScope
                 let fullScope = StageScope(displayUUID: scope.displayUUID,
                                            desktopID: scope.desktopID,
                                            stageID: StageID(stageStr))
                 sm.deleteStage(scope: fullScope)
+                deleteUUID = scope.displayUUID
+                deleteDesktopID = scope.desktopID
             } else {
                 sm.deleteStage(id: StageID(stageStr))
+                deleteUUID = ""
+                deleteDesktopID = 0
             }
+            // SPEC-018 FR-017 : émettre stage_deleted enrichi (display_uuid + desktop_id).
+            EventBus.shared.publish(DesktopEvent.stageDeleted(
+                stageID: stageStr, displayUUID: deleteUUID, desktopID: deleteDesktopID))
             return .success()
 
         case "fx.status":
@@ -617,6 +688,102 @@ enum CommandRouter {
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")
         }
+    }
+
+    // MARK: - SPEC-018 US4 : scope override helper
+
+    /// Résout le StageScope en tenant compte des overrides CLI `display` et `desktop`.
+    /// Si aucun override, délègue à `daemon.currentStageScope()` (curseur→frontmost→primary).
+    /// Retourne nil si le selector display est invalide (`unknown_display`) ou si desktop
+    /// est hors range (`desktop_out_of_range`), en remplissant `errorOut` dans ce cas.
+    private static func resolveScope(
+        request: Request,
+        daemon: Daemon,
+        errorOut: inout Response?
+    ) async -> StageScope? {
+        let displaySelector = request.args?["display"]
+        let desktopArg = request.args?["desktop"]
+
+        // Pas d'override → scope implicite (curseur/frontmost/primary).
+        guard displaySelector != nil || desktopArg != nil else {
+            return await daemon.currentStageScope()
+        }
+
+        // Résolution du display override.
+        var resolvedUUID: String
+        var resolvedDisplayID: CGDirectDisplayID?
+
+        if let selector = displaySelector {
+            guard let dReg = daemon.displayRegistry else {
+                errorOut = .error(.unknownDisplay, "display registry not initialized")
+                return nil
+            }
+            let count = await dReg.count
+            if let index = Int(selector) {
+                guard let display = await dReg.display(at: index) else {
+                    errorOut = .error(.unknownDisplay,
+                        "no display matching selector \"\(selector)\" or UUID")
+                    return nil
+                }
+                resolvedUUID = display.uuid
+                resolvedDisplayID = display.id
+            } else {
+                // Tentative de match UUID.
+                guard let display = await dReg.display(forUUID: selector) else {
+                    errorOut = .error(.unknownDisplay,
+                        "no display matching selector \"\(selector)\" or UUID")
+                    return nil
+                }
+                _ = count
+                resolvedUUID = display.uuid
+                resolvedDisplayID = display.id
+            }
+        } else {
+            // Pas de display override : résoudre via scope implicite et garder son UUID.
+            let implicit = await daemon.currentStageScope()
+            resolvedUUID = implicit.displayUUID
+            // Tenter de résoudre le displayID pour le desktop lookup.
+            if let dReg = daemon.displayRegistry {
+                resolvedDisplayID = await dReg.display(forUUID: resolvedUUID)?.id
+            }
+        }
+
+        // Résolution du desktop override.
+        let desktopCount = daemon.config.desktops.count
+        var resolvedDesktopID: Int
+
+        if let deskStr = desktopArg {
+            guard let deskInt = Int(deskStr) else {
+                errorOut = .error(.desktopOutOfRange,
+                    "desktop \"\(deskStr)\" is not a valid integer")
+                return nil
+            }
+            guard deskInt >= 1 && deskInt <= desktopCount else {
+                errorOut = .error(.desktopOutOfRange,
+                    "desktop \(deskInt) not in range 1..\(desktopCount)")
+                return nil
+            }
+            resolvedDesktopID = deskInt
+        } else {
+            // Pas de desktop override : prendre le current desktop du display résolu.
+            if let did = resolvedDisplayID {
+                resolvedDesktopID = await daemon.desktopRegistry?.currentID(for: did) ?? 1
+            } else {
+                resolvedDesktopID = 1
+            }
+        }
+
+        let result = StageScope(displayUUID: resolvedUUID, desktopID: resolvedDesktopID,
+                               stageID: StageID(""))
+        // Log uniquement pour le path explicit_cli (le path implicite est loggué dans currentStageScope).
+        if displaySelector != nil || desktopArg != nil {
+            logInfo("scope_inferred_from", [
+                "source": "explicit_cli",
+                "display_uuid": resolvedUUID,
+                "desktop_id": String(resolvedDesktopID),
+            ])
+        }
+        return result
     }
 
     // MARK: - Desktop handlers (SPEC-011)

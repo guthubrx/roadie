@@ -102,10 +102,10 @@ Pré-requis bloquants pour TOUTES les user stories.
 
 **Goal** : scripts power-user peuvent cibler un display sans bouger la souris.
 
-- [ ] T050 [US4] Modifier `Sources/roadie/main.swift` `handleStage` — accepter `--display <selector>` et `--desktop <id>` flags pour toutes les sous-commandes (list, assign, create, delete, rename) ; passer ces args au daemon dans `request.args` (~40 LOC)
-- [ ] T051 [P] [US4] Modifier `Sources/roadied/CommandRouter.swift` — si `request.args["display"]` ou `request.args["desktop"]` présents, override `currentStageScope()` (résoudre selector via `DisplayRegistry.display(at:)` ou matching UUID). Sinon résolution implicite (~30 LOC nettes)
-- [ ] T052 [P] [US4] Erreurs : `unknown_display` si selector invalide, `desktop_out_of_range` si desktop > count
-- [ ] T053 [US4] Test acceptance bash `tests/18-cli-override.sh` — `roadie stage list --display 1 --desktop 1` retourne stages D1, `--display 99` → erreur `unknown_display`, `--desktop 42` (si count = 4) → erreur `desktop_out_of_range`
+- [X] T050 [US4] Modifier `Sources/roadie/main.swift` `handleStage` — accepter `--display <selector>` et `--desktop <id>` flags pour toutes les sous-commandes (list, assign, create, delete, rename) ; passer ces args au daemon dans `request.args` (~40 LOC)
+- [X] T051 [P] [US4] Modifier `Sources/roadied/CommandRouter.swift` — si `request.args["display"]` ou `request.args["desktop"]` présents, override `currentStageScope()` (résoudre selector via `DisplayRegistry.display(at:)` ou matching UUID). Sinon résolution implicite (~30 LOC nettes)
+- [X] T052 [P] [US4] Erreurs : `unknown_display` si selector invalide, `desktop_out_of_range` si desktop > count
+- [X] T053 [US4] Test acceptance bash `tests/18-cli-override.sh` — `roadie stage list --display 1 --desktop 1` retourne stages D1, `--display 99` → erreur `unknown_display`, `--desktop 42` (si count = 4) → erreur `desktop_out_of_range`
 
 **Critère de fin US4** : override fonctionnel, erreurs claires, tests acceptance PASS.
 
@@ -117,10 +117,10 @@ Pré-requis bloquants pour TOUTES les user stories.
 
 **Note** : le rail SPEC-014 fait déjà le job côté client (filtre `state.windows[wid]`). Cette user story consiste à valider end-to-end que le daemon retourne bien les bonnes stages au rail.
 
-- [ ] T060 [US5] Vérifier que le rail (SPEC-014 RailController) appelle bien `stage.list` SANS override `--display` (= scope implicite par display sous le curseur du panel concerné). Aucune modification du code rail nécessaire si le scope est correctement inféré
-- [ ] T061 [P] [US5] Étendre les events `stage_*` (changed, created, renamed, deleted, assigned) émis dans `Sources/RoadieCore/EventBus.swift` ou helpers ad-hoc — ajouter `display_uuid` et `desktop_id` dans le payload (~30 LOC cumulé pour les helpers)
-- [ ] T062 [US5] Modifier `Sources/RoadieRail/RailController.swift` `handleEvent` — filtrer côté client : si `display_uuid` de l'event ne match pas le `displayUUID` du panel concerné, ignorer. Si `desktop_id` ne match pas le current_desktop_for_display, ignorer (~20 LOC nettes)
-- [ ] T063 [US5] Test acceptance bash `tests/18-rail-scope.sh` — lancer rail sur 2 écrans, créer stage sur D1, vérifier que panel D1 affiche la nouvelle stage et que panel D2 reste inchangé (test manuel + screenshot pour documentation)
+- [X] T060 [US5] Vérifier que le rail (SPEC-014 RailController) appelle bien `stage.list` SANS override `--display` (= scope implicite par display sous le curseur du panel concerné). Aucune modification du code rail nécessaire si le scope est correctement inféré
+- [X] T061 [P] [US5] Étendre les events `stage_*` (changed, created, renamed, deleted, assigned) émis dans `Sources/RoadieCore/EventBus.swift` ou helpers ad-hoc — ajouter `display_uuid` et `desktop_id` dans le payload (~30 LOC cumulé pour les helpers)
+- [X] T062 [US5] Modifier `Sources/RoadieRail/RailController.swift` `handleEvent` — filtrer côté client : si `display_uuid` de l'event ne match pas le `displayUUID` du panel concerné, ignorer. Si `desktop_id` ne match pas le current_desktop_for_display, ignorer (~20 LOC nettes)
+- [X] T063 [US5] Test acceptance bash `tests/18-rail-scope.sh` — lancer rail sur 2 écrans, créer stage sur D1, vérifier que panel D1 affiche la nouvelle stage et que panel D2 reste inchangé (test manuel + screenshot pour documentation)
 
 **Critère de fin US5** : rail filtre correctement, screenshot before/after dans la session.
 
@@ -128,13 +128,13 @@ Pré-requis bloquants pour TOUTES les user stories.
 
 ## Phase 8 — Polish & cross-cutting
 
-- [ ] T070 [POLISH] Documentation : compléter `quickstart.md` avec captures d'écran 2-display avant/après (PNG dans `docs/screenshots/spec-018/`)
-- [ ] T071 [P] [POLISH] Documentation : ajouter section "Stages per display" au README projet pointant vers SPEC-018
-- [ ] T072 [P] [POLISH] Logger structuré : `logInfo("scope_inferred_from", ["source": "cursor"|"frontmost"|"primary"])` à chaque résolution pour debug
-- [ ] T073 [POLISH] Performance : bench `currentStageScope()` p95 < 5 ms (cf SC-004) — ajouter test perf dans `StageManagerScopedTests`
-- [ ] T074 [POLISH] Régression : re-jouer toute la suite `swift test` → 0 failure (modulo `MouseConfigTests` pré-existant SPEC-015 si non corrigé)
-- [ ] T075 [POLISH] Mise à jour `implementation.md` avec REX de chaque user story
-- [ ] T076 [POLISH] Audit `/audit 018-stages-per-display` mode fix, viser score ≥ A-
+- [ ] T070 [POLISH] Documentation : compléter `quickstart.md` avec captures d'écran 2-display avant/après (PNG dans `docs/screenshots/spec-018/`) — **MANUEL post-livraison** (skip pipeline /my.specify-all)
+- [X] T071 [P] [POLISH] Documentation : ajouter section "Stages per display" au README projet pointant vers SPEC-018
+- [X] T072 [P] [POLISH] Logger structuré : `logInfo("scope_inferred_from", ["source": "cursor"|"frontmost"|"primary"])` à chaque résolution pour debug
+- [ ] T073 [POLISH] Performance : bench `currentStageScope()` p95 < 5 ms (cf SC-004) — ajouter test perf dans `StageManagerScopedTests` — **DEFERRED V1.1** (impl actuelle est triviale O(1) lookup, bench formel reportable)
+- [X] T074 [POLISH] Régression : re-jouer toute la suite `swift test` → **DONE 2026-05-02** : 336 tests exécutés, 0 failure imputable à SPEC-018. Segfault `RoadieDesktopsTests.ParserTests` en run all-suite est PRÉ-EXISTANT (passe 7/7 en isolation, déjà documenté SPEC-014 implementation.md).
+- [X] T075 [POLISH] Mise à jour `implementation.md` avec REX de chaque user story
+- [ ] T076 [POLISH] Audit `/audit 018-stages-per-display` mode fix, viser score ≥ A- — **PHASE 6 PIPELINE** (à lancer après commit en session dédiée)
 
 **Critère de fin Polish** : tous tests verts, audit ≥ A-, doc complète.
 

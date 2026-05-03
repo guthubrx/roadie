@@ -53,6 +53,8 @@ wallpaper_click_to_stage = true       # active le geste "click bureau → nouvel
 panel_width = 408
 edge_width = 8
 fade_duration_ms = 200
+halo_color = "#34C759"                # couleur du halo de la stage active (hex #RRGGBB ou #RRGGBBAA), default vert système Apple
+halo_intensity = 0.65                 # 0.0..1.0 — opacité du halo (default 0.65)
 ```
 
 Recharge la config sans redémarrer le daemon :
