@@ -24,6 +24,30 @@ public final class SCKCaptureService {
     /// Callback déclenché à chaque frame capturée. Le caller câble vers ThumbnailCache.put.
     public var onCapture: ((ThumbnailEntry) -> Void)?
 
+    /// Bundles dont la capture est refusée par le DRM FairPlay/Widevine.
+    /// Activer SCStream sur leur fenêtre fait passer la vidéo en noir côté app
+    /// (protection DRM). On skip silencieusement la capture, le rail tombera
+    /// sur le fallback icône d'app.
+    public static let defaultDRMBundles: Set<String> = [
+        "com.netflix.Netflix",
+        "com.apple.TV",                  // Apple TV+ / iTunes
+        "com.disney.disneyplus",
+        "com.amazon.aiv.AIVApp",         // Amazon Prime Video
+        "com.spotify.client",            // Spotify (DRM audio mais aussi vidéos artistes)
+        "com.warner.hbomax",             // HBO Max
+        "com.hulu.plus",
+    ]
+
+    /// Bundles exclus en plus des DRM par défaut. Utilisable par l'utilisateur
+    /// pour étendre la liste via config (ex: appli spécifique qui détecte
+    /// SCStream comme menace). Modifiable à chaud.
+    public var additionalExcludedBundles: Set<String> = []
+
+    /// Liste effective des bundles exclus = défauts DRM + ajouts utilisateur.
+    public var excludedBundles: Set<String> {
+        Self.defaultDRMBundles.union(additionalExcludedBundles)
+    }
+
     public init() {}
 
     /// Vérifie si la permission Screen Recording est accordée.
@@ -56,6 +80,16 @@ public final class SCKCaptureService {
 
         guard let scWindow = content.windows.first(where: { $0.windowID == wid }) else {
             logWarn("sck: window not found in shareable content", ["wid": String(wid)])
+            return
+        }
+
+        // Refus DRM : Netflix, Apple TV, Disney+, etc. blackoutent la lecture
+        // dès qu'un SCStream est actif sur leur fenêtre (FairPlay). Skip silencieux.
+        if let bundleID = scWindow.owningApplication?.bundleIdentifier,
+           excludedBundles.contains(bundleID) {
+            logInfo("sck: capture refused (DRM bundle excluded)", [
+                "wid": String(wid), "bundle": bundleID,
+            ])
             return
         }
 
