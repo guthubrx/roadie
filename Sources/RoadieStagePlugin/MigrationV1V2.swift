@@ -38,13 +38,32 @@ public final class MigrationV1V2 {
     public func runIfNeeded() throws -> Report? {
         let backupPath = stagesDir + ".v1.bak"
 
-        // Idempotence : backup déjà présent → déjà migré.
-        if FileManager.default.fileExists(atPath: backupPath) {
+        // SPEC-018 fix : avant 2026-05-03, on skippait dès que backup existait.
+        // Mais des V1 sources pouvaient subsister non migrées (ex: V2 cible vide créée
+        // par boot précédent + dst exists block move). On vérifie maintenant aussi qu'il
+        // n'y a plus rien à migrer côté V1 source. Si backup ET V1 vide → vraiment idempotent.
+        let candidates = collectTopLevelTOML()
+        if FileManager.default.fileExists(atPath: backupPath) && candidates.isEmpty {
             logInfo("migration_v1v2_skipped_backup_exists", ["backup": backupPath])
             return nil
         }
+        if FileManager.default.fileExists(atPath: backupPath) && !candidates.isEmpty {
+            // Backup existant ET V1 source non vide : archive le backup ancien (timestamp)
+            // pour permettre une nouvelle migration. Le backup ancien n'est PAS perdu.
+            let timestamp = Int(Date().timeIntervalSince1970)
+            let archivedBackup = "\(backupPath).archived-\(timestamp)"
+            do {
+                try FileManager.default.moveItem(atPath: backupPath, toPath: archivedBackup)
+                logInfo("migration_v1v2_archived_old_backup",
+                        ["from": backupPath, "to": archivedBackup,
+                         "remaining_v1_candidates": String(candidates.count)])
+            } catch {
+                logWarn("migration_v1v2_archive_failed",
+                        ["backup": backupPath, "error": "\(error)"])
+                return nil  // ne pas casser le boot
+            }
+        }
 
-        let candidates = collectTopLevelTOML()
         if candidates.isEmpty {
             logInfo("migration_v1v2_skipped_nothing_to_migrate", ["dir": stagesDir])
             return nil
@@ -93,6 +112,17 @@ public final class MigrationV1V2 {
         }
     }
 
+    /// SPEC-018 fix : un stage TOML est "vide" si son champ `members` est inline `[]`
+    /// (pas d'`[[members]]` array of tables). Heuristique simple grep — suffisante pour
+    /// détecter les V2 cibles créées vides par un boot précédent que la migration a foiré.
+    private func isStageFileEmpty(_ path: String) -> Bool {
+        guard let content = try? String(contentsOfFile: path, encoding: .utf8) else {
+            return false  // si on ne peut pas lire, ne pas écraser
+        }
+        // `members = []` (inline empty) ET pas de `[[members]]` (array of tables)
+        return content.contains("members = []") && !content.contains("[[members]]")
+    }
+
     private func migrateFiles(_ candidates: [String]) throws -> Int {
         let targetDir = "\(stagesDir)/\(mainDisplayUUID)/1"
         do {
@@ -108,6 +138,37 @@ public final class MigrationV1V2 {
         for filename in candidates {
             let src = "\(stagesDir)/\(filename)"
             let dst = "\(targetDir)/\(filename)"
+            // SPEC-018 fix : si dst existe (créé par un boot précédent qui a aussi
+            // tenté la migration), check son état avant move.
+            // - dst vide (members []) → V1 source contient les vraies données →
+            //   supprimer dst et écraser. Comportement antérieur : moveItem échouait
+            //   → V1 source restait, V2 cible vide gardée → données invisibles.
+            // - dst plein → V2 cible a déjà été peuplée (manuellement ou par autre
+            //   path) → ne pas écraser. Backup V1 source en `.legacy.<TS>` pour ne
+            //   rien perdre, puis log warn.
+            if FileManager.default.fileExists(atPath: dst) {
+                if isStageFileEmpty(dst) {
+                    do {
+                        try FileManager.default.removeItem(atPath: dst)
+                        logInfo("migration_v1v2_removed_empty_dst",
+                                ["file": filename, "dst": dst])
+                    } catch {
+                        logWarn("migration_v1v2_remove_empty_dst_failed",
+                                ["file": filename, "err": "\(error)"])
+                        failed.append(filename)
+                        continue
+                    }
+                } else {
+                    // V2 cible plein → préserver V1 source via backup horodaté pour
+                    // permettre intervention manuelle (merge).
+                    let timestamp = Int(Date().timeIntervalSince1970)
+                    let backup = "\(src).legacy.\(timestamp)"
+                    try? FileManager.default.moveItem(atPath: src, toPath: backup)
+                    logWarn("migration_v1v2_dst_already_populated_v1_backed_up",
+                            ["file": filename, "v1_backup": backup, "v2_dst": dst])
+                    continue
+                }
+            }
             do {
                 try FileManager.default.moveItem(atPath: src, toPath: dst)
                 moved.append(filename)
