@@ -173,6 +173,88 @@ $ nm .build/debug/roadied | grep -E "CGSSetWindow|CGSAddWindow" | wc -l
 
 Aucun symbole CGS-write privé dans le daemon. ✓ (constitution C')
 
+## Hotfixes critiques post-MVP (2026-05-03)
+
+### Fix NSZombie SCKCaptureService.encodePNG
+
+11+ crashs `EXC_BREAKPOINT` du daemon en 2 jours, tous à uptime ≈ 140s exactement,
+pattern `___forwarding___.cold.6` au pop d'autoreleasepool de `NSApp.run`.
+
+**Cause** : `Sources/RoadieCore/ScreenCapture/SCKCaptureService.swift` ligne 144
+retournait `data as Data` (toll-free bridging = wrap, pas copie). Le `NSMutableData`
+créé dans l'autoreleasepool du callback `SCStream.didOutputSampleBuffer` était
+release au drain du pool background. Le `Data` retourné devenait zombie au prochain
+accès depuis le main thread (~70 frames plus tard à 0.5 Hz = 140s).
+
+**Fix** : `Data(bytes: data.bytes, count: data.length)` qui copie les bytes dans
+un buffer Swift indépendant. 5 LOC modifiées. Validé en runtime : daemon vit
+> 155s sans crash.
+
+### Fix RailIPCClient lecture multi-chunk
+
+Les vignettes ScreenCaptureKit (~30-80 KB de PNG en base64 = ~45-110 KB JSON) arrivent
+en plusieurs chunks Unix socket. La lecture initiale s'arrêtait au 1er chunk → JSON
+décode failed → 100% des thumbnails fetch en échec côté rail.
+
+**Fix** : `Sources/RoadieRail/Networking/RailIPCClient.swift` boucle `readMore()`
+jusqu'au newline final. Validé : `thumbnail set for wid=N degraded=false bytes=33880`
+visible dans le rail debug log.
+
+### Fix WindowChip stale icon (let → computed property)
+
+`appIcon` était `let` calculé dans `init()`. SwiftUI ne ré-init pas la struct quand
+`pid` change (id stable via `id: \.self`) → l'icône restait celle du premier render
+(fallback générique avec pid=0). 
+
+**Fix** : `Sources/RoadieRail/Views/WindowChip.swift` (anciennement, maintenant
+`WindowPreview.swift`) — `appIcon` devenu computed property recalculée à chaque body.
+
+### Fix StageStackView.windows jamais peuplé
+
+`windows: [CGWindowID: WindowVM] = [:]` était un paramètre par défaut JAMAIS rempli
+par `RailController` → `windows[wid]?.pid` toujours nil → fallback générique.
+
+**Fix** : utilise directement `state.windows` (peuplée par `loadWindows()` IPC
+`windows.list` enrichie avec `app_name` côté daemon).
+
+### Refonte visuelle Stage Manager natif
+
+Refactor des vues SwiftUI pour reproduire l'esthétique Stage Manager natif macOS :
+- `Sources/RoadieRail/Views/WindowStack.swift` (NEW, ~215 LOC) remplace `StageCard.swift`
+- `Sources/RoadieRail/Views/WindowPreview.swift` (NEW, ~89 LOC) remplace `WindowChip.swift`
+- `Sources/RoadieRail/Views/HUDBackground.swift` (NEW, NSVisualEffectView wrapper)
+- `Sources/RoadieRail/Views/StageStackView.swift` refonte : pas de header, stacks
+  centrés verticalement, fond strictement transparent, hint discret en bas
+- Captures 200×130 empilées en cascade Z (offset 6/6, scale -2%, opacity -10% par couche)
+- Halo paramétrique stage active (`[fx.rail].halo_color` `halo_intensity`)
+- Filtrage wids orphelines (visibles uniquement si présentes dans `windows` ou `thumbnails`)
+
+### EdgeMonitor zone active étendue
+
+Le panel se fermait dès que la souris sortait des 8 px d'edge → impossible de
+cliquer sur les vignettes.
+
+**Fix** : `EdgeMonitor.activeZoneWidth` (= panelWidth) appliqué quand le panel est
+visible. Debounce exit augmenté de 100 ms → 700 ms.
+
+### Bug daemon `stage assign` : applyLayout + hide
+
+`sm.assign(wid:to:stageID)` ne déclenchait pas de re-layout ni de hide. Conséquence :
+la wid restait visible à sa frame originale même après assignation à une stage
+non-active.
+
+**Fix** : `Sources/roadied/CommandRouter.swift` case `stage.assign` — après
+`sm.assign()` :
+- Si stage cible ≠ stage active → `setLeafVisible(false)` + `HideStrategyImpl.hide()`
+- Toujours `daemon.applyLayout()`
+- Émission event `window_assigned` pour que le rail refresh
+
+### `windows.list` enrichi `app_name`
+
+`Sources/roadied/CommandRouter.swift` case `windows.list` ajoute le champ `app_name`
+(via `NSWorkspace.shared.runningApplications.localizedName` mappé par PID) — permet
+au rail de résoudre l'icône d'app via `NSRunningApplication(processIdentifier:)`.
+
 ## REX — Implémentation complète
 
 ### Ce qui s'est bien passé
@@ -205,3 +287,32 @@ Aucun symbole CGS-write privé dans le daemon. ✓ (constitution C')
 3. **Profiling 1h** post-installation pour valider SC-004 (< 30MB RSS / 1% CPU).
 4. **Animation `wallpaper_click`** (T064) à ajouter en V1.1 pour le polish final du geste signature.
 5. **EventStream robustness** : migrer de `availableData` polling vers `FileHandle.readabilityHandler` pour resistance aux pipe close.
+
+---
+
+## Post-livraison fix (session 2026-05-03) : halo paramétrique
+
+**Demande user** : rendre le halo de la stage active paramétrique TOML (couleur, intensité, radius) + le default vert.
+
+**Fix** :
+- Avant : `.shadow(color: stage.isActive ? .accentColor.opacity(0.55) : .clear, radius: 14, x: 0, y: 0)` — halo bleu accentColor non paramétrique
+- Après : `if stage.isActive { content.shadow(color: Color(hex: haloColorHex).opacity(haloIntensity), radius: haloRadius, x: 0, y: 0) }` — halo vert système Apple `#34C759` paramétrique via 3 props injectées
+
+**Section TOML `[fx.rail]` étendue** :
+```toml
+halo_color = "#34C759"      # hex #RRGGBB ou #RRGGBBAA, default vert système Apple
+halo_intensity = 0.75       # 0.0..1.0 (clamp), default 0.75
+halo_radius = 18            # 0..80 px (clamp), default 18
+```
+
+**Helper ajouté** : extension `Color(hex:)` privée dans `WindowStack.swift` (parse `#RRGGBB`/`#RRGGBBAA`, fallback gris si malformé).
+
+**Anti-bug** : passage du `.shadow` ternaire à un `@ViewBuilder if` explicite. Raison : `.shadow(color: .clear, ...)` semblait dessiner quand même un effet visible (artefact rendu SwiftUI observé), causant 2 halos visibles au lieu d'1. Le `if` skip totalement le modifier.
+
+**Fichiers** :
+- `Sources/RoadieRail/RailController.swift` (struct `RailConfig` étendue + parsing TOML clamp)
+- `Sources/RoadieRail/Views/StageStackView.swift` (forward props)
+- `Sources/RoadieRail/Views/WindowStack.swift` (consume props + extension `Color(hex:)`)
+- `specs/014-stage-rail/quickstart.md` (documentation des 3 nouvelles options)
+
+**Commits** : `79b2edf` (halo paramétrique radius + halo conditionnel), `a245397` (`ensureTreePopulated` défensif au boot, utilisé par fix SPEC-018).

@@ -1,8 +1,8 @@
 # Implementation log — SPEC-018 Stages-per-display
 
-**Status**: MVP COMPLET (US1 + US2 + US3) — US4 + US5 + Polish reportés
+**Status**: MVP COMPLET (US1 + US2 + US3) + refactor 1-tree-par-stage + reconcile + purge orphelines — US4 + US5 + Polish optionnels reportés
 **Branch**: `018-stages-per-display`
-**Last updated**: 2026-05-02
+**Last updated**: 2026-05-03
 
 ## Phases livrées
 
@@ -144,6 +144,119 @@ et propagés avec exit 5 côté CLI. La décision de ne pas mettre de scope over
 `stage.switch` est délibérée : le switch cible une stage déjà existante, donc le scope
 est forcément le scope courant (pas de création lazy ici).
 
+## Hotfixes & polish post-MVP (2026-05-03)
+
+Suite au test utilisateur intensif, plusieurs bugs et améliorations ont été livrés
+au-delà du périmètre initial des tasks.
+
+### Architecture : 1 tree BSP par stage (refactor majeur)
+
+**Problème** : avant ce refactor, `LayoutEngine.workspace.rootsByDisplay` indexait
+un seul tree par display, indépendamment de la stage active. Conséquence : les wids
+assignées à une stage non-active restaient dans le tree global et n'étaient jamais
+re-tilées correctement au switch (fenêtres "fantômes" qui restaient à leur dernière
+position cachée).
+
+**Solution** : refactor `Workspace.rootsByStageDisplay: [StageDisplayKey: TilingContainer]`
+indexé par tuple `(stageID, displayID)`. Au switch de stage, le `LayoutEngine.activeStageID`
+change → `applyAll` n'utilise QUE le tree de la stage active.
+
+**Couplage StageManager → LayoutEngine** : extension de `LayoutHooks` avec
+`reassignToStage(WindowID, StageID)` et `setActiveStage(StageID?)`. Le StageManager
+appelle ces hooks à chaque `assign()` et `switchTo()` pour synchroniser le LayoutEngine.
+
+**Fichiers** :
+- `Sources/RoadieTiler/LayoutEngine.swift` — refactor complet (-65 LOC nettes)
+- `Sources/RoadieStagePlugin/StageManager.swift` — extension LayoutHooks (+21 LOC)
+- `Sources/roadied/main.swift` — câblage 2 nouveaux hooks (+4 LOC)
+- `Tests/RoadieStagePluginTests/StageLayoutHooksTests.swift` — 4 nouveaux tests (118 LOC)
+
+### `assign(wid:to:scope:)` overload V2 scope-aware
+
+**Problème** : en mode per_display, `CommandRouter` créait la stage dans `stagesV2`
+mais appelait `sm.assign(wid:to:stageID)` (API V1) qui regardait `stages` V1 dict
+→ `stage[stageID]` nil → fail silencieux, wid jamais assignée.
+
+**Solution** : nouvel overload `assign(wid:to:scope: StageScope)` qui écrit dans
+`stagesV2[scope]` et synchronise V1 dict pour compat. CommandRouter utilise cet
+overload en mode per_display.
+
+**Fichier** : `Sources/RoadieStagePlugin/StageManager.swift` (+45 LOC)
+
+### `reconcileStageOwnership()` 2-way + fallback
+
+**Problème** : incohérence entre `state.stageID` (registry, calculé au scan AX) et
+`stage.memberWindows` (persistance disque). Au boot, certaines wids avaient
+`state.stageID = "10"` ou `"5"` venant d'une persistance stale, mais ces stages
+n'existaient pas dans le dict courant.
+
+**Solution** : méthode `reconcileStageOwnership()` qui :
+1. **Sens 1** : pour chaque wid dans `stage.memberWindows`, force `state.stageID = stage.id`
+2. **Sens 2** : pour chaque wid du registry, l'ajoute à `stage[X].memberWindows` si absente
+3. **Fallback** : si `state.stageID` référence une stage inexistante (V1 OU stagesV2 selon mode),
+   force vers la stage default 1
+
+Appelée :
+- Au boot après scan AX initial (Task sleep 1.5s)
+- Inline avant chaque `windows.list` et `stage.list` (cheap, normalise en continu)
+
+### `purgeOrphanWindows()` au boot
+
+**Problème** : les stages chargées du disque pouvaient contenir des wids fermées
+des sessions précédentes (process killed). Le rail UI affichait des stages avec
+0 fenêtres réelles + des chips vides.
+
+**Solution** : retire les wids dont `registry.get(wid) == nil` de toutes les stages
+(V1 dict + stagesV2). Persistance disque mise à jour. Appelée au boot après
+reconcile.
+
+### `ensureDefaultStage(scope:)` matérialisation V2
+
+**Problème** : `ensureDefaultStage()` créait la stage 1 par défaut uniquement dans
+`stages` V1 dict. En mode per_display, `stagesV2` ne contenait pas la stage 1 →
+`stage list` filtré par scope retournait vide, `stage 1` échouait avec
+`unknown_stage in current scope`.
+
+**Solution** : ajout d'un paramètre `scope: StageScope?` à `ensureDefaultStage()`.
+Quand fourni en mode per_display, crée aussi dans `stagesV2[scope]`. Le daemon
+calcule `defaultScope = (mainDisplayUUID, 1, "1")` et le passe au boot après
+`setMode(.perDisplay, ...)`.
+
+### Filtrage events côté rail (SPEC-014 + SPEC-018)
+
+**Problème** : le rail panel sur Display 1 recevait les events `stage_*` de Display 2,
+provoquant des refresh inutiles et de la confusion d'affichage.
+
+**Solution** : `RailController.handleEvent` filtre par `payload["display_uuid"]` et
+`payload["desktop_id"]`. Si l'event ne match pas le scope du panel concerné, ignore.
+Les events sans scope (compat V1) passent toujours.
+
+### Halo stage active paramétrique
+
+**Polish** : couleur (`halo_color`) et intensité (`halo_intensity` 0..1) du halo
+de la stage active configurables via `[fx.rail]` dans le TOML. Defaults vert
+système Apple `#34C759` à `0.65`.
+
+### Bug NSZombie fix critique (SCKCaptureService)
+
+**Problème** : 11+ crashs `EXC_BREAKPOINT` du daemon en 2 jours, tous à uptime
+≈ 140s exactement. Pattern `___forwarding___.cold.6` au pop d'autoreleasepool de
+`NSApp.run`.
+
+**Cause** : dans `SCKCaptureService.encodePNG`, retour `data as Data` faisait un
+toll-free bridging (wrap, pas copie). Le `NSMutableData` créé dans
+l'autoreleasepool du callback `SCStream.didOutputSampleBuffer` était release au
+drain du pool background. Le `Data` retourné devenait zombie au prochain accès
+depuis le main thread (~70 frames plus tard à 0.5 Hz = 140s).
+
+**Solution** : `Data(bytes: data.bytes, count: data.length)` qui copie les bytes
+dans un buffer Swift indépendant du `NSMutableData` autoreleased.
+
+**Fichier** : `Sources/RoadieCore/ScreenCapture/SCKCaptureService.swift` (5 LOC modifiées)
+
+**Validation** : daemon vit > 155s d'uptime sans crash après le fix (vs crash
+systématique à 140s avant).
+
 ## TODOs restants
 
 ### US5 — Rail event enrichment
@@ -226,3 +339,102 @@ Toutes les 42 taches T010-T076 sont cochees `[X]` a l'exception de :
 3. **Vérifier la migration** : `roadie daemon status --json | jq '.payload.migration_pending'` doit retourner `false`
 4. **Tester l'isolation** : créer une stage avec curseur sur Display 1, déplacer souris sur Display 2, `roadie stage list` ne doit pas la contenir
 5. **Audit** quand prêt : `/audit 018-stages-per-display` en mode fix pour validation finale et scoring
+
+---
+
+## Post-livraison fixes (session 2026-05-03 — 6 commits)
+
+Lors de la mise en service end-to-end, plusieurs bugs ont été détectés via le rail UI (SPEC-014) et les commandes CLI. Tous fixés dans la même session.
+
+### Fix 1 — `reconcileStageOwnership` Sens 2 écrasait stagesV2 (commit `b0ea24b`)
+
+**Problème** : en mode `per_display`, le Sens 2 du reconcile (registry → stage.memberWindows) opérait sur le dict V1 `stages` (vide en per_display), puis sync v1→v2 qui **écrasait** stagesV2 avec un stage V1 vide. Résultat : V2 file passait de 576 bytes à 108 bytes (vide) au boot.
+
+**Fix** : en mode per_display, opérer DIRECTEMENT sur `stagesV2[scope]` au lieu de via `stages[targetID]`. Plus de sync destructive v1→v2.
+
+**Bonus fix** : retrait de l'appel `purgeOrphanWindows()` au boot (1.5s timer) car il purgeait des wid légitimes encore en cours de scan AX (apps lentes type iTerm). Purge reste active sur `handleWindowDestroyed` (cleanup en continu).
+
+**Fichier** : `Sources/RoadieStagePlugin/StageManager.swift` + `Sources/roadied/main.swift`.
+
+### Fix 2 — `setActiveStage` ne restaurait pas le tree (commit `905c4d6`)
+
+**Problème** : après stage switch + reswitch, le tree BSP devenait vide → `roadie focus/move/swap left/right/up/down` retournaient "no neighbor" sans raison apparente. Cause : `setActiveStage` se contentait de set `workspace.activeStageID`, sans re-peupler le tree depuis les members de la stage cible.
+
+**Fix** : la closure `setActiveStage` injectée dans `LayoutHooks` (Sources/roadied/main.swift:115) appelle maintenant `engine.ensureTreePopulated(with: wids)` après le set, où `wids` est filtré depuis le registry (`state.stageID == stageID && state.isTileable`).
+
+**Fichiers** : `Sources/roadied/main.swift` (closure) + `Sources/RoadieTiler/LayoutEngine.swift` (méthode `ensureTreePopulated`).
+
+### Fix 3 — `rebuild` lisait du tree vide au lieu du registry (commit `905c4d6`)
+
+**Problème** : `roadie rebuild` reconstruisait l'arbre depuis ses propres `oldLeaves`. Si le tree était déjà vide (cas du fix #2 avant fix), le rebuild produisait un tree vide aussi.
+
+**Fix** : `CommandRouter` case "rebuild" appelle d'abord `ensureTreePopulated(with: registry.tileableWindows)` AVANT `rebuildTree()`. Le registry est maintenant la source de vérité.
+
+**Fichier** : `Sources/roadied/CommandRouter.swift` case `"rebuild"`.
+
+### Fix 4 — `MigrationV1V2` archive backup ancien (commit `dfa8938`)
+
+**Problème** : `MigrationV1V2.runIfNeeded()` skippait dès que `stages.v1.bak` existait. Mais si les V1 sources avaient été ré-créés (boot précédent) et un nouveau backup attendait la migration, la skip silencieuse perdait les members non migrés.
+
+**Fix** : si backup existant ET V1 source non vide → archive backup ancien horodaté + force nouvelle migration. Backup ancien préservé (jamais perdu).
+
+**Fichier** : `Sources/RoadieStagePlugin/MigrationV1V2.swift` lignes 41-69.
+
+### Fix 5 — `migrateFiles` `mv` échouait sur dst existant (commit `dfa8938`)
+
+**Problème** : `FileManager.moveItem(atPath: src, toPath: dst)` échoue avec NSFileWriteFileExistsError 516 si dst existe. Si V2 cible a été créée vide par un boot précédent, V1 source ne pouvait jamais migrer → données perdues silencieusement.
+
+**Fix** : avant `mv`, check si dst existe :
+- dst vide (`members = []` détecté via heuristique TOML grep) → suppression dst + écraser
+- dst plein → backup V1 source en `.legacy.<TS>` pour intervention manuelle
+
+**Helper** : `isStageFileEmpty(_:)` ajouté.
+
+**Fichier** : `Sources/RoadieStagePlugin/MigrationV1V2.swift` lignes 108-150.
+
+### Fix 6 — RailController over-strict sur display_uuid (commit `0a77b04`)
+
+**Problème** : le filtre US5 T062 ignorait les events `stage_*` dont le `display_uuid` ne matchait pas le panel courant. Mais le scope inferré côté daemon (cursor/frontmost/primary) pouvait diverger du panel rail courant → updates manqués silencieusement (rail désynchronisé sans erreur visible).
+
+**Fix** : sur mismatch, déclencher quand même un `loadInitialStages()` léger (sans le `loadWindows` lourd). Compromis : un appel IPC supplémentaire occasionnel, mais zéro update manqué.
+
+**Fichier** : `Sources/RoadieRail/RailController.swift` `handleEvent`.
+
+### Fix 7 — Helpers `decodeBool/Int/String` tolérants AnyCodable (commit `0a77b04`)
+
+**Problème** : `payload["is_active"] as? Bool` échouait silencieusement quand le JSON renvoyait un Int (0/1) ou un NSNumber au lieu d'un Bool natif (cas du bridging AnyCodable côté daemon → JSONSerialization → side rail). Le fallback `id == current` masquait que le cast avait fail. Conséquence observable : 2 stages affichées comme "active" dans le rail (2 halos verts au lieu d'1).
+
+**Fix** : helpers `decodeBool/decodeInt/decodeString` qui tentent toutes les représentations communes (Bool, NSNumber, Int, String "true"/"1") avant d'abandonner. Utilisés dans `parseStages` + `handleEvent`.
+
+**Fichier** : `Sources/RoadieRail/RailController.swift` (extension fonctions globales).
+
+### Fix 8 — Halo conditionnel `@ViewBuilder if` (commit `79b2edf`)
+
+**Problème** : `.shadow(color: stage.isActive ? Color(hex:...).opacity(...) : .clear, radius: ..., x: 0, y: 0)` semblait dessiner un halo même quand inactive — possible artefact rendu SwiftUI avec `.clear`.
+
+**Fix** : remplacement par `@ViewBuilder` `if stage.isActive { content.shadow(...) } else { content }` qui n'applique pas le modifier `.shadow` du tout quand inactive.
+
+**Bonus** : `halo_radius` ajouté en paramètre TOML `[fx.rail]` (en plus de `halo_color` et `halo_intensity` déjà existants).
+
+**Fichiers** : `Sources/RoadieRail/Views/WindowStack.swift` + `RailController.swift` + `StageStackView.swift` + `quickstart.md` SPEC-014.
+
+### Bonus — `ensureTreePopulated` méthode défensive (commit `a245397`)
+
+Méthode utilitaire ajoutée dans `LayoutEngine` : `ensureTreePopulated(with wids: [WindowID]) -> Int`. Idempotent : pour chaque wid pas déjà dans le tree de la stage active du primary display, l'insère via `insertWindow`. Utilisée par fix #2 (boot) et fix #3 (rebuild).
+
+### CLI `roadie window swap/insert` wired (commit `a245397`)
+
+Verbes CLI ajoutés au `handleWindow` de `Sources/roadie/main.swift`. **Note** : la commande daemon `window.swap` n'est PAS encore implémentée (planifiée SPEC-016 catégorie A5/A4 "yabai-parity tier-1"). Le CLI retourne actuellement `unknown command`. Le binding sera fonctionnel à la livraison de SPEC-016.
+
+### Récap commits post-livraison
+
+| Commit | Sujet |
+|---|---|
+| `b0ea24b` | reconcile sens 2 opère sur stagesV2 directement (mode per_display) + retire purgeOrphanWindows du boot |
+| `88c86e2` | DesktopMigration archive auto V2 leftover si V3 actif (anti-fantômes) — cf. SPEC-013 implementation.md |
+| `79b2edf` | halo paramétrique radius + halo conditionnel @ViewBuilder if |
+| `a245397` | ensureTreePopulated défensif au boot + CLI 'window swap/insert' wired |
+| `45f6159` | DesktopRegistry V3 paths display-scoped — cf. SPEC-013 implementation.md |
+| `905c4d6` | setActiveStage restore tree depuis registry + rebuild ensure populated |
+| `dfa8938` | MigrationV1V2 archive backup + écrase dst vide (perte data évitée) |
+| `0a77b04` | rail handleEvent poll léger sur scope mismatch + helpers decodeBool/Int/String tolérants |

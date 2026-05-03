@@ -129,3 +129,43 @@ Test Suite 'All tests' passed
 - T022 (persist au drag) et T023 (test) reportées : à faire si l'utilisateur observe des pertes au switch fréquent (le snapshot au focus suivant rattrape).
 - T014 (CLI table format) : utile pour UX mais bas-niveau, peut attendre que la feature soit testée en runtime.
 - Crash SIGSEGV pool drain (vu en SPEC-012) toujours latent — instrumenter avec NSZombie reste actif dans `scripts/restart.sh`.
+
+---
+
+## Post-livraison fixes (session 2026-05-03)
+
+Deux fixes appliqués après que le user ait observé des stages fantômes (`Stage 13` jamais nettoyée) dans `desktop list`.
+
+### Fix 1 — DesktopMigration archive auto V2 leftover (commit `88c86e2`)
+
+**Problème** : `DesktopMigration.runIfNeeded` détectait correctement le V2 leftover (legacy `desktops/<id>/state.toml`) coexistant avec V3 actif (`displays/<UUID>/desktops/<id>/state.toml`), mais **skip + log warn** au lieu d'agir. Documentation disait littéralement "nettoyage manuel attendu" — mais en pratique le legacy file polluait à chaque boot (50+ windows fantômes, stage "Stage 13" jamais existée vue dans `desktop list`).
+
+**Fix** : si V3 cible existe ET V2 leftover présent → **archive auto** vers `desktops.legacy.archived-<unixts>/` au lieu de skip. Backup horodaté préservé.
+
+**Fichier** : `Sources/RoadieDesktops/DesktopMigration.swift` lignes 32-65.
+
+### Fix 2 — DesktopRegistry utilise V3 paths display-scoped (commit `45f6159`)
+
+**Problème** : malgré `DesktopMigration` qui archivait le V2 leftover au boot, `DesktopRegistry` lui-même continuait d'**écrire** dans le legacy V2 path (`~/.config/roadies/desktops/<id>/state.toml`) à chaque session. Conséquence : le legacy file se recréait à chaque boot → archive auto à chaque boot suivant → pollution accumulée d'archives + risque de divergence avec V3.
+
+**Fix** : refactor de `DesktopRegistry` pour utiliser exclusivement les V3 paths display-scoped (`~/.config/roadies/displays/<UUID>/desktops/<id>/state.toml`). Ajout du paramètre `displayUUID: String` à l'init. Le caller (`Sources/roadied/main.swift`) calcule le `primaryDisplayUUID` via `CGDisplayCreateUUIDFromDisplayID(CGMainDisplayID())` et le passe.
+
+**Fichiers modifiés** :
+- `Sources/RoadieDesktops/DesktopRegistry.swift` (init, save, load, saveCurrentID, desktopURL)
+- `Sources/RoadieDesktops/Migration.swift` (V1→V2 migration legacy : passe le primaryUUID au registry)
+- `Sources/roadied/main.swift:398` (call site init)
+- 11 fichiers tests `Tests/RoadieDesktopsTests/*` (passage `displayUUID: "TEST-UUID-0001"` aux instanciations)
+
+**Validation runtime** :
+```
+~/.config/roadies/displays/<UUID>/desktops/N/state.toml      ← écrit ici (V3) ✓
+~/.config/roadies/desktops/                                   ← plus jamais recréé ✓
+```
+
+**Tests** : 0 régression (tous les 17+ tests `DesktopRegistry*`/`DesktopPersistence*`/`DesktopMigration*` passent après patch sed des call sites).
+
+### Validation finale post-fixes
+
+- `roadie desktop list` : `STAGES=1` cohérent avec `roadie stage list` (plus de fantôme `Stage 13`)
+- `roadie focus left/right/down` : retour `focused: <wid>` (plus de "no neighbor" dû à tree vide)
+- État disque : V3 paths uniquement, plus de legacy `desktops/` recréé à chaque session
