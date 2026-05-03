@@ -1482,11 +1482,19 @@ enum CommandRouter {
 
     /// Retourne une vignette PNG pour `wid` via capture lazy on-demand
     /// (`CGWindowListCreateImage` à la demande, pattern AltTab).
-    /// - Cache hit → réutilise l'image récente.
-    /// - Cache miss → capture synchrone, met en cache, retourne.
-    /// - Échec capture (DRM strict, fenêtre disparue) → fallback icône d'app.
-    /// Plus de SCStream, plus d'observation continue, plus d'indicateur 🟣
-    /// macOS sur les fenêtres observées.
+    ///
+    /// **Ordre de priorité** (capture systématique, cache en filet de secours) :
+    /// 1. Capture immédiate (`captureNow`) — ~5-15 ms. Si succès → cache + retour.
+    /// 2. Échec capture (DRM strict, fenêtre off-screen) → tenter le cache pour
+    ///    réutiliser la dernière capture valide (vignette figée mais présente).
+    /// 3. Cache vide → fallback icône d'app.
+    ///
+    /// Pourquoi capturer à chaque demande au lieu de respecter le cache d'abord ?
+    /// Le rail ping ce handler toutes les ~2 s (refresh timer). Sans recapture
+    /// systématique, une vignette mise en cache une fois (ex: écran noir Netflix
+    /// au premier appel) reste figée éternellement même quand le contenu de la
+    /// fenêtre change (autre onglet Firefox, etc.). CGWindowListCreateImage est
+    /// ponctuel → pas d'activation DRM continue (vs SCStream).
     private static func handleWindowThumbnail(request: Request, daemon: Daemon) async -> Response {
         guard let widStr = request.args?["wid"], let widU = UInt32(widStr) else {
             return .error(.invalidArgument, "missing or invalid wid")
@@ -1495,14 +1503,14 @@ enum CommandRouter {
         guard daemon.registry.get(wid) != nil else {
             return .error(.windowNotFound, "wid not found")
         }
-        if let entry = daemon.thumbnailCache?.get(wid: wid) {
-            return thumbnailResponse(entry)
-        }
-        // Capture immédiate. Coût ~5-15 ms — acceptable dans le path d'une
-        // requête IPC. Si nil (DRM strict ou fenêtre off-screen), fallback.
         if let sck = daemon.sckCaptureService,
            let entry = sck.captureNow(wid: wid) {
             daemon.thumbnailCache?.put(entry)
+            return thumbnailResponse(entry)
+        }
+        // Capture échouée (DRM strict / off-screen) : recycler la dernière
+        // capture valide en cache pour ne pas afficher juste l'icône d'app.
+        if let entry = daemon.thumbnailCache?.get(wid: wid) {
             return thumbnailResponse(entry)
         }
         return fallbackIconResponse(wid: wid, registry: daemon.registry)
