@@ -22,29 +22,16 @@ public final class StackedPreviewsRenderer: StageRenderer {
 // MARK: - Constantes locales
 
 private let maxVisible:    Int     = 5
-/// Amplitude max du décalage pseudo-random par couche (en px). idx=0 reste
-/// centré (= la vignette « hero » n'a pas d'offset), idx>=1 reçoit un offset
-/// déterministe par hash(wid) borné à ±maxOffset → effet « polaroïds éparpillés ».
-private let maxOffsetX:    CGFloat = 28
-private let maxOffsetY:    CGFloat = 36
-/// Rotation max par couche (degrés). idx=0 sans rotation, idx>=1 reçoit ±maxRotation.
-private let maxRotation:   Double  = 5.0
-/// Scale dégressive douce pour donner de la profondeur sans rétrécir trop.
-private let stackScale:    CGFloat = 0.04
-/// Opacité dégressive : la couche du fond reste visible pour qu'on reconnaisse
-/// la fenêtre (vs ancienne valeur 0.10 qui gommait trop les couches arrière).
-private let stackOpacity:  CGFloat = 0.06
-
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
 private let appIconSize:        CGFloat = 24
 
-/// Pseudo-random déterministe : retourne un offset (dx, dy) et un angle stable
-/// pour une wid donnée. La même wid donne TOUJOURS le même décalage → la vignette
-/// ne saute pas à chaque refresh (toutes les 2 s). Indépendant de la position
-/// dans la cascade (idx) → si l'ordre des wids change (ex: focus change), chaque
-/// vignette garde sa signature visuelle.
-private func scatterFor(wid: CGWindowID) -> (dx: CGFloat, dy: CGFloat, angle: Double) {
-    // Hash bête mais reproductible. Évite Random qui donnerait des sauts.
+/// Pseudo-random déterministe : la même wid donne TOUJOURS le même décalage
+/// → la vignette ne saute pas à chaque refresh (toutes les 2 s). Bornes passées
+/// en paramètre pour permettre la configuration via [fx.rail.stacked] TOML.
+private func scatterFor(wid: CGWindowID,
+                        maxOffsetX: CGFloat,
+                        maxOffsetY: CGFloat,
+                        maxRotation: Double) -> (dx: CGFloat, dy: CGFloat, angle: Double) {
     let h = UInt64(wid &* 2654435761)
     let dx  = CGFloat(Int(h % 1000)        ) / 1000 * (maxOffsetX * 2) - maxOffsetX
     let dy  = CGFloat(Int((h / 1000)  % 1000)) / 1000 * (maxOffsetY * 2) - maxOffsetY
@@ -123,14 +110,17 @@ private struct StackedPreviewsView: View {
     @ViewBuilder
     private var stackedPreviews: some View {
         let wids = visibleWids
+        let mxX = CGFloat(context.stackedOffsetX)
+        let mxY = CGFloat(context.stackedOffsetY)
         ZStack(alignment: .center) {
             ForEach(Array(wids.enumerated()), id: \.element) { idx, wid in
                 let depth = idx
-                // idx=0 = vignette « hero » centrée, sans rotation, opacité pleine.
-                // idx>=1 = polaroïds éparpillés derrière, offset + rotation déterministes
-                // par wid (stable au refresh).
+                // idx=0 = vignette « hero » centrée. idx>=1 = polaroïds éparpillés.
                 let scatter = depth == 0 ? (dx: CGFloat(0), dy: CGFloat(0), angle: 0.0)
-                                          : scatterFor(wid: wid)
+                                          : scatterFor(wid: wid,
+                                                       maxOffsetX: mxX,
+                                                       maxOffsetY: mxY,
+                                                       maxRotation: context.stackedRotation)
                 WindowPreview(
                     wid: wid,
                     thumbnail: thumbnails[wid],
@@ -140,15 +130,15 @@ private struct StackedPreviewsView: View {
                     sourceStageID: stage.id
                 )
                 .rotationEffect(.degrees(scatter.angle))
-                .scaleEffect(1.0 - CGFloat(depth) * stackScale)
-                .opacity(1.0 - CGFloat(depth) * stackOpacity)
+                .scaleEffect(1.0 - CGFloat(depth) * CGFloat(context.stackedScale))
+                .opacity(1.0 - CGFloat(depth) * CGFloat(context.stackedOpacity))
                 .offset(x: scatter.dx, y: scatter.dy)
-                .zIndex(Double(wids.count - idx))   // hero (idx=0) sur le dessus
+                .zIndex(Double(wids.count - idx))
             }
         }
-        // Padding suffisant pour que les polaroïds décalés ne soient pas clippés.
-        .padding(.horizontal, maxOffsetX + 4)
-        .padding(.vertical,   maxOffsetY + 4)
+        // Padding adapté à l'amplitude max du scatter.
+        .padding(.horizontal, mxX + 4)
+        .padding(.vertical,   mxY + 4)
     }
 
     @ViewBuilder

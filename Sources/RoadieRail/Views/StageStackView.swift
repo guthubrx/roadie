@@ -20,6 +20,13 @@ struct StageStackView: View {
     var haloRadius:    Double                       = 18
     // SPEC-019 — id du renderer actif (lu depuis [fx.rail].renderer). nil → fallback default.
     var rendererID:    String?                      = nil
+    // SPEC-019 — paramètres scatter renderer "stacked-previews", lus depuis
+    // [fx.rail.stacked] TOML. Defaults marqués (effet polaroïds éparpillés).
+    var stackedOffsetX:   Double = 60
+    var stackedOffsetY:   Double = 80
+    var stackedRotation:  Double = 12
+    var stackedScale:     Double = 0.06
+    var stackedOpacity:   Double = 0.10
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
     var onTapStage:   (String) -> Void              = { _ in }
     // SPEC-014 T052 (US3) : callback de drop, (wid, target_stage_id).
@@ -84,7 +91,12 @@ struct StageStackView: View {
                                 thumbnails: state.thumbnails,
                                 haloColorHex: haloColorHex,
                                 haloIntensity: haloIntensity,
-                                haloRadius: haloRadius
+                                haloRadius: haloRadius,
+                                stackedOffsetX: stackedOffsetX,
+                                stackedOffsetY: stackedOffsetY,
+                                stackedRotation: stackedRotation,
+                                stackedScale: stackedScale,
+                                stackedOpacity: stackedOpacity
                             )
                             let cb = StageRendererCallbacks(
                                 onTap:        { onTapStage(stage.id) },

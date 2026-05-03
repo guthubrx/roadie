@@ -23,6 +23,14 @@ struct RailConfig {
     var haloRadius: Double = 18
     // SPEC-019 — id du renderer actif. nil → fallback "stacked-previews" via le registry.
     var rendererID: String? = nil
+    // SPEC-019 — paramètres scatter du renderer "stacked-previews".
+    // Defaults marqués (effet « polaroïds éparpillés »). Tous configurables
+    // via [fx.rail.stacked] dans le TOML utilisateur.
+    var stackedOffsetX:   Double = 60   // ±px horizontal max par couche idx>=1
+    var stackedOffsetY:   Double = 80   // ±px vertical max
+    var stackedRotation:  Double = 12   // ±deg max
+    var stackedScale:     Double = 0.06 // réduction par couche
+    var stackedOpacity:   Double = 0.10 // transparence additionnelle par couche
 
     var fadeDuration: TimeInterval { TimeInterval(fadeDurationMs) / 1000 }
 
@@ -49,6 +57,17 @@ struct RailConfig {
             else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
             // SPEC-019 — clé optionnelle [fx.rail].renderer = "<id>" pour switch de rendu.
             if let v = rail["renderer"]?.string, !v.isEmpty { cfg.rendererID = v }
+            // SPEC-019 — sous-section [fx.rail.stacked] pour les paramètres scatter.
+            if let stacked = rail["stacked"]?.table {
+                if let v = stacked["offset_x"]?.double { cfg.stackedOffsetX = max(0, min(200, v)) }
+                else if let v = stacked["offset_x"]?.int { cfg.stackedOffsetX = max(0, min(200, Double(v))) }
+                if let v = stacked["offset_y"]?.double { cfg.stackedOffsetY = max(0, min(200, v)) }
+                else if let v = stacked["offset_y"]?.int { cfg.stackedOffsetY = max(0, min(200, Double(v))) }
+                if let v = stacked["rotation"]?.double { cfg.stackedRotation = max(0, min(45, v)) }
+                else if let v = stacked["rotation"]?.int { cfg.stackedRotation = max(0, min(45, Double(v))) }
+                if let v = stacked["scale_per_layer"]?.double { cfg.stackedScale = max(0, min(0.3, v)) }
+                if let v = stacked["opacity_per_layer"]?.double { cfg.stackedOpacity = max(0, min(0.5, v)) }
+            }
         }
         // SPEC-014 T090 : [desktops] mode informe si rails per_display ou global.
         if let desktops = root["desktops"]?.table,
@@ -331,6 +350,11 @@ final class RailController {
                 haloIntensity: config.haloIntensity,
                 haloRadius: config.haloRadius,
                 rendererID: config.rendererID,
+                stackedOffsetX: config.stackedOffsetX,
+                stackedOffsetY: config.stackedOffsetY,
+                stackedRotation: config.stackedRotation,
+                stackedScale: config.stackedScale,
+                stackedOpacity: config.stackedOpacity,
                 onTapStage: onTapScoped,
                 onDropAssign: onDropScoped,
                 onRename: onRename,
