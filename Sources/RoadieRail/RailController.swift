@@ -337,8 +337,20 @@ final class RailController {
     }
 
     private func refreshThumbnails() {
-        // Collecte des wid affichées dans des stages non vides.
-        let visibleWids = Set(state.stages.flatMap { $0.windowIDs })
+        // SPEC-022 — collecter wids depuis stagesByDisplay (per-scope), pas state.stages
+        // (flat keyed par stageID). En multi-display avec stage "1" sur 2 écrans, le flat
+        // collapse perd les wids d'un display → fetch incomplet → vignettes manquantes
+        // côté display "perdant".
+        var visibleWids = Set<CGWindowID>()
+        for (_, list) in state.stagesByDisplay {
+            for stage in list {
+                visibleWids.formUnion(stage.windowIDs)
+            }
+        }
+        // Fallback compat : si stagesByDisplay vide (mode global), retomber sur state.stages.
+        if visibleWids.isEmpty {
+            visibleWids = Set(state.stages.flatMap { $0.windowIDs })
+        }
         debugLog("refreshThumbnails: \(visibleWids.count) visible wids")
         for wid in visibleWids {
             fetcher.invalidate(wid: wid)
