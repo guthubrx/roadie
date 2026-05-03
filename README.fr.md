@@ -18,6 +18,10 @@
 
 Un petit window manager tiling pour macOS, écrit en Swift, que je polis pour en faire mon poste de travail au quotidien.
 
+<p align="center">
+  <img src="docs/assets/screenshot-multi-display.png" alt="capture d'écran roadie multi-display" width="100%">
+</p>
+
 ## Pourquoi ce projet
 
 À l'origine je n'avais pas l'intention d'écrire un window manager. Cela fait des années que [yabai](https://github.com/koekeishiya/yabai) est le support de mon poste de travail — un projet remarquable, taillé au cordeau, dont la stabilité et l'ergonomie ont marqué tous les utilisateurs de tiling sur macOS. Je continue d'y voir la référence, et la dette intellectuelle de roadie envers yabai est totale.
