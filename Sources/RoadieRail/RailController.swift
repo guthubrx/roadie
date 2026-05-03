@@ -146,7 +146,11 @@ final class RailController {
     // MARK: - Event handling
 
     func handleEnterEdge(_ screen: NSScreen) {
-        guard let panel = panel(for: screen) else { return }
+        debugLog("handleEnterEdge: screen=\(displayID(for: screen)) panels.count=\(panels.count)")
+        guard let panel = panel(for: screen) else {
+            debugLog("handleEnterEdge: no panel for this screen — buildPanels skipped this display ?")
+            return
+        }
         // SPEC-014 T081 (US6) : reclaim horizontal space si activé en config.
         if config.reclaimHorizontalSpace {
             sendTilingReserve(size: Int(config.panelWidth), display: screen)
@@ -292,6 +296,7 @@ final class RailController {
         } else {
             targetScreens = NSScreen.screens
         }
+        debugLog("buildPanels: targetScreens=\(targetScreens.count) displayMode=\(config.displayMode)")
         // SPEC-019 — capturer le displayUUID de chaque panel pour les callbacks scopés.
         // Le switch IPC envoie alors `--display <uuid>` au daemon, qui résout dans
         // le bon scope au lieu de retomber sur l'inférence curseur (qui peut différer
@@ -392,6 +397,7 @@ final class RailController {
                                                      args: ["display": uuid])
                     let stages = parseStages(from: payload)
                     state.stagesByDisplay[uuid] = stages
+                    debugLog("loadInitialStages: uuid=\(uuid.prefix(8)) stages=\(stages.count)")
                     state.connectionState = .connected
                 } catch RailIPCError.daemonNotRunning {
                     state.connectionState = .offline(reason: "daemon not running")

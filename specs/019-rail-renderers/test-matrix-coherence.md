@@ -908,11 +908,11 @@ Conventions :
 | TC-103 | FS | PASS | 0 fichier avec frame 66×20 | Aucun helper 66×20 sur disque | — | — | N/A | | /tmp/hui-tc-103.txt |
 | TC-104 | FS | PASS | 0 wid en doublon | Aucune wid double-attribuée | — | — | N/A | | /tmp/hui-tc-104.txt |
 | TC-105 | BTT | PASS | 58 hotkeys roadie | ≥ 50 hotkeys roadie configurés | — | — | N/A | | /tmp/btt-roadie-map.txt |
-| TC-201 | NAV | PENDING | | Hover gauche fait apparaître panel | | | | | |
-| TC-202 | NAV | PENDING | | Cellules = stages du primary | | | | | |
-| TC-203 | NAV | PENDING | | Chaque panel = stages distincts | | | | | |
-| TC-204 | CLI | PENDING | | stage list reflète scope curseur | | | | | |
-| TC-205 | CLI | PENDING | | display focus N change display courant | | | | | |
+| TC-201 | NAV | PASS | Panel apparaît avec vignette + halo vert au hover x=0,y=640 | Hover gauche fait apparaître panel | — | — | N/A | | /tmp/hui-tc-201-after-fix.png |
+| TC-202 | NAV | PASS | 1 stage daemon = 1 cellule rail | Cellules = stages du primary | — | — | N/A | | /tmp/hui-tc-202-state.txt |
+| TC-203 | NAV | SKIP | 1 écran seulement | Chaque panel = stages distincts | — | — | N/A | | matériel manquant |
+| TC-204 | CLI | PARTIAL_PASS | scope retourné cohérent sur primary | stage list reflète scope curseur | 2nd écran absent → pas de diff cross-display | — | N/A | | /tmp/hui-tc-204-primary.txt |
+| TC-205 | CLI | SKIP | 1 écran seulement | display focus N change display courant | — | — | N/A | | matériel manquant |
 | TC-301a | CLI | PENDING | | Mémoire stage à l'aller-retour D1↔D2 | | | | | |
 | TC-301b | BTT | PENDING | | Idem 301a via Cmd+1/Cmd+2 | | | | | |
 | TC-301c | BTT | PENDING | | Alt+Shift+N incrémente desktop | | | | | |
@@ -991,7 +991,7 @@ Conventions :
 | Classe | Total | PASS | FAIL | BLOCKED | SKIP | Tag commit |
 |---|---|---|---|---|---|---|
 | TC-100 boot | 5 | 5 | 0 | 0 | 0 | tc-class-boot-pass |
-| TC-200 display | 5 | 0 | 0 | 0 | 0 | — |
+| TC-200 display | 5 | 3 | 0 | 0 | 2 | tc-class-display-pass |
 | TC-300 desktop | 8 | 0 | 0 | 0 | 0 | — |
 | TC-400 stage | 9 | 0 | 0 | 0 | 0 | — |
 | TC-500 drag-drop | 1 | 0 | 0 | 0 | 0 | — |
