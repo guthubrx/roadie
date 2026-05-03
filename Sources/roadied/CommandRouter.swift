@@ -241,8 +241,13 @@ enum CommandRouter {
             return .success()
 
         case "rebuild":
-            // Reconstruit l'arbre BSP depuis les leaves existantes.
-            // Utile si le tree s'est aplati (insertions avec target=nil successives).
+            // SPEC-018 fix : si le tree est vide (cas observé après stage switches),
+            // rebuildTree ne pouvait rien reconstruire (lit les oldLeaves du root, qui
+            // est vide). On garantit d'abord la présence des wid tilées via
+            // ensureTreePopulated (depuis le registry qui est la source de vérité),
+            // puis on flatten + reinsert via rebuildTree pour un layout BSP propre.
+            let tileableWids = daemon.registry.tileableWindows.map { $0.cgWindowID }
+            daemon.layoutEngine.ensureTreePopulated(with: tileableWids)
             daemon.layoutEngine.rebuildTree()
             daemon.applyLayout()
             return .success()
