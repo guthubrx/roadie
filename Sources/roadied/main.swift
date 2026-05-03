@@ -756,8 +756,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     registry: registry,
                     desktopRegistry: dRegistry,
                     stageManager: sm,
+                    layoutEngine: self.layoutEngine,
+                    displayRegistry: self.displayRegistry,
                     pollIntervalMs: pollMs
                 )
+                reconciler.applyLayoutCallback = { [weak self] in
+                    self?.applyLayout()
+                }
                 reconciler.start()
                 self.windowDesktopReconciler = reconciler
             }
@@ -981,7 +986,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             return
         }
         let subrole = AXReader.subrole(axWindow)
-        let frame = AXReader.bounds(axWindow) ?? .zero
+        var frame = AXReader.bounds(axWindow) ?? .zero
+        // SPEC-022 — au registre initial, si AX retourne une frame degenerate
+        // (height ou width < 100, classique sur Firefox/iTerm pendant init AX),
+        // tenter CGWindowList qui souvent retourne la bonne taille. Sans ça,
+        // la wid est créée comme "helper" et reste mal classifiée toute sa vie.
+        let minDim = WindowState.minimumUsefulDimension
+        if frame.size.height < minDim || frame.size.width < minDim {
+            if let cg = liveCGBounds(for: wid),
+               cg.size.height >= minDim && cg.size.width >= minDim {
+                logInfo("registerWindow: AX degenerate, used CG fallback", [
+                    "wid": String(wid),
+                    "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
+                    "cg": "\(Int(cg.size.width))x\(Int(cg.size.height))",
+                ])
+                frame = cg
+            }
+        }
         let isMin = AXReader.isMinimized(axWindow)
         let isFs = AXReader.isFullscreen(axWindow)
         let state = WindowState(cgWindowID: wid, pid: pid, bundleID: bundleID,
@@ -1575,6 +1596,35 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     func axDidResizeWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
               let frame = AXReader.bounds(element) else { return }
+        // SPEC-022 — rejeter les frames degenerate (height ou width < 100 px).
+        // Cause : iTerm/Firefox AX reporte parfois 1836×20 pendant des transitions
+        // (drawer ouvert/fermé, change d'onglet). Si on accepte, isHelperWindow
+        // devient true → wid classifiée non-tileable → tile ne la replace plus →
+        // reste offscreen invisible quand on switch de stage.
+        // Les vraies fenêtres > 100 px passent normalement. Un user qui réduit
+        // volontairement à 20 px (cas très rare) n'aura pas le cache à jour, mais
+        // le drag manuel suivant déclenchera axDidMoveWindow qui re-set la frame.
+        let minDim = WindowState.minimumUsefulDimension
+        if frame.size.height < minDim || frame.size.width < minDim {
+            // Fallback : tenter CGWindowList qui souvent reporte la bonne taille
+            // quand AX bug. Si CG est sain, l'adopter. Sinon, ignorer cet update.
+            if let cgInfo = liveCGBounds(for: wid),
+               cgInfo.size.height >= minDim && cgInfo.size.width >= minDim {
+                registry.updateFrame(wid, frame: cgInfo)
+                logInfo("axDidResize: AX degenerate, used CG fallback", [
+                    "wid": String(wid),
+                    "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
+                    "cg": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))",
+                ])
+                propagateExpectedFrame(wid: wid, frame: cgInfo)
+            } else {
+                logInfo("axDidResize: ignored degenerate frame", [
+                    "wid": String(wid),
+                    "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
+                ])
+            }
+            return
+        }
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
         propagateExpectedFrame(wid: wid, frame: frame)

@@ -44,6 +44,19 @@ public final class WindowRegistry {
     }
 
     public func updateFrame(_ wid: WindowID, frame: CGRect) {
+        // SPEC-022 — rejeter toute frame avec size degenerate (height < 100 ou
+        // width < 100). HideStrategy déplace à des positions extrêmes mais GARDE
+        // la size normale → un setBounds via HideStrategy a toujours size OK.
+        // Une frame degenerate vient TOUJOURS d'un AX bug (drawer transient,
+        // popup, init en cours). Mieux vaut garder l'ancienne valeur sane.
+        let minDim = WindowState.minimumUsefulDimension
+        if frame.size.width < minDim || frame.size.height < minDim {
+            logWarn("updateFrame: rejected degenerate frame", [
+                "wid": String(wid),
+                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.size.width))x\(Int(frame.size.height))",
+            ])
+            return
+        }
         update(wid) { $0.frame = frame }
     }
 
