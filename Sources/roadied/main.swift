@@ -62,6 +62,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var sckCaptureService: SCKCaptureService?
     /// SPEC-014 : watcher click wallpaper → event wallpaper_click.
     var wallpaperClickWatcher: WallpaperClickWatcher?
+    /// SPEC-021 T048 : reconciler périodique desktop macOS ↔ scope persisté.
+    var windowDesktopReconciler: WindowDesktopReconciler?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -567,6 +569,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 // depuis memberWindows persistés. Source unique de vérité pour l'API
                 // scopeOf(wid:)/stageIDOf(wid:). Coût O(stages × members) une fois.
                 mgr.rebuildWidToScopeIndex()
+                // SPEC-021 T069 (US4) : audit read-only des invariants au boot.
+                // Violation = drift hérité d'une session précédente buggée. Log + continue
+                // (pas de crash) — le code post-T028 maintient les invariants par
+                // construction, donc une violation signale un fichier TOML incohérent.
+                let violations = mgr.auditOwnership()
+                if !violations.isEmpty {
+                    logError("ownership_invariant_violation_boot",
+                             ["count": String(violations.count),
+                              "first": violations.first ?? ""])
+                }
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
@@ -680,6 +692,26 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             logInfo("desktops initialized",
                     ["count": String(config.desktops.count),
                      "current": String(await dRegistry.currentID)])
+
+            // SPEC-021 T048+T049 : démarrer le reconciler périodique desktop macOS ↔ scope
+            // persisté. Rebuild le cache spaceID avant de démarrer (SkyLightBridge @MainActor).
+            // T049 : stop graceful via windowDesktopReconciler?.stop() si besoin d'un shutdown
+            // explicite. En pratique, le process termine via exit() et Swift annule toutes les
+            // Tasks automatiquement — pas de handler SIGTERM dans ce daemon.
+            if let sm = stageManager, config.desktops.mode == .perDisplay {
+                let pollMs = config.desktops.windowDesktopPollMs
+                if let displaySpaces = SkyLightBridge.managedDisplaySpaces() {
+                    await dRegistry.rebuildSpaceIDCache(from: displaySpaces)
+                }
+                let reconciler = WindowDesktopReconciler(
+                    registry: registry,
+                    desktopRegistry: dRegistry,
+                    stageManager: sm,
+                    pollIntervalMs: pollMs
+                )
+                reconciler.start()
+                self.windowDesktopReconciler = reconciler
+            }
         } else {
             logInfo("desktops disabled (desktops.enabled=false)")
         }
@@ -1261,6 +1293,28 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         guard let resolvedDisplay = displayID else { return }
         let currentOnDisplay = await dReg.currentID(for: resolvedDisplay)
+
+        // SPEC-021 T050 : cross-check SkyLight avant le switch desktop.
+        // Si le scope OS diverge du scope persisté (drift Mission Control),
+        // corriger le scope persisté d'abord pour que le switch soit cohérent.
+        if let sm = stageManager,
+           let osSpaceID = SkyLightBridge.currentSpaceID(for: wid),
+           let osScope = await dReg.scopeForSpaceID(osSpaceID),
+           let persistedScope = sm.scopeOf(wid: wid),
+           (osScope.displayUUID != persistedScope.displayUUID || osScope.desktopID != persistedScope.desktopID) {
+            let correctedScope = StageScope(
+                displayUUID: osScope.displayUUID,
+                desktopID: osScope.desktopID,
+                stageID: persistedScope.stageID
+            )
+            sm.assign(wid: wid, to: correctedScope)
+            logInfo("alttab_scope_corrected", [
+                "wid": String(wid),
+                "from": "\(persistedScope.displayUUID):\(persistedScope.desktopID)",
+                "to": "\(osScope.displayUUID):\(osScope.desktopID)",
+            ])
+        }
+
         // No-op si la fenêtre est déjà sur le desktop courant du display.
         guard state.desktopID != currentOnDisplay else { return }
         let targetDesktop = state.desktopID
