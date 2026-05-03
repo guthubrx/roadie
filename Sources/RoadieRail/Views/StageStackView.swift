@@ -9,9 +9,10 @@ private let hintOpacity:  CGFloat = 0.28
 
 struct StageStackView: View {
     @Bindable var state: RailState
-    // SPEC-018 polish — couleur+intensité du halo de la stage active (lus depuis [fx.rail]).
+    // SPEC-018 polish — halo de la stage active (couleur + intensité + radius lus depuis [fx.rail]).
     var haloColorHex:  String                       = "#34C759"
-    var haloIntensity: Double                       = 0.65
+    var haloIntensity: Double                       = 0.75
+    var haloRadius:    Double                       = 18
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
     var onTapStage:   (String) -> Void              = { _ in }
     // SPEC-014 T052 (US3) : callback de drop, (wid, target_stage_id).
@@ -69,6 +70,7 @@ struct StageStackView: View {
                                     windows: state.windows,
                                     haloColorHex: haloColorHex,
                                     haloIntensity: haloIntensity,
+                                    haloRadius: haloRadius,
                                     onTap: { onTapStage(stage.id) },
                                     onDropAssign: onDropAssign,
                                     onRename: onRename,
