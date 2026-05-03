@@ -383,6 +383,33 @@ public actor DesktopRegistry {
         try save(desktop)
     }
 
+    // MARK: - SPEC-021 : cache spaceID → scope (US2, T043-T045)
+
+    /// Index RAM-only : space_id SkyLight → (displayUUID, desktopID roadie).
+    /// Rebuilt à chaque appel à `rebuildSpaceIDCache(from:)`. Jamais persisté.
+    private var spaceIDToScopeCache: [UInt64: (displayUUID: String, desktopID: Int)] = [:]
+
+    /// SPEC-021 T043 — résout un space_id SkyLight vers un scope roadie.
+    /// Retourne nil si le space_id est inconnu (desktop nouvellement créé, fullscreen).
+    public func scopeForSpaceID(_ spaceID: UInt64) -> (displayUUID: String, desktopID: Int)? {
+        spaceIDToScopeCache[spaceID]
+    }
+
+    /// SPEC-021 T045 — reconstruit le cache depuis les données SkyLight pré-calculées.
+    /// Appelant (MainActor) doit avoir appelé `SkyLightBridge.managedDisplaySpaces()`
+    /// et passer le résultat ici. Mapping : ordre SkyLight → desktopID 1, 2, 3, ...
+    public func rebuildSpaceIDCache(
+        from displaySpaces: [(displayUUID: String, spaceIDs: [UInt64])]
+    ) {
+        spaceIDToScopeCache.removeAll(keepingCapacity: true)
+        for entry in displaySpaces {
+            for (index, spaceID) in entry.spaceIDs.enumerated() {
+                spaceIDToScopeCache[spaceID] = (entry.displayUUID, index + 1)
+            }
+        }
+        logInfo("space_id_cache_rebuilt", ["entries": String(spaceIDToScopeCache.count)])
+    }
+
     // MARK: - Helpers internes
 
     private func desktopURL(id: Int) -> URL {
