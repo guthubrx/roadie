@@ -151,7 +151,24 @@ public struct WindowState: Sendable {
         self.preZoomFrame = preZoomFrame
     }
 
+    /// Seuil de taille mini pour qu'une fenêtre soit considérée comme une fenêtre
+    /// applicative réelle (vs utility/tooltip/popup helper). Les apps modernes
+    /// (Firefox WebExtension frames, Grayjay/Electron helpers, iTerm popovers)
+    /// enregistrent des `NSWindow` 66×20 px comme `AXStandardWindow`. Sans ce
+    /// filtre elles polluent le tiling et l'attribution stage.
+    public static let minimumUsefulDimension: CGFloat = 100
+
     public var isTileable: Bool {
         !isFloating && !isMinimized && !isFullscreen && !isZoomed && subrole == .standard
+            && !isHelperWindow
+    }
+
+    /// `true` si la fenêtre est un utility/popup/tooltip non destiné à l'utilisateur final
+    /// (Firefox WebExtension frames 66×20, Grayjay/Electron tooltips, iTerm popovers).
+    /// Critère : au moins une dimension < `minimumUsefulDimension`. Utilisé partout pour
+    /// refuser l'assignation à un stage et la persistance dans `memberWindows`.
+    public var isHelperWindow: Bool {
+        frame.size.width  < Self.minimumUsefulDimension ||
+        frame.size.height < Self.minimumUsefulDimension
     }
 }

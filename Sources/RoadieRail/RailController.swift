@@ -1,8 +1,59 @@
 import AppKit
 import Foundation
+import RoadieCore
 import TOMLKit
 
 // SPEC-014 T032 + T032b — Orchestrateur global : 1 panel par écran, IPC, events.
+
+// MARK: - TOML helpers
+
+/// Lecture d'une clé numérique (Double ou Int) avec clamping, retour `nil` si absente.
+private func parsePreviewKey(_ table: TOMLTable, _ key: String, min lo: Double, max hi: Double) -> Double? {
+    if let v = table[key]?.double { return max(lo, min(hi, v)) }
+    if let v = table[key]?.int    { return max(lo, min(hi, Double(v))) }
+    return nil
+}
+
+/// Mapping clé TOML → rendererID enregistré. Convention : la clé TOML est le préfixe
+/// court, le rendererID complet contient parfois un suffixe (ex: stacked → stacked-previews).
+private func resolveRendererID(fromTOMLKey key: String) -> String {
+    switch key {
+    case "stacked":  return "stacked-previews"
+    case "parallax": return "parallax-45"
+    default:         return key  // mosaic, hero-preview, icons-only : déjà identiques
+    }
+}
+
+// MARK: - Per-renderer overrides
+
+/// SPEC-019 — overrides optionnels d'un renderer sur les paramètres preview
+/// globaux. nil = inherit du global ([fx.rail.preview]).
+struct RendererPreviewOverrides {
+    var width:           Double?
+    var height:          Double?
+    var leadingPadding:  Double?
+    var trailingPadding: Double?
+    var verticalPadding: Double?
+    var borderColor:         String?
+    var borderColorInactive: String?
+    var borderWidth:         Double?
+    var borderStyle:         String?
+    var stageBorderOverrides: [String: String]?
+}
+
+/// Tuple résolu de la preview effective pour un renderer donné.
+struct EffectivePreview {
+    let width:           Double
+    let height:          Double
+    let leadingPadding:  Double
+    let trailingPadding: Double
+    let verticalPadding: Double
+    let borderColor:         String
+    let borderColorInactive: String
+    let borderWidth:         Double
+    let borderStyle:         String
+    let stageBorderOverrides: [String: String]
+}
 
 // MARK: - Config
 
@@ -15,14 +66,80 @@ struct RailConfig {
     var panelWidth: CGFloat = 320
     var edgeWidth: CGFloat = 8
     var fadeDurationMs: Int = 200
+    /// Durée pendant laquelle le panel reste visible après que le curseur quitte
+    /// la zone d'edge (`[fx.rail].persistence_ms`).
+    /// - `-1` (défaut, sentinel "non configuré") : comportement legacy = fade-out immédiat à l'exit.
+    /// - `0` : always-visible. Le panel apparaît au démarrage et n'est jamais caché.
+    /// - `N > 0` : reste affiché N ms après l'exit puis fade-out (cancellable si re-enter).
+    var persistenceMs: Int = -1
     // SPEC-014 T090 (US7) : mode display ("per_display" ou "global").
     var displayMode: String = "per_display"
     // SPEC-018 polish — halo de la stage active. Default vert système Apple #34C759.
+    var haloEnabled: Bool = true   // SPEC-019 : on/off global du halo
     var haloColor: String = "#34C759"
     var haloIntensity: Double = 0.75
     var haloRadius: Double = 18
+    // SPEC-019 — id du renderer actif. nil → fallback "stacked-previews" via le registry.
+    var rendererID: String? = nil
+    // SPEC-019 — paramètres scatter du renderer "stacked-previews".
+    // Defaults marqués (effet « polaroïds éparpillés »). Tous configurables
+    // via [fx.rail.stacked] dans le TOML utilisateur.
+    var stackedOffsetX:   Double = 60   // ±px horizontal max par couche idx>=1
+    var stackedOffsetY:   Double = 80   // ±px vertical max
+    var stackedRotation:  Double = 12   // ±deg max
+    var stackedScale:     Double = 0.06 // réduction par couche
+    var stackedOpacity:   Double = 0.10 // transparence additionnelle par couche
+    var stackedScatterMode: String = "compass" // "compass" | "random"
+    // SPEC-019 — paramètres renderer "parallax-45". Configurables via
+    // [fx.rail.parallax] TOML.
+    var parallaxRotation: Double  = 35  // ° rotation 3D axe Y
+    var parallaxOffsetX:  Double  = 18  // px décalage horizontal par couche
+    var parallaxOffsetY:  Double  = 8   // px décalage vertical par couche
+    var parallaxScale:    Double  = 0.05 // réduction par couche
+    var parallaxOpacity:  Double  = 0.10 // transparence additionnelle par couche
+    // SPEC-019 — taille des vignettes (WindowPreview) et distance depuis le bord
+    // gauche du panel. Configurables via [fx.rail.preview] TOML.
+    var previewWidth:    Double = 200   // px largeur thumbnail
+    var previewHeight:   Double = 130   // px hauteur thumbnail
+    var leadingPadding:  Double = 8     // px distance bord gauche
+    var trailingPadding: Double = 16    // px distance bord droit
+    var verticalPadding: Double = 20    // px padding vertical
+    // SPEC-019 — bordure des vignettes. Hex (RGB ou RGBA), épaisseur, style trait.
+    var borderColor:         String = "#FFFFFF26" // bordure du stage ACTIF (défaut)
+    var borderColorInactive: String = "#80808033" // bordure des stages INACTIFS (gris ~20%)
+    var borderWidth:     Double = 0.5         // px
+    var borderStyle:     String = "solid"     // "solid" | "dashed" | "dotted"
+    /// SPEC-019 — couleurs de bordure par stage actif. Mappe stage_id → hex.
+    /// Quand un stage est actif et a un override ici, sa bordure prend cette
+    /// couleur au lieu du défaut `borderColor`. Mirror du pattern fx.borders.
+    var stageBorderOverrides: [String: String] = [:]
+    // SPEC-019 — assombrissement progressif par couche pour le renderer parallax-45.
+    // 0 = aucun effet. 0.10 = chaque couche idx perd ~10% de luminosité.
+    var parallaxDarkenPerLayer: Double = 0.0
+    // SPEC-019 — overrides par renderer. Chaque [fx.rail.<id>] peut redéfinir
+    // n'importe lequel des 5 paramètres preview ci-dessus. Fallback sur le global
+    // si non spécifié.
+    var rendererOverrides: [String: RendererPreviewOverrides] = [:]
 
     var fadeDuration: TimeInterval { TimeInterval(fadeDurationMs) / 1000 }
+
+    /// SPEC-019 — résout la preview effective pour un renderer donné en appliquant
+    /// les overrides `[fx.rail.<id>]` sur les défauts globaux `[fx.rail.preview]`.
+    func effectivePreview(for rendererID: String) -> EffectivePreview {
+        let o = rendererOverrides[rendererID]
+        return EffectivePreview(
+            width:           o?.width           ?? previewWidth,
+            height:          o?.height          ?? previewHeight,
+            leadingPadding:  o?.leadingPadding  ?? leadingPadding,
+            trailingPadding: o?.trailingPadding ?? trailingPadding,
+            verticalPadding: o?.verticalPadding ?? verticalPadding,
+            borderColor:          o?.borderColor          ?? borderColor,
+            borderColorInactive:  o?.borderColorInactive  ?? borderColorInactive,
+            borderWidth:          o?.borderWidth          ?? borderWidth,
+            borderStyle:          o?.borderStyle          ?? borderStyle,
+            stageBorderOverrides: o?.stageBorderOverrides ?? stageBorderOverrides
+        )
+    }
 
     /// Lit les sections [fx.rail] et [desktops] depuis le TOML. Defaults (FR-031) si absentes.
     static func load() -> RailConfig {
@@ -40,11 +157,104 @@ struct RailConfig {
             if let v = rail["panel_width"]?.int { cfg.panelWidth = CGFloat(v) }
             if let v = rail["edge_width"]?.int { cfg.edgeWidth = CGFloat(v) }
             if let v = rail["fade_duration_ms"]?.int { cfg.fadeDurationMs = v }
+            if let v = rail["persistence_ms"]?.int { cfg.persistenceMs = max(0, v) }
+            if let v = rail["halo_enabled"]?.bool { cfg.haloEnabled = v }
             if let v = rail["halo_color"]?.string { cfg.haloColor = v }
             if let v = rail["halo_intensity"]?.double { cfg.haloIntensity = max(0.0, min(1.0, v)) }
             else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
             if let v = rail["halo_radius"]?.double { cfg.haloRadius = max(0.0, min(80.0, v)) }
             else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
+            // SPEC-019 — clé optionnelle [fx.rail].renderer = "<id>" pour switch de rendu.
+            if let v = rail["renderer"]?.string, !v.isEmpty { cfg.rendererID = v }
+            // SPEC-019 — sous-section [fx.rail.stacked] pour les paramètres scatter.
+            if let stacked = rail["stacked"]?.table {
+                if let v = stacked["offset_x"]?.double { cfg.stackedOffsetX = max(0, min(200, v)) }
+                else if let v = stacked["offset_x"]?.int { cfg.stackedOffsetX = max(0, min(200, Double(v))) }
+                if let v = stacked["offset_y"]?.double { cfg.stackedOffsetY = max(0, min(200, v)) }
+                else if let v = stacked["offset_y"]?.int { cfg.stackedOffsetY = max(0, min(200, Double(v))) }
+                if let v = stacked["rotation"]?.double { cfg.stackedRotation = max(0, min(45, v)) }
+                else if let v = stacked["rotation"]?.int { cfg.stackedRotation = max(0, min(45, Double(v))) }
+                if let v = stacked["scale_per_layer"]?.double { cfg.stackedScale = max(0, min(0.3, v)) }
+                if let v = stacked["opacity_per_layer"]?.double { cfg.stackedOpacity = max(0, min(0.5, v)) }
+                if let v = stacked["scatter_mode"]?.string, v == "compass" || v == "random" {
+                    cfg.stackedScatterMode = v
+                }
+            }
+            // SPEC-019 — sous-section [fx.rail.parallax] pour parallax-45.
+            if let parallax = rail["parallax"]?.table {
+                if let v = parallax["rotation"]?.double { cfg.parallaxRotation = max(0, min(75, v)) }
+                else if let v = parallax["rotation"]?.int { cfg.parallaxRotation = max(0, min(75, Double(v))) }
+                if let v = parallax["offset_x"]?.double { cfg.parallaxOffsetX = max(0, min(80, v)) }
+                else if let v = parallax["offset_x"]?.int { cfg.parallaxOffsetX = max(0, min(80, Double(v))) }
+                if let v = parallax["offset_y"]?.double { cfg.parallaxOffsetY = max(0, min(80, v)) }
+                else if let v = parallax["offset_y"]?.int { cfg.parallaxOffsetY = max(0, min(80, Double(v))) }
+                if let v = parallax["scale_per_layer"]?.double { cfg.parallaxScale = max(0, min(0.3, v)) }
+                if let v = parallax["opacity_per_layer"]?.double { cfg.parallaxOpacity = max(0, min(0.5, v)) }
+                if let v = parallax["darken_per_layer"]?.double { cfg.parallaxDarkenPerLayer = max(0, min(1.0, v)) }
+            }
+            // SPEC-019 — sous-section [fx.rail.preview] : défauts globaux pour TOUS
+            // les renderers. Chaque clé peut être surchargée individuellement par
+            // une sous-section [fx.rail.<id>] (ex: [fx.rail.parallax].leading_padding = 4).
+            if let preview = rail["preview"]?.table {
+                if let v = parsePreviewKey(preview, "width", min: 60, max: 600)            { cfg.previewWidth = v }
+                if let v = parsePreviewKey(preview, "height", min: 40, max: 400)           { cfg.previewHeight = v }
+                if let v = parsePreviewKey(preview, "leading_padding", min: 0, max: 200)   { cfg.leadingPadding = v }
+                if let v = parsePreviewKey(preview, "trailing_padding", min: 0, max: 200)  { cfg.trailingPadding = v }
+                if let v = parsePreviewKey(preview, "vertical_padding", min: 0, max: 200)  { cfg.verticalPadding = v }
+                if let v = preview["border_color"]?.string { cfg.borderColor = v }
+                if let v = preview["border_color_inactive"]?.string { cfg.borderColorInactive = v }
+                if let v = parsePreviewKey(preview, "border_width", min: 0, max: 20)       { cfg.borderWidth = v }
+                if let v = preview["border_style"]?.string,
+                   ["solid", "dashed", "dotted"].contains(v) { cfg.borderStyle = v }
+                // SPEC-019 — stage_overrides : tableau de tables { stage_id, active_color }
+                if let arr = preview["stage_overrides"]?.array {
+                    for item in arr {
+                        guard let row = item.table,
+                              let sid = row["stage_id"]?.string,
+                              let color = row["active_color"]?.string else { continue }
+                        cfg.stageBorderOverrides[sid] = color
+                    }
+                }
+            }
+            // SPEC-019 — overrides preview par renderer. On scanne TOUTES les sous-tables
+            // de [fx.rail] et on extrait les 5 clés preview pour chacune. Les autres
+            // clés (rotation, scatter_mode, etc.) restent traitées en-dessous par renderer.
+            for (key, node) in rail where node.table != nil {
+                guard let table = node.table, key != "preview" else { continue }
+                var ov = RendererPreviewOverrides()
+                ov.width           = parsePreviewKey(table, "width", min: 60, max: 600)
+                ov.height          = parsePreviewKey(table, "height", min: 40, max: 400)
+                ov.leadingPadding  = parsePreviewKey(table, "leading_padding", min: 0, max: 200)
+                ov.trailingPadding = parsePreviewKey(table, "trailing_padding", min: 0, max: 200)
+                ov.verticalPadding = parsePreviewKey(table, "vertical_padding", min: 0, max: 200)
+                ov.borderColor         = table["border_color"]?.string
+                ov.borderColorInactive = table["border_color_inactive"]?.string
+                ov.borderWidth         = parsePreviewKey(table, "border_width", min: 0, max: 20)
+                if let s = table["border_style"]?.string, ["solid", "dashed", "dotted"].contains(s) {
+                    ov.borderStyle = s
+                }
+                if let arr = table["stage_overrides"]?.array {
+                    var ovr: [String: String] = [:]
+                    for item in arr {
+                        guard let row = item.table,
+                              let sid = row["stage_id"]?.string,
+                              let color = row["active_color"]?.string else { continue }
+                        ovr[sid] = color
+                    }
+                    if !ovr.isEmpty { ov.stageBorderOverrides = ovr }
+                }
+                if ov.width != nil || ov.height != nil
+                    || ov.leadingPadding != nil || ov.trailingPadding != nil
+                    || ov.verticalPadding != nil
+                    || ov.borderColor != nil || ov.borderColorInactive != nil
+                    || ov.borderWidth != nil || ov.borderStyle != nil
+                    || ov.stageBorderOverrides != nil {
+                    // Conversion sous-section TOML → renderer ID. [fx.rail.stacked]
+                    // → "stacked-previews", [fx.rail.parallax] → "parallax-45", etc.
+                    let id = resolveRendererID(fromTOMLKey: key)
+                    cfg.rendererOverrides[id] = ov
+                }
+            }
         }
         // SPEC-014 T090 : [desktops] mode informe si rails per_display ou global.
         if let desktops = root["desktops"]?.table,
@@ -69,6 +279,10 @@ final class RailController {
 
     private var panels: [CGDirectDisplayID: StageRailPanel] = [:]
     private var config: RailConfig = .init()
+    /// Tasks de fade-out différé par display, indexées par `displayID`. Permet
+    /// d'annuler le hide programmé si le curseur revient sur l'edge avant
+    /// l'expiration de `persistenceMs`.
+    private var pendingHideTasks: [CGDirectDisplayID: Task<Void, Never>] = [:]
 
     init() {
         state = RailState()
@@ -77,6 +291,10 @@ final class RailController {
         edgeMonitor = EdgeMonitor()
         fade = FadeAnimator()
         fetcher = ThumbnailFetcher(ipc: ipc)
+        // SPEC-019 — enregistrer les renderers livrés AVANT que les panels ne soient créés.
+        // Le default `stacked-previews` DOIT être présent dans le registre, sinon
+        // `StageRendererRegistry.makeOrFallback` trap fail-loud (cf. registry contract).
+        registerBuiltinRenderers()
     }
 
     private var thumbnailRefreshTimer: Timer?
@@ -138,7 +356,16 @@ final class RailController {
     // MARK: - Event handling
 
     func handleEnterEdge(_ screen: NSScreen) {
-        guard let panel = panel(for: screen) else { return }
+        debugLog("handleEnterEdge: screen=\(displayID(for: screen)) panels.count=\(panels.count)")
+        guard let panel = panel(for: screen) else {
+            debugLog("handleEnterEdge: no panel for this screen — buildPanels skipped this display ?")
+            return
+        }
+        // Annuler tout fade-out en attente sur ce display (cas re-enter pendant
+        // la fenêtre de persistance).
+        let did = displayID(for: screen)
+        pendingHideTasks[did]?.cancel()
+        pendingHideTasks.removeValue(forKey: did)
         // SPEC-014 T081 (US6) : reclaim horizontal space si activé en config.
         if config.reclaimHorizontalSpace {
             sendTilingReserve(size: Int(config.panelWidth), display: screen)
@@ -148,11 +375,33 @@ final class RailController {
 
     func handleExitEdge(_ screen: NSScreen) {
         guard let panel = panel(for: screen) else { return }
+        // Mode always-visible : ignorer l'exit, le panel reste affiché.
+        if config.persistenceMs == 0 { return }
         // SPEC-014 T082 (US6) : restaure le workArea au début du fade-out.
         if config.reclaimHorizontalSpace {
             sendTilingReserve(size: 0, display: screen)
         }
-        fade.fadeOut(panel, duration: config.fadeDuration) { panel.orderOut(nil) }
+        let doFadeOut: @MainActor () -> Void = { [weak self] in
+            guard let self = self else { return }
+            self.fade.fadeOut(panel, duration: self.config.fadeDuration) { panel.orderOut(nil) }
+        }
+        if config.persistenceMs > 0 {
+            // Délai cancellable : si le curseur revient sur l'edge avant l'expiration,
+            // handleEnterEdge annule cette task et le panel reste affiché.
+            let did = displayID(for: screen)
+            pendingHideTasks[did]?.cancel()
+            let delayNs = UInt64(config.persistenceMs) * 1_000_000
+            pendingHideTasks[did] = Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: delayNs)
+                guard !Task.isCancelled, let self = self else { return }
+                self.pendingHideTasks.removeValue(forKey: did)
+                doFadeOut()
+            }
+        } else {
+            // Comportement legacy (persistenceMs == -1, sentinel "non configuré") :
+            // fade-out immédiat à l'exit.
+            doFadeOut()
+        }
     }
 
     private func sendTilingReserve(size: Int, display screen: NSScreen) {
@@ -201,16 +450,38 @@ final class RailController {
             loadWindows()
         case "desktop_changed":
             if let id = payload["desktop_id"] as? Int { state.currentDesktopID = id }
-            // Après changement de desktop, resync les stages du nouveau desktop.
+            // Après changement de desktop, full resync : stages ET windows du nouveau
+            // scope. Sans loadWindows, state.windows reste celui de l'ancien desktop
+            // → WindowStack filtre les wids du nouveau desktop comme "orphelines".
+            // Aussi : invalider les thumbnails locales pour refetch les nouvelles wids.
             loadInitialStages()
+            loadWindows()
+            state.thumbnails.removeAll()
+        case "window_focused":
+            // SPEC-019 — promouvoir la vignette focused au rang « hero » (idx=0)
+            // dans le renderer stacked-previews. Coût : un appel windows.list (pas
+            // de thumbnails refetched, juste les VM avec is_focused mis à jour).
+            loadWindows()
         case "thumbnail_updated":
             if let widRaw = payload["wid"] as? Int {
                 fetcher.invalidate(wid: CGWindowID(widRaw))
+            }
+        case "config_reloaded":
+            // SPEC-019 — relire la config TOML (notamment [fx.rail].renderer)
+            // et reconstruire les panels pour que le rail bascule sur le nouveau
+            // renderer en moins d'une seconde, sans perdre l'état des stages.
+            let oldRenderer = config.rendererID ?? StageRendererRegistry.defaultID
+            config = RailConfig.load()
+            let newRenderer = config.rendererID ?? StageRendererRegistry.defaultID
+            if oldRenderer != newRenderer {
+                logInfo("renderer_changed", ["from": oldRenderer, "to": newRenderer])
+                rebuildPanels()
             }
         default:
             break
         }
     }
+
 
     /// Retourne true si l'UUID correspond à l'un des panels de ce rail.
     /// Utilisé pour le filtre display_uuid des events stage_* (SPEC-018 T062).
@@ -239,7 +510,8 @@ final class RailController {
                         bundleID: w["bundle"] as? String ?? "",
                         title: w["title"] as? String ?? "",
                         appName: w["app_name"] as? String ?? "",
-                        isFloating: w["is_floating"] as? Bool ?? false
+                        isFloating: w["is_floating"] as? Bool ?? false,
+                        isFocused: w["is_focused"] as? Bool ?? false
                     )
                     dict[vm.id] = vm
                 }
@@ -267,14 +539,11 @@ final class RailController {
         } else {
             targetScreens = NSScreen.screens
         }
-        // SPEC-014 T041 : injecte switchToStage via closure capturée faiblement.
-        let onTap: (String) -> Void = { [weak self] id in
-            Task { @MainActor [weak self] in self?.switchToStage(id) }
-        }
-        // SPEC-014 T053 (US3) : drop chip → assign window à la stage cible.
-        let onDrop: (CGWindowID, String) -> Void = { [weak self] wid, target in
-            Task { @MainActor [weak self] in self?.assignWindow(wid, to: target) }
-        }
+        debugLog("buildPanels: targetScreens=\(targetScreens.count) displayMode=\(config.displayMode)")
+        // SPEC-019 — capturer le displayUUID de chaque panel pour les callbacks scopés.
+        // Le switch IPC envoie alors `--display <uuid>` au daemon, qui résout dans
+        // le bon scope au lieu de retomber sur l'inférence curseur (qui peut différer
+        // si la souris a bougé entre la liste et le clic).
         // SPEC-014 T070-T073 (US5) : menu contextuel.
         let onRename: (String, String) -> Void = { [weak self] sid, name in
             Task { @MainActor [weak self] in self?.renameStage(sid, to: name) }
@@ -287,13 +556,53 @@ final class RailController {
         }
         for screen in targetScreens {
             let id = displayID(for: screen)
+            let panelUUID = displayUUID(for: screen)
+            // SPEC-019 — callbacks scopés par panel. Le tap/drop IPC porte le display
+            // explicite : le daemon résout dans CE scope, plus dans l'inférence curseur.
+            let onTapScoped: (String) -> Void = { [weak self] sid in
+                Task { @MainActor [weak self] in self?.switchToStage(sid, displayUUID: panelUUID) }
+            }
+            let onDropScoped: (CGWindowID, String) -> Void = { [weak self] wid, target in
+                Task { @MainActor [weak self] in
+                    self?.assignWindow(wid, to: target, displayUUID: panelUUID)
+                }
+            }
+            // SPEC-019 — résoudre la preview effective pour le renderer actif.
+            // Renderer changes (config_reloaded) déclenchent rebuildPanels → re-résolution.
+            let activeRendererID = config.rendererID ?? StageRendererRegistry.defaultID
+            let effective = config.effectivePreview(for: activeRendererID)
             let view = StageStackView(
                 state: state,
+                displayUUID: panelUUID,
                 haloColorHex: config.haloColor,
                 haloIntensity: config.haloIntensity,
                 haloRadius: config.haloRadius,
-                onTapStage: onTap,
-                onDropAssign: onDrop,
+                rendererID: config.rendererID,
+                stackedOffsetX: config.stackedOffsetX,
+                stackedOffsetY: config.stackedOffsetY,
+                stackedRotation: config.stackedRotation,
+                stackedScale: config.stackedScale,
+                stackedOpacity: config.stackedOpacity,
+                stackedScatterMode: config.stackedScatterMode,
+                parallaxRotation: config.parallaxRotation,
+                parallaxOffsetX: config.parallaxOffsetX,
+                parallaxOffsetY: config.parallaxOffsetY,
+                parallaxScale: config.parallaxScale,
+                parallaxOpacity: config.parallaxOpacity,
+                previewWidth: effective.width,
+                previewHeight: effective.height,
+                leadingPadding: effective.leadingPadding,
+                trailingPadding: effective.trailingPadding,
+                verticalPadding: effective.verticalPadding,
+                borderColor: effective.borderColor,
+                borderColorInactive: effective.borderColorInactive,
+                borderWidth: effective.borderWidth,
+                borderStyle: effective.borderStyle,
+                stageBorderOverrides: effective.stageBorderOverrides,
+                haloEnabled: config.haloEnabled,
+                parallaxDarkenPerLayer: config.parallaxDarkenPerLayer,
+                onTapStage: onTapScoped,
+                onDropAssign: onDropScoped,
                 onRename: onRename,
                 onAddFocused: onAddFocused,
                 onDelete: onDelete
@@ -304,9 +613,23 @@ final class RailController {
         }
         state.screens = NSScreen.screens.map { screenInfo(from: $0) }
         state.displayMode = config.displayMode == "global" ? .global : .perDisplay
+        // Mode always-visible : afficher tous les panels immédiatement, sans attendre
+        // un edge-hover. Le fade-out est neutralisé dans handleExitEdge.
+        if config.persistenceMs == 0 {
+            for (id, panel) in panels {
+                if config.reclaimHorizontalSpace,
+                   let screen = NSScreen.screens.first(where: { displayID(for: $0) == id }) {
+                    sendTilingReserve(size: Int(config.panelWidth), display: screen)
+                }
+                fade.fadeIn(panel, duration: config.fadeDuration)
+            }
+        }
     }
 
     private func rebuildPanels() {
+        // Annuler les pending hides : les panels vont être recréés.
+        for (_, task) in pendingHideTasks { task.cancel() }
+        pendingHideTasks.removeAll()
         buildPanels()
     }
 
@@ -328,17 +651,54 @@ final class RailController {
     }
 
     private func loadInitialStages() {
+        // SPEC-019 — charger les stages PAR DISPLAY pour que chaque panel affiche
+        // strictement les stages de son écran (et pas le scope inferré curseur,
+        // qui mixait les 2 displays dans `state.stages`).
+        let uuids = panels.keys.compactMap { id -> String? in
+            guard let cf = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue()
+            else { return nil }
+            return CFUUIDCreateString(nil, cf) as String?
+        }
         Task {
-            do {
-                let payload = try await ipc.send(command: "stage.list")
-                let stages = parseStages(from: payload)
-                state.stages = stages
-                state.connectionState = .connected
-            } catch RailIPCError.daemonNotRunning {
-                state.connectionState = .offline(reason: "daemon not running")
-            } catch {
-                state.connectionState = .offline(reason: "\(error)")
+            // Compat fallback : si aucun panel encore créé OU UUIDs vides, retomber
+            // sur `stage.list` sans override (= scope curseur).
+            if uuids.isEmpty {
+                do {
+                    let payload = try await ipc.send(command: "stage.list")
+                    state.stages = parseStages(from: payload)
+                    state.connectionState = .connected
+                } catch RailIPCError.daemonNotRunning {
+                    state.connectionState = .offline(reason: "daemon not running")
+                } catch {
+                    state.connectionState = .offline(reason: "\(error)")
+                }
+                return
             }
+            // Une requête par display, en parallèle.
+            for uuid in uuids {
+                do {
+                    let payload = try await ipc.send(command: "stage.list",
+                                                     args: ["display": uuid])
+                    let stages = parseStages(from: payload)
+                    state.stagesByDisplay[uuid] = stages
+                    debugLog("loadInitialStages: uuid=\(uuid.prefix(8)) stages=\(stages.count)")
+                    state.connectionState = .connected
+                } catch RailIPCError.daemonNotRunning {
+                    state.connectionState = .offline(reason: "daemon not running")
+                } catch {
+                    // Une erreur sur un display ne tue pas les autres.
+                    logErr("rail: stage.list display=\(uuid) failed: \(error)")
+                }
+            }
+            // Conserver `state.stages` à plat pour les call-sites legacy : union de tous
+            // les scopes (déduplication par id n'est pas nécessaire — les stage IDs
+            // sont uniques par scope mais peuvent coexister entre displays avec valeurs
+            // équivalentes ; la flat list garde tout, dernier écrit gagne par id).
+            var flat: [String: StageVM] = [:]
+            for (_, list) in state.stagesByDisplay {
+                for s in list { flat[s.id] = s }
+            }
+            state.stages = Array(flat.values)
         }
     }
 
@@ -364,7 +724,7 @@ final class RailController {
 
     /// Envoie `stage.assign` au daemon avec wid + cible. Update optimiste local.
     /// Le daemon émet ensuite `window_assigned` qui re-sync via loadInitialStages.
-    func assignWindow(_ wid: CGWindowID, to stageID: String) {
+    func assignWindow(_ wid: CGWindowID, to stageID: String, displayUUID: String = "") {
         // Update optimiste : retire wid de tout stage, l'ajoute à la cible.
         state.stages = state.stages.map { stage in
             var ids = stage.windowIDs.filter { $0 != wid }
@@ -375,8 +735,11 @@ final class RailController {
         }
         Task {
             do {
-                _ = try await ipc.send(command: "stage.assign",
-                                       args: ["stage_id": stageID, "wid": String(wid)])
+                // SPEC-019 — override `--display` explicite pour que le daemon
+                // résolve le scope dans le bon écran (pas via inférence curseur).
+                var args: [String: String] = ["stage_id": stageID, "wid": String(wid)]
+                if !displayUUID.isEmpty { args["display"] = displayUUID }
+                _ = try await ipc.send(command: "stage.assign", args: args)
             } catch {
                 logErr("rail: stage.assign \(wid)→\(stageID) failed: \(error)")
                 loadInitialStages()
@@ -424,10 +787,20 @@ final class RailController {
 
     /// Envoie `stage.switch` au daemon. Optimiste : pré-update activeStageID
     /// localement pour réactivité visuelle, le `stage_changed` event confirme.
-    func switchToStage(_ id: String) {
-        // Pas de re-trigger si déjà active (FR-018).
-        if state.stages.first(where: { $0.id == id })?.isActive == true { return }
-        // Update optimiste : marque la cible active immédiatement.
+    func switchToStage(_ id: String, displayUUID: String = "") {
+        // SPEC-019 — la stage cible peut être active dans le scope du panel d'origine
+        // mais pas dans state.stages (= état partagé qui peut refléter un autre scope).
+        // On lève le no-op : le daemon est seul juge, il fera no-op si déjà active.
+        // Update optimiste : marque la cible active dans `stagesByDisplay[uuid]` ET
+        // dans `state.stages` (pour les call-sites qui n'utilisent pas le scope).
+        if !displayUUID.isEmpty, var scoped = state.stagesByDisplay[displayUUID] {
+            scoped = scoped.map { stage in
+                StageVM(id: stage.id, displayName: stage.displayName,
+                        isActive: stage.id == id,
+                        windowIDs: stage.windowIDs, desktopID: stage.desktopID)
+            }
+            state.stagesByDisplay[displayUUID] = scoped
+        }
         state.stages = state.stages.map { stage in
             StageVM(id: stage.id, displayName: stage.displayName,
                     isActive: stage.id == id,
@@ -436,10 +809,11 @@ final class RailController {
         state.activeStageID = id
         Task {
             do {
-                _ = try await ipc.send(command: "stage.switch", args: ["stage_id": id])
+                var args: [String: String] = ["stage_id": id]
+                if !displayUUID.isEmpty { args["display"] = displayUUID }
+                _ = try await ipc.send(command: "stage.switch", args: args)
             } catch {
                 logErr("rail: stage.switch \(id) failed: \(error)")
-                // Re-sync depuis le daemon en cas d'échec.
                 loadInitialStages()
             }
         }
@@ -451,6 +825,14 @@ final class RailController {
 
     private func displayID(for screen: NSScreen) -> CGDirectDisplayID {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) ?? 0
+    }
+
+    /// SPEC-019 — UUID stable du display pour ce screen (utilisé en override `--display`
+    /// dans les requêtes IPC scopées). Vide si la résolution AX échoue.
+    private func displayUUID(for screen: NSScreen) -> String {
+        let id = displayID(for: screen)
+        guard let cf = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue() else { return "" }
+        return CFUUIDCreateString(nil, cf) as String? ?? ""
     }
 
     private func screenInfo(from screen: NSScreen) -> ScreenInfo {

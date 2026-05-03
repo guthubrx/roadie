@@ -5,6 +5,7 @@ import RoadieTiler
 import RoadieStagePlugin
 import RoadieFXCore
 import RoadieDesktops
+import TOMLKit
 
 /// SPEC-010 : OSAXBridge partagé entre le daemon et les modules FX. Permet au
 /// daemon d'envoyer directement des commandes osax (move_window_to_space,
@@ -75,10 +76,60 @@ enum CommandRouter {
                     Logger.shared.setMinLevel(level)
                 }
                 logInfo("config reloaded")
+                // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
+                // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
+                EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
                 return .success()
             } catch {
                 return .error(.invalidArgument, "config reload failed: \(error)")
             }
+
+        case "rail.renderer.list":
+            // SPEC-019 — liste des renderers connus côté daemon (manifest hardcoded,
+            // miroir de Sources/RoadieRail/Renderers/Bootstrap.swift) + le `current`
+            // lu depuis le TOML utilisateur. La liste réelle des renderers compilés
+            // dans le binaire roadie-rail est connaissance partagée constante.
+            let knownRenderers: [(id: String, displayName: String)] = [
+                ("stacked-previews", "Stacked previews"),
+                ("icons-only",       "Icons only"),
+                ("hero-preview",     "Hero preview"),
+                ("mosaic",           "Mosaic"),
+                ("parallax-45",      "Parallax 45\u{00B0}"),
+            ]
+            let currentRenderer = readCurrentRendererID() ?? "stacked-previews"
+            let payload: [String: AnyCodable] = [
+                "default": AnyCodable("stacked-previews"),
+                "current": AnyCodable(currentRenderer),
+                "renderers": AnyCodable(knownRenderers.map { r -> [String: Any] in
+                    ["id": r.id, "display_name": r.displayName]
+                }),
+            ]
+            return .success(payload)
+
+        case "rail.renderer.set":
+            guard let id = request.args?["id"], !id.isEmpty else {
+                return .error(.invalidArgument, "missing renderer id")
+            }
+            let knownIDs = ["stacked-previews", "icons-only", "hero-preview", "mosaic", "parallax-45"]
+            guard knownIDs.contains(id) else {
+                return .error(.invalidArgument,
+                              "renderer '\(id)' not found. Available: \(knownIDs.joined(separator: ", "))")
+            }
+            let previous = readCurrentRendererID() ?? "stacked-previews"
+            do {
+                try writeRendererID(id)
+            } catch {
+                return .error(.internalError, "failed to write TOML: \(error)")
+            }
+            // Reload config + signaler au rail.
+            if let newConfig = try? ConfigLoader.load() {
+                daemon.config = newConfig
+            }
+            EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
+            return .success([
+                "previous": AnyCodable(previous),
+                "current": AnyCodable(id),
+            ])
 
         case "focus":
             guard let dirStr = request.args?["direction"],
@@ -327,23 +378,25 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id")
             }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier dans stagesV2 que le stage
-            // existe dans le scope courant avant de switcher.
+            // Lazy auto-create : si la stage n'existe pas dans le scope courant,
+            // la créer vide puis switcher dessus. Cohérent avec stage.assign qui
+            // est déjà lazy. Évite l'échec silencieux quand l'utilisateur tape
+            // Alt+N avant d'avoir jamais peuplé la stage N.
             if sm.stageMode == .perDisplay {
                 var scopeError: Response? = nil
                 guard let baseScope = await resolveScope(request: request, daemon: daemon,
                                                          errorOut: &scopeError) else {
                     return scopeError ?? .error(.internalError, "scope resolution failed")
                 }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID, stageID: stageID)
-                guard sm.stagesV2[fullScope] != nil else {
-                    return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
+                let fullScope = StageScope(displayUUID: baseScope.displayUUID,
+                                           desktopID: baseScope.desktopID, stageID: stageID)
+                if sm.stagesV2[fullScope] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
+                                       scope: fullScope)
                 }
             } else {
-                guard sm.stages[stageID] != nil else {
-                    return .error(.unknownStage, "unknown stage \(stageStr)")
+                if sm.stages[stageID] == nil {
+                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
                 }
             }
             sm.switchTo(stageID: stageID)
@@ -389,17 +442,22 @@ enum CommandRouter {
                 }
                 sm.assign(wid: wid, to: stageID)  // API V1
             }
-            // Si la stage cible n'est pas la stage active, la fenêtre doit être
-            // cachée (elle vient de quitter la stage visible). Sinon le tiler
-            // doit re-distribuer la stage active sans elle. Dans les deux cas,
-            // applyLayout résout.
-            if let current = sm.currentStageID, current != stageID,
-               let state = daemon.registry.get(wid) {
-                if state.isTileable {
-                    daemon.layoutEngine.setLeafVisible(wid, false)
+            // Si la stage cible n'est pas la stage active, deux comportements
+            // possibles selon `[focus] assign_follows_focus` :
+            //   - true (défaut, yabai-style) : switcher sur la stage cible →
+            //     l'utilisateur voit immédiatement le résultat de son assign.
+            //   - false : cacher la fenêtre, l'utilisateur reste sur la courante
+            //     (utile pour dispatcher plusieurs fenêtres avant de bouger).
+            if let current = sm.currentStageID, current != stageID {
+                if daemon.config.focus.assignFollowsFocus {
+                    sm.switchTo(stageID: stageID)
+                } else if let state = daemon.registry.get(wid) {
+                    if state.isTileable {
+                        daemon.layoutEngine.setLeafVisible(wid, false)
+                    }
+                    HideStrategyImpl.hide(wid, registry: daemon.registry,
+                                          strategy: daemon.config.stageManager.hideStrategy)
                 }
-                HideStrategyImpl.hide(wid, registry: daemon.registry,
-                                      strategy: daemon.config.stageManager.hideStrategy)
             }
             daemon.applyLayout()
             // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).
@@ -1014,6 +1072,22 @@ enum CommandRouter {
         // Mute le current du display ciblé.
         await registry.setCurrent(resolvedTarget, on: targetDisplayID)
 
+        // SPEC-019 INV-3 — matérialiser stage 1 sur le (display, desktop) d'arrivée
+        // si jamais visité. Sans ce passage, `handleDesktopFocusPerDisplay` ne passe
+        // PAS par DesktopSwitcher.performSwitch (qui appelle onDesktopChanged →
+        // ensureDefaultStage), donc desktop neuf reste sans stage 1 sur disque.
+        if let sm = daemon.stageManager, sm.stageMode == .perDisplay,
+           let displays = await daemon.displayRegistry?.displays,
+           let dst = displays.first(where: { $0.id == targetDisplayID }),
+           !dst.uuid.isEmpty {
+            let arrivalScope = StageScope(displayUUID: dst.uuid,
+                                           desktopID: resolvedTarget,
+                                           stageID: StageID("1"))
+            sm.ensureDefaultStage(scope: arrivalScope)
+            sm.setCurrentDesktopKey(DesktopKey(displayUUID: dst.uuid,
+                                                desktopID: resolvedTarget))
+        }
+
         // SPEC-013 T034/FR-016 : persister le current per-display sur disque pour
         // restoration au rebranchement.
         if let displays = await daemon.displayRegistry?.displays,
@@ -1053,6 +1127,18 @@ enum CommandRouter {
         // BUGFIX : une fenêtre cachée est offscreen → state.frame.midXY tombe
         // hors de tous les displays → displayIDContainingPoint retourne nil →
         // skip → jamais reshown. Fallback sur expectedFrame (pré-hide position).
+        // SPEC-018 audit-cohérence : intersecter aussi avec le stage actif du desktop
+        // cible. Sans ça, entrer un desktop affiche TOUTES ses wids (peu importe le
+        // stage), contredisant le concept même de stage. Si le mode est global ou si
+        // le desktop cible n'a jamais eu de stage actif mémorisé, fallback : show all.
+        let activeStageOnTarget: StageID? = await {
+            guard let sm = daemon.stageManager, sm.stageMode == .perDisplay else { return nil }
+            guard let displays = await daemon.displayRegistry?.displays,
+                  let target = displays.first(where: { $0.id == targetDisplayID }),
+                  !target.uuid.isEmpty else { return nil }
+            let key = DesktopKey(displayUUID: target.uuid, desktopID: resolvedTarget)
+            return sm.activeStage(for: key)
+        }()
         let allWindows = daemon.registry.allWindows
         for state in allWindows {
             let frameCenter = CGPoint(x: state.frame.midX, y: state.frame.midY)
@@ -1067,10 +1153,16 @@ enum CommandRouter {
             // système). Les hide/show les rendrait invisibles alors qu'elles
             // sont gérées par macOS natif (ex: dialog "Organiser…" Monitors).
             guard state.isTileable else { continue }
-            let shouldShow = state.desktopID == resolvedTarget
+            let stageMatches: Bool = {
+                guard let active = activeStageOnTarget else { return true }
+                return state.stageID == active
+            }()
+            let shouldShow = state.desktopID == resolvedTarget && stageMatches
             logInfo("desktop.focus per_display window", [
                 "wid": String(state.cgWindowID),
                 "desktop": String(state.desktopID),
+                "stage": state.stageID?.value ?? "nil",
+                "active_stage": activeStageOnTarget?.value ?? "any",
                 "should_show": shouldShow ? "yes" : "no",
             ])
             if state.isTileable {
@@ -1398,8 +1490,21 @@ enum CommandRouter {
 
     // MARK: - SPEC-014 private handlers
 
-    /// Retourne une vignette PNG pour `wid`. Si absente du cache, démarre l'observation
-    /// SCK et retourne un fallback icône d'app (degraded=true).
+    /// Retourne une vignette PNG pour `wid` via capture lazy on-demand
+    /// (`CGWindowListCreateImage` à la demande, pattern AltTab).
+    ///
+    /// **Ordre de priorité** (capture systématique, cache en filet de secours) :
+    /// 1. Capture immédiate (`captureNow`) — ~5-15 ms. Si succès → cache + retour.
+    /// 2. Échec capture (DRM strict, fenêtre off-screen) → tenter le cache pour
+    ///    réutiliser la dernière capture valide (vignette figée mais présente).
+    /// 3. Cache vide → fallback icône d'app.
+    ///
+    /// Pourquoi capturer à chaque demande au lieu de respecter le cache d'abord ?
+    /// Le rail ping ce handler toutes les ~2 s (refresh timer). Sans recapture
+    /// systématique, une vignette mise en cache une fois (ex: écran noir Netflix
+    /// au premier appel) reste figée éternellement même quand le contenu de la
+    /// fenêtre change (autre onglet Firefox, etc.). CGWindowListCreateImage est
+    /// ponctuel → pas d'activation DRM continue (vs SCStream).
     private static func handleWindowThumbnail(request: Request, daemon: Daemon) async -> Response {
         guard let widStr = request.args?["wid"], let widU = UInt32(widStr) else {
             return .error(.invalidArgument, "missing or invalid wid")
@@ -1408,12 +1513,15 @@ enum CommandRouter {
         guard daemon.registry.get(wid) != nil else {
             return .error(.windowNotFound, "wid not found")
         }
-        if let entry = daemon.thumbnailCache?.get(wid: wid) {
+        if let sck = daemon.sckCaptureService,
+           let entry = sck.captureNow(wid: wid) {
+            daemon.thumbnailCache?.put(entry)
             return thumbnailResponse(entry)
         }
-        // Cache miss : démarre observation SCK en fire-and-forget.
-        if let sck = daemon.sckCaptureService {
-            Task { try? await sck.observe(wid: wid) }
+        // Capture échouée (DRM strict / off-screen) : recycler la dernière
+        // capture valide en cache pour ne pas afficher juste l'icône d'app.
+        if let entry = daemon.thumbnailCache?.get(wid: wid) {
+            return thumbnailResponse(entry)
         }
         return fallbackIconResponse(wid: wid, registry: daemon.registry)
     }
@@ -1555,6 +1663,67 @@ enum CommandRouter {
         let attrs = try? FileManager.default.attributesOfItem(atPath: path)
         let date = attrs?[.creationDate] as? Date ?? Date()
         return iso8601String(date)
+    }
+
+    /// SPEC-019 — lecture de la clé `[fx.rail].renderer` depuis le TOML utilisateur.
+    /// Retourne nil si absente, vide ou TOML illisible.
+    private static func readCurrentRendererID() -> String? {
+        let path = (NSString(string: "~/.config/roadies/roadies.toml")
+            .expandingTildeInPath as String)
+        guard let data = FileManager.default.contents(atPath: path),
+              let toml = String(data: data, encoding: .utf8),
+              let root = try? TOMLTable(string: toml),
+              let fx = root["fx"]?.table,
+              let rail = fx["rail"]?.table,
+              let v = rail["renderer"]?.string,
+              !v.isEmpty
+        else { return nil }
+        return v
+    }
+
+    /// SPEC-019 — écriture idempotente de `[fx.rail].renderer = "<id>"`. Préserve
+    /// le reste de la section et du fichier. Crée le fichier + section si absent.
+    private static func writeRendererID(_ id: String) throws {
+        let path = (NSString(string: "~/.config/roadies/roadies.toml")
+            .expandingTildeInPath as String)
+        let dir = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir,
+                                                  withIntermediateDirectories: true)
+        var lines: [String]
+        if let data = FileManager.default.contents(atPath: path),
+           let content = String(data: data, encoding: .utf8) {
+            lines = content.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        } else {
+            lines = []
+        }
+        // Trouver la section [fx.rail], y mettre/remplacer la clé renderer.
+        var inFxRail = false
+        var rendererLineIdx: Int? = nil
+        var fxRailHeaderIdx: Int? = nil
+        for (idx, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("[") {
+                inFxRail = (trimmed == "[fx.rail]")
+                if inFxRail { fxRailHeaderIdx = idx }
+                continue
+            }
+            if inFxRail, trimmed.hasPrefix("renderer") {
+                rendererLineIdx = idx
+                break
+            }
+        }
+        let newLine = "renderer = \"\(id)\""
+        if let i = rendererLineIdx {
+            lines[i] = newLine
+        } else if let h = fxRailHeaderIdx {
+            lines.insert(newLine, at: h + 1)
+        } else {
+            if !lines.isEmpty && !(lines.last?.isEmpty ?? true) { lines.append("") }
+            lines.append("[fx.rail]")
+            lines.append(newLine)
+        }
+        try lines.joined(separator: "\n").write(toFile: path,
+                                                atomically: true, encoding: .utf8)
     }
 
     private static func resizeImage(_ image: NSImage, to size: NSSize) -> NSImage {

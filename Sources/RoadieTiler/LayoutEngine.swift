@@ -41,9 +41,40 @@ public final class LayoutEngine {
     // MARK: - Stage active
 
     /// Définit la stage active. Utilisé par StageManager via LayoutHooks.
+    /// SPEC-019 (hotfix switchTo) : garantit aussi que le tree (stageID, primaryDisplay)
+    /// contient TOUTES les wids tilées du registry dont state.stageID == stageID, et
+    /// les marque visible. Sans ça, switch sur une stage dont les wids n'avaient pas
+    /// été insérées dans le tree donnait un applyLayout no-op (= fenêtres restent à
+    /// leur dernière position cachée).
     public func setActiveStage(_ stageID: StageID?) {
         workspace.activeStageID = stageID
         logInfo("layout_engine_active_stage", ["stage": stageID?.value ?? "nil"])
+        guard let stageID = stageID else { return }
+        // Réconcilier tree (stageID, primaryDisplay) avec registry pour cette stage.
+        let primaryID = CGMainDisplayID()
+        let key = StageDisplayKey(stageID: stageID, displayID: primaryID)
+        let target = root(for: key)
+        let presentWids = Set(target.allLeaves.map { $0.windowID })
+        let expectedWids = registry.allWindows
+            .filter { $0.stageID == stageID && $0.isTileable }
+            .map { $0.cgWindowID }
+        // Ajouter les manquantes
+        var inserted = 0
+        for wid in expectedWids where !presentWids.contains(wid) {
+            let leaf = WindowLeaf(windowID: wid)
+            leaf.isVisible = true
+            tiler.insert(leaf: leaf, near: target.allLeaves.first, in: target)
+            inserted += 1
+        }
+        // Force toutes les leaves expected à isVisible = true
+        let expectedSet = Set(expectedWids)
+        for leaf in target.allLeaves where expectedSet.contains(leaf.windowID) {
+            leaf.isVisible = true
+        }
+        if inserted > 0 {
+            logInfo("layout_engine_tree_repopulated",
+                    ["stage": stageID.value, "inserted": String(inserted)])
+        }
     }
 
     /// SPEC-018 fix : garantit que toutes les `wids` passées sont présentes dans le tree

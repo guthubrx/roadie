@@ -144,7 +144,7 @@ public extension DesktopEvent {
         ])
     }
 
-    /// Émis quand SCKCaptureService a produit une nouvelle vignette pour `wid`.
+    /// Émis quand WindowCaptureService a produit une nouvelle vignette pour `wid`.
     /// Le rail peut alors fetch via window.thumbnail.
     static func thumbnailUpdated(wid: CGWindowID) -> DesktopEvent {
         DesktopEvent(name: "thumbnail_updated", payload: [
