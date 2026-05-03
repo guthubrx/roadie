@@ -20,6 +20,29 @@ public struct StageRenderContext {
     public let stackedRotation: Double
     public let stackedScale:    Double
     public let stackedOpacity:  Double
+    public let stackedScatterMode: String
+    // SPEC-019 — paramètres renderer "parallax-45" (ignorés par les autres
+    // renderers). Configurables via [fx.rail.parallax] TOML.
+    public let parallaxRotation: Double
+    public let parallaxOffsetX:  Double
+    public let parallaxOffsetY:  Double
+    public let parallaxScale:    Double
+    public let parallaxOpacity:  Double
+    // SPEC-019 — taille des vignettes (WindowPreview). Configurables via [fx.rail.preview].
+    public let previewWidth:    Double
+    public let previewHeight:   Double
+    public let leadingPadding:  Double
+    public let trailingPadding: Double
+    public let verticalPadding: Double
+    // SPEC-019 — bordure des vignettes (per-renderer override possible).
+    public let borderColor: String              // bordure du stage ACTIF (défaut)
+    public let borderColorInactive: String      // bordure des stages INACTIFS
+    public let borderWidth: Double
+    public let borderStyle: String              // "solid" | "dashed" | "dotted"
+    public let stageBorderOverrides: [String: String]  // stage_id → couleur active spécifique
+    public let haloEnabled: Bool                // on/off du halo (en plus de stage.isActive)
+    // SPEC-019 — assombrissement par couche pour parallax (0..1, 0 = désactivé).
+    public let parallaxDarkenPerLayer: Double
 
     public init(stage: StageVM,
                 windows: [CGWindowID: WindowVM] = [:],
@@ -31,7 +54,25 @@ public struct StageRenderContext {
                 stackedOffsetY: Double = 80,
                 stackedRotation: Double = 12,
                 stackedScale: Double = 0.06,
-                stackedOpacity: Double = 0.10) {
+                stackedOpacity: Double = 0.10,
+                stackedScatterMode: String = "compass",
+                parallaxRotation: Double = 35,
+                parallaxOffsetX: Double = 18,
+                parallaxOffsetY: Double = 8,
+                parallaxScale: Double = 0.05,
+                parallaxOpacity: Double = 0.10,
+                previewWidth: Double = 200,
+                previewHeight: Double = 130,
+                leadingPadding: Double = 8,
+                trailingPadding: Double = 16,
+                verticalPadding: Double = 20,
+                borderColor: String = "#FFFFFF26",
+                borderColorInactive: String = "#80808033",
+                borderWidth: Double = 0.5,
+                borderStyle: String = "solid",
+                stageBorderOverrides: [String: String] = [:],
+                haloEnabled: Bool = true,
+                parallaxDarkenPerLayer: Double = 0.0) {
         self.stage = stage
         self.windows = windows
         self.thumbnails = thumbnails
@@ -43,6 +84,24 @@ public struct StageRenderContext {
         self.stackedRotation = stackedRotation
         self.stackedScale = stackedScale
         self.stackedOpacity = stackedOpacity
+        self.stackedScatterMode = stackedScatterMode
+        self.parallaxRotation = parallaxRotation
+        self.parallaxOffsetX = parallaxOffsetX
+        self.parallaxOffsetY = parallaxOffsetY
+        self.parallaxScale = parallaxScale
+        self.parallaxOpacity = parallaxOpacity
+        self.previewWidth = previewWidth
+        self.previewHeight = previewHeight
+        self.leadingPadding = leadingPadding
+        self.trailingPadding = trailingPadding
+        self.verticalPadding = verticalPadding
+        self.borderColor = borderColor
+        self.borderColorInactive = borderColorInactive
+        self.borderWidth = borderWidth
+        self.borderStyle = borderStyle
+        self.stageBorderOverrides = stageBorderOverrides
+        self.haloEnabled = haloEnabled
+        self.parallaxDarkenPerLayer = parallaxDarkenPerLayer
     }
 }
 
@@ -68,6 +127,23 @@ public struct StageRendererCallbacks {
         self.onAddFocused = onAddFocused
         self.onDelete = onDelete
     }
+}
+
+// MARK: - Helpers partagés
+
+public extension StageRenderContext {
+    /// Couleur de bordure effective pour la stage courante.
+    /// - Stage actif : `stageBorderOverrides[stage.id]` si présent, sinon `borderColor`
+    /// - Stage inactif : `borderColorInactive`
+    func resolvedBorderColor() -> String {
+        if stage.isActive {
+            return stageBorderOverrides[stage.id] ?? borderColor
+        }
+        return borderColorInactive
+    }
+
+    /// Indique si le halo doit être appliqué : actif global ET stage actuel actif.
+    var shouldApplyHalo: Bool { haloEnabled && stage.isActive }
 }
 
 /// Contrat d'un rendu de cellule de stage.

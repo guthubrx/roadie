@@ -3,7 +3,9 @@
 **Branch**: `019-rail-renderers`
 **Date début**: 2026-05-03
 **Date fin MVP**: 2026-05-03
+**Date fin Phase 5**: 2026-05-03
 **Status MVP**: ✅ Livré (US1 + US2)
+**Status Phase 5**: ✅ Livré (US3 + US4 + US5 + T012 + T082)
 
 ## Phase 1 — Setup
 
@@ -143,9 +145,87 @@
 - **Test snapshot** : si un test framework SwiftUI snapshot devient maintenable (SnapshotTesting), ajouter 1 snapshot par renderer × 2 cas (empty, populated) ferait gagner en confiance non-régression.
 - **Future amélioration : transitionner le manifest** : déplacer la liste des renderers connus dans un fichier partagé (ex: `Sources/RoadieCore/RailRendererCatalog.swift`) consultable à la fois par le daemon et le rail. Évite la double maintenance.
 
+## Phase 5 — User Story 3 : HeroPreviewRenderer
+
+### Tâche T050-T053 : `HeroPreviewRenderer`
+
+- **Statut** : ✅ Complété
+- **Fichiers créés** :
+  - `Sources/RoadieRail/Renderers/HeroPreviewRenderer.swift` (145 LOC) — VStack avec `WindowPreview` 240×135 de la fenêtre focused/frontmost, suivi d'une `HStack` d'icônes 24×24 pour les autres fenêtres. Placeholder "Empty stage" si aucune fenêtre. Drag-drop et halo conditionnels.
+- **Fichiers modifiés** :
+  - `Sources/RoadieRail/Renderers/Bootstrap.swift` — enregistrement `HeroPreviewRenderer` ajouté.
+- **Tests** : `swift build` ✅ Build complete!
+
+### REX US3
+
+- **Ce qui a bien fonctionné** : le pattern était mécanique — copier la structure d'`IconsOnlyRenderer` et adapter le `body`. La logique de sélection de la fenêtre hero (focused > première disponible) est un tri simple sur `isFocused`.
+- **Difficulté** : `sideWids` nécessite de connaître `heroWid` — calculé via une computed property pour éviter de dupliquer le calcul. La propriété `sideWids` filtre `heroWid` et tronque à `maxSideIcons`.
+- **Décision** : la taille fixe 240×135 pour la vignette hero correspond au rapport 16:9 standard. `WindowPreview` gère déjà cette taille dans ses constantes internes (`previewWidth=200, previewHeight=130`), donc un frame override est appliqué pour l'agrandir.
+
+---
+
+## Phase 6 — User Story 4 : MosaicRenderer
+
+### Tâche T060-T062 : `MosaicRenderer`
+
+- **Statut** : ✅ Complété
+- **Fichiers créés** :
+  - `Sources/RoadieRail/Renderers/MosaicRenderer.swift` (145 LOC) — `LazyVGrid` avec nombre de colonnes adaptatif (`columnCount(for:)` : 1→1, 2→2, 3-4→2, 5-6→3, 7+→3). Maximum 9 vignettes, badge "+N" en overlay si overflow. Placeholder vide cohérent.
+- **Fichiers modifiés** :
+  - `Sources/RoadieRail/Renderers/Bootstrap.swift` — enregistrement `MosaicRenderer` ajouté.
+- **Tests** : `swift build` ✅ Build complete!
+
+### REX US4
+
+- **Ce qui a bien fonctionné** : `LazyVGrid` avec `GridItem(.flexible())` adapte automatiquement la taille des cellules selon la géométrie disponible — pas de calcul de taille à faire manuellement. `GeometryReader` utilisé pour passer la taille au grid.
+- **Difficulté** : `WindowPreview` a des dimensions fixes internes (200×130). Pour la mosaic, chaque cellule doit être plus petite. Le `frame(maxWidth: .infinity)` avec le grid force le redimensionnement via `clipped`. Visuellement satisfaisant sans modifier `WindowPreview`.
+- **Décision** : badge overflow en `ZStack` overlay sur le grid (coin bas-droit) plutôt qu'une cellule "+N" dans la grille — évite de casser le layout de la dernière rangée quand overflow=1.
+
+---
+
+## Phase 7 — User Story 5 : Parallax45Renderer
+
+### Tâche T070-T072 : `Parallax45Renderer`
+
+- **Statut** : ✅ Complété
+- **Fichiers créés** :
+  - `Sources/RoadieRail/Renderers/Parallax45Renderer.swift` (150 LOC) — `ZStack` en cascade, chaque vignette `.rotation3DEffect(35°, axis Y, perspective 0.5)` + scale dégressif 0.05/couche + opacity dégressif 0.10/couche + offset X/Y croissant. `@State isHovered` + `.onHover` déclenchant `.spring(response: 0.2, dampingFraction: 0.7)` sur `scaleEffect(1.04)`. Maximum 5 vignettes.
+- **Fichiers modifiés** :
+  - `Sources/RoadieRail/Renderers/Bootstrap.swift` — enregistrement `Parallax45Renderer` ajouté.
+- **Tests** : `swift build` ✅ Build complete!
+
+### REX US5
+
+- **Ce qui a bien fonctionné** : `.rotation3DEffect` avec `perspective: 0.5` donne l'effet 3D souhaité sans librairie tierce. L'animation hover est déclarée une fois sur le `ZStack` parent — toute la pile bouge ensemble.
+- **Difficulté** : l'ordre de `ForEach` doit être inversé (`reversed()`) pour que la vignette frontale (idx=0) soit rendue en dernier et donc au-dessus dans le `ZStack`. Le `.zIndex` explicit était redondant mais laissé pour clarté.
+- **Décision** : `rendererID = "parallax-45"` avec le degré symbole unicode `\u{00B0}` dans `displayName` plutôt que le caractère littéral `°` pour éviter les surprises d'encodage dans les fichiers Swift.
+- **Padding** : adapté à l'amplitude max du stack (`maxVisible * offsetXStep + 8`) pour que les vignettes les plus décalées ne soient pas clippées.
+
+---
+
+## Phase 5 (Polish partiel) — T012, T082, T087
+
+### T012 : Tests unitaires registry
+
+- **Statut** : ✅ Complété
+- **Fichiers créés** :
+  - `Tests/RoadieRailTests/StageRendererRegistryTests.swift` (60 LOC) — 6 cas : `testDefaultRegistered`, `testMakeKnown`, `testMakeUnknownReturnsNil`, `testMakeOrFallbackUnknownReturnsDefault`, `testMakeOrFallbackNilReturnsDefault`, `testRegisterIsIdempotent`.
+- **Résultat** : `6/6 PASS` — `swift test --filter StageRendererRegistryTests`
+
+### T082 : Log structuré `renderer_changed`
+
+- **Statut** : ✅ Complété
+- **Fichiers modifiés** :
+  - `Sources/RoadieRail/RailController.swift` — remplacement de `debugLog("renderer_changed from=…")` (format texte libre + écriture fichier /tmp) par `logInfo("renderer_changed", ["from": oldRenderer, "to": newRenderer])` (log structuré via RoadieCore `Logger.shared`). Ajout de `import RoadieCore` requis.
+
+### T087 : Cleanup traces debug
+
+- **Statut** : ✅ Complété (aucune trace trouvée dans les nouveaux fichiers renderers)
+
+---
+
 ## Tâches NON-LIVRÉES (reportées)
 
-- **T012** : tests unit `StageRendererRegistryTests.swift` — protocole vérifié manuellement, à formaliser en tests Swift.
 - **T026, T027** : validations manuelles screenshot pixel-à-pixel + mesure -30% LOC StageStackView — utilisateur peut les exécuter.
-- **US3 (T050-T055), US4 (T060-T063), US5 (T070-T073)** : renderers HeroPreview, Mosaic, Parallax45 — livrables indépendamment.
-- **Polish (T080-T088)** : doc, screenshots, audit, matrice empty/overflow.
+- **T054, T055, T063, T073** : screenshots manuels HeroPreview/Mosaic/Parallax (test visuel utilisateur requis).
+- **Polish (T080, T081, T084, T086, T088)** : doc, screenshots, audit, matrice empty/overflow — à compléter manuellement.

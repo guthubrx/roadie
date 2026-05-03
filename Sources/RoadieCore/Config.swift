@@ -12,6 +12,8 @@ public struct Config: Codable, Sendable {
     public var displays: [DisplayRule]
     /// SPEC-015 : config souris (drag/resize avec modifier).
     public var mouse: MouseConfig
+    /// Config des comportements liés au focus (auto-switch stage/desktop sur AltTab).
+    public var focus: FocusConfig
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
@@ -19,7 +21,8 @@ public struct Config: Codable, Sendable {
                 exclusions: ExclusionsConfig = .init(),
                 desktops: DesktopsConfig = .init(),
                 displays: [DisplayRule] = [],
-                mouse: MouseConfig = .init()) {
+                mouse: MouseConfig = .init(),
+                focus: FocusConfig = .init()) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
@@ -27,6 +30,7 @@ public struct Config: Codable, Sendable {
         self.desktops = desktops
         self.displays = displays
         self.mouse = mouse
+        self.focus = focus
     }
 
     enum CodingKeys: String, CodingKey {
@@ -37,6 +41,7 @@ public struct Config: Codable, Sendable {
         case desktops
         case displays
         case mouse
+        case focus
     }
 
     /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
@@ -52,6 +57,7 @@ public struct Config: Codable, Sendable {
         self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? .init()
         self.displays = try c.decodeIfPresent([DisplayRule].self, forKey: .displays) ?? []
         self.mouse = try c.decodeIfPresent(MouseConfig.self, forKey: .mouse) ?? .init()
+        self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? .init()
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,6 +71,7 @@ public struct Config: Codable, Sendable {
             try c.encode(displays, forKey: .displays)
         }
         try c.encode(mouse, forKey: .mouse)
+        try c.encode(focus, forKey: .focus)
     }
 }
 
@@ -246,6 +253,40 @@ public struct DesktopsConfig: Codable, Sendable {
         } else {
             self.mode = .global
         }
+    }
+}
+
+/// Configuration des comportements liés au focus (section `[focus]`).
+public struct FocusConfig: Codable, Sendable, Equatable {
+    /// Si true, basculer automatiquement vers le stage/desktop de la fenêtre
+    /// nouvellement focused (typiquement déclenché par AltTab/Cmd-Tab).
+    /// Sans ça, l'app prend le focus mais sa fenêtre reste invisible
+    /// (cachée offscreen sur un autre stage/desktop).
+    public var stageFollowsFocus: Bool
+
+    /// Si true, après `stage.assign`, basculer aussi vers le stage cible
+    /// (comportement yabai `--focus`). Sans ça, la fenêtre est envoyée mais
+    /// l'utilisateur reste sur la stage courante (utile pour dispatcher
+    /// plusieurs fenêtres avant de bouger).
+    public var assignFollowsFocus: Bool
+
+    public init(stageFollowsFocus: Bool = false,
+                assignFollowsFocus: Bool = true) {
+        self.stageFollowsFocus = stageFollowsFocus
+        self.assignFollowsFocus = assignFollowsFocus
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case stageFollowsFocus = "stage_follows_focus"
+        case assignFollowsFocus = "assign_follows_focus"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Default false : éviter l'animation involontaire des fenêtres déplacées
+        // par HideStrategy.corner quand on tabe entre apps. Opt-in via TOML.
+        self.stageFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .stageFollowsFocus) ?? false
+        self.assignFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .assignFollowsFocus) ?? true
     }
 }
 
