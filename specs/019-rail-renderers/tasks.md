@@ -35,7 +35,7 @@ Tous les chemins relatifs à la racine du repo `/Users/moi/Nextcloud/10.Scripts/
 
 - [X] T010 Créer `Sources/RoadieRail/Renderers/StageRendererProtocol.swift` (~60 LOC) avec : `struct StageRenderContext`, `struct StageRendererCallbacks`, `protocol StageRenderer: AnyObject` conformes au contrat [contracts/stage-renderer-protocol.md](contracts/stage-renderer-protocol.md)
 - [X] T011 Créer `Sources/RoadieRail/Renderers/StageRendererRegistry.swift` (~50 LOC) avec : `enum StageRendererRegistry`, `defaultID`, `register/make/makeOrFallback/availableRenderers/reset` conformes au contrat [contracts/registry-api.md](contracts/registry-api.md)
-- [ ] T012 [P] Créer `Tests/RoadieRailTests/StageRendererRegistryTests.swift` couvrant : default registered, makeKnown, makeUnknownReturnsNil, makeOrFallbackUnknownReturnsDefault, makeOrFallbackNilReturnsDefault, registerIsIdempotent (cf [contracts/registry-api.md](contracts/registry-api.md) Tests unit)
+- [X] T012 [P] Créer `Tests/RoadieRailTests/StageRendererRegistryTests.swift` couvrant : default registered, makeKnown, makeUnknownReturnsNil, makeOrFallbackUnknownReturnsDefault, makeOrFallbackNilReturnsDefault, registerIsIdempotent (cf [contracts/registry-api.md](contracts/registry-api.md) Tests unit)
 - [X] T013 Vérifier que `Package.swift` inclut bien `Sources/RoadieRail/Renderers/` dans la target `RoadieRail` (par défaut SwiftPM scanne tout le dossier — vérification seulement)
 
 **Critère de fin Phase 2** : protocol + registry compilent, tests unit registry passent.
@@ -113,15 +113,15 @@ Tous les chemins relatifs à la racine du repo `/Users/moi/Nextcloud/10.Scripts/
 
 **Goal** : livrer `hero-preview` — 1 grande capture frontmost + barre d'icônes app dessous.
 
-- [ ] T050 [US3] Créer `Sources/RoadieRail/Renderers/HeroPreviewRenderer.swift` (~100 LOC) :
+- [X] T050 [US3] Créer `Sources/RoadieRail/Renderers/HeroPreviewRenderer.swift` (~100 LOC) :
   - `rendererID = "hero-preview"`, `displayName = "Hero preview"`
   - `render` : VStack avec en haut WindowPreview de la wid frontmost (taille 240×135), en bas HStack d'icônes app (24×24) pour les autres wids du stage
   - placeholder « Empty stage » + icône générique si stage vide
   - drag-drop sur l'ensemble de la cellule
   - halo conditionnel si stage actif
-- [ ] T051 [US3] Enregistrer dans `registerBuiltinRenderers()`
-- [ ] T052 [US3] Mettre à jour le manifest CommandRouter (T035) pour exposer `hero-preview` dans `rail.renderer.list`
-- [ ] T053 [US3] Build OK
+- [X] T051 [US3] Enregistrer dans `registerBuiltinRenderers()`
+- [X] T052 [US3] Mettre à jour le manifest CommandRouter (T035) pour exposer `hero-preview`, `mosaic` et `parallax-45` dans `rail.renderer.list` + `rail.renderer.set`
+- [X] T053 [US3] Build OK
 - [ ] T054 [US3] Test manuel `roadie rail renderer hero-preview` → screenshot `/tmp/rail-us3-hero.png` montrant 1 grande vignette + barre d'icônes (acceptance #1)
 - [ ] T055 [US3] Test manuel stage vide → placeholder neutre (acceptance #2)
 
@@ -133,14 +133,14 @@ Tous les chemins relatifs à la racine du repo `/Users/moi/Nextcloud/10.Scripts/
 
 **Goal** : livrer `mosaic` — toutes vignettes en grille à plat (1×1, 2×1, 2×2, 3×2 selon nombre).
 
-- [ ] T060 [US4] Créer `Sources/RoadieRail/Renderers/MosaicRenderer.swift` (~120 LOC) :
+- [X] T060 [US4] Créer `Sources/RoadieRail/Renderers/MosaicRenderer.swift` (~120 LOC) :
   - `rendererID = "mosaic"`, `displayName = "Mosaic"`
   - `render` : LazyVGrid avec colonnes adaptatives selon `windowIDs.count` (1→1, 2→2, 3-4→2, 5-6→3, >6→3 cols + truncation à 6 + indicateur "+N")
   - chaque cellule = WindowPreview taille adaptée
   - placeholder vide cohérent
   - halo conditionnel
-- [ ] T061 [US4] Enregistrer dans `registerBuiltinRenderers()`, mettre à jour manifest
-- [ ] T062 [US4] Build OK
+- [X] T061 [US4] Enregistrer dans `registerBuiltinRenderers()`, mettre à jour manifest
+- [X] T062 [US4] Build OK
 - [ ] T063 [US4] Test manuel : 1 fenêtre → grande vignette unique (acceptance #2). 4 fenêtres → 2×2 (acceptance #1). Screenshot `/tmp/rail-us4-mosaic.png`
 
 **Critère de fin US4** : `mosaic` sélectionnable, layout responsive au nombre.
@@ -151,14 +151,14 @@ Tous les chemins relatifs à la racine du repo `/Users/moi/Nextcloud/10.Scripts/
 
 **Goal** : livrer `parallax-45` — vignettes empilées avec rotation 3D 45° axe Y + micro-anim hover.
 
-- [ ] T070 [US5] Créer `Sources/RoadieRail/Renderers/Parallax45Renderer.swift` (~150 LOC) :
+- [X] T070 [US5] Créer `Sources/RoadieRail/Renderers/Parallax45Renderer.swift` (~150 LOC) :
   - `rendererID = "parallax-45"`, `displayName = "Parallax 45°"`
   - `render` : ZStack avec WindowPreview successifs en cascade `.rotation3DEffect(45°, axis: (x: 0, y: 1, z: 0)) + .perspective`
   - offset croissant + scale dégressive entre les couches
   - `@State isHovered` + `.onHover` qui déclenche `withAnimation(.spring(response: 0.2)) { scale = 1.04 }`
   - max 5 vignettes visibles
-- [ ] T071 [US5] Enregistrer + manifest
-- [ ] T072 [US5] Build OK
+- [X] T071 [US5] Enregistrer + manifest
+- [X] T072 [US5] Build OK
 - [ ] T073 [US5] Test manuel : effet visuel 3D présent (acceptance #1). Hover → micro-anim < 200 ms (acceptance #2). Screenshot `/tmp/rail-us5-parallax.png`
 
 **Critère de fin US5** : `parallax-45` sélectionnable, effet visible.
@@ -169,12 +169,12 @@ Tous les chemins relatifs à la racine du repo `/Users/moi/Nextcloud/10.Scripts/
 
 - [ ] T080 [P] [POLISH] Documentation utilisateur : compléter `quickstart.md` avec captures d'écran de chaque rendu (PNG dans `docs/screenshots/spec-019/`) — **MANUEL post-livraison**
 - [ ] T081 [P] [POLISH] Mise à jour `README.md` projet : ajouter section « Rendus modulaires du rail » pointant vers SPEC-019
-- [ ] T082 [POLISH] Logger structuré : `logInfo("renderer_changed", ["from": old, "to": new])` à chaque switch effectif côté rail
+- [X] T082 [POLISH] Logger structuré : `logInfo("renderer_changed", ["from": old, "to": new])` à chaque switch effectif côté rail
 - [X] T083 [POLISH] Régression : re-jouer toute la suite `swift test` → tous tests verts, en particulier `RoadieRailTests` et `RoadieCoreTests`
-- [ ] T084 [POLISH] Mise à jour `implementation.md` avec REX de chaque user story livrée
+- [X] T084 [POLISH] Mise à jour `implementation.md` avec REX de chaque user story livrée
 - [X] T085 [POLISH] Audit `/audit 019-rail-renderers` mode fix, viser score ≥ A- — **PHASE 6 PIPELINE** (à lancer après commit en session dédiée)
 - [ ] T086 [P] [POLISH] Vérifier mesure SC-006 : `wc -l Sources/RoadieRail/Views/StageStackView.swift` doit avoir diminué d'au moins 30% par rapport au baseline initial
-- [ ] T087 [POLISH] Cleanup : supprimer toute trace temporaire (logs debug, `print`, `try!`) introduite pendant l'implémentation
+- [X] T087 [POLISH] Cleanup : supprimer toute trace temporaire (logs debug, `print`, `try!`) introduite pendant l'implémentation
 - [ ] T088 [POLISH] Matrice de validation FR-010 : pour chaque renderer livré (au minimum stacked-previews + icons-only), vérifier manuellement par screenshot 2 cas — (a) stage vide (0 fenêtre) → placeholder neutre visible et pas de crash, (b) stage avec plus de fenêtres que la limite du renderer → indicateur de truncation lisible (ex. "+N"). Documenter chaque screenshot dans `docs/screenshots/spec-019/edge-cases/`
 
 **Critère de fin Polish** : tous tests verts, audit ≥ A-, doc complète.

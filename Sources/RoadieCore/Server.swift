@@ -112,8 +112,20 @@ public final class Server: @unchecked Sendable {
             ? []
             : Set(typesArg.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) })
 
-        // Valider les types demandés
-        let knownTypes: Set<String> = ["desktop_changed", "stage_changed"]
+        // Valider les types demandés. Allow-list synchro avec les events
+        // effectivement publiés sur EventBus.shared (cf. catalogue dans
+        // contracts/events-stream.md). Sans cette mise à jour, tout `--types`
+        // contenant un autre nom retourne `invalid_filter` et le subscriber
+        // (notamment le rail) reste sourd à tout.
+        let knownTypes: Set<String> = [
+            "desktop_changed", "stage_changed",
+            "stage_assigned", "stage_created", "stage_deleted", "stage_renamed",
+            "window_assigned", "window_unassigned",
+            "window_created", "window_destroyed", "window_focused",
+            "display_changed", "display_configuration_changed",
+            "wallpaper_click", "thumbnail_updated", "config_reloaded",
+            "migration_v1_to_v2",
+        ]
         if let unknown = requestedTypes.first(where: { !knownTypes.contains($0) }) {
             let errResp = Response.error(.invalidArgument, "invalid_filter: unknown event type \"\(unknown)\"")
             self.send(errResp, on: connection)
