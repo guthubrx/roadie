@@ -224,6 +224,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
            let sm = stageManager {
             let stagesDir = (NSString(string: "~/.config/roadies/stages")
                 .expandingTildeInPath as String)
+            // SPEC-022 T065 : warn si active.toml global est encore présent (deprecated
+            // depuis le passage à activeStageByDesktop per-(display, desktop)). Pas de
+            // suppression auto — l'utilisateur peut nettoyer manuellement à sa guise.
+            let deprecatedActivePath = "\(stagesDir)/active.toml"
+            if FileManager.default.fileExists(atPath: deprecatedActivePath) {
+                logWarn("deprecated_active_toml_present", [
+                    "path": deprecatedActivePath,
+                    "spec": "022",
+                    "hint": "active.toml global est ignoré en mode per_display ; safe à supprimer.",
+                ])
+            }
             let earlyPV2 = NestedStagePersistence(stagesDir: stagesDir)
             sm.setMode(.perDisplay, persistence: earlyPV2)
             let primaryUUID = resolveDisplayUUID(CGMainDisplayID())

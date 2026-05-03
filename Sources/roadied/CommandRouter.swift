@@ -347,9 +347,11 @@ enum CommandRouter {
                 let filtered = sm.stagesV2.filter {
                     $0.key.displayUUID == scope.displayUUID && $0.key.desktopID == scope.desktopID
                 }
-                // Stage actif dans ce scope : chercher dans stagesV2 l'entrée dont la valeur
-                // correspond au currentStageID V1 (synchronisé par StageManager).
-                currentID = sm.currentStageID?.value ?? ""
+                // SPEC-022 : "current stage" du scope = activeStageByDesktop[(uuid, desktopID)],
+                // PAS le scalaire global currentStageID (qui ne reflète que le scope visible).
+                let scopedKey = DesktopKey(displayUUID: scope.displayUUID,
+                                            desktopID: scope.desktopID)
+                currentID = sm.activeStageByDesktop[scopedKey]?.value ?? ""
                 scopedStages = filtered.map { (scopeKey, stage) -> [String: Any] in
                     [
                         "id": stage.id.value,
@@ -382,6 +384,9 @@ enum CommandRouter {
             // la créer vide puis switcher dessus. Cohérent avec stage.assign qui
             // est déjà lazy. Évite l'échec silencieux quand l'utilisateur tape
             // Alt+N avant d'avoir jamais peuplé la stage N.
+            // SPEC-022 : en mode per_display, utiliser le switchTo scopé pour que
+            // le switch n'affecte QUE le scope cible (display, desktop) et pas
+            // l'écran visible courant si le scope est distant.
             if sm.stageMode == .perDisplay {
                 var scopeError: Response? = nil
                 guard let baseScope = await resolveScope(request: request, daemon: daemon,
@@ -394,12 +399,13 @@ enum CommandRouter {
                     _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
                                        scope: fullScope)
                 }
+                sm.switchTo(stageID: stageID, scope: fullScope)
             } else {
                 if sm.stages[stageID] == nil {
                     _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
                 }
+                sm.switchTo(stageID: stageID)
             }
-            sm.switchTo(stageID: stageID)
             return .success(["current": AnyCodable(stageID.value)])
 
         case "stage.assign":
