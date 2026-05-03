@@ -1,8 +1,62 @@
 # Implementation log — SPEC-018 Stages-per-display
 
-**Status**: MVP COMPLET (US1 + US2 + US3) + refactor 1-tree-par-stage + reconcile + purge orphelines — US4 + US5 + Polish optionnels reportés
+**Status**: MVP + refactor 1-tree-par-stage + reconcile + purge orphelines + **HOTFIX switchTo cohérence V2** — US4 + US5 + Polish optionnels reportés
 **Branch**: `018-stages-per-display`
-**Last updated**: 2026-05-03
+**Last updated**: 2026-05-03 (session 8)
+
+## Hotfix critique session 8 (2026-05-03) — switchTo cohérence V2
+
+**Symptôme** : `roadie stage 2` retournait `current: 2` mais le state interne du daemon
+ne mettait pas vraiment à jour. Visuellement : clic vignette dans le rail → halo bouge,
+mais aucune fenêtre ne change. `daemon.status` après switch retournait `current_stage: 1`.
+
+**Cause racine** : 3 bugs cumulés dans `StageManager.switchTo(stageID:)` en mode per_display.
+
+1. `switchTo` lookup `stages[stageID]` (V1 dict) qui pouvait être nil pour les stages
+   créées uniquement dans `stagesV2` → log warn + early return → currentStageID inchangé.
+2. Le hide loop itérait `stages` V1 dict (synchro fragile cross-scope) → certaines wids
+   d'autres stages pas hidées.
+3. Le `setActiveStage(stageID)` du LayoutEngine ne garantissait pas que le tree
+   `(stageID, primaryDisplay)` contenait les wids tilées → applyLayout no-op.
+
+**Fix appliqué** :
+- `switchTo` : fallback `stagesV2 → stages V1` + full sync au début pour avoir la vue
+  complète des memberWindows cross-scope
+- Hide loop : utilise `registry.allWindows.filter { state.stageID != nil && != cible }`
+  (source de vérité = registry)
+- `setActiveStage` étendu : peuple le tree de la stage cible avec les wids du registry
+  qui ont `state.stageID == stageID`, force `isVisible = true` sur ces leaves
+- Events `stage_changed` enrichis : en mode per_display, `desktop_id` et `display_uuid`
+  proviennent de `stagesV2` (pas du `extractDesktopID` qui retourne nil en V2 plat)
+
+**Validation E2E** :
+- `roadie stage 2` → `daemon.status` retourne `current_stage: 2` ✓
+- Grayjay (assigned stage 2) → frame `125,43 1910x1172` (plein écran) ✓
+- Autres wids (stage 1) → frame `-949,1252 ...` (offscreen corner) ✓
+- `roadie stage 1` retour → wids stage 1 reviennent à frame positives ✓
+
+**Bug résiduel mineur** : certaines apps (Grayjay observée) résistent au `setBounds(corner)`
+et restent partiellement visibles après hide. Probablement auto-restore frame côté app
+via son propre code AX. Hors scope SPEC-018.
+
+**Fichiers modifiés** :
+- `Sources/RoadieStagePlugin/StageManager.swift` — switchTo refait, +20 LOC nettes
+- `Sources/RoadieTiler/LayoutEngine.swift` — setActiveStage repopule tree, +30 LOC
+
+## Audit stage/desktop confusion (session 8)
+
+Recherche exhaustive de patterns de confusion conceptuelle entre stages roadie
+(groupes de fenêtres) et desktops (espaces virtuels) :
+- Aucune variable mal nommée trouvée
+- `DesktopBackedStagePersistence` / `DesktopState.stages` sont des conteneurs de
+  stockage légitimes (un desktop contient ses stages)
+- Tous les `desktop_id` dans payloads d'events sont explicitement **desktop ROADIE**,
+  jamais Mission Control macOS
+- `currentStageScope()` daemon résout correctement display + desktop courant via
+  `desktopRegistry.currentID(for: displayID)` (pas confondu avec Spaces macOS)
+
+Code globalement cohérent. La confusion observée par l'utilisateur venait du
+**bug fonctionnel** (switchTo broken), pas d'une ambiguïté de nommage.
 
 ## Phases livrées
 

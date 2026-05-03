@@ -1,7 +1,7 @@
 # Feature Specification: Stages scopées par (display × desktop)
 
 **Feature Branch**: `018-stages-per-display`
-**Status**: Implemented (V1 livré 2026-05-03 + 6 fixes post-livraison même jour)
+**Status**: Implemented (V1 livré 2026-05-03 + 6 fixes post-livraison + 15 fixes cohérence display×desktop×stage 2026-05-03 — voir [audit-coherence.md](audit-coherence.md))
 **Created**: 2026-05-02
 **Dependencies**: SPEC-002 (Stage Manager), SPEC-011 (Virtual Desktops), SPEC-012 (Multi-display), SPEC-013 (Desktop-per-display)
 **Blocks**: SPEC-014 (Stage Rail UI — bloquée tant que les stages restent globales)

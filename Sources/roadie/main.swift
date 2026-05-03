@@ -109,6 +109,7 @@ default:
 }
 
 /// SPEC-014 : `roadie rail status|toggle`.
+/// SPEC-019 : `roadie rail renderer <id>` / `roadie rail renderers list`.
 func handleRail(args: [String]) {
     guard args.count >= 3 else { printUsage(); exit(64) }
     switch args[2] {
@@ -116,6 +117,14 @@ func handleRail(args: [String]) {
         sendAndPrint(Request(command: "rail.status"))
     case "toggle":
         sendAndPrint(Request(command: "rail.toggle"))
+    case "renderers":
+        // `roadie rail renderers list`
+        guard args.count >= 4, args[3] == "list" else { printUsage(); exit(64) }
+        sendAndPrint(Request(command: "rail.renderer.list"))
+    case "renderer":
+        // `roadie rail renderer <id>`
+        guard args.count >= 4 else { printUsage(); exit(2) }
+        sendAndPrint(Request(command: "rail.renderer.set", args: ["id": args[3]]))
     default:
         printUsage(); exit(64)
     }
@@ -314,8 +323,12 @@ func handleStage(args: [String]) {
         reqArgs["new_name"] = args[4]
         sendAndPrint(Request(command: "stage.rename", args: reqArgs))
     default:
-        // arg2 est le stage_id pour switch (pas de scope override pour switch)
-        sendAndPrint(Request(command: "stage.switch", args: ["stage_id": arg2]))
+        // arg2 est le stage_id pour switch. SPEC-019 : honorer aussi les flags
+        // `--display <sel>` / `--desktop <id>` pour cibler un scope précis (utile
+        // au rail qui envoie le scope de son panel d'origine).
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = arg2
+        sendAndPrint(Request(command: "stage.switch", args: reqArgs))
     }
 }
 

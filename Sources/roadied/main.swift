@@ -84,6 +84,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// SPEC-013 : timestamp du dernier follow AltTab pour anti-feedback (évite
     /// les bascules en cascade quand un focus event suit une bascule).
     private var lastAltTabFollowTimestamp: Date = .distantPast
+    /// Anti-feedback pour `followFocusToStageAndDesktop`. Sans ce guard, un
+    /// switchTo programmatique rend la wid cible visible et focused, ce qui
+    /// re-déclenche onFocusChanged → re-follow → oscillation entre 2 stages
+    /// chacun ayant une wid focused (boucle observée 5×/300ms).
+    private var lastFocusFollowTimestamp: Date = .distantPast
 
     init(config: Config) throws {
         self.config = config
@@ -166,9 +171,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             }
             // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
             // SPEC-018 : en mode per_display, créer aussi dans stagesV2 au scope primary.
+            // PAS `CGMainDisplayID()` qui est dynamique (suit le focus) — au boot le focus
+            // peut être sur n'importe quel display → pollution du « mauvais » écran avec un
+            // stage par défaut. On prend l'écran à origin (0,0) = primary stable au sens
+            // macOS, qui correspond au choix utilisateur dans Réglages > Écrans.
             let defaultScope: StageScope?
             if config.desktops.mode == .perDisplay {
-                let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+                let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+                    ?? NSScreen.main
+                let primaryDisplayID: CGDirectDisplayID
+                if let s = primaryScreen,
+                   let did = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                       as? CGDirectDisplayID {
+                    primaryDisplayID = did
+                } else {
+                    primaryDisplayID = CGMainDisplayID()
+                }
+                let primaryUUID = resolveDisplayUUID(primaryDisplayID)
                 defaultScope = StageScope(displayUUID: primaryUUID, desktopID: 1, stageID: StageID("1"))
             } else {
                 defaultScope = nil
@@ -195,6 +214,22 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         )
         layoutEngine.setScreenRect(workArea)
 
+        // CAUSE RACINE Grayjay (timing) : précharger stagesV2 AVANT registerExistingWindows.
+        // Sans ça, registerWindow voit stagesV2 vide → ne propage pas `state.stageID` →
+        // insertWindow place la wid dans le tree de la stage active (1) au lieu de son
+        // tree de persistance → applyAll la layoute visible alors qu'elle devrait être
+        // hidden. La persistence V2 (NestedStagePersistence) n'a aucune dépendance au
+        // DesktopRegistry, on peut donc la setup tôt.
+        if config.desktops.enabled, config.desktops.mode == .perDisplay,
+           let sm = stageManager {
+            let stagesDir = (NSString(string: "~/.config/roadies/stages")
+                .expandingTildeInPath as String)
+            let earlyPV2 = NestedStagePersistence(stagesDir: stagesDir)
+            sm.setMode(.perDisplay, persistence: earlyPV2)
+            let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+            sm.setCurrentDesktopKey(DesktopKey(displayUUID: primaryUUID, desktopID: 1))
+        }
+
         // Snapshot des apps déjà lancées
         for app in globalObserver?.currentApps() ?? [] {
             axEventLoop?.observe(app)
@@ -205,6 +240,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         server = Server(socketPath: config.daemon.socketPath, handler: self)
         try server?.start()
 
+        // CAUSE RACINE Grayjay (suite) : reconcileStageOwnership AVANT l'auto-assign
+        // des orphelines. Sens 1 (stagesV2 → state.stageID) propage l'attribution
+        // persistée vers le registry. Sans ce passage, les wids présentes sur disque
+        // sont vues comme `state.stageID == nil` et sont écrasées vers `currentStage`
+        // par la boucle ci-dessous → perte de la mémoire de l'attribution.
+        stageManager?.reconcileStageOwnership()
         // Auto-assign des fenêtres orphelines au stage courant (migration utilisateurs existants).
         // Si 5 fenêtres n'ont pas de stageID après loadFromDisk, elles atterrissent toutes
         // dans le stage 1 du desktop courant. Sans effet si stageManager est nil (mode V1 strict).
@@ -226,6 +267,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             registry: registry,
             skipWhenModifier: config.mouse.modifier
         )
+        // Click sur une fenêtre d'un autre stage → switch vers son stage. Sans ce hook,
+        // le raise nu remettait la fenêtre on-screen sans changer de stage → incohérence
+        // (cf. observation utilisateur : "Grayjay visible alors que stage 2 inactif").
+        mouseRaiser?.onClickInOtherStage = { [weak self] _, stageID in
+            guard let self = self, let sm = self.stageManager else { return false }
+            guard sm.currentStageID != stageID else { return false }
+            sm.switchTo(stageID: stageID)
+            return true
+        }
         mouseRaiser?.start()
 
         // SPEC-015 : drag/resize de fenêtre via modifier + clic. Lifecycle géré
@@ -273,6 +323,19 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 let tileableWids = self.registry.tileableWindows.map { $0.cgWindowID }
                 self.layoutEngine.ensureTreePopulated(with: tileableWids)
             }
+            // Purge des helpers persistés par les sessions précédentes (Firefox WebExtension
+            // frames 66×20, Grayjay/Electron tooltips, iTerm popovers). Sans ce passage, les
+            // ~4-8 wids helpers s'accumulent dans `1.toml` à chaque sauvegarde et polluent
+            // `windows.list` + le navrail. Le critère taille est stable, sûr d'appeler ici.
+            self?.stageManager?.purgeOrphanWindows()
+            // Au boot, currentStageID est restauré depuis le disque mais on n'a jamais
+            // déclenché de hide pour les wids assignées à d'autres stages. Sans ce passage,
+            // une fenêtre comme Grayjay (stage 2) reste on-screen alors que stage 1 est
+            // actif. switchTo(currentStageID) est idempotent côté state mais réapplique
+            // le hide → résout l'incohérence visuelle au démarrage.
+            if let sm = self?.stageManager, let active = sm.currentStageID {
+                sm.switchTo(stageID: active)
+            }
             // Re-tile pour que les wids assignées à des stages non-actives soient cachées
             self?.applyLayout()
         }
@@ -310,9 +373,28 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // notifications, MouseRaiser, click-to-raise, manual) publie un
         // windowFocused sur le bus FX. Évite que le module Borders rate des focus
         // changes qui n'ont pas transité par axDidChangeFocusedWindow (apps Electron).
-        registry.onFocusChanged = { [weak loader] wid in
+        registry.onFocusChanged = { [weak loader, weak self] wid in
             guard let wid = wid else { return }
             loader?.bus.publish(FXEvent(kind: .windowFocused, wid: CGWindowID(wid)))
+            // Bridge IPC : le rail (et tout subscriber `events --follow`) reçoit aussi
+            // l'event pour pouvoir promouvoir la vignette focused en hero (SPEC-019).
+            Task { @MainActor in
+                EventBus.shared.publish(DesktopEvent(
+                    name: "window_focused",
+                    payload: ["wid": String(wid)]
+                ))
+            }
+            // Auto-switch stage/desktop sur le focus de la fenêtre cible. Branché ici
+            // (et pas dans axDidChangeFocusedWindow) parce qu'AltTab/Cmd-Tab peut router
+            // le focus via plusieurs chemins (kAXFocusedWindowChanged direct, ou
+            // kAXApplicationActivated → refreshFromSystem) — onFocusChanged est le seul
+            // point central qui fire pour TOUTES les sources. Idempotent via
+            // currentStageID != targetStage.
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                guard self.config.focus.stageFollowsFocus else { return }
+                self.followFocusToStageAndDesktop(wid: wid)
+            }
         }
 
         // SPEC-011 : init desktops virtuels si activé
@@ -440,17 +522,55 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 // avec "unknown_stage in current scope" (la stage 1 V1 du boot n'a pas migré).
                 if stageMode == .perDisplay {
                     let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
-                    let scope = StageScope(displayUUID: primaryUUID, desktopID: 1, stageID: StageID("1"))
-                    mgr.ensureDefaultStage(scope: scope)
+                    // SPEC-019 — invariant utilisateur : "il devrait toujours y avoir au
+                    // minimum la première stage" sur CHAQUE écran. Itérer sur les displays
+                    // physiques (via NSScreen — DisplayRegistry n'est pas encore init à
+                    // ce stade du bootstrap) et matérialiser stage 1 partout.
+                    var seenUUIDs = Set<String>()
+                    for screen in NSScreen.screens {
+                        guard let cgID = screen.deviceDescription[
+                            NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+                        else { continue }
+                        let uuid = resolveDisplayUUID(cgID)
+                        guard !uuid.isEmpty, seenUUIDs.insert(uuid).inserted else { continue }
+                        let scope = StageScope(displayUUID: uuid, desktopID: 1,
+                                               stageID: StageID("1"))
+                        mgr.ensureDefaultStage(scope: scope)
+                    }
+                    // Garde-fou : si NSScreen.screens est vide (cas extrême), au minimum
+                    // matérialiser sur le primary connu.
+                    if seenUUIDs.isEmpty && !primaryUUID.isEmpty {
+                        let scope = StageScope(displayUUID: primaryUUID, desktopID: 1,
+                                               stageID: StageID("1"))
+                        mgr.ensureDefaultStage(scope: scope)
+                    }
+                    // SPEC-018 audit-cohérence F5 : initialiser le scope desktop courant
+                    // (primary, desktop 1) pour que les futurs switchTo persistent dans
+                    // le bon `_active.toml` et que currentStageID reste cohérent.
+                    mgr.setCurrentDesktopKey(
+                        DesktopKey(displayUUID: primaryUUID, desktopID: 1))
                 }
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
                 { @Sendable (newDesktopID: Int) async in
                     await MainActor.run {
                         mgr.reload(forDesktop: newDesktopID)
+                        // SPEC-018 audit-cohérence F5+F6 : après reload, repositionner
+                        // le scope desktop courant pour que `currentStageID` se resync
+                        // au stage actif mémorisé du nouveau desktop. Sans ça, le
+                        // legacy currentStageID retient le stage du desktop précédent.
+                        let primaryUUID = self.resolveDisplayUUID(CGMainDisplayID())
+                        mgr.setCurrentDesktopKey(
+                            DesktopKey(displayUUID: primaryUUID, desktopID: newDesktopID))
                         // Garantir stage 1 + stage actif sur le desktop d'arrivée.
-                        // Si le desktop n'a jamais eu de stages persistés, crée stage 1 et l'active.
-                        mgr.ensureDefaultStage()
+                        // SPEC-019 INV-3 : passer le scope explicite pour matérialiser
+                        // stage 1 dans `stagesV2[(uuid, newDesktopID, "1")]` et créer le
+                        // dossier disque correspondant. Sans le scope, l'API V1 fallback
+                        // ne crée rien dans stagesV2 → desktop neuf reste sans stage 1.
+                        let arrivalScope = StageScope(displayUUID: primaryUUID,
+                                                       desktopID: newDesktopID,
+                                                       stageID: StageID("1"))
+                        mgr.ensureDefaultStage(scope: arrivalScope)
                     }
                 }
             }
@@ -773,6 +893,24 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                 isMinimized: isMin, isFullscreen: isFs)
         registry.register(state, axElement: axWindow)
         axEventLoop?.subscribeDestruction(pid: pid, axWindow: axWindow)
+        // CAUSE RACINE Grayjay (insertion) : si la wid est déjà persistée dans une
+        // stage V2, propager `state.stageID` AVANT `insertWindow`. Sans ce passage,
+        // `LayoutEngine.stageID(for:)` fallback sur `activeStageID` (= "1" au boot),
+        // et la wid est insérée dans le mauvais tree → applyAll la layoute comme une
+        // wid de stage 1 visible, contredit la persistance.
+        if let sm = stageManager, sm.stageMode == .perDisplay {
+            if let owningScope = sm.stagesV2.first(where: { _, st in
+                st.memberWindows.contains { $0.cgWindowID == wid }
+            })?.key {
+                registry.update(wid) { $0.stageID = owningScope.stageID }
+            }
+        } else if let sm = stageManager {
+            if let owningStage = sm.stages.values.first(where: { st in
+                st.memberWindows.contains { $0.cgWindowID == wid }
+            }) {
+                registry.update(wid) { $0.stageID = owningStage.id }
+            }
+        }
         if state.isTileable {
             let targetID = registry.insertionTarget(for: wid)
             logInfo("insert decision", [
@@ -820,8 +958,26 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         // Auto-assign la fenêtre au stage actif. Sans effet si stageManager nil ou
         // si la fenêtre n'est pas tileable (floating, modale).
+        // CAUSE RACINE Grayjay : si la wid est DÉJÀ persistée dans une stage (mode V2),
+        // ne PAS l'écraser avec le stage courant. La délégation V1→V2 (F11) propagerait
+        // cette ré-assignation à stagesV2 + disque → la mémoire de l'attribution serait
+        // perdue. La wid recevra son state.stageID correct via reconcileStageOwnership
+        // au boot (sens stagesV2 → state.stageID).
         if state.isTileable, let sm = stageManager, let stageID = sm.currentStageID {
-            sm.assign(wid: state.cgWindowID, to: stageID)
+            let alreadyAssigned: Bool = {
+                if sm.stageMode == .perDisplay {
+                    return sm.stagesV2.values.contains { stage in
+                        stage.memberWindows.contains { $0.cgWindowID == state.cgWindowID }
+                    }
+                } else {
+                    return sm.stages.values.contains { stage in
+                        stage.memberWindows.contains { $0.cgWindowID == state.cgWindowID }
+                    }
+                }
+            }()
+            if !alreadyAssigned {
+                sm.assign(wid: state.cgWindowID, to: stageID)
+            }
         }
 
         if !isInitial { applyLayout() }
@@ -1137,6 +1293,53 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         ])
     }
 
+    /// Auto-switch stage + desktop pour révéler la fenêtre nouvellement focused.
+    /// Idempotent : ne fait rien si stage/desktop courants matchent déjà.
+    /// Anti-parasite via `state.isTileable` (filtre dialogs/popovers/helpers).
+    /// PAS de filtre sur la position : une wid cachée par HideStrategy est offscreen
+    /// (origin.x ≈ -100000), c'est précisément le cas qu'on veut suivre.
+    func followFocusToStageAndDesktop(wid: WindowID) {
+        guard let state = registry.get(wid), state.isTileable else { return }
+        // Anti-feedback : si on a déjà fait un follow récent (< 500ms), skip.
+        // switchTo() rend la wid cible visible/focused, ce qui re-fire onFocusChanged
+        // sur cette wid puis sur l'ancienne (effet ping-pong). Sans ce guard, on
+        // oscille entre 2 stages tant que les 2 ont une wid focused.
+        let now = Date()
+        if now.timeIntervalSince(lastFocusFollowTimestamp) < 0.5 { return }
+        // 1. Desktop (mode per_display uniquement, géré dans followAltTabFocus).
+        if config.desktops.enabled {
+            Task { @MainActor [weak self] in
+                await self?.followAltTabFocus(wid)
+            }
+        }
+        // 2. Stage : switcher si différent et que la stage cible existe.
+        if let sm = stageManager,
+           let targetStage = state.stageID,
+           sm.currentStageID != targetStage {
+            let stageExists: Bool = {
+                if sm.stageMode == .perDisplay {
+                    return sm.stagesV2.contains { $0.key.stageID == targetStage }
+                }
+                return sm.stages[targetStage] != nil
+            }()
+            if stageExists {
+                logInfo("focus_follow stage switch", [
+                    "wid": String(wid),
+                    "from": sm.currentStageID?.value ?? "nil",
+                    "to": targetStage.value,
+                ])
+                lastFocusFollowTimestamp = now
+                sm.switchTo(stageID: targetStage)
+            } else {
+                logWarn("focus_follow_skipped", [
+                    "wid": String(wid),
+                    "want_stage": targetStage.value,
+                    "reason": "stage_missing",
+                ])
+            }
+        }
+    }
+
     /// SPEC-013 : retourne les bounds réels d'une fenêtre via CGWindowList
     /// (= source de vérité système), utilisé pour détecter le mismatch AX/CG
     /// sur certaines apps (iTerm tabs, Firefox plein écran AX-collapsed).
@@ -1177,6 +1380,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             "wid_at_creation": axWindowID(of: axWindow).map(String.init) ?? "nil",
         ])
         registerWindow(pid: pid, axWindow: axWindow)
+        // Émettre window_created sur le bus DesktopEvent pour que le rail se resync.
+        // Sans ça, ouvrir une nouvelle fenêtre n'apparaît pas dans le navrail tant qu'un
+        // autre event ne déclenche pas un reload (stage_changed, desktop_changed, etc.).
+        if let wid = axWindowID(of: axWindow) {
+            EventBus.shared.publish(DesktopEvent(name: "window_created",
+                                                payload: ["wid": String(wid)]))
+        }
         // Race condition macOS : à la création, le CGWindowID n'est pas toujours encore alloué.
         // Retry après un court délai pour rattraper les fenêtres ratées.
         Task { @MainActor [weak self] in
@@ -1207,6 +1417,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         applyLayout()
         logInfo("window destroyed", ["wid": String(wid), "pid": String(pid)])
         fxLoader?.bus.publish(FXEvent(kind: .windowDestroyed, wid: CGWindowID(wid)))
+        // Émettre window_destroyed sur le bus DesktopEvent pour que le rail retire
+        // immédiatement la vignette correspondante. Sans ça, la wid morte reste
+        // affichée jusqu'au prochain refresh (stage_changed, desktop_changed).
+        EventBus.shared.publish(DesktopEvent(name: "window_destroyed",
+                                            payload: ["wid": String(wid)]))
     }
     func axDidMoveWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
@@ -1345,14 +1560,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 registerWindow(pid: pid, axWindow: axWindow)
             }
             registry.setFocus(wid)
-            // SPEC-013 : AltTab/Cmd-Tab raise une fenêtre cachée (= sur un autre
-            // desktop roadie). Détecter le mismatch et auto-basculer le desktop
-            // du display où la fenêtre vit pour la révéler.
-            if config.desktops.enabled {
-                Task { @MainActor [weak self] in
-                    await self?.followAltTabFocus(wid)
-                }
-            }
+            // L'auto-switch stage/desktop est branché sur registry.onFocusChanged
+            // (cf. bootstrap()), couvrant toutes les sources de focus change y compris
+            // les paths qui ne passent pas par cette callback AX directe.
         } else {
             focusManager.refreshFromSystem()
         }
