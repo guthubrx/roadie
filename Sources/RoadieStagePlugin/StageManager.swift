@@ -9,19 +9,10 @@ import RoadieCore
 public struct LayoutHooks: Sendable {
     public let setLeafVisible: @MainActor (WindowID, Bool) -> Void
     public let applyLayout: @MainActor () -> Void
-    /// Déplace la wid du tree de son ancienne stage vers le tree de la nouvelle stage.
-    public let reassignToStage: @MainActor (WindowID, StageID) -> Void
-    /// Définit la stage active dans le LayoutEngine (change le tree utilisé par applyLayout).
-    public let setActiveStage: @MainActor (StageID?) -> Void
-
     public init(setLeafVisible: @escaping @MainActor (WindowID, Bool) -> Void,
-                applyLayout: @escaping @MainActor () -> Void,
-                reassignToStage: @escaping @MainActor (WindowID, StageID) -> Void,
-                setActiveStage: @escaping @MainActor (StageID?) -> Void) {
+                applyLayout: @escaping @MainActor () -> Void) {
         self.setLeafVisible = setLeafVisible
         self.applyLayout = applyLayout
-        self.reassignToStage = reassignToStage
-        self.setActiveStage = setActiveStage
     }
 }
 
@@ -263,108 +254,6 @@ public final class StageManager {
         loadFromPersistence()
     }
 
-    /// SPEC-018 : réconcilie state.stageID ↔ stage.memberWindows dans les 2 sens.
-    /// Sens 1 : pour chaque wid dans stage.memberWindows, set state.stageID = stage.id
-    ///          (récupère l'assignation persistée que le scan AX a écrasée).
-    /// Sens 2 : pour chaque wid du registry avec state.stageID = X, l'ajouter à
-    ///          stage[X].memberWindows si elle n'y est pas déjà
-    ///          (rattrape les fenêtres trackées au scan mais absentes du disque).
-    public func reconcileStageOwnership() {
-        var fixed1 = 0, fixed2 = 0
-        // Sens 1 : memberWindows → state.stageID
-        for (id, stage) in stages {
-            for member in stage.memberWindows {
-                let wid = member.cgWindowID
-                guard let state = registry.get(wid) else { continue }
-                if state.stageID != id {
-                    registry.update(wid) { $0.stageID = id }
-                    fixed1 += 1
-                }
-            }
-        }
-        // Sens 2 : registry → stage.memberWindows
-        let defaultID = StageID("1")
-        for state in registry.allWindows {
-            // Fall-back vers stage 1 si state.stageID pointe vers stage inexistante.
-            // En mode per_display, "existe" = présence dans stagesV2 (n'importe quel
-            // scope). En mode global, présence dans stages V1.
-            let targetID: StageID
-            let stageExists: (StageID) -> Bool = { [stagesV2, stages, stageMode] sid in
-                if stageMode == .perDisplay {
-                    return stagesV2.contains { $0.key.stageID == sid }
-                } else {
-                    return stages[sid] != nil
-                }
-            }
-            if let sid = state.stageID, stageExists(sid) {
-                targetID = sid
-            } else if stageExists(defaultID) {
-                targetID = defaultID
-                registry.update(state.cgWindowID) { $0.stageID = defaultID }
-            } else {
-                continue
-            }
-            guard var stage = stages[targetID] else { continue }
-            let stageID = targetID
-            if !stage.memberWindows.contains(where: { $0.cgWindowID == state.cgWindowID }) {
-                stage.memberWindows.append(StageMember(
-                    cgWindowID: state.cgWindowID,
-                    bundleID: state.bundleID,
-                    titleHint: state.title,
-                    savedFrame: SavedRect(state.frame)))
-                stages[stageID] = stage
-                saveStage(stage)
-                // Sync stagesV2 si mode per_display.
-                if stageMode == .perDisplay {
-                    for (scope, _) in stagesV2 where scope.stageID == stageID {
-                        stagesV2[scope] = stage
-                        try? persistenceV2?.save(stage, at: scope)
-                    }
-                }
-                fixed2 += 1
-            }
-        }
-        if fixed1 + fixed2 > 0 {
-            logInfo("reconcile_stage_ownership",
-                    ["state_to_stage": String(fixed1), "stage_to_state": String(fixed2)])
-        }
-    }
-
-    /// SPEC-018 : retire les wids orphelines (= pas dans le registry) de toutes les
-    /// stages. À appeler au boot après scan AX initial pour éviter que des wids
-    /// mortes des sessions précédentes restent référencées dans memberWindows.
-    /// Aussi appelé sur handleWindowDestroyed pour nettoyer en continu.
-    public func purgeOrphanWindows() {
-        var purgedCount = 0
-        // V1 dict
-        for (id, stage) in stages {
-            var s = stage
-            let before = s.memberWindows.count
-            s.memberWindows.removeAll { registry.get($0.cgWindowID) == nil }
-            let removed = before - s.memberWindows.count
-            if removed > 0 {
-                stages[id] = s
-                saveStage(s)
-                purgedCount += removed
-            }
-        }
-        // V2 dict (SPEC-018)
-        for (scope, stage) in stagesV2 {
-            var s = stage
-            let before = s.memberWindows.count
-            s.memberWindows.removeAll { registry.get($0.cgWindowID) == nil }
-            let removed = before - s.memberWindows.count
-            if removed > 0 {
-                stagesV2[scope] = s
-                try? persistenceV2?.save(s, at: scope)
-                purgedCount += removed
-            }
-        }
-        if purgedCount > 0 {
-            logInfo("purge_orphan_windows", ["count": String(purgedCount)])
-        }
-    }
-
     private func loadFromPersistence() {
         let loaded = persistence.loadStages()
         stages.removeAll()
@@ -436,15 +325,10 @@ public final class StageManager {
 
     /// Garantit que le stage 1 par défaut existe et qu'un stage est actif.
     /// Appelé par bootstrap() après loadFromDisk() et après chaque reload(forDesktop:).
-    public func ensureDefaultStage(scope: StageScope? = nil) {
+    public func ensureDefaultStage() {
         let defaultID = StageID("1")
         if stages[defaultID] == nil {
             _ = createStage(id: defaultID, displayName: "1")
-        }
-        // SPEC-018 : en mode per_display, garantir aussi la présence de la stage 1
-        // dans stagesV2 au tuple courant pour que `stage 1`, `stage list` etc. la voient.
-        if stageMode == .perDisplay, let scope = scope, stagesV2[scope] == nil {
-            _ = createStage(id: scope.stageID, displayName: "1", scope: scope)
         }
         if currentStageID == nil {
             switchTo(stageID: defaultID)
@@ -481,8 +365,6 @@ public final class StageManager {
         stages[stageID] = target
         saveStage(target)
         registry.update(wid) { $0.stageID = stageID }
-        // Déplacer la wid dans le tree BSP de la nouvelle stage.
-        layoutHooks?.reassignToStage(wid, stageID)
     }
 
     /// SPEC-018 : overload scope-aware. Écrit dans `stagesV2` au tuple complet
@@ -527,8 +409,6 @@ public final class StageManager {
         stages[scope.stageID] = target
         persistence.saveStage(target)
         registry.update(wid) { $0.stageID = scope.stageID }
-        // Déplacer la wid dans le tree BSP de la nouvelle stage (via scope.stageID).
-        layoutHooks?.reassignToStage(wid, scope.stageID)
     }
 
     // MARK: - API desktop (SPEC-011 refactor)
@@ -571,7 +451,6 @@ public final class StageManager {
         }
         currentStageID = nil
         saveActive()
-        layoutHooks?.setActiveStage(nil)
         layoutHooks?.applyLayout()
     }
 
@@ -600,7 +479,6 @@ public final class StageManager {
                 }
             }
         }
-        layoutHooks?.setActiveStage(stageID)
         layoutHooks?.applyLayout()
         var updated = target
         updated.lastActiveAt = Date()
@@ -679,9 +557,6 @@ public final class StageManager {
                 }
             }
         }
-        // Activer la stage dans le LayoutEngine AVANT applyLayout pour que le tiler
-        // utilise le tree (stageID, displayID) correspondant à la nouvelle stage.
-        layoutHooks?.setActiveStage(stageID)
         // Re-layout pour propager les changements de visibilité aux fenêtres tilées.
         layoutHooks?.applyLayout()
 
