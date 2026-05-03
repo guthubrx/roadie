@@ -177,13 +177,24 @@ final class RailController {
             // Si l'event porte un display_uuid non vide, vérifier qu'il correspond
             // à l'un des panels de ce rail. Sinon l'event vient d'un autre display → ignorer.
             // Si display_uuid est vide (mode global ou events sans scope), on passe toujours.
+            //
+            // SPEC-018 fix : avant 2026-05-03, le filtre était trop strict. Si le scope
+            // inferré côté daemon (cursor/frontmost/primary) divergeait du panel courant,
+            // les events stage_* étaient ignorés → rail désynchronisé silencieusement.
+            // Maintenant : sur mismatch display, on déclenche quand même un poll léger
+            // (loadInitialStages SEUL, pas loadWindows) pour resync au cas où l'état
+            // global aurait changé. Compromis : un appel IPC supplémentaire occasionnel,
+            // mais zero update manqué.
             if config.displayMode == "per_display" {
                 let evtUUID = payload["display_uuid"] as? String ?? ""
-                if !evtUUID.isEmpty && !panelBelongsToUUID(evtUUID) { return }
-                // Filtre desktop_id : si l'event cible un desktop précis, ne recharger
-                // que si c'est le desktop courant du rail (state.currentDesktopID).
-                if let evtDesktop = payload["desktop_id"] as? Int, evtDesktop != 0 {
-                    guard evtDesktop == state.currentDesktopID else { return }
+                let evtDesktop = decodeInt(payload["desktop_id"]) ?? 0
+                let displayMatch = evtUUID.isEmpty || panelBelongsToUUID(evtUUID)
+                let desktopMatch = evtDesktop == 0 || evtDesktop == state.currentDesktopID
+                if !displayMatch || !desktopMatch {
+                    // Mismatch léger : poll stage list pour rester resynchro mais sans
+                    // recharger la full liste windows (économie de bande IPC).
+                    loadInitialStages()
+                    return
                 }
             }
             loadInitialStages()
@@ -333,14 +344,17 @@ final class RailController {
 
     private func parseStages(from payload: [String: Any]) -> [StageVM] {
         guard let list = payload["stages"] as? [[String: Any]] else { return [] }
-        let current = payload["current"] as? String ?? ""
+        let current = decodeString(payload["current"]) ?? ""
         return list.compactMap { dict in
-            guard let id = dict["id"] as? String else { return nil }
-            let name = (dict["display_name"] as? String) ?? (dict["name"] as? String) ?? "Stage \(id)"
-            // is_active vient du daemon (SPEC-014 T041) ; fallback : compare avec current.
-            let active = (dict["is_active"] as? Bool) ?? (id == current)
+            guard let id = decodeString(dict["id"]) else { return nil }
+            let name = decodeString(dict["display_name"]) ?? decodeString(dict["name"]) ?? "Stage \(id)"
+            // SPEC-018 fix : is_active passe par decodeBool tolérant (le daemon peut
+            // sérialiser en Bool, Int 0/1 ou NSNumber selon le bridging AnyCodable —
+            // l'échec silencieux du cast `as? Bool` provoquait des halos verts sur 2
+            // stages au lieu d'1). Fallback final : compare avec `current`.
+            let active = decodeBool(dict["is_active"]) ?? (id == current)
             let wids = (dict["window_ids"] as? [Int])?.map { CGWindowID($0) } ?? []
-            let desktop = dict["desktop_id"] as? Int ?? 1
+            let desktop = decodeInt(dict["desktop_id"]) ?? 1
             return StageVM(id: id, displayName: name, isActive: active,
                            windowIDs: wids, desktopID: desktop)
         }
@@ -469,4 +483,47 @@ private func debugLog(_ msg: String) {
             try? data.write(to: URL(fileURLWithPath: path))
         }
     }
+}
+
+// MARK: - SPEC-018 fix : helpers de cast robustes pour payloads JSON-AnyCodable
+//
+// Problème observé : `payload["x"] as? Bool` échoue silencieusement quand le JSON
+// renvoie un Int (0/1) ou un NSNumber au lieu d'un Bool natif (cas typique
+// JSONSerialization → AnyCodable bridging). Le fallback (nil ou autre default)
+// peut masquer un vrai bug. Les helpers ci-dessous tentent toutes les
+// représentations communes avant d'abandonner.
+
+/// Décodage tolérant : Bool natif, NSNumber bool, Int (0=false, autre=true),
+/// String ("true"/"false"/"1"/"0", case-insensitive). Retourne nil sinon.
+func decodeBool(_ any: Any?) -> Bool? {
+    guard let any = any else { return nil }
+    if let b = any as? Bool { return b }
+    if let n = any as? NSNumber { return n.boolValue }
+    if let i = any as? Int { return i != 0 }
+    if let s = any as? String {
+        switch s.lowercased() {
+        case "true", "1", "yes", "on": return true
+        case "false", "0", "no", "off": return false
+        default: return nil
+        }
+    }
+    return nil
+}
+
+/// Décodage tolérant : Int natif, NSNumber, String numérique. Retourne nil sinon.
+func decodeInt(_ any: Any?) -> Int? {
+    guard let any = any else { return nil }
+    if let i = any as? Int { return i }
+    if let n = any as? NSNumber { return n.intValue }
+    if let s = any as? String, let i = Int(s) { return i }
+    if let d = any as? Double { return Int(d) }
+    return nil
+}
+
+/// Décodage tolérant : String natif, NSString, ou description de tout autre type.
+func decodeString(_ any: Any?) -> String? {
+    guard let any = any else { return nil }
+    if let s = any as? String { return s }
+    if let n = any as? NSNumber { return n.stringValue }
+    return "\(any)"
 }
