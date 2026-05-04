@@ -81,6 +81,12 @@ public final class BSPTiler: Tiler {
 
     // MARK: - insert / remove
 
+    /// SPEC-025 amend — pour détecter `tree_flatten_event` au prochain insert.
+    /// Mémorise la profondeur de chaque root après le dernier insert. Si elle
+    /// diminue entre 2 inserts (sans remove entre temps), un autre code path
+    /// a aplati l'arbre = bug observability layer signale.
+    nonisolated(unsafe) private static var lastDepthByRoot: [ObjectIdentifier: Int] = [:]
+
     public func insert(leaf: WindowLeaf, near target: WindowLeaf?, in root: TilingContainer) {
         // Idempotence : si déjà présent, ne rien faire.
         if TreeNode.find(windowID: leaf.windowID, in: root) != nil { return }
@@ -122,21 +128,6 @@ public final class BSPTiler: Tiler {
             orientation = parent.orientation.opposite
             reason = "policy=dwindle parent_orientation=\(parent.orientation.rawValue).opposite"
         }
-        // SPEC-025 amend — log structuré info pour traçabilité et observabilité.
-        // Permet le replay post-mortem d'une insertion BSP qui aurait dérapé du
-        // pattern attendu (= split sur côté le plus long).
-        let tw = target.lastFrame.map { Int($0.width) } ?? -1
-        let th = target.lastFrame.map { Int($0.height) } ?? -1
-        logInfo("tiler_insert", [
-            "strategy": "bsp",
-            "new_wid": String(leaf.windowID),
-            "target_wid": String(target.windowID),
-            "orientation": orientation.rawValue,
-            "parent_orientation": parent.orientation.rawValue,
-            "target_w": String(tw),
-            "target_h": String(th),
-            "reason": reason,
-        ])
         // Invariant : si la décision dépend du fallback (lastFrame nil), c'est
         // qu'on n'a pas pu calculer l'orientation idéale et on a peut-être
         // produit une division non-conforme à BSP "split-côté-le-plus-long".
@@ -152,6 +143,24 @@ public final class BSPTiler: Tiler {
             ])
         }
 
+        // SPEC-025 amend — capture profondeur AVANT mutation pour détection
+        // tree_flatten_event (= un autre code path a aplati le tree depuis le
+        // dernier insert, signal du bug observabilité layout).
+        let rootKey = ObjectIdentifier(root)
+        let depthBeforeInsert = root.maxDepth
+        let lastKnownDepth = BSPTiler.lastDepthByRoot[rootKey] ?? 0
+        // Si le tree a été aplati entre le dernier insert et celui-ci, signaler.
+        // Tolère les diminutions = 1 (cas remove + reinsert légitime).
+        if lastKnownDepth > 0 && depthBeforeInsert < lastKnownDepth - 1 {
+            logWarn("tree_flatten_event", [
+                "strategy": "bsp",
+                "depth_last_insert": String(lastKnownDepth),
+                "depth_now": String(depthBeforeInsert),
+                "delta": String(lastKnownDepth - depthBeforeInsert),
+                "structure_now": String(root.compactStructure.prefix(200)),
+            ])
+        }
+
         let subContainer = TilingContainer(orientation: orientation,
                                            adaptiveWeight: target.adaptiveWeight)
         parent.children[idx] = subContainer
@@ -161,6 +170,46 @@ public final class BSPTiler: Tiler {
         target.parent = nil   // sera réattaché juste après
         subContainer.append(target)
         subContainer.append(leaf)
+
+        // SPEC-025 amend — log structuré info enrichi avec profondeur + structure.
+        // Permet le replay post-mortem d'une insertion BSP qui aurait dérapé du
+        // pattern attendu, ET la détection d'un tree aplati par cascade externe.
+        let tw = target.lastFrame.map { Int($0.width) } ?? -1
+        let th = target.lastFrame.map { Int($0.height) } ?? -1
+        let depthAfter = root.maxDepth
+        let leafCount = root.allLeaves.count
+        // Si leafCount > 1 mais depth = 1 → tree plat (= politique BSP non
+        // respectée). Cas attendu seulement à la 1ère insertion (leaf+target
+        // dans subContainer, parent=root direct).
+        let isFlat = (leafCount > 2 && depthAfter <= 1)
+        logInfo("tiler_insert", [
+            "strategy": "bsp",
+            "new_wid": String(leaf.windowID),
+            "target_wid": String(target.windowID),
+            "orientation": orientation.rawValue,
+            "parent_orientation": parent.orientation.rawValue,
+            "target_w": String(tw),
+            "target_h": String(th),
+            "reason": reason,
+            "tree_depth_after": String(depthAfter),
+            "tree_leaves_count": String(leafCount),
+            "tree_structure_after": String(root.compactStructure.prefix(200)),
+            "tree_is_flat": String(isFlat),
+        ])
+        // Si le tree est plat alors qu'on a > 2 leaves → la politique BSP
+        // (qu'elle soit largest_dim ou dwindle) n'a pas pu construire un arbre
+        // profond. Symptôme du bug "cascade post-insert qui ré-aplatit".
+        if isFlat {
+            logWarn("tiler_policy_unrespected", [
+                "strategy": "bsp",
+                "policy": BSPTiler.splitPolicy.rawValue,
+                "leaves_count": String(leafCount),
+                "tree_depth": String(depthAfter),
+                "structure": String(root.compactStructure.prefix(200)),
+                "expected": "depth >= ~log2(leaves_count)",
+            ])
+        }
+        BSPTiler.lastDepthByRoot[rootKey] = depthAfter
     }
 
     public func remove(leaf: WindowLeaf, from root: TilingContainer) {

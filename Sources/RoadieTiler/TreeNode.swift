@@ -52,6 +52,33 @@ public final class TilingContainer: TreeNode {
             return []
         }
     }
+
+    /// SPEC-025 amend — observabilité layout.
+    /// Profondeur max de l'arbre depuis ce nœud (leaf=0, container=1+max(children)).
+    /// Sert à détecter les arbres "aplatis" (tous les leaves au niveau 1) qui
+    /// révèlent un bug dans la cascade d'insertion (= politique BSP non respectée).
+    public var maxDepth: Int {
+        guard !children.isEmpty else { return 0 }
+        let childMax = children.map { node -> Int in
+            if node is WindowLeaf { return 0 }
+            if let c = node as? TilingContainer { return c.maxDepth }
+            return 0
+        }.max() ?? 0
+        return 1 + childMax
+    }
+
+    /// Dump compact à 1 ligne pour log : `H[L12,V[L17848,L20208]]`.
+    /// `H` = horizontal, `V` = vertical, `L<wid>` = leaf. Lecture facile pour
+    /// replay post-mortem. Limité à 200 char dans le log pour rester compact.
+    public var compactStructure: String {
+        let kids = children.map { node -> String in
+            if let leaf = node as? WindowLeaf { return "L\(leaf.windowID)" }
+            if let c = node as? TilingContainer { return c.compactStructure }
+            return "?"
+        }.joined(separator: ",")
+        let prefix = orientation == .horizontal ? "H" : "V"
+        return "\(prefix)[\(kids)]"
+    }
 }
 
 public final class WindowLeaf: TreeNode {
