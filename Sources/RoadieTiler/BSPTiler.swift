@@ -7,6 +7,21 @@ import RoadieCore
 public final class BSPTiler: Tiler {
     public static let strategyID: TilerStrategy = .bsp
 
+    /// SPEC-025 amend — politique de split, configurable via [tiling].split_policy.
+    public enum SplitPolicy: String, Sendable {
+        /// Split sur le côté le plus long de la cible (default).
+        /// Comportement actuel : suit l'aspect-ratio physique.
+        case largestDim = "largest_dim"
+        /// Split orthogonal au parent (alterne H/V à chaque profondeur).
+        /// Layouts plus équilibrés, comportement i3/sway classique.
+        case dwindle = "dwindle"
+    }
+
+    /// Politique active. Set au boot du daemon depuis la config TOML
+    /// (`[tiling].split_policy`). Default = .largestDim pour compat backward.
+    /// Thread-safe : accédée @MainActor (insertions BSP toujours main thread).
+    @MainActor public static var splitPolicy: SplitPolicy = .largestDim
+
     public init() {}
 
     /// Auto-enregistrement dans le TilerRegistry. À appeler au bootstrap du daemon.
@@ -75,20 +90,29 @@ public final class BSPTiler: Tiler {
             return
         }
 
-        // Auto-orientation : orientation choisie par l'aspect ratio du target.
-        // Target large (w > h) → split horizontal (côte à côte).
-        // Target haute (h > w) → split vertical (empilé).
-        // Fallback : opposite du parent (BSP classique) si lastFrame inconnue.
+        // Auto-orientation selon la politique de split active.
+        //   .largestDim : orientation choisie par l'aspect ratio du target
+        //     (target large → split horizontal, target haute → split vertical)
+        //   .dwindle    : orientation = opposée du parent (alterne H/V à
+        //     chaque profondeur d'arbre, layout plus équilibré)
+        // Fallback (.largestDim) : opposite du parent si target.lastFrame nil.
         let orientation: Orientation
         let reason: String
         var fallbackUsed = false
-        if let frame = target.lastFrame {
-            orientation = frame.width >= frame.height ? .horizontal : .vertical
-            reason = "aspect-ratio w=\(Int(frame.width)) h=\(Int(frame.height))"
-        } else {
+        let policy = MainActor.assumeIsolated { BSPTiler.splitPolicy }
+        switch policy {
+        case .largestDim:
+            if let frame = target.lastFrame {
+                orientation = frame.width >= frame.height ? .horizontal : .vertical
+                reason = "policy=largest_dim aspect-ratio w=\(Int(frame.width)) h=\(Int(frame.height))"
+            } else {
+                orientation = parent.orientation.opposite
+                reason = "policy=largest_dim fallback parent.opposite (target.lastFrame=nil)"
+                fallbackUsed = true
+            }
+        case .dwindle:
             orientation = parent.orientation.opposite
-            reason = "fallback parent.opposite (target.lastFrame=nil)"
-            fallbackUsed = true
+            reason = "policy=dwindle parent_orientation=\(parent.orientation.rawValue).opposite"
         }
         // SPEC-025 amend — log structuré info pour traçabilité et observabilité.
         // Permet le replay post-mortem d'une insertion BSP qui aurait dérapé du

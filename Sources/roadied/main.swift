@@ -104,6 +104,18 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // `ButterflyTiler.register()` ici. Aucun autre changement requis.
         BSPTiler.register()
         MasterStackTiler.register()
+        // SPEC-025 amend — wire la politique de split BSP depuis la config TOML.
+        if let policy = BSPTiler.SplitPolicy(rawValue: config.tiling.splitPolicy) {
+            BSPTiler.splitPolicy = policy
+        } else {
+            logWarn("bsp_split_policy_invalid", [
+                "value": config.tiling.splitPolicy,
+                "fallback": "largest_dim",
+                "valid": "largest_dim, dwindle",
+            ])
+            BSPTiler.splitPolicy = .largestDim
+        }
+        logInfo("bsp_split_policy", ["policy": BSPTiler.splitPolicy.rawValue])
         self.layoutEngine = try LayoutEngine(registry: registry, strategy: config.tiling.defaultStrategy)
         if config.stageManager.enabled {
             // Hooks injectés via closure pour que StageManager puisse marquer les

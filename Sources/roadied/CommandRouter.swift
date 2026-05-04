@@ -177,6 +177,11 @@ enum CommandRouter {
                 if let level = LogLevel(rawValue: newConfig.daemon.logLevel) {
                     Logger.shared.setMinLevel(level)
                 }
+                // SPEC-025 amend — re-wire la politique split BSP au reload.
+                if let policy = BSPTiler.SplitPolicy(rawValue: newConfig.tiling.splitPolicy) {
+                    BSPTiler.splitPolicy = policy
+                    logInfo("bsp_split_policy", ["policy": policy.rawValue, "via": "reload"])
+                }
                 logInfo("config reloaded")
                 // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
                 // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
