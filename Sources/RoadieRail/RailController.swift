@@ -65,6 +65,16 @@ struct RailConfig {
     var wallpaperClickToStage: Bool = true
     var panelWidth: CGFloat = 320
     var edgeWidth: CGFloat = 8
+    /// Click sur zone vide du rail (hors thumbnails + ceinture de sécurité) =
+    /// hide toutes les fenêtres de la stage active du display courant. Pattern
+    /// Stage Manager natif Apple. Pas de toggle (no-op si déjà hide) — pour
+    /// ressortir, l'utilisateur clique une thumbnail.
+    var emptyClickHideActive: Bool = true
+    /// Marge invisible (en px) autour de chaque thumbnail. Un click qui tombe
+    /// dans cette ceinture est ignoré (ni "switch stage" ni "hide active") —
+    /// évite les hide accidentels quand l'utilisateur vise une thumbnail mais
+    /// rate de quelques pixels.
+    var emptyClickSafetyMargin: Double = 12
     var fadeDurationMs: Int = 200
     /// Durée pendant laquelle le panel reste visible après que le curseur quitte
     /// la zone d'edge (`[fx.rail].persistence_ms`).
@@ -154,6 +164,12 @@ struct RailConfig {
             if let v = rail["enabled"]?.bool { cfg.enabled = v }
             if let v = rail["reclaim_horizontal_space"]?.bool { cfg.reclaimHorizontalSpace = v }
             if let v = rail["wallpaper_click_to_stage"]?.bool { cfg.wallpaperClickToStage = v }
+            if let v = rail["empty_click_hide_active"]?.bool { cfg.emptyClickHideActive = v }
+            if let v = rail["empty_click_safety_margin"]?.double {
+                cfg.emptyClickSafetyMargin = max(0, min(60, v))
+            } else if let v = rail["empty_click_safety_margin"]?.int {
+                cfg.emptyClickSafetyMargin = max(0, min(60, Double(v)))
+            }
             if let v = rail["panel_width"]?.int { cfg.panelWidth = CGFloat(v) }
             if let v = rail["edge_width"]?.int { cfg.edgeWidth = CGFloat(v) }
             if let v = rail["fade_duration_ms"]?.int { cfg.fadeDurationMs = v }
@@ -579,6 +595,9 @@ final class RailController {
                     self?.assignWindow(wid, to: target, displayUUID: panelUUID)
                 }
             }
+            let onEmptyClickScoped: () -> Void = { [weak self] in
+                Task { @MainActor [weak self] in self?.hideActiveStage(displayUUID: panelUUID) }
+            }
             // SPEC-019 — résoudre la preview effective pour le renderer actif.
             // Renderer changes (config_reloaded) déclenchent rebuildPanels → re-résolution.
             let activeRendererID = config.rendererID ?? StageRendererRegistry.defaultID
@@ -617,7 +636,10 @@ final class RailController {
                 onDropAssign: onDropScoped,
                 onRename: onRename,
                 onAddFocused: onAddFocused,
-                onDelete: onDelete
+                onDelete: onDelete,
+                emptyClickHideActive: config.emptyClickHideActive,
+                emptyClickSafetyMargin: config.emptyClickSafetyMargin,
+                onEmptyClick: onEmptyClickScoped
             )
             let panel = StageRailPanel(rootView: view)
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
@@ -827,6 +849,21 @@ final class RailController {
             } catch {
                 logErr("rail: stage.switch \(id) failed: \(error)")
                 loadInitialStages()
+            }
+        }
+    }
+
+    /// Click sur zone vide du rail (hors thumbnails + ceinture de sécurité).
+    /// Hide toutes les fenêtres de la stage active du display ciblé. Pattern
+    /// Apple Stage Manager natif. Pour ressortir, l'utilisateur clique une thumbnail.
+    func hideActiveStage(displayUUID: String = "") {
+        Task {
+            do {
+                var args: [String: String] = [:]
+                if !displayUUID.isEmpty { args["display"] = displayUUID }
+                _ = try await ipc.send(command: "stage.hide_active", args: args)
+            } catch {
+                logErr("rail: stage.hide_active failed: \(error)")
             }
         }
     }

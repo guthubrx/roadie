@@ -57,6 +57,15 @@ struct StageStackView: View {
     var onRename:     (String, String) -> Void      = { _, _ in }
     var onAddFocused: (String) -> Void              = { _ in }
     var onDelete:     (String) -> Void              = { _ in }
+    // Click bureau Apple : zone vide du rail = hide stage active du display.
+    var emptyClickHideActive:   Bool       = true
+    var emptyClickSafetyMargin: Double     = 12
+    var onEmptyClick:           () -> Void = {}
+
+    /// Rects des thumbnails dans le coordinate space du rail. Mis à jour par
+    /// `ThumbRectsKey` quand les renderers se rendent. Sert à filtrer les taps
+    /// "click vide" qui tombent dans la ceinture de sécurité d'une thumbnail.
+    @State private var thumbRects: [CGRect] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,6 +76,23 @@ struct StageStackView: View {
                 .padding(.bottom, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .coordinateSpace(name: "rail")
+        .contentShape(Rectangle())
+        // SwiftUI propage le tap aux enfants en priorité : si une thumbnail
+        // l'absorbe via son propre `.onTapGesture`, ce handler racine n'est pas
+        // appelé. Sinon, on vérifie si le tap tombe dans la ceinture de sécurité
+        // d'une thumb (à `emptyClickSafetyMargin` px près) — si oui, ignoré.
+        .onTapGesture(coordinateSpace: .named("rail")) { location in
+            guard emptyClickHideActive else { return }
+            let m = CGFloat(emptyClickSafetyMargin)
+            for rect in thumbRects {
+                if rect.insetBy(dx: -m, dy: -m).contains(location) { return }
+            }
+            onEmptyClick()
+        }
+        .onPreferenceChange(ThumbRectsKey.self) { rects in
+            thumbRects = rects
+        }
         // Fond strictement transparent (demande utilisateur explicite, 3x).
     }
 
@@ -148,6 +174,18 @@ struct StageStackView: View {
                             renderer.render(context: context, callbacks: cb)
                             // Aligner à gauche (vs centre) — demande utilisateur.
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            // Expose le rect de cette cellule dans le coordinate
+                            // space "rail" pour le hit-test "click vide" du body.
+                            // Le tap geste racine ignore les clicks tombés dans la
+                            // ceinture de `emptyClickSafetyMargin` autour de ce rect.
+                            .background(
+                                GeometryReader { proxy in
+                                    Color.clear.preference(
+                                        key: ThumbRectsKey.self,
+                                        value: [proxy.frame(in: .named("rail"))]
+                                    )
+                                }
+                            )
                         }
                     }
                     // SPEC-019 — pas de padding ici : chaque renderer gère son propre
@@ -174,5 +212,16 @@ struct StageStackView: View {
             Color(red: 0.04, green: 0.05, blue: 0.08).opacity(0.35)
         }
         .ignoresSafeArea()
+    }
+}
+
+/// Collecte les rects (dans le coordinate space "rail") de toutes les
+/// thumbnails rendues. Le body de `StageStackView` les consomme pour
+/// décider si un tap "click vide" doit être ignoré (ceinture de sécurité)
+/// ou déclencher `onEmptyClick`.
+private struct ThumbRectsKey: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
     }
 }
