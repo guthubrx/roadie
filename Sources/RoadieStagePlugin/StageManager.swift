@@ -423,7 +423,11 @@ public final class StageManager {
     }
 
     /// Compteur public lu par le bootstrap pour BootStateHealth (FR-003).
-    public static var lastValidationInvalidatedCount: Int = 0
+    /// `@MainActor` pour cohérence avec le reste du StageManager (toutes les
+    /// écritures viennent de loadFromDisk @MainActor, et toutes les lectures
+    /// viennent de bootstrap / CommandRouter @MainActor). Évite la classe de
+    /// data race théorique sur un static var non-isolated.
+    @MainActor public static var lastValidationInvalidatedCount: Int = 0
 
     /// Nombre total de members across stagesV1 + stagesV2. Lu par le bootstrap
     /// pour BootStateHealth.totalWids et par les compteurs de zombies purgés.
