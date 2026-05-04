@@ -22,10 +22,9 @@ Une seule install canonique :
 
 | Élément | Chemin | Rôle |
 |---|---|---|
-| Binaire daemon (réel, fichier) | `~/Applications/roadied.app/Contents/MacOS/roadied` | Seul exécutable lancé. TCC ancré ici. |
+| Binaire app (réel, fichier) | `~/Applications/roadied.app/Contents/MacOS/roadied` | Seul exécutable lancé. TCC ancré ici. |
 | Symlink dev | `~/.local/bin/roadied` → bundle ci-dessus | Pour `cp .build/debug/roadied ~/.local/bin/` qui dérefère et MAJ le bundle. Sécurise le workflow dev existant. |
 | Binaire CLI client | `~/.local/bin/roadie` (fichier réel) | Client IPC. Signé aussi pour cohérence. |
-| Binaire rail | `~/.local/bin/roadie-rail` (fichier réel) | Lancé manuellement par `install-dev.sh`, pas par launchd. |
 | LaunchAgent | `~/Library/LaunchAgents/com.roadie.roadie.plist` | `RunAtLoad=true`, `KeepAlive.Crashed=true`, pointe vers `~/Applications/roadied.app/Contents/MacOS/roadied`. |
 | Certificat dev | `roadied-cert` (login keychain, type Code Signing, Self Signed Root) | Identité stable. Créé une fois via Keychain Access > Certificate Assistant. |
 
@@ -36,17 +35,17 @@ Tout autre `.app` de roadie est interdit (les bundles `/Applications/Roadie.app`
 Ce script est **le seul** point d'entrée pour propager une nouvelle build vers le système :
 
 1. `swift build` (PATH override anaconda — règle MEMORY.md projet).
-2. `launchctl bootout` du daemon courant + `pkill` sur rail et events --follow zombies.
-3. `cp .build/debug/{roadied,roadie-rail,roadie}` aux 3 cibles.
+2. `launchctl bootout` de l'app courante + `pkill` sur les clients `events --follow` zombies.
+3. `cp .build/debug/{roadied,roadie}` aux 2 cibles.
 4. Crée le `Info.plist` du bundle si absent (CFBundleExecutable=roadied, LSUIElement=true).
-5. **`codesign -fs roadied-cert`** sur chacun des 3 binaires (préserve la grant Accessibility).
-6. `launchctl bootstrap` du LaunchAgent + relance manuelle de roadie-rail.
+5. **`codesign -fs roadied-cert`** sur chaque binaire (préserve la grant Accessibility).
+6. `launchctl bootstrap` du LaunchAgent.
 
 Toute autre méthode de mise à jour des binaires (édition manuelle, `cp` direct, `brew install`, etc.) est interdite tant qu'on est en phase dev — elle invaliderait soit le path stable, soit la signature TCC, soit les deux.
 
 ### 3. Identité TCC pérenne
 
-Le certificat `roadied-cert` est self-signed root, type Code Signing, dans le login keychain. Il est partagé entre les 3 binaires (daemon, rail, CLI). Il ne contient **aucune information personnelle** (juste un nom de cert), n'est jamais commité dans le repo. Il est créé manuellement par chaque développeur du projet — son contenu n'a pas besoin d'être identique entre développeurs, c'est une convention de nom uniquement.
+Le certificat `roadied-cert` est self-signed root, type Code Signing, dans le login keychain. Il est partagé entre les binaires (app + CLI). Il ne contient **aucune information personnelle** (juste un nom de cert), n'est jamais commité dans le repo. Il est créé manuellement par chaque développeur du projet — son contenu n'a pas besoin d'être identique entre développeurs, c'est une convention de nom uniquement.
 
 Conséquences :
 - Permission Accessibility donnée **une seule fois** au binaire `~/Applications/roadied.app/Contents/MacOS/roadied`. Elle survit à tous les rebuilds.

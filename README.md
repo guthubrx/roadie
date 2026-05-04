@@ -91,7 +91,7 @@ The script checks all dependencies, builds, signs every binary with `roadied-cer
 
 Then in System Settings → Privacy & Security:
 - **Accessibility** : add `~/Applications/roadied.app` and tick the checkbox
-- **Screen Recording** : add `~/Applications/roadied.app` and tick the checkbox (needed for window thumbnail capture by the daemon — `roadie-rail.app` does NOT need any TCC grant, it consumes thumbnails via IPC)
+- **Screen Recording** : add `~/Applications/roadied.app` and tick the checkbox (needed for window thumbnail capture)
 
 ```bash
 roadied --daemon &
