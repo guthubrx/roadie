@@ -424,24 +424,32 @@ public final class StageManager {
         for (id, stage) in stages {
             var s = stage
             let before = s.memberWindows.count
+            // SPEC-021 fix invariant I1 : capturer les wids supprimées pour
+            // nettoyer aussi les index inverses (sinon widToStageV1 reste avec
+            // des entrées orphelines pointant vers stages qui ne les contiennent
+            // plus → drift observé).
+            let purgedWids = s.memberWindows.filter { shouldPurge($0.cgWindowID) }.map { $0.cgWindowID }
             s.memberWindows.removeAll { shouldPurge($0.cgWindowID) }
             let removed = before - s.memberWindows.count
             if removed > 0 {
                 stages[id] = s
                 saveStage(s)
                 purgedCount += removed
+                for wid in purgedWids { widToStageV1.removeValue(forKey: wid) }
             }
         }
         // V2 dict (SPEC-018)
         for (scope, stage) in stagesV2 {
             var s = stage
             let before = s.memberWindows.count
+            let purgedWids = s.memberWindows.filter { shouldPurge($0.cgWindowID) }.map { $0.cgWindowID }
             s.memberWindows.removeAll { shouldPurge($0.cgWindowID) }
             let removed = before - s.memberWindows.count
             if removed > 0 {
                 stagesV2[scope] = s
                 try? persistenceV2?.save(s, at: scope)
                 purgedCount += removed
+                for wid in purgedWids { widToScope.removeValue(forKey: wid) }
             }
         }
         // Clear state.stageID des helpers : sinon `windows.list` continue à rapporter
@@ -622,9 +630,10 @@ public final class StageManager {
             }
         }
         for id in emptied { deleteStage(id: id) }
-        // SPEC-021 T016 : index inverse V1 mis à jour.
-        widToStageV1[wid] = stageID
-        // Ajouter au stage cible
+        // SPEC-021 fix invariant I1 (V1) : muter widToStageV1 SEULEMENT après que
+        // l'append à memberWindows soit garanti. Avant ce fix, on mutait
+        // widToStageV1 en premier, et si stages[stageID] n'existait pas, le
+        // guard early-return laissait widToStageV1 orphelin.
         guard var target = stages[stageID] else {
             logWarn("assign: unknown stage", ["stage": stageID.value])
             return
@@ -637,7 +646,7 @@ public final class StageManager {
         target.lastActiveAt = Date()
         stages[stageID] = target
         saveStage(target)
-        // SPEC-021 : registry.update { $0.stageID = } supprimé (computed via widToStageV1).
+        // Muter ici (après memberWindows peuplé) pour garantir l'invariant I1.
         widToStageV1[wid] = stageID
         // Déplacer la wid dans le tree BSP de la nouvelle stage.
         layoutHooks?.reassignToStage(wid, stageID)
@@ -665,9 +674,11 @@ public final class StageManager {
             stagesV2.removeValue(forKey: s)
             try? persistenceV2?.delete(at: s)
         }
-        // SPEC-021 T015 : index inverse mis à jour avant mutation stagesV2.
-        widToScope[wid] = scope
-        // Ajouter au scope cible.
+        // SPEC-021 fix invariant I1 : muter widToScope SEULEMENT après que
+        // l'append à memberWindows soit garanti. Avant ce fix, on mutait
+        // widToScope en premier, et si stagesV2[scope] n'existait pas, le
+        // guard early-return laissait widToScope orphelin → drift observé
+        // par auditOwnership.
         guard var target = stagesV2[scope] else {
             logWarn("assign: unknown stage in scope", [
                 "stage": scope.stageID.value,
@@ -687,7 +698,9 @@ public final class StageManager {
         // Sync V1 dict pour que `switchTo(stageID:)` et autres APIs V1 trouvent la stage.
         stages[scope.stageID] = target
         persistence.saveStage(target)
-        // SPEC-021 : registry.update { $0.stageID = } supprimé (computed via widToScope).
+        // SPEC-021 : registry.update { $0.stageID = } supprimé (computed via
+        // widToScope). Muter ici, après que memberWindows soit peuplé, garantit
+        // l'invariant I1 (widToScope[wid] ⇒ wid ∈ memberWindows[scope]).
         widToScope[wid] = scope
         widToStageV1[wid] = scope.stageID  // sync pour compat lecture V1.
         // Déplacer la wid dans le tree BSP de la nouvelle stage (via scope.stageID).
