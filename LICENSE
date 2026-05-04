@@ -19,3 +19,14 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Third-party notices
+
+This project incorporates code adapted from the following MIT-licensed
+projects. Their copyright notices and full license texts are preserved in
+THIRD_PARTY_LICENSES.md.
+
+- yabai — Copyright (c) 2019 Åsmund Vikane — https://github.com/koekeishiya/yabai
+- AeroSpace — Copyright (c) 2023 Nikita Bobko — https://github.com/nikitabobko/AeroSpace
