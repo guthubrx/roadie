@@ -31,6 +31,14 @@ case "daemon":
     guard args.count >= 3 else { printUsage(); exit(64) }
     handleDaemon(verb: args[2])
 
+case "heal":
+    // SPEC-025 FR-005 — auto-cicatrisation rapide.
+    sendAndPrint(Request(command: "daemon.heal"))
+
+case "diag":
+    // SPEC-025 US7 — diagnostic bundle pour bug report.
+    handleDiag(args: args)
+
 case "focus":
     guard args.count >= 3 else { printUsage(); exit(64) }
     sendAndPrint(Request(command: "focus", args: ["direction": args[2]]))
@@ -266,6 +274,13 @@ func handleDaemon(verb: String) {
         let fix = args.contains("--fix")
         sendAndPrint(Request(command: "daemon.audit",
                              args: fix ? ["fix": "true"] : nil))
+    case "health":
+        // SPEC-025 FR-004 — health metric instantané.
+        sendAndPrint(Request(command: "daemon.health"))
+    case "heal":
+        // SPEC-025 FR-005 — alias de `roadie heal`. Pratique pour les users
+        // qui pensent en namespace `daemon.*`.
+        sendAndPrint(Request(command: "daemon.heal"))
     default:
         printUsage(); exit(64)
     }
@@ -592,6 +607,160 @@ func printUsage() {
       roadie window pin | unpin                  # SPEC-010 always-on-top
       roadie rail status                         # état du rail (intégré au daemon)
       roadie rail toggle                         # no-op (config via [fx.rail].enabled)
+      roadie heal                                # SPEC-025 auto-cicatrisation
+      roadie diag [--out <path>]                 # SPEC-025 bundle de diagnostic pour bug report
     """
     FileHandle.standardError.write((usage + "\n").data(using: .utf8) ?? Data())
+}
+
+// MARK: - SPEC-025 US7 — `roadie diag` : bundle de diagnostic pour bug report
+
+/// Crée un bundle compressé contenant les logs récents, l'état actuel du daemon,
+/// la config TOML, les snapshots stages et les infos système macOS pertinentes.
+/// Format : `~/Desktop/roadie-diag-YYYYMMDD-HHMMSS.tar.gz` (ou `--out <path>`).
+///
+/// Les utilisateurs peuvent attacher ce bundle à un bug report. Le maintainer
+/// a tout ce qu'il faut pour reproduire / comprendre sans demander de détails.
+///
+/// **Anonymisation** : titres de fenêtres et bundle IDs ne sont PAS anonymisés
+/// dans cette version — l'utilisateur doit reviewer le bundle avant envoi
+/// (mention dans l'output). Future amélioration : flag `--anonymize`.
+func handleDiag(args: [String]) {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd-HHmmss"
+    let timestamp = formatter.string(from: Date())
+    let defaultOut = "\(NSHomeDirectory())/Desktop/roadie-diag-\(timestamp).tar.gz"
+
+    var outPath = defaultOut
+    if let i = args.firstIndex(of: "--out"), i + 1 < args.count {
+        outPath = args[i + 1]
+    }
+
+    // Working dir temporaire pour rassembler les fichiers avant tar.
+    let workDir = "\(NSTemporaryDirectory())roadie-diag-\(timestamp)"
+    try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(atPath: workDir) }
+
+    let collectedFiles = collectDiagFiles(into: workDir)
+
+    // Tarball gzippé.
+    let tarProc = Process()
+    tarProc.launchPath = "/usr/bin/tar"
+    tarProc.arguments = ["-czf", outPath, "-C", NSTemporaryDirectory(),
+                          "roadie-diag-\(timestamp)"]
+    do {
+        try tarProc.run()
+        tarProc.waitUntilExit()
+    } catch {
+        FileHandle.standardError.write("roadie diag: tar failed: \(error)\n"
+            .data(using: .utf8) ?? Data())
+        exit(1)
+    }
+
+    let attrs = try? FileManager.default.attributesOfItem(atPath: outPath)
+    let size = (attrs?[.size] as? Int) ?? 0
+
+    let summary = """
+    roadie diag — bundle créé : \(outPath)
+      taille : \(size) bytes
+      contient : \(collectedFiles.count) fichiers (\(collectedFiles.joined(separator: ", ")))
+
+    ⚠ Le bundle peut contenir des informations sensibles (titres de fenêtres,
+    bundle IDs d'apps installées). Reviewer avant envoi à un mainteneur tiers.
+
+    Pour ouvrir : tar -xzf \(outPath)
+    """
+    print(summary)
+}
+
+/// Collecte les fichiers utiles pour le diagnostic dans `workDir`.
+private func collectDiagFiles(into workDir: String) -> [String] {
+    var collected: [String] = []
+    let fm = FileManager.default
+
+    // 1. Logs récents (200 dernières lignes).
+    let logSrc = "\(NSHomeDirectory())/.local/state/roadies/daemon.log"
+    if fm.fileExists(atPath: logSrc) {
+        let tailDest = "\(workDir)/daemon.log.tail"
+        let proc = Process()
+        proc.launchPath = "/bin/sh"
+        proc.arguments = ["-c", "tail -200 '\(logSrc)' > '\(tailDest)'"]
+        try? proc.run()
+        proc.waitUntilExit()
+        collected.append("daemon.log.tail")
+    }
+
+    // 2. Config TOML.
+    let configSrc = "\(NSHomeDirectory())/.config/roadies/roadies.toml"
+    if fm.fileExists(atPath: configSrc) {
+        try? fm.copyItem(atPath: configSrc, toPath: "\(workDir)/roadies.toml")
+        collected.append("roadies.toml")
+    }
+
+    // 3. Stages persistés (sans .legacy.* pour réduire la taille).
+    let stagesSrc = "\(NSHomeDirectory())/.config/roadies/stages"
+    let stagesDest = "\(workDir)/stages"
+    if fm.fileExists(atPath: stagesSrc) {
+        try? fm.createDirectory(atPath: stagesDest, withIntermediateDirectories: true)
+        let cp = Process()
+        cp.launchPath = "/bin/sh"
+        cp.arguments = ["-c",
+            "find '\(stagesSrc)' -name '*.toml' -not -name '*.legacy.*' -print0 | " +
+            "xargs -0 -I {} cp -p {} '\(stagesDest)/'"]
+        try? cp.run()
+        cp.waitUntilExit()
+        collected.append("stages/")
+    }
+
+    // 4. Output `roadie daemon status --json`, `roadie daemon health`,
+    //    `roadie windows list`, `roadie display list` (snapshots état runtime).
+    captureCommand("daemon", "status", to: "\(workDir)/status.json", flags: ["--json"])
+    captureCommand("daemon", "health", to: "\(workDir)/health.json")
+    captureCommand("daemon", "audit", to: "\(workDir)/audit.txt")
+    captureCommand("windows", "list", to: "\(workDir)/windows.txt")
+    captureCommand("display", "list", to: "\(workDir)/displays.txt")
+    captureCommand("stage", "list", to: "\(workDir)/stages-current.txt")
+    if fm.fileExists(atPath: "\(workDir)/status.json") { collected.append("status.json") }
+    if fm.fileExists(atPath: "\(workDir)/health.json") { collected.append("health.json") }
+    if fm.fileExists(atPath: "\(workDir)/audit.txt") { collected.append("audit.txt") }
+    if fm.fileExists(atPath: "\(workDir)/windows.txt") { collected.append("windows.txt") }
+    if fm.fileExists(atPath: "\(workDir)/displays.txt") { collected.append("displays.txt") }
+    if fm.fileExists(atPath: "\(workDir)/stages-current.txt") { collected.append("stages-current.txt") }
+
+    // 5. Infos système macOS (version, displays, codesign daemon).
+    let sysInfo = Process()
+    sysInfo.launchPath = "/bin/sh"
+    sysInfo.arguments = ["-c", """
+        {
+          echo '=== macOS version ==='; sw_vers
+          echo
+          echo '=== uname ==='; uname -a
+          echo
+          echo '=== codesign daemon ==='
+          codesign -dv --verbose=2 ~/Applications/roadied.app/Contents/MacOS/roadied 2>&1 | head -10
+          echo
+          echo '=== launchctl list roadie ==='; launchctl list | grep roadie || true
+          echo
+          echo '=== pgrep roadied ==='; pgrep -lf roadied || true
+        } > '\(workDir)/system-info.txt'
+    """]
+    try? sysInfo.run()
+    sysInfo.waitUntilExit()
+    if fm.fileExists(atPath: "\(workDir)/system-info.txt") {
+        collected.append("system-info.txt")
+    }
+
+    return collected
+}
+
+/// Helper : exécute `roadie <obj> <verb> [flags]`, sauve stdout dans `dest`.
+private func captureCommand(_ obj: String, _ verb: String, to dest: String,
+                             flags: [String] = []) {
+    let proc = Process()
+    proc.launchPath = "/bin/sh"
+    let args = flags.joined(separator: " ")
+    proc.arguments = ["-c",
+        "timeout 3 ~/.local/bin/roadie \(obj) \(verb) \(args) > '\(dest)' 2>&1 || true"]
+    try? proc.run()
+    proc.waitUntilExit()
 }

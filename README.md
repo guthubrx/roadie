@@ -121,6 +121,39 @@ loop on `permission Accessibility manquante`). Workflow:
 ./scripts/recheck-tcc.sh --mark-toggled   # confirm new baseline
 ```
 
+## Troubleshooting
+
+If something feels off (windows missing, weird tile placement, rail counting more thumbnails than visible windows) :
+
+```bash
+# 1. Quick auto-heal — fixes 90 % of cases
+roadie heal
+
+# 2. Check daemon state
+roadie daemon health
+# → verdict: healthy | degraded | corrupted + counters
+
+# 3. Inspect logs
+tail -50 ~/.local/state/roadies/daemon.log | grep -E 'warn|error'
+
+# 4. Last resort : restart daemon
+launchctl bootout "gui/$(id -u)/com.roadie.roadie"
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.roadie.roadie.plist
+```
+
+### Reporting a bug
+
+```bash
+roadie diag
+# → ~/Desktop/roadie-diag-YYYYMMDD-HHMMSS.tar.gz
+```
+
+The bundle contains daemon logs (last 200 lines), config TOML, stages snapshots, runtime state outputs, and macOS system info. Review before sending — it may contain window titles and bundle IDs.
+
+### Known issues
+
+See [specs/bugs/](specs/bugs/) folder.
+
 ## Configuration
 
 Everything goes through `~/.config/roadies/roadies.toml`. Minimal example:

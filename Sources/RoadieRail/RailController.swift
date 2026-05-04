@@ -69,7 +69,10 @@ struct RailConfig {
     /// hide toutes les fenêtres de la stage active du display courant. Pattern
     /// Stage Manager natif Apple. Pas de toggle (no-op si déjà hide) — pour
     /// ressortir, l'utilisateur clique une thumbnail.
-    var emptyClickHideActive: Bool = true
+    // SPEC-025 T001 — default false (était true V1). Cause de BUG-001 quand
+    // déclenché par accident. Power-users peuvent ré-activer via TOML :
+    //   [fx.rail] empty_click_hide_active = true
+    var emptyClickHideActive: Bool = false
     /// Marge invisible (en px) autour de chaque thumbnail. Un click qui tombe
     /// dans cette ceinture est ignoré (ni "switch stage" ni "hide active") —
     /// évite les hide accidentels quand l'utilisateur vise une thumbnail mais

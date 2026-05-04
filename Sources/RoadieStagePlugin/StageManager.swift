@@ -398,6 +398,58 @@ public final class StageManager {
 
     public func loadFromDisk() {
         loadFromPersistence()
+        // SPEC-025 FR-001 : valider les savedFrame chargés contre les displays
+        // physiquement connectés. Toute frame dont le centre est hors écran
+        // connu est invalidée (savedFrame = nil) → le tree calculera un slot
+        // fresh au prochain applyLayout au lieu de restaurer aveuglément
+        // une position offscreen persistée (cause racine BUG-001).
+        let axDisplayFrames = Self.currentAXDisplayFrames()
+        var totalInvalidated = 0
+        for (id, var stage) in stages {
+            let n = stage.validateMembers(againstDisplayFrames: axDisplayFrames)
+            if n > 0 { stages[id] = stage; totalInvalidated += n }
+        }
+        for (scope, var stage) in stagesV2 {
+            let n = stage.validateMembers(againstDisplayFrames: axDisplayFrames)
+            if n > 0 { stagesV2[scope] = stage; totalInvalidated += n }
+        }
+        Self.lastValidationInvalidatedCount = totalInvalidated
+        if totalInvalidated > 0 {
+            logInfo("loadFromDisk_validated", [
+                "invalidated_savedFrames": String(totalInvalidated),
+                "displays_known": String(axDisplayFrames.count),
+            ])
+        }
+    }
+
+    /// Compteur public lu par le bootstrap pour BootStateHealth (FR-003).
+    public static var lastValidationInvalidatedCount: Int = 0
+
+    /// Nombre total de members across stagesV1 + stagesV2. Lu par le bootstrap
+    /// pour BootStateHealth.totalWids et par les compteurs de zombies purgés.
+    public func totalMemberCount() -> Int {
+        var n = 0
+        for (_, stage) in stages { n += stage.memberWindows.count }
+        for (_, stage) in stagesV2 { n += stage.memberWindows.count }
+        return n
+    }
+
+    /// Calcule les rects AX (origin top-left du primary) de tous les NSScreens
+    /// connectés. Format aligné avec `WindowState.frame` (AX coords).
+    private static func currentAXDisplayFrames() -> [CGRect] {
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        let primaryHeight = primary?.frame.height ?? 0
+        return NSScreen.screens.map { ns in
+            // AX y = primaryHeight - ns.origin.y - ns.height
+            CGRect(
+                x: ns.frame.origin.x,
+                y: primaryHeight - ns.frame.origin.y - ns.frame.height,
+                width: ns.frame.width,
+                height: ns.frame.height
+            )
+        }
     }
 
     /// SPEC-021 T028 : `reconcileStageOwnership` supprimée. Devenue sans objet :

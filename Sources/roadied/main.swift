@@ -230,6 +230,56 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // (computed) puisse déléguer à stageManager sans dépendance circulaire.
         StageManagerLocator.shared = stageManager
 
+        // SPEC-025 FR-002 — auto-fix au boot. Détecte et corrige les drifts
+        // widToScope/memberWindows + purge wids zombies (= fenêtres fermées
+        // entre la dernière save et ce boot). Évite à l'utilisateur de devoir
+        // mémoriser et lancer `roadie daemon audit --fix` à la main.
+        let widsOffscreenAtRestore = StageManager.lastValidationInvalidatedCount
+        var widsZombiesPurged = 0
+        var widToScopeDriftsFixed = 0
+        if let sm = stageManager {
+            let violationsBefore = sm.auditOwnership()
+            widToScopeDriftsFixed = violationsBefore.count
+            // Capturer le compteur avant purge pour mesurer les zombies effectivement retirés.
+            let memberCountBefore = sm.totalMemberCount()
+            sm.purgeOrphanWindows()
+            sm.rebuildWidToScopeIndex()
+            let memberCountAfter = sm.totalMemberCount()
+            widsZombiesPurged = max(0, memberCountBefore - memberCountAfter)
+            if widToScopeDriftsFixed > 0 || widsZombiesPurged > 0 {
+                logInfo("boot_audit_autofixed", [
+                    "violations_before": String(widToScopeDriftsFixed),
+                    "zombies_purged": String(widsZombiesPurged),
+                ])
+            } else {
+                logInfo("boot_audit_clean")
+            }
+        }
+
+        // SPEC-025 FR-003 — émettre BootStateHealth après auto-fix pour traçabilité.
+        let totalWids = stageManager?.totalMemberCount() ?? 0
+        let bootHealth = BootStateHealth(
+            totalWids: totalWids,
+            widsOffscreenAtRestore: widsOffscreenAtRestore,
+            widsZombiesPurged: widsZombiesPurged,
+            widToScopeDriftsFixed: widToScopeDriftsFixed
+        )
+        logInfo("boot_state_health", bootHealth.toLogPayload())
+        // Notification utilisateur si état dégradé (best-effort terminal-notifier).
+        if bootHealth.verdict != .healthy {
+            let tn = "/opt/homebrew/bin/terminal-notifier"
+            if FileManager.default.fileExists(atPath: tn) {
+                let p = Process()
+                p.launchPath = tn
+                p.arguments = [
+                    "-title", "🟡 roadie",
+                    "-message", "State \(bootHealth.verdict.rawValue) — try `roadie heal`",
+                    "-sound", "Tink",
+                ]
+                try? p.run()
+            }
+        }
+
         // Pre-existing stages from config (mode global uniquement — en perDisplay
         // les stages sont matérialisées par scope plus loin via ensureDefaultStage).
         if let sm = stageManager, sm.stageMode == .global {

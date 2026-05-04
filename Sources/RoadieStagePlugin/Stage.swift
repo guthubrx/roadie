@@ -65,3 +65,29 @@ public struct SavedRect: Codable, Sendable {
         CGRect(x: x, y: y, width: w, height: h)
     }
 }
+
+// MARK: - SPEC-025 T020 — Validation au load
+
+extension Stage {
+    /// Reset les `savedFrame` des members dont le centre n'est dans aucun
+    /// display connu. Retourne le nombre de members invalidés. Appelé par
+    /// `StageManager.loadFromDisk` (FR-001) pour empêcher la restauration
+    /// aveugle de positions offscreen persistées (cause racine BUG-001).
+    ///
+    /// La frame `nil` après reset signifie "pas de frame mémorisée" — le
+    /// tree calculera un slot fresh au prochain `applyLayout`.
+    public mutating func validateMembers(againstDisplayFrames frames: [CGRect]) -> Int {
+        var invalidated = 0
+        for i in memberWindows.indices {
+            guard let saved = memberWindows[i].savedFrame else { continue }
+            let rect = saved.cgRect
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let isOnKnownDisplay = frames.contains { $0.contains(center) }
+            if !isOnKnownDisplay {
+                memberWindows[i].savedFrame = nil
+                invalidated += 1
+            }
+        }
+        return invalidated
+    }
+}

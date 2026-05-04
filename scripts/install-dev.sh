@@ -99,6 +99,13 @@ launchctl bootout "gui/$(id -u)/com.roadie.roadie-rail" 2>/dev/null || true
 tccutil reset Accessibility com.roadie.roadie-rail >/dev/null 2>&1 || true
 tccutil reset ScreenCapture com.roadie.roadie-rail >/dev/null 2>&1 || true
 
+# SPEC-025 T002 — GC fichiers .legacy.* > 7 jours dans ~/.config/roadies/stages/.
+# Ces fichiers sont créés par StageManager.saveStage à chaque écriture comme
+# backup de l'ancienne version. Sans GC, ils s'accumulent indéfiniment (90+
+# fichiers observés en quelques jours de dev).
+echo "==> GC .legacy.* > 7 jours"
+find "$HOME/.config/roadies/stages" -name "*.legacy.*" -type f -mtime +7 -delete 2>/dev/null || true
+
 echo "==> install binaries (mono-binaire)"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
 cp "$BUILD_DIR/roadied" "$APP_BIN"

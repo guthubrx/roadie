@@ -116,6 +116,39 @@ roadied --daemon &
 roadie desktop list   # sanity check
 ```
 
+## Dépannage
+
+Si quelque chose ne va pas (fenêtres manquantes, tiling étrange, rail qui compte plus de thumbnails que de fenêtres visibles) :
+
+```bash
+# 1. Auto-réparation rapide — corrige 90 % des cas
+roadie heal
+
+# 2. Vérifier l'état du daemon
+roadie daemon health
+# → verdict: healthy | degraded | corrupted + compteurs
+
+# 3. Inspecter les logs
+tail -50 ~/.local/state/roadies/daemon.log | grep -E 'warn|error'
+
+# 4. En dernier recours : restart daemon
+launchctl bootout "gui/$(id -u)/com.roadie.roadie"
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.roadie.roadie.plist
+```
+
+### Reporter un bug
+
+```bash
+roadie diag
+# → ~/Desktop/roadie-diag-YYYYMMDD-HHMMSS.tar.gz
+```
+
+Le bundle contient logs daemon (200 dernières lignes), config TOML, snapshots stages, sortie d'état runtime, infos système macOS. À reviewer avant envoi — peut contenir titres de fenêtres et bundle IDs.
+
+### Bugs connus
+
+Voir le dossier [specs/bugs/](specs/bugs/).
+
 ## Configuration
 
 Tout passe par `~/.config/roadies/roadies.toml`. Exemple minimal :

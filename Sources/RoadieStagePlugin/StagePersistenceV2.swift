@@ -56,6 +56,8 @@ public final class FlatStagePersistence: StagePersistenceV2, @unchecked Sendable
         let path = "\(stagesDir)/\(stage.id.value).toml"
         let toml = try TOMLEncoder().encode(stage)
         try atomicWrite(toml, to: path)
+        // SPEC-025 FR-009 — GC silencieux .legacy.* > 7 jours.
+        FileBackedStagePersistence.gcLegacyFiles(in: stagesDir, olderThanDays: 7)
     }
 
     public func delete(at scope: StageScope) throws {
@@ -148,6 +150,11 @@ public final class NestedStagePersistence: StagePersistenceV2, @unchecked Sendab
         let path = "\(dir)/\(stage.id.value).toml"
         let toml = try TOMLEncoder().encode(stage)
         try atomicWrite(toml, to: path)
+        // SPEC-025 FR-009 — GC silencieux .legacy.* > 7 jours dans tous les
+        // sous-dossiers (récursif via stagesDir, car les .legacy peuvent être
+        // au niveau stagesDir/* legacy historiques).
+        FileBackedStagePersistence.gcLegacyFiles(in: dir, olderThanDays: 7)
+        FileBackedStagePersistence.gcLegacyFiles(in: stagesDir, olderThanDays: 7)
     }
 
     public func delete(at scope: StageScope) throws {

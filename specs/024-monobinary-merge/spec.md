@@ -2,7 +2,7 @@
 
 **Feature Branch**: `024-monobinary-merge`
 **Created**: 2026-05-04
-**Status**: Draft
+**Status**: Implemented (mergée sur main, audit grade A, daily-driver en cours)
 **Dependencies**: SPEC-002 (tiler+stage), SPEC-011 (virtual desktops), SPEC-014 (rail UI), SPEC-018 (stages per display), SPEC-022 (multi-display per-stage), SPEC-023 (sketchybar plugin)
 **Input**: User description: "Migration roadie de 2 binaires (roadied daemon launchd + roadie-rail .app GUI) vers 1 binaire mono-process NSApplication. Garder la séparation logique en modules Swift (RoadieCore, RoadieTiler, RoadieStagePlugin, RoadieDesktops, RoadieRail). 1 activation policy .accessory, 1 grant Accessibility, 1 grant Screen Recording, 1 process TCC, 1 launchd plist. Suppression de l'IPC Unix-socket inter-process : accès direct via EventBus/Combine in-process. Élimine les bugs récurrents : drift state rail/daemon, double signing à chaque rebuild, double TCC, désync events JSON. Préserver compat ascendante des CLIs `roadie ...` : le binaire CLI reste séparé et parle au process unifié via socket Unix existant. Nom du binaire unifié : roadied. Migration en respect strict de la constitution (Article 0 minimalisme, Article G plafond LOC)."
 
