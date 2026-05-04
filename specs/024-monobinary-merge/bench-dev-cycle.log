@@ -1,0 +1,13 @@
+==> bench dev cycle (3 itérations)
+  iter 1...
+    9.93s
+  iter 2...
+    7.14s
+  iter 3...
+    8.68s
+==> stats (s)
+  mean   : 8.58s
+  median : 8.68s
+  p95    : 9.93s
+
+Sauvegarder ce résultat dans specs/024-monobinary-merge/bench-dev-cycle.log si baseline.
