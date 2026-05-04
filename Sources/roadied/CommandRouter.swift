@@ -681,6 +681,58 @@ enum CommandRouter {
                 stageID: stageStr, displayUUID: deleteUUID, desktopID: deleteDesktopID))
             return .success()
 
+        case "stage.hide_active":
+            // SPEC-022+ "click bureau Apple" : hide TOUTES les fenêtres de la stage
+            // active du scope (display, desktop) cible. Pas de toggle (no-op si déjà
+            // hide). Pour ressortir, l'utilisateur clique une thumbnail dans le rail
+            // → switchTo standard re-positionne via le tree.
+            // Pas de mutation d'activeStageByDesktop : on laisse l'état logique tel
+            // quel. Si un autre event invoque applyLayout entre-temps, les fenêtres
+            // ressortiront naturellement (comportement Apple-like : reprise d'activité
+            // = fin du hide).
+            guard let sm = daemon.stageManager else {
+                return .error(.stageManagerDisabled, "stage manager disabled in config")
+            }
+            var scopeError: Response? = nil
+            guard let scope = await resolveScope(request: request, daemon: daemon,
+                                                  errorOut: &scopeError) else {
+                return scopeError ?? .error(.internalError, "scope resolution failed")
+            }
+            let key = DesktopKey(displayUUID: scope.displayUUID,
+                                  desktopID: scope.desktopID)
+            let activeStageID = sm.activeStageByDesktop[key] ?? StageID("1")
+            let activeScope = StageScope(displayUUID: scope.displayUUID,
+                                          desktopID: scope.desktopID,
+                                          stageID: activeStageID)
+            let widsToHide: [WindowID]
+            if sm.stageMode == .perDisplay, let stage = sm.stagesV2[activeScope] {
+                widsToHide = stage.memberWindows.map { $0.cgWindowID }
+            } else if let stage = sm.stages[activeStageID] {
+                widsToHide = stage.memberWindows.map { $0.cgWindowID }
+            } else {
+                widsToHide = []
+            }
+            var hiddenCount = 0
+            for wid in widsToHide {
+                guard let state = daemon.registry.get(wid) else { continue }
+                if state.isTileable {
+                    daemon.layoutEngine.setLeafVisible(wid, false)
+                }
+                HideStrategyImpl.hide(wid, registry: daemon.registry,
+                                       strategy: daemon.config.stageManager.hideStrategy)
+                hiddenCount += 1
+            }
+            logInfo("stage.hide_active", [
+                "display_uuid": scope.displayUUID,
+                "desktop_id": String(scope.desktopID),
+                "stage_id": activeStageID.value,
+                "hidden_count": String(hiddenCount),
+            ])
+            return .success([
+                "hidden_count": AnyCodable(hiddenCount),
+                "stage_id": AnyCodable(activeStageID.value),
+            ])
+
         case "fx.status":
             // SPEC-004 : retourne l'état SIP + osax + modules chargés.
             // Toujours répond, même si fxLoader nil (= aucun module, vanilla).
