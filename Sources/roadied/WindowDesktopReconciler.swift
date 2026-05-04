@@ -82,7 +82,11 @@ public final class WindowDesktopReconciler {
         public var degenerateFrames: Int = 0
         public var offscreenWithActiveScope: Int = 0
         public var treeLeafWrongDisplay: Int = 0
-        public var fixedCount: Int { degenerateFrames + offscreenWithActiveScope + treeLeafWrongDisplay }
+        /// SPEC-025 BUG-002 — wid member d'une stage du display A mais sa frame
+        /// physique est on-screen sur le display B. Drift causé typiquement
+        /// par un cross-display warp qui ne met pas à jour le memberWindows.
+        public var memberOnWrongDisplay: Int = 0
+        public var fixedCount: Int { degenerateFrames + offscreenWithActiveScope + treeLeafWrongDisplay + memberOnWrongDisplay }
     }
 
     @discardableResult
@@ -175,11 +179,68 @@ public final class WindowDesktopReconciler {
             }
         }
 
+        // CHECK 4 (SPEC-025 BUG-002) — wid member d'une stage du display A
+        // mais frame physique on-screen sur le display B. Cas observé avec le
+        // bug warp_cross_display_edge où LayoutEngine.warp ne met pas à jour
+        // stageManager.memberWindows. Différent du CHECK 2 (qui détecte les
+        // frames OFFSCREEN) : ici la frame est ON-screen, juste sur le mauvais
+        // display. Fix : ré-étiqueter le scope vers le display physique.
+        if let dReg = desktopRegistry, !displays.isEmpty {
+            for state in windows {
+                guard state.isTileable, !state.isMinimized else { continue }
+                guard let scope = stageManager.scopeOf(wid: state.cgWindowID) else { continue }
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                // Display physique : celui qui contient le centre de la frame.
+                guard let physicalDisplay = displays.first(where: { $0.frame.contains(center) }) else {
+                    continue  // frame offscreen : déjà géré par CHECK 2
+                }
+                guard physicalDisplay.uuid != scope.displayUUID else { continue }
+                report.memberOnWrongDisplay += 1
+                logInfo("integrity_drift_member_wrong_display", [
+                    "wid": String(state.cgWindowID),
+                    "scope_display_uuid": scope.displayUUID,
+                    "physical_display_uuid": physicalDisplay.uuid,
+                    "frame_center": "\(Int(center.x)),\(Int(center.y))",
+                ])
+                if autoFix {
+                    let mode = await dReg.mode
+                    let targetDeskID: Int = (mode == .perDisplay)
+                        ? await dReg.currentID(for: physicalDisplay.id)
+                        : await dReg.currentID
+                    let key = DesktopKey(displayUUID: physicalDisplay.uuid,
+                                          desktopID: targetDeskID)
+                    let activeStage = stageManager.activeStageByDesktop[key] ?? StageID("1")
+                    let targetScope = StageScope(displayUUID: physicalDisplay.uuid,
+                                                  desktopID: targetDeskID,
+                                                  stageID: activeStage)
+                    if stageManager.stagesV2[targetScope] == nil {
+                        _ = stageManager.createStage(id: activeStage,
+                                                     displayName: activeStage.value,
+                                                     scope: targetScope)
+                    }
+                    stageManager.assign(wid: state.cgWindowID, to: targetScope)
+                    registry.update(state.cgWindowID) { $0.desktopID = targetDeskID }
+                    try? await dReg.updateWindowDisplayUUID(
+                        cgwid: UInt32(state.cgWindowID),
+                        desktopID: targetDeskID,
+                        displayUUID: physicalDisplay.uuid)
+                    EventBus.shared.publish(DesktopEvent(
+                        name: "window_assigned",
+                        payload: ["wid": String(state.cgWindowID),
+                                  "stage_id": activeStage.value,
+                                  "display_uuid": physicalDisplay.uuid,
+                                  "desktop_id": String(targetDeskID),
+                                  "source": "integrity_check"]))
+                }
+            }
+        }
+
         if report.fixedCount > 0 {
             logInfo("integrity_check_summary", [
                 "degenerate_frames": String(report.degenerateFrames),
                 "offscreen_active": String(report.offscreenWithActiveScope),
                 "leaf_wrong_display": String(report.treeLeafWrongDisplay),
+                "member_wrong_display": String(report.memberOnWrongDisplay),
                 "auto_fix": String(autoFix),
             ])
         }

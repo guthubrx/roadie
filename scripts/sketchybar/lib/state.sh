@@ -9,15 +9,27 @@ ROADIE="${ROADIE_BIN:-$HOME/.local/bin/roadie}"
 # Sort : current first, puis recent, puis numérique. Limite : MAX (default 3).
 roadie_desktops_recent() {
     local max="${1:-3}"
+    # SPEC-023 — extraction du label : `roadie desktop list` output approximatif :
+    # "  N: label" ou "* N: label" ou simplement "  N" (label vide). Fix audit-F3 :
+    # capture le label après le ':' s'il existe, sinon laisse vide (le caller
+    # fallback sur "Bureau N" via `[ -z "$label" ] && label="Bureau $did"`).
+    # Format `roadie desktop list` (table colonnes) :
+    # "ID   LABEL     CURRENT  RECENT  WINDOWS  STAGES"
+    # "1    (none)    *                1        2"
+    # "2    Work                       0        1"
     "$ROADIE" desktop list 2>/dev/null | awk -v max="$max" '
-        # Format : "  N  label  stages  windows  current_marker"
-        # Output : id|label|stages|windows|current(true|false)
+        # Skip header (commence par "ID")
+        /^ID[[:space:]]+LABEL/ { next }
+        # Match data rows (ligne commence par un nombre)
         /^[[:space:]]*[0-9]+/ {
-            id = $1; gsub(/[*[:space:]]/, "", id)
-            label = ""
+            id = $1
+            label = $2
+            # Normaliser label "(none)" en chaîne vide pour fallback "Bureau N"
+            if (label == "(none)") label = ""
+            # CURRENT = colonne 3 si marker, sinon shift les autres colonnes.
+            # Heuristique : si la 3e colonne est "*", current=true.
             current = "false"
-            if ($0 ~ /\(current\)|\*/) current = "true"
-            # Extraction approximative — fallback empty
+            if ($3 == "*") current = "true"
             print id "|" label "|0|0|" current
             count++
             if (count >= max) exit
@@ -65,12 +77,8 @@ roadie_daemon_alive() {
     "$ROADIE" daemon status >/dev/null 2>&1
 }
 
-# Compte de fenêtres tilées dans un (stage, desktop). Args : $1=stage_id $2=desktop_id.
-roadie_window_count() {
-    local sid="$1"
-    local did="$2"
-    "$ROADIE" windows list 2>/dev/null | awk -v sid="$sid" -v did="$did" '
-        $0 ~ ("stage=" sid)"\\b" { count++ }
-        END { print count + 0 }
-    '
-}
+# SPEC-023 — `roadie_window_count` retiré (audit-F2) : code mort, pattern awk
+# bugué (`\b` non-standard, matchait stage=10/11 quand sid=1). Le panneau utilise
+# directement `wcount` retourné par `roadie_stages_for` (parse "N window(s)").
+# Si un futur call-site a besoin de cette fonction, la réimplémenter avec un
+# pattern exact : `$0 ~ "[[:space:]]stage=" sid "($|[[:space:]])"`.
