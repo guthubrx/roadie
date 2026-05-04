@@ -91,6 +91,22 @@ Ensuite dans Réglages Système → Confidentialité et sécurité :
 - **Accessibilité** : ajouter `~/Applications/roadied.app` et cocher
 - **Enregistrement d'écran** : ajouter `~/Applications/roadied.app` et cocher (nécessaire pour la capture des thumbnails de fenêtres)
 
+Une fois la case cochée, fige le hash binaire courant comme baseline TCC pour que les futurs rebuilds détectent les drifts :
+
+```bash
+./scripts/recheck-tcc.sh --mark-toggled
+```
+
+### Détection de drift TCC
+
+`install-dev.sh` exécute `scripts/recheck-tcc.sh` à la fin de chaque déploiement. Si le hash du binaire deployed diffère de la dernière baseline `--mark-toggled`, tu obtiens un avertissement clair pour re-toggler Accessibility (sinon le daemon boucle sur `permission Accessibility manquante`). Workflow :
+
+```bash
+./scripts/install-dev.sh           # deploy + auto-recheck
+# → si "drift détecté" : Réglages, décoche/recoche roadied
+./scripts/recheck-tcc.sh --mark-toggled   # confirme la nouvelle baseline
+```
+
 ```bash
 roadied --daemon &
 roadie desktop list   # sanity check

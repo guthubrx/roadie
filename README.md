@@ -93,9 +93,28 @@ Then in System Settings → Privacy & Security:
 - **Accessibility** : add `~/Applications/roadied.app` and tick the checkbox
 - **Screen Recording** : add `~/Applications/roadied.app` and tick the checkbox (needed for window thumbnail capture)
 
+After ticking, mark the current binary hash as the TCC baseline so future rebuilds can detect drift:
+
+```bash
+./scripts/recheck-tcc.sh --mark-toggled
+```
+
 ```bash
 roadied --daemon &
 roadie desktop list   # sanity check
+```
+
+### TCC drift detection
+
+`install-dev.sh` runs `scripts/recheck-tcc.sh` at the end of each deploy. If the
+deployed binary hash differs from the last `--mark-toggled` baseline, you'll get a
+clear warning telling you to re-toggle Accessibility (otherwise the daemon will
+loop on `permission Accessibility manquante`). Workflow:
+
+```bash
+./scripts/install-dev.sh           # deploy + auto-recheck
+# → if "drift detected": go to Settings, decoche/recoche roadied
+./scripts/recheck-tcc.sh --mark-toggled   # confirm new baseline
 ```
 
 ## Configuration
