@@ -71,6 +71,11 @@ public final class MasterStackTiler: Tiler {
             root.orientation = .horizontal
             leaf.adaptiveWeight = 1.0
             root.append(leaf)
+            logInfo("tiler_insert", [
+                "strategy": "master-stack",
+                "new_wid": String(leaf.windowID),
+                "case": "1_empty_root_becomes_master",
+            ])
             return
         }
 
@@ -81,17 +86,38 @@ public final class MasterStackTiler: Tiler {
                                         adaptiveWeight: 1.0 - masterRatio)
             stack.append(leaf)
             root.append(stack)
+            logInfo("tiler_insert", [
+                "strategy": "master-stack",
+                "new_wid": String(leaf.windowID),
+                "case": "2_create_stack_with_first_slave",
+                "master_ratio": String(format: "%.2f", Double(masterRatio)),
+            ])
             return
         }
 
         // Cas 3 : root déjà avec master + stack → ajout dans la stack.
         if root.children.count >= 2, let stack = root.children[1] as? TilingContainer {
             stack.append(leaf)
+            logInfo("tiler_insert", [
+                "strategy": "master-stack",
+                "new_wid": String(leaf.windowID),
+                "case": "3_append_to_stack",
+                "stack_size_after": String(stack.children.count),
+            ])
             return
         }
 
-        // Fallback : append à la racine.
+        // Fallback : append à la racine. Cas anormal — root.children.count >= 2
+        // mais children[1] n'est pas un Container : structure inattendue.
         root.append(leaf)
+        logWarn("tiler_invariant_violation", [
+            "strategy": "master-stack",
+            "invariant": "root_structure_master_plus_stack_container",
+            "actual": "root.children[1]_is_not_a_container",
+            "expected": "children[0]=master_leaf children[1]=stack_container",
+            "wid": String(leaf.windowID),
+            "root_children_count": String(root.children.count),
+        ])
     }
 
     // MARK: - remove

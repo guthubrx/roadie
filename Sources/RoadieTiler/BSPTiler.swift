@@ -81,19 +81,44 @@ public final class BSPTiler: Tiler {
         // Fallback : opposite du parent (BSP classique) si lastFrame inconnue.
         let orientation: Orientation
         let reason: String
+        var fallbackUsed = false
         if let frame = target.lastFrame {
             orientation = frame.width >= frame.height ? .horizontal : .vertical
             reason = "aspect-ratio w=\(Int(frame.width)) h=\(Int(frame.height))"
         } else {
             orientation = parent.orientation.opposite
             reason = "fallback parent.opposite (target.lastFrame=nil)"
+            fallbackUsed = true
         }
-        logDebug("BSP insert", [
+        // SPEC-025 amend — log structuré info pour traçabilité et observabilité.
+        // Permet le replay post-mortem d'une insertion BSP qui aurait dérapé du
+        // pattern attendu (= split sur côté le plus long).
+        let tw = target.lastFrame.map { Int($0.width) } ?? -1
+        let th = target.lastFrame.map { Int($0.height) } ?? -1
+        logInfo("tiler_insert", [
+            "strategy": "bsp",
             "new_wid": String(leaf.windowID),
             "target_wid": String(target.windowID),
             "orientation": orientation.rawValue,
+            "parent_orientation": parent.orientation.rawValue,
+            "target_w": String(tw),
+            "target_h": String(th),
             "reason": reason,
         ])
+        // Invariant : si la décision dépend du fallback (lastFrame nil), c'est
+        // qu'on n'a pas pu calculer l'orientation idéale et on a peut-être
+        // produit une division non-conforme à BSP "split-côté-le-plus-long".
+        // Warn pour pouvoir mesurer la fréquence en prod.
+        if fallbackUsed {
+            logWarn("tiler_invariant_violation", [
+                "strategy": "bsp",
+                "invariant": "split_axis_from_aspect_ratio",
+                "actual": "fallback_parent_opposite",
+                "expected": "axis_orthogonal_to_target_longest_side",
+                "wid": String(leaf.windowID),
+                "target_wid": String(target.windowID),
+            ])
+        }
 
         let subContainer = TilingContainer(orientation: orientation,
                                            adaptiveWeight: target.adaptiveWeight)

@@ -58,6 +58,9 @@ gestures_no_op_5m = 0  # desktop_focus_unresolved + desktop_focus_noop
 rail_panels_count_last = None  # dernière valeur de count loggée par rail_panels_built
 rail_screens_count_last = None  # screens_count attendu (même log)
 rail_panel_missing_5m = 0  # rail_panel_missing événements
+# Tiler invariants (BSP / master-stack).
+tiler_invariant_violations_5m = 0  # tiler_invariant_violation
+tiler_inserts_5m = 0  # tiler_insert (volume baseline pour ratio)
 
 # Parse log avec tolérance : skip lignes invalides JSON.
 parse_failures = 0
@@ -108,6 +111,11 @@ try:
                     pass
             if msg == "rail_panel_missing":
                 rail_panel_missing_5m += 1
+            # Tiler invariants.
+            if msg == "tiler_insert":
+                tiler_inserts_5m += 1
+            if msg == "tiler_invariant_violation":
+                tiler_invariant_violations_5m += 1
 except Exception as ex:
     print(json.dumps({"error": "log_parse_failed", "detail": str(ex)}))
     sys.exit(3)
@@ -134,6 +142,8 @@ metrics = {
     "rail_panels_count_last": rail_panels_count_last if rail_panels_count_last is not None else -1,
     "rail_screens_count_last": rail_screens_count_last if rail_screens_count_last is not None else -1,
     "rail_panel_missing_5m": rail_panel_missing_5m,
+    "tiler_invariant_violations_5m": tiler_invariant_violations_5m,
+    "tiler_inserts_5m": tiler_inserts_5m,
 }
 
 # --- Baseline depuis history -------------------------------------------------
@@ -162,7 +172,8 @@ anti_flap_ok = False
 # Stable = sans intervention de fix (skip ticks marked as fix/revert sur
 # skill-runs.jsonl — ici on simplifie en prenant tous les derniers 6 ticks).
 NUMERIC_AXES = ["errors_5m", "warns_5m_filtered", "drifts_5m", "applyall_p95_5m_ms",
-                "gestures_no_op_5m", "rail_panel_missing_5m"]
+                "gestures_no_op_5m", "rail_panel_missing_5m",
+                "tiler_invariant_violations_5m"]
 
 if len(hist) >= 6:
     last6 = hist[-6:]
@@ -187,6 +198,8 @@ if len(hist) >= 6:
             thr = max(thr, 3)  # 3 gestes perdus/5min plancher (= signal user)
         elif axisName == "rail_panel_missing_5m":
             thr = max(thr, 1)  # tout missing déjà suspect
+        elif axisName == "tiler_invariant_violations_5m":
+            thr = max(thr, 1)  # tout violation = signal direct
         baseline[axisName] = {"median": round(med, 2), "mad": round(mad, 2),
                               "threshold": round(thr, 2)}
         threshold[axisName] = thr
