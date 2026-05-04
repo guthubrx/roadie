@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# install-dev.sh — workflow dev pour roadie.
+# install-dev.sh — workflow dev pour roadie (V2 mono-binaire, SPEC-024).
 #
 # - Build (swift build) si pas explicitement skipped
+# - Cleanup l'ancien rail séparé (roadie-rail.app) si présent (migration V1→V2)
 # - Copie roadied dans ~/Applications/roadied.app/Contents/MacOS/ (chemin stable connu de TCC)
-# - Copie roadie + roadie-rail dans ~/.local/bin/
-# - Re-signe avec roadied-cert pour préserver la grant Accessibility entre rebuilds
-# - Restart launchd (daemon) + relance roadie-rail manuellement
+# - Copie roadie (CLI) dans ~/.local/bin/
+# - Re-signe avec roadied-cert pour préserver les grants TCC entre rebuilds
+# - Restart launchd. Plus de second process : le rail est intégré au daemon.
 #
 # Convention : la grant Accessibility est ancrée à la signature `roadied-cert`,
 # tant que les binaires sont resignés avec ce même cert, la perm persiste.
@@ -20,15 +21,11 @@ CERT="${ROADIE_CERT:-roadied-cert}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="$HOME/Applications/roadied.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/roadied"
-# roadie-rail dans un .app bundle pour héritage SPEC-014. Le rail n'a en
-# pratique besoin d'AUCUNE grant TCC (pas d'API Accessibility, pas de
-# CGWindowList*, pas de NSEvent global monitor — il polle NSEvent.mouseLocation
-# en lecture pure et consomme les thumbnails via IPC depuis roadied). Le bundle
-# reste pour ne pas casser une install V1 existante. SPEC-024 supprime ce
-# bundle entièrement.
-RAIL_BUNDLE="$HOME/Applications/roadie-rail.app"
-RAIL_BIN_REAL="$RAIL_BUNDLE/Contents/MacOS/roadie-rail"
-RAIL_BIN="$HOME/.local/bin/roadie-rail"
+# SPEC-024 — fusion mono-binaire : plus de roadie-rail séparé. Les chemins
+# RAIL_* ci-dessous sont conservés UNIQUEMENT pour la migration V1→V2
+# (cleanup de l'ancien bundle si présent sur la machine).
+RAIL_BUNDLE_OLD="$HOME/Applications/roadie-rail.app"
+RAIL_BIN_OLD="$HOME/.local/bin/roadie-rail"
 CLI_BIN="$HOME/.local/bin/roadie"
 
 # PATH override pour eviter ld shadow par anaconda (cf MEMORY.md projet).
@@ -81,9 +78,8 @@ if [[ "${1:-}" != "--no-build" ]]; then
 fi
 
 BUILD_DIR="$REPO_ROOT/.build/debug"
-[[ -x "$BUILD_DIR/roadied" ]]    || { echo "missing $BUILD_DIR/roadied"; exit 1; }
-[[ -x "$BUILD_DIR/roadie-rail" ]] || { echo "missing $BUILD_DIR/roadie-rail"; exit 1; }
-[[ -x "$BUILD_DIR/roadie" ]]      || { echo "missing $BUILD_DIR/roadie"; exit 1; }
+[[ -x "$BUILD_DIR/roadied" ]] || { echo "missing $BUILD_DIR/roadied"; exit 1; }
+[[ -x "$BUILD_DIR/roadie" ]]  || { echo "missing $BUILD_DIR/roadie"; exit 1; }
 
 echo "==> stop running instances"
 launchctl bootout "gui/$(id -u)/com.roadie.roadie" 2>/dev/null || true
@@ -91,21 +87,29 @@ pkill -f roadie-rail 2>/dev/null || true
 pkill -f "roadie events" 2>/dev/null || true
 sleep 1
 
-echo "==> install binaries"
-mkdir -p "$APP_BUNDLE/Contents/MacOS" "$RAIL_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
-cp "$BUILD_DIR/roadied"     "$APP_BIN"
-cp "$BUILD_DIR/roadie-rail" "$RAIL_BIN_REAL"  # bundle .app héritage V1 (sera supprimé par SPEC-024)
-# Symlink ~/.local/bin/roadie-rail → bundle pour CLI/scripts qui appellent par path court.
-ln -sf "$RAIL_BIN_REAL" "$RAIL_BIN"
-cp "$BUILD_DIR/roadie"      "$CLI_BIN"
+# SPEC-024 — Migration V1→V2 : nettoyer l'ancien rail séparé s'il existe.
+# Idempotent : sans effet si on est déjà en V2 ou en fresh install.
+echo "==> migration V1→V2 (cleanup ancien rail séparé si présent)"
+launchctl bootout "gui/$(id -u)/com.roadie.roadie-rail" 2>/dev/null || true
+[[ -d "$RAIL_BUNDLE_OLD" ]] && rm -rf "$RAIL_BUNDLE_OLD" && echo "    removed $RAIL_BUNDLE_OLD"
+[[ -L "$RAIL_BIN_OLD" || -f "$RAIL_BIN_OLD" ]] && rm -f "$RAIL_BIN_OLD" && echo "    removed $RAIL_BIN_OLD"
+[[ -f "$HOME/.roadies/rail.pid" ]] && rm -f "$HOME/.roadies/rail.pid"
+# tccutil reset (best-effort) sur l'ancien bundle id pour nettoyer les grants
+# orphelines dans Réglages Système.
+tccutil reset Accessibility com.roadie.roadie-rail >/dev/null 2>&1 || true
+tccutil reset ScreenCapture com.roadie.roadie-rail >/dev/null 2>&1 || true
+
+echo "==> install binaries (mono-binaire)"
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
+cp "$BUILD_DIR/roadied" "$APP_BIN"
+cp "$BUILD_DIR/roadie"  "$CLI_BIN"
 
 # Symlink dev pour que `cp .build/debug/roadied ~/.local/bin/` continue a marcher.
 ln -sf "$APP_BIN" "$HOME/.local/bin/roadied"
 
 echo "==> codesign with $CERT (preserve TCC grants)"
-codesign -fs "$CERT" "$APP_BIN"       2>&1 | tail -1
-codesign -fs "$CERT" "$RAIL_BIN_REAL" 2>&1 | tail -1
-codesign -fs "$CERT" "$CLI_BIN"       2>&1 | tail -1
+codesign -fs "$CERT" "$APP_BIN" 2>&1 | tail -1
+codesign -fs "$CERT" "$CLI_BIN" 2>&1 | tail -1
 
 # Info.plist minimal pour que le bundle soit reconnu comme une .app par TCC.
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
@@ -131,43 +135,15 @@ if [[ ! -f "$INFO_PLIST" ]]; then
 </plist>
 EOF
 fi
-RAIL_INFO_PLIST="$RAIL_BUNDLE/Contents/Info.plist"
-if [[ ! -f "$RAIL_INFO_PLIST" ]]; then
-  cat > "$RAIL_INFO_PLIST" <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>roadie-rail</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.roadie.roadie-rail</string>
-    <key>CFBundleName</key>
-    <string>roadie-rail</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
-    <key>LSUIElement</key>
-    <true/>
-</dict>
-</plist>
-EOF
-fi
 
-echo "==> restart daemon via launchd"
+echo "==> restart daemon via launchd (rail intégré, plus de second process)"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.roadie.roadie.plist"
-sleep 2
-
-echo "==> restart roadie-rail"
-("$RAIL_BIN" >/tmp/roadie-rail.log 2>&1 &)
-sleep 1
+sleep 3
 
 echo
 echo "==> status"
 launchctl list | grep roadie || true
-pgrep -lf roadied      | head -1 || true
-pgrep -lf roadie-rail  | head -1 || true
+pgrep -lf roadied | head -1 || true
 echo
 echo "Done. Si la 1ere fois apres creation du cert, donne la perm Accessibility a :"
 echo "    $APP_BIN"

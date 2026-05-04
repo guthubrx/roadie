@@ -6,6 +6,7 @@ import RoadieCore
 import RoadieTiler
 import RoadieStagePlugin
 import RoadieDesktops
+import RoadieRail
 
 // MARK: - StageOpsBridge
 
@@ -64,6 +65,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var wallpaperClickWatcher: WallpaperClickWatcher?
     /// SPEC-021 T048 : reconciler périodique desktop macOS ↔ scope persisté.
     var windowDesktopReconciler: WindowDesktopReconciler?
+    /// SPEC-024 — rail UI in-process. Stocké en propriété forte (sinon ARC le
+    /// déalloue immédiatement après bootstrap, comme `AppState.daemon`).
+    var railController: RailController?
 
     /// Drag tracking : on mémorise le wid qui reçoit des notifs move/resize pendant
     /// que l'utilisateur a le bouton enfoncé. Au mouseUp, on adapte uniquement ce wid.
@@ -1005,6 +1009,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
 
         logInfo("roadied ready")
+
+        // SPEC-024 — démarrage du rail in-process (fusion mono-binaire). Le rail
+        // accède directement aux sous-systèmes du daemon via le proxy
+        // CommandHandler ; plus de socket Unix loop-back ni d'EventStream sous-process.
+        // Stocké dans une propriété forte pour éviter le déalloc ARC.
+        self.railController = RailIntegration.start(handler: self)
+        logInfo("rail_started_inprocess")
     }
 
     private func periodicScan() {
