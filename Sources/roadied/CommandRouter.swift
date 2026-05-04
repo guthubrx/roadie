@@ -75,8 +75,25 @@ enum CommandRouter {
             // SPEC-022 — étendu : si arg `fix=true`, lance aussi l'integrity check
             // physique (frames degenerate, wids offscreen-active, leafs misplaced)
             // ET applique les corrections.
-            let violations = daemon.stageManager?.auditOwnership() ?? []
             let fix = (request.args?["fix"] ?? "false") == "true"
+            // SPEC-024 fix : si fix=true ET violations widToScope drift,
+            // rebuild l'index inverse via rebuildWidToScopeIndex() (qui existe
+            // dans StageManager). Sans ça, fix=true ne traitait que l'integrity
+            // physique mais laissait les violations d'ownership intactes.
+            let violationsBefore = daemon.stageManager?.auditOwnership() ?? []
+            var rebuildApplied = false
+            if fix, !violationsBefore.isEmpty, let sm = daemon.stageManager {
+                // 1. Purge les wids orphelines (fenêtres fermées + helpers) du
+                //    memberWindows — sinon rebuildWidToScopeIndex va re-injecter
+                //    des wids fantômes dans widToScope.
+                sm.purgeOrphanWindows()
+                // 2. Rebuild widToScope depuis memberWindows (cohérence I1).
+                sm.rebuildWidToScopeIndex()
+                rebuildApplied = true
+            }
+            let violations = fix && rebuildApplied
+                ? (daemon.stageManager?.auditOwnership() ?? [])
+                : violationsBefore
             var integrity: [String: AnyCodable] = [:]
             if let reconciler = daemon.windowDesktopReconciler {
                 let report = await reconciler.runIntegrityCheck(autoFix: fix)
@@ -93,6 +110,8 @@ enum CommandRouter {
                 "healthy": AnyCodable(violations.isEmpty && integrity.isEmpty),
                 "integrity": AnyCodable(integrity),
                 "fix_applied": AnyCodable(fix),
+                "ownership_rebuild_applied": AnyCodable(rebuildApplied),
+                "violations_before_fix": AnyCodable(violationsBefore.count),
             ]
             return .success(payload)
 
