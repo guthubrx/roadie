@@ -428,19 +428,38 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                             displayName: activeStage.value, scope: scope)
                     }
                     sm.assign(wid: state.cgWindowID, to: scope)
-                    // SPEC-022 : assign() ne migre PAS le BSP tree. Et la wid peut être
-                    // présente dans plusieurs trees (boot insert built-in + auto-assign LG).
-                    // Nettoyer agressivement (removeWindow purge TOUS les trees), puis
-                    // insérer dans le tree cible (display + stage actifs).
                     let cgwid = state.cgWindowID
-                    self.layoutEngine.removeWindow(cgwid)
-                    self.layoutEngine.insertWindow(cgwid, focusedID: nil, displayID: did)
+                    // SPEC-025 amend — fix bug "tree flatten after assign" :
+                    // skip le remove+insert si la wid est déjà dans le bon tree
+                    // (cas dominant). Le remove+insert agressif aplatissait
+                    // systématiquement l'arbre BSP que le 1er insert venait de
+                    // construire (= politique dwindle perdue, drift observable).
+                    let currentTreeDisplay = self.layoutEngine.displayIDForWindow(cgwid)
+                    if currentTreeDisplay != did {
+                        // Vraie pollution : la wid n'est pas dans le tree cible.
+                        // Nettoyer + ré-insérer en préservant la position BSP via
+                        // focusedID (= dernier focused réel, pas nil).
+                        let focused = self.registry.focusedWindowID
+                        let nearTarget: WindowID? = (focused != nil && focused != cgwid)
+                            ? focused : nil
+                        self.layoutEngine.removeWindow(cgwid)
+                        self.layoutEngine.insertWindow(cgwid, focusedID: nearTarget,
+                                                        displayID: did)
+                        logInfo("tree_force_reinsert", [
+                            "wid": String(cgwid),
+                            "from_display": String(currentTreeDisplay ?? 0),
+                            "to_display": String(did),
+                            "near": nearTarget.map(String.init) ?? "nil",
+                            "reason": "auto_assign_orphan",
+                        ])
+                    }
                     self.applyLayout()
                     logInfo("auto_assign_orphan_to_display", [
                         "wid": String(cgwid),
                         "display_uuid": uuid,
                         "desktop_id": String(desktopID),
                         "stage": activeStage.value,
+                        "tree_preserved": String(currentTreeDisplay == did),
                     ])
                 }
             }
@@ -1252,11 +1271,26 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                                         displayName: activeStage.value, scope: scope)
                                 }
                                 sm.assign(wid: cgwid, to: scope)
-                                // SPEC-022 : nettoyage agressif tree (peut être dans
-                                // plusieurs trees si insertion antérieure pollue).
-                                self.layoutEngine.removeWindow(cgwid)
-                                self.layoutEngine.insertWindow(cgwid, focusedID: nil,
-                                                                displayID: did)
+                                // SPEC-025 amend — voir commentaire identique
+                                // ligne 430 (registerExistingWindows). Skip le
+                                // remove+insert si la wid est déjà dans le bon
+                                // tree, pour préserver la profondeur BSP.
+                                let currentTreeDisplay = self.layoutEngine.displayIDForWindow(cgwid)
+                                if currentTreeDisplay != did {
+                                    let focused = self.registry.focusedWindowID
+                                    let nearTarget: WindowID? = (focused != nil && focused != cgwid)
+                                        ? focused : nil
+                                    self.layoutEngine.removeWindow(cgwid)
+                                    self.layoutEngine.insertWindow(cgwid, focusedID: nearTarget,
+                                                                    displayID: did)
+                                    logInfo("tree_force_reinsert", [
+                                        "wid": String(cgwid),
+                                        "from_display": String(currentTreeDisplay ?? 0),
+                                        "to_display": String(did),
+                                        "near": nearTarget.map(String.init) ?? "nil",
+                                        "reason": "auto_assign_orphan_runtime",
+                                    ])
+                                }
                                 self.applyLayout()
                             }
                         }
@@ -1869,9 +1903,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         registry.update(wid) { $0.isFloating = false }
         // Si la wid n'est plus dans aucun tree (cas same-display drag), réinsérer.
         if layoutEngine.displayIDForWindow(wid) == nil {
-            layoutEngine.insertWindow(wid, focusedID: nil)
+            // SPEC-025 amend — passer focused au lieu de nil pour préserver
+            // la sémantique BSP (insertion près de la wid voisine, pas au root).
+            let focused = registry.focusedWindowID
+            let nearTarget: WindowID? = (focused != nil && focused != wid) ? focused : nil
+            layoutEngine.insertWindow(wid, focusedID: nearTarget)
             applyLayout()
-            logInfo("drag_retile", ["wid": String(wid)])
+            logInfo("drag_retile", ["wid": String(wid),
+                                     "near": nearTarget.map(String.init) ?? "nil"])
         }
     }
 
