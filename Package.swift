@@ -7,8 +7,9 @@ let package = Package(
     products: [
         .executable(name: "roadied", targets: ["roadied"]),
         .executable(name: "roadie", targets: ["roadie"]),
-        // SPEC-014 stage-rail — binaire SwiftUI séparé, opt-in
-        .executable(name: "roadie-rail", targets: ["RoadieRail"]),
+        // SPEC-024 — RoadieRail est désormais une library liée statiquement à
+        // roadied (fusion mono-binaire). Plus de produit `roadie-rail` exécutable.
+        .library(name: "RoadieRail", targets: ["RoadieRail"]),
         .library(name: "RoadieCore", targets: ["RoadieCore"]),
         .library(name: "RoadieTiler", targets: ["RoadieTiler"]),
         .library(name: "RoadieStagePlugin", targets: ["RoadieStagePlugin"]),
@@ -75,7 +76,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "roadied",
-            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin", "RoadieDesktops", "RoadieFXCore"],
+            // SPEC-024 — RoadieRail intégré au binaire daemon (fusion mono-process).
+            dependencies: ["RoadieCore", "RoadieTiler", "RoadieStagePlugin", "RoadieDesktops", "RoadieFXCore", "RoadieRail"],
             path: "Sources/roadied"
         ),
         .executableTarget(
@@ -182,8 +184,9 @@ let package = Package(
             dependencies: ["RoadieCrossDesktop"],
             path: "Tests/RoadieCrossDesktopTests"
         ),
-        // SPEC-014 stage-rail — binaire SwiftUI séparé
-        .executableTarget(
+        // SPEC-014/024 — stage-rail. Library liée à roadied (V2). En V1 c'était
+        // un executableTarget séparé ; SPEC-024 a fusionné le rail dans le daemon.
+        .target(
             name: "RoadieRail",
             dependencies: [
                 "RoadieCore",

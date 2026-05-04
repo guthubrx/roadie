@@ -1,0 +1,8 @@
+current_scope: ["display_uuid": "37D8832A-2D66-02CA-B9F7-8F30A301B230", "desktop_id": 1, "inferred_from": "cursor"]
+current_stage: 1
+migration_pending: false
+stage_manager_enabled: true
+stages_mode: per_display
+tiled_windows: 3
+tiler_strategy: bsp
+version: 0.1.0

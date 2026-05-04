@@ -1,0 +1,14 @@
+Sources/roadie/                  610
+Sources/RoadieAnimations/        449
+Sources/RoadieBlur/              82
+Sources/RoadieBorders/           355
+Sources/RoadieCore/              2571
+Sources/RoadieCrossDesktop/      180
+Sources/roadied/                 3582
+Sources/RoadieDesktops/          1098
+Sources/RoadieFXCore/            364
+Sources/RoadieOpacity/           129
+Sources/RoadieRail/              2733
+Sources/RoadieShadowless/        82
+Sources/RoadieStagePlugin/       1315
+Sources/RoadieTiler/             1020

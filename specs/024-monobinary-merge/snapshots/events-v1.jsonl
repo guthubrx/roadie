@@ -1,0 +1,12 @@
+{"status":"success","payload":{"subscription_id":"5484BE4F-F9B6-41FA-A1A6-DB79C7712242","subscribed_types":["thumbnail_updated","stage_created","display_configuration_changed","desktop_changed","stage_assigned","window_unassigned","stage_deleted","stage_renamed","window_destroyed","config_reloaded","display_changed","migration_v1_to_v2","window_assigned","stage_changed","wallpaper_click","window_focused","window_created"]},"version":"roadie\/1"}
+{"desktop_id":"1","display_uuid":"37D8832A-2D66-02CA-B9F7-8F30A301B230","event":"stage_changed","from":"1","from_name":"1","to":"2","to_name":"stage 2","ts":"2026-05-04T05:58:01.506Z","version":1}
+{"desktop_id":"1","event":"stage_changed","from":"1","to":"2","ts":"1777874281505","version":1}
+{"desktop_id":"2","display_uuid":"37D8832A-2D66-02CA-B9F7-8F30A301B230","event":"stage_changed","from":"2","from_name":"stage 2","to":"1","to_name":"1","ts":"2026-05-04T05:58:02.548Z","version":1}
+{"desktop_id":"2","event":"stage_changed","from":"2","to":"1","ts":"1777874282548","version":1}
+{"event":"window_focused","ts":"2026-05-04T05:58:03.580Z","version":1,"wid":"12"}
+{"desktop_id":"1","display_uuid":"37D8832A-2D66-02CA-B9F7-8F30A301B230","event":"stage_changed","from":"1","from_name":"1","to":"2","to_name":"stage 2","ts":"2026-05-04T05:58:03.597Z","version":1}
+{"desktop_id":"1","event":"stage_changed","from":"1","to":"2","ts":"1777874283597","version":1}
+{"display_id":"1","display_index":"1","event":"display_changed","ts":"1777874283649","version":1}
+{"event":"window_focused","ts":"2026-05-04T05:58:05.549Z","version":1,"wid":"2752"}
+{"desktop_id":"2","display_uuid":"37D8832A-2D66-02CA-B9F7-8F30A301B230","event":"stage_changed","from":"2","from_name":"stage 2","to":"1","to_name":"1","ts":"2026-05-04T05:58:05.582Z","version":1}
+{"desktop_id":"2","event":"stage_changed","from":"2","to":"1","ts":"1777874285581","version":1}
