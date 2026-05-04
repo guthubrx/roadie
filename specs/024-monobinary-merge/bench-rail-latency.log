@@ -1,0 +1,8 @@
+==> bench rail latency : 100 requêtes rapides daemon.status (proxy de rail bootstrap)
+==> latence (ms) sur 100 samples
+  mean : 20.67
+  p50  : 16.87
+  p95  : 27.32
+  p99  : 149.67
+
+  → SC-006 ≤ 100ms p95 : OK ✅

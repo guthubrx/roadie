@@ -285,10 +285,10 @@ struct RailConfig {
 
 /// Orchestrateur principal du rail. Gère panels, IPC, event stream et edge monitor.
 @MainActor
-final class RailController {
+public final class RailController {
     let state: RailState
-    let ipc: RailIPCClient
-    let eventStream: EventStream
+    let ipc: RailDaemonProxy
+    let eventStream: EventStreamInProcess
     let edgeMonitor: EdgeMonitor
     let fade: FadeAnimator
     let fetcher: ThumbnailFetcher
@@ -300,10 +300,13 @@ final class RailController {
     /// l'expiration de `persistenceMs`.
     private var pendingHideTasks: [CGDirectDisplayID: Task<Void, Never>] = [:]
 
-    init() {
+    /// SPEC-024 — accès in-process au daemon. Le `handler` est le `Daemon` lui-même
+    /// (qui implémente `CommandHandler` dans RoadieCore.Server). Plus de socket Unix
+    /// pour les appels rail→daemon : appel direct via le proxy.
+    public init(handler: CommandHandler) {
         state = RailState()
-        ipc = RailIPCClient()
-        eventStream = EventStream()
+        ipc = RailDaemonProxy(handler: handler)
+        eventStream = EventStreamInProcess()
         edgeMonitor = EdgeMonitor()
         fade = FadeAnimator()
         fetcher = ThumbnailFetcher(ipc: ipc)
@@ -315,7 +318,7 @@ final class RailController {
 
     private var thumbnailRefreshTimer: Timer?
 
-    func start() {
+    public func start() {
         config = RailConfig.load()
         guard config.enabled else {
             logErr("roadie-rail: disabled via config (fx.rail.enabled = false)")

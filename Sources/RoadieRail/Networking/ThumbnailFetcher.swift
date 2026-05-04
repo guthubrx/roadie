@@ -7,11 +7,11 @@ import CoreGraphics
 /// Récupère et met en cache les vignettes de fenêtres depuis le daemon.
 @MainActor
 final class ThumbnailFetcher {
-    private let ipc: RailIPCClient
+    private let ipc: RailDaemonProxy
     // NSCache gère automatiquement l'éviction sous pression mémoire.
     private var cache: [CGWindowID: ThumbnailVM] = [:]
 
-    init(ipc: RailIPCClient) {
+    init(ipc: RailDaemonProxy) {
         self.ipc = ipc
     }
 
