@@ -88,8 +88,8 @@ cd roadie
 Le script vérifie toutes les dépendances, build, signe chaque binaire avec `roadied-cert`, déploie dans `~/Applications/roadied.app/`, configure launchd. À relancer après chaque `swift build` pour pousser le binaire frais sans perdre les grants TCC.
 
 Ensuite dans Réglages Système → Confidentialité et sécurité :
-- **Accessibilité** : ajouter `~/Applications/roadied.app/Contents/MacOS/roadied` et cocher
-- **Enregistrement d'écran** : ajouter le même chemin (nécessaire pour `roadie-rail` qui capture les thumbnails)
+- **Accessibilité** : ajouter `~/Applications/roadied.app` et cocher
+- **Enregistrement d'écran** : ajouter **les deux** `~/Applications/roadied.app` et `~/Applications/roadie-rail.app` (nécessaire pour la capture des thumbnails de fenêtres)
 
 ```bash
 roadied --daemon &

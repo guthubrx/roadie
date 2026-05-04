@@ -90,8 +90,8 @@ cd roadie
 The script checks all dependencies, builds, signs every binary with `roadied-cert`, deploys to `~/Applications/roadied.app/`, and configures launchd. Re-run after every `swift build` to refresh the deployed binary while keeping TCC grants.
 
 Then in System Settings → Privacy & Security:
-- **Accessibility** : add `~/Applications/roadied.app/Contents/MacOS/roadied` and tick the checkbox
-- **Screen Recording** : add the same path (needed by `roadie-rail` for thumbnails)
+- **Accessibility** : add `~/Applications/roadied.app` and tick the checkbox
+- **Screen Recording** : add **both** `~/Applications/roadied.app` and `~/Applications/roadie-rail.app` (needed for window thumbnail capture)
 
 ```bash
 roadied --daemon &
