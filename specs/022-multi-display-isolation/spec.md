@@ -2,7 +2,7 @@
 
 **Feature Branch**: `022-multi-display-isolation`
 **Created**: 2026-05-03
-**Status**: Draft
+**Status**: Implemented (mergée sur main, US1+US2+US3 ✅, polish post-merge complet, daily-driver en cours)
 **Dependencies**: SPEC-013 (desktop-per-display), SPEC-018 (stages-per-display), SPEC-019 (rail-renderers)
 **Input**: User description: "Refactor stage state from global currentStageID to per-(display, desktop) tuple. Empty stages render nothing in the rail panel."
 

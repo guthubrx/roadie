@@ -328,6 +328,16 @@ public final class LayoutEngine {
                 return true
             }
         }
+        // SPEC-025 FR-008 — log explicite quand le leaf est introuvable.
+        // Cause possible : la wid est dans memberWindows mais pas (encore)
+        // insérée dans un tree (ex: fenêtre venant d'être créée, ou drift
+        // tree vs memberWindows). Le caller doit décider quoi faire (typiquement
+        // appeler tree.insertIfMissing, ou laisser le prochain applyLayout gérer).
+        logWarn("setLeafVisible_no_leaf_found", [
+            "wid": String(wid),
+            "visible_requested": String(visible),
+            "trees_count": String(workspace.rootsByStageDisplay.count),
+        ])
         return false
     }
 

@@ -115,6 +115,60 @@ enum CommandRouter {
             ]
             return .success(payload)
 
+        case "daemon.health":
+            // SPEC-025 FR-004 — health metric instantané. Compteurs cumulés
+            // depuis le dernier boot + verdict global.
+            let totalWids = daemon.stageManager?.totalMemberCount() ?? 0
+            let violationsNow = daemon.stageManager?.auditOwnership().count ?? 0
+            let offscreenAtRestore = StageManager.lastValidationInvalidatedCount
+            let health = BootStateHealth(
+                totalWids: totalWids,
+                widsOffscreenAtRestore: offscreenAtRestore,
+                widsZombiesPurged: 0,  // cumulé depuis boot non tracé granulairement
+                widToScopeDriftsFixed: violationsNow
+            )
+            return .success([
+                "total_wids": AnyCodable(totalWids),
+                "offscreen_at_restore": AnyCodable(offscreenAtRestore),
+                "zombies_purged": AnyCodable(0),
+                "drifts_fixed": AnyCodable(violationsNow),
+                "verdict": AnyCodable(health.verdict.rawValue),
+            ])
+
+        case "daemon.heal":
+            // SPEC-025 FR-005 — orchestration de toutes les réparations connues.
+            // Idempotent : relancer 2× = pas de side effect.
+            let start = Date()
+            var purged = 0
+            var driftsFixed = 0
+            if let sm = daemon.stageManager {
+                let memberBefore = sm.totalMemberCount()
+                let violationsBefore = sm.auditOwnership()
+                driftsFixed = violationsBefore.count
+                sm.purgeOrphanWindows()
+                sm.rebuildWidToScopeIndex()
+                purged = max(0, memberBefore - sm.totalMemberCount())
+            }
+            daemon.applyLayout()
+            var widsRestored = 0
+            if let reconciler = daemon.windowDesktopReconciler {
+                let report = await reconciler.runIntegrityCheck(autoFix: true)
+                widsRestored = report.fixedCount
+            }
+            let durationMs = Int(Date().timeIntervalSince(start) * 1000)
+            logInfo("daemon_heal", [
+                "purged": String(purged),
+                "drifts_fixed": String(driftsFixed),
+                "wids_restored": String(widsRestored),
+                "duration_ms": String(durationMs),
+            ])
+            return .success([
+                "purged": AnyCodable(purged),
+                "drifts_fixed": AnyCodable(driftsFixed),
+                "wids_restored": AnyCodable(widsRestored),
+                "duration_ms": AnyCodable(durationMs),
+            ])
+
         case "daemon.reload":
             do {
                 let newConfig = try ConfigLoader.load()

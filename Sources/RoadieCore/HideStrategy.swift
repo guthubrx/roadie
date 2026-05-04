@@ -39,10 +39,30 @@ public enum HideStrategyImpl {
     @MainActor
     public static func show(_ wid: WindowID, registry: WindowRegistry, strategy: HideStrategy) {
         guard let element = registry.axElement(for: wid),
-              let state = registry.get(wid) else { return }
-        // SPEC-013 fix : restorer depuis expectedFrame (sauvegardée dans hide()),
-        // fallback sur state.frame si expectedFrame n'a pas été initialisée.
-        let target: CGRect = state.expectedFrame != .zero ? state.expectedFrame : state.frame
+              let state = registry.get(wid) else {
+            logWarn("hide_strategy_show_no_element", ["wid": String(wid)])
+            return
+        }
+        // SPEC-013 fix : restorer depuis expectedFrame (sauvegardée dans hide()).
+        // SPEC-025 FR-007 — fallback safe sur primary visible center si :
+        //   - expectedFrame == .zero (jamais initialisée)
+        //   - ET state.frame est offscreen (= en dehors de tous les displays connus)
+        // Garantit qu'une fenêtre show() réapparait toujours quelque part de visible.
+        // Cause racine BUG-001 : sans ce fallback, target = state.frame = -2117 → setBounds(-2117) = no-op.
+        let target: CGRect
+        if state.expectedFrame != .zero, isOnScreen(state.expectedFrame) {
+            target = state.expectedFrame
+        } else if isOnScreen(state.frame) {
+            target = state.frame
+        } else {
+            target = primaryVisibleCenterRect()
+            logWarn("hide_strategy_show_fallback_center", [
+                "wid": String(wid),
+                "expected_frame_zero": String(state.expectedFrame == .zero),
+                "state_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
+                "fallback": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))",
+            ])
+        }
         switch strategy {
         case .corner:
             AXReader.setBounds(element, frame: target)
@@ -52,6 +72,28 @@ public enum HideStrategyImpl {
             AXReader.setMinimized(element, false)
             AXReader.setBounds(element, frame: target)
         }
+    }
+
+    /// SPEC-025 FR-007 — frame de fallback safe : centre du primary display
+    /// visible, ~50% de sa taille. Utilisée par `show()` quand aucune frame
+    /// connue (expectedFrame ou state.frame) n'est sur un display connu.
+    @MainActor
+    private static func primaryVisibleCenterRect() -> CGRect {
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let p = primary else {
+            return CGRect(x: 100, y: 100, width: 800, height: 600)
+        }
+        // Calcul en NS coords (origin bottom-left) puis conversion AX (top-left primary).
+        let nsFrame = p.visibleFrame
+        let w = nsFrame.width * 0.5
+        let h = nsFrame.height * 0.5
+        let nsX = nsFrame.origin.x + (nsFrame.width - w) / 2
+        let nsY = nsFrame.origin.y + (nsFrame.height - h) / 2
+        // Conversion vers AX coords (origin top-left du primary).
+        let axY = p.frame.height - nsY - h
+        return CGRect(x: nsX, y: axY, width: w, height: h)
     }
 
     /// Reproduction littérale de AeroSpace `MacWindow.hideInCorner(.bottomLeftCorner)` :

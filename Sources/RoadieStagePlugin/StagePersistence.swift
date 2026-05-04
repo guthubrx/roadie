@@ -49,8 +49,33 @@ public final class FileBackedStagePersistence: StagePersistence, @unchecked Send
         do {
             let toml = try TOMLEncoderBridge.encode(stage)
             try toml.write(toFile: path, atomically: true, encoding: .utf8)
+            // SPEC-025 FR-009 — GC silencieux des .legacy.* > 7 jours dans le
+            // même dossier. Idempotent. Tourne après chaque save (= au moment
+            // où on touche déjà disque, coût marginal).
+            Self.gcLegacyFiles(in: stagesDir, olderThanDays: 7)
         } catch {
             logError("stage save failed", ["id": stage.id.value, "err": "\(error)"])
+        }
+    }
+
+    /// Supprime les fichiers `*.legacy.*` du dossier dont mtime > N jours.
+    /// Silencieux par fichier (1 log avec compteur si > 0). Best-effort.
+    static func gcLegacyFiles(in dir: String, olderThanDays days: Int) {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
+        var removed = 0
+        for entry in entries where entry.contains(".legacy.") {
+            let path = "\(dir)/\(entry)"
+            if let attrs = try? fm.attributesOfItem(atPath: path),
+               let mtime = attrs[.modificationDate] as? Date,
+               mtime < cutoff {
+                try? fm.removeItem(atPath: path)
+                removed += 1
+            }
+        }
+        if removed > 0 {
+            logInfo("legacy_gc_done", ["removed": String(removed), "dir": dir])
         }
     }
 
