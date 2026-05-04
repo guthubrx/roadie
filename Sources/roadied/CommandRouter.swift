@@ -1190,9 +1190,24 @@ enum CommandRouter {
         let previousID = await registry.currentID
         guard let targetID = await resolveSelector(
             selector, registry: registry, count: daemon.config.desktops.count) else {
+            logWarn("desktop_focus_unresolved", [
+                "selector": selector,
+                "previous_id": String(previousID),
+                "flow": "global",
+                "reason": "selector_returned_nil",
+            ])
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
         let wasNoop = targetID == previousID && !daemon.config.desktops.backAndForth
+        if wasNoop {
+            logInfo("desktop_focus_noop", [
+                "selector": selector,
+                "current_id": String(previousID),
+                "flow": "global",
+                "back_and_forth": "false",
+                "reason": "same_target_no_backforth",
+            ])
+        }
         do {
             try await switcher.switch(to: targetID)
         } catch DesktopError.unknownDesktop {
@@ -1300,6 +1315,12 @@ enum CommandRouter {
         let previousID = await registry.currentID(for: targetDisplayID)
         guard let targetID = await resolveSelector(
             selector, registry: registry, count: daemon.config.desktops.count) else {
+            logWarn("desktop_focus_unresolved", [
+                "selector": selector,
+                "previous_id": String(previousID),
+                "target_display": String(targetDisplayID),
+                "reason": "selector_returned_nil",
+            ])
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
         // Same desktop + back-and-forth → bascule vers recent **du display ciblé**
@@ -1311,7 +1332,16 @@ enum CommandRouter {
                let recent = await registry.recentID(for: targetDisplayID) {
                 resolvedTarget = recent
             } else {
-                // No-op
+                // No-op silencieux côté UI mais on trace pour observabilité.
+                logInfo("desktop_focus_noop", [
+                    "selector": selector,
+                    "current_id": String(previousID),
+                    "target_display": String(targetDisplayID),
+                    "back_and_forth": String(daemon.config.desktops.backAndForth),
+                    "reason": daemon.config.desktops.backAndForth
+                        ? "no_recent_desktop"
+                        : "same_target_no_backforth",
+                ])
                 return .success([
                     "current_id": AnyCodable(previousID),
                     "previous_id": AnyCodable(previousID),

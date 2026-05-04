@@ -324,9 +324,15 @@ public final class RailController {
     public func start() {
         config = RailConfig.load()
         guard config.enabled else {
-            logErr("rail: disabled via config (fx.rail.enabled = false)")
+            logWarn("rail_disabled", ["reason": "fx.rail.enabled=false"])
             return
         }
+        logInfo("rail_started", [
+            "display_mode": config.displayMode,
+            "renderer": config.rendererID ?? StageRendererRegistry.defaultID,
+            "panel_width": String(Int(config.panelWidth)),
+            "edge_width": String(Int(config.edgeWidth)),
+        ])
         edgeMonitor.edgeWidth = config.edgeWidth
         edgeMonitor.activeZoneWidth = config.panelWidth
         buildPanels()
@@ -340,6 +346,9 @@ public final class RailController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
+            logInfo("rail_screens_changed", [
+                "screen_count": String(NSScreen.screens.count),
+            ])
             Task { @MainActor [weak self] in self?.rebuildPanels() }
         }
     }
@@ -651,6 +660,25 @@ public final class RailController {
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
             panels[id] = panel
         }
+        let panelUUIDs = panels.keys.map { id -> String in
+            guard let scr = NSScreen.screens.first(where: { displayID(for: $0) == id }) else {
+                return "?"
+            }
+            return displayUUID(for: scr)
+        }
+        logInfo("rail_panels_built", [
+            "count": String(panels.count),
+            "screens_count": String(NSScreen.screens.count),
+            "display_mode": config.displayMode,
+            "panel_uuids": panelUUIDs.joined(separator: ","),
+        ])
+        if panels.count < targetScreens.count {
+            logWarn("rail_panel_missing", [
+                "expected": String(targetScreens.count),
+                "got": String(panels.count),
+                "diff": String(targetScreens.count - panels.count),
+            ])
+        }
         state.screens = NSScreen.screens.map { screenInfo(from: $0) }
         state.displayMode = config.displayMode == "global" ? .global : .perDisplay
         // Mode always-visible : afficher tous les panels immédiatement, sans attendre
@@ -667,10 +695,16 @@ public final class RailController {
     }
 
     private func rebuildPanels() {
+        let countBefore = panels.count
         // Annuler les pending hides : les panels vont être recréés.
         for (_, task) in pendingHideTasks { task.cancel() }
         pendingHideTasks.removeAll()
         buildPanels()
+        logInfo("rail_rebuild_done", [
+            "panels_before": String(countBefore),
+            "panels_after": String(panels.count),
+            "screens_now": String(NSScreen.screens.count),
+        ])
     }
 
     private func startEdgeMonitor() {
