@@ -53,6 +53,11 @@ drifts_5m = 0
 boot_health_last = None
 applyall_starts = []
 applyall_durations_ms = []
+# SPEC-025 amend — métriques observabilité point-mort (gestures + rail).
+gestures_no_op_5m = 0  # desktop_focus_unresolved + desktop_focus_noop
+rail_panels_count_last = None  # dernière valeur de count loggée par rail_panels_built
+rail_screens_count_last = None  # screens_count attendu (même log)
+rail_panel_missing_5m = 0  # rail_panel_missing événements
 
 # Parse log avec tolérance : skip lignes invalides JSON.
 parse_failures = 0
@@ -91,6 +96,18 @@ try:
             elif msg == "applyAll done" and applyall_starts:
                 start = applyall_starts.pop(0)
                 applyall_durations_ms.append((ts - start).total_seconds() * 1000.0)
+            # Gestures silent / unresolved.
+            if msg in ("desktop_focus_unresolved", "desktop_focus_noop"):
+                gestures_no_op_5m += 1
+            # Rail observability.
+            if msg == "rail_panels_built":
+                try:
+                    rail_panels_count_last = int(e.get("count", "0"))
+                    rail_screens_count_last = int(e.get("screens_count", "0"))
+                except Exception:
+                    pass
+            if msg == "rail_panel_missing":
+                rail_panel_missing_5m += 1
 except Exception as ex:
     print(json.dumps({"error": "log_parse_failed", "detail": str(ex)}))
     sys.exit(3)
@@ -113,6 +130,10 @@ metrics = {
     "drifts_5m": drifts_5m,
     "boot_health_last": boot_health_last or "unknown",
     "applyall_p95_5m_ms": applyall_p95_5m,
+    "gestures_no_op_5m": gestures_no_op_5m,
+    "rail_panels_count_last": rail_panels_count_last if rail_panels_count_last is not None else -1,
+    "rail_screens_count_last": rail_screens_count_last if rail_screens_count_last is not None else -1,
+    "rail_panel_missing_5m": rail_panel_missing_5m,
 }
 
 # --- Baseline depuis history -------------------------------------------------
@@ -140,7 +161,8 @@ anti_flap_ok = False
 # Pour calculer baseline, il faut au moins 6 ticks précédents stables.
 # Stable = sans intervention de fix (skip ticks marked as fix/revert sur
 # skill-runs.jsonl — ici on simplifie en prenant tous les derniers 6 ticks).
-NUMERIC_AXES = ["errors_5m", "warns_5m_filtered", "drifts_5m", "applyall_p95_5m_ms"]
+NUMERIC_AXES = ["errors_5m", "warns_5m_filtered", "drifts_5m", "applyall_p95_5m_ms",
+                "gestures_no_op_5m", "rail_panel_missing_5m"]
 
 if len(hist) >= 6:
     last6 = hist[-6:]
@@ -161,6 +183,10 @@ if len(hist) >= 6:
             thr = max(thr, 5)  # 5 warns/5min plancher
         elif axisName == "applyall_p95_5m_ms":
             thr = max(thr, 250)  # 250ms plancher
+        elif axisName == "gestures_no_op_5m":
+            thr = max(thr, 3)  # 3 gestes perdus/5min plancher (= signal user)
+        elif axisName == "rail_panel_missing_5m":
+            thr = max(thr, 1)  # tout missing déjà suspect
         baseline[axisName] = {"median": round(med, 2), "mad": round(mad, 2),
                               "threshold": round(thr, 2)}
         threshold[axisName] = thr
@@ -181,6 +207,19 @@ if len(hist) >= 6:
         anomaly = True
         axis = "boot_health_last"
         reason = f"boot_health={metrics['boot_health_last']}"
+
+    # Anomalie rail panels manquants : count_last < screens_count_last.
+    # Catégorielle : un déficit d'un panel suffit même sans baseline historique.
+    if not anomaly and rail_panels_count_last is not None \
+            and rail_screens_count_last is not None \
+            and rail_panels_count_last >= 0 \
+            and rail_screens_count_last > 0 \
+            and rail_panels_count_last < rail_screens_count_last:
+        anomaly = True
+        axis = "rail_panels_count_last"
+        reason = (f"rail_panels_count={rail_panels_count_last} < "
+                  f"screens_count={rail_screens_count_last} "
+                  f"(panel manquant sur au moins 1 display)")
 
     # Anti-flap : exiger 2 ticks consécutifs sur le même axe pour déclencher.
     if anomaly and len(hist) >= 1:
