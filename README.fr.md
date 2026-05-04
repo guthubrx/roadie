@@ -89,7 +89,7 @@ Le script vérifie toutes les dépendances, build, signe chaque binaire avec `ro
 
 Ensuite dans Réglages Système → Confidentialité et sécurité :
 - **Accessibilité** : ajouter `~/Applications/roadied.app` et cocher
-- **Enregistrement d'écran** : ajouter **les deux** `~/Applications/roadied.app` et `~/Applications/roadie-rail.app` (nécessaire pour la capture des thumbnails de fenêtres)
+- **Enregistrement d'écran** : ajouter `~/Applications/roadied.app` et cocher (nécessaire pour la capture des thumbnails de fenêtres par le daemon — `roadie-rail.app` n'a besoin d'AUCUNE permission TCC, il consomme les thumbnails via IPC)
 
 ```bash
 roadied --daemon &
