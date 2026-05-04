@@ -5,9 +5,12 @@ import AppKit
 /// Gère les animations d'opacité sur les NSPanel du rail.
 final class FadeAnimator {
     /// Fait apparaître le panel en fondu (alpha 0 → 1).
+    /// `orderFrontRegardless()` (et non `orderFront(nil)`) car roadie-rail tourne en
+    /// `.accessory` (LSUIElement) : il n'est jamais "active app", donc `orderFront`
+    /// classique ne dessine pas la fenêtre. Le `Regardless` ignore l'état d'activation.
     func fadeIn(_ panel: NSPanel, duration: TimeInterval = 0.2) {
         panel.alphaValue = 0
-        panel.orderFront(nil)
+        panel.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = duration
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
