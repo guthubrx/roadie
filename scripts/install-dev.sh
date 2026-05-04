@@ -20,6 +20,11 @@ CERT="${ROADIE_CERT:-roadied-cert}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="$HOME/Applications/roadied.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/roadied"
+# SPEC-023 — roadie-rail dans son propre .app bundle pour pouvoir l'ajouter
+# au panneau Réglages > Confidentialité > Enregistrement écran (Sequoia/Tahoe
+# refuse les binaires CLI nus dans le panneau TCC).
+RAIL_BUNDLE="$HOME/Applications/roadie-rail.app"
+RAIL_BIN_REAL="$RAIL_BUNDLE/Contents/MacOS/roadie-rail"
 RAIL_BIN="$HOME/.local/bin/roadie-rail"
 CLI_BIN="$HOME/.local/bin/roadie"
 
@@ -84,18 +89,20 @@ pkill -f "roadie events" 2>/dev/null || true
 sleep 1
 
 echo "==> install binaries"
-mkdir -p "$APP_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
+mkdir -p "$APP_BUNDLE/Contents/MacOS" "$RAIL_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
 cp "$BUILD_DIR/roadied"     "$APP_BIN"
-cp "$BUILD_DIR/roadie-rail" "$RAIL_BIN"
+cp "$BUILD_DIR/roadie-rail" "$RAIL_BIN_REAL"  # bundle .app pour TCC Screen Recording
+# Symlink ~/.local/bin/roadie-rail → bundle pour CLI/scripts qui appellent par path court.
+ln -sf "$RAIL_BIN_REAL" "$RAIL_BIN"
 cp "$BUILD_DIR/roadie"      "$CLI_BIN"
 
 # Symlink dev pour que `cp .build/debug/roadied ~/.local/bin/` continue a marcher.
 ln -sf "$APP_BIN" "$HOME/.local/bin/roadied"
 
 echo "==> codesign with $CERT (preserve TCC grants)"
-codesign -fs "$CERT" "$APP_BIN"     2>&1 | tail -1
-codesign -fs "$CERT" "$RAIL_BIN"    2>&1 | tail -1
-codesign -fs "$CERT" "$CLI_BIN"     2>&1 | tail -1
+codesign -fs "$CERT" "$APP_BIN"       2>&1 | tail -1
+codesign -fs "$CERT" "$RAIL_BIN_REAL" 2>&1 | tail -1
+codesign -fs "$CERT" "$CLI_BIN"       2>&1 | tail -1
 
 # Info.plist minimal pour que le bundle soit reconnu comme une .app par TCC.
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
@@ -111,6 +118,29 @@ if [[ ! -f "$INFO_PLIST" ]]; then
     <string>com.roadie.roadied</string>
     <key>CFBundleName</key>
     <string>roadied</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>LSUIElement</key>
+    <true/>
+</dict>
+</plist>
+EOF
+fi
+RAIL_INFO_PLIST="$RAIL_BUNDLE/Contents/Info.plist"
+if [[ ! -f "$RAIL_INFO_PLIST" ]]; then
+  cat > "$RAIL_INFO_PLIST" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>roadie-rail</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.roadie.roadie-rail</string>
+    <key>CFBundleName</key>
+    <string>roadie-rail</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
