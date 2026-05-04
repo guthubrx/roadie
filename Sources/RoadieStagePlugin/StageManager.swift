@@ -712,8 +712,27 @@ public final class StageManager {
     /// `(displayUUID, desktopID, stageID)` et synchronise le dict V1 par compat.
     /// La wid est retirée de tout autre scope où elle figurerait.
     public func assign(wid: WindowID, to scope: StageScope) {
-        guard let state = registry.get(wid) else { return }
-        guard !state.isHelperWindow else { return }
+        guard let state = registry.get(wid) else {
+            logWarn("stage_assign_skipped", [
+                "wid": String(wid), "reason": "wid_not_in_registry",
+                "scope": "\(scope.displayUUID):\(scope.desktopID):\(scope.stageID.value)",
+            ])
+            return
+        }
+        guard !state.isHelperWindow else {
+            logInfo("stage_assign_skipped", [
+                "wid": String(wid), "reason": "helper_window",
+                "frame": "\(Int(state.frame.width))x\(Int(state.frame.height))",
+            ])
+            return
+        }
+        let previousScope = widToScope[wid]
+        logInfo("stage_assign", [
+            "wid": String(wid),
+            "from": previousScope.map { "\($0.displayUUID):\($0.desktopID):\($0.stageID.value)" } ?? "nil",
+            "to": "\(scope.displayUUID):\(scope.desktopID):\(scope.stageID.value)",
+            "bundle": state.bundleID,
+        ])
         // Retirer la wid de tous les autres scopes V2.
         var emptiedScopes: [StageScope] = []
         for (s, stage) in stagesV2 where s != scope {
