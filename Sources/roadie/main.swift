@@ -656,6 +656,14 @@ func handleDiag(args: [String]) {
             .data(using: .utf8) ?? Data())
         exit(1)
     }
+    // SPEC-025 audit fix : check tar terminationStatus. Sans ça, un tar qui échoue
+    // (disque plein, permission, etc.) produit un fichier incomplet sans erreur visible.
+    guard tarProc.terminationStatus == 0 else {
+        FileHandle.standardError.write(
+            "roadie diag: tar exit code \(tarProc.terminationStatus) (output may be corrupt)\n"
+                .data(using: .utf8) ?? Data())
+        exit(1)
+    }
 
     let attrs = try? FileManager.default.attributesOfItem(atPath: outPath)
     let size = (attrs?[.size] as? Int) ?? 0
