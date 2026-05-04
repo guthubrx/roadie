@@ -50,15 +50,18 @@ enum CommandRouter {
 
         case "daemon.status":
             // SPEC-018 : ajouter stages_mode, migration_pending, current_scope.
+            // SPEC-024 : ajouter arch_version (2 = mono-binaire, rail in-process).
             let currentScope = await daemon.currentStageScope()
             let payload: [String: AnyCodable] = [
                 "version": AnyCodable("0.1.0"),
+                "arch_version": AnyCodable(2),
                 "tiled_windows": AnyCodable(daemon.registry.tileableWindows.count),
                 "tiler_strategy": AnyCodable(daemon.layoutEngine.workspace.tilerStrategy.rawValue),
                 "stage_manager_enabled": AnyCodable(daemon.config.stageManager.enabled),
                 "current_stage": AnyCodable(daemon.stageManager?.currentStageID?.value ?? ""),
                 "stages_mode": AnyCodable(daemon.stageManager?.stageMode.rawValue ?? "global"),
                 "migration_pending": AnyCodable(daemon.migrationPending),
+                "rail_inprocess": AnyCodable(daemon.railController != nil),
                 "current_scope": AnyCodable([
                     "display_uuid": currentScope.displayUUID,
                     "desktop_id": currentScope.desktopID,
