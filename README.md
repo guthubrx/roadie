@@ -1,4 +1,8 @@
 <div align="center">
+  <img src="docs/assets/roadie-logo.svg" alt="roadie logo" width="128" height="128">
+</div>
+
+<div align="center">
 
 # 🚧 UNDER CONSTRUCTION · EN CONSTRUCTION 🚧
 
@@ -17,10 +21,6 @@
 > **Work in progress — actively evolving project.** My goal is to make this my daily driver. All feedback is welcome — see [Status](#status).
 
 A small tiling window manager for macOS, written in Swift, that I'm polishing into my everyday workstation.
-
-<p align="center">
-  <img src="docs/assets/screenshot-multi-display.png" alt="roadie multi-display screenshot" width="100%">
-</p>
 
 ## Why this project
 

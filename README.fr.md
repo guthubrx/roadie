@@ -1,4 +1,8 @@
 <div align="center">
+  <img src="docs/assets/roadie-logo.svg" alt="logo roadie" width="128" height="128">
+</div>
+
+<div align="center">
 
 # 🚧 EN CONSTRUCTION · UNDER CONSTRUCTION 🚧
 
@@ -17,10 +21,6 @@
 > **Work in progress — projet en évolution active.** Mon objectif est d'en faire mon daily driver. Toutes les remarques sont les bienvenues — voir [Status](#status).
 
 Un petit window manager tiling pour macOS, écrit en Swift, que je polis pour en faire mon poste de travail au quotidien.
-
-<p align="center">
-  <img src="docs/assets/screenshot-multi-display.png" alt="capture d'écran roadie multi-display" width="100%">
-</p>
 
 ## Pourquoi ce projet
 
