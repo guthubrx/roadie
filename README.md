@@ -1,4 +1,8 @@
 <div align="center">
+  <img src="docs/assets/roadie-logo.svg" alt="roadie logo" width="128" height="128">
+</div>
+
+<div align="center">
 
 # 🚧 UNDER CONSTRUCTION · EN CONSTRUCTION 🚧
 
