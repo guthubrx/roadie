@@ -1,3 +1,7 @@
+// Adapted from AeroSpace (MIT, Copyright (c) 2023 Nikita Bobko).
+// Original source : AeroSpace/Sources/AppBundle/tree/MacWindow.swift, hideInCorner.
+// See THIRD_PARTY_LICENSES.md at the repository root for the full MIT notice.
+
 import Foundation
 import ApplicationServices
 import Cocoa
