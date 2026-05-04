@@ -601,13 +601,24 @@ public final class LayoutEngine {
                     let dy = abs(prev.origin.y - innerFrame.origin.y)
                     let dw = abs(prev.width - innerFrame.width)
                     let dh = abs(prev.height - innerFrame.height)
-                    if dx + dy + dw + dh > 1 {
-                        logDebug("applyall_setbounds", [
+                    let positionDelta = dx + dy
+                    let totalDelta = dx + dy + dw + dh
+                    if totalDelta > 1 {
+                        let fields: [String: String] = [
                             "wid": String(wid),
                             "display": String(display.id),
                             "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y)) \(Int(prev.width))x\(Int(prev.height))",
                             "to": "\(Int(innerFrame.origin.x)),\(Int(innerFrame.origin.y)) \(Int(innerFrame.width))x\(Int(innerFrame.height))",
-                        ])
+                            "position_delta_px": String(Int(positionDelta)),
+                        ]
+                        // Ajustement < 50px = stabilisation/redim normaux → debug.
+                        // Saut ≥ 50px = repositionnement notable (= explique le
+                        // "ma fenêtre se déplace après création") → info.
+                        if positionDelta >= 50 {
+                            logInfo("applyall_setbounds_jump", fields)
+                        } else {
+                            logDebug("applyall_setbounds", fields)
+                        }
                     }
                 }
             }

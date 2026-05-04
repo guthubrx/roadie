@@ -19,8 +19,16 @@ public final class BSPTiler: Tiler {
 
     /// Politique active. Set au boot du daemon depuis la config TOML
     /// (`[tiling].split_policy`). Default = .largestDim pour compat backward.
-    /// Thread-safe : accédée @MainActor (insertions BSP toujours main thread).
-    @MainActor public static var splitPolicy: SplitPolicy = .largestDim
+    ///
+    /// PAS d'isolation `@MainActor` car `insert()` peut être appelé depuis
+    /// le chemin `registerWindow → insertWindow → tiler.insert` qui n'est
+    /// pas garanti main thread (dispatch depuis AX event loop). Une variante
+    /// `@MainActor` + `assumeIsolated` crashait en SIGSEGV (= cause probable
+    /// du crash-loop observé après commit 94ce5f4). Le compromis : la valeur
+    /// est rarement écrite (boot + reload), lue à chaque insert. Race possible
+    /// en théorie mais sans corruption (enum SplitPolicy = lecture atomique
+    /// d'un raw int sur les architectures Swift visées).
+    nonisolated(unsafe) public static var splitPolicy: SplitPolicy = .largestDim
 
     public init() {}
 
@@ -99,7 +107,7 @@ public final class BSPTiler: Tiler {
         let orientation: Orientation
         let reason: String
         var fallbackUsed = false
-        let policy = MainActor.assumeIsolated { BSPTiler.splitPolicy }
+        let policy = BSPTiler.splitPolicy
         switch policy {
         case .largestDim:
             if let frame = target.lastFrame {
