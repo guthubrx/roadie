@@ -142,22 +142,20 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     }
 
     func bootstrap() async throws {
-        // Permissions Accessibility
-        guard AXIsProcessTrusted() else {
+        // Permissions Accessibility — wait-loop : éviter le respawn-prompt-spam
+        // launchd qui re-déclenche TCC en cascade quand l'utilisateur clique
+        // "Allow" pendant que le daemon exit en boucle. Au lieu d'exit(2)
+        // immédiat : ouvrir les Réglages, notifier, puis poll AXIsProcessTrusted()
+        // toutes les 2s pendant 60s. Pendant ce temps, l'utilisateur a le temps
+        // de cocher la case sans déclencher 30 prompts d'affilée.
+        if !AXIsProcessTrusted() {
             FileHandle.standardError.write("""
-            roadied: permission Accessibility manquante.
-            Ouvre Réglages Système > Confidentialité et sécurité > Accessibilité,
-            ajoute le binaire et coche-le.
-
-            Chemin attendu : ~/Applications/roadied.app
+            roadied: permission Accessibility manquante. Ouverture des Réglages…
+            En attente que la case soit cochée (timeout 60s).
 
             """.data(using: .utf8) ?? Data())
-            // SPEC-023 — alerte UX visible : notification macOS native cliquable
-            // via terminal-notifier (brew install terminal-notifier). Le -open URL
-            // ouvre direct les Réglages Système au clic. Fallback `open` si
-            // terminal-notifier absent.
-            // Anti-spam : 1 alerte toutes les 60s via marker file (sinon launchd
-            // KeepAlive déclenche un spam — daemon mort/relancé chaque seconde).
+            // Notification + ouverture Réglages (anti-spam 60s pour les
+            // notifications elles-mêmes — pas le wait-loop).
             let marker = "/tmp/roadied-tcc-notif.last"
             let now = Int(Date().timeIntervalSince1970)
             let last = (try? String(contentsOfFile: marker)).flatMap(Int.init) ?? 0
@@ -174,7 +172,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         "-sound", "Funk",
                     ]
                 } else {
-                    // Fallback : ouvre Réglages direct si pas de terminal-notifier.
                     p.launchPath = "/usr/bin/open"
                     p.arguments = [prefURL]
                 }
@@ -182,6 +179,25 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 p.waitUntilExit()
                 try? "\(now)".write(toFile: marker, atomically: true, encoding: .utf8)
             }
+            // Poll 30 × 2s = 60s max. Sort dès que la perm passe (TCC propage
+            // instantanément à AXIsProcessTrusted). Combiné avec
+            // ThrottleInterval=30 dans le plist launchd, ça empêche
+            // définitivement les bursts de prompts.
+            for i in 0..<30 {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if AXIsProcessTrusted() {
+                    FileHandle.standardError.write("roadied: permission Accessibility OK après \(i * 2)s d'attente.\n".data(using: .utf8) ?? Data())
+                    break
+                }
+            }
+        }
+        guard AXIsProcessTrusted() else {
+            FileHandle.standardError.write("""
+            roadied: permission Accessibility toujours manquante après 60s.
+            launchd va respawn dans 30s (ThrottleInterval). Coche la case
+            avant et ça repartira automatiquement.
+
+            """.data(using: .utf8) ?? Data())
             exit(2)
         }
 
@@ -382,8 +398,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             _ = self.layoutEngine.adaptToManualResize(wid, newFrame: finalFrame)
             self.applyLayout()
         }
-        mdh.onDragDrop = { [weak self] _ in
-            self?.onDragDrop()
+        mdh.onDragDrop = { [weak self] wid, wasFloatingBeforeDrag in
+            self?.onDragDrop(wid: wid, wasFloatingBeforeDrag: wasFloatingBeforeDrag)
         }
         mdh.start()
         self.mouseDragHandler = mdh
@@ -1490,7 +1506,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// PAS de filtre sur la position : une wid cachée par HideStrategy est offscreen
     /// (origin.x ≈ -100000), c'est précisément le cas qu'on veut suivre.
     func followFocusToStageAndDesktop(wid: WindowID) {
-        guard let state = registry.get(wid), state.isTileable else { return }
+        // SPEC-022 — check moins strict que isTileable : on veut suivre le focus
+        // même vers les wids "float" (iTerm drawer, etc.) tant que ce sont des
+        // windows utilisateur réelles. On exclut seulement les vrais helpers
+        // (subrole non-standard ou size < 100, popovers/tooltips/dialogs).
+        guard let state = registry.get(wid),
+              state.subrole == .standard,
+              !state.isHelperWindow,
+              !state.isMinimized else { return }
         // Anti-feedback : si on a déjà fait un follow récent (< 500ms), skip.
         // switchTo() rend la wid cible visible/focused, ce qui re-fire onFocusChanged
         // sur cette wid puis sur l'ancienne (effet ping-pong). Sans ce guard, on
@@ -1712,6 +1735,27 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Ignorer les fenêtres non-tilées (floating, modales).
         guard let state = registry.get(wid), state.isTileable else { return }
         dragTrackedWid = wid
+    }
+
+    /// Variante MouseDragHandler : la wid est connue (pas via dragTrackedWid),
+    /// et on doit en plus restaurer `isFloating=false` + réinsérer dans le tree
+    /// si la fenêtre était tilée avant le drag (cf. user feedback : un drag
+    /// manuel ne doit pas transformer une fenêtre tilée en floating permanent).
+    func onDragDrop(wid: WindowID, wasFloatingBeforeDrag: Bool) {
+        // Force le tracking pour réutiliser la logique cross-display existante.
+        dragTrackedWid = wid
+        onDragDrop()
+        // Re-tile si la wid n'était pas explicitement floatée par l'utilisateur.
+        // MouseDragHandler.handleMouseDragged a mis isFloating=true + removeFromTile
+        // au 1er drag delta — on défait ça maintenant que le drag est terminé.
+        guard !wasFloatingBeforeDrag else { return }
+        registry.update(wid) { $0.isFloating = false }
+        // Si la wid n'est plus dans aucun tree (cas same-display drag), réinsérer.
+        if layoutEngine.displayIDForWindow(wid) == nil {
+            layoutEngine.insertWindow(wid, focusedID: nil)
+            applyLayout()
+            logInfo("drag_retile", ["wid": String(wid)])
+        }
     }
 
     /// Appelé par DragWatcher au `leftMouseUp`. Si un wid a été trackée pendant le drag,

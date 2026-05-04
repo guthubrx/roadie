@@ -27,7 +27,10 @@ public final class MouseDragHandler {
     /// Callback appelé au mouseUp si la fenêtre a traversé un display. Le daemon
     /// branche ici sa logique SPEC-013 onDragDrop (réassignation arbre BSP +
     /// adoption desktop en mode per_display).
-    public var onDragDrop: ((WindowID) -> Void)?
+    /// Le `Bool` est `wasFloatingBeforeDrag` : si false, la wid était tilée avant
+    /// le drag (donc à re-tiler à mouse-up). Si true, l'utilisateur l'avait
+    /// explicitement passée en floating (toggle.floating) → laisser floating.
+    public var onDragDrop: ((WindowID, Bool) -> Void)?
 
     /// Callback : retire une fenêtre de l'arbre BSP au 1er drag-move (FR-012).
     public var removeFromTile: ((WindowID) -> Void)?
@@ -181,7 +184,8 @@ public final class MouseDragHandler {
             startFrame: state.frame,
             quadrant: quadrant,
             lastApply: .distantPast,
-            tileableAtStart: state.isTileable
+            tileableAtStart: state.isTileable,
+            wasFloatingBeforeDrag: state.isFloating
         )
         logInfo("mouse-drag-start", [
             "wid": String(wid),
@@ -253,7 +257,7 @@ public final class MouseDragHandler {
         }
         // Callbacks.
         if session.mode == .move {
-            onDragDrop?(session.wid)   // SPEC-013 cross-display
+            onDragDrop?(session.wid, session.wasFloatingBeforeDrag)   // SPEC-013 cross-display
         } else if session.mode == .resize, session.tileableAtStart,
                   let registry = registry,
                   let state = registry.get(session.wid) {
@@ -310,6 +314,10 @@ public struct MouseDragSession {
     public let quadrant: Quadrant
     public var lastApply: Date
     public var tileableAtStart: Bool
+    /// État `isFloating` avant le drag. Permet à mouse-up de distinguer une
+    /// fenêtre déjà float user-choice (laisser float) d'une fenêtre tilée
+    /// transitoirement floatée par le handler pour la session de drag (re-tiler).
+    public let wasFloatingBeforeDrag: Bool
 }
 
 // MARK: - Quadrant computation (FR-020)
