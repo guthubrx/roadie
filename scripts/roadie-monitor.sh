@@ -64,6 +64,10 @@ tiler_inserts_5m = 0  # tiler_insert (volume baseline pour ratio)
 # Crash-loop detection : count des "roadied ready" qui apparaissent dans la
 # fenêtre 5 min. > 1 = redémarrage anormal (crash-loop possible).
 roadied_starts_5m = 0
+# Layout policy compliance.
+tiler_policy_unrespected_5m = 0  # warn level, count
+tree_flatten_events_5m = 0       # warn level, count
+tree_depth_min_5m = None         # min observée parmi les tiler_insert (= worst case)
 
 # Parse log avec tolérance : skip lignes invalides JSON.
 parse_failures = 0
@@ -122,6 +126,19 @@ try:
             # Crash-loop : daemon redémarrages.
             if msg == "roadied ready":
                 roadied_starts_5m += 1
+            # Layout policy compliance.
+            if msg == "tiler_policy_unrespected":
+                tiler_policy_unrespected_5m += 1
+            if msg == "tree_flatten_event":
+                tree_flatten_events_5m += 1
+            if msg == "tiler_insert":
+                try:
+                    d = int(e.get("tree_depth_after", "-1"))
+                    if d >= 0:
+                        if tree_depth_min_5m is None or d < tree_depth_min_5m:
+                            tree_depth_min_5m = d
+                except Exception:
+                    pass
 except Exception as ex:
     print(json.dumps({"error": "log_parse_failed", "detail": str(ex)}))
     sys.exit(3)
@@ -151,6 +168,9 @@ metrics = {
     "tiler_invariant_violations_5m": tiler_invariant_violations_5m,
     "tiler_inserts_5m": tiler_inserts_5m,
     "roadied_starts_5m": roadied_starts_5m,
+    "tiler_policy_unrespected_5m": tiler_policy_unrespected_5m,
+    "tree_flatten_events_5m": tree_flatten_events_5m,
+    "tree_depth_min_5m": tree_depth_min_5m if tree_depth_min_5m is not None else -1,
 }
 
 # --- Baseline depuis history -------------------------------------------------
@@ -180,7 +200,8 @@ anti_flap_ok = False
 # skill-runs.jsonl — ici on simplifie en prenant tous les derniers 6 ticks).
 NUMERIC_AXES = ["errors_5m", "warns_5m_filtered", "drifts_5m", "applyall_p95_5m_ms",
                 "gestures_no_op_5m", "rail_panel_missing_5m",
-                "tiler_invariant_violations_5m", "roadied_starts_5m"]
+                "tiler_invariant_violations_5m", "roadied_starts_5m",
+                "tiler_policy_unrespected_5m", "tree_flatten_events_5m"]
 
 if len(hist) >= 6:
     last6 = hist[-6:]
@@ -209,6 +230,10 @@ if len(hist) >= 6:
             thr = max(thr, 1)  # tout violation = signal direct
         elif axisName == "roadied_starts_5m":
             thr = max(thr, 1)  # 1 boot/5min = OK ; >1 = crash-loop suspect
+        elif axisName == "tiler_policy_unrespected_5m":
+            thr = max(thr, 1)  # tout tree plat avec >2 leaves = signal direct
+        elif axisName == "tree_flatten_events_5m":
+            thr = max(thr, 1)  # toute diminution de profondeur entre 2 inserts = bug
         baseline[axisName] = {"median": round(med, 2), "mad": round(mad, 2),
                               "threshold": round(thr, 2)}
         threshold[axisName] = thr
