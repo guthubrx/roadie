@@ -338,6 +338,13 @@ public struct TilingConfig: Codable, Sendable {
     public var gapsOuterRight: Int?
     public var gapsInner: Int
     public var masterRatio: Double
+    /// SPEC-025 amend — politique de split BSP.
+    /// "largest_dim" (default) : split sur le côté le plus long de la cible
+    ///   → fenêtres ≈ carrées, mais peut produire 3+ colonnes étirées en cas
+    ///     d'insertions successives sur une cible large.
+    /// "dwindle" : split orthogonal au parent (alterne H/V à chaque profondeur)
+    ///   → layouts plus équilibrés, comportement i3/sway classique.
+    public var splitPolicy: String
 
     /// Marges externes effectives (avec fallback sur gapsOuter pour les côtés non spécifiés).
     public var effectiveOuterGaps: OuterGaps {
@@ -354,7 +361,8 @@ public struct TilingConfig: Codable, Sendable {
                 gapsOuterLeft: Int? = nil,
                 gapsOuterRight: Int? = nil,
                 gapsInner: Int = 4,
-                masterRatio: Double = 0.6) {
+                masterRatio: Double = 0.6,
+                splitPolicy: String = "largest_dim") {
         self.defaultStrategy = defaultStrategy
         self.gapsOuter = gapsOuter
         self.gapsOuterTop = gapsOuterTop
@@ -363,6 +371,7 @@ public struct TilingConfig: Codable, Sendable {
         self.gapsOuterRight = gapsOuterRight
         self.gapsInner = gapsInner
         self.masterRatio = masterRatio
+        self.splitPolicy = splitPolicy
     }
 
     enum CodingKeys: String, CodingKey {
@@ -374,6 +383,23 @@ public struct TilingConfig: Codable, Sendable {
         case gapsOuterRight = "gaps_outer_right"
         case gapsInner = "gaps_inner"
         case masterRatio = "master_ratio"
+        case splitPolicy = "split_policy"
+    }
+
+    /// Decode tolérant : tous les champs sont optionnels et ont un default.
+    /// Permet d'ajouter de nouvelles clés (ex: split_policy) sans casser les
+    /// configs TOML existantes des utilisateurs.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.defaultStrategy = try c.decodeIfPresent(TilerStrategy.self, forKey: .defaultStrategy) ?? .bsp
+        self.gapsOuter = try c.decodeIfPresent(Int.self, forKey: .gapsOuter) ?? 8
+        self.gapsOuterTop = try c.decodeIfPresent(Int.self, forKey: .gapsOuterTop)
+        self.gapsOuterBottom = try c.decodeIfPresent(Int.self, forKey: .gapsOuterBottom)
+        self.gapsOuterLeft = try c.decodeIfPresent(Int.self, forKey: .gapsOuterLeft)
+        self.gapsOuterRight = try c.decodeIfPresent(Int.self, forKey: .gapsOuterRight)
+        self.gapsInner = try c.decodeIfPresent(Int.self, forKey: .gapsInner) ?? 4
+        self.masterRatio = try c.decodeIfPresent(Double.self, forKey: .masterRatio) ?? 0.6
+        self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
     }
 }
 
