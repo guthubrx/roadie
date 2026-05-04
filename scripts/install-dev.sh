@@ -138,13 +138,17 @@ fi
 
 echo "==> restart daemon via launchd (rail intégré, plus de second process)"
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.roadie.roadie.plist"
-sleep 3
+sleep 4
 
 echo
 echo "==> status"
 launchctl list | grep roadie || true
 pgrep -lf roadied | head -1 || true
+
+# Diagnostic TCC post-deploy. Si le hash binaire a changé depuis le dernier
+# toggle TCC, le script alerte et explique quoi faire. Non-bloquant.
 echo
-echo "Done. Si la 1ere fois apres creation du cert, donne la perm Accessibility a :"
-echo "    $APP_BIN"
-echo "via Reglages Systeme > Confidentialite et securite > Accessibilite."
+"$REPO_ROOT/scripts/recheck-tcc.sh" || true
+
+echo
+echo "Done."
