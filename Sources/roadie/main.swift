@@ -590,8 +590,8 @@ func printUsage() {
       roadie window stick [true|false]           # SPEC-010 sticky (visible sur tous desktops)
       roadie window unstick                      # alias de stick false
       roadie window pin | unpin                  # SPEC-010 always-on-top
-      roadie rail status                         # SPEC-014 état du binaire roadie-rail
-      roadie rail toggle                         # SPEC-014 démarre/arrête le rail
+      roadie rail status                         # état du rail (intégré au daemon)
+      roadie rail toggle                         # no-op (config via [fx.rail].enabled)
     """
     FileHandle.standardError.write((usage + "\n").data(using: .utf8) ?? Data())
 }

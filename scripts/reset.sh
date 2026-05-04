@@ -125,22 +125,14 @@ else
 fi
 
 # ============================================================================
-# Étape 3 : stop daemon + rail (sinon ils réécrivent la config)
+# Étape 3 : stop l'app (sinon elle réécrit la config). Cleanup résidu V1
+# (binaire roadie-rail séparé) si présent — idempotent.
 # ============================================================================
-_log "Arrêt du rail + daemon"
-RAIL_WAS_RUNNING=0
+_log "Arrêt de roadied"
 DAEMON_WAS_RUNNING=0
 
-if pgrep -f "roadie-rail" >/dev/null 2>&1; then
-    RAIL_WAS_RUNNING=1
-    pkill -f "roadie-rail" || true
-    for _ in 1 2 3 4 5; do
-        pgrep -f "roadie-rail" >/dev/null 2>&1 || break
-        sleep 0.2
-    done
-    pkill -9 -f "roadie-rail" 2>/dev/null || true
-    _ok "rail stoppé"
-fi
+# Cleanup résidu V1 (silencieux si absent).
+pkill -f "roadie-rail" 2>/dev/null || true
 
 if pgrep -f "roadied --daemon" >/dev/null 2>&1; then
     DAEMON_WAS_RUNNING=1
@@ -150,7 +142,7 @@ if pgrep -f "roadied --daemon" >/dev/null 2>&1; then
         sleep 0.3
     done
     pkill -9 -f "roadied --daemon" 2>/dev/null || true
-    _ok "daemon stoppé"
+    _ok "roadied stoppé"
 fi
 
 # ============================================================================
@@ -204,22 +196,6 @@ elif [ "$DAEMON_WAS_RUNNING" -eq 1 ]; then
         else
             _err "daemon a quitté immédiatement, voir $LOG"
             tail -10 "$LOG" >&2 || true
-        fi
-    fi
-
-    # Restart rail si on l'avait stoppé
-    if [ "$RAIL_WAS_RUNNING" -eq 1 ]; then
-        RAIL_BIN="$HOME/.local/bin/roadie-rail"
-        RAIL_LOG="/tmp/roadie-rail.log"
-        if [ -x "$RAIL_BIN" ]; then
-            _log "Restart rail"
-            nohup "$RAIL_BIN" > "$RAIL_LOG" 2>&1 &
-            RAIL_PID=$!
-            disown "$RAIL_PID" 2>/dev/null || true
-            sleep 0.3
-            kill -0 "$RAIL_PID" 2>/dev/null && _ok "rail relancé, PID=$RAIL_PID"
-        else
-            _warn "rail binaire introuvable ($RAIL_BIN)"
         fi
     fi
 else

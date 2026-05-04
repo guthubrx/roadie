@@ -321,7 +321,7 @@ public final class RailController {
     public func start() {
         config = RailConfig.load()
         guard config.enabled else {
-            logErr("roadie-rail: disabled via config (fx.rail.enabled = false)")
+            logErr("rail: disabled via config (fx.rail.enabled = false)")
             return
         }
         edgeMonitor.edgeWidth = config.edgeWidth

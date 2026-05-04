@@ -115,8 +115,7 @@ enum CommandRouter {
         case "rail.renderer.list":
             // SPEC-019 — liste des renderers connus côté daemon (manifest hardcoded,
             // miroir de Sources/RoadieRail/Renderers/Bootstrap.swift) + le `current`
-            // lu depuis le TOML utilisateur. La liste réelle des renderers compilés
-            // dans le binaire roadie-rail est connaissance partagée constante.
+            // lu depuis le TOML utilisateur.
             let knownRenderers: [(id: String, displayName: String)] = [
                 ("stacked-previews", "Stacked previews"),
                 ("icons-only",       "Icons only"),
@@ -875,10 +874,10 @@ enum CommandRouter {
             ])
 
         case "rail.status":
-            return handleRailStatus()
+            return handleRailStatus(daemon: daemon)
 
         case "rail.toggle":
-            return handleRailToggle()
+            return handleRailToggle(daemon: daemon)
 
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")
@@ -1710,97 +1709,28 @@ enum CommandRouter {
         ])
     }
 
-    /// Lit `~/.roadies/rail.pid` et vérifie si le processus est vivant.
-    private static func handleRailStatus() -> Response {
-        let pidPath = (NSString(string: "~/.roadies/rail.pid").expandingTildeInPath as String)
-        guard let data = FileManager.default.contents(atPath: pidPath),
-              let pidStr = String(data: data, encoding: .utf8)?
-                  .trimmingCharacters(in: .whitespacesAndNewlines),
-              let pid = Int32(pidStr) else {
-            return .success(["running": AnyCodable(false), "pid": AnyCodable("null"),
-                              "panels_open": AnyCodable(0), "stages_displayed": AnyCodable(0)])
-        }
-        // kill(pid, 0) : retourne 0 si le processus existe, -1 sinon.
-        guard Darwin.kill(pid, 0) == 0 else {
-            return .success(["running": AnyCodable(false), "pid": AnyCodable("null"),
-                              "panels_open": AnyCodable(0), "stages_displayed": AnyCodable(0)])
-        }
-        let ctimeISO = fileCreationISO(pidPath)
+    /// Le rail vit dans le même process que le daemon (SPEC-024). `running`
+    /// reflète directement la présence d'un RailController instancié sur Daemon.
+    private static func handleRailStatus(daemon: Daemon) -> Response {
+        let isRunning = daemon.railController != nil
         return .success([
-            "running": AnyCodable(true),
-            "pid": AnyCodable(Int(pid)),
-            "since": AnyCodable(ctimeISO),
-            "panels_open": AnyCodable(0),
-            "screens_visible": AnyCodable([String]()),
-            "current_desktop_id": AnyCodable(0),
-            "stages_displayed": AnyCodable(0),
+            "running": AnyCodable(isRunning),
+            "inprocess": AnyCodable(true),
+            "pid": AnyCodable(Int(ProcessInfo.processInfo.processIdentifier)),
         ])
     }
 
-    /// Toggle rail : si tourne → SIGTERM ; sinon → résout le binaire dans plusieurs paths.
-    /// Ordre de recherche : PATH (which) → ~/.local/bin → /usr/local/bin → /opt/homebrew/bin.
-    /// Permet d'éviter à l'utilisateur de configurer manuellement un path précis.
-    private static func handleRailToggle() -> Response {
-        let pidPath = (NSString(string: "~/.roadies/rail.pid").expandingTildeInPath as String)
-        if let data = FileManager.default.contents(atPath: pidPath),
-           let pidStr = String(data: data, encoding: .utf8)?
-               .trimmingCharacters(in: .whitespacesAndNewlines),
-           let pid = Int32(pidStr), Darwin.kill(pid, 0) == 0 {
-            Darwin.kill(pid, SIGTERM)
-            logInfo("rail.toggle: sent SIGTERM", ["pid": String(pid)])
-            return .success(["action": AnyCodable("stopped"), "killed_pid": AnyCodable(Int(pid))])
-        }
-        guard let railBin = locateRailBinary() else {
-            return .error(.invalidArgument,
-                          "roadie-rail binary not found in PATH, ~/.local/bin, /usr/local/bin, or /opt/homebrew/bin. Run `make install-rail` from the roadies repo.")
-        }
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: railBin)
-        proc.arguments = []
-        proc.qualityOfService = .background
-        do {
-            try proc.run()
-        } catch {
-            return .error(.internalError, "failed to spawn roadie-rail: \(error)")
-        }
-        let spawnedPID = Int(proc.processIdentifier)
-        logInfo("rail.toggle: spawned roadie-rail",
-                ["pid": String(spawnedPID), "path": railBin])
+    /// Toggle rail in-process. Pas d'état persistant à toggler — le rail est
+    /// toujours instancié au boot du daemon (cf. RailIntegration.start()).
+    /// Conservé pour compat CLI ascendante : retourne le statut courant sans
+    /// muter (l'utilisateur ne peut pas désactiver le rail à la volée en V2,
+    /// il faut éditer `[fx.rail].enabled = false` dans roadies.toml).
+    private static func handleRailToggle(daemon: Daemon) -> Response {
         return .success([
-            "action": AnyCodable("started"),
-            "pid": AnyCodable(spawnedPID),
-            "path": AnyCodable(railBin),
+            "action": AnyCodable("noop_inprocess"),
+            "running": AnyCodable(daemon.railController != nil),
+            "hint": AnyCodable("Le rail est intégré au daemon depuis SPEC-024. Désactivation via [fx.rail].enabled = false dans roadies.toml."),
         ])
-    }
-
-    /// Cherche `roadie-rail` dans les chemins standards (ordre par priorité).
-    private static func locateRailBinary() -> String? {
-        let fm = FileManager.default
-        let home = NSString(string: "~").expandingTildeInPath
-        // 1. PATH via /usr/bin/which (n'introduit pas de dépendance Swift).
-        let which = Process()
-        which.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        which.arguments = ["roadie-rail"]
-        let pipe = Pipe()
-        which.standardOutput = pipe
-        which.standardError = Pipe()
-        if (try? which.run()) != nil {
-            which.waitUntilExit()
-            if which.terminationStatus == 0,
-               let data = try? pipe.fileHandleForReading.readToEnd(),
-               let s = String(data: data, encoding: .utf8)?
-                   .trimmingCharacters(in: .whitespacesAndNewlines),
-               !s.isEmpty, fm.isExecutableFile(atPath: s) {
-                return s
-            }
-        }
-        // 2. Chemins standards.
-        let candidates = [
-            "\(home)/.local/bin/roadie-rail",
-            "/usr/local/bin/roadie-rail",
-            "/opt/homebrew/bin/roadie-rail",
-        ]
-        return candidates.first { fm.isExecutableFile(atPath: $0) }
     }
 
     // MARK: - SPEC-014 utilities
