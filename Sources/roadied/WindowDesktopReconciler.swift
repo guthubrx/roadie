@@ -101,6 +101,26 @@ public final class WindowDesktopReconciler {
             return await dReg.displays
         }()
 
+        // SPEC-025 BUG-002 amendement — `Display.frame` est en NS coords (origin
+        // bas-gauche, primary à origine zéro), tandis que `WindowState.frame`
+        // est en AX coords (origin haut-gauche primary). Mélanger les deux dans
+        // un `display.frame.contains(state.frame.midX/midY)` produit des "false
+        // offscreen" pour les fenêtres au-dessus du primary (LG en AX = Y<0,
+        // mais en NS Y>primaryHeight). Pré-calculer ici les AX rects une fois.
+        let primaryHeight = NSScreen.screens
+            .first(where: { $0.frame.origin == .zero })?.frame.height
+            ?? NSScreen.main?.frame.height
+            ?? NSScreen.screens.first?.frame.height
+            ?? 0
+        let axRectByDisplayUUID: [String: CGRect] = Dictionary(
+            uniqueKeysWithValues: displays.map { d in
+                let axY = primaryHeight - d.frame.origin.y - d.frame.height
+                return (d.uuid, CGRect(x: d.frame.origin.x, y: axY,
+                                        width: d.frame.width,
+                                        height: d.frame.height))
+            }
+        )
+
         // CHECK 1 — frame degenerate (height ou width < 100).
         let minDim = WindowState.minimumUsefulDimension
         for state in windows {
@@ -124,20 +144,44 @@ public final class WindowDesktopReconciler {
         // Pour chaque wid, son scope dit (display, desktop, stage). Si stage
         // est l'active du (display, desktop), la wid devrait être visible sur
         // ce display. Si frame est offscreen → drift, re-trigger applyAll.
+        //
+        // SPEC-025 BUG-002 amendement — avant de re-tiler, re-check
+        // `AXFullScreen`. Une wid peut être passée en native fullscreen depuis
+        // son register (ex: cmd-control-F dans Firefox/iTerm) et atterrir sur
+        // un Space dédié, ce qui la fait apparaître "offscreen" en NS coords
+        // mais elle est en fait correctement positionnée par macOS. Sans cette
+        // re-check, le reconciler boucle indéfiniment en tentant de re-tiler
+        // une fenêtre qui n'est plus tileable.
         var displayNeedsRetile = Set<CGDirectDisplayID>()
+        var fullscreenSyncedCount = 0
         for state in windows {
             guard state.isTileable, !state.isMinimized else { continue }
             guard let scope = stageManager.scopeOf(wid: state.cgWindowID) else { continue }
-            // Stage active de ce scope ?
             let key = DesktopKey(displayUUID: scope.displayUUID, desktopID: scope.desktopID)
             guard let activeStage = stageManager.activeStageByDesktop[key],
                   activeStage == scope.stageID else { continue }
-            // Display match ?
             guard let display = displays.first(where: { $0.uuid == scope.displayUUID }) else { continue }
-            // La frame est-elle dans la zone visible de ce display ?
             let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
-            let onTargetDisplay = display.frame.contains(center)
+            let axRect = axRectByDisplayUUID[display.uuid] ?? display.frame
+            let onTargetDisplay = axRect.contains(center)
             if !onTargetDisplay {
+                // Re-check AX fullscreen : la wid est-elle passée en native FS
+                // depuis son register ? Si oui, sync le state pour qu'isTileable
+                // devienne false → la wid sortira du tree au prochain applyAll.
+                if let axEl = registry.axElement(for: state.cgWindowID),
+                   AXReader.isFullscreen(axEl) {
+                    if autoFix {
+                        registry.update(state.cgWindowID) { $0.isFullscreen = true }
+                        layoutEngine?.removeWindow(state.cgWindowID)
+                        fullscreenSyncedCount += 1
+                        logInfo("integrity_drift_fullscreen_synced", [
+                            "wid": String(state.cgWindowID),
+                            "scope": "\(scope.displayUUID):\(scope.desktopID):\(scope.stageID.value)",
+                            "frame_center": "\(Int(center.x)),\(Int(center.y))",
+                        ])
+                    }
+                    continue
+                }
                 report.offscreenWithActiveScope += 1
                 displayNeedsRetile.insert(display.id)
                 logInfo("integrity_drift_offscreen_active", [
@@ -148,6 +192,9 @@ public final class WindowDesktopReconciler {
             }
         }
         if autoFix && !displayNeedsRetile.isEmpty {
+            applyLayoutCallback?()
+        }
+        if fullscreenSyncedCount > 0 && autoFix {
             applyLayoutCallback?()
         }
 
@@ -190,8 +237,10 @@ public final class WindowDesktopReconciler {
                 guard state.isTileable, !state.isMinimized else { continue }
                 guard let scope = stageManager.scopeOf(wid: state.cgWindowID) else { continue }
                 let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
-                // Display physique : celui qui contient le centre de la frame.
-                guard let physicalDisplay = displays.first(where: { $0.frame.contains(center) }) else {
+                // Display physique : celui dont l'AX rect contient le centre.
+                guard let physicalDisplay = displays.first(where: {
+                    (axRectByDisplayUUID[$0.uuid] ?? $0.frame).contains(center)
+                }) else {
                     continue  // frame offscreen : déjà géré par CHECK 2
                 }
                 guard physicalDisplay.uuid != scope.displayUUID else { continue }

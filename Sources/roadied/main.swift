@@ -346,16 +346,24 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
            let sm = stageManager {
             let stagesDir = (NSString(string: "~/.config/roadies/stages")
                 .expandingTildeInPath as String)
-            // SPEC-022 T065 : warn si active.toml global est encore présent (deprecated
-            // depuis le passage à activeStageByDesktop per-(display, desktop)). Pas de
-            // suppression auto — l'utilisateur peut nettoyer manuellement à sa guise.
+            // SPEC-025 BUG-002 amendement — active.toml global est un artefact legacy
+            // (avant SPEC-022 et le passage à activeStageByDesktop per-(display,desktop))
+            // strictement ignoré en mode per_display. Auto-cleanup : supprimer
+            // silencieusement pour ne plus warner à chaque boot.
             let deprecatedActivePath = "\(stagesDir)/active.toml"
             if FileManager.default.fileExists(atPath: deprecatedActivePath) {
-                logWarn("deprecated_active_toml_present", [
-                    "path": deprecatedActivePath,
-                    "spec": "022",
-                    "hint": "active.toml global est ignoré en mode per_display ; safe à supprimer.",
-                ])
+                do {
+                    try FileManager.default.removeItem(atPath: deprecatedActivePath)
+                    logInfo("deprecated_active_toml_cleaned", [
+                        "path": deprecatedActivePath,
+                        "spec": "022",
+                    ])
+                } catch {
+                    logWarn("deprecated_active_toml_cleanup_failed", [
+                        "path": deprecatedActivePath,
+                        "error": "\(error)",
+                    ])
+                }
             }
             let earlyPV2 = NestedStagePersistence(stagesDir: stagesDir)
             sm.setMode(.perDisplay, persistence: earlyPV2)
