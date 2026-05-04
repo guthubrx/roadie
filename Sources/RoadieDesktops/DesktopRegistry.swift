@@ -65,10 +65,26 @@ public actor DesktopRegistry {
                     let desktop = try parseDesktop(from: toml)
                     desktops[id] = desktop
                 } catch {
-                    // FR-013 : corruption → log + état vierge
+                    // FR-013 : corruption → archive le fichier corrompu pour
+                    // post-mortem puis état vierge. Sans archivage, le warning
+                    // ré-apparaît à chaque boot car le blank en mémoire n'est
+                    // persisté que sur la prochaine mutation. Avec archivage +
+                    // save synchrone du blank, le boot suivant trouve un fichier
+                    // valide → silence.
+                    let corruptPath = url.path + ".corrupt-"
+                        + String(Int(Date().timeIntervalSince1970))
+                    try? fm.moveItem(atPath: url.path, toPath: corruptPath)
                     logWarn("desktop state corrupted, using blank",
-                            ["id": String(id), "error": "\(error)"])
-                    desktops[id] = .blank(id: id)
+                            ["id": String(id), "error": "\(error)",
+                             "archived_to": corruptPath])
+                    let blank = RoadieDesktop.blank(id: id)
+                    desktops[id] = blank
+                    do {
+                        try save(blank)
+                    } catch {
+                        logWarn("desktop blank save failed",
+                                ["id": String(id), "error": "\(error)"])
+                    }
                 }
             } else {
                 desktops[id] = .blank(id: id)
