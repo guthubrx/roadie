@@ -590,8 +590,26 @@ public final class LayoutEngine {
             for (wid, frame) in frames {
                 guard let element = registry.axElement(for: wid) else { continue }
                 let innerFrame = frame.insetBy(dx: innerInset, dy: innerInset)
+                // SPEC-025 amend — log debug du diff applied. Niveau debug pour
+                // ne pas polluer info en prod (un applyAll = N setBounds). Active
+                // via [daemon].log_level = "debug" pour analyse post-mortem.
+                let prevFrame = registry.get(wid)?.frame
                 AXReader.setBounds(element, frame: innerFrame)
                 registry.updateFrame(wid, frame: innerFrame)
+                if let prev = prevFrame {
+                    let dx = abs(prev.origin.x - innerFrame.origin.x)
+                    let dy = abs(prev.origin.y - innerFrame.origin.y)
+                    let dw = abs(prev.width - innerFrame.width)
+                    let dh = abs(prev.height - innerFrame.height)
+                    if dx + dy + dw + dh > 1 {
+                        logDebug("applyall_setbounds", [
+                            "wid": String(wid),
+                            "display": String(display.id),
+                            "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y)) \(Int(prev.width))x\(Int(prev.height))",
+                            "to": "\(Int(innerFrame.origin.x)),\(Int(innerFrame.origin.y)) \(Int(innerFrame.width))x\(Int(innerFrame.height))",
+                        ])
+                    }
+                }
             }
         }
     }
