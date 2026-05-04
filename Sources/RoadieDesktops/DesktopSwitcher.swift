@@ -65,28 +65,44 @@ public actor DesktopSwitcher {
     public func `switch`(to id: Int) async throws {
         // FR-023 : validation range
         guard (1...config.count).contains(id) else {
+            logWarn("desktop_switch_rejected", [
+                "to": String(id), "reason": "out_of_range",
+                "count": String(config.count),
+            ])
             throw DesktopError.unknownDesktop(id)
         }
 
         let currentID = await registry.currentID
+        logInfo("desktop_switch_requested", [
+            "from": String(currentID), "to": String(id),
+            "in_flight": String(inFlight),
+        ])
 
         // FR-006 : idempotence + back-and-forth
         if id == currentID {
             if config.backAndForth, let recent = await registry.recentID {
-                // Back-and-forth : basculer vers recentID
+                logInfo("desktop_switch_back_and_forth", [
+                    "current": String(currentID), "recent": String(recent),
+                ])
                 try await performSwitch(to: recent)
+            } else {
+                logInfo("desktop_switch_noop_same_id",
+                        ["id": String(id), "back_and_forth": String(config.backAndForth)])
             }
-            // back_and_forth=false ou pas de recent → no-op sans event
             return
         }
 
         // FR-025 / R-003 : sérialisation — si bascule en cours, mémoriser la dernière demande
         if inFlight {
+            logInfo("desktop_switch_pending",
+                    ["from": String(currentID), "to": String(id)])
             pendingTarget = id
             return
         }
 
         try await performSwitch(to: id)
+        logInfo("desktop_switch_completed",
+                ["from": String(currentID), "to": String(id)])
     }
 
     /// Bascule vers `recentID` (FR-007).
