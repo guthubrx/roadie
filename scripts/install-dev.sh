@@ -20,9 +20,12 @@ CERT="${ROADIE_CERT:-roadied-cert}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_BUNDLE="$HOME/Applications/roadied.app"
 APP_BIN="$APP_BUNDLE/Contents/MacOS/roadied"
-# SPEC-023 — roadie-rail dans son propre .app bundle pour pouvoir l'ajouter
-# au panneau Réglages > Confidentialité > Enregistrement écran (Sequoia/Tahoe
-# refuse les binaires CLI nus dans le panneau TCC).
+# roadie-rail dans un .app bundle pour héritage SPEC-014. Le rail n'a en
+# pratique besoin d'AUCUNE grant TCC (pas d'API Accessibility, pas de
+# CGWindowList*, pas de NSEvent global monitor — il polle NSEvent.mouseLocation
+# en lecture pure et consomme les thumbnails via IPC depuis roadied). Le bundle
+# reste pour ne pas casser une install V1 existante. SPEC-024 supprime ce
+# bundle entièrement.
 RAIL_BUNDLE="$HOME/Applications/roadie-rail.app"
 RAIL_BIN_REAL="$RAIL_BUNDLE/Contents/MacOS/roadie-rail"
 RAIL_BIN="$HOME/.local/bin/roadie-rail"
@@ -91,7 +94,7 @@ sleep 1
 echo "==> install binaries"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$RAIL_BUNDLE/Contents/MacOS" "$HOME/.local/bin"
 cp "$BUILD_DIR/roadied"     "$APP_BIN"
-cp "$BUILD_DIR/roadie-rail" "$RAIL_BIN_REAL"  # bundle .app pour TCC Screen Recording
+cp "$BUILD_DIR/roadie-rail" "$RAIL_BIN_REAL"  # bundle .app héritage V1 (sera supprimé par SPEC-024)
 # Symlink ~/.local/bin/roadie-rail → bundle pour CLI/scripts qui appellent par path court.
 ln -sf "$RAIL_BIN_REAL" "$RAIL_BIN"
 cp "$BUILD_DIR/roadie"      "$CLI_BIN"
