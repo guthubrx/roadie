@@ -1188,8 +1188,10 @@ enum CommandRouter {
             return .error(.internalError, "desktop subsystem not initialized")
         }
         let previousID = await registry.currentID
+        let inhabited = inhabitedDesktopIDs(daemon: daemon, restrictToDisplayUUID: nil)
         guard let targetID = await resolveSelector(
-            selector, registry: registry, count: daemon.config.desktops.count) else {
+            selector, registry: registry, count: daemon.config.desktops.count,
+            inhabited: inhabited) else {
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
         let wasNoop = targetID == previousID && !daemon.config.desktops.backAndForth
@@ -1298,8 +1300,20 @@ enum CommandRouter {
             }
         }
         let previousID = await registry.currentID(for: targetDisplayID)
+        // SPEC-025 amend : pour la nav relative prev/next sur un display, ne
+        // considérer que les desktops habités SUR CE DISPLAY. Sinon on
+        // wraperait vers des desktops vides ou habités d'un autre display.
+        let targetUUID: String? = await {
+            guard let displays = await daemon.displayRegistry?.displays,
+                  let dst = displays.first(where: { $0.id == targetDisplayID })
+            else { return nil }
+            return dst.uuid.isEmpty ? nil : dst.uuid
+        }()
+        let inhabited = inhabitedDesktopIDs(daemon: daemon,
+                                             restrictToDisplayUUID: targetUUID)
         guard let targetID = await resolveSelector(
-            selector, registry: registry, count: daemon.config.desktops.count) else {
+            selector, registry: registry, count: daemon.config.desktops.count,
+            inhabited: inhabited) else {
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
         // Same desktop + back-and-forth → bascule vers recent **du display ciblé**
@@ -1871,6 +1885,24 @@ enum CommandRouter {
         let attrs = try? FileManager.default.attributesOfItem(atPath: path)
         let date = attrs?[.creationDate] as? Date ?? Date()
         return iso8601String(date)
+    }
+
+    /// SPEC-025 amend — Set des desktop IDs habités (≥ 1 fenêtre dans une stage).
+    /// Si `restrictToDisplayUUID` fourni, ne compte que les stages sur ce display.
+    /// Utilisé par la nav `prev`/`next` pour skip les desktops vides (cohérent
+    /// avec i3, Hyprland, AeroSpace).
+    private static func inhabitedDesktopIDs(daemon: Daemon,
+                                             restrictToDisplayUUID: String?) -> Set<Int> {
+        guard let sm = daemon.stageManager else { return [] }
+        var ids: Set<Int> = []
+        for (scope, stage) in sm.stagesV2 {
+            guard !stage.memberWindows.isEmpty else { continue }
+            if let uuid = restrictToDisplayUUID, scope.displayUUID != uuid { continue }
+            ids.insert(scope.desktopID)
+        }
+        // Toujours inclure le current : si l'utilisateur est sur un desktop
+        // vide volontairement, on garde un point d'ancrage.
+        return ids
     }
 
     /// SPEC-019 — lecture de la clé `[fx.rail].renderer` depuis le TOML utilisateur.
