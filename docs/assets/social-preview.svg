@@ -55,6 +55,5 @@
     <text x="0" y="0" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', sans-serif" font-size="120" font-weight="700" letter-spacing="-3">roadie</text>
     <text x="0" y="60" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="32" font-weight="400" fill="#7AA2F7">tiling window manager for macOS</text>
     <text x="0" y="130" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="22" font-weight="400" fill="#A8B2C7">BSP tiling · Stage Manager · virtual desktops · multi-display</text>
-    <text x="0" y="170" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="22" font-weight="400" fill="#A8B2C7">no SkyLight write · no SIP off · no scripting addition</text>
   </g>
 </svg>
