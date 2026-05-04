@@ -101,6 +101,7 @@ enum CommandRouter {
                     "degenerate_frames": AnyCodable(report.degenerateFrames),
                     "offscreen_with_active_scope": AnyCodable(report.offscreenWithActiveScope),
                     "tree_leaf_wrong_display": AnyCodable(report.treeLeafWrongDisplay),
+                    "member_on_wrong_display": AnyCodable(report.memberOnWrongDisplay),
                     "fixed_count": AnyCodable(fix ? report.fixedCount : 0),
                 ]
             }
@@ -265,7 +266,58 @@ enum CommandRouter {
             guard let wid = daemon.registry.focusedWindowID else {
                 return .error(.windowNotFound, "no focused window")
             }
+            // SPEC-025 BUG-002 fix : capter le display ID avant le warp pour
+            // détecter les warps cross-display (warp_cross_display_edge).
+            // LayoutEngine.warp ne met à jour QUE le tree. Sans ce sync, le
+            // stageManager.memberWindows et le desktopRegistry restent désync
+            // → au prochain restart la wid est ré-assignée à la stage du
+            // SOURCE display (drift physique vs logique).
+            let srcDisplayID = daemon.layoutEngine.displayIDForWindow(wid)
             let warped = daemon.layoutEngine.warp(wid, direction: direction)
+            // Détecter cross-display : displayID a changé après le warp.
+            let dstDisplayID = daemon.layoutEngine.displayIDForWindow(wid)
+            if warped, let src = srcDisplayID, let dst = dstDisplayID, src != dst,
+               let dRegistry = daemon.desktopRegistry,
+               let dispReg = daemon.displayRegistry {
+                let displays = await dispReg.displays
+                if let dstDisplay = displays.first(where: { $0.id == dst }) {
+                    let mode = await dRegistry.mode
+                    let targetDeskID: Int = (mode == .perDisplay)
+                        ? await dRegistry.currentID(for: dst)
+                        : await dRegistry.currentID
+                    daemon.registry.update(wid) { $0.desktopID = targetDeskID }
+                    try? await dRegistry.updateWindowDisplayUUID(
+                        cgwid: UInt32(wid),
+                        desktopID: targetDeskID,
+                        displayUUID: dstDisplay.uuid)
+                    if let sm = daemon.stageManager, sm.stageMode == .perDisplay {
+                        let activeStage = sm.activeStageByDesktop[
+                            DesktopKey(displayUUID: dstDisplay.uuid, desktopID: targetDeskID)]
+                            ?? StageID("1")
+                        let targetScope = StageScope(displayUUID: dstDisplay.uuid,
+                                                      desktopID: targetDeskID,
+                                                      stageID: activeStage)
+                        if sm.stagesV2[targetScope] == nil {
+                            _ = sm.createStage(id: activeStage,
+                                                displayName: activeStage.value,
+                                                scope: targetScope)
+                        }
+                        sm.assign(wid: wid, to: targetScope)
+                        EventBus.shared.publish(DesktopEvent(
+                            name: "window_assigned",
+                            payload: ["wid": String(wid),
+                                      "stage_id": activeStage.value,
+                                      "display_uuid": dstDisplay.uuid,
+                                      "desktop_id": String(targetDeskID)]))
+                        logInfo("warp_cross_display_synced", [
+                            "wid": String(wid),
+                            "from_display": String(src),
+                            "to_display": String(dst),
+                            "stage_id": activeStage.value,
+                        ])
+                    }
+                }
+            }
             daemon.applyLayout()
             return .success(["warped": AnyCodable(warped)])
 

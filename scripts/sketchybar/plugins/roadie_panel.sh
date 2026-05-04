@@ -196,4 +196,9 @@ if [ "$OVERFLOW" -gt 0 ]; then
     track_item roadie.overflow
 fi
 
+# SPEC-023 — log avec rotation : tronque si > 1 MB pour éviter croissance
+# infinie sur sessions longues (audit-fix-F1).
+if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG" 2>/dev/null || echo 0)" -gt 1048576 ]; then
+    tail -c 524288 "$LOG" > "${LOG}.tmp" && mv "${LOG}.tmp" "$LOG"
+fi
 echo "$(date '+%H:%M:%S') render OK — $SHOWN desktops shown, $OVERFLOW overflow" >> "$LOG"
