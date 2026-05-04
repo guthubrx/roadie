@@ -325,6 +325,13 @@ public final class LayoutEngine {
         for (_, root) in workspace.rootsByStageDisplay {
             if let leaf = TreeNode.find(windowID: wid, in: root) {
                 leaf.isVisible = visible
+                // SPEC-025 T071 — log debug pour traçabilité (niveau debug
+                // pour ne pas polluer en info ; activable [daemon].log_level).
+                logDebug("setLeafVisible_outcome", [
+                    "wid": String(wid),
+                    "visible": String(visible),
+                    "found": "true",
+                ])
                 return true
             }
         }

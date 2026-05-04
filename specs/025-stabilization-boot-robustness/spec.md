@@ -2,7 +2,7 @@
 
 **Feature Branch**: `025-stabilization-boot-robustness`
 **Created**: 2026-05-04
-**Status**: Draft
+**Status**: Implemented (mergée sur main, audit grade A-, soak 24h en cours avant tag v0.2.0-stabilization)
 **Dependencies**: SPEC-002, SPEC-014, SPEC-018, SPEC-021, SPEC-022, SPEC-024, BUG-001
 **Input**: User description: "Stabilization sprint qui regroupe : (Vague 0) désactiver `empty_click_hide_active` par défaut + GC legacy. (Vague 1) Boot robustness : validation `saved_frame` au restore, audit auto au boot, health metric, tests E2E minimaux. (Vague 2) BUG-001 fix réel — `HideStrategyImpl.show()` avec fallback safe + investigation tree leaf manquant. (Vague 3) Commande `roadie heal` + doc troubleshooting README. Zéro nouvelle feature visible utilisateur. Focus exclusif sur la robustesse runtime du daily-driving."
 

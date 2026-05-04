@@ -5,7 +5,9 @@
 
 ## Summary
 
-Sprint de stabilisation post-SPEC-024 qui adresse 6 user stories prioritisées (P1×3, P2×2, P3×1) sans introduire aucune nouvelle feature visible utilisateur. Cible : éliminer les classes de drift connues (frames offscreen persistées, wids zombies, drift widToScope, BUG-001) et fournir des outils d'auto-cicatrisation (`roadie heal`, audit auto au boot, health metric). Le fix réel BUG-001 (option B) est inclus avec un time-box strict de 3h.
+Sprint de stabilisation post-SPEC-024 qui adresse 7 user stories prioritisées (P1×3, P2×3, P3×1) sans introduire aucune nouvelle feature visible utilisateur. Cible : éliminer les classes de drift connues (frames offscreen persistées, wids zombies, drift widToScope, BUG-001) et fournir des outils d'auto-cicatrisation (`roadie heal`, audit auto au boot, health metric, `roadie diag` bundle). Le fix réel BUG-001 (option B FR-007) a été appliqué sans dépasser le time-box.
+
+> **Implementation status** (post-merge) : livré commits `453e511` (sprint complet) + `936bdf3` (audit fixes L3 + L4). Audit grade A-. Delta LOC effectif +310 (justifié US7 ajoutée en cours, tracé Complexity Tracking ci-dessous). 2 fixes audit appliqués (L3 thread-safety static var, L4 tar exit code check).
 
 ## Technical Context
 
@@ -181,4 +183,22 @@ Adresse US4, US3 (notification).
 
 | Violation | Pourquoi nécessaire | Alternative simple rejetée parce que |
 |-----------|---------------------|--------------------------------------|
-| (Aucune — voir tableau Constitution Check ci-dessus) | — | — |
+| Delta LOC +310 dépasse plafond +200 du plan initial | US7 (`roadie diag`) ajoutée en cours de session à la demande utilisateur (besoin produit : bundle structuré pour bug report par utilisateurs tiers). Coût ~200 LOC (collecteur de fichiers + tar + helpers). Sans US7, delta = +110 (sous cible). | Reporter US7 dans une SPEC-026 dédiée aurait dupliqué le ceremonial spec/plan/tasks et fragmenté un sprint cohérent (US7 complémentaire de US3 health metric et US4 heal command — diagnostic forme un tout). |
+
+## Implementation summary (post-merge)
+
+| Composant | Statut | Notes |
+|---|---|---|
+| Vague 0 quick wins (T001-T003) | ✅ Implemented | Default `empty_click_hide_active=false`, GC `.legacy.*` install-dev |
+| Vague 1 boot robustness (T010-T063) | ✅ Implemented | `Stage.validateMembers`, auto-fix au boot, `BootStateHealth`, `daemon.health`, GC runtime |
+| Vague 2 BUG-001 fix (T070-T076) | ✅ Implemented (FR-007 partial) | `HideStrategyImpl.show()` fallback safe + log `setLeafVisible_no_leaf_found`. FR-008 tree leaf insertion idempotente reportée si bug réapparaît |
+| Vague 3 heal + docs (T090-T122) | ✅ Implemented | `daemon.heal`, `roadie heal`, notification health, README Troubleshooting EN+FR |
+| US7 `roadie diag` (FR-016) | ✅ Implemented (ajoutée en cours) | Bundle tarball avec logs, config, stages, system-info |
+| Vague 4 soak + tag (T130-T135) | ⏭ DEFER | Wall-clock 24h, action manuelle utilisateur post-merge |
+
+## Audit fixes appliqués (commit 936bdf3)
+
+| ID | Fix |
+|---|---|
+| L3 quality | `@MainActor` ajouté sur `StageManager.lastValidationInvalidatedCount` (data race théorique Swift 6 strict) |
+| L4 robustness | Check `tarProc.terminationStatus == 0` dans `roadie diag` (silent corruption potentielle si tar échoue) |

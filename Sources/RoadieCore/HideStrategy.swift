@@ -50,12 +50,16 @@ public enum HideStrategyImpl {
         // Garantit qu'une fenêtre show() réapparait toujours quelque part de visible.
         // Cause racine BUG-001 : sans ce fallback, target = state.frame = -2117 → setBounds(-2117) = no-op.
         let target: CGRect
+        let path: String
         if state.expectedFrame != .zero, isOnScreen(state.expectedFrame) {
             target = state.expectedFrame
+            path = "expectedFrame"
         } else if isOnScreen(state.frame) {
             target = state.frame
+            path = "stateFrame"
         } else {
             target = primaryVisibleCenterRect()
+            path = "fallbackCenter"
             logWarn("hide_strategy_show_fallback_center", [
                 "wid": String(wid),
                 "expected_frame_zero": String(state.expectedFrame == .zero),
@@ -63,6 +67,17 @@ public enum HideStrategyImpl {
                 "fallback": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))",
             ])
         }
+        // SPEC-025 T070 — log debug pour traçabilité de chaque show().
+        // Niveau debug pour ne pas polluer en mode info ; activable via
+        // [daemon].log_level = "debug" dans roadies.toml.
+        logDebug("hide_strategy_show", [
+            "wid": String(wid),
+            "strategy": "\(strategy)",
+            "path": path,
+            "expected_frame": "\(Int(state.expectedFrame.origin.x)),\(Int(state.expectedFrame.origin.y))",
+            "state_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
+            "target": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))",
+        ])
         switch strategy {
         case .corner:
             AXReader.setBounds(element, frame: target)
