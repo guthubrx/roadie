@@ -1723,6 +1723,28 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     func axDidMoveWindow(pid: pid_t, wid: WindowID) {
         guard let element = registry.axElement(for: wid),
               let frame = AXReader.bounds(element) else { return }
+        // SPEC-025 amend — log info pour distinguer mouvement piloté par roadie
+        // (= dans la fenêtre 200ms post-applyLayout) vs mouvement subi (drag user,
+        // macOS Mission Control, snap auto). Source = "self" si le delta est
+        // imputable à notre propre setBounds, "external" sinon.
+        let prevFrame = registry.get(wid)?.frame
+        let timeSinceApply = Date().timeIntervalSince(lastApplyTimestamp)
+        let source = timeSinceApply < 0.2 ? "self" : "external"
+        if let prev = prevFrame {
+            let dx = abs(prev.origin.x - frame.origin.x)
+            let dy = abs(prev.origin.y - frame.origin.y)
+            let dw = abs(prev.width - frame.width)
+            let dh = abs(prev.height - frame.height)
+            if dx + dy + dw + dh > 1 {
+                logInfo("ax_window_moved", [
+                    "wid": String(wid),
+                    "source": source,
+                    "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y)) \(Int(prev.width))x\(Int(prev.height))",
+                    "to": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.width))x\(Int(frame.height))",
+                    "since_apply_ms": String(Int(timeSinceApply * 1000)),
+                ])
+            }
+        }
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
         propagateExpectedFrame(wid: wid, frame: frame)
