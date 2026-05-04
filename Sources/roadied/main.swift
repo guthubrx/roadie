@@ -207,6 +207,20 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         logInfo("roadied starting")
 
+        // SPEC-024 T015 — état Screen Recording (log-only). CGRequestScreenCaptureAccess()
+        // crash le daemon dans le contexte launchd ; on se contente de Preflight (lecture).
+        // Si denied : le rail aura des thumbnails dégradées (icônes app) — non bloquant.
+        let scGranted = CGPreflightScreenCaptureAccess()
+        if scGranted {
+            logInfo("screen_capture_state", ["granted": "true"])
+        } else {
+            logWarn("screen_capture_state", ["granted": "false",
+                "hint": "Réglages Système → Confidentialité → Enregistrement d'écran → cocher roadied.app"])
+            FileHandle.standardError.write(
+                "roadied: Screen Recording NON accordé — thumbnails de fenêtres seront dégradées en icônes.\n"
+                    .data(using: .utf8) ?? Data())
+        }
+
         stageManager?.loadFromDisk()
         // SPEC-021 T021 : brancher le service locator pour que WindowState.stageID
         // (computed) puisse déléguer à stageManager sans dépendance circulaire.
