@@ -1826,17 +1826,52 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 await self?.followAltTabFocus(wid)
             }
         }
-        // 2. Stage : switcher si différent et que la stage cible existe.
+        // 2. Stage : switcher si différent et que la stage cible existe DANS LE
+        // SCOPE PHYSIQUE DE LA WID. Avant : check global de l'existence (true si
+        // stage existe sur n'importe quel display) → switchTo échouait avec
+        // 'unknown stage in current scope' quand la stage existait sur un autre
+        // display que celui de la wid. SPEC-026 fix : résoudre le scope correct.
         if let sm = stageManager,
            let targetStage = state.stageID,
            sm.currentStageID != targetStage {
-            let stageExists: Bool = {
-                if sm.stageMode == .perDisplay {
-                    return sm.stagesV2.contains { $0.key.stageID == targetStage }
+            if sm.stageMode == .perDisplay {
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                Task { @MainActor [weak self] in
+                    guard let self = self else { return }
+                    guard let display = await self.displayRegistry?.displayContaining(point: center) else {
+                        return
+                    }
+                    let desktopID = await self.desktopRegistry?.currentID(for: display.id) ?? 1
+                    let fullScope = StageScope(displayUUID: display.uuid,
+                                               desktopID: desktopID, stageID: targetStage)
+                    guard sm.stagesV2[fullScope] != nil else {
+                        logInfo("focus_follow_skipped", [
+                            "wid": String(wid),
+                            "want_stage": targetStage.value,
+                            "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
+                            "reason": "stage_missing_in_target_scope",
+                        ])
+                        return
+                    }
+                    logInfo("focus_follow stage switch", [
+                        "wid": String(wid),
+                        "from": sm.currentStageID?.value ?? "nil",
+                        "to": targetStage.value,
+                        "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
+                    ])
+                    self.lastFocusFollowTimestamp = now
+                    sm.switchTo(stageID: targetStage, scope: fullScope)
                 }
-                return sm.stages[targetStage] != nil
-            }()
-            if stageExists {
+            } else {
+                // Mode global : check legacy.
+                guard sm.stages[targetStage] != nil else {
+                    logInfo("focus_follow_skipped", [
+                        "wid": String(wid),
+                        "want_stage": targetStage.value,
+                        "reason": "stage_missing",
+                    ])
+                    return
+                }
                 logInfo("focus_follow stage switch", [
                     "wid": String(wid),
                     "from": sm.currentStageID?.value ?? "nil",
@@ -1844,12 +1879,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 ])
                 lastFocusFollowTimestamp = now
                 sm.switchTo(stageID: targetStage)
-            } else {
-                logWarn("focus_follow_skipped", [
-                    "wid": String(wid),
-                    "want_stage": targetStage.value,
-                    "reason": "stage_missing",
-                ])
             }
         }
     }
