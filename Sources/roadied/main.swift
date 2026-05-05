@@ -1377,8 +1377,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                             Task { @MainActor [weak self, weak sm] in
                                 guard let self = self, let sm = sm else { return }
                                 let desktopID = await dskReg?.currentID(for: did) ?? 1
-                                let activeStage = sm.activeStageByDesktop[
-                                    DesktopKey(displayUUID: uuid, desktopID: desktopID)] ?? StageID("1")
+                                // SPEC-026 fix Outlook : si la wid avait déjà un scope
+                                // dans widToScope (= elle était tilée mais momentanément
+                                // sortie de memberWindows), respecter cette stage au lieu
+                                // d'écraser avec la stage active. Cas observé : Outlook
+                                // crée plein de wids → PeriodicScanner re-scan toutes les
+                                // wids → iTerm sortis temporairement de memberWindows →
+                                // ré-assignées à la stage active (= mauvaise stage).
+                                let priorScope = sm.scopeOf(wid: cgwid)
+                                let activeStage: StageID
+                                if let prior = priorScope,
+                                   prior.displayUUID == uuid,
+                                   prior.desktopID == desktopID {
+                                    activeStage = prior.stageID
+                                } else {
+                                    activeStage = sm.activeStageByDesktop[
+                                        DesktopKey(displayUUID: uuid, desktopID: desktopID)] ?? StageID("1")
+                                }
                                 let scope = StageScope(displayUUID: uuid, desktopID: desktopID,
                                                         stageID: activeStage)
                                 if sm.stagesV2[scope] == nil {
