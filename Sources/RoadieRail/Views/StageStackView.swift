@@ -179,7 +179,12 @@ struct StageStackView: View {
                             ZStack(alignment: .topLeading) {
                                 if badgeState.isVisible {
                                     StageNumberBadge(
-                                        number: stage.id,
+                                        // SPEC-026 — affiche displayName plutôt que id pour
+                                        // que rename via CLI soit visible sans rebuild, et
+                                        // qu'un id non-numérique residuel (ex: stage zombie
+                                        // "switch" héritée d'un parsing CLI buggué) puisse
+                                        // être renommée en chiffre via `roadie stage rename`.
+                                        number: stage.displayName,
                                         colorHex: stageBorderOverrides[stage.id]
                                             ?? (stage.isActive ? borderColor : borderColorInactive)
                                     )
