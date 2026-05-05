@@ -68,6 +68,33 @@ roadied_starts_5m = 0
 tiler_policy_unrespected_5m = 0  # warn level, count
 tree_flatten_events_5m = 0       # warn level, count
 tree_depth_min_5m = None         # min observée parmi les tiler_insert (= worst case)
+# Layout aspect ratio extrême : signale qu'une fenêtre tilée se retrouve avec un
+# ratio < 0.28 ou > 3.5 (= très allongée vs forme du display) — indique un bug
+# d'orientation racine du tree. Toute occurrence est anormale.
+tiler_extreme_aspect_5m = 0      # warn level, count
+# Tree dégénéré : root avec 1 unique enfant container (= état impossible
+# post-fix `root_single_child_append`). Invariant absolu, 0 FP attendu →
+# promu directement en NUMERIC_AXES (seuil > 0 = anomalie certaine).
+tiler_root_degenerate_5m = 0     # warn level, count
+# Stage double membership : wid présente dans 2+ scopes simultanément
+# (auditOwnership I3). Invariant absolu cross-stage. Symptôme : "fenêtre
+# stage 2 apparaît aussi en stage 1" — signalé par user au tick 75.
+stage_double_membership_5m = 0   # warn level, count
+# Tiled orphan stage : wid dans un tree mais aucune stage ne la possède
+# (= scopeOf retourne nil). Invariant absolu : tile => stage owner.
+# Symptôme : la wid apparaît dans le navrail "sans stage", aucun module
+# FX (borders, opacity) ne la voit. Signalé user au tick 81.
+tiled_orphan_stage_5m = 0        # warn level, count
+# Tile in wrong tree : wid présente dans tree de stage X mais widToScope
+# dit Y. Drift cross-stage qui cause les disparitions de fenêtres lors des
+# stage switches (Firefox stage=2 visible dans tree stage=1 → switch stage 2
+# le cache, switch back stage 1 layout cassé). Signalé user au tick 85.
+tile_in_wrong_tree_5m = 0        # warn level, count
+# Staged orphan tree : wid dans memberWindows mais pas dans le tree de
+# son scope (= jamais framée par applyAll → fantôme). Cas root-cause :
+# sm.assign() oublié de réinsérer dans tree. Signalé user 07:04 (Firefox
+# 1844x20 sur LG après stage assign).
+staged_orphan_tree_5m = 0        # warn level, count
 
 # Parse log avec tolérance : skip lignes invalides JSON.
 parse_failures = 0
@@ -131,6 +158,25 @@ try:
                 tiler_policy_unrespected_5m += 1
             if msg == "tree_flatten_event":
                 tree_flatten_events_5m += 1
+            # Layout aspect ratio extrême — capté mais PAS encore promu en signal
+            # d'anomalie : risque de faux positifs si l'utilisateur a manipulé
+            # le layout exprès (warp/drag-resize/toggle float intentionnels).
+            # Phase 1 = observation passive. Phase 2 (futur) = corrélation avec
+            # absence de user-action récente avant d'alerter.
+            if msg == "tiler_extreme_aspect":
+                tiler_extreme_aspect_5m += 1
+            # Tree dégénéré : invariant absolu post-fix root_single_child_append.
+            # Toute occurrence = bug. Promu directement en NUMERIC_AXES.
+            if msg == "tiler_root_degenerate":
+                tiler_root_degenerate_5m += 1
+            if msg == "stage_double_membership":
+                stage_double_membership_5m += 1
+            if msg == "tiled_orphan_stage":
+                tiled_orphan_stage_5m += 1
+            if msg == "tile_in_wrong_tree":
+                tile_in_wrong_tree_5m += 1
+            if msg == "staged_orphan_tree":
+                staged_orphan_tree_5m += 1
             if msg == "tiler_insert":
                 try:
                     d = int(e.get("tree_depth_after", "-1"))
@@ -171,6 +217,12 @@ metrics = {
     "tiler_policy_unrespected_5m": tiler_policy_unrespected_5m,
     "tree_flatten_events_5m": tree_flatten_events_5m,
     "tree_depth_min_5m": tree_depth_min_5m if tree_depth_min_5m is not None else -1,
+    "tiler_extreme_aspect_5m": tiler_extreme_aspect_5m,  # phase 2 : promu en NUMERIC_AXES (filtre user-origin appliqué côté daemon)
+    "tiler_root_degenerate_5m": tiler_root_degenerate_5m,
+    "stage_double_membership_5m": stage_double_membership_5m,
+    "tiled_orphan_stage_5m": tiled_orphan_stage_5m,
+    "tile_in_wrong_tree_5m": tile_in_wrong_tree_5m,
+    "staged_orphan_tree_5m": staged_orphan_tree_5m,
 }
 
 # --- Baseline depuis history -------------------------------------------------
@@ -201,7 +253,10 @@ anti_flap_ok = False
 NUMERIC_AXES = ["errors_5m", "warns_5m_filtered", "drifts_5m", "applyall_p95_5m_ms",
                 "gestures_no_op_5m", "rail_panel_missing_5m",
                 "tiler_invariant_violations_5m", "roadied_starts_5m",
-                "tiler_policy_unrespected_5m", "tree_flatten_events_5m"]
+                "tiler_policy_unrespected_5m", "tree_flatten_events_5m",
+                "tiler_root_degenerate_5m", "tiler_extreme_aspect_5m",
+                "stage_double_membership_5m", "tiled_orphan_stage_5m",
+                "tile_in_wrong_tree_5m", "staged_orphan_tree_5m"]
 
 if len(hist) >= 6:
     last6 = hist[-6:]
@@ -234,6 +289,18 @@ if len(hist) >= 6:
             thr = max(thr, 1)  # tout tree plat avec >2 leaves = signal direct
         elif axisName == "tree_flatten_events_5m":
             thr = max(thr, 1)  # toute diminution de profondeur entre 2 inserts = bug
+        elif axisName == "tiler_root_degenerate_5m":
+            thr = max(thr, 1)  # invariant absolu : root[X]=[X.opp[…]] = bug
+        elif axisName == "tiler_extreme_aspect_5m":
+            thr = max(thr, 1)  # filtre user-origin appliqué côté daemon → 1+ = signal pur
+        elif axisName == "stage_double_membership_5m":
+            thr = max(thr, 1)  # invariant absolu cross-stage : 1+ = bug
+        elif axisName == "tiled_orphan_stage_5m":
+            thr = max(thr, 1)  # invariant absolu : tile in tree => stage owner
+        elif axisName == "tile_in_wrong_tree_5m":
+            thr = max(thr, 1)  # invariant absolu : tree stage == widToScope stage
+        elif axisName == "staged_orphan_tree_5m":
+            thr = max(thr, 1)  # invariant absolu : memberWindow => present in tree
         baseline[axisName] = {"median": round(med, 2), "mad": round(mad, 2),
                               "threshold": round(thr, 2)}
         threshold[axisName] = thr

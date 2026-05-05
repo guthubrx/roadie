@@ -23,6 +23,43 @@ public final class MasterStackTiler: Tiler {
         TilerRegistry.register(.masterStack) { MasterStackTiler() }
     }
 
+    /// SPEC-025 cross-layout — invariant structurel master-stack.
+    /// Retourne `nil` si la structure du root est conforme, sinon une chaîne
+    /// décrivant la violation. États valides :
+    ///   - root vide
+    ///   - `H[L]` : master seul
+    ///   - `H[L, V[L+]]` : master + stack non vide de leaves
+    /// Tout autre état signale un bug d'insert/remove ou une corruption externe.
+    private func validateStructure(_ root: TilingContainer) -> String? {
+        if root.children.isEmpty { return nil }
+        if root.orientation != .horizontal { return "root_not_horizontal" }
+        if root.children.count == 1 {
+            return (root.children[0] is WindowLeaf) ? nil : "single_child_not_leaf"
+        }
+        if root.children.count != 2 { return "more_than_2_children" }
+        if !(root.children[0] is WindowLeaf) { return "first_child_not_master_leaf" }
+        guard let stack = root.children[1] as? TilingContainer else { return "second_child_not_stack" }
+        if stack.orientation != .vertical { return "stack_not_vertical" }
+        if stack.children.isEmpty { return "stack_empty" }
+        if stack.children.contains(where: { !($0 is WindowLeaf) }) { return "stack_has_non_leaf" }
+        return nil
+    }
+
+    /// Helper : logge `tiler_policy_unrespected` si la structure n'est pas conforme.
+    /// Appelé après chaque mutation (insert/remove) qui pourrait casser l'invariant.
+    private func checkAndLogStructure(_ root: TilingContainer, after op: String, wid: WindowID) {
+        guard let violation = validateStructure(root) else { return }
+        logWarn("tiler_policy_unrespected", [
+            "strategy": "master-stack",
+            "policy": "master_plus_stack",
+            "violation": violation,
+            "after_op": op,
+            "wid": String(wid),
+            "leaves_count": String(root.allLeaves.count),
+            "structure": String(root.compactStructure.prefix(200)),
+        ])
+    }
+
     // MARK: - layout (réutilise l'algorithme général de partage par adaptiveWeight)
 
     public func layout(rect: CGRect, root: TilingContainer) -> [WindowID: CGRect] {
@@ -75,7 +112,12 @@ public final class MasterStackTiler: Tiler {
                 "strategy": "master-stack",
                 "new_wid": String(leaf.windowID),
                 "case": "1_empty_root_becomes_master",
+                "tree_depth_after": String(root.maxDepth),
+                "tree_leaves_count": String(root.allLeaves.count),
+                "tree_structure_after": String(root.compactStructure.prefix(200)),
+                "tree_is_flat": "false",
             ])
+            checkAndLogStructure(root, after: "insert_case1", wid: leaf.windowID)
             return
         }
 
@@ -91,7 +133,12 @@ public final class MasterStackTiler: Tiler {
                 "new_wid": String(leaf.windowID),
                 "case": "2_create_stack_with_first_slave",
                 "master_ratio": String(format: "%.2f", Double(masterRatio)),
+                "tree_depth_after": String(root.maxDepth),
+                "tree_leaves_count": String(root.allLeaves.count),
+                "tree_structure_after": String(root.compactStructure.prefix(200)),
+                "tree_is_flat": "false",
             ])
+            checkAndLogStructure(root, after: "insert_case2", wid: leaf.windowID)
             return
         }
 
@@ -103,7 +150,12 @@ public final class MasterStackTiler: Tiler {
                 "new_wid": String(leaf.windowID),
                 "case": "3_append_to_stack",
                 "stack_size_after": String(stack.children.count),
+                "tree_depth_after": String(root.maxDepth),
+                "tree_leaves_count": String(root.allLeaves.count),
+                "tree_structure_after": String(root.compactStructure.prefix(200)),
+                "tree_is_flat": "false",
             ])
+            checkAndLogStructure(root, after: "insert_case3", wid: leaf.windowID)
             return
         }
 
@@ -118,6 +170,7 @@ public final class MasterStackTiler: Tiler {
             "wid": String(leaf.windowID),
             "root_children_count": String(root.children.count),
         ])
+        checkAndLogStructure(root, after: "insert_fallback", wid: leaf.windowID)
     }
 
     // MARK: - remove
@@ -146,6 +199,7 @@ public final class MasterStackTiler: Tiler {
         if root.children.count == 1, let only = root.children.first {
             only.adaptiveWeight = 1.0
         }
+        checkAndLogStructure(root, after: "remove", wid: leaf.windowID)
     }
 
     // MARK: - move (master ↔ stack)
