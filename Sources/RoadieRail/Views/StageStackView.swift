@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 // SPEC-014 T028 — Vue racine SwiftUI du rail. Design "Stage Manager natif".
 // Reçoit RailState en @Bindable (pattern @Observable macOS 14+).
@@ -58,6 +59,9 @@ struct StageStackView: View {
     var onRename:     (String, String) -> Void      = { _, _ in }
     var onAddFocused: (String) -> Void              = { _ in }
     var onDelete:     (String) -> Void              = { _ in }
+    // SPEC-027 US3 — drag-reorder : (sourceStageID, targetStageID) — la stage
+    // source vient se placer juste avant la stage target dans l'ordre rail.
+    var onReorderStages: (String, String) -> Void   = { _, _ in }
     // Click bureau Apple : zone vide du rail = hide stage active du display.
     var emptyClickHideActive:   Bool       = true
     var emptyClickSafetyMargin: Double     = 12
@@ -128,8 +132,38 @@ struct StageStackView: View {
             // Quand le contenu dépasse, le ScrollView prend le relais naturellement.
             GeometryReader { geo in
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: stackSpacing) {
-                        ForEach(allStages) { stage in
+                    // SPEC-027 US1 — z-index global : 2 layers empilés au niveau
+                    // du VStack racine. Layer badges en arrière, layer vignettes
+                    // par-dessus. Quand un badge déborde verticalement (offset_y < 0),
+                    // il passe physiquement sous la vignette de la cellule au-dessus,
+                    // au lieu de la couvrir comme avec un ZStack par-cellule.
+                    let cellHeight = CGFloat(previewHeight + verticalPadding * 2)
+                    ZStack(alignment: .topLeading) {
+                        // Layer 1 — badges. Chaque slot a la même hauteur que la
+                        // cellule correspondante pour rester aligné verticalement
+                        // avec le layer 2. Le badge interne garde fixedSize + offset.
+                        if badgeState.isVisible {
+                            VStack(spacing: stackSpacing) {
+                                ForEach(allStages) { stage in
+                                    Color.clear
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: cellHeight)
+                                        .overlay(alignment: .topLeading) {
+                                            StageNumberBadge(
+                                                number: stage.displayName,
+                                                colorHex: stageBorderOverrides[stage.id]
+                                                    ?? (stage.isActive ? borderColor : borderColorInactive)
+                                            )
+                                        }
+                                }
+                            }
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.18), value: badgeState.isVisible)
+                        }
+
+                        // Layer 2 — vignettes par-dessus.
+                        VStack(spacing: stackSpacing) {
+                            ForEach(allStages) { stage in
                             // SPEC-019 — délégation au renderer actif (récupéré depuis le registre
                             // via l'id [fx.rail].renderer, fallback "stacked-previews"). Le consommateur
                             // ne connaît pas la stratégie concrète du rendu de cellule.
@@ -172,27 +206,7 @@ struct StageStackView: View {
                                 onAddFocused: onAddFocused,
                                 onDelete:     onDelete
                             )
-                            // SPEC-026 — badge chiffre stage en arrière-plan
-                            // (universel pour tous les renderers). Visible si le
-                            // toggle TOML est actif OU pendant un flash temporaire
-                            // déclenché via `roadie rail stage-numbers flash N`.
-                            ZStack(alignment: .topLeading) {
-                                if badgeState.isVisible {
-                                    StageNumberBadge(
-                                        // SPEC-026 — affiche displayName plutôt que id pour
-                                        // que rename via CLI soit visible sans rebuild, et
-                                        // qu'un id non-numérique residuel (ex: stage zombie
-                                        // "switch" héritée d'un parsing CLI buggué) puisse
-                                        // être renommée en chiffre via `roadie stage rename`.
-                                        number: stage.displayName,
-                                        colorHex: stageBorderOverrides[stage.id]
-                                            ?? (stage.isActive ? borderColor : borderColorInactive)
-                                    )
-                                    .transition(.opacity)
-                                }
-                                renderer.render(context: context, callbacks: cb)
-                            }
-                            .animation(.easeInOut(duration: 0.18), value: badgeState.isVisible)
+                            renderer.render(context: context, callbacks: cb)
                             // Aligner à gauche (vs centre) — demande utilisateur.
                             .frame(maxWidth: .infinity, alignment: .leading)
                             // Expose le rect de cette cellule dans le coordinate
@@ -207,6 +221,23 @@ struct StageStackView: View {
                                     )
                                 }
                             )
+                            // SPEC-027 US3 — drag-reorder source. La cellule est
+                            // draggable ; le payload est le stage_id encodé en string.
+                            .onDrag { NSItemProvider(object: stage.id as NSString) }
+                            // SPEC-027 US3 — drop target : si le payload est un stage_id
+                            // de la même liste, on appelle onReorderStages(source, target).
+                            .onDrop(of: [.text], isTargeted: nil) { providers in
+                                guard let p = providers.first else { return false }
+                                _ = p.loadObject(ofClass: NSString.self) { obj, _ in
+                                    guard let srcID = obj as? String,
+                                          srcID != stage.id else { return }
+                                    Task { @MainActor in
+                                        onReorderStages(srcID, stage.id)
+                                    }
+                                }
+                                return true
+                            }
+                            }
                         }
                     }
                     // SPEC-019 — pas de padding ici : chaque renderer gère son propre
