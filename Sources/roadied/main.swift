@@ -1835,6 +1835,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
            let targetStage = state.stageID,
            sm.currentStageID != targetStage {
             if sm.stageMode == .perDisplay {
+                // Pose le timestamp SYNCHRONE avant le Task pour éviter la race :
+                // sans ça, 2 onFocusChanged dans la même 500ms passent tous les
+                // deux le check anti-feedback (le Task async n'a pas eu le
+                // temps d'updater le timestamp). Résultat : ping-pong.
+                lastFocusFollowTimestamp = now
                 let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
                 Task { @MainActor [weak self] in
                     guard let self = self else { return }
@@ -1859,7 +1864,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         "to": targetStage.value,
                         "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
                     ])
-                    self.lastFocusFollowTimestamp = now
                     sm.switchTo(stageID: targetStage, scope: fullScope)
                 }
             } else {
