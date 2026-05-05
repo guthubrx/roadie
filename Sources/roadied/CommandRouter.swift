@@ -704,17 +704,36 @@ enum CommandRouter {
             // le switch n'affecte QUE le scope cible (display, desktop) et pas
             // l'écran visible courant si le scope est distant.
             if sm.stageMode == .perDisplay {
-                var scopeError: Response? = nil
-                guard let baseScope = await resolveScope(request: request, daemon: daemon,
-                                                         errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                // SPEC-026 fix bug Alt+N — utiliser focused window display en priorité
+                // sur curseur. Avec mouse_follows_focus, le curseur peut être sur
+                // un autre display que la fenêtre active → switch sur mauvais scope.
+                let baseScope: StageScope
+                if request.args?["display"] != nil || request.args?["desktop"] != nil {
+                    var scopeError: Response? = nil
+                    guard let resolved = await resolveScope(request: request, daemon: daemon,
+                                                             errorOut: &scopeError) else {
+                        return scopeError ?? .error(.internalError, "scope resolution failed")
+                    }
+                    baseScope = resolved
+                } else {
+                    baseScope = await daemon.currentStageScopeFocusedFirst()
                 }
                 let fullScope = StageScope(displayUUID: baseScope.displayUUID,
                                            desktopID: baseScope.desktopID, stageID: stageID)
-                if sm.stagesV2[fullScope] == nil {
+                let preExisting = sm.stagesV2[fullScope] != nil
+                let memberCountBefore = sm.stagesV2[fullScope]?.memberWindows.count ?? 0
+                if !preExisting {
                     _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
                                        scope: fullScope)
                 }
+                logInfo("stage_switch_diag", [
+                    "stage": stageID.value,
+                    "display_uuid": String(baseScope.displayUUID.prefix(8)),
+                    "desktop": String(baseScope.desktopID),
+                    "pre_existing": String(preExisting),
+                    "members_before": String(memberCountBefore),
+                    "current_visible_scope": "\(String(sm.currentDesktopKey?.displayUUID.prefix(8) ?? "nil"))/\(String(sm.currentDesktopKey?.desktopID ?? -1))",
+                ])
                 sm.switchTo(stageID: stageID, scope: fullScope)
             } else {
                 if sm.stages[stageID] == nil {
@@ -1205,6 +1224,39 @@ enum CommandRouter {
             let n = daemon.layoutEngine.mirrorActiveTrees(axis: axis)
             daemon.applyLayout()
             return .success(["axis": AnyCodable(raw), "trees_mirrored": AnyCodable(n)])
+
+        case "scope":
+            // SPEC-026 — affiche scope courant (display + desktop + stage par display).
+            let curScope = await daemon.currentStageScope()
+            let displays = (await daemon.displayRegistry?.displays) ?? []
+            var lines: [String] = []
+            lines.append("Curseur sur display=\(String(curScope.displayUUID.prefix(8))) desktop=\(curScope.desktopID)")
+            lines.append("---")
+            if let sm = daemon.stageManager {
+                for d in displays {
+                    let isCurrent = d.uuid == curScope.displayUUID
+                    let prefix = isCurrent ? ">" : " "
+                    var bestStage = "?"
+                    var bestMembers = 0
+                    var totalStages = 0
+                    for (k, stage) in sm.stagesV2 where k.displayUUID == d.uuid && k.desktopID == curScope.desktopID {
+                        totalStages += 1
+                        let count = stage.memberWindows.count
+                        if count > bestMembers {
+                            bestMembers = count
+                            bestStage = k.stageID.value
+                        } else if bestStage == "?" {
+                            bestStage = k.stageID.value
+                        }
+                    }
+                    lines.append("\(prefix) display=\(d.id) (\(String(d.uuid.prefix(8)))) | stages_in_desktop=\(totalStages) | active_stage=\(bestStage) members=\(bestMembers)")
+                }
+            }
+            return .success([
+                "summary": AnyCodable(lines.joined(separator: "\n")),
+                "current_desktop": AnyCodable(curScope.desktopID),
+                "current_display_uuid": AnyCodable(curScope.displayUUID),
+            ])
 
         case "scratchpad.toggle":
             // SPEC-026 US3 — toggle un scratchpad par nom.

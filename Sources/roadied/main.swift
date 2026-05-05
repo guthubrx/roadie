@@ -2380,6 +2380,32 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// Retourne `.global(StageID(""))` en mode global (stageID placeholder, complété par le caller).
     /// En mode per_display, résout displayUUID + desktopID et retourne un scope partiel
     /// (stageID == StageID("")) que le caller complète avec l'ID réel avant lookup.
+    /// SPEC-026 — variante qui priorise la fenêtre focused (mieux pour stage.switch
+    /// quand mouse_follows_focus est activé : le curseur peut se balader).
+    func currentStageScopeFocusedFirst() async -> StageScope {
+        guard config.desktops.mode == .perDisplay else {
+            return .global(StageID(""))
+        }
+        // Priorité 1 : fenêtre focused (intent stable).
+        if let wid = registry.focusedWindowID,
+           let state = registry.get(wid) {
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            if let display = await displayRegistry?.displayContaining(point: center) {
+                let desktopID = await desktopRegistry?.currentID(for: display.id) ?? 1
+                let scope = StageScope(displayUUID: display.uuid, desktopID: desktopID, stageID: StageID(""))
+                logInfo("scope_inferred_from", [
+                    "source": "focused_window",
+                    "display_uuid": display.uuid,
+                    "desktop_id": String(desktopID),
+                    "wid": String(wid),
+                ])
+                return scope
+            }
+        }
+        // Fallback : curseur (la logique d'origine).
+        return await currentStageScope()
+    }
+
     func currentStageScope() async -> StageScope {
         guard config.desktops.mode == .perDisplay else {
             return .global(StageID(""))

@@ -110,6 +110,10 @@ case "tiling":
         exit(64)
     }
 
+case "scope":
+    // SPEC-026 — affiche scope courant (display + desktop + stage actuelle par display).
+    sendAndPrint(Request(command: "scope"))
+
 case "scratchpad":
     // SPEC-026 US3 — `roadie scratchpad toggle <name>`.
     guard args.count >= 4, args[2] == "toggle" else {
