@@ -24,7 +24,7 @@ public struct StageNumberBadge: View {
             .font(.system(size: 64, weight: .black, design: .rounded))
             .foregroundColor(Color(hex: colorHex).opacity(0.22))
             .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
-            .offset(x: 4, y: -25)
+            .offset(x: 4, y: -30)
             .allowsHitTesting(false)
             .fixedSize()
     }
