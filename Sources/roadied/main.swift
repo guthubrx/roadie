@@ -695,6 +695,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 guard self.config.focus.stageFollowsFocus else { return }
                 self.followFocusToStageAndDesktop(wid: wid)
             }
+            // SPEC-026 US5 — mouse_follows_focus depuis source externe (Alt+Tab,
+            // click app dans Dock, etc.). Le check `isFollowMouseInhibited` empêche
+            // le feedback loop avec focus_follows_mouse (qui pose un inhibit 200ms
+            // dans setFocus → AX → onFocusChanged).
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                guard self.focusManager.mouseFollowsFocus else { return }
+                guard !self.focusManager.isFollowMouseInhibited() else { return }
+                self.focusManager.warpCursorToFocusedIfEnabled()
+            }
         }
 
         // SPEC-011 : init desktops virtuels si activé

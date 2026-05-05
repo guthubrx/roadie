@@ -66,6 +66,10 @@ public final class FocusFollowsMouseWatcher {
         if registry.focusedWindowID == wid { return }
         // Skip helper windows.
         if let state = registry.get(wid), state.isHelperWindow { return }
+        // Pose un inhibit avant le setFocus : empêche le hook onFocusChanged
+        // (SPEC-026 mouse_follows_focus sur source externe) de warper inutilement
+        // alors que le curseur est déjà sur la fenêtre.
+        focusManager.setInhibitFollowMouse(durationSeconds: 0.2)
         focusManager.setFocus(to: wid)
         logInfo("focus_follows_mouse_triggered", ["wid": String(wid)])
     }

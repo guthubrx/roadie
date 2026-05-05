@@ -89,6 +89,13 @@ public final class FocusManager {
         return Date() < until
     }
 
+    /// SPEC-026 US5 — pose un inhibit transitoire. Utilisé par
+    /// FocusFollowsMouseWatcher pour signaler "ce setFocus vient de moi, ne
+    /// re-warpe pas via le hook onFocusChanged". Évite warp redondant sur hover.
+    public func setInhibitFollowMouse(durationSeconds: TimeInterval) {
+        inhibitFollowMouseUntil = Date().addingTimeInterval(durationSeconds)
+    }
+
     /// SPEC-026 US5 — warp uniquement (pas de re-set AX). Utile après un
     /// stage_switch ou desktop_switch où la wid focalisée a changé sans
     /// passer par setFocusFromShortcut (le show des fenêtres a déclenché
