@@ -210,16 +210,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             return self.stickyBundleIDs.contains(bundleID)
         }
         _ = stickyBundleIDs   // silence unused if reload path branches differently
-        // SPEC-026 fix Firefox slide — installer OpacityStageHider si activé.
-        // Cause root : protocol StageHideOverride était défini mais jamais
-        // implémenté → HideStrategy.corner s'appliquait toujours → animation
-        // de slide macOS systématique. Cet override remplace setBounds(offscreen)
-        // par setAlpha(0) via OSAX → fenêtre invisible sans déplacement.
+        // SPEC-026 fix Firefox slide — installer OpacityStageHider si activé
+        // ET si l'osax est disponible (sinon les setAlpha partent dans le vide
+        // et les fenêtres ne sont ni cachées ni montrées — pire que le slide).
         if config.fxOpacityStageHideEnabled {
-            let hider = OpacityStageHider(bridge: DaemonOSAXBridge.shared)
-            self.opacityStageHider = hider
-            self.stageManager?.hideOverride = hider
-            logInfo("opacity_stage_hider_installed")
+            let osaxSocket = "/var/tmp/roadied-osax.sock"
+            if FileManager.default.fileExists(atPath: osaxSocket) {
+                let hider = OpacityStageHider(bridge: DaemonOSAXBridge.shared)
+                self.opacityStageHider = hider
+                self.stageManager?.hideOverride = hider
+                logInfo("opacity_stage_hider_installed")
+            } else {
+                logWarn("opacity_stage_hider_skipped", [
+                    "reason": "osax_not_loaded",
+                    "expected_socket": osaxSocket,
+                    "remediation": "scripts/install-fx.sh + osascript reload Dock",
+                ])
+            }
         }
         self.thumbnailCache = ThumbnailCache(capacity: 50)
     }

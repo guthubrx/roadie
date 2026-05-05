@@ -262,8 +262,10 @@ enum CommandRouter {
                 daemon.scratchpadManager?.loadConfig(newConfig.scratchpads)
                 // SPEC-026 US4 — sticky reload (re-build index bundle IDs).
                 daemon.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
-                // SPEC-026 fix Firefox slide — install/uninstall override au reload.
-                if newConfig.fxOpacityStageHideEnabled {
+                // SPEC-026 fix Firefox slide — install/uninstall override au reload,
+                // conditionnel à la présence de l'osax.
+                if newConfig.fxOpacityStageHideEnabled,
+                   FileManager.default.fileExists(atPath: "/var/tmp/roadied-osax.sock") {
                     if daemon.opacityStageHider == nil {
                         let hider = OpacityStageHider(bridge: DaemonOSAXBridge.shared)
                         daemon.opacityStageHider = hider
