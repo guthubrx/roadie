@@ -64,6 +64,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// SPEC-026 fix Firefox slide — référence forte sur l'override hide. Sinon
     /// la weak ref dans StageManager.hideOverride collapse → fallback HideStrategy.corner.
     var opacityStageHider: OpacityStageHider?
+    /// SPEC-026 — watcher du TOML user. Reload automatique sur modification.
+    var configFileWatcher: ConfigFileWatcher?
     var periodicScanner: PeriodicScanner?
     var dragWatcher: DragWatcher?
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
@@ -1214,6 +1216,37 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         } else {
             logWarn("wallpaper_watcher: AX not trusted, watcher skipped")
         }
+
+        // SPEC-026 — auto-reload sur modification du TOML user.
+        let configPath = ConfigLoader.defaultConfigPath()
+        let watcher = ConfigFileWatcher(path: configPath) { [weak self] in
+            guard let self = self else { return }
+            do {
+                let newConfig = try ConfigLoader.load()
+                self.config = newConfig
+                StageNumbersBadgeState.shared.configEnabled = newConfig.fxRailStageNumbersEnabled
+                StageNumbersBadgeState.shared.offsetX = newConfig.fxRailStageNumbersOffsetX
+                StageNumbersBadgeState.shared.offsetY = newConfig.fxRailStageNumbersOffsetY
+                StageNumbersBadgeState.shared.fontSize = newConfig.fxRailStageNumbersSize
+                StageNumbersBadgeState.shared.opacity = newConfig.fxRailStageNumbersOpacity
+                self.layoutEngine.smartGapsSolo = newConfig.tiling.smartGapsSolo
+                self.focusManager.mouseFollowsFocus = newConfig.focus.mouseFollowsFocus
+                if newConfig.focus.focusFollowsMouse {
+                    self.focusFollowsMouseWatcher?.start()
+                } else {
+                    self.focusFollowsMouseWatcher?.stop()
+                }
+                self.signalDispatcher?.loadConfig(newConfig.signals)
+                self.scratchpadManager?.loadConfig(newConfig.scratchpads)
+                self.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
+                self.applyLayout()
+                logInfo("config_auto_reloaded")
+            } catch {
+                logWarn("config_auto_reload_failed", ["error": String(describing: error)])
+            }
+        }
+        watcher.start()
+        self.configFileWatcher = watcher
 
         logInfo("roadied ready")
 
