@@ -2518,29 +2518,42 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         for display in displays {
             let activeStage = sm.activeStageByDesktop[
                 DesktopKey(displayUUID: display.uuid, desktopID: 1)] ?? StageID("1")
-            // SPEC-022 — déclarer la stage active per-display. Sans ça, applyAll
-            // utiliserait le fallback global "1" pour tous les displays.
             layoutEngine.setActiveStage(activeStage, displayID: display.id)
-            // Wids attendues sur ce tree : celles dont widToScope pointe vers
-            // (display.uuid, *, *). Cross-stage handled : seules celles de la stage
-            // active du display seront visibles, les autres présentes en tree mais
-            // marquées invisible par switchTo.
-            let expectedWids = registry.allWindows.compactMap { state -> WindowID? in
-                guard state.isTileable else { return nil }
-                guard let scope = sm.scopeOf(wid: state.cgWindowID) else { return nil }
-                guard scope.displayUUID == display.uuid else { return nil }
-                return state.cgWindowID
-            }
-            // Nettoyer toute wid présente dans ce tree mais pas attendue.
-            let key = StageDisplayKey(stageID: activeStage, displayID: display.id)
-            if let root = layoutEngine.workspace.rootsByStageDisplay[key] {
-                let presentWids = root.allLeaves.map { $0.windowID }
-                for wid in presentWids where !expectedWids.contains(wid) {
-                    layoutEngine.removeWindow(wid)
+            // SPEC-026 fix bug "tout regroupé sur stage active" : itérer par
+            // (stage, display) et insérer chaque wid dans le tree de SA stage
+            // d'origine (widToScope), pas dans le tree de la stage active.
+            // Avant : expectedWids filtré par displayUUID seulement → ALL wids
+            // insérées dans le tree (activeStage, display) → stage 1 vidée et
+            // tout regroupé sur stage 2 au prochain restart.
+            // Après : pour chaque stage existante du display, on calcule les
+            // expectedWids en intersectant displayUUID ET stageID.
+            let stageIDsOnDisplay = Set(sm.stagesV2.keys
+                .filter { $0.displayUUID == display.uuid }
+                .map { $0.stageID })
+            for stageID in stageIDsOnDisplay {
+                let expectedWidsForStage = registry.allWindows.compactMap { state -> WindowID? in
+                    guard state.isTileable else { return nil }
+                    guard let scope = sm.scopeOf(wid: state.cgWindowID) else { return nil }
+                    guard scope.displayUUID == display.uuid else { return nil }
+                    guard scope.stageID == stageID else { return nil }
+                    return state.cgWindowID
                 }
+                let key = StageDisplayKey(stageID: stageID, displayID: display.id)
+                if let root = layoutEngine.workspace.rootsByStageDisplay[key] {
+                    let presentWids = root.allLeaves.map { $0.windowID }
+                    for wid in presentWids where !expectedWidsForStage.contains(wid) {
+                        layoutEngine.removeWindow(wid)
+                    }
+                }
+                // ensureTreePopulated insère dans le tree (activeStage, displayID)
+                // donc on doit temporairement faire de stageID l'active pour cette
+                // boucle. Restoré après.
+                layoutEngine.setActiveStage(stageID, displayID: display.id)
+                _ = layoutEngine.ensureTreePopulated(with: expectedWidsForStage,
+                                                     displayID: display.id)
             }
-            // Insérer les attendues manquantes.
-            _ = layoutEngine.ensureTreePopulated(with: expectedWids, displayID: display.id)
+            // Restorer la vraie stage active pour ce display.
+            layoutEngine.setActiveStage(activeStage, displayID: display.id)
         }
         // SPEC-026 — rebalance TOUS les trees après rebuild, pas seulement les
         // actifs. Les inserts en cascade peuvent déséquilibrer les poids des
