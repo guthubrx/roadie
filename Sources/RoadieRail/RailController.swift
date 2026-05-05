@@ -297,6 +297,10 @@ public final class RailController {
     let fetcher: ThumbnailFetcher
 
     private var panels: [CGDirectDisplayID: StageRailPanel] = [:]
+    /// SPEC-028 — overlay panels qui captent les drops de WindowDragData hors
+    /// rail (= ailleurs que sur les vignettes du rail) et déclenchent un
+    /// summon vers la stage active du display. 1 panel par display.
+    private var dropPanels: [CGDirectDisplayID: StageDropPanel] = [:]
     private var config: RailConfig = .init()
     /// Tasks de fade-out différé par display, indexées par `displayID`. Permet
     /// d'annuler le hide programmé si le curseur revient sur l'edge avant
@@ -573,6 +577,9 @@ public final class RailController {
     private func buildPanels() {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
+        // SPEC-028 — tear-down des drop panels avant rebuild (sinon fuite).
+        dropPanels.values.forEach { $0.orderOut(nil) }
+        dropPanels.removeAll()
         // SPEC-014 T090 (US7) : si mode "global" → 1 seul panel sur primary.
         let targetScreens: [NSScreen]
         if config.displayMode == "global" {
@@ -666,6 +673,16 @@ public final class RailController {
             let panel = StageRailPanel(rootView: view)
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
             panels[id] = panel
+
+            // SPEC-028 — overlay panel pour summon-by-drag.
+            let dropPanel = StageDropPanel(screen: screen)
+            dropPanel.onSummon = { [weak self] wid in
+                Task { @MainActor [weak self] in
+                    self?.summonWindow(wid, displayUUID: panelUUID)
+                }
+            }
+            dropPanel.orderFront(nil)
+            dropPanels[id] = dropPanel
         }
         let panelUUIDs = panels.keys.map { id -> String in
             guard let scr = NSScreen.screens.first(where: { displayID(for: $0) == id }) else {
@@ -826,6 +843,18 @@ public final class RailController {
                 loadInitialStages()
             }
         }
+    }
+
+    /// SPEC-028 — drop d'une vignette wid hors-rail = "ramène-moi cette
+    /// fenêtre dans la stage active de ce display". Résout la stage active
+    /// du display via state.stagesByDisplay[uuid], puis appelle assignWindow.
+    func summonWindow(_ wid: CGWindowID, displayUUID: String) {
+        let scoped = state.stagesByDisplay[displayUUID] ?? state.stages
+        guard let activeStage = scoped.first(where: { $0.isActive }) else {
+            logWarn("rail: summon \(wid) failed — no active stage on \(displayUUID)")
+            return
+        }
+        assignWindow(wid, to: activeStage.id, displayUUID: displayUUID)
     }
 
     // MARK: - SPEC-014 US5 (T071-T073) : menu contextuel daemon-side.
