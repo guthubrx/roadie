@@ -7,13 +7,15 @@ public struct Config: Codable, Sendable {
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
     public var desktops: DesktopsConfig
-    // SPEC-012 T037 : règles de config per-écran (section [[displays]] dans roadies.toml)
-
     public var displays: [DisplayRule]
-    /// SPEC-015 : config souris (drag/resize avec modifier).
     public var mouse: MouseConfig
-    /// Config des comportements liés au focus (auto-switch stage/desktop sur AltTab).
     public var focus: FocusConfig
+    /// SPEC-026 US6 — configuration signal hooks (kill-switch + liste de hooks).
+    public var signals: SignalsConfig
+    /// SPEC-026 US3 — scratchpads déclarés (clé TOML `[[scratchpads]]`).
+    public var scratchpads: [ScratchpadDef]
+    /// SPEC-026 US4 — règles sticky par-fenêtre (clé TOML `[[sticky]]`).
+    public var stickyRules: [StickyRuleDef]
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
@@ -22,7 +24,10 @@ public struct Config: Codable, Sendable {
                 desktops: DesktopsConfig = .init(),
                 displays: [DisplayRule] = [],
                 mouse: MouseConfig = .init(),
-                focus: FocusConfig = .init()) {
+                focus: FocusConfig = .init(),
+                signals: SignalsConfig = .init(),
+                scratchpads: [ScratchpadDef] = [],
+                stickyRules: [StickyRuleDef] = []) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
@@ -31,6 +36,9 @@ public struct Config: Codable, Sendable {
         self.displays = displays
         self.mouse = mouse
         self.focus = focus
+        self.signals = signals
+        self.scratchpads = scratchpads
+        self.stickyRules = stickyRules
     }
 
     enum CodingKeys: String, CodingKey {
@@ -42,6 +50,9 @@ public struct Config: Codable, Sendable {
         case displays
         case mouse
         case focus
+        case signals
+        case scratchpads
+        case stickyRules = "sticky"
     }
 
     /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
@@ -58,6 +69,9 @@ public struct Config: Codable, Sendable {
         self.displays = try c.decodeIfPresent([DisplayRule].self, forKey: .displays) ?? []
         self.mouse = try c.decodeIfPresent(MouseConfig.self, forKey: .mouse) ?? .init()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? .init()
+        self.signals = try c.decodeIfPresent(SignalsConfig.self, forKey: .signals) ?? .init()
+        self.scratchpads = try c.decodeIfPresent([ScratchpadDef].self, forKey: .scratchpads) ?? []
+        self.stickyRules = try c.decodeIfPresent([StickyRuleDef].self, forKey: .stickyRules) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -510,4 +524,93 @@ public enum ConfigLoader {
         let toml = try TOMLEncoder().encode(config)
         try toml.write(toFile: resolved, atomically: true, encoding: .utf8)
     }
+}
+
+// MARK: - SPEC-026 — nouvelles entités
+
+/// SPEC-026 US6 — config signaux. `[signals]` global + `[[signals.hooks]]` liste.
+public struct SignalsConfig: Codable, Sendable, Equatable {
+    public var enabled: Bool
+    public var hooks: [SignalDef]
+
+    public init(enabled: Bool = true, hooks: [SignalDef] = []) {
+        self.enabled = enabled
+        self.hooks = hooks
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case hooks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        self.hooks = try c.decodeIfPresent([SignalDef].self, forKey: .hooks) ?? []
+    }
+}
+
+/// SPEC-026 US6 — un hook : event → cmd shell.
+public struct SignalDef: Codable, Sendable, Equatable {
+    public var event: String
+    public var cmd: String
+
+    public init(event: String, cmd: String) {
+        self.event = event
+        self.cmd = cmd
+    }
+}
+
+/// SPEC-026 US3 — déclaration d'un scratchpad.
+public struct ScratchpadDef: Codable, Sendable, Equatable {
+    public var name: String
+    public var cmd: String
+    /// Optionnel : force le bundleID matché plutôt que l'heuristic basée sur cmd.
+    public var matchBundleID: String?
+
+    public init(name: String, cmd: String, matchBundleID: String? = nil) {
+        self.name = name
+        self.cmd = cmd
+        self.matchBundleID = matchBundleID
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case cmd
+        case matchBundleID = "match_bundle_id"
+    }
+}
+
+/// SPEC-026 US4 — règle sticky par-fenêtre.
+/// Match minimal sur bundle_id (pour rester autonome de SPEC-016 RuleDef qui n'existe pas).
+public struct StickyRuleDef: Codable, Sendable, Equatable {
+    public var matchBundleID: String
+    public var scope: StickyScope
+
+    public init(matchBundleID: String, scope: StickyScope = .stage) {
+        self.matchBundleID = matchBundleID
+        self.scope = scope
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case matchBundleID = "bundle_id"
+        case scope
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.matchBundleID = try c.decode(String.self, forKey: .matchBundleID)
+        if let raw = try c.decodeIfPresent(String.self, forKey: .scope) {
+            self.scope = StickyScope(rawValue: raw) ?? .stage
+        } else {
+            self.scope = .stage
+        }
+    }
+}
+
+/// SPEC-026 US4 — portée du sticky.
+public enum StickyScope: String, Codable, Sendable, Equatable {
+    case stage    // visible sur toutes stages d'un (display, desktop)
+    case desktop  // visible sur tous desktops d'un display
+    case all      // suit le display actif (cross-display)
 }

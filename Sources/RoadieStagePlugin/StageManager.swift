@@ -154,6 +154,9 @@ public final class StageManager {
     // Mis à jour incrémentalement par assign/removeWindow/deleteStage.
     // Reconstruit au boot via rebuildWidToScopeIndex().
     private var widToScope: [WindowID: StageScope] = [:]
+    /// SPEC-026 US4 — closure injectée par le daemon. Si retourne true, la wid
+    /// est exemptée du hide cross-stage (sticky). Appelée depuis le main actor.
+    public var shouldKeepWidStickyAcrossStages: ((WindowID) -> Bool)?
     // SPEC-021 : index inverse wid → stageID (mode V1 global).
     private var widToStageV1: [WindowID: StageID] = [:]
 
@@ -890,6 +893,10 @@ public final class StageManager {
                                       && s.stageID != stageID {
             for member in stage.memberWindows { widsToHide.insert(member.cgWindowID) }
         }
+        // SPEC-026 US4 — exclure les sticky.
+        if let isSticky = shouldKeepWidStickyAcrossStages {
+            widsToHide = widsToHide.filter { !isSticky($0) }
+        }
         for wid in widsToHide {
             let isTileable = registry.get(wid)?.isTileable ?? false
             if let override = hideOverride {
@@ -1025,7 +1032,7 @@ public final class StageManager {
         // du display X hide aussi les windows des autres displays → "tout descend
         // sur le petit écran" (bug observé). Ownership wid→display dérivée de stagesV2
         // (un wid appartient à la stage qui le contient via memberWindows).
-        let widsToHide: Set<WindowID>
+        var widsToHide: Set<WindowID>
         if stageMode == .perDisplay {
             var widDisplay: [WindowID: String] = [:]
             for (s, stage) in stagesV2 {
@@ -1045,6 +1052,10 @@ public final class StageManager {
                 for member in stage.memberWindows { s.insert(member.cgWindowID) }
             }
             widsToHide = s
+        }
+        // SPEC-026 US4 — exclure les sticky du hide cross-stage.
+        if let isSticky = shouldKeepWidStickyAcrossStages {
+            widsToHide = widsToHide.filter { !isSticky($0) }
         }
         for wid in widsToHide {
             let isTileable = registry.get(wid)?.isTileable ?? false
