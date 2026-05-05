@@ -130,6 +130,12 @@ public struct WindowState: Sendable {
     /// `preZoomFrame` mémorise sa position pré-zoom pour la restoration.
     public var isZoomed: Bool
     public var preZoomFrame: CGRect?
+    /// SPEC-025 — bit sticky : `true` dès qu'une fenêtre a été observée tileable
+    /// (subrole standard + frame ≥ 100px) au moins une fois. Empêche la
+    /// reclassification automatique en helper si la frame rétrécit ensuite
+    /// (ex: warp/move qui produit une frame 73×1172 → ne doit PAS éjecter
+    /// la wid du tree). Mis à jour par WindowRegistry à chaque updateFrame.
+    public var wasEverTileable: Bool = false
 
     public init(cgWindowID: WindowID, pid: pid_t, bundleID: String,
                 title: String, frame: CGRect, subrole: AXSubrole,
@@ -163,8 +169,14 @@ public struct WindowState: Sendable {
     public static let minimumUsefulDimension: CGFloat = 100
 
     public var isTileable: Bool {
-        !isFloating && !isMinimized && !isFullscreen && !isZoomed && subrole == .standard
-            && !isHelperWindow
+        let baseFlags = !isFloating && !isMinimized && !isFullscreen
+            && !isZoomed && subrole == .standard
+        // SPEC-025 — sticky : si la wid a déjà été tilée, on ignore le check
+        // helper (= elle reste tileable même si la frame a rétréci suite à
+        // resize/warp foireux). Empêche le bug "iTerm 73×1172 éjecté du tree
+        // après warp chaotique → invisible dans le navrail".
+        if wasEverTileable { return baseFlags }
+        return baseFlags && !isHelperWindow
     }
 
     /// `true` si la fenêtre est un utility/popup/tooltip non destiné à l'utilisateur final

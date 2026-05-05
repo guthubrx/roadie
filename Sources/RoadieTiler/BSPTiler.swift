@@ -104,6 +104,33 @@ public final class BSPTiler: Tiler {
             return
         }
 
+        // SPEC-025 amend — racine single-child : append direct sans wrap.
+        // Sinon la 2e fenêtre crée toujours root[H]=[V[leaf,leaf]] (parent.opposite),
+        // tree dégénéré que ni warp ni move ne peuvent réparer (move cherche un
+        // parent dont l'orientation matche la direction, mais le V interne fait
+        // border immédiat). On reste plat tant qu'on est au niveau racine.
+        if parent === root && parent.children.count == 1 {
+            leaf.adaptiveWeight = 1.0
+            parent.children.insert(leaf, at: idx + 1)
+            leaf.parent = parent
+            let depthAfter = root.maxDepth
+            let leafCount = root.allLeaves.count
+            logInfo("tiler_insert", [
+                "strategy": "bsp",
+                "new_wid": String(leaf.windowID),
+                "target_wid": String(target.windowID),
+                "orientation": parent.orientation.rawValue,
+                "parent_orientation": parent.orientation.rawValue,
+                "reason": "root_single_child_append (no wrap)",
+                "tree_depth_after": String(depthAfter),
+                "tree_leaves_count": String(leafCount),
+                "tree_structure_after": String(root.compactStructure.prefix(200)),
+                "tree_is_flat": "false",
+            ])
+            BSPTiler.lastDepthByRoot[ObjectIdentifier(root)] = depthAfter
+            return
+        }
+
         // Auto-orientation selon la politique de split active.
         //   .largestDim : orientation choisie par l'aspect ratio du target
         //     (target large → split horizontal, target haute → split vertical)
@@ -270,15 +297,21 @@ public final class BSPTiler: Tiler {
 
     public func focusNeighbor(of leaf: WindowLeaf, direction: Direction, in root: TilingContainer) -> WindowLeaf? {
         // Remonte jusqu'à trouver un container avec une orientation qui matche
-        // et un voisin dans la bonne direction.
+        // et un voisin VISIBLE dans la bonne direction. SPEC-025 — skip les
+        // leaves hidden (= sur un autre stage caché), sinon focus tombe dessus
+        // → setFocus réveille l'app → auto-stage-switch → cache les autres
+        // (signalé user "roadie focus left m'a caché les fenêtres").
         var current: TreeNode = leaf
         while let parent = current.parent {
             if parent.orientation == direction.orientation {
                 guard let idx = parent.index(of: current) else { return nil }
-                let targetIdx = direction.sign > 0 ? idx + 1 : idx - 1
-                if targetIdx >= 0 && targetIdx < parent.children.count {
-                    // Trouvé un voisin. Descendre dans son arbre pour récupérer une leaf.
-                    return descendToLeaf(parent.children[targetIdx], preferring: direction)
+                var targetIdx = direction.sign > 0 ? idx + 1 : idx - 1
+                while targetIdx >= 0 && targetIdx < parent.children.count {
+                    if let candidate = descendToVisibleLeaf(parent.children[targetIdx],
+                                                             preferring: direction) {
+                        return candidate
+                    }
+                    targetIdx += direction.sign > 0 ? 1 : -1
                 }
             }
             current = parent
@@ -286,18 +319,24 @@ public final class BSPTiler: Tiler {
         return nil
     }
 
-    /// Descend dans l'arbre vers une feuille, en préférant le côté correspondant à la direction.
-    private func descendToLeaf(_ node: TreeNode, preferring direction: Direction) -> WindowLeaf? {
-        if let leaf = node as? WindowLeaf { return leaf }
+    /// Descend dans l'arbre vers une feuille VISIBLE (skip hidden), en préférant
+    /// le côté correspondant à la direction.
+    private func descendToVisibleLeaf(_ node: TreeNode, preferring direction: Direction) -> WindowLeaf? {
+        if let leaf = node as? WindowLeaf { return leaf.isVisible ? leaf : nil }
         guard let container = node as? TilingContainer, !container.children.isEmpty else { return nil }
-        // Si le container est dans la direction du mouvement, prendre le coin proche.
-        // Sinon, prendre le 1er enfant.
-        let pickIndex: Int
-        if container.orientation == direction.orientation {
-            pickIndex = direction.sign > 0 ? 0 : container.children.count - 1
+        let kids = container.children
+        let isAxisAligned = container.orientation == direction.orientation
+        let order: [Int]
+        if isAxisAligned {
+            order = direction.sign > 0
+                ? Array(kids.indices)
+                : Array(kids.indices.reversed())
         } else {
-            pickIndex = 0
+            order = Array(kids.indices)
         }
-        return descendToLeaf(container.children[pickIndex], preferring: direction)
+        for i in order {
+            if let l = descendToVisibleLeaf(kids[i], preferring: direction) { return l }
+        }
+        return nil
     }
 }
