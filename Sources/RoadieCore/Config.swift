@@ -456,6 +456,13 @@ public struct TilingConfig: Codable, Sendable {
     /// SPEC-026 US2 — si true et qu'un display contient 1 seule fenêtre tilée,
     /// les gaps (outer + inner) sont forcés à 0 sur ce display. Default false.
     public var smartGapsSolo: Bool
+    /// SPEC-027 US2 — sélection des côtés à neutraliser quand `smartGapsSolo`
+    /// est actif. Liste de strings parmi `top|bottom|left|right`. Default
+    /// `["top","bottom","left","right"]` (tous → comportement SPEC-026).
+    /// Si vide → équivalent à `smartGapsSolo = false`. Permet par exemple
+    /// de garder `gaps_outer_left = 150` (réserve navrail) tout en mettant
+    /// les autres côtés à 0 quand une seule fenêtre est présente.
+    public var smartGapsSoloSides: [String]
 
     /// Marges externes effectives (avec fallback sur gapsOuter pour les côtés non spécifiés).
     public var effectiveOuterGaps: OuterGaps {
@@ -474,7 +481,8 @@ public struct TilingConfig: Codable, Sendable {
                 gapsInner: Int = 4,
                 masterRatio: Double = 0.6,
                 splitPolicy: String = "largest_dim",
-                smartGapsSolo: Bool = false) {
+                smartGapsSolo: Bool = false,
+                smartGapsSoloSides: [String] = ["top", "bottom", "left", "right"]) {
         self.defaultStrategy = defaultStrategy
         self.gapsOuter = gapsOuter
         self.gapsOuterTop = gapsOuterTop
@@ -485,6 +493,7 @@ public struct TilingConfig: Codable, Sendable {
         self.masterRatio = masterRatio
         self.splitPolicy = splitPolicy
         self.smartGapsSolo = smartGapsSolo
+        self.smartGapsSoloSides = smartGapsSoloSides
     }
 
     enum CodingKeys: String, CodingKey {
@@ -498,6 +507,7 @@ public struct TilingConfig: Codable, Sendable {
         case masterRatio = "master_ratio"
         case splitPolicy = "split_policy"
         case smartGapsSolo = "smart_gaps_solo"
+        case smartGapsSoloSides = "smart_gaps_solo_sides"
     }
 
     /// Decode tolérant : tous les champs sont optionnels et ont un default.
@@ -515,6 +525,8 @@ public struct TilingConfig: Codable, Sendable {
         self.masterRatio = try c.decodeIfPresent(Double.self, forKey: .masterRatio) ?? 0.6
         self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
         self.smartGapsSolo = try c.decodeIfPresent(Bool.self, forKey: .smartGapsSolo) ?? false
+        self.smartGapsSoloSides = try c.decodeIfPresent([String].self, forKey: .smartGapsSoloSides)
+            ?? ["top", "bottom", "left", "right"]
     }
 }
 

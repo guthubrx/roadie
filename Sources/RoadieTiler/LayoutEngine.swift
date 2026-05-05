@@ -32,6 +32,10 @@ public final class LayoutEngine {
     /// visible, gaps outer + inner forcés à 0 sur ce display. Settable depuis
     /// main.swift au boot/reload depuis `config.tiling.smartGapsSolo`.
     public var smartGapsSolo: Bool = false
+    /// SPEC-027 US2 — côtés à neutraliser quand `smartGapsSolo` est actif.
+    /// Default = tous (rétrocompat SPEC-026). Liste vide = équivalent à
+    /// `smartGapsSolo = false`. Settable depuis main.swift / CommandRouter.
+    public var smartGapsSoloSides: Set<String> = ["top", "bottom", "left", "right"]
 
     /// SPEC-025 — timestamp du dernier resize/warp/move user-driven par wid.
     /// Sert au filtre `tiler_extreme_aspect` : on n'alerte pas si la frame
@@ -724,8 +728,25 @@ public final class LayoutEngine {
             let displayRoot = root(for: key)
             let visibleLeavesCount = displayRoot.allLeaves.filter { $0.isVisible }.count
             let useSoloGaps = smartGapsSolo && visibleLeavesCount == 1
-            var gaps = useSoloGaps ? OuterGaps.zero : (outerSides ?? .uniform(display.gapsOuter))
-            if let reserve = leftReserveByDisplay[display.id], reserve > 0, !useSoloGaps {
+                && !smartGapsSoloSides.isEmpty
+            // SPEC-027 US2 — application sélective. Pour chaque côté, si
+            // smartGapsSoloSides le mentionne, on force 0, sinon on garde
+            // la valeur configurée (outerSides ou .uniform).
+            let baseGaps = outerSides ?? .uniform(display.gapsOuter)
+            var gaps: OuterGaps
+            if useSoloGaps {
+                gaps = OuterGaps(
+                    top:    smartGapsSoloSides.contains("top")    ? 0 : baseGaps.top,
+                    bottom: smartGapsSoloSides.contains("bottom") ? 0 : baseGaps.bottom,
+                    left:   smartGapsSoloSides.contains("left")   ? 0 : baseGaps.left,
+                    right:  smartGapsSoloSides.contains("right")  ? 0 : baseGaps.right)
+            } else {
+                gaps = baseGaps
+            }
+            // Reserve s'applique encore quand left n'a pas été neutralisé (sinon
+            // contradiction : l'utilisateur a explicitement demandé left=0).
+            if let reserve = leftReserveByDisplay[display.id], reserve > 0,
+               !(useSoloGaps && smartGapsSoloSides.contains("left")) {
                 gaps = OuterGaps(top: gaps.top, bottom: gaps.bottom,
                                  left: gaps.left + Int(reserve), right: gaps.right)
             }

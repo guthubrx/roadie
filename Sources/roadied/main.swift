@@ -148,6 +148,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         self.layoutEngine = try LayoutEngine(registry: registry, strategy: config.tiling.defaultStrategy)
         // SPEC-026 US2 — propage smart_gaps_solo au moteur.
         self.layoutEngine.smartGapsSolo = config.tiling.smartGapsSolo
+        // SPEC-027 US2 — propage la sélection des côtés à neutraliser.
+        self.layoutEngine.smartGapsSoloSides = Set(config.tiling.smartGapsSoloSides)
         if config.stageManager.enabled {
             // Hooks injectés via closure pour que StageManager puisse marquer les
             // leaves invisibles au tiler sans dépendance directe vers RoadieTiler.
@@ -1230,6 +1232,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 StageNumbersBadgeState.shared.fontSize = newConfig.fxRailStageNumbersSize
                 StageNumbersBadgeState.shared.opacity = newConfig.fxRailStageNumbersOpacity
                 self.layoutEngine.smartGapsSolo = newConfig.tiling.smartGapsSolo
+                self.layoutEngine.smartGapsSoloSides = Set(newConfig.tiling.smartGapsSoloSides)
                 self.focusManager.mouseFollowsFocus = newConfig.focus.mouseFollowsFocus
                 if newConfig.focus.focusFollowsMouse {
                     self.focusFollowsMouseWatcher?.start()
