@@ -113,6 +113,15 @@ public final class MouseDragHandler {
         return active.isSuperset(of: needed)
     }
 
+    /// Vrai si modifier ET slow_modifier sont pressés simultanément (= mode lent).
+    private func slowIsPressed(in event: NSEvent) -> Bool {
+        guard config.slowModifier != .none else { return false }
+        let mask: NSEvent.ModifierFlags = [.shift, .control, .option, .command]
+        let active = event.modifierFlags.intersection(mask)
+        let needed = config.modifier.nsFlags.union(config.slowModifier.nsFlags)
+        return active.isSuperset(of: needed)
+    }
+
     // MARK: Event dispatch
 
     private func handle(event: NSEvent, at location: CGPoint) {
@@ -177,6 +186,7 @@ public final class MouseDragHandler {
             ? computeQuadrant(cursor: cursorAX, frame: state.frame,
                               edgeThreshold: CGFloat(config.edgeThreshold))
             : .center
+        let factor = slowIsPressed(in: event) ? config.slowFactor : 1.0
         session = MouseDragSession(
             wid: wid,
             mode: action,
@@ -185,12 +195,14 @@ public final class MouseDragHandler {
             quadrant: quadrant,
             lastApply: .distantPast,
             tileableAtStart: state.isTileable,
-            wasFloatingBeforeDrag: state.isFloating
+            wasFloatingBeforeDrag: state.isFloating,
+            slowFactor: factor
         )
         logInfo("mouse-drag-start", [
             "wid": String(wid),
             "mode": action.rawValue,
             "quadrant": quadrant.rawValue,
+            "slow_factor": String(format: "%.2f", factor),
         ])
     }
 
@@ -203,8 +215,8 @@ public final class MouseDragHandler {
         let now = Date()
         guard now.timeIntervalSince(session.lastApply) >= 0.030 else { return }
         session.lastApply = now
-        let delta = CGPoint(x: cgPoint.x - session.startCursor.x,
-                            y: cgPoint.y - session.startCursor.y)
+        let delta = CGPoint(x: (cgPoint.x - session.startCursor.x) * session.slowFactor,
+                            y: (cgPoint.y - session.startCursor.y) * session.slowFactor)
         let newFrame: CGRect
         switch session.mode {
         case .move:
@@ -235,8 +247,8 @@ public final class MouseDragHandler {
         guard var session = session else { return }
         // Final setBounds inconditionnel.
         if let cgPoint = nsToCG(location) {
-            let delta = CGPoint(x: cgPoint.x - session.startCursor.x,
-                                y: cgPoint.y - session.startCursor.y)
+            let delta = CGPoint(x: (cgPoint.x - session.startCursor.x) * session.slowFactor,
+                                y: (cgPoint.y - session.startCursor.y) * session.slowFactor)
             let finalFrame: CGRect
             switch session.mode {
             case .move:
@@ -318,6 +330,10 @@ public struct MouseDragSession {
     /// fenêtre déjà float user-choice (laisser float) d'une fenêtre tilée
     /// transitoirement floatée par le handler pour la session de drag (re-tiler).
     public let wasFloatingBeforeDrag: Bool
+    /// Facteur appliqué au delta de mouvement. 1.0 = mode normal, < 1.0 = lent.
+    /// Capturé au mouseDown (slow_modifier pressé) pour rester stable toute la
+    /// durée du drag même si l'utilisateur relâche le slow_modifier en route.
+    public let slowFactor: Double
 }
 
 // MARK: - Quadrant computation (FR-020)
