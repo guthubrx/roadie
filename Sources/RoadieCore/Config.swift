@@ -97,17 +97,23 @@ public enum MouseAction: String, Codable, Sendable, Equatable {
 /// Configuration souris (section `[mouse]` du TOML).
 public struct MouseConfig: Codable, Sendable, Equatable {
     public var modifier: ModifierKey
+    public var slowModifier: ModifierKey
+    public var slowFactor: Double
     public var actionLeft: MouseAction
     public var actionRight: MouseAction
     public var actionMiddle: MouseAction
     public var edgeThreshold: Int
 
     public init(modifier: ModifierKey = .ctrl,
+                slowModifier: ModifierKey = .none,
+                slowFactor: Double = 0.3,
                 actionLeft: MouseAction = .move,
                 actionRight: MouseAction = .resize,
                 actionMiddle: MouseAction = .none,
                 edgeThreshold: Int = 30) {
         self.modifier = modifier
+        self.slowModifier = slowModifier
+        self.slowFactor = max(0.05, min(1.0, slowFactor))
         self.actionLeft = actionLeft
         self.actionRight = actionRight
         self.actionMiddle = actionMiddle
@@ -116,6 +122,8 @@ public struct MouseConfig: Codable, Sendable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case modifier
+        case slowModifier = "slow_modifier"
+        case slowFactor = "slow_factor"
         case actionLeft = "action_left"
         case actionRight = "action_right"
         case actionMiddle = "action_middle"
@@ -130,6 +138,13 @@ public struct MouseConfig: Codable, Sendable, Equatable {
         } else {
             self.modifier = .ctrl
         }
+        if let raw = try c.decodeIfPresent(String.self, forKey: .slowModifier) {
+            self.slowModifier = ModifierKey(rawValue: raw) ?? .none
+        } else {
+            self.slowModifier = .none
+        }
+        let rawSlow = try c.decodeIfPresent(Double.self, forKey: .slowFactor) ?? 0.3
+        self.slowFactor = max(0.05, min(1.0, rawSlow))
         // FR-003 : valeur invalide → fallback default (move pour left, resize pour right, none pour middle).
         if let raw = try c.decodeIfPresent(String.self, forKey: .actionLeft) {
             self.actionLeft = MouseAction(rawValue: raw) ?? .move
