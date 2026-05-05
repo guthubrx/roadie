@@ -86,9 +86,27 @@ public struct Config: Codable, Sendable {
     private struct FXSection: Codable {
         let opacity: OpacitySection?
         let rail: RailSection?
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            opacity = try c.decodeIfPresent(OpacitySection.self, forKey: .opacity)
+            rail = try c.decodeIfPresent(RailSection.self, forKey: .rail)
+        }
+        enum CodingKeys: String, CodingKey { case opacity, rail }
         struct OpacitySection: Codable {
             let stage_hide: StageHideSection?
-            struct StageHideSection: Codable { let enabled: Bool? }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                stage_hide = try c.decodeIfPresent(StageHideSection.self, forKey: .stage_hide)
+            }
+            enum CodingKeys: String, CodingKey { case stage_hide }
+            struct StageHideSection: Codable {
+                let enabled: Bool?
+                init(from decoder: Decoder) throws {
+                    let c = try decoder.container(keyedBy: CodingKeys.self)
+                    enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
+                }
+                enum CodingKeys: String, CodingKey { case enabled }
+            }
         }
         struct RailSection: Codable {
             let stage_numbers_enabled: Bool?
@@ -96,6 +114,18 @@ public struct Config: Codable, Sendable {
             let stage_numbers_offset_y: Double?
             let stage_numbers_size: Double?
             let stage_numbers_opacity: Double?
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                stage_numbers_enabled = try c.decodeIfPresent(Bool.self, forKey: .stage_numbers_enabled)
+                stage_numbers_offset_x = try c.decodeIfPresent(Double.self, forKey: .stage_numbers_offset_x)
+                stage_numbers_offset_y = try c.decodeIfPresent(Double.self, forKey: .stage_numbers_offset_y)
+                stage_numbers_size = try c.decodeIfPresent(Double.self, forKey: .stage_numbers_size)
+                stage_numbers_opacity = try c.decodeIfPresent(Double.self, forKey: .stage_numbers_opacity)
+            }
+            enum CodingKeys: String, CodingKey {
+                case stage_numbers_enabled, stage_numbers_offset_x, stage_numbers_offset_y
+                case stage_numbers_size, stage_numbers_opacity
+            }
         }
     }
 
