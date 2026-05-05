@@ -67,6 +67,22 @@ public final class FocusFollowsMouseWatcher {
         if registry.focusedWindowID == wid { return }
         // Skip si récemment marquée zombie (échec setFocus).
         if let until = skippedZombieUntil[wid], Date() < until { return }
+        // SPEC-026 — skip les wids parkées offscreen par HideStrategy.corner.
+        // Sans ça, le coin bas-gauche réveille systématiquement les fenêtres
+        // cachées des autres stages (HideStrategy.corner park les fenêtres à
+        // `x = -width + 1`, donc origin.x très négatif). CGWindowList retourne
+        // ces wids car leur rect, étiré sur la largeur de la fenêtre, traverse
+        // encore la zone visible quand le curseur arrive sur le bord gauche.
+        if let state = registry.get(wid) {
+            if state.frame.origin.x < -100 || state.frame.origin.y < -100 {
+                skippedZombieUntil[wid] = Date().addingTimeInterval(5.0)
+                logInfo("focus_follows_mouse_skipped_offscreen", [
+                    "wid": String(wid),
+                    "origin": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
+                ])
+                return
+            }
+        }
         // Skip helper windows.
         if let state = registry.get(wid), state.isHelperWindow { return }
         // Skip wids zombies (sans AXElement). Évite le loop : sans ce skip,
