@@ -262,6 +262,17 @@ enum CommandRouter {
                 daemon.scratchpadManager?.loadConfig(newConfig.scratchpads)
                 // SPEC-026 US4 — sticky reload (re-build index bundle IDs).
                 daemon.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
+                // SPEC-026 fix Firefox slide — install/uninstall override au reload.
+                if newConfig.fxOpacityStageHideEnabled {
+                    if daemon.opacityStageHider == nil {
+                        let hider = OpacityStageHider(bridge: DaemonOSAXBridge.shared)
+                        daemon.opacityStageHider = hider
+                    }
+                    daemon.stageManager?.hideOverride = daemon.opacityStageHider
+                } else {
+                    daemon.stageManager?.hideOverride = nil
+                    daemon.opacityStageHider = nil
+                }
                 logInfo("config reloaded", [
                     "smart_gaps_solo": String(newConfig.tiling.smartGapsSolo),
                     "focus_follows_mouse": String(newConfig.focus.focusFollowsMouse),

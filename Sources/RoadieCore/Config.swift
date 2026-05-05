@@ -16,6 +16,10 @@ public struct Config: Codable, Sendable {
     public var scratchpads: [ScratchpadDef]
     /// SPEC-026 US4 — règles sticky par-fenêtre (clé TOML `[[sticky]]`).
     public var stickyRules: [StickyRuleDef]
+    /// SPEC-026 fix Firefox slide — lecture minimale de `[fx.opacity.stage_hide].enabled`
+    /// pour décider si on installe `OpacityStageHider` au boot. Indépendant du
+    /// module dynamique RoadieOpacity (qui décode sa propre section au runtime).
+    public var fxOpacityStageHideEnabled: Bool
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
@@ -27,7 +31,8 @@ public struct Config: Codable, Sendable {
                 focus: FocusConfig = .init(),
                 signals: SignalsConfig = .init(),
                 scratchpads: [ScratchpadDef] = [],
-                stickyRules: [StickyRuleDef] = []) {
+                stickyRules: [StickyRuleDef] = [],
+                fxOpacityStageHideEnabled: Bool = false) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
@@ -39,6 +44,7 @@ public struct Config: Codable, Sendable {
         self.signals = signals
         self.scratchpads = scratchpads
         self.stickyRules = stickyRules
+        self.fxOpacityStageHideEnabled = fxOpacityStageHideEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -53,6 +59,16 @@ public struct Config: Codable, Sendable {
         case signals
         case scratchpads
         case stickyRules = "sticky"
+        case fx
+    }
+
+    /// SPEC-026 — décodeur minimal pour `[fx.opacity.stage_hide].enabled`.
+    private struct FXSection: Codable {
+        let opacity: OpacitySection?
+        struct OpacitySection: Codable {
+            let stage_hide: StageHideSection?
+            struct StageHideSection: Codable { let enabled: Bool? }
+        }
     }
 
     /// Decode tolérant : toute section absente du TOML utilisateur retombe sur les
@@ -72,6 +88,9 @@ public struct Config: Codable, Sendable {
         self.signals = try c.decodeIfPresent(SignalsConfig.self, forKey: .signals) ?? .init()
         self.scratchpads = try c.decodeIfPresent([ScratchpadDef].self, forKey: .scratchpads) ?? []
         self.stickyRules = try c.decodeIfPresent([StickyRuleDef].self, forKey: .stickyRules) ?? []
+        // SPEC-026 — extrait juste `[fx.opacity.stage_hide].enabled`.
+        let fx = try c.decodeIfPresent(FXSection.self, forKey: .fx)
+        self.fxOpacityStageHideEnabled = fx?.opacity?.stage_hide?.enabled ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
