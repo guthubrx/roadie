@@ -61,6 +61,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var scratchpadManager: ScratchpadManager?
     /// SPEC-026 US4 — index des bundleID sticky pour matching rapide.
     var stickyBundleIDs: Set<String> = []
+    /// SPEC-026 fix Firefox slide — référence forte sur l'override hide. Sinon
+    /// la weak ref dans StageManager.hideOverride collapse → fallback HideStrategy.corner.
+    var opacityStageHider: OpacityStageHider?
     var periodicScanner: PeriodicScanner?
     var dragWatcher: DragWatcher?
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
@@ -207,6 +210,17 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             return self.stickyBundleIDs.contains(bundleID)
         }
         _ = stickyBundleIDs   // silence unused if reload path branches differently
+        // SPEC-026 fix Firefox slide — installer OpacityStageHider si activé.
+        // Cause root : protocol StageHideOverride était défini mais jamais
+        // implémenté → HideStrategy.corner s'appliquait toujours → animation
+        // de slide macOS systématique. Cet override remplace setBounds(offscreen)
+        // par setAlpha(0) via OSAX → fenêtre invisible sans déplacement.
+        if config.fxOpacityStageHideEnabled {
+            let hider = OpacityStageHider(bridge: DaemonOSAXBridge.shared)
+            self.opacityStageHider = hider
+            self.stageManager?.hideOverride = hider
+            logInfo("opacity_stage_hider_installed")
+        }
         self.thumbnailCache = ThumbnailCache(capacity: 50)
     }
 
