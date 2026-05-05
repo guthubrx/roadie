@@ -16,12 +16,16 @@ public struct StageNumberBadge: View {
     }
 
     public var body: some View {
+        // Pas de frame(maxWidth/maxHeight: .infinity) : sinon le ZStack se
+        // redimensionne sur infinity et la cellule devient géante (bug observé).
+        // Le badge est positionné dans le coin haut-gauche via le ZStack alignment
+        // côté StageStackView, puis l'offset le fait dépasser légèrement.
         Text(number)
-            .font(.system(size: 88, weight: .black, design: .rounded))
-            .foregroundColor(Color(hex: colorHex).opacity(0.20))
-            .shadow(color: Color.black.opacity(0.30), radius: 4, x: 0, y: 2)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .offset(x: -10, y: -22)
+            .font(.system(size: 64, weight: .black, design: .rounded))
+            .foregroundColor(Color(hex: colorHex).opacity(0.28))
+            .shadow(color: Color.black.opacity(0.40), radius: 3, x: 0, y: 1)
+            .offset(x: -8, y: -16)
             .allowsHitTesting(false)
+            .fixedSize()
     }
 }
