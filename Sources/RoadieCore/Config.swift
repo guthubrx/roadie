@@ -281,35 +281,36 @@ public struct DesktopsConfig: Codable, Sendable {
 
 /// Configuration des comportements liés au focus (section `[focus]`).
 public struct FocusConfig: Codable, Sendable, Equatable {
-    /// Si true, basculer automatiquement vers le stage/desktop de la fenêtre
-    /// nouvellement focused (typiquement déclenché par AltTab/Cmd-Tab).
-    /// Sans ça, l'app prend le focus mais sa fenêtre reste invisible
-    /// (cachée offscreen sur un autre stage/desktop).
     public var stageFollowsFocus: Bool
-
-    /// Si true, après `stage.assign`, basculer aussi vers le stage cible
-    /// (comportement yabai `--focus`). Sans ça, la fenêtre est envoyée mais
-    /// l'utilisateur reste sur la stage courante (utile pour dispatcher
-    /// plusieurs fenêtres avant de bouger).
     public var assignFollowsFocus: Bool
+    /// SPEC-026 US5 — focus suit la souris (hover focus). Default false (opt-in obligatoire).
+    public var focusFollowsMouse: Bool
+    /// SPEC-026 US5 — curseur saute sur la fenêtre focalisée par raccourci. Default false.
+    public var mouseFollowsFocus: Bool
 
     public init(stageFollowsFocus: Bool = false,
-                assignFollowsFocus: Bool = true) {
+                assignFollowsFocus: Bool = true,
+                focusFollowsMouse: Bool = false,
+                mouseFollowsFocus: Bool = false) {
         self.stageFollowsFocus = stageFollowsFocus
         self.assignFollowsFocus = assignFollowsFocus
+        self.focusFollowsMouse = focusFollowsMouse
+        self.mouseFollowsFocus = mouseFollowsFocus
     }
 
     enum CodingKeys: String, CodingKey {
         case stageFollowsFocus = "stage_follows_focus"
         case assignFollowsFocus = "assign_follows_focus"
+        case focusFollowsMouse = "focus_follows_mouse"
+        case mouseFollowsFocus = "mouse_follows_focus"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        // Default false : éviter l'animation involontaire des fenêtres déplacées
-        // par HideStrategy.corner quand on tabe entre apps. Opt-in via TOML.
         self.stageFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .stageFollowsFocus) ?? false
         self.assignFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .assignFollowsFocus) ?? true
+        self.focusFollowsMouse = try c.decodeIfPresent(Bool.self, forKey: .focusFollowsMouse) ?? false
+        self.mouseFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .mouseFollowsFocus) ?? false
     }
 }
 
@@ -354,12 +355,10 @@ public struct TilingConfig: Codable, Sendable {
     public var gapsInner: Int
     public var masterRatio: Double
     /// SPEC-025 amend — politique de split BSP.
-    /// "largest_dim" (default) : split sur le côté le plus long de la cible
-    ///   → fenêtres ≈ carrées, mais peut produire 3+ colonnes étirées en cas
-    ///     d'insertions successives sur une cible large.
-    /// "dwindle" : split orthogonal au parent (alterne H/V à chaque profondeur)
-    ///   → layouts plus équilibrés, comportement i3/sway classique.
     public var splitPolicy: String
+    /// SPEC-026 US2 — si true et qu'un display contient 1 seule fenêtre tilée,
+    /// les gaps (outer + inner) sont forcés à 0 sur ce display. Default false.
+    public var smartGapsSolo: Bool
 
     /// Marges externes effectives (avec fallback sur gapsOuter pour les côtés non spécifiés).
     public var effectiveOuterGaps: OuterGaps {
@@ -377,7 +376,8 @@ public struct TilingConfig: Codable, Sendable {
                 gapsOuterRight: Int? = nil,
                 gapsInner: Int = 4,
                 masterRatio: Double = 0.6,
-                splitPolicy: String = "largest_dim") {
+                splitPolicy: String = "largest_dim",
+                smartGapsSolo: Bool = false) {
         self.defaultStrategy = defaultStrategy
         self.gapsOuter = gapsOuter
         self.gapsOuterTop = gapsOuterTop
@@ -387,6 +387,7 @@ public struct TilingConfig: Codable, Sendable {
         self.gapsInner = gapsInner
         self.masterRatio = masterRatio
         self.splitPolicy = splitPolicy
+        self.smartGapsSolo = smartGapsSolo
     }
 
     enum CodingKeys: String, CodingKey {
@@ -399,6 +400,7 @@ public struct TilingConfig: Codable, Sendable {
         case gapsInner = "gaps_inner"
         case masterRatio = "master_ratio"
         case splitPolicy = "split_policy"
+        case smartGapsSolo = "smart_gaps_solo"
     }
 
     /// Decode tolérant : tous les champs sont optionnels et ont un default.
@@ -415,6 +417,7 @@ public struct TilingConfig: Codable, Sendable {
         self.gapsInner = try c.decodeIfPresent(Int.self, forKey: .gapsInner) ?? 4
         self.masterRatio = try c.decodeIfPresent(Double.self, forKey: .masterRatio) ?? 0.6
         self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
+        self.smartGapsSolo = try c.decodeIfPresent(Bool.self, forKey: .smartGapsSolo) ?? false
     }
 }
 
