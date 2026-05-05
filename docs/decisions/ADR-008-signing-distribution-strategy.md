@@ -26,7 +26,7 @@ A single canonical install:
 | Dev symlink | `~/.local/bin/roadied` → bundle above | So `cp .build/debug/roadied ~/.local/bin/` dereferences and updates the bundle. Preserves the existing dev workflow. |
 | CLI client binary | `~/.local/bin/roadie` (real file) | IPC client. Also signed for consistency. |
 | LaunchAgent | `~/Library/LaunchAgents/com.roadie.roadie.plist` | `RunAtLoad=true`, `KeepAlive.Crashed=true`, points to `~/Applications/roadied.app/Contents/MacOS/roadied`. |
-| Dev certificate | `roadied-cert` (login keychain, Code Signing type, Self Signed Root) | Stable identity. Created once via Keychain Access > Certificate Assistant. |
+| Dev certificate | `roadied-cert` (login keychain, Code Signing type, Self Signed Root) | Stable identity. Created once via Keychain Access > Certificate Assistant **or** via `scripts/create-codesign-cert.sh`. **The X.509 profile is constrained**: non-critical extensions, `subjectKeyIdentifier` + `authorityKeyIdentifier` required — see ADR-010 for the Tahoe-specific cause and automated check. |
 
 Any other roadie `.app` is forbidden (orphan `/Applications/Roadie.app` bundles must be deleted on first detection).
 
@@ -49,7 +49,7 @@ The `roadied-cert` certificate is a self-signed root, Code Signing type, in the 
 
 Consequences:
 - Accessibility permission granted **once** to the binary `~/Applications/roadied.app/Contents/MacOS/roadied`. It survives all rebuilds.
-- If the cert is deleted from the keychain or expires, a new one must be generated (same name) and the grant re-ticked. This is a rare event (cert with no explicit expiration by default).
+- If the cert is deleted from the keychain or expires, a new one must be generated (same name) and the grant re-ticked. **Regeneration invalidates every accumulated grant and requires a full Mac reboot** — see the strict procedure in ADR-010 §3. This is a rare event (10-year validity in the default profile) and should be avoided unless strictly necessary.
 - If a developer changes the cert name (`ROADIE_CERT=foo ./scripts/install-dev.sh`), they must re-tick the grant for that new TCC identifier.
 
 ### 4. **End-user** distribution strategy (future phase, not immediate)

@@ -26,7 +26,7 @@ Une seule install canonique :
 | Symlink dev | `~/.local/bin/roadied` → bundle ci-dessus | Pour `cp .build/debug/roadied ~/.local/bin/` qui dérefère et MAJ le bundle. Sécurise le workflow dev existant. |
 | Binaire CLI client | `~/.local/bin/roadie` (fichier réel) | Client IPC. Signé aussi pour cohérence. |
 | LaunchAgent | `~/Library/LaunchAgents/com.roadie.roadie.plist` | `RunAtLoad=true`, `KeepAlive.Crashed=true`, pointe vers `~/Applications/roadied.app/Contents/MacOS/roadied`. |
-| Certificat dev | `roadied-cert` (login keychain, type Code Signing, Self Signed Root) | Identité stable. Créé une fois via Keychain Access > Certificate Assistant. |
+| Certificat dev | `roadied-cert` (login keychain, type Code Signing, Self Signed Root) | Identité stable. Créé une fois via Keychain Access > Certificate Assistant **ou** via `scripts/create-codesign-cert.sh`. **Le profile X.509 est contraint** : extensions non-critical, `subjectKeyIdentifier` + `authorityKeyIdentifier` requis — cf. ADR-010 pour la cause Tahoe et le check automatique. |
 
 Tout autre `.app` de roadie est interdit (les bundles `/Applications/Roadie.app` orphelins doivent être supprimés à la première détection).
 
@@ -49,7 +49,7 @@ Le certificat `roadied-cert` est self-signed root, type Code Signing, dans le lo
 
 Conséquences :
 - Permission Accessibility donnée **une seule fois** au binaire `~/Applications/roadied.app/Contents/MacOS/roadied`. Elle survit à tous les rebuilds.
-- Si le cert est supprimé du keychain ou expiré, il faut en re-générer un (même nom) et re-cocher la grant. C'est un événement rare (cert sans expiration explicite par défaut).
+- Si le cert est supprimé du keychain ou expiré, il faut en re-générer un (même nom) et re-cocher la grant. **La régénération invalide tous les grants accumulés et impose un reboot Mac complet** — voir la procédure stricte en ADR-010 §3. C'est un événement rare (cert valable 10 ans dans le profile par défaut), à éviter sauf nécessité absolue.
 - Si un développeur change le nom du cert (`ROADIE_CERT=foo ./scripts/install-dev.sh`), il devra re-cocher la grant pour ce nouvel identifiant TCC.
 
 ### 4. Stratégie de distribution **end-user** (phase ultérieure, non immédiate)

@@ -100,6 +100,23 @@ else
 fi
 echo "  ${B}·${N} CDHash=$CDHASH"
 
+# ADR-010 : extensions X.509 du cert NE DOIVENT PAS être flag 'critical'.
+# Sur macOS Tahoe, TCC refuse de stabiliser une grant pour un cert dont
+# basicConstraints / keyUsage / extendedKeyUsage sont marqués critical.
+# Cf. issue OpenClaw#14138 + Apple Developer Forums 730043.
+EXTS_CRITICAL=$(security find-certificate -c roadied-cert -p login.keychain 2>/dev/null \
+    | openssl x509 -text -noout 2>/dev/null \
+    | grep -cE "X509v3 (Basic Constraints|Key Usage|Extended Key Usage): critical" \
+    || true)
+if [ "$EXTS_CRITICAL" -gt 0 ]; then
+    echo "  ${R}✗${N} cert 'roadied-cert' a $EXTS_CRITICAL extension(s) flag 'critical'"
+    echo "    → INCOMPATIBLE avec TCC sur macOS Tahoe (cf. ADR-010)"
+    echo "    → re-générer : ./scripts/create-codesign-cert.sh --force"
+    echo "    → puis : ./scripts/install-dev.sh + reboot Mac + re-cocher TCC"
+    exit 2
+fi
+echo "  ${G}·${N} cert profile : extensions non-critical (TCC-compatible)"
+
 # 2. Drift de hash depuis le dernier toggle TCC.
 echo
 echo "${B}[2/5]${N} hash binaire vs dernier toggle TCC"
