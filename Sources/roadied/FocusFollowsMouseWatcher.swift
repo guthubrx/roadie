@@ -18,6 +18,7 @@ public final class FocusFollowsMouseWatcher {
 
     private var monitor: Any?
     private var lastApply: Date = .distantPast
+    private var skippedZombieUntil: [WindowID: Date] = [:]
     private static let throttleSeconds: TimeInterval = 0.1
 
     public init(registry: WindowRegistry,
@@ -64,8 +65,18 @@ public final class FocusFollowsMouseWatcher {
         guard let wid = topmostWindowID(at: cgPoint) else { return }
         // Skip si déjà focused.
         if registry.focusedWindowID == wid { return }
+        // Skip si récemment marquée zombie (échec setFocus).
+        if let until = skippedZombieUntil[wid], Date() < until { return }
         // Skip helper windows.
         if let state = registry.get(wid), state.isHelperWindow { return }
+        // Skip wids zombies (sans AXElement). Évite le loop : sans ce skip,
+        // setFocus échoue silencieusement, registry.focusedWindowID ne change
+        // pas, au prochain mouseMoved on re-trigger sur la même wid morte.
+        guard registry.axElement(for: wid) != nil else {
+            // Cache la wid 1s pour ne pas re-essayer immédiatement.
+            skippedZombieUntil[wid] = Date().addingTimeInterval(1.0)
+            return
+        }
         // Inhibit le warp : pas besoin de bouger le curseur, il est déjà sur
         // la fenêtre cible (c'est ce qui vient de déclencher le focus).
         focusManager.setInhibitWarp(durationSeconds: 0.4)
