@@ -213,6 +213,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // SPEC-026 fix Firefox slide — installer OpacityStageHider si activé
         // ET si l'osax est disponible (sinon les setAlpha partent dans le vide
         // et les fenêtres ne sont ni cachées ni montrées — pire que le slide).
+        // SPEC-026 — propage le toggle TOML stage_numbers_enabled au singleton
+        // observable consommé par le navrail SwiftUI. Reload-aware via daemon.reload.
+        StageNumbersBadgeState.shared.configEnabled = config.fxRailStageNumbersEnabled
         if config.fxOpacityStageHideEnabled {
             let osaxSocket = "/var/tmp/roadied-osax.sock"
             if FileManager.default.fileExists(atPath: osaxSocket) {

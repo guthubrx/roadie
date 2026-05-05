@@ -168,6 +168,14 @@ func handleRail(args: [String]) {
         // `roadie rail renderer <id>`
         guard args.count >= 4 else { printUsage(); exit(2) }
         sendAndPrint(Request(command: "rail.renderer.set", args: ["id": args[3]]))
+    case "stage-numbers":
+        // SPEC-026 — `roadie rail stage-numbers flash [seconds]` (default 3).
+        guard args.count >= 4, args[3] == "flash" else {
+            FileHandle.standardError.write("usage: roadie rail stage-numbers flash [seconds]\n".data(using: .utf8)!)
+            exit(64)
+        }
+        let secs = args.count >= 5 ? args[4] : "3"
+        sendAndPrint(Request(command: "rail.stage_numbers.flash", args: ["seconds": secs]))
     default:
         printUsage(); exit(64)
     }

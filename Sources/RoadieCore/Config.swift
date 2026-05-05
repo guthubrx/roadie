@@ -20,6 +20,10 @@ public struct Config: Codable, Sendable {
     /// pour décider si on installe `OpacityStageHider` au boot. Indépendant du
     /// module dynamique RoadieOpacity (qui décode sa propre section au runtime).
     public var fxOpacityStageHideEnabled: Bool
+    /// SPEC-026 — `[fx.rail].stage_numbers_enabled`. Affiche en permanence le
+    /// chiffre de la stage en arrière-plan de chaque cellule du navrail.
+    /// Désactivable + flash temporaire via `roadie rail stage-numbers flash <s>`.
+    public var fxRailStageNumbersEnabled: Bool
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
@@ -32,7 +36,8 @@ public struct Config: Codable, Sendable {
                 signals: SignalsConfig = .init(),
                 scratchpads: [ScratchpadDef] = [],
                 stickyRules: [StickyRuleDef] = [],
-                fxOpacityStageHideEnabled: Bool = false) {
+                fxOpacityStageHideEnabled: Bool = false,
+                fxRailStageNumbersEnabled: Bool = false) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
@@ -45,6 +50,7 @@ public struct Config: Codable, Sendable {
         self.scratchpads = scratchpads
         self.stickyRules = stickyRules
         self.fxOpacityStageHideEnabled = fxOpacityStageHideEnabled
+        self.fxRailStageNumbersEnabled = fxRailStageNumbersEnabled
     }
 
     enum CodingKeys: String, CodingKey {
@@ -62,12 +68,17 @@ public struct Config: Codable, Sendable {
         case fx
     }
 
-    /// SPEC-026 — décodeur minimal pour `[fx.opacity.stage_hide].enabled`.
+    /// SPEC-026 — décodeur minimal pour les sous-sections `[fx.*]` lues par le
+    /// daemon (independant des décodages des modules dynamiques).
     private struct FXSection: Codable {
         let opacity: OpacitySection?
+        let rail: RailSection?
         struct OpacitySection: Codable {
             let stage_hide: StageHideSection?
             struct StageHideSection: Codable { let enabled: Bool? }
+        }
+        struct RailSection: Codable {
+            let stage_numbers_enabled: Bool?
         }
     }
 
@@ -88,9 +99,11 @@ public struct Config: Codable, Sendable {
         self.signals = try c.decodeIfPresent(SignalsConfig.self, forKey: .signals) ?? .init()
         self.scratchpads = try c.decodeIfPresent([ScratchpadDef].self, forKey: .scratchpads) ?? []
         self.stickyRules = try c.decodeIfPresent([StickyRuleDef].self, forKey: .stickyRules) ?? []
-        // SPEC-026 — extrait juste `[fx.opacity.stage_hide].enabled`.
+        // SPEC-026 — extraits depuis [fx.*] : opacity.stage_hide.enabled,
+        // rail.stage_numbers_enabled.
         let fx = try c.decodeIfPresent(FXSection.self, forKey: .fx)
         self.fxOpacityStageHideEnabled = fx?.opacity?.stage_hide?.enabled ?? false
+        self.fxRailStageNumbersEnabled = fx?.rail?.stage_numbers_enabled ?? false
     }
 
     public func encode(to encoder: Encoder) throws {

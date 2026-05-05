@@ -5,6 +5,7 @@ import RoadieTiler
 import RoadieStagePlugin
 import RoadieFXCore
 import RoadieDesktops
+import RoadieRail
 import TOMLKit
 
 /// SPEC-010 : OSAXBridge partagé entre le daemon et les modules FX. Permet au
@@ -262,6 +263,8 @@ enum CommandRouter {
                 daemon.scratchpadManager?.loadConfig(newConfig.scratchpads)
                 // SPEC-026 US4 — sticky reload (re-build index bundle IDs).
                 daemon.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
+                // SPEC-026 — propage stage_numbers_enabled au reload.
+                StageNumbersBadgeState.shared.configEnabled = newConfig.fxRailStageNumbersEnabled
                 // SPEC-026 fix Firefox slide — install/uninstall override au reload,
                 // conditionnel à la présence de l'osax.
                 if newConfig.fxOpacityStageHideEnabled,
@@ -1206,6 +1209,14 @@ enum CommandRouter {
                 "size": AnyCodable(size),
                 "display_id": AnyCodable(Int(did)),
             ])
+
+        case "rail.stage_numbers.flash":
+            // SPEC-026 — affiche le badge chiffre stage pendant N secondes.
+            // Args: seconds (Double, default 3, clamp 0.5..30).
+            let raw = request.args?["seconds"] ?? "3"
+            let secs = max(0.5, min(30.0, Double(raw) ?? 3.0))
+            StageNumbersBadgeState.shared.flash(seconds: secs)
+            return .success(["seconds": AnyCodable(secs)])
 
         case "rail.status":
             return handleRailStatus(daemon: daemon)

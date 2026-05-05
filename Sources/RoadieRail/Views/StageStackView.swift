@@ -9,6 +9,7 @@ private let hintOpacity:  CGFloat = 0.28
 
 struct StageStackView: View {
     @Bindable var state: RailState
+    @ObservedObject private var badgeState = StageNumbersBadgeState.shared
     /// SPEC-019 — UUID du display sur lequel ce panel est posé. Utilisé pour
     /// piocher `state.stagesByDisplay[displayUUID]`. Vide → fallback `state.stages`
     /// (compat). Sans cette donnée par-panel, les 2 panels affichaient le même
@@ -171,7 +172,22 @@ struct StageStackView: View {
                                 onAddFocused: onAddFocused,
                                 onDelete:     onDelete
                             )
-                            renderer.render(context: context, callbacks: cb)
+                            // SPEC-026 — badge chiffre stage en arrière-plan
+                            // (universel pour tous les renderers). Visible si le
+                            // toggle TOML est actif OU pendant un flash temporaire
+                            // déclenché via `roadie rail stage-numbers flash N`.
+                            ZStack(alignment: .topLeading) {
+                                if badgeState.isVisible {
+                                    StageNumberBadge(
+                                        number: stage.id,
+                                        colorHex: stageBorderOverrides[stage.id]
+                                            ?? (stage.isActive ? borderColor : borderColorInactive)
+                                    )
+                                    .transition(.opacity)
+                                }
+                                renderer.render(context: context, callbacks: cb)
+                            }
+                            .animation(.easeInOut(duration: 0.18), value: badgeState.isVisible)
                             // Aligner à gauche (vs centre) — demande utilisateur.
                             .frame(maxWidth: .infinity, alignment: .leading)
                             // Expose le rect de cette cellule dans le coordinate
