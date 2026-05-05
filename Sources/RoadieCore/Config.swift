@@ -24,6 +24,11 @@ public struct Config: Codable, Sendable {
     /// chiffre de la stage en arrière-plan de chaque cellule du navrail.
     /// Désactivable + flash temporaire via `roadie rail stage-numbers flash <s>`.
     public var fxRailStageNumbersEnabled: Bool
+    /// SPEC-026 — paramétrage visuel du badge (lus dans `[fx.rail]`).
+    public var fxRailStageNumbersOffsetX: Double
+    public var fxRailStageNumbersOffsetY: Double
+    public var fxRailStageNumbersSize: Double
+    public var fxRailStageNumbersOpacity: Double
 
     public init(daemon: DaemonConfig = .init(),
                 tiling: TilingConfig = .init(),
@@ -37,7 +42,11 @@ public struct Config: Codable, Sendable {
                 scratchpads: [ScratchpadDef] = [],
                 stickyRules: [StickyRuleDef] = [],
                 fxOpacityStageHideEnabled: Bool = false,
-                fxRailStageNumbersEnabled: Bool = false) {
+                fxRailStageNumbersEnabled: Bool = false,
+                fxRailStageNumbersOffsetX: Double = 4,
+                fxRailStageNumbersOffsetY: Double = -30,
+                fxRailStageNumbersSize: Double = 64,
+                fxRailStageNumbersOpacity: Double = 0.22) {
         self.daemon = daemon
         self.tiling = tiling
         self.stageManager = stageManager
@@ -51,6 +60,10 @@ public struct Config: Codable, Sendable {
         self.stickyRules = stickyRules
         self.fxOpacityStageHideEnabled = fxOpacityStageHideEnabled
         self.fxRailStageNumbersEnabled = fxRailStageNumbersEnabled
+        self.fxRailStageNumbersOffsetX = fxRailStageNumbersOffsetX
+        self.fxRailStageNumbersOffsetY = fxRailStageNumbersOffsetY
+        self.fxRailStageNumbersSize = fxRailStageNumbersSize
+        self.fxRailStageNumbersOpacity = fxRailStageNumbersOpacity
     }
 
     enum CodingKeys: String, CodingKey {
@@ -79,6 +92,10 @@ public struct Config: Codable, Sendable {
         }
         struct RailSection: Codable {
             let stage_numbers_enabled: Bool?
+            let stage_numbers_offset_x: Double?
+            let stage_numbers_offset_y: Double?
+            let stage_numbers_size: Double?
+            let stage_numbers_opacity: Double?
         }
     }
 
@@ -104,6 +121,10 @@ public struct Config: Codable, Sendable {
         let fx = try c.decodeIfPresent(FXSection.self, forKey: .fx)
         self.fxOpacityStageHideEnabled = fx?.opacity?.stage_hide?.enabled ?? false
         self.fxRailStageNumbersEnabled = fx?.rail?.stage_numbers_enabled ?? false
+        self.fxRailStageNumbersOffsetX = fx?.rail?.stage_numbers_offset_x ?? 4
+        self.fxRailStageNumbersOffsetY = fx?.rail?.stage_numbers_offset_y ?? -30
+        self.fxRailStageNumbersSize = fx?.rail?.stage_numbers_size ?? 64
+        self.fxRailStageNumbersOpacity = fx?.rail?.stage_numbers_opacity ?? 0.22
     }
 
     public func encode(to encoder: Encoder) throws {

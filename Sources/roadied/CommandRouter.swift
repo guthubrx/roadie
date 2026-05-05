@@ -263,8 +263,12 @@ enum CommandRouter {
                 daemon.scratchpadManager?.loadConfig(newConfig.scratchpads)
                 // SPEC-026 US4 — sticky reload (re-build index bundle IDs).
                 daemon.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
-                // SPEC-026 — propage stage_numbers_enabled au reload.
+                // SPEC-026 — propage tous les params badge au reload.
                 StageNumbersBadgeState.shared.configEnabled = newConfig.fxRailStageNumbersEnabled
+                StageNumbersBadgeState.shared.offsetX = newConfig.fxRailStageNumbersOffsetX
+                StageNumbersBadgeState.shared.offsetY = newConfig.fxRailStageNumbersOffsetY
+                StageNumbersBadgeState.shared.fontSize = newConfig.fxRailStageNumbersSize
+                StageNumbersBadgeState.shared.opacity = newConfig.fxRailStageNumbersOpacity
                 // SPEC-026 fix Firefox slide — install/uninstall override au reload,
                 // conditionnel à la présence de l'osax.
                 if newConfig.fxOpacityStageHideEnabled,
