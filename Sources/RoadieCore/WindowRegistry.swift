@@ -21,12 +21,22 @@ public final class WindowRegistry {
     public init() {}
 
     public func register(_ state: WindowState, axElement: AXUIElement) {
-        windows[state.cgWindowID] = state
-        axElements[state.cgWindowID] = axElement
+        var s = state
+        // SPEC-025 — sticky tileable bit : à la 1ère observation, si la wid
+        // passe les checks tileable (subrole standard + frame ≥ 100px),
+        // on grave wasEverTileable=true. Plus jamais reclassifiée en helper
+        // ensuite, même si setBounds futur la rétrécit.
+        if s.subrole == .standard && !s.isFloating && !s.isMinimized
+                && !s.isFullscreen && !s.isHelperWindow {
+            s.wasEverTileable = true
+        }
+        windows[s.cgWindowID] = s
+        axElements[s.cgWindowID] = axElement
         logDebug("registered window", [
-            "wid": String(state.cgWindowID),
-            "bundle": state.bundleID,
-            "subrole": state.subrole.rawValue,
+            "wid": String(s.cgWindowID),
+            "bundle": s.bundleID,
+            "subrole": s.subrole.rawValue,
+            "wasEverTileable": String(s.wasEverTileable),
         ])
     }
 
@@ -57,7 +67,18 @@ public final class WindowRegistry {
             ])
             return
         }
-        update(wid) { $0.frame = frame }
+        update(wid) {
+            $0.frame = frame
+            // SPEC-025 — promotion sticky : si la wid atteint maintenant une
+            // taille normale (les 2 dimensions ≥ 100px), grave le bit
+            // wasEverTileable. Couvre le cas "wid registered en helper-size
+            // au boot, puis grandit après" (Firefox WebExtension popup vs
+            // vraie fenêtre Firefox née helper).
+            if !$0.wasEverTileable && $0.subrole == .standard
+                    && frame.size.width >= minDim && frame.size.height >= minDim {
+                $0.wasEverTileable = true
+            }
+        }
     }
 
     public func setFocus(_ wid: WindowID?) {
@@ -66,7 +87,8 @@ public final class WindowRegistry {
         // l'init du focus au boot du daemon assure qu'on a un focus réel
         // dès le départ via refreshFromSystem().
         let changed = focusedWindowID != wid
-        if changed, let old = focusedWindowID {
+        if !changed { return }   // Pas de log ni callback si no-op (anti-spam).
+        if let old = focusedWindowID {
             previousFocusedWindowID = old
         }
         focusedWindowID = wid
@@ -74,7 +96,7 @@ public final class WindowRegistry {
             logInfo("focus changed", ["wid": String(wid),
                                       "prev": previousFocusedWindowID.map(String.init) ?? "nil"])
         }
-        if changed { onFocusChanged?(wid) }
+        onFocusChanged?(wid)
     }
 
     /// Retourne le meilleur candidat "near" pour insertion :
