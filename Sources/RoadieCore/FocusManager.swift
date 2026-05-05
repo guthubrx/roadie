@@ -13,10 +13,16 @@ public final class FocusManager {
     /// SPEC-026 US5 — config mouse_follows_focus. Settable depuis main.swift.
     public var mouseFollowsFocus: Bool = false
 
-    /// SPEC-026 US5 — flag anti-feedback loop. Quand mouse_follows_focus warp
-    /// le curseur, ce timestamp est posé à now+0.2s ; le FocusFollowsMouseWatcher
-    /// vérifie ce flag avant de déclencher un setFocus pour éviter une cascade.
+    /// SPEC-026 US5 — anti-feedback warp → focus_follows_mouse. Posé par les
+    /// warps curseur, lu par FocusFollowsMouseWatcher pour skip son setFocus.
     public private(set) var inhibitFollowMouseUntil: Date?
+
+    /// SPEC-026 US5 — anti-double-warp. Posé par focus_follows_mouse avant son
+    /// setFocus (pour signaler au hook onFocusChanged "déjà sur la fenêtre, pas
+    /// de warp"). Lu par warpCursorToFocusedIfEnabled. Distinct de
+    /// `inhibitFollowMouseUntil` pour éviter qu'un mouvement souris bloque
+    /// un warp légitime déclenché par Cmd+Tab arrivant juste après.
+    public private(set) var inhibitWarpUntil: Date?
 
     public init(registry: WindowRegistry) {
         self.registry = registry
@@ -75,7 +81,7 @@ public final class FocusManager {
         guard let state = registry.get(wid) else { return }
         let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
         CGWarpMouseCursorPosition(center)
-        inhibitFollowMouseUntil = Date().addingTimeInterval(0.2)
+        inhibitFollowMouseUntil = Date().addingTimeInterval(0.6)
         logInfo("mouse_follows_focus_warped", [
             "wid": String(wid),
             "x": String(Int(center.x)),
@@ -89,24 +95,31 @@ public final class FocusManager {
         return Date() < until
     }
 
-    /// SPEC-026 US5 — pose un inhibit transitoire. Utilisé par
-    /// FocusFollowsMouseWatcher pour signaler "ce setFocus vient de moi, ne
-    /// re-warpe pas via le hook onFocusChanged". Évite warp redondant sur hover.
-    public func setInhibitFollowMouse(durationSeconds: TimeInterval) {
-        inhibitFollowMouseUntil = Date().addingTimeInterval(durationSeconds)
+    /// Vrai si le warp doit être inhibé (focus_follows_mouse vient de set focus).
+    public func isWarpInhibited() -> Bool {
+        guard let until = inhibitWarpUntil else { return false }
+        return Date() < until
+    }
+
+    /// Posé par FocusFollowsMouseWatcher avant son setFocus. Empêche le hook
+    /// onFocusChanged de re-warper inutilement.
+    public func setInhibitWarp(durationSeconds: TimeInterval) {
+        inhibitWarpUntil = Date().addingTimeInterval(durationSeconds)
     }
 
     /// SPEC-026 US5 — warp uniquement (pas de re-set AX). Utile après un
-    /// stage_switch ou desktop_switch où la wid focalisée a changé sans
-    /// passer par setFocusFromShortcut (le show des fenêtres a déclenché
-    /// macOS qui a focalisé une wid de la nouvelle stage).
+    /// stage_switch / desktop_switch / Cmd+Tab où le focus AX a changé sans
+    /// passer par setFocusFromShortcut.
+    /// Skip si le warp est inhibé (focus_follows_mouse vient de set focus :
+    /// la souris est déjà sur la fenêtre).
     public func warpCursorToFocusedIfEnabled() {
         guard mouseFollowsFocus else { return }
+        if isWarpInhibited() { return }
         guard let wid = registry.focusedWindowID else { return }
         guard let state = registry.get(wid) else { return }
         let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
         CGWarpMouseCursorPosition(center)
-        inhibitFollowMouseUntil = Date().addingTimeInterval(0.2)
+        inhibitFollowMouseUntil = Date().addingTimeInterval(0.6)
         logInfo("mouse_follows_focus_warped", [
             "via": "post-switch",
             "wid": String(wid),
