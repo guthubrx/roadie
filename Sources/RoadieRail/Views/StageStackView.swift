@@ -4,7 +4,7 @@ import SwiftUI
 // Reçoit RailState en @Bindable (pattern @Observable macOS 14+).
 // Pas de header, stacks centrés verticalement, hint discret en bas.
 
-private let stackSpacing: CGFloat = 32
+private let stackSpacing: CGFloat = 56
 private let hintOpacity:  CGFloat = 0.28
 
 struct StageStackView: View {
