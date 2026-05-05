@@ -22,9 +22,9 @@ public struct StageNumberBadge: View {
         // côté StageStackView, puis l'offset le fait dépasser légèrement.
         Text(number)
             .font(.system(size: 64, weight: .black, design: .rounded))
-            .foregroundColor(Color(hex: colorHex).opacity(0.28))
-            .shadow(color: Color.black.opacity(0.40), radius: 3, x: 0, y: 1)
-            .offset(x: -8, y: -16)
+            .foregroundColor(Color(hex: colorHex).opacity(0.38))
+            .shadow(color: Color.black.opacity(0.45), radius: 3, x: 0, y: 1)
+            .offset(x: -28, y: -32)
             .allowsHitTesting(false)
             .fixedSize()
     }
