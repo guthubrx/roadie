@@ -722,6 +722,12 @@ enum CommandRouter {
                 }
                 sm.switchTo(stageID: stageID)
             }
+            // SPEC-026 US5 — warp curseur sur la wid focalisée résultante (après
+            // que macOS ait fini son show/raise, ~50ms suffisent).
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                daemon.focusManager.warpCursorToFocusedIfEnabled()
+            }
             return .success(["current": AnyCodable(stageID.value)])
 
         case "stage.assign":
@@ -1113,13 +1119,19 @@ enum CommandRouter {
             guard let selector = request.args?["selector"] else {
                 return .error(.invalidArgument, "missing selector argument")
             }
-            // SPEC-013 : en mode per_display, scoper le hide/show au display de la
-            // frontmost. En mode global, fallback sur le path V2 (DesktopSwitcher).
             let mode = await daemon.desktopRegistry?.mode ?? .global
+            let resp: Response
             if mode == .perDisplay {
-                return await handleDesktopFocusPerDisplay(selector: selector, daemon: daemon)
+                resp = await handleDesktopFocusPerDisplay(selector: selector, daemon: daemon)
+            } else {
+                resp = await handleDesktopFocus(selector: selector, daemon: daemon)
             }
-            return await handleDesktopFocus(selector: selector, daemon: daemon)
+            // SPEC-026 US5 — warp curseur post-desktop-switch.
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                daemon.focusManager.warpCursorToFocusedIfEnabled()
+            }
+            return resp
 
         case "desktop.label":
             let name = request.args?["name"] ?? ""

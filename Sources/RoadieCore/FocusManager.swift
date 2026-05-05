@@ -88,4 +88,23 @@ public final class FocusManager {
         guard let until = inhibitFollowMouseUntil else { return false }
         return Date() < until
     }
+
+    /// SPEC-026 US5 — warp uniquement (pas de re-set AX). Utile après un
+    /// stage_switch ou desktop_switch où la wid focalisée a changé sans
+    /// passer par setFocusFromShortcut (le show des fenêtres a déclenché
+    /// macOS qui a focalisé une wid de la nouvelle stage).
+    public func warpCursorToFocusedIfEnabled() {
+        guard mouseFollowsFocus else { return }
+        guard let wid = registry.focusedWindowID else { return }
+        guard let state = registry.get(wid) else { return }
+        let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+        CGWarpMouseCursorPosition(center)
+        inhibitFollowMouseUntil = Date().addingTimeInterval(0.2)
+        logInfo("mouse_follows_focus_warped", [
+            "via": "post-switch",
+            "wid": String(wid),
+            "x": String(Int(center.x)),
+            "y": String(Int(center.y)),
+        ])
+    }
 }
