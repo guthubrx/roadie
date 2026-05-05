@@ -249,6 +249,8 @@ enum CommandRouter {
                 }
                 // SPEC-026 US2 — propage smart_gaps_solo au reload.
                 daemon.layoutEngine.smartGapsSolo = newConfig.tiling.smartGapsSolo
+                // SPEC-027 US2 — propage la sélection des côtés au reload.
+                daemon.layoutEngine.smartGapsSoloSides = Set(newConfig.tiling.smartGapsSoloSides)
                 daemon.applyLayout()
                 // SPEC-026 US5 — propage follow focus toggles au reload.
                 daemon.focusManager.mouseFollowsFocus = newConfig.focus.mouseFollowsFocus
@@ -655,8 +657,10 @@ enum CommandRouter {
             if sm.stageMode == .global {
                 // Mode global : compat V1 — liste plate, currentStageID direct.
                 currentID = sm.currentStageID?.value ?? ""
+                // SPEC-027 US3 — tri par `order` croissant, fallback id alphanum.
                 let sortedStages = sm.stages.values.sorted { lhs, rhs in
-                    lhs.id.value.localizedStandardCompare(rhs.id.value) == .orderedAscending
+                    if lhs.order != rhs.order { return lhs.order < rhs.order }
+                    return lhs.id.value.localizedStandardCompare(rhs.id.value) == .orderedAscending
                 }
                 scopedStages = sortedStages.map { stage -> [String: Any] in
                     [
@@ -684,8 +688,13 @@ enum CommandRouter {
                 // SPEC-022 — tri stable par stage.id pour que le rail panel n'inverse pas
                 // les vignettes d'un poll au suivant (Dictionary.filter retourne dans
                 // un ordre non-déterministe).
+                // SPEC-027 US3 — tri primaire par `Stage.order` croissant pour
+                // refléter le drag-reorder ; fallback id alphanum à égalité.
                 let sortedFiltered = filtered.sorted { lhs, rhs in
-                    lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
+                    if lhs.value.order != rhs.value.order {
+                        return lhs.value.order < rhs.value.order
+                    }
+                    return lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
                         == .orderedAscending
                 }
                 scopedStages = sortedFiltered.map { (scopeKey, stage) -> [String: Any] in
@@ -1016,6 +1025,65 @@ enum CommandRouter {
             // SPEC-018 FR-017 : émettre stage_deleted enrichi (display_uuid + desktop_id).
             EventBus.shared.publish(DesktopEvent.stageDeleted(
                 stageID: stageStr, displayUUID: deleteUUID, desktopID: deleteDesktopID))
+            return .success()
+
+        case "stage.reorder":
+            // SPEC-027 US3 — réordonne deux stages dans le scope (display, desktop).
+            // args : stage_id (source) + target_id + position ("before"|"after")
+            // + optionnels display/desktop. Default position = "before".
+            guard let sm = daemon.stageManager else {
+                return .error(.stageManagerDisabled, "stage manager disabled in config")
+            }
+            guard let stageStr = request.args?["stage_id"],
+                  let targetStr = request.args?["target_id"] else {
+                return .error(.invalidArgument, "missing stage_id or target_id")
+            }
+            let position = request.args?["position"] ?? "before"
+            var scopeError: Response? = nil
+            guard let scope = await resolveScope(request: request, daemon: daemon,
+                                                  errorOut: &scopeError) else {
+                return scopeError ?? .error(.internalError, "scope resolution failed")
+            }
+            let stageID = StageID(stageStr)
+            let targetID = StageID(targetStr)
+            // "after" = on insère avant la stage qui suit target dans l'ordre courant.
+            // Cas particuliers : target == dernière position OU stage est déjà
+            // juste après target → no-op success (état déjà conforme).
+            let effectiveTarget: StageID?
+            if position == "after" {
+                let scoped = sm.stages(in: .displayDesktop(scope.displayUUID, scope.desktopID))
+                guard let targetIdx = scoped.firstIndex(where: { $0.id == targetID }) else {
+                    return .error(.invalidArgument, "target stage not found in scope")
+                }
+                if targetIdx + 1 >= scoped.count {
+                    // Target en dernière position : place stage à la toute fin
+                    // (= move-after de la dernière). On reorder en plaçant stage
+                    // après target en l'insérant avant target puis en swappant.
+                    // Plus simple : on réécrit directement.
+                    let ok = sm.reorderStage(targetID, before: stageID, in: scope)
+                        || stageID == targetID
+                    return ok ? .success() : .error(.invalidArgument,
+                                                    "reorder failed (stage not in scope?)")
+                }
+                let next = scoped[targetIdx + 1].id
+                if next == stageID {
+                    // Déjà conforme (stage est juste après target).
+                    return .success()
+                }
+                effectiveTarget = next
+            } else {
+                effectiveTarget = targetID
+            }
+            guard let target = effectiveTarget else {
+                return .error(.invalidArgument, "reorder failed (no target)")
+            }
+            if stageID == target {
+                return .success()  // no-op : déjà à la position demandée.
+            }
+            let ok = sm.reorderStage(stageID, before: target, in: scope)
+            if !ok {
+                return .error(.invalidArgument, "reorder failed (unknown stage in scope?)")
+            }
             return .success()
 
         case "stage.hide_active":

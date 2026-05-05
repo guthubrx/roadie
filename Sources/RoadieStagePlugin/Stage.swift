@@ -7,15 +7,21 @@ public struct Stage: Codable, Sendable {
     public var memberWindows: [StageMember]
     public var tilerStrategy: TilerStrategy
     public var lastActiveAt: Date
+    /// SPEC-027 US3 — rang dans le navrail. Plus petit = affiché en premier.
+    /// Default 0 pour rétrocompat ; le premier reorder pose un ordre custom
+    /// (réécrit les order de toutes les stages du scope avec un pas de 10).
+    public var order: Int
 
     public init(id: StageID, displayName: String,
                 tilerStrategy: TilerStrategy = .bsp,
-                memberWindows: [StageMember] = []) {
+                memberWindows: [StageMember] = [],
+                order: Int = 0) {
         self.id = id
         self.displayName = displayName
         self.tilerStrategy = tilerStrategy
         self.memberWindows = memberWindows
         self.lastActiveAt = Date()
+        self.order = order
     }
 
     enum CodingKeys: String, CodingKey {
@@ -24,6 +30,19 @@ public struct Stage: Codable, Sendable {
         case memberWindows = "members"
         case tilerStrategy = "tiler_strategy"
         case lastActiveAt = "last_active_at"
+        case order
+    }
+
+    /// Decode tolérant : `order` est optionnel pour rétrocompat avec les
+    /// fichiers persistés pré-SPEC-027.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(StageID.self, forKey: .id)
+        self.displayName = try c.decode(String.self, forKey: .displayName)
+        self.memberWindows = try c.decodeIfPresent([StageMember].self, forKey: .memberWindows) ?? []
+        self.tilerStrategy = try c.decodeIfPresent(TilerStrategy.self, forKey: .tilerStrategy) ?? .bsp
+        self.lastActiveAt = try c.decodeIfPresent(Date.self, forKey: .lastActiveAt) ?? Date()
+        self.order = try c.decodeIfPresent(Int.self, forKey: .order) ?? 0
     }
 }
 

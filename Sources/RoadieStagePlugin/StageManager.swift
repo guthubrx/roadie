@@ -270,23 +270,67 @@ public final class StageManager {
         }
     }
 
-    /// Retourne les stages filtrés par scope (SPEC-018).
+    /// Retourne les stages filtrés par scope (SPEC-018), triées par `order`
+    /// croissant (SPEC-027 US3) puis par id alphanum à égalité (rétrocompat
+    /// quand toutes les stages ont order=0).
     /// En mode global, `ScopeFilter.all` retourne les mêmes stages que `stages.values`.
     public func stages(in filter: ScopeFilter) -> [Stage] {
+        let result: [Stage]
         switch filter {
         case .all:
-            return Array(stagesV2.values)
+            result = Array(stagesV2.values)
         case .display(let uuid):
-            return stagesV2.compactMap { scope, stage in
+            result = stagesV2.compactMap { scope, stage in
                 scope.displayUUID == uuid ? stage : nil
             }
         case .displayDesktop(let uuid, let desktopID):
-            return stagesV2.compactMap { scope, stage in
+            result = stagesV2.compactMap { scope, stage in
                 scope.displayUUID == uuid && scope.desktopID == desktopID ? stage : nil
             }
         case .exact(let target):
-            return stagesV2[target].map { [$0] } ?? []
+            result = stagesV2[target].map { [$0] } ?? []
         }
+        return result.sorted { lhs, rhs in
+            if lhs.order != rhs.order { return lhs.order < rhs.order }
+            return lhs.id.value < rhs.id.value
+        }
+    }
+
+    /// SPEC-027 US3 — réordonne les stages d'un scope donné : place `stageID`
+    /// juste avant `targetID` dans le rail. Réécrit tous les `order` du scope
+    /// avec un pas de 10 pour avoir de la marge pour des insertions futures
+    /// sans avoir à tout réécrire à chaque fois (10, 20, 30, ...).
+    /// Idempotent si stageID == targetID. No-op si l'un des deux n'existe pas
+    /// dans le scope.
+    @discardableResult
+    public func reorderStage(_ stageID: StageID, before targetID: StageID,
+                             in scope: StageScope) -> Bool {
+        let scopeKey = DesktopKey(displayUUID: scope.displayUUID,
+                                  desktopID: scope.desktopID)
+        let scoped = stages(in: .displayDesktop(scopeKey.displayUUID, scopeKey.desktopID))
+        guard scoped.contains(where: { $0.id == stageID }),
+              scoped.contains(where: { $0.id == targetID }),
+              stageID != targetID else { return false }
+        // Construit la nouvelle liste : on retire stageID puis on l'insère
+        // juste avant l'index courant de targetID.
+        var ordered = scoped.filter { $0.id != stageID }
+        guard let targetIdx = ordered.firstIndex(where: { $0.id == targetID }),
+              let movingStage = scoped.first(where: { $0.id == stageID }) else { return false }
+        ordered.insert(movingStage, at: targetIdx)
+        // Réécrit les order avec un pas de 10.
+        for (idx, stage) in ordered.enumerated() {
+            let s = StageScope(displayUUID: scope.displayUUID,
+                                desktopID: scope.desktopID,
+                                stageID: stage.id)
+            if var cur = stagesV2[s] {
+                cur.order = (idx + 1) * 10
+                stagesV2[s] = cur
+                if let pv2 = persistenceV2 {
+                    try? pv2.save(cur, at: s)
+                }
+            }
+        }
+        return true
     }
 
     /// Overload scopé de createStage (SPEC-018).
