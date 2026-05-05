@@ -355,6 +355,13 @@ func handleStage(args: [String]) {
     switch arg2 {
     case "list":
         sendAndPrint(Request(command: "stage.list", args: scopeOverrides.isEmpty ? nil : scopeOverrides))
+    case "switch":
+        // SPEC-026 fix : verbe explicite `roadie stage switch <id>` (utilisé par BTT).
+        // Avant : tombait dans default avec stage_id="switch" → créait une stage zombie.
+        guard args.count >= 4 else { printUsage(); exit(64) }
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        sendAndPrint(Request(command: "stage.switch", args: reqArgs))
     case "assign":
         guard args.count >= 4 else { printUsage(); exit(64) }
         var reqArgs = scopeOverrides
