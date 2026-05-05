@@ -13,6 +13,11 @@ public final class StageNumbersBadgeState: ObservableObject {
 
     @Published public var configEnabled: Bool = false
     @Published public var flashUntil: Date? = nil
+    /// SPEC-026 — paramètres visuels du badge, settable depuis main.swift au boot et au reload.
+    @Published public var offsetX: Double = 4
+    @Published public var offsetY: Double = -30
+    @Published public var fontSize: Double = 64
+    @Published public var opacity: Double = 0.22
 
     public init() {}
 
