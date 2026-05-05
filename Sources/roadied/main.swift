@@ -33,6 +33,13 @@ struct StageOpsBridge: DesktopStageOps {
 /// Bootstrap : check Accessibility → load config → init modules → start observers → run loop.
 
 @MainActor
+/// SPEC-025 — wrapper class pour capturer une référence Daemon de manière
+/// différée (utilisé par le hook applyLayout qui doit appeler la version full
+/// multi-display, mais self n'est pas init au moment de la création du hook).
+final class DaemonHolder: @unchecked Sendable {
+    weak var daemon: Daemon?
+}
+
 final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     let registry = WindowRegistry()
     let displayManager = DisplayManager()
@@ -51,6 +58,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
     /// nil tant que `bootstrap()` n'a pas tourné. Toujours instancié, même en SIP fully on.
     var fxLoader: FXLoader?
+    /// SPEC-025 — flag one-shot pour auto-cure cross-stage drift au boot.
+    /// Set à true après le 1er applyAll qui détecte+fixe un drift. Évite les
+    /// reassigns en cascade pendant les stage switches.
+    var didInitialDriftFix: Bool = false
+    /// SPEC-025 — wrapper class pour capturer self.applyLayout dans la closure
+    /// du hook LayoutHooks.applyLayout (self pas init au moment de la création
+    /// du hook). Set à `self` à la fin de l'init pour permettre au hook
+    /// d'appeler la version multi-display complète.
+    private var daemonHolder: DaemonHolder?
     /// SPEC-011 : registry des desktops virtuels. nil si desktops.enabled=false.
     var desktopRegistry: DesktopRegistry?
     /// SPEC-011 : orchestrateur de bascule. nil si desktops.enabled=false.
@@ -117,6 +133,8 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         logInfo("bsp_split_policy", ["policy": BSPTiler.splitPolicy.rawValue])
         self.layoutEngine = try LayoutEngine(registry: registry, strategy: config.tiling.defaultStrategy)
+        // SPEC-026 US2 — propage smart_gaps_solo au moteur.
+        self.layoutEngine.smartGapsSolo = config.tiling.smartGapsSolo
         if config.stageManager.enabled {
             // Hooks injectés via closure pour que StageManager puisse marquer les
             // leaves invisibles au tiler sans dépendance directe vers RoadieTiler.
@@ -125,11 +143,26 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             let registryRef = self.registry  // capture pour usage dans closures (self pas init)
             let outerGaps = config.tiling.effectiveOuterGaps
             let gapsInner = CGFloat(config.tiling.gapsInner)
+            // SPEC-025 root-cause fix — le hook applyLayout doit appeler la
+            // version FULL multi-display (engine.applyAll via daemon.applyLayout).
+            // L'ancien code utilisait `engine.apply(rect: display.workArea)` qui
+            // ne fait que mono-display primary → au stage switch les wids des
+            // autres displays/stages n'étaient PAS show/hide → Firefox stage 2
+            // restait offscreen quand on switch sur stage 2. Le wrapper class
+            // permet de capturer self post-init (sans cycle de référence init).
+            let daemonHolder = DaemonHolder()
+            self.daemonHolder = daemonHolder
             let hooks = LayoutHooks(
                 setLeafVisible: { wid, vis in engine.setLeafVisible(wid, vis) },
                 applyLayout: {
-                    engine.apply(rect: display.workArea,
-                                 outerGaps: outerGaps, gapsInner: gapsInner)
+                    if let d = daemonHolder.daemon {
+                        d.applyLayout()
+                    } else {
+                        // Fallback init-time : avant que daemonHolder.daemon
+                        // ne soit set en fin de bootstrap (rare en pratique).
+                        engine.apply(rect: display.workArea,
+                                     outerGaps: outerGaps, gapsInner: gapsInner)
+                    }
                 },
                 reassignToStage: { wid, stageID in engine.reassignWindow(wid, toStage: stageID) },
                 // SPEC-022 — closure scope-aware. Si displayUUID fourni, scope la
@@ -469,6 +502,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 sm.assign(wid: state.cgWindowID, to: currentStage)
             }
         }
+
+        // SPEC-025 root-cause fix — wire le DaemonHolder vers self pour que
+        // le hook applyLayout (créé à init time) puisse appeler la version
+        // multi-display complète au stage switch. Sans ça, fallback engine.apply
+        // mono-display → wids cross-display/stage pas show/hide → Firefox stage 2
+        // restait offscreen.
+        daemonHolder?.daemon = self
 
         // Initialiser le focus avec la fenêtre frontmost réelle.
         focusManager.refreshFromSystem()
@@ -1320,7 +1360,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
     }
 
-    func applyLayout() {
+    func applyLayout(then completion: (@MainActor @Sendable () -> Void)? = nil) {
         lastApplyTimestamp = Date()
         if let dspRegistry = displayRegistry {
             // T018 : multi-display → distribuer sur tous les écrans.
@@ -1342,7 +1382,87 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logInfo("applyAll start")
                 await self.layoutEngine.applyAll(displayRegistry: dspRegistry, outerSides: outerSides)
                 logInfo("applyAll done")
+                // SPEC-025 — invariant cross-stage : auditOwnership détecte les wids
+                // dans 2+ scopes simultanément (= "wid stage 2 visible aussi en stage 1"
+                // signalé par user). Émission warn structurée, parser bash agrège en
+                // stage_double_membership_5m (NUMERIC_AXES, threshold 1 = invariant absolu).
+                if let sm = self.stageManager {
+                    let violations = sm.auditOwnership()
+                    let doubleMembership = violations.filter { $0.contains("in 2 scopes") }
+                    for v in doubleMembership {
+                        logWarn("stage_double_membership", ["violation": String(v.prefix(220))])
+                    }
+                }
+                // SPEC-025 — invariant orphan : toute wid présente dans un tree
+                // (= tilée) DOIT appartenir à une stage. Sinon : pas de stage
+                // ownership → modules FX (borders, opacity) ne la voient pas
+                // + cross-stage drift possible. Catch silencieux des bugs
+                // d'insertion qui oublient l'assignment (cf. toggle floating
+                // pré-fix wid 17848 sans stage).
+                if let sm = self.stageManager {
+                    var orphans: [WindowID] = []
+                    var crossStage: [(WindowID, String, String)] = []
+                    for (treeKey, root) in self.layoutEngine.workspace.rootsByStageDisplay {
+                        for leaf in root.allLeaves {
+                            let widScope = sm.scopeOf(wid: leaf.windowID)
+                            if widScope == nil {
+                                orphans.append(leaf.windowID)
+                            } else if let s = widScope, s.stageID != treeKey.stageID {
+                                crossStage.append((leaf.windowID, treeKey.stageID.value, s.stageID.value))
+                            }
+                        }
+                    }
+                    for wid in orphans {
+                        logWarn("tiled_orphan_stage", ["wid": String(wid)])
+                    }
+                    for (wid, treeStage, scopeStage) in crossStage {
+                        logWarn("tile_in_wrong_tree", [
+                            "wid": String(wid),
+                            "tree_stage": treeStage,
+                            "scope_stage": scopeStage,
+                        ])
+                    }
+                    // SPEC-025 — staged_orphan_tree : wid présente dans memberWindows
+                    // d'une stage MAIS pas dans le tree (= aucune leaf dans rootsByStageDisplay).
+                    // Symptôme : wid "fantôme" visible avec frame native macOS, jamais
+                    // reframée par applyAll. Cas typique : sm.assign() oublié d'insérer
+                    // dans le tree (cf. fix CommandRouter case stage.assign 2026-05-05).
+                    var allTreeLeaves = Set<WindowID>()
+                    for (_, root) in self.layoutEngine.workspace.rootsByStageDisplay {
+                        for leaf in root.allLeaves { allTreeLeaves.insert(leaf.windowID) }
+                    }
+                    for (scope, stage) in sm.stagesV2 {
+                        for member in stage.memberWindows {
+                            if !allTreeLeaves.contains(member.cgWindowID) {
+                                logWarn("staged_orphan_tree", [
+                                    "wid": String(member.cgWindowID),
+                                    "scope_stage": scope.stageID.value,
+                                    "scope_display": scope.displayUUID,
+                                ])
+                            }
+                        }
+                    }
+                    // SPEC-025 root-cause fix — auto-cure UNIQUEMENT au tout 1er
+                    // applyAll après boot (one-shot via flag). Garantit que les
+                    // wids sont dans le bon tree dès le démarrage du daemon
+                    // (= cas Firefox stage 2 inséré tree stage 1 par boot race).
+                    // Pas d'auto-cure aux applyAll suivants → pas de cascade
+                    // reassign pendant stage switches (= pas d'animation parasite).
+                    if !crossStage.isEmpty && !self.didInitialDriftFix {
+                        let fixed = self.layoutEngine.fixCrossStageDrift { wid in
+                            sm.scopeOf(wid: wid)?.stageID
+                        }
+                        if fixed > 0 {
+                            logInfo("tile_cross_stage_boot_fixed", ["count": String(fixed)])
+                        }
+                        self.didInitialDriftFix = true
+                    }
+                }
                 self.applyLayoutInFlight = false
+                // SPEC-025 — completion appelée APRÈS setBounds + audit, mais
+                // AVANT que d'autres events AX externes ne puissent intervenir.
+                // Caller idéal : focus-follow après move/warp.
+                completion?()
                 if self.applyLayoutNeedsRetrigger {
                     self.applyLayoutNeedsRetrigger = false
                     self.applyLayout()
@@ -1832,6 +1952,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         registry.updateFrame(wid, frame: frame)
         trackDrag(wid: wid)
         propagateExpectedFrame(wid: wid, frame: frame)
+        // SPEC-025 — drag-resize externe (= hors fenêtre 200ms post-applyLayout) :
+        // marque la wid comme user-resized pour que tiler_extreme_aspect ne crie
+        // pas si l'utilisateur compresse volontairement la fenêtre.
+        if Date().timeIntervalSince(lastApplyTimestamp) >= 0.2 {
+            layoutEngine.noteUserResize(wid)
+        }
         fxLoader?.bus.publish(FXEvent(kind: .windowResized,
                                       wid: CGWindowID(wid), frame: frame))
     }
@@ -1885,6 +2011,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         if Date().timeIntervalSince(lastApplyTimestamp) < 0.2 { return }
         // Ignorer les fenêtres non-tilées (floating, modales).
         guard let state = registry.get(wid), state.isTileable else { return }
+        if dragTrackedWid != wid {
+            // SPEC-025 — log INFO pour post-mortem drag (avant: aucun log start).
+            logInfo("drag_started", [
+                "wid": String(wid),
+                "from_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y)) \(Int(state.frame.width))x\(Int(state.frame.height))",
+                "from_display": String(layoutEngine.displayIDForWindow(wid) ?? 0),
+                "scope_stage": stageManager?.scopeOf(wid: wid)?.stageID.value ?? "nil",
+            ])
+        }
         dragTrackedWid = wid
     }
 
@@ -1922,20 +2057,35 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         guard let wid = dragTrackedWid else { return }
         dragTrackedWid = nil
         guard let element = registry.axElement(for: wid),
-              let frame = AXReader.bounds(element) else { return }
+              let frame = AXReader.bounds(element) else {
+            logInfo("drag_ended_no_element", ["wid": String(wid)])
+            return
+        }
         let center = CGPoint(x: frame.midX, y: frame.midY)
+        let resolvedDisplay = layoutEngine.displayIDContainingPoint(center)
+        let treeDisplay = layoutEngine.displayIDForWindow(wid)
+        // SPEC-025 — log INFO pour post-mortem drag end (avant: rien).
+        logInfo("drag_ended", [
+            "wid": String(wid),
+            "drop_frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.width))x\(Int(frame.height))",
+            "drop_center": "\(Int(center.x)),\(Int(center.y))",
+            "resolved_display": resolvedDisplay.map(String.init) ?? "nil",
+            "tree_display": treeDisplay.map(String.init) ?? "nil",
+            "will_migrate": String(resolvedDisplay != nil && treeDisplay != nil && resolvedDisplay != treeDisplay),
+        ])
         // SPEC-022 fix : si frame center offscreen (Netflix fullscreen, window
         // hidée par stage switch, etc.), NE PAS faker realDisplayID = main.
         // Le fallback CGMainDisplayID() forçait une migration vers built-in à
         // chaque mouvement offscreen → toutes les wids LG migraient vers built-in.
         // Skip la migration : la wid garde son scope d'origine, sera ré-évaluée
         // quand AX reportera une frame valide.
-        guard let realDisplayID = layoutEngine.displayIDContainingPoint(center) else {
+        guard let realDisplayID = resolvedDisplay else {
+            logInfo("drag_skip_offscreen", ["wid": String(wid)])
             // Adapt manual resize si la frame est valide mais offscreen (cas dock).
             _ = layoutEngine.adaptToManualResize(wid, newFrame: frame)
             return
         }
-        let treeDisplayID = layoutEngine.displayIDForWindow(wid)
+        let treeDisplayID = treeDisplay
         if let src = treeDisplayID, src != realDisplayID {
             // Migration cross-display : la fenêtre a été draggée d'un écran à l'autre.
             _ = layoutEngine.moveWindow(wid, fromDisplay: src, toDisplay: realDisplayID)
@@ -1995,13 +2145,20 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             } else {
                 applyLayout()
             }
-            logDebug("drag migrated cross-display",
+            logInfo("drag_migrated_cross_display",
                      ["wid": String(wid), "from": String(src), "to": String(realDisplayID)])
             return
         }
         if layoutEngine.adaptToManualResize(wid, newFrame: frame) {
-            logDebug("drag adapted", ["wid": String(wid)])
+            logInfo("drag_adapted_same_display",
+                    ["wid": String(wid), "display": String(realDisplayID)])
             applyLayout()
+        } else {
+            logInfo("drag_no_action", [
+                "wid": String(wid),
+                "display": String(realDisplayID),
+                "reason": "adaptToManualResize returned false (frame matches calculated)",
+            ])
         }
     }
     func axDidChangeFocusedWindow(pid: pid_t, axWindow: AXUIElement) {

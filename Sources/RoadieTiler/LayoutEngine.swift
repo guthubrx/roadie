@@ -28,6 +28,33 @@ public final class LayoutEngine {
     /// `tiling.reserve`. Restoration → set 0 (ou supprime l'entrée).
     public var leftReserveByDisplay: [CGDirectDisplayID: CGFloat] = [:]
 
+    /// SPEC-026 US2 — si true et qu'un display contient 1 seule fenêtre tilée
+    /// visible, gaps outer + inner forcés à 0 sur ce display. Settable depuis
+    /// main.swift au boot/reload depuis `config.tiling.smartGapsSolo`.
+    public var smartGapsSolo: Bool = false
+
+    /// SPEC-025 — timestamp du dernier resize/warp/move user-driven par wid.
+    /// Sert au filtre `tiler_extreme_aspect` : on n'alerte pas si la frame
+    /// extrême résulte d'une manipulation explicite (≤ 60s) — sinon FP
+    /// systématique sur les colonnes étroites volontaires. Mis à jour par
+    /// CommandRouter (tiling.move/warp/resize) et axDidResizeWindow (drag-resize
+    /// externe). TTL implicite 60s (jamais de purge — dict reste petit).
+    private var lastUserResizeByWid: [WindowID: Date] = [:]
+    private static let userResizeGraceSeconds: TimeInterval = 60
+
+    /// Marque un wid comme cible d'une action user récente. À appeler depuis
+    /// CommandRouter sur move/warp/resize, et depuis axDidResizeWindow quand
+    /// `source=external` (drag-resize, pas un setBounds du daemon lui-même).
+    public func noteUserResize(_ wid: WindowID) {
+        lastUserResizeByWid[wid] = Date()
+    }
+
+    /// Vrai si `wid` a reçu une action user dans la fenêtre de grâce.
+    private func isUserOriginated(_ wid: WindowID) -> Bool {
+        guard let t = lastUserResizeByWid[wid] else { return false }
+        return Date().timeIntervalSince(t) < LayoutEngine.userResizeGraceSeconds
+    }
+
     public init(registry: WindowRegistry, workspaceID: WorkspaceID = .main, strategy: TilerStrategy = .bsp) throws {
         self.registry = registry
         self.workspace = Workspace(id: workspaceID)
@@ -92,6 +119,106 @@ public final class LayoutEngine {
     }
 
     // MARK: - Helpers multi-display / multi-stage
+
+    /// SPEC-025 cure — déplace les leaves présentes dans le tree d'une stage X
+    /// alors que `widToScope` dit Y vers le tree correct (Y). Symptôme corrigé :
+    /// Firefox stage=2 visible dans tree stage=1 → switch stage 2 = Firefox
+    /// absent (user doit le récupérer offscreen). Idempotent. Retourne le nb
+    /// de wids déplacées.
+    @discardableResult
+    public func fixCrossStageDrift(stageManagerScopeOf: (WindowID) -> StageID?) -> Int {
+        var fixedCount = 0
+        var moves: [(wid: WindowID, fromKey: StageDisplayKey, toStage: StageID)] = []
+        for (treeKey, root) in workspace.rootsByStageDisplay {
+            for leaf in root.allLeaves {
+                if let scopeStage = stageManagerScopeOf(leaf.windowID),
+                   scopeStage != treeKey.stageID {
+                    moves.append((leaf.windowID, treeKey, scopeStage))
+                }
+            }
+        }
+        for move in moves {
+            reassignWindow(move.wid, toStage: move.toStage)
+            fixedCount += 1
+            logInfo("tile_cross_stage_fixed", [
+                "wid": String(move.wid),
+                "from_tree_stage": move.fromKey.stageID.value,
+                "to_stage": move.toStage.value,
+            ])
+        }
+        return fixedCount
+    }
+
+    /// SPEC-026 US1 — équivalent `yabai -m space --balance`. Réinitialise tous
+    /// les `adaptiveWeight` à 1.0 sur les trees actuellement actifs (un par display
+    /// + stage active). Retourne le nombre de leaves rééquilibrées au total.
+    @discardableResult
+    public func balanceActiveTrees() -> Int {
+        var total = 0
+        for (displayID, stageID) in workspace.activeStageByDisplay {
+            let key = StageDisplayKey(stageID: stageID, displayID: displayID)
+            guard let r = workspace.rootsByStageDisplay[key] else { continue }
+            let leavesCount = r.allLeaves.count
+            balanceWeights(r)
+            total += leavesCount
+        }
+        if total == 0, let stageID = workspace.activeStageID {
+            // Fallback legacy mode (single-display, activeStageID seul).
+            for (key, r) in workspace.rootsByStageDisplay where key.stageID == stageID {
+                let leavesCount = r.allLeaves.count
+                balanceWeights(r)
+                total += leavesCount
+            }
+        }
+        logInfo("tree_balanced", ["leaves": String(total)])
+        return total
+    }
+
+    /// SPEC-026 US1 — équivalent `yabai -m space --rotate <angle>`.
+    @discardableResult
+    public func rotateActiveTrees(angle: RotateAngle) -> Int {
+        var total = 0
+        for (displayID, stageID) in workspace.activeStageByDisplay {
+            let key = StageDisplayKey(stageID: stageID, displayID: displayID)
+            guard let r = workspace.rootsByStageDisplay[key] else { continue }
+            rotateTree(r, angle: angle)
+            total += 1
+        }
+        logInfo("tree_rotated", ["angle": String(angle.rawValue), "trees": String(total)])
+        return total
+    }
+
+    /// SPEC-026 US1 — équivalent `yabai -m space --mirror <axis>`.
+    @discardableResult
+    public func mirrorActiveTrees(axis: MirrorAxis) -> Int {
+        var total = 0
+        for (displayID, stageID) in workspace.activeStageByDisplay {
+            let key = StageDisplayKey(stageID: stageID, displayID: displayID)
+            guard let r = workspace.rootsByStageDisplay[key] else { continue }
+            mirrorTree(r, axis: axis)
+            total += 1
+        }
+        logInfo("tree_mirrored", ["axis": axis.rawValue, "trees": String(total)])
+        return total
+    }
+
+    /// SPEC-025 cure — aplatit tous les roots dégénérés `root[H]=[V[…]]`.
+    /// Appelé par `daemon.heal` pour réparer les arbres produits par d'anciennes
+    /// versions du tiler avant le fix `root_single_child_append`. Idempotent.
+    /// Retourne le nombre de roots aplatis (= count > 0 si cure effective).
+    @discardableResult
+    public func flattenAllRoots() -> Int {
+        var fixed = 0
+        for (_, root) in workspace.rootsByStageDisplay {
+            let depthBefore = root.maxDepth
+            root.flattenRoot()
+            if root.maxDepth < depthBefore { fixed += 1 }
+        }
+        if fixed > 0 {
+            logInfo("tiler_roots_flattened", ["count": String(fixed)])
+        }
+        return fixed
+    }
 
     /// Retourne le root pour une clé (stageID, displayID), en le créant si absent.
     private func root(for key: StageDisplayKey) -> TilingContainer {
@@ -575,18 +702,38 @@ public final class LayoutEngine {
             // Stage active spécifique à ce display. Fallback "1" si jamais set.
             let activeSID = workspace.activeStageByDisplay[display.id] ?? StageID("1")
             let visibleFrameAX = LayoutEngine.nsToAx(display.visibleFrame, primaryHeight: primaryHeight)
-            var gaps = outerSides ?? .uniform(display.gapsOuter)
-            if let reserve = leftReserveByDisplay[display.id], reserve > 0 {
+            // SPEC-026 US2 — smart_gaps_solo : si 1 seule leaf visible sur ce display,
+            // override gaps à 0 pour ce display uniquement (per-display, pas global).
+            let key = StageDisplayKey(stageID: activeSID, displayID: display.id)
+            let displayRoot = root(for: key)
+            let visibleLeavesCount = displayRoot.allLeaves.filter { $0.isVisible }.count
+            let useSoloGaps = smartGapsSolo && visibleLeavesCount == 1
+            var gaps = useSoloGaps ? OuterGaps.zero : (outerSides ?? .uniform(display.gapsOuter))
+            if let reserve = leftReserveByDisplay[display.id], reserve > 0, !useSoloGaps {
                 gaps = OuterGaps(top: gaps.top, bottom: gaps.bottom,
                                  left: gaps.left + Int(reserve), right: gaps.right)
             }
             let usable = applyOuterGaps(visibleFrameAX, outerGaps: gaps)
-            let key = StageDisplayKey(stageID: activeSID, displayID: display.id)
-            let displayRoot = root(for: key)
+            // SPEC-025 invariant — tree dégénéré : root avec 1 unique enfant container.
+            // Symptôme du bug "wrap par parent.opposite à la 2e fenêtre" qui produit
+            // root[H]=[V[leaf,leaf]] (tile vertical au lieu d'horizontal). Zéro FP :
+            // c'est un état que `BSPTiler.insert` ne doit jamais produire post-fix.
+            if displayRoot.children.count == 1,
+               let onlyChild = displayRoot.children.first as? TilingContainer {
+                logWarn("tiler_root_degenerate", [
+                    "display": String(display.id),
+                    "stage": activeSID.value,
+                    "root_orientation": displayRoot.orientation.rawValue,
+                    "child_orientation": onlyChild.orientation.rawValue,
+                    "leaves_count": String(displayRoot.allLeaves.count),
+                    "structure": String(displayRoot.compactStructure.prefix(200)),
+                ])
+            }
             workspace.lastAppliedRectsByDisplay[display.id] = usable
             let displayTiler = currentTiler(for: display.id)
             let frames = displayTiler.layout(rect: usable, root: displayRoot)
-            let innerInset = CGFloat(display.gapsInner) / 2
+            // SPEC-026 US2 — solo display : inner gap aussi à 0.
+            let innerInset = useSoloGaps ? CGFloat(0) : CGFloat(display.gapsInner) / 2
             for (wid, frame) in frames {
                 guard let element = registry.axElement(for: wid) else { continue }
                 let innerFrame = frame.insetBy(dx: innerInset, dy: innerInset)
@@ -596,6 +743,32 @@ public final class LayoutEngine {
                 let prevFrame = registry.get(wid)?.frame
                 AXReader.setBounds(element, frame: innerFrame)
                 registry.updateFrame(wid, frame: innerFrame)
+                // Signal "layout sub-optimal" : aspect ratio extrême (> 3.5 ou < 0.28).
+                // Filtre surface > 10000 px² pour exclure les helper windows (typiquement
+                // 80×60), tout en captant les colonnes étroites pathologiques (ex 81×581
+                // = 47 000 px², bien au-dessus du seuil) que l'ancien filtre `w>200 &&
+                // h>200` masquait. Skip si une action user récente (< 60s) cible cette
+                // wid → évite FP sur resize manuel volontaire (cf. message user "juste
+                // si le user n'est pas à l'origine de ce redimensionnement").
+                if innerFrame.width * innerFrame.height > 10000 {
+                    let aspect = innerFrame.width / innerFrame.height
+                    if aspect > 3.5 || aspect < 0.28 {
+                        if isUserOriginated(wid) {
+                            logDebug("tiler_extreme_aspect_skipped_user_origin", [
+                                "wid": String(wid),
+                                "aspect": String(format: "%.2f", aspect),
+                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))",
+                            ])
+                        } else {
+                            logWarn("tiler_extreme_aspect", [
+                                "wid": String(wid),
+                                "display": String(display.id),
+                                "aspect": String(format: "%.2f", aspect),
+                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))",
+                            ])
+                        }
+                    }
+                }
                 if let prev = prevFrame {
                     let dx = abs(prev.origin.x - innerFrame.origin.x)
                     let dy = abs(prev.origin.y - innerFrame.origin.y)

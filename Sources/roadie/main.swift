@@ -87,6 +87,29 @@ case "tree":
 case "balance":
     sendAndPrint(Request(command: "balance"))
 
+case "tiling":
+    // SPEC-026 US1 — sous-verbes balance/rotate/mirror (active trees per-display).
+    guard args.count >= 3 else { printUsage(); exit(64) }
+    switch args[2] {
+    case "balance":
+        sendAndPrint(Request(command: "tiling.balance"))
+    case "rotate":
+        guard args.count >= 4 else {
+            FileHandle.standardError.write("usage: roadie tiling rotate <90|180|270>\n".data(using: .utf8)!)
+            exit(64)
+        }
+        sendAndPrint(Request(command: "tiling.rotate", args: ["angle": args[3]]))
+    case "mirror":
+        guard args.count >= 4 else {
+            FileHandle.standardError.write("usage: roadie tiling mirror <x|y>\n".data(using: .utf8)!)
+            exit(64)
+        }
+        sendAndPrint(Request(command: "tiling.mirror", args: ["axis": args[3]]))
+    default:
+        FileHandle.standardError.write("unknown tiling subcommand: \(args[2])\n".data(using: .utf8)!)
+        exit(64)
+    }
+
 case "rebuild":
     sendAndPrint(Request(command: "rebuild"))
 

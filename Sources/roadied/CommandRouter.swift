@@ -150,6 +150,66 @@ enum CommandRouter {
                 sm.rebuildWidToScopeIndex()
                 purged = max(0, memberBefore - sm.totalMemberCount())
             }
+            // SPEC-025 cure — aplatit les roots dégénérés `root[H]=[V[leaf,leaf]]`
+            // produits par d'anciennes versions avant le fix `root_single_child_append`.
+            let rootsFlattened = daemon.layoutEngine.flattenAllRoots()
+            // SPEC-025 cure cross-stage drift : déplace les leaves présentes dans
+            // le mauvais tree (Firefox stage=2 dans tree stage=1) vers leur tree
+            // correct selon widToScope.
+            let crossStageFixed = daemon.stageManager.map { sm in
+                daemon.layoutEngine.fixCrossStageDrift { wid in sm.scopeOf(wid: wid)?.stageID }
+            } ?? 0
+            // SPEC-025 cure double membership : wid présente dans memberWindows de 2+
+            // scopes simultanément (= sm.assign() a oublié de retirer la wid des
+            // autres scopes). Garder l'entrée widToScope (canonique) et retirer la
+            // wid de toutes les memberWindows qui ne matchent pas.
+            var doubleFixed = 0
+            if let sm = daemon.stageManager {
+                let violations = sm.auditOwnership()
+                for v in violations where v.contains("in 2 scopes") {
+                    let parts = v.split(separator: " ")
+                    if parts.count >= 2, let widNum = WindowID(parts[1]) {
+                        if let canonical = sm.scopeOf(wid: widNum) {
+                            sm.removeWindow(widNum)
+                            sm.assign(wid: widNum, to: canonical)
+                            doubleFixed += 1
+                            logInfo("stage_double_membership_fixed", [
+                                "wid": String(widNum),
+                                "kept_scope": canonical.stageID.value + "@" + canonical.displayUUID,
+                            ])
+                        }
+                    }
+                }
+            }
+            // SPEC-025 cure staged_orphan_tree : wid présente dans memberWindows[scope]
+            // mais aucune leaf dans rootsByStageDisplay → applyAll ne la frame jamais.
+            // Symptôme : Firefox 170x205 ou 3492x20 visible sur LG après stage assign
+            // pré-fix (sm.assign sans reassignWindow). Insère la wid dans le tree de
+            // son scope.
+            var orphanInsertedCount = 0
+            if let sm = daemon.stageManager {
+                var allTreeLeaves = Set<WindowID>()
+                for (_, root) in daemon.layoutEngine.workspace.rootsByStageDisplay {
+                    for leaf in root.allLeaves { allTreeLeaves.insert(leaf.windowID) }
+                }
+                for (_, stage) in sm.stagesV2 {
+                    for member in stage.memberWindows {
+                        let wid = member.cgWindowID
+                        if !allTreeLeaves.contains(wid) {
+                            // Insérer via reassignWindow qui trouve le tree du scope
+                            // et insère la wid dedans.
+                            if let scope = sm.scopeOf(wid: wid) {
+                                daemon.layoutEngine.reassignWindow(wid, toStage: scope.stageID)
+                                orphanInsertedCount += 1
+                                logInfo("staged_orphan_tree_fixed", [
+                                    "wid": String(wid),
+                                    "scope_stage": scope.stageID.value,
+                                ])
+                            }
+                        }
+                    }
+                }
+            }
             daemon.applyLayout()
             var widsRestored = 0
             if let reconciler = daemon.windowDesktopReconciler {
@@ -161,12 +221,16 @@ enum CommandRouter {
                 "purged": String(purged),
                 "drifts_fixed": String(driftsFixed),
                 "wids_restored": String(widsRestored),
+                "roots_flattened": String(rootsFlattened),
+                "cross_stage_fixed": String(crossStageFixed),
                 "duration_ms": String(durationMs),
             ])
             return .success([
                 "purged": AnyCodable(purged),
                 "drifts_fixed": AnyCodable(driftsFixed),
                 "wids_restored": AnyCodable(widsRestored),
+                "roots_flattened": AnyCodable(rootsFlattened),
+                "cross_stage_fixed": AnyCodable(crossStageFixed),
                 "duration_ms": AnyCodable(durationMs),
             ])
 
@@ -182,7 +246,10 @@ enum CommandRouter {
                     BSPTiler.splitPolicy = policy
                     logInfo("bsp_split_policy", ["policy": policy.rawValue, "via": "reload"])
                 }
-                logInfo("config reloaded")
+                // SPEC-026 US2 — propage smart_gaps_solo au reload.
+                daemon.layoutEngine.smartGapsSolo = newConfig.tiling.smartGapsSolo
+                daemon.applyLayout()
+                logInfo("config reloaded", ["smart_gaps_solo": String(newConfig.tiling.smartGapsSolo)])
                 // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
                 // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
                 EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
@@ -259,8 +326,17 @@ enum CommandRouter {
             guard let wid = daemon.registry.focusedWindowID else {
                 return .error(.windowNotFound, "no focused window")
             }
+            daemon.layoutEngine.noteUserResize(wid)
             let moved = daemon.layoutEngine.move(wid, direction: direction)
-            daemon.applyLayout()
+            // SPEC-025 — focus follows window. setFocus chainé via completion de
+            // applyLayout : s'exécute juste après les setBounds (pas avant) → évite
+            // le "saut" visuel où macOS focus la mauvaise wid pendant les setBounds.
+            if moved {
+                let movedWid = wid
+                daemon.applyLayout { daemon.focusManager.setFocus(to: movedWid) }
+            } else {
+                daemon.applyLayout()
+            }
             return .success(["moved": AnyCodable(moved)])
 
         case "warp":
@@ -277,6 +353,7 @@ enum CommandRouter {
             // stageManager.memberWindows et le desktopRegistry restent désync
             // → au prochain restart la wid est ré-assignée à la stage du
             // SOURCE display (drift physique vs logique).
+            daemon.layoutEngine.noteUserResize(wid)
             let srcDisplayID = daemon.layoutEngine.displayIDForWindow(wid)
             let warped = daemon.layoutEngine.warp(wid, direction: direction)
             // Détecter cross-display : displayID a changé après le warp.
@@ -323,7 +400,14 @@ enum CommandRouter {
                     }
                 }
             }
-            daemon.applyLayout()
+            // SPEC-025 — focus follows window après warp (idem move) chainé via
+            // completion de applyLayout pour s'exécuter pile après setBounds.
+            if warped {
+                let movedWid = wid
+                daemon.applyLayout { daemon.focusManager.setFocus(to: movedWid) }
+            } else {
+                daemon.applyLayout()
+            }
             return .success(["warped": AnyCodable(warped)])
 
         case "resize":
@@ -336,6 +420,7 @@ enum CommandRouter {
             guard let wid = daemon.registry.focusedWindowID else {
                 return .error(.windowNotFound, "no focused window")
             }
+            daemon.layoutEngine.noteUserResize(wid)
             daemon.layoutEngine.resize(wid, direction: direction, delta: CGFloat(delta))
             daemon.applyLayout()
             return .success()
@@ -354,11 +439,60 @@ enum CommandRouter {
                 return .error(.windowNotFound, "no focused window")
             }
             let newFloating = !state.isFloating
-            daemon.registry.update(wid) { $0.isFloating = newFloating }
+            daemon.registry.update(wid) {
+                $0.isFloating = newFloating
+                // SPEC-025 — toggle vers tiled = intention user explicite,
+                // promote sticky bit pour que la wid puisse être insérée même
+                // si sa frame courante est < 100px (cas wid stuck en helper
+                // après warp/move chaotique). applyLayout va la re-frame.
+                if !newFloating { $0.wasEverTileable = true }
+            }
             if newFloating {
                 daemon.layoutEngine.removeWindow(wid)
+                if let sm = daemon.stageManager { sm.removeWindow(wid) }
             } else {
                 daemon.layoutEngine.insertWindow(wid, focusedID: nil)
+                // SPEC-025 — invariant : toute wid tilée DOIT appartenir à une
+                // stage. Mais on RESPECTE le scope existant : si la wid était
+                // déjà sur stage 2 avant un toggle float intermédiaire, on la
+                // remet sur stage 2 (pas force-assign à active = drift garanti).
+                // Cas user 2026-05-05: Firefox stage=2 → toggle off → toggle on
+                // → réassignée à stage 1 active → switch stage 1 cassé tree.
+                if let sm = daemon.stageManager, sm.scopeOf(wid: wid) == nil {
+                    if sm.stageMode == .perDisplay,
+                       let dReg = daemon.displayRegistry,
+                       let dispID = daemon.layoutEngine.displayIDForWindow(wid) {
+                        let displays = await dReg.displays
+                        if let dst = displays.first(where: { $0.id == dispID }),
+                           let drReg = daemon.desktopRegistry {
+                            let mode = await drReg.mode
+                            let deskID: Int = (mode == .perDisplay)
+                                ? await drReg.currentID(for: dispID)
+                                : await drReg.currentID
+                            let activeStage = sm.activeStageByDesktop[
+                                DesktopKey(displayUUID: dst.uuid, desktopID: deskID)] ?? StageID("1")
+                            let scope = StageScope(displayUUID: dst.uuid,
+                                                    desktopID: deskID,
+                                                    stageID: activeStage)
+                            if sm.stagesV2[scope] == nil {
+                                _ = sm.createStage(id: activeStage,
+                                                   displayName: activeStage.value, scope: scope)
+                            }
+                            sm.assign(wid: wid, to: scope)
+                        }
+                    } else if let activeStage = sm.currentStageID {
+                        sm.assign(wid: wid, to: activeStage)
+                    }
+                }
+                // SPEC-025 — re-publier windowCreated sur le bus FX. Les modules
+                // (Borders, Opacity, ...) attachent leurs overlays sur cet event.
+                // Sans ce repli, une wid née helper puis promue tilée n'a JAMAIS
+                // d'overlay (event windowCreated initial filtré côté daemon).
+                if let loader = daemon.fxLoader {
+                    loader.bus.publish(FXEvent(kind: .windowCreated,
+                                                wid: CGWindowID(wid),
+                                                frame: state.frame))
+                }
             }
             daemon.applyLayout()
             return .success(["floating": AnyCodable(newFloating)])
@@ -644,6 +778,13 @@ enum CommandRouter {
                 }
                 sm.assign(wid: wid, to: stageID)  // API V1
             }
+            // SPEC-025 root-cause fix — sm.assign met dans widToScope/memberWindows
+            // mais N'INSÈRE PAS la wid dans le tree de la nouvelle stage. Sans ça
+            // applyAll ne la frame jamais → wid "fantôme" visible offscreen avec
+            // sa frame native macOS (ex: Firefox 1844x20 sur LG, signalé user 07:04).
+            // reassignWindow gère les 2 cas : wid pas dans tree → insert ; wid dans
+            // autre tree → move. Idempotent si la wid est déjà dans le bon tree.
+            daemon.layoutEngine.reassignWindow(wid, toStage: stageID)
             // Si la stage cible n'est pas la stage active, deux comportements
             // possibles selon `[focus] assign_follows_focus` :
             //   - true (défaut, yabai-style) : switcher sur la stage cible →
@@ -1008,6 +1149,31 @@ enum CommandRouter {
 
         case "rail.toggle":
             return handleRailToggle(daemon: daemon)
+
+        case "tiling.balance":
+            // SPEC-026 US1 — équivalent yabai --balance.
+            let n = daemon.layoutEngine.balanceActiveTrees()
+            daemon.applyLayout()
+            return .success(["leaves_balanced": AnyCodable(n)])
+
+        case "tiling.rotate":
+            // SPEC-026 US1 — args: angle ∈ {90, 180, 270}.
+            guard let raw = request.args?["angle"], let v = Int(raw),
+                  let angle = RotateAngle(rawValue: v) else {
+                return .error(.invalidArgument, "angle must be 90|180|270")
+            }
+            let n = daemon.layoutEngine.rotateActiveTrees(angle: angle)
+            daemon.applyLayout()
+            return .success(["angle": AnyCodable(v), "trees_rotated": AnyCodable(n)])
+
+        case "tiling.mirror":
+            // SPEC-026 US1 — args: axis ∈ {x, y}.
+            guard let raw = request.args?["axis"], let axis = MirrorAxis(rawValue: raw) else {
+                return .error(.invalidArgument, "axis must be x|y")
+            }
+            let n = daemon.layoutEngine.mirrorActiveTrees(axis: axis)
+            daemon.applyLayout()
+            return .success(["axis": AnyCodable(raw), "trees_mirrored": AnyCodable(n)])
 
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")

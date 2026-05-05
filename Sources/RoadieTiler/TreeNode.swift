@@ -133,6 +133,50 @@ public func balanceWeights(_ node: TreeNode) {
     }
 }
 
+/// SPEC-026 US1 — angle de rotation supporté.
+public enum RotateAngle: Int, Sendable {
+    case rot90 = 90
+    case rot180 = 180
+    case rot270 = 270
+}
+
+/// SPEC-026 US1 — axe de miroir.
+public enum MirrorAxis: String, Sendable {
+    case x  // inverse l'ordre des children dans les containers H (left↔right).
+    case y  // inverse l'ordre des children dans les containers V (top↔bottom).
+}
+
+/// SPEC-026 US1 — rotation récursive de l'arbre (équivalent `yabai -m space --rotate`).
+/// 90 : swap orientation H↔V à chaque container.
+/// 180 : inverse l'ordre des children à chaque container.
+/// 270 : combine 90 + 180.
+public func rotateTree(_ node: TreeNode, angle: RotateAngle) {
+    guard let container = node as? TilingContainer else { return }
+    if angle == .rot90 || angle == .rot270 {
+        container.orientation = container.orientation == .horizontal ? .vertical : .horizontal
+    }
+    if angle == .rot180 || angle == .rot270 {
+        container.children.reverse()
+    }
+    for child in container.children {
+        rotateTree(child, angle: angle)
+    }
+}
+
+/// SPEC-026 US1 — miroir récursif de l'arbre (équivalent `yabai -m space --mirror`).
+/// `axis = .x` : reverse children dans tous les containers H.
+/// `axis = .y` : reverse children dans tous les containers V.
+public func mirrorTree(_ node: TreeNode, axis: MirrorAxis) {
+    guard let container = node as? TilingContainer else { return }
+    let targetOrientation: Orientation = (axis == .x) ? .horizontal : .vertical
+    if container.orientation == targetOrientation {
+        container.children.reverse()
+    }
+    for child in container.children {
+        mirrorTree(child, axis: axis)
+    }
+}
+
 // MARK: - Helpers de manipulation
 
 public extension TilingContainer {
@@ -147,6 +191,30 @@ public extension TilingContainer {
         }
         children.removeAll()
         self.parent = nil
+    }
+
+    /// SPEC-025 amend — adopte enfants+orientation d'un sous-container unique
+    /// au niveau racine. `normalize()` ne sait pas réparer la racine (pas de
+    /// parent où collapse), d'où ce helper dédié appelé en cure (heal) sur
+    /// les arbres dégénérés `root[H]=[V[leaf,leaf]]` produits par d'anciennes
+    /// versions ou par migration. Idempotent : no-op si racine déjà saine.
+    func flattenRoot() {
+        guard parent == nil,
+              children.count == 1,
+              let onlyChild = children.first as? TilingContainer
+        else { return }
+        self.orientation = onlyChild.orientation
+        let adopted = onlyChild.children
+        children.removeAll()
+        for c in adopted {
+            c.parent = self
+            children.append(c)
+        }
+        onlyChild.children.removeAll()
+        onlyChild.parent = nil
+        // Récursion : si le nouveau root a encore 1 seul container enfant
+        // (cas tres profond), on continue à aplatir.
+        flattenRoot()
     }
 
     /// Supprime les containers vides ou single-child à partir de ce nœud, en remontant.
