@@ -2521,7 +2521,15 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             // Insérer les attendues manquantes.
             _ = layoutEngine.ensureTreePopulated(with: expectedWids, displayID: display.id)
         }
-        logInfo("rebuild_all_trees_done", ["displays": String(displays.count)])
+        // SPEC-026 — rebalance après rebuild : les inserts en cascade peuvent
+        // déséquilibrer les poids (ex: target.adaptiveWeight=0.05 hérité d'un
+        // sub-container collapsé pré-restart) → fenêtres à 48px observées en
+        // prod. Reset uniforme les ramène à 1.0 → frames équilibrées.
+        let balanced = layoutEngine.balanceActiveTrees()
+        logInfo("rebuild_all_trees_done", [
+            "displays": String(displays.count),
+            "leaves_rebalanced": String(balanced),
+        ])
     }
 }
 
