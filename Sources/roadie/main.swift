@@ -110,6 +110,14 @@ case "tiling":
         exit(64)
     }
 
+case "scratchpad":
+    // SPEC-026 US3 — `roadie scratchpad toggle <name>`.
+    guard args.count >= 4, args[2] == "toggle" else {
+        FileHandle.standardError.write("usage: roadie scratchpad toggle <name>\n".data(using: .utf8)!)
+        exit(64)
+    }
+    sendAndPrint(Request(command: "scratchpad.toggle", args: ["name": args[3]]))
+
 case "rebuild":
     sendAndPrint(Request(command: "rebuild"))
 

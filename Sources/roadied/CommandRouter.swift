@@ -249,7 +249,26 @@ enum CommandRouter {
                 // SPEC-026 US2 — propage smart_gaps_solo au reload.
                 daemon.layoutEngine.smartGapsSolo = newConfig.tiling.smartGapsSolo
                 daemon.applyLayout()
-                logInfo("config reloaded", ["smart_gaps_solo": String(newConfig.tiling.smartGapsSolo)])
+                // SPEC-026 US5 — propage follow focus toggles au reload.
+                daemon.focusManager.mouseFollowsFocus = newConfig.focus.mouseFollowsFocus
+                if newConfig.focus.focusFollowsMouse {
+                    daemon.focusFollowsMouseWatcher?.start()
+                } else {
+                    daemon.focusFollowsMouseWatcher?.stop()
+                }
+                // SPEC-026 US6 — signals reload.
+                daemon.signalDispatcher?.loadConfig(newConfig.signals)
+                // SPEC-026 US3 — scratchpads reload.
+                daemon.scratchpadManager?.loadConfig(newConfig.scratchpads)
+                // SPEC-026 US4 — sticky reload (re-build index bundle IDs).
+                daemon.stickyBundleIDs = Set(newConfig.stickyRules.map { $0.matchBundleID })
+                logInfo("config reloaded", [
+                    "smart_gaps_solo": String(newConfig.tiling.smartGapsSolo),
+                    "focus_follows_mouse": String(newConfig.focus.focusFollowsMouse),
+                    "mouse_follows_focus": String(newConfig.focus.mouseFollowsFocus),
+                    "signals_enabled": String(newConfig.signals.enabled),
+                    "signals_count": String(newConfig.signals.hooks.count),
+                ])
                 // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
                 // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
                 EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
@@ -315,7 +334,7 @@ enum CommandRouter {
             guard let neighbor = daemon.layoutEngine.focusNeighbor(of: from, direction: direction) else {
                 return .error(.windowNotFound, "no neighbor in direction \(direction.rawValue)")
             }
-            daemon.focusManager.setFocus(to: neighbor)
+            daemon.focusManager.setFocusFromShortcut(to: neighbor)
             return .success(["focused": AnyCodable(Int(neighbor))])
 
         case "move":
@@ -333,7 +352,7 @@ enum CommandRouter {
             // le "saut" visuel où macOS focus la mauvaise wid pendant les setBounds.
             if moved {
                 let movedWid = wid
-                daemon.applyLayout { daemon.focusManager.setFocus(to: movedWid) }
+                daemon.applyLayout { daemon.focusManager.setFocusFromShortcut(to: movedWid) }
             } else {
                 daemon.applyLayout()
             }
@@ -404,7 +423,7 @@ enum CommandRouter {
             // completion de applyLayout pour s'exécuter pile après setBounds.
             if warped {
                 let movedWid = wid
-                daemon.applyLayout { daemon.focusManager.setFocus(to: movedWid) }
+                daemon.applyLayout { daemon.focusManager.setFocusFromShortcut(to: movedWid) }
             } else {
                 daemon.applyLayout()
             }
@@ -1175,6 +1194,28 @@ enum CommandRouter {
             daemon.applyLayout()
             return .success(["axis": AnyCodable(raw), "trees_mirrored": AnyCodable(n)])
 
+        case "scratchpad.toggle":
+            // SPEC-026 US3 — toggle un scratchpad par nom.
+            guard let name = request.args?["name"], !name.isEmpty else {
+                return .error(.invalidArgument, "missing scratchpad name")
+            }
+            guard let mgr = daemon.scratchpadManager else {
+                return .error(.internalError, "scratchpad manager not initialized")
+            }
+            let result = mgr.toggle(name: name)
+            switch result {
+            case .spawning(let n):
+                return .success(["state": AnyCodable("spawning"), "name": AnyCodable(n)])
+            case .shown(let n, let wid):
+                return .success(["state": AnyCodable("visible"), "name": AnyCodable(n),
+                                 "wid": AnyCodable(Int(wid))])
+            case .hidden(let n, let wid):
+                return .success(["state": AnyCodable("hidden"), "name": AnyCodable(n),
+                                 "wid": AnyCodable(Int(wid))])
+            case .error(let msg):
+                return .error(.invalidArgument, msg)
+            }
+
         default:
             return .error(.invalidArgument, "unknown command: \(request.command)")
         }
@@ -1887,7 +1928,7 @@ enum CommandRouter {
         // Focus la première leaf tilée de l'écran cible.
         if let root = daemon.layoutEngine.workspace.rootsByDisplay[d.id],
            let firstLeaf = root.allLeaves.first(where: { $0.isVisible }) {
-            daemon.focusManager.setFocus(to: firstLeaf.windowID)
+            daemon.focusManager.setFocusFromShortcut(to: firstLeaf.windowID)
             return .success([
                 "display": AnyCodable(d.index),
                 "focused": AnyCodable(Int(firstLeaf.windowID)),

@@ -53,6 +53,14 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     var mouseRaiser: MouseRaiser?
     /// SPEC-015 : drag/resize avec modifier + clic souris.
     var mouseDragHandler: MouseDragHandler?
+    /// SPEC-026 US5 — focus_follows_mouse watcher.
+    var focusFollowsMouseWatcher: FocusFollowsMouseWatcher?
+    /// SPEC-026 US6 — signal hooks dispatcher.
+    var signalDispatcher: SignalDispatcher?
+    /// SPEC-026 US3 — scratchpad manager.
+    var scratchpadManager: ScratchpadManager?
+    /// SPEC-026 US4 — index des bundleID sticky pour matching rapide.
+    var stickyBundleIDs: Set<String> = []
     var periodicScanner: PeriodicScanner?
     var dragWatcher: DragWatcher?
     /// SPEC-004 fx-framework : loader de modules opt-in chargés via dlopen.
@@ -187,6 +195,18 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         } else {
             self.stageManager = nil
         }
+        // SPEC-026 US4 — câblage sticky : closure qui regarde les rules pour décider
+        // si une wid doit rester visible cross-stage. Capture sticky rules au boot ;
+        // le reload met à jour l'index local.
+        let registryRefForSticky = self.registry
+        var stickyBundleIDs = Set(config.stickyRules.map { $0.matchBundleID })
+        self.stickyBundleIDs = stickyBundleIDs
+        self.stageManager?.shouldKeepWidStickyAcrossStages = { [weak self] wid in
+            guard let self = self else { return false }
+            guard let bundleID = registryRefForSticky.get(wid)?.bundleID else { return false }
+            return self.stickyBundleIDs.contains(bundleID)
+        }
+        _ = stickyBundleIDs   // silence unused if reload path branches differently
         self.thumbnailCache = ThumbnailCache(capacity: 50)
     }
 
@@ -550,6 +570,29 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         }
         mdh.start()
         self.mouseDragHandler = mdh
+
+        // SPEC-026 US5 — wire mouse_follows_focus + focus_follows_mouse.
+        focusManager.mouseFollowsFocus = config.focus.mouseFollowsFocus
+        let ffmw = FocusFollowsMouseWatcher(
+            registry: registry,
+            focusManager: focusManager,
+            mouseDragHandler: mdh
+        )
+        if config.focus.focusFollowsMouse {
+            ffmw.start()
+        }
+        self.focusFollowsMouseWatcher = ffmw
+
+        // SPEC-026 US6 — signal hooks dispatcher.
+        let sigDispatcher = SignalDispatcher()
+        sigDispatcher.loadConfig(config.signals)
+        sigDispatcher.start()
+        self.signalDispatcher = sigDispatcher
+
+        // SPEC-026 US3 — scratchpad manager.
+        let scratchpadMgr = ScratchpadManager(registry: registry)
+        scratchpadMgr.loadConfig(config.scratchpads)
+        self.scratchpadManager = scratchpadMgr
 
         // Drag-to-resize : adapte le tree quand l'utilisateur lâche après avoir
         // dragué un bord ou la barre de titre d'une fenêtre tilée.
@@ -1849,6 +1892,12 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         if let wid = axWindowID(of: axWindow) {
             EventBus.shared.publish(DesktopEvent(name: "window_created",
                                                 payload: ["wid": String(wid)]))
+            // SPEC-026 US3 — tente d'attacher la wid à un scratchpad pending.
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                scratchpadManager?.tryAttachOnWindowCreated(
+                    wid: wid, bundleID: app.bundleIdentifier
+                )
+            }
         }
         // Race condition macOS : à la création, le CGWindowID n'est pas toujours encore alloué.
         // Retry après un court délai pour rattraper les fenêtres ratées.
