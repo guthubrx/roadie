@@ -613,6 +613,12 @@ public final class RailController {
             let onEmptyClickScoped: () -> Void = { [weak self] in
                 Task { @MainActor [weak self] in self?.hideActiveStage(displayUUID: panelUUID) }
             }
+            // SPEC-027 US3 — drag stage A sur stage B → A vient juste avant B.
+            let onReorderScoped: (String, String) -> Void = { [weak self] src, target in
+                Task { @MainActor [weak self] in
+                    self?.reorderStage(src, before: target, displayUUID: panelUUID)
+                }
+            }
             // SPEC-019 — résoudre la preview effective pour le renderer actif.
             // Renderer changes (config_reloaded) déclenchent rebuildPanels → re-résolution.
             let activeRendererID = config.rendererID ?? StageRendererRegistry.defaultID
@@ -652,6 +658,7 @@ public final class RailController {
                 onRename: onRename,
                 onAddFocused: onAddFocused,
                 onDelete: onDelete,
+                onReorderStages: onReorderScoped,
                 emptyClickHideActive: config.emptyClickHideActive,
                 emptyClickSafetyMargin: config.emptyClickSafetyMargin,
                 onEmptyClick: onEmptyClickScoped
@@ -822,6 +829,23 @@ public final class RailController {
     }
 
     // MARK: - SPEC-014 US5 (T071-T073) : menu contextuel daemon-side.
+
+    /// SPEC-027 US3 — drag-reorder dans le rail. Envoie au daemon dans le scope
+    /// du panel d'origine. Le daemon réécrit les `order` côté StageManager et
+    /// `state_changed` rafraîchira la vue.
+    func reorderStage(_ src: String, before target: String, displayUUID: String) {
+        Task {
+            do {
+                _ = try await ipc.send(command: "stage.reorder",
+                                       args: ["stage_id": src,
+                                              "target_id": target,
+                                              "position": "before",
+                                              "display": displayUUID])
+            } catch {
+                logErr("rail: stage.reorder \(src)→before(\(target)) failed: \(error)")
+            }
+        }
+    }
 
     func renameStage(_ id: String, to newName: String) {
         Task {

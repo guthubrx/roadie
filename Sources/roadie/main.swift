@@ -393,6 +393,15 @@ func handleStage(args: [String]) {
         reqArgs["stage_id"] = args[3]
         reqArgs["new_name"] = args[4]
         sendAndPrint(Request(command: "stage.rename", args: reqArgs))
+    case "move-before", "move-after":
+        // SPEC-027 US3 : `roadie stage move-before <id> <target>` ou move-after.
+        // Réordonne `<id>` dans le rail : juste avant (ou juste après) `<target>`.
+        guard args.count >= 5 else { printUsage(); exit(64) }
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = args[3]
+        reqArgs["target_id"] = args[4]
+        reqArgs["position"] = args[2] == "move-after" ? "after" : "before"
+        sendAndPrint(Request(command: "stage.reorder", args: reqArgs))
     default:
         // arg2 est le stage_id pour switch. SPEC-019 : honorer aussi les flags
         // `--display <sel>` / `--desktop <id>` pour cibler un scope précis (utile
@@ -640,6 +649,8 @@ func printUsage() {
       roadie stage create <stage_id> <name> [--display <sel>] [--desktop <id>]
       roadie stage delete <stage_id> [--display <sel>] [--desktop <id>]
       roadie stage rename <stage_id> <new_name> [--display <sel>] [--desktop <id>]
+      roadie stage move-before <stage_id> <target_id> [--display <sel>] [--desktop <id>]
+      roadie stage move-after  <stage_id> <target_id> [--display <sel>] [--desktop <id>]
       roadie desktop list [--json]               # V2 multi-desktop
       roadie desktop current [--json]
       roadie desktop focus <prev|next|recent|first|last|N|label>
