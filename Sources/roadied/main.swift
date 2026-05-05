@@ -2521,11 +2521,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             // Insérer les attendues manquantes.
             _ = layoutEngine.ensureTreePopulated(with: expectedWids, displayID: display.id)
         }
-        // SPEC-026 — rebalance après rebuild : les inserts en cascade peuvent
-        // déséquilibrer les poids (ex: target.adaptiveWeight=0.05 hérité d'un
-        // sub-container collapsé pré-restart) → fenêtres à 48px observées en
-        // prod. Reset uniforme les ramène à 1.0 → frames équilibrées.
-        let balanced = layoutEngine.balanceActiveTrees()
+        // SPEC-026 — rebalance TOUS les trees après rebuild, pas seulement les
+        // actifs. Les inserts en cascade peuvent déséquilibrer les poids des
+        // trees non-actifs (ex: stage 2 reconstruit alors que stage 1 active),
+        // qui produisent des frames extrêmes au prochain stage switch.
+        let balanced = layoutEngine.balanceAllTrees()
         logInfo("rebuild_all_trees_done", [
             "displays": String(displays.count),
             "leaves_rebalanced": String(balanced),

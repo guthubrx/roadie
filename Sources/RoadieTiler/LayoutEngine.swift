@@ -149,6 +149,22 @@ public final class LayoutEngine {
         return fixedCount
     }
 
+    /// SPEC-026 — balance TOUS les trees indistinctement. Utilisé en fin de
+    /// rebuildAllTrees pour reset les poids hérités de sub-containers
+    /// pré-restart, qui peuvent rester déséquilibrés sur les trees inactifs.
+    @discardableResult
+    public func balanceAllTrees() -> Int {
+        var total = 0
+        for (_, root) in workspace.rootsByStageDisplay {
+            let leavesCount = root.allLeaves.count
+            balanceWeights(root)
+            total += leavesCount
+        }
+        logInfo("tree_balanced_all", ["leaves": String(total),
+                                       "trees": String(workspace.rootsByStageDisplay.count)])
+        return total
+    }
+
     /// SPEC-026 US1 — équivalent `yabai -m space --balance`. Réinitialise tous
     /// les `adaptiveWeight` à 1.0 sur les trees actuellement actifs (un par display
     /// + stage active). Retourne le nombre de leaves rééquilibrées au total.
