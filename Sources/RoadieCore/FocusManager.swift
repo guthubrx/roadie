@@ -24,6 +24,14 @@ public final class FocusManager {
     /// un warp légitime déclenché par Cmd+Tab arrivant juste après.
     public private(set) var inhibitWarpUntil: Date?
 
+    /// SPEC-028 — anti-loop stage_follows_focus ↔ focus_follows_mouse. Quand
+    /// le focus est causé par un hover souris, on ne veut pas que le stage
+    /// switche automatiquement (sinon : hover → focus → stage switch →
+    /// applyAll repositionne → wid sous curseur change → cycle).
+    /// Posé par FocusFollowsMouseWatcher avant son setFocus, lu par le hook
+    /// onFocusChanged → followFocusToStageAndDesktop.
+    public private(set) var inhibitStageFollowsFocusUntil: Date?
+
     public init(registry: WindowRegistry) {
         self.registry = registry
     }
@@ -85,7 +93,7 @@ public final class FocusManager {
         logInfo("mouse_follows_focus_warped", [
             "wid": String(wid),
             "x": String(Int(center.x)),
-            "y": String(Int(center.y)),
+            "y": String(Int(center.y))
         ])
     }
 
@@ -107,6 +115,19 @@ public final class FocusManager {
         inhibitWarpUntil = Date().addingTimeInterval(durationSeconds)
     }
 
+    /// SPEC-028 — anti-loop. Posé par FocusFollowsMouseWatcher avant son setFocus.
+    /// Empêche le hook stage_follows_focus de switcher la stage en réponse à un
+    /// focus issu d'un simple hover.
+    public func setInhibitStageFollowsFocus(durationSeconds: TimeInterval) {
+        inhibitStageFollowsFocusUntil = Date().addingTimeInterval(durationSeconds)
+    }
+
+    /// Vrai si stage_follows_focus doit être inhibé (focus issu d'un hover souris).
+    public func isStageFollowsFocusInhibited() -> Bool {
+        guard let until = inhibitStageFollowsFocusUntil else { return false }
+        return Date() < until
+    }
+
     /// SPEC-026 US5 — warp uniquement (pas de re-set AX). Utile après un
     /// stage_switch / desktop_switch / Cmd+Tab où le focus AX a changé sans
     /// passer par setFocusFromShortcut.
@@ -124,7 +145,7 @@ public final class FocusManager {
             "via": "post-switch",
             "wid": String(wid),
             "x": String(Int(center.x)),
-            "y": String(Int(center.y)),
+            "y": String(Int(center.y))
         ])
     }
 }

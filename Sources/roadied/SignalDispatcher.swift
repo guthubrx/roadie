@@ -12,7 +12,7 @@ import RoadieCore
 public final class SignalDispatcher {
     private static let supportedEvents: Set<String> = [
         "window_focused", "window_created", "window_destroyed",
-        "stage_changed", "desktop_changed", "display_changed",
+        "stage_changed", "desktop_changed", "display_changed"
     ]
     private static let timeoutSeconds: Double = 5.0
 
@@ -36,7 +36,7 @@ public final class SignalDispatcher {
         logInfo("signals_loaded", [
             "enabled": String(enabled),
             "hooks_count": String(config.hooks.count),
-            "events": indexed.keys.sorted().joined(separator: ","),
+            "events": indexed.keys.sorted().joined(separator: ",")
         ])
     }
 
@@ -88,12 +88,12 @@ public final class SignalDispatcher {
             logInfo("signal_executed", [
                 "event": event,
                 "cmd": String(cmd.prefix(80)),
-                "pid": String(process.processIdentifier),
+                "pid": String(process.processIdentifier)
             ])
         } catch {
             logWarn("signal_spawn_failed", [
                 "event": event,
-                "error": String(describing: error),
+                "error": String(describing: error)
             ])
             return
         }
@@ -112,7 +112,7 @@ public final class SignalDispatcher {
                     logWarn("signal_timeout", [
                         "event": event,
                         "pid": String(pidCapture),
-                        "timeout_s": String(Self.timeoutSeconds),
+                        "timeout_s": String(Self.timeoutSeconds)
                     ])
                 }
             }

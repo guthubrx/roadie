@@ -15,7 +15,7 @@ final class DisplayRegistryRecoveryTests: XCTestCase {
 
     private let display1ID: CGDirectDisplayID = 3001
     private let display2ID: CGDirectDisplayID = 3002
-    private let primaryFrame = CGRect(x: 0,    y: 0, width: 1280, height: 800)
+    private let primaryFrame = CGRect(x: 0, y: 0, width: 1280, height: 800)
     private let externalFrame = CGRect(x: 1280, y: 0, width: 2560, height: 1440)
 
     override func setUp() {

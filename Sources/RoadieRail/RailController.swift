@@ -10,7 +10,7 @@ import TOMLKit
 /// Lecture d'une clé numérique (Double ou Int) avec clamping, retour `nil` si absente.
 private func parsePreviewKey(_ table: TOMLTable, _ key: String, min lo: Double, max hi: Double) -> Double? {
     if let v = table[key]?.double { return max(lo, min(hi, v)) }
-    if let v = table[key]?.int    { return max(lo, min(hi, Double(v))) }
+    if let v = table[key]?.int { return max(lo, min(hi, Double(v))) }
     return nil
 }
 
@@ -29,29 +29,29 @@ private func resolveRendererID(fromTOMLKey key: String) -> String {
 /// SPEC-019 — overrides optionnels d'un renderer sur les paramètres preview
 /// globaux. nil = inherit du global ([fx.rail.preview]).
 struct RendererPreviewOverrides {
-    var width:           Double?
-    var height:          Double?
-    var leadingPadding:  Double?
+    var width: Double?
+    var height: Double?
+    var leadingPadding: Double?
     var trailingPadding: Double?
     var verticalPadding: Double?
-    var borderColor:         String?
+    var borderColor: String?
     var borderColorInactive: String?
-    var borderWidth:         Double?
-    var borderStyle:         String?
+    var borderWidth: Double?
+    var borderStyle: String?
     var stageBorderOverrides: [String: String]?
 }
 
 /// Tuple résolu de la preview effective pour un renderer donné.
 struct EffectivePreview {
-    let width:           Double
-    let height:          Double
-    let leadingPadding:  Double
+    let width: Double
+    let height: Double
+    let leadingPadding: Double
     let trailingPadding: Double
     let verticalPadding: Double
-    let borderColor:         String
+    let borderColor: String
     let borderColorInactive: String
-    let borderWidth:         Double
-    let borderStyle:         String
+    let borderWidth: Double
+    let borderStyle: String
     let stageBorderOverrides: [String: String]
 }
 
@@ -93,35 +93,35 @@ struct RailConfig {
     var haloIntensity: Double = 0.75
     var haloRadius: Double = 18
     // SPEC-019 — id du renderer actif. nil → fallback "stacked-previews" via le registry.
-    var rendererID: String? = nil
+    var rendererID: String?
     // SPEC-019 — paramètres scatter du renderer "stacked-previews".
     // Defaults marqués (effet « polaroïds éparpillés »). Tous configurables
     // via [fx.rail.stacked] dans le TOML utilisateur.
-    var stackedOffsetX:   Double = 60   // ±px horizontal max par couche idx>=1
-    var stackedOffsetY:   Double = 80   // ±px vertical max
-    var stackedRotation:  Double = 12   // ±deg max
-    var stackedScale:     Double = 0.06 // réduction par couche
-    var stackedOpacity:   Double = 0.10 // transparence additionnelle par couche
+    var stackedOffsetX: Double = 60   // ±px horizontal max par couche idx>=1
+    var stackedOffsetY: Double = 80   // ±px vertical max
+    var stackedRotation: Double = 12   // ±deg max
+    var stackedScale: Double = 0.06 // réduction par couche
+    var stackedOpacity: Double = 0.10 // transparence additionnelle par couche
     var stackedScatterMode: String = "compass" // "compass" | "random"
     // SPEC-019 — paramètres renderer "parallax-45". Configurables via
     // [fx.rail.parallax] TOML.
     var parallaxRotation: Double  = 35  // ° rotation 3D axe Y
-    var parallaxOffsetX:  Double  = 18  // px décalage horizontal par couche
-    var parallaxOffsetY:  Double  = 8   // px décalage vertical par couche
-    var parallaxScale:    Double  = 0.05 // réduction par couche
-    var parallaxOpacity:  Double  = 0.10 // transparence additionnelle par couche
+    var parallaxOffsetX: Double  = 18  // px décalage horizontal par couche
+    var parallaxOffsetY: Double  = 8   // px décalage vertical par couche
+    var parallaxScale: Double  = 0.05 // réduction par couche
+    var parallaxOpacity: Double  = 0.10 // transparence additionnelle par couche
     // SPEC-019 — taille des vignettes (WindowPreview) et distance depuis le bord
     // gauche du panel. Configurables via [fx.rail.preview] TOML.
-    var previewWidth:    Double = 200   // px largeur thumbnail
-    var previewHeight:   Double = 130   // px hauteur thumbnail
-    var leadingPadding:  Double = 8     // px distance bord gauche
+    var previewWidth: Double = 200   // px largeur thumbnail
+    var previewHeight: Double = 130   // px hauteur thumbnail
+    var leadingPadding: Double = 8     // px distance bord gauche
     var trailingPadding: Double = 16    // px distance bord droit
     var verticalPadding: Double = 20    // px padding vertical
     // SPEC-019 — bordure des vignettes. Hex (RGB ou RGBA), épaisseur, style trait.
-    var borderColor:         String = "#FFFFFF26" // bordure du stage ACTIF (défaut)
+    var borderColor: String = "#FFFFFF26" // bordure du stage ACTIF (défaut)
     var borderColorInactive: String = "#80808033" // bordure des stages INACTIFS (gris ~20%)
-    var borderWidth:     Double = 0.5         // px
-    var borderStyle:     String = "solid"     // "solid" | "dashed" | "dotted"
+    var borderWidth: Double = 0.5         // px
+    var borderStyle: String = "solid"     // "solid" | "dashed" | "dotted"
     /// SPEC-019 — couleurs de bordure par stage actif. Mappe stage_id → hex.
     /// Quand un stage est actif et a un override ici, sa bordure prend cette
     /// couleur au lieu du défaut `borderColor`. Mirror du pattern fx.borders.
@@ -129,6 +129,33 @@ struct RailConfig {
     // SPEC-019 — assombrissement progressif par couche pour le renderer parallax-45.
     // 0 = aucun effet. 0.10 = chaque couche idx perd ~10% de luminosité.
     var parallaxDarkenPerLayer: Double = 0.0
+    // SPEC-028 — moyens de summon d'une fenêtre depuis une stage inactive vers
+    // la stage active du display. Indépendamment activables :
+    //   summonButtonEnabled       → bouton « → » centré bas de chaque vignette
+    //   summonDoubleClickEnabled  → clic-droit sur vignette → menu "Amener ici"
+    // Defaults true / true = découvrabilité maximale. Le user peut couper l'un
+    // ou l'autre selon préférence (épuration UI vs raccourci direct).
+    var summonButtonEnabled: Bool = true
+    var summonDoubleClickEnabled: Bool = true
+    /// SPEC-028 — visibilité des chevrons (move-window + reorder-stage).
+    /// "proximity" (default) = visibles uniquement quand le curseur est dans
+    /// la zone de trigger correspondante. "always" = toujours visibles (v1).
+    var chevronsVisibility: String = "proximity"
+    /// Largeur (px) de la bande gauche dans la vignette qui déclenche les
+    /// chevrons move-window. Default 30.
+    var chevronsMoveZoneWidth: Double = 30
+    /// Hauteur (px) des bandes au-dessus/au-dessous de la vignette frontmost
+    /// qui déclenchent les chevrons reorder-stage. Default 30.
+    var chevronsReorderZoneHeight: Double = 30
+    /// Délai (ms) avant masquage après sortie de zone. Default 200.
+    var chevronsFadeoutMs: Int    = 200
+    /// SPEC-014 — intervalle (ms) du polling périodique de capture
+    /// ScreenCaptureKit pour refresh les vignettes (contenu qui change).
+    /// Default 500ms (vs ancien 2000ms). Plus court = plus fluide pour les
+    /// fenêtres avec contenu animé, mais charge CPU/GPU plus. La latence
+    /// d'apparition d'une nouvelle fenêtre est désormais traitée par
+    /// l'event `window_created` (fetch immédiat indépendant du polling).
+    var thumbnailRefreshMs: Int    = 500
     // SPEC-019 — overrides par renderer. Chaque [fx.rail.<id>] peut redéfinir
     // n'importe lequel des 5 paramètres preview ci-dessus. Fallback sur le global
     // si non spécifié.
@@ -141,15 +168,15 @@ struct RailConfig {
     func effectivePreview(for rendererID: String) -> EffectivePreview {
         let o = rendererOverrides[rendererID]
         return EffectivePreview(
-            width:           o?.width           ?? previewWidth,
-            height:          o?.height          ?? previewHeight,
-            leadingPadding:  o?.leadingPadding  ?? leadingPadding,
+            width: o?.width           ?? previewWidth,
+            height: o?.height          ?? previewHeight,
+            leadingPadding: o?.leadingPadding  ?? leadingPadding,
             trailingPadding: o?.trailingPadding ?? trailingPadding,
             verticalPadding: o?.verticalPadding ?? verticalPadding,
-            borderColor:          o?.borderColor          ?? borderColor,
-            borderColorInactive:  o?.borderColorInactive  ?? borderColorInactive,
-            borderWidth:          o?.borderWidth          ?? borderWidth,
-            borderStyle:          o?.borderStyle          ?? borderStyle,
+            borderColor: o?.borderColor          ?? borderColor,
+            borderColorInactive: o?.borderColorInactive  ?? borderColorInactive,
+            borderWidth: o?.borderWidth          ?? borderWidth,
+            borderStyle: o?.borderStyle          ?? borderStyle,
             stageBorderOverrides: o?.stageBorderOverrides ?? stageBorderOverrides
         )
     }
@@ -179,20 +206,41 @@ struct RailConfig {
             if let v = rail["persistence_ms"]?.int { cfg.persistenceMs = max(0, v) }
             if let v = rail["halo_enabled"]?.bool { cfg.haloEnabled = v }
             if let v = rail["halo_color"]?.string { cfg.haloColor = v }
-            if let v = rail["halo_intensity"]?.double { cfg.haloIntensity = max(0.0, min(1.0, v)) }
-            else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
-            if let v = rail["halo_radius"]?.double { cfg.haloRadius = max(0.0, min(80.0, v)) }
-            else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
+            if let v = rail["halo_intensity"]?.double { cfg.haloIntensity = max(0.0, min(1.0, v)) } else if let v = rail["halo_intensity"]?.int { cfg.haloIntensity = max(0.0, min(1.0, Double(v))) }
+            if let v = rail["halo_radius"]?.double { cfg.haloRadius = max(0.0, min(80.0, v)) } else if let v = rail["halo_radius"]?.int { cfg.haloRadius = max(0.0, min(80.0, Double(v))) }
+            // SPEC-028 — toggles UI summon (bouton + menu contextuel).
+            if let v = rail["summon_button_enabled"]?.bool { cfg.summonButtonEnabled = v }
+            if let v = rail["summon_double_click_enabled"]?.bool { cfg.summonDoubleClickEnabled = v }
+            // SPEC-028 — visibilité par proximité des chevrons (move + reorder).
+            if let v = rail["chevrons_visibility"]?.string,
+               v == "proximity" || v == "always" {
+                cfg.chevronsVisibility = v
+            }
+            if let v = rail["chevrons_move_zone_width"]?.double {
+                cfg.chevronsMoveZoneWidth = max(0, min(200, v))
+            } else if let v = rail["chevrons_move_zone_width"]?.int {
+                cfg.chevronsMoveZoneWidth = max(0, min(200, Double(v)))
+            }
+            if let v = rail["chevrons_reorder_zone_height"]?.double {
+                cfg.chevronsReorderZoneHeight = max(0, min(120, v))
+            } else if let v = rail["chevrons_reorder_zone_height"]?.int {
+                cfg.chevronsReorderZoneHeight = max(0, min(120, Double(v)))
+            }
+            if let v = rail["chevrons_fadeout_ms"]?.int {
+                cfg.chevronsFadeoutMs = max(0, min(2000, v))
+            }
+            // SPEC-014 — intervalle de polling thumbnails (default 500ms).
+            // Bornes [100, 5000]ms : trop court tape sur SCK et le daemon.
+            if let v = rail["thumbnail_refresh_ms"]?.int {
+                cfg.thumbnailRefreshMs = max(100, min(5000, v))
+            }
             // SPEC-019 — clé optionnelle [fx.rail].renderer = "<id>" pour switch de rendu.
             if let v = rail["renderer"]?.string, !v.isEmpty { cfg.rendererID = v }
             // SPEC-019 — sous-section [fx.rail.stacked] pour les paramètres scatter.
             if let stacked = rail["stacked"]?.table {
-                if let v = stacked["offset_x"]?.double { cfg.stackedOffsetX = max(0, min(200, v)) }
-                else if let v = stacked["offset_x"]?.int { cfg.stackedOffsetX = max(0, min(200, Double(v))) }
-                if let v = stacked["offset_y"]?.double { cfg.stackedOffsetY = max(0, min(200, v)) }
-                else if let v = stacked["offset_y"]?.int { cfg.stackedOffsetY = max(0, min(200, Double(v))) }
-                if let v = stacked["rotation"]?.double { cfg.stackedRotation = max(0, min(45, v)) }
-                else if let v = stacked["rotation"]?.int { cfg.stackedRotation = max(0, min(45, Double(v))) }
+                if let v = stacked["offset_x"]?.double { cfg.stackedOffsetX = max(0, min(200, v)) } else if let v = stacked["offset_x"]?.int { cfg.stackedOffsetX = max(0, min(200, Double(v))) }
+                if let v = stacked["offset_y"]?.double { cfg.stackedOffsetY = max(0, min(200, v)) } else if let v = stacked["offset_y"]?.int { cfg.stackedOffsetY = max(0, min(200, Double(v))) }
+                if let v = stacked["rotation"]?.double { cfg.stackedRotation = max(0, min(45, v)) } else if let v = stacked["rotation"]?.int { cfg.stackedRotation = max(0, min(45, Double(v))) }
                 if let v = stacked["scale_per_layer"]?.double { cfg.stackedScale = max(0, min(0.3, v)) }
                 if let v = stacked["opacity_per_layer"]?.double { cfg.stackedOpacity = max(0, min(0.5, v)) }
                 if let v = stacked["scatter_mode"]?.string, v == "compass" || v == "random" {
@@ -201,12 +249,9 @@ struct RailConfig {
             }
             // SPEC-019 — sous-section [fx.rail.parallax] pour parallax-45.
             if let parallax = rail["parallax"]?.table {
-                if let v = parallax["rotation"]?.double { cfg.parallaxRotation = max(0, min(75, v)) }
-                else if let v = parallax["rotation"]?.int { cfg.parallaxRotation = max(0, min(75, Double(v))) }
-                if let v = parallax["offset_x"]?.double { cfg.parallaxOffsetX = max(0, min(80, v)) }
-                else if let v = parallax["offset_x"]?.int { cfg.parallaxOffsetX = max(0, min(80, Double(v))) }
-                if let v = parallax["offset_y"]?.double { cfg.parallaxOffsetY = max(0, min(80, v)) }
-                else if let v = parallax["offset_y"]?.int { cfg.parallaxOffsetY = max(0, min(80, Double(v))) }
+                if let v = parallax["rotation"]?.double { cfg.parallaxRotation = max(0, min(75, v)) } else if let v = parallax["rotation"]?.int { cfg.parallaxRotation = max(0, min(75, Double(v))) }
+                if let v = parallax["offset_x"]?.double { cfg.parallaxOffsetX = max(0, min(80, v)) } else if let v = parallax["offset_x"]?.int { cfg.parallaxOffsetX = max(0, min(80, Double(v))) }
+                if let v = parallax["offset_y"]?.double { cfg.parallaxOffsetY = max(0, min(80, v)) } else if let v = parallax["offset_y"]?.int { cfg.parallaxOffsetY = max(0, min(80, Double(v))) }
                 if let v = parallax["scale_per_layer"]?.double { cfg.parallaxScale = max(0, min(0.3, v)) }
                 if let v = parallax["opacity_per_layer"]?.double { cfg.parallaxOpacity = max(0, min(0.5, v)) }
                 if let v = parallax["darken_per_layer"]?.double { cfg.parallaxDarkenPerLayer = max(0, min(1.0, v)) }
@@ -215,14 +260,14 @@ struct RailConfig {
             // les renderers. Chaque clé peut être surchargée individuellement par
             // une sous-section [fx.rail.<id>] (ex: [fx.rail.parallax].leading_padding = 4).
             if let preview = rail["preview"]?.table {
-                if let v = parsePreviewKey(preview, "width", min: 60, max: 600)            { cfg.previewWidth = v }
-                if let v = parsePreviewKey(preview, "height", min: 40, max: 400)           { cfg.previewHeight = v }
-                if let v = parsePreviewKey(preview, "leading_padding", min: 0, max: 200)   { cfg.leadingPadding = v }
-                if let v = parsePreviewKey(preview, "trailing_padding", min: 0, max: 200)  { cfg.trailingPadding = v }
-                if let v = parsePreviewKey(preview, "vertical_padding", min: 0, max: 200)  { cfg.verticalPadding = v }
+                if let v = parsePreviewKey(preview, "width", min: 60, max: 600) { cfg.previewWidth = v }
+                if let v = parsePreviewKey(preview, "height", min: 40, max: 400) { cfg.previewHeight = v }
+                if let v = parsePreviewKey(preview, "leading_padding", min: 0, max: 200) { cfg.leadingPadding = v }
+                if let v = parsePreviewKey(preview, "trailing_padding", min: 0, max: 200) { cfg.trailingPadding = v }
+                if let v = parsePreviewKey(preview, "vertical_padding", min: 0, max: 200) { cfg.verticalPadding = v }
                 if let v = preview["border_color"]?.string { cfg.borderColor = v }
                 if let v = preview["border_color_inactive"]?.string { cfg.borderColorInactive = v }
-                if let v = parsePreviewKey(preview, "border_width", min: 0, max: 20)       { cfg.borderWidth = v }
+                if let v = parsePreviewKey(preview, "border_width", min: 0, max: 20) { cfg.borderWidth = v }
                 if let v = preview["border_style"]?.string,
                    ["solid", "dashed", "dotted"].contains(v) { cfg.borderStyle = v }
                 // SPEC-019 — stage_overrides : tableau de tables { stage_id, active_color }
@@ -331,7 +376,7 @@ public final class RailController {
             "display_mode": config.displayMode,
             "renderer": config.rendererID ?? StageRendererRegistry.defaultID,
             "panel_width": String(Int(config.panelWidth)),
-            "edge_width": String(Int(config.edgeWidth)),
+            "edge_width": String(Int(config.edgeWidth))
         ])
         edgeMonitor.edgeWidth = config.edgeWidth
         edgeMonitor.activeZoneWidth = config.panelWidth
@@ -347,24 +392,42 @@ public final class RailController {
             queue: .main
         ) { [weak self] _ in
             logInfo("rail_screens_changed", [
-                "screen_count": String(NSScreen.screens.count),
+                "screen_count": String(NSScreen.screens.count)
             ])
             Task { @MainActor [weak self] in self?.rebuildPanels() }
         }
     }
 
-    /// SPEC-014 : refresh des vignettes ScreenCaptureKit toutes les 2 s.
+    /// SPEC-014 : refresh des vignettes ScreenCaptureKit à intervalle régulier.
+    /// Default 500ms (configurable via `[fx.rail].thumbnail_refresh_ms` TOML).
     /// Le daemon coupe l'observation après 30 s sans requête, donc tant que le
-    /// rail tourne il maintient le flux. Pas de polling si le panel n'est pas visible.
+    /// rail tourne il maintient le flux. La latence d'apparition d'une nouvelle
+    /// fenêtre est court-circuitée par l'event `window_created` (fetch one-shot
+    /// immédiat indépendant du polling).
     private func startThumbnailRefresh() {
         thumbnailRefreshTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+        let interval = TimeInterval(config.thumbnailRefreshMs) / 1000.0
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refreshThumbnails() }
         }
         RunLoop.main.add(timer, forMode: .common)
         thumbnailRefreshTimer = timer
-        // Premier fetch immédiat pour ne pas attendre 2 s.
+        // Premier fetch immédiat pour ne pas attendre le 1er tick.
         Task { @MainActor in self.refreshThumbnails() }
+    }
+
+    /// SPEC-028 — fetch one-shot immédiat d'une wid spécifique. Court-circuite
+    /// le polling périodique pour réduire la latence d'apparition de la
+    /// thumbnail "jolie" après création d'une fenêtre. Pas d'invalidate :
+    /// on veut juste populer le cache si vide.
+    private func fetchThumbnailNow(wid: CGWindowID) {
+        Task {
+            if let vm = await fetcher.fetch(wid: wid) {
+                await MainActor.run { [weak self] in
+                    self?.state.thumbnails[wid] = vm
+                }
+            }
+        }
     }
 
     private func refreshThumbnails() {
@@ -461,6 +524,18 @@ public final class RailController {
     }
 
     func handleEvent(_ name: String, _ payload: [String: Any]) {
+        // SPEC-028 — fetch immédiat de la thumbnail à la création d'une fenêtre.
+        // Court-circuite le polling périodique (default 500ms). Délai 200ms
+        // pour laisser macOS rendre au moins une frame avant la capture SCK
+        // (sinon ScreenCaptureKit retourne du contenu noir/degraded).
+        if name == "window_created", let widStr = payload["wid"] as? String,
+           let widInt = UInt32(widStr) {
+            let wid = CGWindowID(widInt)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                self?.fetchThumbnailNow(wid: wid)
+            }
+        }
         switch name {
         case "stage_changed", "window_assigned", "window_unassigned",
              "window_created", "window_destroyed", "stage_renamed",
@@ -525,7 +600,6 @@ public final class RailController {
         }
     }
 
-
     /// Retourne true si l'UUID correspond à l'un des panels de ce rail.
     /// Utilisé pour le filtre display_uuid des events stage_* (SPEC-018 T062).
     private func panelBelongsToUUID(_ uuid: String) -> Bool {
@@ -573,9 +647,6 @@ public final class RailController {
     private func buildPanels() {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        // SPEC-028 — reset les frames panels enregistrées dans le tracker
-        // avant de re-enregistrer les nouveaux panels ci-dessous.
-        DragSummonTracker.shared.clearPanels()
         // SPEC-014 T090 (US7) : si mode "global" → 1 seul panel sur primary.
         let targetScreens: [NSScreen]
         if config.displayMode == "global" {
@@ -622,6 +693,13 @@ public final class RailController {
                     self?.reorderStage(src, before: target, displayUUID: panelUUID)
                 }
             }
+            // SPEC-028 alt — bouton « → » bas-gauche d'une vignette =
+            // summon de la wid vers la stage active de CE display.
+            let onSummonScoped: (CGWindowID) -> Void = { [weak self] wid in
+                Task { @MainActor [weak self] in
+                    self?.summonWindow(wid, displayUUID: panelUUID)
+                }
+            }
             // SPEC-019 — résoudre la preview effective pour le renderer actif.
             // Renderer changes (config_reloaded) déclenchent rebuildPanels → re-résolution.
             let activeRendererID = config.rendererID ?? StageRendererRegistry.defaultID
@@ -656,12 +734,19 @@ public final class RailController {
                 stageBorderOverrides: effective.stageBorderOverrides,
                 haloEnabled: config.haloEnabled,
                 parallaxDarkenPerLayer: config.parallaxDarkenPerLayer,
+                summonButtonEnabled: config.summonButtonEnabled,
+                summonDoubleClickEnabled: config.summonDoubleClickEnabled,
+                chevronsVisibility: config.chevronsVisibility,
+                chevronsMoveZoneWidth: config.chevronsMoveZoneWidth,
+                chevronsReorderZoneHeight: config.chevronsReorderZoneHeight,
+                chevronsFadeoutMs: config.chevronsFadeoutMs,
                 onTapStage: onTapScoped,
                 onDropAssign: onDropScoped,
                 onRename: onRename,
                 onAddFocused: onAddFocused,
                 onDelete: onDelete,
                 onReorderStages: onReorderScoped,
+                onSummonWindow: onSummonScoped,
                 emptyClickHideActive: config.emptyClickHideActive,
                 emptyClickSafetyMargin: config.emptyClickSafetyMargin,
                 onEmptyClick: onEmptyClickScoped
@@ -669,19 +754,6 @@ public final class RailController {
             let panel = StageRailPanel(rootView: view)
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
             panels[id] = panel
-            // SPEC-028 — enregistre la frame du panel rail dans le tracker
-            // pour que startDrag puisse retrouver le displayUUID, et que
-            // handleMouseUp puisse savoir si le drop est dans-rail (= laisser
-            // dropDestination natif gérer) ou hors-rail (= summon).
-            DragSummonTracker.shared.registerPanel(frame: panel.frame,
-                                                    displayUUID: panelUUID)
-        }
-        // Set ou re-set le callback summon (pas besoin par-panel, le tracker
-        // déduit le panel d'origine du drag via la position curseur initiale).
-        DragSummonTracker.shared.onSummon = { [weak self] wid, displayUUID in
-            Task { @MainActor [weak self] in
-                self?.summonWindow(wid, displayUUID: displayUUID)
-            }
         }
         let panelUUIDs = panels.keys.map { id -> String in
             guard let scr = NSScreen.screens.first(where: { displayID(for: $0) == id }) else {
@@ -693,13 +765,13 @@ public final class RailController {
             "count": String(panels.count),
             "screens_count": String(NSScreen.screens.count),
             "display_mode": config.displayMode,
-            "panel_uuids": panelUUIDs.joined(separator: ","),
+            "panel_uuids": panelUUIDs.joined(separator: ",")
         ])
         if panels.count < targetScreens.count {
             logWarn("rail_panel_missing", [
                 "expected": String(targetScreens.count),
                 "got": String(panels.count),
-                "diff": String(targetScreens.count - panels.count),
+                "diff": String(targetScreens.count - panels.count)
             ])
         }
         state.screens = NSScreen.screens.map { screenInfo(from: $0) }
@@ -726,7 +798,7 @@ public final class RailController {
         logInfo("rail_rebuild_done", [
             "panels_before": String(countBefore),
             "panels_after": String(panels.count),
-            "screens_now": String(NSScreen.screens.count),
+            "screens_now": String(NSScreen.screens.count)
         ])
     }
 

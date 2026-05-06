@@ -20,6 +20,27 @@ public enum DaemonOSAXBridge {
 /// Routeur des commandes reçues sur le socket.
 @MainActor
 enum CommandRouter {
+    /// SPEC-028 — IDs de stage réservés. Ces strings collent avec des sous-verbes
+    /// CLI (`roadie stage switch`, `roadie stage focus`, etc.). Les accepter
+    /// comme stage_id ouvre la porte à des "stages zombies" lazy-créées par un
+    /// mauvais parse (ex: `roadie stage switch switch` lazy-crée la stage
+    /// "switch"). Réservés au parse côté daemon, refusés explicitement.
+    private static let reservedStageIDs: Set<String> = [
+        "switch", "focus", "prev", "next",
+        "assign", "create", "delete", "rename", "list",
+        "move-before", "move-after"
+    ]
+
+    /// Retourne nil si le stage_id est valide. Sinon une Response erreur prête
+    /// à retourner par le caller.
+    private static func validateStageID(_ s: String) -> Response? {
+        if reservedStageIDs.contains(s.lowercased()) {
+            return .error(.invalidArgument,
+                          "stage_id \"\(s)\" is reserved (CLI verb collision)")
+        }
+        return nil
+    }
+
     static func route(_ request: Request, daemon: Daemon) async -> Response {
         switch request.command {
         case "windows.list":
@@ -43,9 +64,9 @@ enum CommandRouter {
                         "is_tiled": state.isTileable,
                         "is_floating": state.isFloating,
                         "is_focused": daemon.registry.focusedWindowID == state.cgWindowID,
-                        "stage": state.stageID?.value ?? "",
+                        "stage": state.stageID?.value ?? ""
                     ]
-                }),
+                })
             ]
             return .success(payload)
 
@@ -60,14 +81,14 @@ enum CommandRouter {
                 "tiler_strategy": AnyCodable(daemon.layoutEngine.workspace.tilerStrategy.rawValue),
                 "stage_manager_enabled": AnyCodable(daemon.config.stageManager.enabled),
                 "current_stage": AnyCodable(daemon.stageManager?.currentStageID?.value ?? ""),
-                "stages_mode": AnyCodable(daemon.stageManager?.stageMode.rawValue ?? "global"),
+                "stages_mode": AnyCodable("per_display"),
                 "migration_pending": AnyCodable(daemon.migrationPending),
                 "rail_inprocess": AnyCodable(daemon.railController != nil),
                 "current_scope": AnyCodable([
                     "display_uuid": currentScope.displayUUID,
                     "desktop_id": currentScope.desktopID,
-                    "inferred_from": "cursor",
-                ] as [String: Any]),
+                    "inferred_from": "cursor"
+                ] as [String: Any])
             ]
             return .success(payload)
 
@@ -103,7 +124,7 @@ enum CommandRouter {
                     "offscreen_with_active_scope": AnyCodable(report.offscreenWithActiveScope),
                     "tree_leaf_wrong_display": AnyCodable(report.treeLeafWrongDisplay),
                     "member_on_wrong_display": AnyCodable(report.memberOnWrongDisplay),
-                    "fixed_count": AnyCodable(fix ? report.fixedCount : 0),
+                    "fixed_count": AnyCodable(fix ? report.fixedCount : 0)
                 ]
             }
             let payload: [String: AnyCodable] = [
@@ -113,7 +134,7 @@ enum CommandRouter {
                 "integrity": AnyCodable(integrity),
                 "fix_applied": AnyCodable(fix),
                 "ownership_rebuild_applied": AnyCodable(rebuildApplied),
-                "violations_before_fix": AnyCodable(violationsBefore.count),
+                "violations_before_fix": AnyCodable(violationsBefore.count)
             ]
             return .success(payload)
 
@@ -134,7 +155,7 @@ enum CommandRouter {
                 "offscreen_at_restore": AnyCodable(offscreenAtRestore),
                 "zombies_purged": AnyCodable(0),
                 "drifts_fixed": AnyCodable(violationsNow),
-                "verdict": AnyCodable(health.verdict.rawValue),
+                "verdict": AnyCodable(health.verdict.rawValue)
             ])
 
         case "daemon.heal":
@@ -176,7 +197,7 @@ enum CommandRouter {
                             doubleFixed += 1
                             logInfo("stage_double_membership_fixed", [
                                 "wid": String(widNum),
-                                "kept_scope": canonical.stageID.value + "@" + canonical.displayUUID,
+                                "kept_scope": canonical.stageID.value + "@" + canonical.displayUUID
                             ])
                         }
                     }
@@ -204,7 +225,7 @@ enum CommandRouter {
                                 orphanInsertedCount += 1
                                 logInfo("staged_orphan_tree_fixed", [
                                     "wid": String(wid),
-                                    "scope_stage": scope.stageID.value,
+                                    "scope_stage": scope.stageID.value
                                 ])
                             }
                         }
@@ -224,7 +245,7 @@ enum CommandRouter {
                 "wids_restored": String(widsRestored),
                 "roots_flattened": String(rootsFlattened),
                 "cross_stage_fixed": String(crossStageFixed),
-                "duration_ms": String(durationMs),
+                "duration_ms": String(durationMs)
             ])
             return .success([
                 "purged": AnyCodable(purged),
@@ -232,7 +253,7 @@ enum CommandRouter {
                 "wids_restored": AnyCodable(widsRestored),
                 "roots_flattened": AnyCodable(rootsFlattened),
                 "cross_stage_fixed": AnyCodable(crossStageFixed),
-                "duration_ms": AnyCodable(durationMs),
+                "duration_ms": AnyCodable(durationMs)
             ])
 
         case "daemon.reload":
@@ -289,7 +310,7 @@ enum CommandRouter {
                     "focus_follows_mouse": String(newConfig.focus.focusFollowsMouse),
                     "mouse_follows_focus": String(newConfig.focus.mouseFollowsFocus),
                     "signals_enabled": String(newConfig.signals.enabled),
-                    "signals_count": String(newConfig.signals.hooks.count),
+                    "signals_count": String(newConfig.signals.hooks.count)
                 ])
                 // SPEC-019 — signaler aux consommateurs externes (rail) qu'ils doivent
                 // relire leur config (ex: [fx.rail].renderer pour switcher de rendu).
@@ -305,10 +326,10 @@ enum CommandRouter {
             // lu depuis le TOML utilisateur.
             let knownRenderers: [(id: String, displayName: String)] = [
                 ("stacked-previews", "Stacked previews"),
-                ("icons-only",       "Icons only"),
-                ("hero-preview",     "Hero preview"),
-                ("mosaic",           "Mosaic"),
-                ("parallax-45",      "Parallax 45\u{00B0}"),
+                ("icons-only", "Icons only"),
+                ("hero-preview", "Hero preview"),
+                ("mosaic", "Mosaic"),
+                ("parallax-45", "Parallax 45\u{00B0}")
             ]
             let currentRenderer = readCurrentRendererID() ?? "stacked-previews"
             let payload: [String: AnyCodable] = [
@@ -316,7 +337,7 @@ enum CommandRouter {
                 "current": AnyCodable(currentRenderer),
                 "renderers": AnyCodable(knownRenderers.map { r -> [String: Any] in
                     ["id": r.id, "display_name": r.displayName]
-                }),
+                })
             ]
             return .success(payload)
 
@@ -342,7 +363,7 @@ enum CommandRouter {
             EventBus.shared.publish(DesktopEvent(name: "config_reloaded"))
             return .success([
                 "previous": AnyCodable(previous),
-                "current": AnyCodable(id),
+                "current": AnyCodable(id)
             ])
 
         case "daemon.apply_layout":
@@ -444,7 +465,7 @@ enum CommandRouter {
                         cgwid: UInt32(wid),
                         desktopID: targetDeskID,
                         displayUUID: dstDisplay.uuid)
-                    if let sm = daemon.stageManager, sm.stageMode == .perDisplay {
+                    if let sm = daemon.stageManager {
                         let activeStage = sm.activeStageByDesktop[
                             DesktopKey(displayUUID: dstDisplay.uuid, desktopID: targetDeskID)]
                             ?? StageID("1")
@@ -467,7 +488,7 @@ enum CommandRouter {
                             "wid": String(wid),
                             "from_display": String(src),
                             "to_display": String(dst),
-                            "stage_id": activeStage.value,
+                            "stage_id": activeStage.value
                         ])
                     }
                 }
@@ -531,8 +552,7 @@ enum CommandRouter {
                 // Cas user 2026-05-05: Firefox stage=2 → toggle off → toggle on
                 // → réassignée à stage 1 active → switch stage 1 cassé tree.
                 if let sm = daemon.stageManager, sm.scopeOf(wid: wid) == nil {
-                    if sm.stageMode == .perDisplay,
-                       let dReg = daemon.displayRegistry,
+                    if let dReg = daemon.displayRegistry,
                        let dispID = daemon.layoutEngine.displayIDForWindow(wid) {
                         let displays = await dReg.displays
                         if let dst = displays.first(where: { $0.id == dispID }),
@@ -552,8 +572,6 @@ enum CommandRouter {
                             }
                             sm.assign(wid: wid, to: scope)
                         }
-                    } else if let activeStage = sm.currentStageID {
-                        sm.assign(wid: wid, to: activeStage)
                     }
                 }
                 // SPEC-025 — re-publier windowCreated sur le bus FX. Les modules
@@ -639,13 +657,13 @@ enum CommandRouter {
         case "tiler.list":
             return .success([
                 "current": AnyCodable(daemon.layoutEngine.workspace.tilerStrategy.rawValue),
-                "available": AnyCodable(TilerRegistry.availableStrategies.map(\.rawValue)),
+                "available": AnyCodable(TilerRegistry.availableStrategies.map(\.rawValue))
             ])
 
         case "tree.dump":
             // Représentation textuelle de l'arbre pour diagnostic.
             return .success([
-                "tree": AnyCodable(dumpTree(daemon.layoutEngine.workspace.rootNode)),
+                "tree": AnyCodable(dumpTree(daemon.layoutEngine.workspace.rootNode))
             ])
 
         case "balance":
@@ -669,84 +687,44 @@ enum CommandRouter {
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
-            // SPEC-018 : en mode per_display, filtrer par (displayUUID, desktopID) du scope.
-            // US4 : si request.args["display"] ou ["desktop"] présents, override le scope implicite.
-            // En mode global, comportement V1 identique (toutes les stages).
-            var scopeError: Response? = nil
-            let scope: StageScope
-            if sm.stageMode == .perDisplay {
-                guard let resolved = await resolveScope(request: request, daemon: daemon,
-                                                        errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
-                }
-                scope = resolved
-            } else {
-                scope = await daemon.currentStageScope()
+            // V2-only : filtrer par (displayUUID, desktopID) du scope résolu.
+            var scopeError: Response?
+            guard let scope = await resolveScope(request: request, daemon: daemon,
+                                                  errorOut: &scopeError) else {
+                return scopeError ?? .error(.internalError, "scope resolution failed")
             }
-            let currentID: String
-            let scopedStages: [[String: Any]]
-            if sm.stageMode == .global {
-                // Mode global : compat V1 — liste plate, currentStageID direct.
-                currentID = sm.currentStageID?.value ?? ""
-                // SPEC-027 US3 — tri par `order` croissant, fallback id alphanum.
-                let sortedStages = sm.stages.values.sorted { lhs, rhs in
-                    if lhs.order != rhs.order { return lhs.order < rhs.order }
-                    return lhs.id.value.localizedStandardCompare(rhs.id.value) == .orderedAscending
-                }
-                scopedStages = sortedStages.map { stage -> [String: Any] in
-                    [
-                        "id": stage.id.value,
-                        "display_name": stage.displayName,
-                        "window_count": stage.memberWindows.count,
-                        "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
-                        "is_active": stage.id.value == currentID,
-                    ]
-                }
-                return .success([
-                    "current": AnyCodable(currentID),
-                    "stages": AnyCodable(scopedStages),
-                ])
-            } else {
-                // Mode per_display : filtrer stagesV2 par (displayUUID, desktopID).
-                let filtered = sm.stagesV2.filter {
-                    $0.key.displayUUID == scope.displayUUID && $0.key.desktopID == scope.desktopID
-                }
-                // SPEC-022 : "current stage" du scope = activeStageByDesktop[(uuid, desktopID)],
-                // PAS le scalaire global currentStageID (qui ne reflète que le scope visible).
-                let scopedKey = DesktopKey(displayUUID: scope.displayUUID,
-                                            desktopID: scope.desktopID)
-                currentID = sm.activeStageByDesktop[scopedKey]?.value ?? ""
-                // SPEC-022 — tri stable par stage.id pour que le rail panel n'inverse pas
-                // les vignettes d'un poll au suivant (Dictionary.filter retourne dans
-                // un ordre non-déterministe).
-                // SPEC-027 US3 — tri primaire par `Stage.order` croissant pour
-                // refléter le drag-reorder ; fallback id alphanum à égalité.
-                let sortedFiltered = filtered.sorted { lhs, rhs in
-                    if lhs.value.order != rhs.value.order {
-                        return lhs.value.order < rhs.value.order
-                    }
-                    return lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
-                        == .orderedAscending
-                }
-                scopedStages = sortedFiltered.map { (scopeKey, stage) -> [String: Any] in
-                    [
-                        "id": stage.id.value,
-                        "display_name": stage.displayName,
-                        "window_count": stage.memberWindows.count,
-                        "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
-                        "is_active": stage.id.value == currentID,
-                    ]
-                }
-                return .success([
-                    "current": AnyCodable(currentID),
-                    "mode": AnyCodable(sm.stageMode.rawValue),
-                    "stages": AnyCodable(scopedStages),
-                    "scope": AnyCodable([
-                        "display_uuid": scope.displayUUID,
-                        "desktop_id": scope.desktopID,
-                    ] as [String: Any]),
-                ])
+            let filtered = sm.stagesV2.filter {
+                $0.key.displayUUID == scope.displayUUID && $0.key.desktopID == scope.desktopID
             }
+            let scopedKey = DesktopKey(displayUUID: scope.displayUUID,
+                                        desktopID: scope.desktopID)
+            let currentID = sm.activeStageByDesktop[scopedKey]?.value ?? ""
+            // SPEC-027 US3 — tri primaire par `Stage.order` croissant ; fallback id alphanum.
+            let sortedFiltered = filtered.sorted { lhs, rhs in
+                if lhs.value.order != rhs.value.order {
+                    return lhs.value.order < rhs.value.order
+                }
+                return lhs.key.stageID.value.localizedStandardCompare(rhs.key.stageID.value)
+                    == .orderedAscending
+            }
+            let scopedStages = sortedFiltered.map { (_, stage) -> [String: Any] in
+                [
+                    "id": stage.id.value,
+                    "display_name": stage.displayName,
+                    "window_count": stage.memberWindows.count,
+                    "window_ids": stage.memberWindows.map { Int($0.cgWindowID) },
+                    "is_active": stage.id.value == currentID
+                ]
+            }
+            return .success([
+                "current": AnyCodable(currentID),
+                "mode": AnyCodable("per_display"),
+                "stages": AnyCodable(scopedStages),
+                "scope": AnyCodable([
+                    "display_uuid": scope.displayUUID,
+                    "desktop_id": scope.desktopID
+                ] as [String: Any])
+            ])
 
         case "stage.switch":
             guard let sm = daemon.stageManager else {
@@ -755,7 +733,65 @@ enum CommandRouter {
             guard let stageStr = request.args?["stage_id"] else {
                 return .error(.invalidArgument, "missing stage_id")
             }
-            let stageID = StageID(stageStr)
+            // SPEC-028 — by_position : interprète stage_id comme position
+            // 1-indexed dans la liste rail du scope courant. Si la position
+            // dépasse le nombre de stages, fallback sur la dernière. Sert au
+            // CLI `roadie stage focus N` qui devient position-based pour
+            // s'aligner avec ce que l'utilisateur voit dans le rail.
+            //
+            // by_relative : delta (+1, -1, +2, …) appliqué à la position
+            // courante dans le rail. Sert aux raccourcis Alt+↑/Alt+↓ pour
+            // naviguer une stage à la fois sans connaître sa position absolue.
+            let byPosition = (request.args?["by_position"] ?? "false") == "true"
+            let byRelativeStr = request.args?["by_relative"]
+            let stageID: StageID
+            if let relStr = byRelativeStr, let delta = Int(relStr) {
+                let baseScope = await daemon.currentStageScopeFocusedFirst()
+                let scoped = sm.stages(in: .displayDesktop(baseScope.displayUUID,
+                                                           baseScope.desktopID))
+                guard !scoped.isEmpty else {
+                    return .error(.invalidArgument, "no stages in current scope")
+                }
+                let key = DesktopKey(displayUUID: baseScope.displayUUID,
+                                     desktopID: baseScope.desktopID)
+                let currentID = sm.activeStageByDesktop[key]
+                let currentIdx = currentID
+                    .flatMap { id in scoped.firstIndex(where: { $0.id == id }) } ?? 0
+                // SPEC-028 — navigation cyclique : wrap autour des extrémités.
+                // Alt+↑ depuis la première stage va à la dernière, et inversement.
+                let count = scoped.count
+                var newIdx = (currentIdx + delta) % count
+                if newIdx < 0 { newIdx += count }
+                stageID = scoped[newIdx].id
+                logInfo("stage_switch_by_relative", [
+                    "delta": String(delta),
+                    "from_idx": String(currentIdx),
+                    "to_idx": String(newIdx),
+                    "resolved": stageID.value
+                ])
+            } else if !byPosition, byRelativeStr == nil,
+                      let err = validateStageID(stageStr) {
+                // Mode by-id explicite (ni by_position, ni by_relative) avec
+                // un mot réservé → refus. Empêche `stage switch switch` de
+                // lazy-créer une stage zombie "switch".
+                return err
+            } else if byPosition, let pos = Int(stageStr), pos >= 1 {
+                let baseScope = await daemon.currentStageScopeFocusedFirst()
+                let scoped = sm.stages(in: .displayDesktop(baseScope.displayUUID,
+                                                           baseScope.desktopID))
+                guard !scoped.isEmpty else {
+                    return .error(.invalidArgument, "no stages in current scope")
+                }
+                let clamped = max(1, min(pos, scoped.count))
+                stageID = scoped[clamped - 1].id
+                logInfo("stage_switch_by_position", [
+                    "requested": String(pos),
+                    "resolved": stageID.value,
+                    "rail_size": String(scoped.count)
+                ])
+            } else {
+                stageID = StageID(stageStr)
+            }
             // Lazy auto-create : si la stage n'existe pas dans le scope courant,
             // la créer vide puis switcher dessus. Cohérent avec stage.assign qui
             // est déjà lazy. Évite l'échec silencieux quand l'utilisateur tape
@@ -763,43 +799,57 @@ enum CommandRouter {
             // SPEC-022 : en mode per_display, utiliser le switchTo scopé pour que
             // le switch n'affecte QUE le scope cible (display, desktop) et pas
             // l'écran visible courant si le scope est distant.
-            if sm.stageMode == .perDisplay {
-                // SPEC-026 fix bug Alt+N — utiliser focused window display en priorité
-                // sur curseur. Avec mouse_follows_focus, le curseur peut être sur
-                // un autre display que la fenêtre active → switch sur mauvais scope.
-                let baseScope: StageScope
-                if request.args?["display"] != nil || request.args?["desktop"] != nil {
-                    var scopeError: Response? = nil
-                    guard let resolved = await resolveScope(request: request, daemon: daemon,
-                                                             errorOut: &scopeError) else {
-                        return scopeError ?? .error(.internalError, "scope resolution failed")
-                    }
-                    baseScope = resolved
-                } else {
-                    baseScope = await daemon.currentStageScopeFocusedFirst()
+            // V2-only — résoudre baseScope depuis args ou focused window.
+            let baseScope: StageScope
+            if request.args?["display"] != nil || request.args?["desktop"] != nil {
+                var scopeError: Response?
+                guard let resolved = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
                 }
-                let fullScope = StageScope(displayUUID: baseScope.displayUUID,
-                                           desktopID: baseScope.desktopID, stageID: stageID)
-                let preExisting = sm.stagesV2[fullScope] != nil
-                let memberCountBefore = sm.stagesV2[fullScope]?.memberWindows.count ?? 0
-                if !preExisting {
-                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
-                                       scope: fullScope)
-                }
-                logInfo("stage_switch_diag", [
-                    "stage": stageID.value,
-                    "display_uuid": String(baseScope.displayUUID.prefix(8)),
-                    "desktop": String(baseScope.desktopID),
-                    "pre_existing": String(preExisting),
-                    "members_before": String(memberCountBefore),
-                    "current_visible_scope": "\(String(sm.currentDesktopKey?.displayUUID.prefix(8) ?? "nil"))/\(String(sm.currentDesktopKey?.desktopID ?? -1))",
-                ])
-                sm.switchTo(stageID: stageID, scope: fullScope)
+                baseScope = resolved
             } else {
-                if sm.stages[stageID] == nil {
-                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
+                baseScope = await daemon.currentStageScopeFocusedFirst()
+            }
+            let fullScope = StageScope(displayUUID: baseScope.displayUUID,
+                                       desktopID: baseScope.desktopID, stageID: stageID)
+            let preExisting = sm.stagesV2[fullScope] != nil
+            let memberCountBefore = sm.stagesV2[fullScope]?.memberWindows.count ?? 0
+            if !preExisting {
+                _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
+                                   scope: fullScope)
+            }
+            logInfo("stage_switch_diag", [
+                "stage": stageID.value,
+                "display_uuid": String(baseScope.displayUUID.prefix(8)),
+                "desktop": String(baseScope.desktopID),
+                "pre_existing": String(preExisting),
+                "members_before": String(memberCountBefore),
+                "current_visible_scope": "\(String(sm.currentDesktopKey?.displayUUID.prefix(8) ?? "nil"))/\(String(sm.currentDesktopKey?.desktopID ?? -1))"
+            ])
+            sm.switchTo(stageID: stageID, scope: fullScope)
+            // SPEC-028 — focus restauré sur la stage cible (parité yabai/AeroSpace/i3).
+            let focusMode = daemon.config.focus.focusOnSwitch
+            if focusMode != "none" {
+                let targetScope: StageScope = fullScope
+                var targetWid: WindowID?
+                if focusMode == "last_focused",
+                   let stored = daemon.lastFocusedByStageScope[targetScope],
+                   let stage = sm.stagesV2[targetScope],
+                   stage.memberWindows.contains(where: { $0.cgWindowID == stored }) {
+                    targetWid = stored
                 }
-                sm.switchTo(stageID: stageID)
+                if targetWid == nil {
+                    targetWid = sm.stagesV2[targetScope]?.memberWindows.first?.cgWindowID
+                }
+                if let wid = targetWid {
+                    logInfo("focus_on_switch", [
+                        "mode": focusMode,
+                        "stage": stageID.value,
+                        "wid": String(wid)
+                    ])
+                    daemon.focusManager.setFocus(to: wid)
+                }
             }
             // SPEC-026 US5 — warp curseur sur la wid focalisée résultante (après
             // que macOS ait fini son show/raise, ~50ms suffisent).
@@ -816,6 +866,7 @@ enum CommandRouter {
             guard let stageStr = request.args?["stage_id"] else {
                 return .error(.invalidArgument, "missing stage_id")
             }
+            if let err = validateStageID(stageStr) { return err }
             let stageID = StageID(stageStr)
             // SPEC-014 T053 : accepter un wid explicite (drag-drop dans rail UI).
             // Fallback sur focusedWindowID pour compat ascendante CLI.
@@ -834,54 +885,42 @@ enum CommandRouter {
             // sur une fenêtre du LG alors que le curseur est sur built-in assignait
             // logiquement la wid au built-in → cascade de moves cross-display foireux.
             // assignedScope est capturé pour l'auto-switch suivant (assign_follows_focus).
-            var assignedScope: StageScope? = nil
-            if sm.stageMode == .perDisplay {
-                let baseScope: StageScope
-                let hasExplicitDisplay = request.args?["display"] != nil
-                if hasExplicitDisplay {
-                    var scopeError: Response? = nil
-                    guard let resolved = await resolveScope(request: request, daemon: daemon,
-                                                             errorOut: &scopeError) else {
-                        return scopeError ?? .error(.internalError, "scope resolution failed")
-                    }
-                    baseScope = resolved
+            // V2-only — résoudre baseScope depuis args explicites OU display physique de la wid.
+            let baseScope: StageScope
+            let hasExplicitDisplay = request.args?["display"] != nil
+            if hasExplicitDisplay {
+                var scopeError: Response?
+                guard let resolved = await resolveScope(request: request, daemon: daemon,
+                                                         errorOut: &scopeError) else {
+                    return scopeError ?? .error(.internalError, "scope resolution failed")
+                }
+                baseScope = resolved
+            } else if let state = daemon.registry.get(wid),
+                      let dReg = daemon.displayRegistry,
+                      let dskReg = daemon.desktopRegistry {
+                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+                let displays = await dReg.displays
+                if let display = displays.first(where: { $0.frame.contains(center) }) {
+                    let desktopID = await dskReg.currentID(for: display.id)
+                    baseScope = StageScope(displayUUID: display.uuid,
+                                            desktopID: desktopID,
+                                            stageID: StageID(""))
+                } else if let known = sm.scopeOf(wid: wid) {
+                    baseScope = known
                 } else {
-                    // Inférer depuis le display physique de la wid.
-                    if let state = daemon.registry.get(wid),
-                       let dReg = daemon.displayRegistry,
-                       let dskReg = daemon.desktopRegistry {
-                        let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
-                        let displays = await dReg.displays
-                        // 1. Display contenant le centre. 2. Sinon scope existant
-                        //    de la wid via widToScope. 3. Fallback scope curseur.
-                        if let display = displays.first(where: { $0.frame.contains(center) }) {
-                            let desktopID = await dskReg.currentID(for: display.id)
-                            baseScope = StageScope(displayUUID: display.uuid,
-                                                    desktopID: desktopID,
-                                                    stageID: StageID(""))
-                        } else if let known = sm.scopeOf(wid: wid) {
-                            baseScope = known
-                        } else {
-                            baseScope = await daemon.currentStageScope()
-                        }
-                    } else {
-                        baseScope = await daemon.currentStageScope()
-                    }
+                    baseScope = await daemon.currentStageScope()
                 }
-                let fullScope = StageScope(displayUUID: baseScope.displayUUID,
-                                           desktopID: baseScope.desktopID, stageID: stageID)
-                if sm.stagesV2[fullScope] == nil {
-                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
-                                       scope: fullScope)
-                }
-                sm.assign(wid: wid, to: fullScope)  // overload V2 scope-aware
-                assignedScope = fullScope
             } else {
-                if sm.stages[stageID] == nil {
-                    _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)")
-                }
-                sm.assign(wid: wid, to: stageID)  // API V1
+                baseScope = await daemon.currentStageScope()
             }
+            let fullScope = StageScope(displayUUID: baseScope.displayUUID,
+                                       desktopID: baseScope.desktopID, stageID: stageID)
+            if sm.stagesV2[fullScope] == nil {
+                _ = sm.createStage(id: stageID, displayName: "stage \(stageStr)",
+                                   scope: fullScope)
+            }
+            sm.assign(wid: wid, to: fullScope)
+            let assignedScope: StageScope? = fullScope
             // SPEC-025 root-cause fix — sm.assign met dans widToScope/memberWindows
             // mais N'INSÈRE PAS la wid dans le tree de la nouvelle stage. Sans ça
             // applyAll ne la frame jamais → wid "fantôme" visible offscreen avec
@@ -923,7 +962,7 @@ enum CommandRouter {
             // active stage, applyLayout. Le combo show explicite est ce qui
             // déverrouille la visibilité pour iTerm/Firefox post-offscreen.
             let isStageActiveOnTarget: Bool = {
-                if sm.stageMode == .perDisplay, let scope = assignedScope {
+                if let scope = assignedScope {
                     let key = DesktopKey(displayUUID: scope.displayUUID,
                                           desktopID: scope.desktopID)
                     return sm.activeStageByDesktop[key] == stageID
@@ -939,7 +978,7 @@ enum CommandRouter {
                 logInfo("stage_assign_force_switch", [
                     "wid": String(wid),
                     "stage": stageStr,
-                    "reason": "summon_to_active_stage",
+                    "reason": "summon_to_active_stage"
                 ])
                 // SPEC-028 — pour forcer le compositor Tahoe à flusher après
                 // setBounds AX (qui sinon est ignoré jusqu'à un mouse event
@@ -950,6 +989,19 @@ enum CommandRouter {
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     guard let element = registry.axElement(for: wid),
                           let state = registry.get(wid) else { return }
+                    // SPEC-028 diagnostic — log le Space de la wid vs le Space
+                    // actif. Si différents → bug Mission Control Spaces confirmé,
+                    // setBounds/raise/activate ne suffiront jamais sans
+                    // CGSAddWindowsToSpaces (= scripting addition Dock + SIP-off).
+                    let widSpaces = CGSSpaces.spacesForWindow(CGWindowID(wid))
+                    let activeSpace = CGSSpaces.currentSpace()
+                    let onActive = widSpaces.contains(activeSpace)
+                    logInfo("stage_assign_spaces_diag", [
+                        "wid": String(wid),
+                        "wid_spaces": widSpaces.map(String.init).joined(separator: ","),
+                        "active_space": String(activeSpace),
+                        "wid_on_active_space": String(onActive)
+                    ])
                     CGSCompositor.batch {
                         AXUIElementSetAttributeValue(element,
                                                       kAXMainAttribute as CFString,
@@ -966,25 +1018,27 @@ enum CommandRouter {
                             AXReader.setBounds(element, frame: current)
                         }
                     }
-                    logInfo("stage_assign_compositor_flush", [
+                    // SPEC-028 — post un click virtuel au PID via SLEventPostToPid
+                    // (private SkyLight). yabai/cua-driver utilisent ça pour
+                    // bypasser le HID tap qui peut filtrer les CGEvent normaux.
+                    // Le click est posté au centre de la frame de la wid →
+                    // simule ce qu'un user click déclencherait.
+                    if let frame = AXReader.bounds(element) {
+                        let center = CGPoint(x: frame.midX, y: frame.midY)
+                        SLEvents.postClick(pid: state.pid, at: center)
+                    }
+                    logInfo("stage_assign_sl_post_click", [
                         "wid": String(wid),
-                        "pid": String(state.pid),
+                        "pid": String(state.pid)
                     ])
                 }
             }
             // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).
-            let assignUUID: String
-            let assignDesktopID: Int
-            if sm.stageMode == .perDisplay {
-                var assignScopeError: Response? = nil
-                let sc = await resolveScope(request: request, daemon: daemon,
-                                            errorOut: &assignScopeError)
-                assignUUID = sc?.displayUUID ?? ""
-                assignDesktopID = sc?.desktopID ?? 0
-            } else {
-                assignUUID = ""
-                assignDesktopID = 0
-            }
+            var assignScopeError: Response?
+            let assignSc = await resolveScope(request: request, daemon: daemon,
+                                              errorOut: &assignScopeError)
+            let assignUUID = assignSc?.displayUUID ?? ""
+            let assignDesktopID = assignSc?.desktopID ?? 0
             EventBus.shared.publish(DesktopEvent.stageAssigned(
                 wid: Int(wid), stageID: stageStr,
                 displayUUID: assignUUID, desktopID: assignDesktopID))
@@ -998,33 +1052,22 @@ enum CommandRouter {
                   let displayName = request.args?["display_name"] else {
                 return .error(.invalidArgument, "missing stage_id or display_name")
             }
+            if let err = validateStageID(stageStr) { return err }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier l'unicité dans le scope courant (ou overridé).
-            let createUUID: String
-            let createDesktopID: Int
-            if sm.stageMode == .perDisplay {
-                var scopeError: Response? = nil
-                guard let baseScope = await resolveScope(request: request, daemon: daemon,
-                                                         errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
-                }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID, stageID: stageID)
-                if sm.stagesV2[fullScope] != nil {
-                    return .error(.invalidArgument, "stage already exists in current scope")
-                }
-                _ = sm.createStage(id: stageID, displayName: displayName, scope: fullScope)
-                createUUID = scope.displayUUID
-                createDesktopID = scope.desktopID
-            } else {
-                if sm.stages[stageID] != nil {
-                    return .error(.invalidArgument, "stage already exists")
-                }
-                _ = sm.createStage(id: stageID, displayName: displayName)
-                createUUID = ""
-                createDesktopID = 0
+            // V2-only — vérifier l'unicité dans le scope courant (ou overridé).
+            var createScopeError: Response?
+            guard let createBaseScope = await resolveScope(request: request, daemon: daemon,
+                                                            errorOut: &createScopeError) else {
+                return createScopeError ?? .error(.internalError, "scope resolution failed")
             }
+            let createFullScope = StageScope(displayUUID: createBaseScope.displayUUID,
+                                              desktopID: createBaseScope.desktopID, stageID: stageID)
+            if sm.stagesV2[createFullScope] != nil {
+                return .error(.invalidArgument, "stage already exists in current scope")
+            }
+            _ = sm.createStage(id: stageID, displayName: displayName, scope: createFullScope)
+            let createUUID = createBaseScope.displayUUID
+            let createDesktopID = createBaseScope.desktopID
             // SPEC-018 FR-017 : émettre stage_created enrichi (display_uuid + desktop_id).
             EventBus.shared.publish(DesktopEvent.stageCreated(
                 stageID: stageID.value, displayName: displayName,
@@ -1040,34 +1083,22 @@ enum CommandRouter {
                   let newName = request.args?["new_name"] else {
                 return .error(.invalidArgument, "missing stage_id or new_name")
             }
+            if let err = validateStageID(stageStr) { return err }
             let stageID = StageID(stageStr)
-            // SPEC-018 : en mode per_display, vérifier l'existence dans le scope (ou overridé).
-            let oldName: String
-            let renameUUID: String
-            let renameDesktopID: Int
-            if sm.stageMode == .perDisplay {
-                var scopeError: Response? = nil
-                guard let baseScope = await resolveScope(request: request, daemon: daemon,
-                                                         errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
-                }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID, stageID: stageID)
-                guard let existing = sm.stagesV2[fullScope] else {
-                    return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
-                }
-                oldName = existing.displayName
-                renameUUID = scope.displayUUID
-                renameDesktopID = scope.desktopID
-            } else {
-                guard let oldStage = sm.stages[stageID] else {
-                    return .error(.unknownStage, "unknown stage \(stageStr)")
-                }
-                oldName = oldStage.displayName
-                renameUUID = ""
-                renameDesktopID = 0
+            // V2-only — vérifier l'existence dans le scope (ou overridé).
+            var renameScopeError: Response?
+            guard let renameBaseScope = await resolveScope(request: request, daemon: daemon,
+                                                            errorOut: &renameScopeError) else {
+                return renameScopeError ?? .error(.internalError, "scope resolution failed")
             }
+            let renameFullScope = StageScope(displayUUID: renameBaseScope.displayUUID,
+                                              desktopID: renameBaseScope.desktopID, stageID: stageID)
+            guard let existing = sm.stagesV2[renameFullScope] else {
+                return .error(.unknownStage, "unknown stage \(stageStr) in current scope")
+            }
+            let oldName = existing.displayName
+            let renameUUID = renameBaseScope.displayUUID
+            let renameDesktopID = renameBaseScope.desktopID
             guard sm.renameStage(id: stageID, newName: newName) else {
                 return .error(.invalidArgument, "rename failed (empty or > 32 chars)")
             }
@@ -1077,7 +1108,7 @@ enum CommandRouter {
                 displayUUID: renameUUID, desktopID: renameDesktopID))
             return .success([
                 "stage_id": AnyCodable(stageStr),
-                "new_name": AnyCodable(newName),
+                "new_name": AnyCodable(newName)
             ])
 
         case "stage.delete":
@@ -1090,27 +1121,18 @@ enum CommandRouter {
             if stageStr == "1" {
                 return .error(.invalidArgument, "cannot delete default stage 1")
             }
-            // SPEC-018 : en mode per_display, supprimer dans le scope courant (ou overridé).
-            let deleteUUID: String
-            let deleteDesktopID: Int
-            if sm.stageMode == .perDisplay {
-                var scopeError: Response? = nil
-                guard let baseScope = await resolveScope(request: request, daemon: daemon,
-                                                         errorOut: &scopeError) else {
-                    return scopeError ?? .error(.internalError, "scope resolution failed")
-                }
-                let scope = baseScope
-                let fullScope = StageScope(displayUUID: scope.displayUUID,
-                                           desktopID: scope.desktopID,
-                                           stageID: StageID(stageStr))
-                sm.deleteStage(scope: fullScope)
-                deleteUUID = scope.displayUUID
-                deleteDesktopID = scope.desktopID
-            } else {
-                sm.deleteStage(id: StageID(stageStr))
-                deleteUUID = ""
-                deleteDesktopID = 0
+            // V2-only — supprimer dans le scope courant (ou overridé).
+            var deleteScopeError: Response?
+            guard let deleteBaseScope = await resolveScope(request: request, daemon: daemon,
+                                                            errorOut: &deleteScopeError) else {
+                return deleteScopeError ?? .error(.internalError, "scope resolution failed")
             }
+            let deleteFullScope = StageScope(displayUUID: deleteBaseScope.displayUUID,
+                                              desktopID: deleteBaseScope.desktopID,
+                                              stageID: StageID(stageStr))
+            sm.deleteStage(scope: deleteFullScope)
+            let deleteUUID = deleteBaseScope.displayUUID
+            let deleteDesktopID = deleteBaseScope.desktopID
             // SPEC-018 FR-017 : émettre stage_deleted enrichi (display_uuid + desktop_id).
             EventBus.shared.publish(DesktopEvent.stageDeleted(
                 stageID: stageStr, displayUUID: deleteUUID, desktopID: deleteDesktopID))
@@ -1128,7 +1150,7 @@ enum CommandRouter {
                 return .error(.invalidArgument, "missing stage_id or target_id")
             }
             let position = request.args?["position"] ?? "before"
-            var scopeError: Response? = nil
+            var scopeError: Response?
             guard let scope = await resolveScope(request: request, daemon: daemon,
                                                   errorOut: &scopeError) else {
                 return scopeError ?? .error(.internalError, "scope resolution failed")
@@ -1187,7 +1209,7 @@ enum CommandRouter {
             guard let sm = daemon.stageManager else {
                 return .error(.stageManagerDisabled, "stage manager disabled in config")
             }
-            var scopeError: Response? = nil
+            var scopeError: Response?
             guard let scope = await resolveScope(request: request, daemon: daemon,
                                                   errorOut: &scopeError) else {
                 return scopeError ?? .error(.internalError, "scope resolution failed")
@@ -1199,9 +1221,7 @@ enum CommandRouter {
                                           desktopID: scope.desktopID,
                                           stageID: activeStageID)
             let widsToHide: [WindowID]
-            if sm.stageMode == .perDisplay, let stage = sm.stagesV2[activeScope] {
-                widsToHide = stage.memberWindows.map { $0.cgWindowID }
-            } else if let stage = sm.stages[activeStageID] {
+            if let stage = sm.stagesV2[activeScope] {
                 widsToHide = stage.memberWindows.map { $0.cgWindowID }
             } else {
                 widsToHide = []
@@ -1220,11 +1240,11 @@ enum CommandRouter {
                 "display_uuid": scope.displayUUID,
                 "desktop_id": String(scope.desktopID),
                 "stage_id": activeStageID.value,
-                "hidden_count": String(hiddenCount),
+                "hidden_count": String(hiddenCount)
             ])
             return .success([
                 "hidden_count": AnyCodable(hiddenCount),
-                "stage_id": AnyCodable(activeStageID.value),
+                "stage_id": AnyCodable(activeStageID.value)
             ])
 
         case "fx.status":
@@ -1322,6 +1342,37 @@ enum CommandRouter {
             } else {
                 resp = await handleDesktopFocus(selector: selector, daemon: daemon)
             }
+            // SPEC-028 — restaurer focus sur la wid last-focused du desktop cible
+            // (parité yabai/AeroSpace/i3). Après que le daemon ait posé le nouveau
+            // currentDesktopKey, on lookup le tracker.
+            let focusMode = daemon.config.focus.focusOnSwitch
+            if focusMode != "none", let sm = daemon.stageManager,
+               let key = sm.currentDesktopKey {
+                var targetWid: WindowID?
+                if focusMode == "last_focused",
+                   let stored = daemon.lastFocusedByDesktopKey[key] {
+                    // Vérifier que la wid existe encore dans une stage de ce desktop.
+                    let inDesktop = sm.stagesV2.contains { (scope, stage) in
+                        scope.displayUUID == key.displayUUID
+                            && scope.desktopID == key.desktopID
+                            && stage.memberWindows.contains(where: { $0.cgWindowID == stored })
+                    }
+                    if inDesktop { targetWid = stored }
+                }
+                if targetWid == nil, let activeStageID = sm.activeStageByDesktop[key],
+                   let activeStage = sm.stagesV2[StageScope(displayUUID: key.displayUUID,
+                                                             desktopID: key.desktopID,
+                                                             stageID: activeStageID)] {
+                    targetWid = activeStage.memberWindows.first?.cgWindowID
+                }
+                if let wid = targetWid {
+                    logInfo("focus_on_desktop_switch", [
+                        "mode": focusMode,
+                        "wid": String(wid)
+                    ])
+                    daemon.focusManager.setFocus(to: wid)
+                }
+            }
             // SPEC-026 US5 — warp curseur post-desktop-switch.
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 80_000_000)
@@ -1368,7 +1419,7 @@ enum CommandRouter {
             return .success([
                 "edge": AnyCodable(edge),
                 "size": AnyCodable(size),
-                "display_id": AnyCodable(Int(did)),
+                "display_id": AnyCodable(Int(did))
             ])
 
         case "rail.stage_numbers.flash":
@@ -1440,7 +1491,7 @@ enum CommandRouter {
             return .success([
                 "summary": AnyCodable(lines.joined(separator: "\n")),
                 "current_desktop": AnyCodable(curScope.desktopID),
-                "current_display_uuid": AnyCodable(curScope.displayUUID),
+                "current_display_uuid": AnyCodable(curScope.displayUUID)
             ])
 
         case "scratchpad.toggle":
@@ -1560,7 +1611,7 @@ enum CommandRouter {
             logInfo("scope_inferred_from", [
                 "source": "explicit_cli",
                 "display_uuid": resolvedUUID,
-                "desktop_id": String(resolvedDesktopID),
+                "desktop_id": String(resolvedDesktopID)
             ])
         }
         return result
@@ -1588,7 +1639,7 @@ enum CommandRouter {
                 "current": d.id == currentID,
                 "recent": d.id == recentID,
                 "windows": d.windows.count,
-                "stages": d.stages.count,
+                "stages": d.stages.count
             ]
         }
         // SPEC-013 FR-010 : exposer le mode + la map per-display.
@@ -1598,7 +1649,7 @@ enum CommandRouter {
         return .success([
             "desktops": AnyCodable(items),
             "mode": AnyCodable(mode.rawValue),
-            "current_by_display": AnyCodable(perDisplay),
+            "current_by_display": AnyCodable(perDisplay)
         ])
     }
 
@@ -1614,8 +1665,8 @@ enum CommandRouter {
         let mode = await registry.mode
         // SPEC-013 FR-009 : en perDisplay, retourner aussi le current du display
         // de la frontmost.
-        var displayID: CGDirectDisplayID? = nil
-        var displayCurrent: Int? = nil
+        var displayID: CGDirectDisplayID?
+        var displayCurrent: Int?
         if mode == .perDisplay,
            let frontmost = daemon.registry.focusedWindowID,
            let state = daemon.registry.get(frontmost) {
@@ -1631,7 +1682,7 @@ enum CommandRouter {
             "label": AnyCodable(desktop?.label ?? ""),
             "active_stage_id": AnyCodable(desktop?.activeStageID ?? 1),
             "windows": AnyCodable(desktop?.windows.count ?? 0),
-            "mode": AnyCodable(mode.rawValue),
+            "mode": AnyCodable(mode.rawValue)
         ]
         if let did = displayID {
             payload["display_id"] = AnyCodable(Int(did))
@@ -1655,7 +1706,7 @@ enum CommandRouter {
                 "selector": selector,
                 "previous_id": String(previousID),
                 "flow": "global",
-                "reason": "selector_returned_nil",
+                "reason": "selector_returned_nil"
             ])
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
@@ -1666,7 +1717,7 @@ enum CommandRouter {
                 "current_id": String(previousID),
                 "flow": "global",
                 "back_and_forth": "false",
-                "reason": "same_target_no_backforth",
+                "reason": "same_target_no_backforth"
             ])
         }
         do {
@@ -1680,7 +1731,7 @@ enum CommandRouter {
         return .success([
             "current_id": AnyCodable(currentID),
             "previous_id": AnyCodable(previousID),
-            "event_emitted": AnyCodable(!wasNoop && currentID != previousID),
+            "event_emitted": AnyCodable(!wasNoop && currentID != previousID)
         ])
     }
 
@@ -1730,13 +1781,13 @@ enum CommandRouter {
             "wid": String(wid),
             "desktop": String(targetID),
             "display_id": String(resolvedDisplayID),
-            "current": String(currentOnDisplay),
+            "current": String(currentOnDisplay)
         ])
         return .success([
             "cgwid": AnyCodable(Int(wid)),
             "desktop": AnyCodable(targetID),
             "display_id": AnyCodable(Int(resolvedDisplayID)),
-            "hidden": AnyCodable(targetID != currentOnDisplay),
+            "hidden": AnyCodable(targetID != currentOnDisplay)
         ])
     }
 
@@ -1780,7 +1831,7 @@ enum CommandRouter {
                 "selector": selector,
                 "previous_id": String(previousID),
                 "target_display": String(targetDisplayID),
-                "reason": "selector_returned_nil",
+                "reason": "selector_returned_nil"
             ])
             return .error(.unknownDesktop, "unknown desktop selector \"\(selector)\"")
         }
@@ -1801,20 +1852,20 @@ enum CommandRouter {
                     "back_and_forth": String(daemon.config.desktops.backAndForth),
                     "reason": daemon.config.desktops.backAndForth
                         ? "no_recent_desktop"
-                        : "same_target_no_backforth",
+                        : "same_target_no_backforth"
                 ])
                 return .success([
                     "current_id": AnyCodable(previousID),
                     "previous_id": AnyCodable(previousID),
                     "display_id": AnyCodable(Int(targetDisplayID)),
-                    "event_emitted": AnyCodable(false),
+                    "event_emitted": AnyCodable(false)
                 ])
             }
         }
         logInfo("desktop.focus per_display resolved", [
             "target_display": String(targetDisplayID),
             "previous_id": String(previousID),
-            "resolved_target": String(resolvedTarget),
+            "resolved_target": String(resolvedTarget)
         ])
         // Mute le current du display ciblé.
         await registry.setCurrent(resolvedTarget, on: targetDisplayID)
@@ -1823,7 +1874,7 @@ enum CommandRouter {
         // si jamais visité. Sans ce passage, `handleDesktopFocusPerDisplay` ne passe
         // PAS par DesktopSwitcher.performSwitch (qui appelle onDesktopChanged →
         // ensureDefaultStage), donc desktop neuf reste sans stage 1 sur disque.
-        if let sm = daemon.stageManager, sm.stageMode == .perDisplay,
+        if let sm = daemon.stageManager,
            let displays = await daemon.displayRegistry?.displays,
            let dst = displays.first(where: { $0.id == targetDisplayID }),
            !dst.uuid.isEmpty {
@@ -1879,7 +1930,7 @@ enum CommandRouter {
         // stage), contredisant le concept même de stage. Si le mode est global ou si
         // le desktop cible n'a jamais eu de stage actif mémorisé, fallback : show all.
         let activeStageOnTarget: StageID? = await {
-            guard let sm = daemon.stageManager, sm.stageMode == .perDisplay else { return nil }
+            guard let sm = daemon.stageManager else { return nil }
             guard let displays = await daemon.displayRegistry?.displays,
                   let target = displays.first(where: { $0.id == targetDisplayID }),
                   !target.uuid.isEmpty else { return nil }
@@ -1910,7 +1961,7 @@ enum CommandRouter {
                 "desktop": String(state.desktopID),
                 "stage": state.stageID?.value ?? "nil",
                 "active_stage": activeStageOnTarget?.value ?? "any",
-                "should_show": shouldShow ? "yes" : "no",
+                "should_show": shouldShow ? "yes" : "no"
             ])
             if state.isTileable {
                 daemon.layoutEngine.setLeafVisible(state.cgWindowID, shouldShow)
@@ -1936,14 +1987,14 @@ enum CommandRouter {
                 "to": String(resolvedTarget),
                 "display_id": String(targetDisplayID),
                 "mode": "per_display",
-                "ts": String(ts),
+                "ts": String(ts)
             ]
         ))
         return .success([
             "current_id": AnyCodable(resolvedTarget),
             "previous_id": AnyCodable(previousID),
             "display_id": AnyCodable(Int(targetDisplayID)),
-            "event_emitted": AnyCodable(true),
+            "event_emitted": AnyCodable(true)
         ])
     }
 
@@ -2009,7 +2060,7 @@ enum CommandRouter {
             return .success([
                 "cgwid": AnyCodable(Int(wid)),
                 "from": AnyCodable(srcDisplay.index),
-                "to": AnyCodable(dstDisplay.index),
+                "to": AnyCodable(dstDisplay.index)
             ])
         }
         // Calculer la nouvelle frame : centrer dans visibleFrame dst, clamp si dépasse.
@@ -2055,7 +2106,7 @@ enum CommandRouter {
             // fenêtre est physiquement sur dst mais le rail panel src continue de
             // l'afficher (étiquette logique inchangée). C'est l'action explicite
             // de l'user (raccourci `window display N`) → re-étiquetage légitime.
-            if let sm = daemon.stageManager, sm.stageMode == .perDisplay {
+            if let sm = daemon.stageManager {
                 let activeStage = sm.activeStageByDesktop[
                     DesktopKey(displayUUID: dstDisplay.uuid, desktopID: targetDeskID)] ?? StageID("1")
                 let targetScope = StageScope(displayUUID: dstDisplay.uuid,
@@ -2064,7 +2115,24 @@ enum CommandRouter {
                     _ = sm.createStage(id: activeStage, displayName: activeStage.value,
                                         scope: targetScope)
                 }
+                // SPEC-028 — audit pré-assign pour identifier état initial.
+                let violationsBefore = sm.auditOwnership()
                 sm.assign(wid: wid, to: targetScope)
+                // SPEC-028 — audit post-assign : si NOUVELLES violations
+                // introduites, log avec contexte pour identifier la cause.
+                let violationsAfter = sm.auditOwnership()
+                if violationsAfter.count > violationsBefore.count {
+                    logWarn("window_display_introduced_violations", [
+                        "wid": String(wid),
+                        "src_display": srcDisplay.uuid.prefix(8) + "",
+                        "dst_display": dstDisplay.uuid.prefix(8) + "",
+                        "dst_stage": activeStage.value,
+                        "before": String(violationsBefore.count),
+                        "after": String(violationsAfter.count),
+                        "new": violationsAfter.filter { !violationsBefore.contains($0) }
+                                         .joined(separator: " | ")
+                    ])
+                }
                 EventBus.shared.publish(DesktopEvent(
                     name: "window_assigned",
                     payload: ["wid": String(wid),
@@ -2075,14 +2143,26 @@ enum CommandRouter {
         }
         // Re-appliquer le layout sur tous les écrans.
         daemon.applyLayout()
+        // SPEC-028 — audit final post-applyLayout : si applyLayout a réintroduit
+        // des violations (ex: tree drift), on les capture maintenant.
+        if let sm = daemon.stageManager {
+            let violationsFinal = sm.auditOwnership()
+            if !violationsFinal.isEmpty {
+                logWarn("window_display_violations_after_applyLayout", [
+                    "wid": String(wid),
+                    "count": String(violationsFinal.count),
+                    "list": violationsFinal.joined(separator: " | ")
+                ])
+            }
+        }
         return .success([
             "cgwid": AnyCodable(Int(wid)),
             "from": AnyCodable(srcDisplay.index),
             "to": AnyCodable(dstDisplay.index),
             "new_frame": AnyCodable([
                 Int(newFrame.origin.x), Int(newFrame.origin.y),
-                Int(newFrame.size.width), Int(newFrame.size.height),
-            ]),
+                Int(newFrame.size.width), Int(newFrame.size.height)
+            ])
         ])
     }
 
@@ -2107,7 +2187,7 @@ enum CommandRouter {
                                   Int(d.visibleFrame.size.width), Int(d.visibleFrame.size.height)],
                 "is_main": d.isMain,
                 "is_active": d.id == activeID,
-                "windows": leafCount,
+                "windows": leafCount
             ]
         }
         return .success(["displays": AnyCodable(payload)])
@@ -2136,7 +2216,7 @@ enum CommandRouter {
             "index": AnyCodable(d.index),
             "id": AnyCodable(Int(d.id)),
             "uuid": AnyCodable(d.uuid),
-            "name": AnyCodable(d.name),
+            "name": AnyCodable(d.name)
         ])
     }
 
@@ -2180,12 +2260,12 @@ enum CommandRouter {
             daemon.focusManager.setFocusFromShortcut(to: firstLeaf.windowID)
             return .success([
                 "display": AnyCodable(d.index),
-                "focused": AnyCodable(Int(firstLeaf.windowID)),
+                "focused": AnyCodable(Int(firstLeaf.windowID))
             ])
         }
         return .success([
             "display": AnyCodable(d.index),
-            "focused": AnyCodable(""),
+            "focused": AnyCodable("")
         ])
     }
 
@@ -2252,7 +2332,7 @@ enum CommandRouter {
         let currentID = await registry.currentID
         return .success([
             "current_id": AnyCodable(currentID),
-            "previous_id": AnyCodable(previousID),
+            "previous_id": AnyCodable(previousID)
         ])
     }
 
@@ -2301,7 +2381,7 @@ enum CommandRouter {
             "wid": AnyCodable(Int(entry.wid)),
             "size": AnyCodable([Int(entry.size.width), Int(entry.size.height)]),
             "degraded": AnyCodable(entry.degraded),
-            "captured_at": AnyCodable(iso),
+            "captured_at": AnyCodable(iso)
         ])
     }
 
@@ -2321,7 +2401,7 @@ enum CommandRouter {
             "wid": AnyCodable(Int(wid)),
             "size": AnyCodable([128, 128]),
             "degraded": AnyCodable(true),
-            "captured_at": AnyCodable(now),
+            "captured_at": AnyCodable(now)
         ])
     }
 
@@ -2332,7 +2412,7 @@ enum CommandRouter {
         return .success([
             "running": AnyCodable(isRunning),
             "inprocess": AnyCodable(true),
-            "pid": AnyCodable(Int(ProcessInfo.processInfo.processIdentifier)),
+            "pid": AnyCodable(Int(ProcessInfo.processInfo.processIdentifier))
         ])
     }
 
@@ -2345,7 +2425,7 @@ enum CommandRouter {
         return .success([
             "action": AnyCodable("noop_inprocess"),
             "running": AnyCodable(daemon.railController != nil),
-            "hint": AnyCodable("Le rail est intégré au daemon depuis SPEC-024. Désactivation via [fx.rail].enabled = false dans roadies.toml."),
+            "hint": AnyCodable("Le rail est intégré au daemon depuis SPEC-024. Désactivation via [fx.rail].enabled = false dans roadies.toml.")
         ])
     }
 
@@ -2397,8 +2477,8 @@ enum CommandRouter {
         }
         // Trouver la section [fx.rail], y mettre/remplacer la clé renderer.
         var inFxRail = false
-        var rendererLineIdx: Int? = nil
-        var fxRailHeaderIdx: Int? = nil
+        var rendererLineIdx: Int?
+        var fxRailHeaderIdx: Int?
         for (idx, line) in lines.enumerated() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.hasPrefix("[") {

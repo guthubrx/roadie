@@ -21,65 +21,24 @@ public protocol StagePersistenceV2: Sendable {
     func loadActiveStage() throws -> StageScope?
 }
 
-// MARK: - FlatStagePersistence
-
-/// Implémentation mode global (compat V1) : stocke `<stagesDir>/<stageID>.toml`.
-/// Les scopes retournés sont toujours `.global(stageID)`.
-/// Compatible 100% avec le format SPEC-002 existant.
-public final class FlatStagePersistence: StagePersistenceV2, @unchecked Sendable {
-    private let stagesDir: String
-
-    public init(stagesDir: String) {
-        self.stagesDir = (stagesDir as NSString).expandingTildeInPath
-        try? FileManager.default.createDirectory(
-            atPath: self.stagesDir, withIntermediateDirectories: true)
-    }
-
-    public func loadAll() throws -> [StageScope: Stage] {
-        let entries = (try? FileManager.default.contentsOfDirectory(atPath: stagesDir)) ?? []
-        var result: [StageScope: Stage] = [:]
-        for entry in entries where entry.hasSuffix(".toml") && entry != "active.toml" {
-            let path = "\(stagesDir)/\(entry)"
-            guard let raw = try? String(contentsOfFile: path, encoding: .utf8),
-                  let stage = try? TOMLDecoder().decode(Stage.self, from: raw)
-            else {
-                logWarn("flat_stage_file_corrupt", ["path": path])
-                continue
-            }
-            result[.global(stage.id)] = stage
+/// GC silencieux des fichiers `*.legacy.*` > N jours dans un dossier.
+/// Idempotent. Tourne après chaque save (= au moment où on touche déjà disque).
+func gcLegacyFiles(in dir: String, olderThanDays days: Int) {
+    let fm = FileManager.default
+    guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return }
+    let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
+    var removed = 0
+    for entry in entries where entry.contains(".legacy.") {
+        let path = "\(dir)/\(entry)"
+        if let attrs = try? fm.attributesOfItem(atPath: path),
+           let mtime = attrs[.modificationDate] as? Date,
+           mtime < cutoff {
+            try? fm.removeItem(atPath: path)
+            removed += 1
         }
-        return result
     }
-
-    public func save(_ stage: Stage, at scope: StageScope) throws {
-        // Ignore displayUUID et desktopID : mode flat.
-        let path = "\(stagesDir)/\(stage.id.value).toml"
-        let toml = try TOMLEncoder().encode(stage)
-        try atomicWrite(toml, to: path)
-        // SPEC-025 FR-009 — GC silencieux .legacy.* > 7 jours.
-        FileBackedStagePersistence.gcLegacyFiles(in: stagesDir, olderThanDays: 7)
-    }
-
-    public func delete(at scope: StageScope) throws {
-        let path = "\(stagesDir)/\(scope.stageID.value).toml"
-        try? FileManager.default.removeItem(atPath: path)
-    }
-
-    public func saveActiveStage(_ scope: StageScope?) throws {
-        let path = "\(stagesDir)/active.toml"
-        let dict: [String: String] = ["current_stage": scope?.stageID.value ?? ""]
-        let toml = try TOMLEncoder().encode(dict)
-        try atomicWrite(toml, to: path)
-    }
-
-    public func loadActiveStage() throws -> StageScope? {
-        let path = "\(stagesDir)/active.toml"
-        guard let raw = try? String(contentsOfFile: path, encoding: .utf8),
-              let parsed = try? TOMLDecoder().decode([String: String].self, from: raw),
-              let active = parsed["current_stage"],
-              !active.isEmpty
-        else { return nil }
-        return .global(StageID(active))
+    if removed > 0 {
+        logInfo("legacy_gc_done", ["removed": String(removed), "dir": dir])
     }
 }
 
@@ -153,8 +112,8 @@ public final class NestedStagePersistence: StagePersistenceV2, @unchecked Sendab
         // SPEC-025 FR-009 — GC silencieux .legacy.* > 7 jours dans tous les
         // sous-dossiers (récursif via stagesDir, car les .legacy peuvent être
         // au niveau stagesDir/* legacy historiques).
-        FileBackedStagePersistence.gcLegacyFiles(in: dir, olderThanDays: 7)
-        FileBackedStagePersistence.gcLegacyFiles(in: stagesDir, olderThanDays: 7)
+        gcLegacyFiles(in: dir, olderThanDays: 7)
+        gcLegacyFiles(in: stagesDir, olderThanDays: 7)
     }
 
     public func delete(at scope: StageScope) throws {

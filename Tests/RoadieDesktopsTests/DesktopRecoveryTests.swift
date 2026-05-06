@@ -74,7 +74,7 @@ final class DesktopRecoveryTests: XCTestCase {
                 expectedFrame: CGRect(x: 0, y: 0, width: 100, height: 100)),
             DesktopPersistence.WindowSnapshot(
                 cgwid: 2002, bundleID: "tué", titlePrefix: "dead",
-                expectedFrame: CGRect(x: 0, y: 0, width: 100, height: 100)),
+                expectedFrame: CGRect(x: 0, y: 0, width: 100, height: 100))
         ]
         DesktopPersistence.saveDesktopWindows(
             configDir: tempDir, displayUUID: lgUUID, desktopID: 1, windows: snaps)

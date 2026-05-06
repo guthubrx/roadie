@@ -75,6 +75,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// Set à true après le 1er applyAll qui détecte+fixe un drift. Évite les
     /// reassigns en cascade pendant les stage switches.
     var didInitialDriftFix: Bool = false
+    /// SPEC-028 — mémoire du `last focused wid` par scope (stage et desktop).
+    /// Mise à jour à chaque `onFocusChanged`. Lu par stage.switch / desktop.focus
+    /// quand `focus.focus_on_switch == "last_focused"` pour restaurer la fenêtre
+    /// active à l'arrivée dans le scope (parité yabai/AeroSpace/i3).
+    /// RAM-only : reset au reboot (acceptable, on revient à frontmost fallback).
+    var lastFocusedByStageScope: [StageScope: WindowID] = [:]
+    var lastFocusedByDesktopKey: [DesktopKey: WindowID] = [:]
     /// SPEC-025 — wrapper class pour capturer self.applyLayout dans la closure
     /// du hook LayoutHooks.applyLayout (self pas init au moment de la création
     /// du hook). Set à `self` à la fin de l'init pour permettre au hook
@@ -140,7 +147,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             logWarn("bsp_split_policy_invalid", [
                 "value": config.tiling.splitPolicy,
                 "fallback": "largest_dim",
-                "valid": "largest_dim, dwindle",
+                "valid": "largest_dim, dwindle"
             ])
             BSPTiler.splitPolicy = .largestDim
         }
@@ -234,7 +241,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logWarn("opacity_stage_hider_skipped", [
                     "reason": "osax_not_loaded",
                     "expected_socket": osaxSocket,
-                    "remediation": "scripts/install-fx.sh + osascript reload Dock",
+                    "remediation": "scripts/install-fx.sh + osascript reload Dock"
                 ])
             }
         }
@@ -269,7 +276,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         "-title", "🔴 roadie : permission manquante",
                         "-message", "Re-cocher Accessibilité dans Réglages Système (clic).",
                         "-open", prefURL,
-                        "-sound", "Funk",
+                        "-sound", "Funk"
                     ]
                 } else {
                     p.launchPath = "/usr/bin/open"
@@ -345,7 +352,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             if widToScopeDriftsFixed > 0 || widsZombiesPurged > 0 {
                 logInfo("boot_audit_autofixed", [
                     "violations_before": String(widToScopeDriftsFixed),
-                    "zombies_purged": String(widsZombiesPurged),
+                    "zombies_purged": String(widsZombiesPurged)
                 ])
             } else {
                 logInfo("boot_audit_clean")
@@ -370,22 +377,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 p.arguments = [
                     "-title", "🟡 roadie",
                     "-message", "State \(bootHealth.verdict.rawValue) — try `roadie heal`",
-                    "-sound", "Tink",
+                    "-sound", "Tink"
                 ]
                 try? p.run()
             }
         }
 
-        // Pre-existing stages from config (mode global uniquement — en perDisplay
-        // les stages sont matérialisées par scope plus loin via ensureDefaultStage).
-        if let sm = stageManager, sm.stageMode == .global {
-            for stageDef in config.stageManager.workspaces {
-                let id = StageID(stageDef.id)
-                if sm.stages[id] == nil {
-                    _ = sm.createStage(id: id, displayName: stageDef.displayName)
-                }
-            }
-        }
+        // V2-only : les stages sont matérialisées par scope via ensureDefaultStage plus bas.
         if let sm = stageManager {
             // Garantir le stage 1 par défaut (modèle "toujours au moins 1 stage par desktop").
             // SPEC-018 : en mode per_display, créer aussi dans stagesV2 au scope primary.
@@ -452,17 +450,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     try FileManager.default.removeItem(atPath: deprecatedActivePath)
                     logInfo("deprecated_active_toml_cleaned", [
                         "path": deprecatedActivePath,
-                        "spec": "022",
+                        "spec": "022"
                     ])
                 } catch {
                     logWarn("deprecated_active_toml_cleanup_failed", [
                         "path": deprecatedActivePath,
-                        "error": "\(error)",
+                        "error": "\(error)"
                     ])
                 }
             }
-            let earlyPV2 = NestedStagePersistence(stagesDir: stagesDir)
-            sm.setMode(.perDisplay, persistence: earlyPV2)
+            sm.reloadFromPersistence()
             let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
             sm.setCurrentDesktopKey(DesktopKey(displayUUID: primaryUUID, desktopID: 1))
         }
@@ -485,7 +482,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Skip silencieusement les wids à frame anormale (offscreen, fullscreen Space)
         // — elles seront auto-assignées plus tard via axDidMoveWindow quand AX
         // reportera une frame valide.
-        if let sm = stageManager, sm.stageMode == .perDisplay {
+        if let sm = stageManager {
             let dskReg = desktopRegistry
             for state in registry.allWindows
                 where state.isTileable && sm.scopeOf(wid: state.cgWindowID) == nil {
@@ -494,7 +491,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     logInfo("auto_assign_skip_offscreen", [
                         "wid": String(state.cgWindowID),
                         "frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y)) "
-                                + "\(Int(state.frame.width))x\(Int(state.frame.height))",
+                                + "\(Int(state.frame.width))x\(Int(state.frame.height))"
                     ])
                     continue
                 }
@@ -534,7 +531,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                             "from_display": String(currentTreeDisplay ?? 0),
                             "to_display": String(did),
                             "near": nearTarget.map(String.init) ?? "nil",
-                            "reason": "auto_assign_orphan",
+                            "reason": "auto_assign_orphan"
                         ])
                     }
                     self.applyLayout()
@@ -543,7 +540,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         "display_uuid": uuid,
                         "desktop_id": String(desktopID),
                         "stage": activeStage.value,
-                        "tree_preserved": String(currentTreeDisplay == did),
+                        "tree_preserved": String(currentTreeDisplay == did)
                     ])
                 }
             }
@@ -576,10 +573,27 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // Click sur une fenêtre d'un autre stage → switch vers son stage. Sans ce hook,
         // le raise nu remettait la fenêtre on-screen sans changer de stage → incohérence
         // (cf. observation utilisateur : "Grayjay visible alors que stage 2 inactif").
-        mouseRaiser?.onClickInOtherStage = { [weak self] _, stageID in
+        mouseRaiser?.onClickInOtherStage = { [weak self] wid, stageID in
             guard let self = self, let sm = self.stageManager else { return false }
-            guard sm.currentStageID != stageID else { return false }
-            sm.switchTo(stageID: stageID)
+            // SPEC-028 — switch dans le SCOPE DE LA WID CLIQUÉE (= display physique
+            // de la wid), pas le current scope global. Sans ça, cliquer sur une
+            // wid du LG pendant que le curseur est resté sur le primary causait
+            // un switch sur le primary → les wids stage N du primary se retrouvaient
+            // corner-hidden alors que c'était leur stage qui était active.
+            guard let scope = sm.scopeOf(wid: wid) else { return false }
+            let key = DesktopKey(displayUUID: scope.displayUUID,
+                                 desktopID: scope.desktopID)
+            guard sm.activeStageByDesktop[key] != stageID else { return false }
+            let targetScope = StageScope(displayUUID: scope.displayUUID,
+                                         desktopID: scope.desktopID,
+                                         stageID: stageID)
+            sm.switchTo(stageID: stageID, scope: targetScope)
+            logInfo("click_to_raise_stage_switch", [
+                "wid": String(wid),
+                "display": String(scope.displayUUID.prefix(8)),
+                "desktop": String(scope.desktopID),
+                "stage": stageID.value
+            ])
             return true
         }
         mouseRaiser?.start()
@@ -707,6 +721,26 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         registry.onFocusChanged = { [weak loader, weak self] wid in
             guard let wid = wid else { return }
             loader?.bus.publish(FXEvent(kind: .windowFocused, wid: CGWindowID(wid)))
+            // SPEC-028 — mémoriser le last-focused per-scope pour restauration
+            // à `stage.switch` / `desktop.focus`. On écrit dans 2 dicts :
+            // (a) per StageScope du wid (pour stage.switch), (b) per DesktopKey
+            // du display courant (pour desktop.focus).
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                if let sm = self.stageManager {
+                    // Trouver la stage qui contient cette wid (peut être dans
+                    // un scope précis en perDisplay).
+                    for (scope, stage) in sm.stagesV2 {
+                        if stage.memberWindows.contains(where: { $0.cgWindowID == wid }) {
+                            self.lastFocusedByStageScope[scope] = wid
+                            self.lastFocusedByDesktopKey[
+                                DesktopKey(displayUUID: scope.displayUUID,
+                                           desktopID: scope.desktopID)] = wid
+                            break
+                        }
+                    }
+                }
+            }
             // Bridge IPC : le rail (et tout subscriber `events --follow`) reçoit aussi
             // l'event pour pouvoir promouvoir la vignette focused en hero (SPEC-019).
             Task { @MainActor in
@@ -724,6 +758,11 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
                 guard self.config.focus.stageFollowsFocus else { return }
+                // SPEC-028 — anti-loop : skip si le focus est issu d'un hover
+                // souris (focus_follows_mouse a posé le flag avant son setFocus).
+                // Sinon : hover → focus → stage switch → applyAll repositionne
+                // → wid sous curseur change → cycle infini.
+                if self.focusManager.isStageFollowsFocusInhibited() { return }
                 self.followFocusToStageAndDesktop(wid: wid)
             }
             // SPEC-026 US5 — mouse_follows_focus depuis source externe (Alt+Tab,
@@ -778,40 +817,27 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 }
             }
 
-            // SPEC-018 T030 : migration silencieuse V1→V2 (stages globaux → scoped per_display).
-            // Déclenché uniquement en mode per_display, avant l'init du StageManager V2.
-            // Sur erreur : flag migrationPending = true, boot continue en mode flat (V1).
-            if config.desktops.mode == .perDisplay,
-               let primaryScreen = NSScreen.screens.first(where: { $0.frame.origin == .zero })
-                   ?? NSScreen.main,
-               let displayID = primaryScreen.deviceDescription[
-                   NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID,
-               let cfUUID = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue() {
-                let mainUUID = CFUUIDCreateString(nil, cfUUID) as String? ?? ""
-                if !mainUUID.isEmpty {
-                    let stagesDirPath = (NSString(string: "~/.config/roadies/stages")
-                        .expandingTildeInPath as String)
-                    let migrator = MigrationV1V2(stagesDir: stagesDirPath, mainDisplayUUID: mainUUID)
-                    do {
-                        if let report = try migrator.runIfNeeded() {
-                            logInfo("migration_v1_to_v2 completed", [
-                                "migrated_count": String(report.migratedCount),
-                                "backup_path": report.backupPath,
-                                "target_display_uuid": report.targetDisplayUUID,
-                                "duration_ms": String(report.durationMs),
-                            ])
-                            EventBus.shared.publish(DesktopEvent.migrationV1V2(
-                                migratedCount: report.migratedCount,
-                                backupPath: report.backupPath,
-                                targetUUID: report.targetDisplayUUID,
-                                durationMs: report.durationMs
-                            ))
-                            self.migrationPending = false
-                        }
-                    } catch {
-                        logError("migration_v1_to_v2 failed", ["error": "\(error)"])
-                        self.migrationPending = true
-                    }
+            // V2-only — V1 migration supprimée. Cleanup unique des fichiers V1 résiduels.
+            self.migrationPending = false
+            do {
+                let stagesDirPath = (NSString(string: "~/.config/roadies/stages")
+                    .expandingTildeInPath as String)
+                let fm = FileManager.default
+                let entries = (try? fm.contentsOfDirectory(atPath: stagesDirPath)) ?? []
+                var removed = 0
+                for entry in entries {
+                    // Garder uniquement les sous-dossiers UUID + active.toml.
+                    let path = "\(stagesDirPath)/\(entry)"
+                    var isDir: ObjCBool = false
+                    fm.fileExists(atPath: path, isDirectory: &isDir)
+                    if isDir.boolValue { continue }
+                    // Tout fichier à la racine (legacy V1, .legacy.<ts>, etc.) est supprimé.
+                    try? fm.removeItem(atPath: path)
+                    removed += 1
+                }
+                if removed > 0 {
+                    logInfo("v1_legacy_stage_files_cleaned",
+                            ["removed": String(removed), "dir": stagesDirPath])
                 }
             }
 
@@ -836,72 +862,57 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             // Le currentID du registry est la source de vérité pour l'ID de desktop courant.
             let sm = self.stageManager
             if let mgr = sm {
-                let currentDeskID = await dRegistry.currentID
-                let dbPersistence = DesktopBackedStagePersistence(
-                    registry: dRegistry,
-                    desktopID: currentDeskID
-                )
-                mgr.setPersistence(dbPersistence)
-                logInfo("stage_persistence: switched to DesktopRegistry-backed",
-                        ["desktop": String(currentDeskID)])
-
-                // SPEC-018 : configurer la persistence V2 (scopée) selon le mode.
-                let stagesDir = (NSString(string: "~/.config/roadies/stages")
-                    .expandingTildeInPath as String)
-                let stageMode: StageMode = config.desktops.mode == .perDisplay
-                    ? .perDisplay : .global
-                let persistenceV2: any StagePersistenceV2 = stageMode == .global
-                    ? FlatStagePersistence(stagesDir: stagesDir)
-                    : NestedStagePersistence(stagesDir: stagesDir)
-                mgr.setMode(stageMode, persistence: persistenceV2)
-                logInfo("stage_manager: mode set",
-                        ["stage_mode": stageMode.rawValue])
-                // SPEC-018 : matérialiser stage 1 dans stagesV2 maintenant que le mode V2 est actif.
-                // Sans ça, `stage list` filtré par scope retourne vide et `stage 1` échoue
-                // avec "unknown_stage in current scope" (la stage 1 V1 du boot n'a pas migré).
-                if stageMode == .perDisplay {
-                    let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
-                    // SPEC-019 — invariant utilisateur : "il devrait toujours y avoir au
-                    // minimum la première stage" sur CHAQUE écran. Itérer sur les displays
-                    // physiques (via NSScreen — DisplayRegistry n'est pas encore init à
-                    // ce stade du bootstrap) et matérialiser stage 1 partout.
-                    var seenUUIDs = Set<String>()
-                    for screen in NSScreen.screens {
-                        guard let cgID = screen.deviceDescription[
-                            NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
-                        else { continue }
-                        let uuid = resolveDisplayUUID(cgID)
-                        guard !uuid.isEmpty, seenUUIDs.insert(uuid).inserted else { continue }
-                        let scope = StageScope(displayUUID: uuid, desktopID: 1,
-                                               stageID: StageID("1"))
-                        mgr.ensureDefaultStage(scope: scope)
-                    }
-                    // Garde-fou : si NSScreen.screens est vide (cas extrême), au minimum
-                    // matérialiser sur le primary connu.
-                    if seenUUIDs.isEmpty && !primaryUUID.isEmpty {
-                        let scope = StageScope(displayUUID: primaryUUID, desktopID: 1,
-                                               stageID: StageID("1"))
-                        mgr.ensureDefaultStage(scope: scope)
-                    }
-                    // SPEC-018 audit-cohérence F5 : initialiser le scope desktop courant
-                    // (primary, desktop 1) pour que les futurs switchTo persistent dans
-                    // le bon `_active.toml` et que currentStageID reste cohérent.
-                    mgr.setCurrentDesktopKey(
-                        DesktopKey(displayUUID: primaryUUID, desktopID: 1))
+                // V2-only : la NestedStagePersistence a déjà été branchée à l'init du StageManager.
+                // SPEC-019 — matérialiser stage 1 par display.
+                let primaryUUID = resolveDisplayUUID(CGMainDisplayID())
+                var seenUUIDs = Set<String>()
+                for screen in NSScreen.screens {
+                    guard let cgID = screen.deviceDescription[
+                        NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+                    else { continue }
+                    let uuid = resolveDisplayUUID(cgID)
+                    guard !uuid.isEmpty, seenUUIDs.insert(uuid).inserted else { continue }
+                    let scope = StageScope(displayUUID: uuid, desktopID: 1,
+                                           stageID: StageID("1"))
+                    mgr.ensureDefaultStage(scope: scope)
                 }
+                if seenUUIDs.isEmpty && !primaryUUID.isEmpty {
+                    let scope = StageScope(displayUUID: primaryUUID, desktopID: 1,
+                                           stageID: StageID("1"))
+                    mgr.ensureDefaultStage(scope: scope)
+                }
+                mgr.setCurrentDesktopKey(
+                    DesktopKey(displayUUID: primaryUUID, desktopID: 1))
                 // SPEC-021 T031 : reconstruire l'index inverse widToScope/widToStageV1
                 // depuis memberWindows persistés. Source unique de vérité pour l'API
                 // scopeOf(wid:)/stageIDOf(wid:). Coût O(stages × members) une fois.
                 mgr.rebuildWidToScopeIndex()
-                // SPEC-021 T069 (US4) : audit read-only des invariants au boot.
-                // Violation = drift hérité d'une session précédente buggée. Log + continue
-                // (pas de crash) — le code post-T028 maintient les invariants par
-                // construction, donc une violation signale un fichier TOML incohérent.
+                // SPEC-028 root cause fix — auto-cure des violations introduites
+                // par la collision migration V1→V2 vs AX scan auto-assign.
+                // Avant : detection-only (logError + continue). La duplication
+                // persistait jusqu'au prochain `daemon heal` manuel.
+                // Maintenant : pour chaque wid dans 2+ scopes, on garde celui de
+                // widToScope (canonical) et on retire des autres. Idempotent.
                 let violations = mgr.auditOwnership()
                 if !violations.isEmpty {
-                    logError("ownership_invariant_violation_boot",
-                             ["count": String(violations.count),
-                              "first": violations.first ?? ""])
+                    var doubleFixed = 0
+                    for v in violations where v.contains("in 2 scopes") {
+                        let parts = v.split(separator: " ")
+                        if parts.count >= 2, let widNum = WindowID(parts[1]) {
+                            if let canonical = mgr.scopeOf(wid: widNum) {
+                                mgr.removeWindow(widNum)
+                                mgr.assign(wid: widNum, to: canonical)
+                                doubleFixed += 1
+                            }
+                        }
+                    }
+                    let after = mgr.auditOwnership()
+                    logInfo("ownership_invariant_violation_boot_healed", [
+                        "violations_before": String(violations.count),
+                        "double_membership_fixed": String(doubleFixed),
+                        "violations_after": String(after.count),
+                        "first_remaining": after.first ?? "nil"
+                    ])
                 }
             }
             let stageHook: (@Sendable (Int) async -> Void)? = sm.map { mgr in
@@ -991,7 +1002,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                             "desktop_id": evt.desktopID,
                             "from": evt.from,
                             "to": evt.to,
-                            "ts": String(evt.ts),
+                            "ts": String(evt.ts)
                         ]
                     } else {
                         var p: [String: String] = ["from": evt.from, "to": evt.to,
@@ -1092,7 +1103,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 layoutEngine.removeWindow(state.cgWindowID)
                 logInfo("boot: degenerate leaf removed from BSP tree", [
                     "wid": String(state.cgWindowID),
-                    "frame_h": String(Int(state.frame.size.height)),
+                    "frame_h": String(Int(state.frame.size.height))
                 ])
             }
         }
@@ -1137,7 +1148,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         logInfo("recovery: AX/CG mismatch fixed", [
                             "wid": String(state.cgWindowID),
                             "ax_frame": "\(Int(state.frame.size.width))x\(Int(state.frame.size.height))",
-                            "cg_frame": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))",
+                            "cg_frame": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))"
                         ])
                         continue
                     }
@@ -1170,7 +1181,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     logInfo("recovery: orphaned offscreen window restored", [
                         "wid": String(state.cgWindowID),
                         "old_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
-                        "new_frame": "\(Int(target.origin.x)),\(Int(target.origin.y))",
+                        "new_frame": "\(Int(target.origin.x)),\(Int(target.origin.y))"
                     ])
                 }
             }
@@ -1312,7 +1323,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logInfo("registerWindow: AX degenerate, used CG fallback", [
                     "wid": String(wid),
                     "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
-                    "cg": "\(Int(cg.size.width))x\(Int(cg.size.height))",
+                    "cg": "\(Int(cg.size.width))x\(Int(cg.size.height))"
                 ])
                 frame = cg
             }
@@ -1342,7 +1353,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 "target": targetID.map(String.init) ?? "nil",
                 "focused": registry.focusedWindowID.map(String.init) ?? "nil",
                 "prev_focused": registry.previousFocusedWindowID.map(String.init) ?? "nil",
-                "initial": String(isInitial),
+                "initial": String(isInitial)
             ])
             layoutEngine.insertWindow(wid, focusedID: targetID)
             // Pendant le bootstrap, le focus système n'est pas encore propagé via
@@ -1388,24 +1399,16 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         // perdue. La wid recevra son state.stageID correct via reconcileStageOwnership
         // au boot (sens stagesV2 → state.stageID).
         if state.isTileable, let sm = stageManager {
-            let alreadyAssigned: Bool = {
-                if sm.stageMode == .perDisplay {
-                    return sm.stagesV2.values.contains { stage in
-                        stage.memberWindows.contains { $0.cgWindowID == state.cgWindowID }
-                    }
-                } else {
-                    return sm.stages.values.contains { stage in
-                        stage.memberWindows.contains { $0.cgWindowID == state.cgWindowID }
-                    }
-                }
-            }()
+            let alreadyAssigned: Bool = sm.stagesV2.values.contains { stage in
+                stage.memberWindows.contains { $0.cgWindowID == state.cgWindowID }
+            }
             if !alreadyAssigned {
                 // SPEC-022 : en perDisplay, assigner au scope du display PHYSIQUE de
                 // la wid (frame center → displayUUID). Sinon (V1 global), legacy
                 // currentStageID. Sans cette résolution, toutes les wids scannées
                 // partaient sur le scope courant (= built-in) quel que soit leur
                 // display réel → tout finissait dans built-in stage 1 en multi-display.
-                if sm.stageMode == .perDisplay {
+                do {
                     let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
                     if let did = layoutEngine.displayIDContainingPoint(center) {
                         let uuid = resolveDisplayUUID(did)
@@ -1457,7 +1460,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                         "from_display": String(currentTreeDisplay ?? 0),
                                         "to_display": String(did),
                                         "near": nearTarget.map(String.init) ?? "nil",
-                                        "reason": "auto_assign_orphan_runtime",
+                                        "reason": "auto_assign_orphan_runtime"
                                     ])
                                 }
                                 self.applyLayout()
@@ -1466,8 +1469,6 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     }
                     // Sinon : frame offscreen / display introuvable → laisser orphelin,
                     // sera ré-évalué par axDidMoveWindow plus tard.
-                } else if let stageID = sm.currentStageID {
-                    sm.assign(wid: state.cgWindowID, to: stageID)
                 }
             }
         }
@@ -1548,7 +1549,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         logWarn("tile_in_wrong_tree", [
                             "wid": String(wid),
                             "tree_stage": treeStage,
-                            "scope_stage": scopeStage,
+                            "scope_stage": scopeStage
                         ])
                     }
                     // SPEC-025 — staged_orphan_tree : wid présente dans memberWindows
@@ -1566,7 +1567,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                                 logWarn("staged_orphan_tree", [
                                     "wid": String(member.cgWindowID),
                                     "scope_stage": scope.stageID.value,
-                                    "scope_display": scope.displayUUID,
+                                    "scope_display": scope.displayUUID
                                 ])
                             }
                         }
@@ -1645,7 +1646,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 layoutEngine.clearDisplayRoot(for: removedDisplay.id)
                 logInfo("display removed: windows migrated to primary", [
                     "removed_id": String(removedDisplay.id),
-                    "count": String(wids.count),
+                    "count": String(wids.count)
                 ])
             }
         }
@@ -1668,7 +1669,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     configDir: configDir, displayUUID: uuid) {
                     await dRegistry.setCurrent(saved, on: addedDisplay.id)
                     logInfo("display rebranched: current restored", [
-                        "uuid": uuid, "desktop": String(saved),
+                        "uuid": uuid, "desktop": String(saved)
                     ])
                 }
                 // Restore fenêtres assignées (matching N1 cgwid > N2 bundle/title).
@@ -1725,7 +1726,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         logInfo("display rebranched: windows restored", [
                             "uuid": uuid,
                             "desktop": String(desktopID),
-                            "count": String(restoredCount),
+                            "count": String(restoredCount)
                         ])
                     }
                 }
@@ -1874,7 +1875,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         logInfo("alttab follow: desktop switched", [
             "wid": String(wid),
             "display_id": String(resolvedDisplay),
-            "desktop": String(targetDesktop),
+            "desktop": String(targetDesktop)
         ])
     }
 
@@ -1912,45 +1913,23 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         if let sm = stageManager,
            let targetStage = state.stageID,
            sm.currentStageID != targetStage {
-            if sm.stageMode == .perDisplay {
-                // Pose le timestamp SYNCHRONE avant le Task pour éviter la race :
-                // sans ça, 2 onFocusChanged dans la même 500ms passent tous les
-                // deux le check anti-feedback (le Task async n'a pas eu le
-                // temps d'updater le timestamp). Résultat : ping-pong.
-                lastFocusFollowTimestamp = now
-                let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
-                Task { @MainActor [weak self] in
-                    guard let self = self else { return }
-                    guard let display = await self.displayRegistry?.displayContaining(point: center) else {
-                        return
-                    }
-                    let desktopID = await self.desktopRegistry?.currentID(for: display.id) ?? 1
-                    let fullScope = StageScope(displayUUID: display.uuid,
-                                               desktopID: desktopID, stageID: targetStage)
-                    guard sm.stagesV2[fullScope] != nil else {
-                        logInfo("focus_follow_skipped", [
-                            "wid": String(wid),
-                            "want_stage": targetStage.value,
-                            "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
-                            "reason": "stage_missing_in_target_scope",
-                        ])
-                        return
-                    }
-                    logInfo("focus_follow stage switch", [
-                        "wid": String(wid),
-                        "from": sm.currentStageID?.value ?? "nil",
-                        "to": targetStage.value,
-                        "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
-                    ])
-                    sm.switchTo(stageID: targetStage, scope: fullScope)
+            // Pose le timestamp SYNCHRONE avant le Task (anti-feedback ping-pong).
+            lastFocusFollowTimestamp = now
+            let center = CGPoint(x: state.frame.midX, y: state.frame.midY)
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                guard let display = await self.displayRegistry?.displayContaining(point: center) else {
+                    return
                 }
-            } else {
-                // Mode global : check legacy.
-                guard sm.stages[targetStage] != nil else {
+                let desktopID = await self.desktopRegistry?.currentID(for: display.id) ?? 1
+                let fullScope = StageScope(displayUUID: display.uuid,
+                                           desktopID: desktopID, stageID: targetStage)
+                guard sm.stagesV2[fullScope] != nil else {
                     logInfo("focus_follow_skipped", [
                         "wid": String(wid),
                         "want_stage": targetStage.value,
-                        "reason": "stage_missing",
+                        "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)",
+                        "reason": "stage_missing_in_target_scope"
                     ])
                     return
                 }
@@ -1958,9 +1937,9 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     "wid": String(wid),
                     "from": sm.currentStageID?.value ?? "nil",
                     "to": targetStage.value,
+                    "scope": "\(String(display.uuid.prefix(8)))/\(desktopID)"
                 ])
-                lastFocusFollowTimestamp = now
-                sm.switchTo(stageID: targetStage)
+                sm.switchTo(stageID: targetStage, scope: fullScope)
             }
         }
     }
@@ -2002,7 +1981,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             "pid": String(pid),
             "title": AXReader.title(axWindow),
             "subrole": AXReader.subrole(axWindow).rawValue,
-            "wid_at_creation": axWindowID(of: axWindow).map(String.init) ?? "nil",
+            "wid_at_creation": axWindowID(of: axWindow).map(String.init) ?? "nil"
         ])
         registerWindow(pid: pid, axWindow: axWindow)
         // Émettre window_created sur le bus DesktopEvent pour que le rail se resync.
@@ -2070,13 +2049,35 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             let dw = abs(prev.width - frame.width)
             let dh = abs(prev.height - frame.height)
             if dx + dy + dw + dh > 1 {
+                // SPEC-028 — détection des transitions on→offscreen non-loggées
+                // par HideStrategy. Une wid qui passe d'une frame on-screen à
+                // une frame offscreen (origin < -100 typique) sans que ce soit
+                // notre HideStrategy.corner = mystère à creuser.
+                let wasOnScreen = prev.origin.x > -100 && prev.origin.y > -100
+                let nowOffscreen = frame.origin.x < -100 || frame.origin.y < -100
+                let scope = stageManager?.scopeOf(wid: wid)
                 logInfo("ax_window_moved", [
                     "wid": String(wid),
                     "source": source,
                     "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y)) \(Int(prev.width))x\(Int(prev.height))",
                     "to": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.width))x\(Int(frame.height))",
                     "since_apply_ms": String(Int(timeSinceApply * 1000)),
+                    "scope_stage": scope?.stageID.value ?? "nil",
+                    "scope_display": String(scope?.displayUUID.prefix(8) ?? "nil"),
+                    "transition": wasOnScreen && nowOffscreen
+                        ? "ONSCREEN_TO_OFFSCREEN"
+                        : (!wasOnScreen && !nowOffscreen ? "OFFSCREEN_TO_ONSCREEN" : "same")
                 ])
+                // Cas critique : transition on→off non self-piloté = qui l'a fait ?
+                if source == "external" && wasOnScreen && nowOffscreen {
+                    logWarn("ax_window_moved_unexpected_offscreen", [
+                        "wid": String(wid),
+                        "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y))",
+                        "to": "\(Int(frame.origin.x)),\(Int(frame.origin.y))",
+                        "since_apply_ms": String(Int(timeSinceApply * 1000)),
+                        "hint": "external source = pas notre setBounds. macOS, app, ou autre."
+                    ])
+                }
             }
         }
         registry.updateFrame(wid, frame: frame)
@@ -2106,13 +2107,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logInfo("axDidResize: AX degenerate, used CG fallback", [
                     "wid": String(wid),
                     "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
-                    "cg": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))",
+                    "cg": "\(Int(cgInfo.size.width))x\(Int(cgInfo.size.height))"
                 ])
                 propagateExpectedFrame(wid: wid, frame: cgInfo)
             } else {
                 logInfo("axDidResize: ignored degenerate frame", [
                     "wid": String(wid),
-                    "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))",
+                    "ax": "\(Int(frame.size.width))x\(Int(frame.size.height))"
                 ])
             }
             return
@@ -2176,7 +2177,13 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     private func trackDrag(wid: WindowID) {
         // Si la notif arrive tout de suite après notre propre apply, c'est notre
         // setBounds qui répond, pas un drag user. Pas de tracking.
-        if Date().timeIntervalSince(lastApplyTimestamp) < 0.2 { return }
+        // SPEC-028 — la garde était à 200ms : trop court pour les cascades AX
+        // qui suivent un cross-display move (Firefox/Slack ont une animation
+        // de slide-in qui émet des AXMoved 400-700ms après l'apply). Le
+        // DragWatcher confondait ces notifs avec un vrai drag user et
+        // déclenchait drag_adapted_same_display, ce qui cassait les ratios
+        // BSP. 1 seconde couvre toutes les cascades observées.
+        if Date().timeIntervalSince(lastApplyTimestamp) < 1.0 { return }
         // Ignorer les fenêtres non-tilées (floating, modales).
         guard let state = registry.get(wid), state.isTileable else { return }
         if dragTrackedWid != wid {
@@ -2185,7 +2192,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 "wid": String(wid),
                 "from_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y)) \(Int(state.frame.width))x\(Int(state.frame.height))",
                 "from_display": String(layoutEngine.displayIDForWindow(wid) ?? 0),
-                "scope_stage": stageManager?.scopeOf(wid: wid)?.stageID.value ?? "nil",
+                "scope_stage": stageManager?.scopeOf(wid: wid)?.stageID.value ?? "nil"
             ])
         }
         dragTrackedWid = wid
@@ -2239,7 +2246,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             "drop_center": "\(Int(center.x)),\(Int(center.y))",
             "resolved_display": resolvedDisplay.map(String.init) ?? "nil",
             "tree_display": treeDisplay.map(String.init) ?? "nil",
-            "will_migrate": String(resolvedDisplay != nil && treeDisplay != nil && resolvedDisplay != treeDisplay),
+            "will_migrate": String(resolvedDisplay != nil && treeDisplay != nil && resolvedDisplay != treeDisplay)
         ])
         // SPEC-022 fix : si frame center offscreen (Netflix fullscreen, window
         // hidée par stage switch, etc.), NE PAS faker realDisplayID = main.
@@ -2284,7 +2291,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                         // display cible. assign(wid:to:scope:) retire la wid de tous les
                         // autres scopes et l'ajoute au scope cible (active stage du nouveau
                         // (display, desktop)).
-                        if let sm = self.stageManager, sm.stageMode == .perDisplay {
+                        if let sm = self.stageManager {
                             let targetKey = DesktopKey(displayUUID: dst.uuid,
                                                         desktopID: newDesktopID)
                             let targetStageID = sm.activeStageByDesktop[targetKey]
@@ -2325,7 +2332,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             logInfo("drag_no_action", [
                 "wid": String(wid),
                 "display": String(realDisplayID),
-                "reason": "adaptToManualResize returned false (frame matches calculated)",
+                "reason": "adaptToManualResize returned false (frame matches calculated)"
             ])
         }
     }
@@ -2368,7 +2375,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                             payload: [
                                 "display_index": String(newDisplay.index),
                                 "display_id": String(newDisplay.id),
-                                "ts": String(ts),
+                                "ts": String(ts)
                             ]
                         ))
                     }
@@ -2395,7 +2402,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 "source": source,
                 "pid": String(pid),
                 "windows_found": String(windows.count),
-                "newly_registered": String(registered),
+                "newly_registered": String(registered)
             ])
         }
     }
@@ -2466,7 +2473,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         if !widsToRemove.isEmpty {
             logInfo("app terminated, windows removed", [
                 "pid": String(pid),
-                "count": String(widsToRemove.count),
+                "count": String(widsToRemove.count)
             ])
             applyLayout()
         }
@@ -2506,7 +2513,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                     "source": "focused_window",
                     "display_uuid": display.uuid,
                     "desktop_id": String(desktopID),
-                    "wid": String(wid),
+                    "wid": String(wid)
                 ])
                 return scope
             }
@@ -2527,7 +2534,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
             logInfo("scope_inferred_from", [
                 "source": "cursor",
                 "display_uuid": display.uuid,
-                "desktop_id": String(desktopID),
+                "desktop_id": String(desktopID)
             ])
             return scope
         }
@@ -2541,7 +2548,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
                 logInfo("scope_inferred_from", [
                     "source": "frontmost",
                     "display_uuid": display.uuid,
-                    "desktop_id": String(desktopID),
+                    "desktop_id": String(desktopID)
                 ])
                 return scope
             }
@@ -2553,7 +2560,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         logInfo("scope_inferred_from", [
             "source": "primary",
             "display_uuid": uuid,
-            "desktop_id": String(desktopID),
+            "desktop_id": String(desktopID)
         ])
         return StageScope(displayUUID: uuid, desktopID: desktopID, stageID: StageID(""))
     }
@@ -2569,7 +2576,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
     /// tree qui ne devraient pas y être, et insère celles qui devraient y être.
     /// Élimine la pollution cross-display en mode multi-écran.
     func rebuildAllTrees() async {
-        guard let sm = stageManager, sm.stageMode == .perDisplay,
+        guard let sm = stageManager,
               let dReg = displayRegistry else { return }
         let displays = await dReg.displays
         for display in displays {
@@ -2619,7 +2626,7 @@ final class Daemon: AXEventDelegate, GlobalObserverDelegate, CommandHandler {
         let balanced = layoutEngine.balanceAllTrees()
         logInfo("rebuild_all_trees_done", [
             "displays": String(displays.count),
-            "leaves_rebalanced": String(balanced),
+            "leaves_rebalanced": String(balanced)
         ])
     }
 }

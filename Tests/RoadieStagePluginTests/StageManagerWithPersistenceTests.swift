@@ -8,7 +8,7 @@ import RoadieCore
 /// Lit/écrit un tableau de Stage en mémoire — aucune dépendance vers RoadieDesktops.
 final class MockDesktopPersistence: StagePersistence, @unchecked Sendable {
     var storedStages: [Stage] = []
-    var activeStageID: StageID? = nil
+    var activeStageID: StageID?
     var lastDesktopID: Int = 1
     var requiresPhysicalDirSwap: Bool { false }
 
@@ -53,7 +53,7 @@ final class StageManagerWithPersistenceTests: XCTestCase {
             StageMember(cgWindowID: 100, bundleID: "com.apple.Terminal",
                         titleHint: "Terminal", savedFrame: nil),
             StageMember(cgWindowID: 200, bundleID: "com.apple.Safari",
-                        titleHint: "Safari", savedFrame: nil),
+                        titleHint: "Safari", savedFrame: nil)
         ]
         mockPersistence.storedStages = [stage1]
         mockPersistence.activeStageID = StageID("1")
@@ -137,7 +137,7 @@ final class StageManagerWithPersistenceTests: XCTestCase {
             StageMember(cgWindowID: 10, bundleID: "a", titleHint: "W1"),
             StageMember(cgWindowID: 20, bundleID: "b", titleHint: "W2"),
             StageMember(cgWindowID: 30, bundleID: "c", titleHint: "W3"),
-            StageMember(cgWindowID: 40, bundleID: "d", titleHint: "W4"),
+            StageMember(cgWindowID: 40, bundleID: "d", titleHint: "W4")
         ]
         mockPersistence.storedStages = [stageWith4]
         mockPersistence.activeStageID = StageID("1")

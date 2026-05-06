@@ -122,7 +122,7 @@ final class StageManagerScopedSwitchTests: XCTestCase {
         // Vérifier que inMemPersistence a capturé le bon scope.
         let saved = try inMemPersistence.loadActiveStage()
         XCTAssertEqual(saved?.displayUUID, uuidB, "Active stage persisté sur le bon display")
-        XCTAssertEqual(saved?.desktopID, 2,        "Active stage persisté sur le bon desktop")
+        XCTAssertEqual(saved?.desktopID, 2, "Active stage persisté sur le bon desktop")
         XCTAssertEqual(saved?.stageID, StageID("3"), "Active stage persisté avec le bon stageID")
     }
 }

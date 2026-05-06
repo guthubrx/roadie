@@ -78,7 +78,7 @@ public final class FocusFollowsMouseWatcher {
                 skippedZombieUntil[wid] = Date().addingTimeInterval(5.0)
                 logInfo("focus_follows_mouse_skipped_offscreen", [
                     "wid": String(wid),
-                    "origin": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
+                    "origin": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))"
                 ])
                 return
             }
@@ -96,6 +96,11 @@ public final class FocusFollowsMouseWatcher {
         // Inhibit le warp : pas besoin de bouger le curseur, il est déjà sur
         // la fenêtre cible (c'est ce qui vient de déclencher le focus).
         focusManager.setInhibitWarp(durationSeconds: 0.4)
+        // SPEC-028 — anti-loop : si le focus vient d'un hover souris, le hook
+        // stage_follows_focus ne doit PAS déclencher de stage switch (sinon le
+        // applyAll qui suit repositionne les wids → la wid sous le curseur
+        // change → focus_follows_mouse re-trigger → cycle).
+        focusManager.setInhibitStageFollowsFocus(durationSeconds: 0.6)
         focusManager.setFocus(to: wid)
         logInfo("focus_follows_mouse_triggered", ["wid": String(wid)])
     }

@@ -6,7 +6,7 @@ import AppKit
 // et les autres fenêtres du stage comme une rangée d'icônes d'app dessous.
 
 public final class HeroPreviewRenderer: StageRenderer {
-    public static let rendererID:  String = "hero-preview"
+    public static let rendererID: String = "hero-preview"
     public static let displayName: String = "Hero preview"
 
     public init() {}
@@ -22,19 +22,19 @@ public final class HeroPreviewRenderer: StageRenderer {
 
 // Hero size lue depuis context.previewWidth/Height (TOML [fx.rail.preview]).
 private let thumbIconSize: CGFloat = 24
-private let maxSideIcons:  Int    = 6
+private let maxSideIcons: Int    = 6
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
 
 // MARK: - View
 
 private struct HeroPreviewView: View {
-    let context:   StageRenderContext
+    let context: StageRenderContext
     let callbacks: StageRendererCallbacks
 
     @State private var isDropTargeted: Bool = false
 
-    private var stage:      StageVM                  { context.stage }
-    private var windows:    [CGWindowID: WindowVM]   { context.windows }
+    private var stage: StageVM { context.stage }
+    private var windows: [CGWindowID: WindowVM] { context.windows }
     private var thumbnails: [CGWindowID: ThumbnailVM] { context.thumbnails }
 
     var body: some View {
@@ -50,7 +50,7 @@ private struct HeroPreviewView: View {
                 isDropTargeted = hovering
             }
             // SPEC-019 — paddings outer driven by context (override via [fx.rail.hero-preview]).
-            .padding(.leading,  CGFloat(context.leadingPadding))
+            .padding(.leading, CGFloat(context.leadingPadding))
             .padding(.trailing, CGFloat(context.trailingPadding))
             .padding(.vertical, CGFloat(context.verticalPadding))
     }
@@ -103,7 +103,30 @@ private struct HeroPreviewView: View {
                 sourceStageID: stage.id,
                 borderColor: Color(hex: context.resolvedBorderColor()),
                 borderWidth: CGFloat(context.borderWidth),
-                borderStyle: context.borderStyle
+                borderStyle: context.borderStyle,
+                onMoveUp: context.prevStageID.map { id in
+                    { callbacks.onDropAssign(wid, id) }
+                },
+                onSummon: stage.isActive ? nil : {
+                    callbacks.onSummonWindow(wid)
+                },
+                onMoveDown: context.nextStageID.map { id in
+                    { callbacks.onDropAssign(wid, id) }
+                },
+                showSummonButton: context.summonButtonEnabled,
+                enableSummonDoubleClick: context.summonDoubleClickEnabled,
+                // SPEC-028 — la hero est par définition la frontmost de Hero.
+                isStageRepresentative: true,
+                onMoveStageUp: context.prevStageID.map { id in
+                    { callbacks.onReorderStages(stage.id, id) }
+                },
+                onMoveStageDown: context.nextStageID.map { id in
+                    { callbacks.onReorderStages(id, stage.id) }
+                },
+                chevronsAlwaysVisible: context.chevronsAlwaysVisible,
+                moveZoneWidth: CGFloat(context.chevronsMoveZoneWidth),
+                reorderZoneHeight: CGFloat(context.chevronsReorderZoneHeight),
+                fadeoutMs: context.chevronsFadeoutMs
             )
             .frame(width: CGFloat(context.previewWidth), height: CGFloat(context.previewHeight))
         }

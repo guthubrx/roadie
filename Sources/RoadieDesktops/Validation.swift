@@ -9,7 +9,7 @@ import Foundation
 /// Labels réservés par le sélecteur de navigation (Selector.swift).
 /// Un desktop ne peut pas porter ces noms pour éviter toute ambiguïté.
 private let reservedLabels: Set<String> = [
-    "prev", "next", "recent", "first", "last", "current",
+    "prev", "next", "recent", "first", "last", "current"
 ]
 
 /// Ensemble des scalaires autorisés : ASCII alphanumérique + underscore + tiret.

@@ -13,7 +13,7 @@ public final class BezierLibrary: @unchecked Sendable {
         "easeInOut": .easeInOut,
         "snappy": .snappy,
         "smooth": .smooth,
-        "easeOutBack": .easeOutBack,
+        "easeOutBack": .easeOutBack
     ]
 
     public init(custom: [String: BezierCurve] = [:]) {

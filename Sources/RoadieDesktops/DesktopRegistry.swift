@@ -21,7 +21,7 @@ public actor DesktopRegistry {
     /// `perDisplay`, `currentByDisplay` est la source de vérité ; `currentID` reflète
     /// la valeur du primary par convention pour les call-sites legacy non-migrés.
     public private(set) var currentID: Int = 1
-    public private(set) var recentID: Int? = nil
+    public private(set) var recentID: Int?
     public private(set) var count: Int
 
     /// SPEC-013 FR-004 : current desktop par display physique.

@@ -41,7 +41,7 @@ public final class AXEventLoop: @unchecked Sendable {
         // Une fenêtre minimisée doit être retirée du tile (l'espace doit se redistribuer),
         // et réinsérée à la dé-minimisation. Ces notifications fire sur l'app element.
         kAXWindowMiniaturizedNotification as String,
-        kAXWindowDeminiaturizedNotification as String,
+        kAXWindowDeminiaturizedNotification as String
     ]
 
     public init(delegate: AXEventDelegate) {
@@ -104,7 +104,7 @@ public final class AXEventLoop: @unchecked Sendable {
     }
 
     /// Callback C-compatible. On dispatch tout vers MainActor pour cohérence d'état.
-    private static let callback: AXObserverCallback = { observer, element, notification, refcon in
+    private static let callback: AXObserverCallback = { _, element, notification, refcon in
         guard let refcon = refcon else { return }
         let loop = Unmanaged<AXEventLoop>.fromOpaque(refcon).takeUnretainedValue()
         let note = notification as String

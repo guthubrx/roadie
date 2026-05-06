@@ -51,7 +51,7 @@ final class ConfigTests: XCTestCase {
         var cfg = BordersConfig()
         cfg.stageOverrides = [
             StageOverride(stageID: "1", activeColor: "#9ECE6A"),
-            StageOverride(stageID: "2", activeColor: "#F7768E"),
+            StageOverride(stageID: "2", activeColor: "#F7768E")
         ]
         XCTAssertEqual(activeColor(forStage: "1", config: cfg), "#9ECE6A")
         XCTAssertEqual(activeColor(forStage: "2", config: cfg), "#F7768E")

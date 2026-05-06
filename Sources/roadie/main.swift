@@ -363,12 +363,24 @@ func handleStage(args: [String]) {
     switch arg2 {
     case "list":
         sendAndPrint(Request(command: "stage.list", args: scopeOverrides.isEmpty ? nil : scopeOverrides))
-    case "switch":
-        // SPEC-026 fix : verbe explicite `roadie stage switch <id>` (utilisé par BTT).
-        // Avant : tombait dans default avec stage_id="switch" → créait une stage zombie.
+    case "switch", "focus":
+        // SPEC-026 fix : verbe explicite `roadie stage switch <N>` (utilisé par BTT).
+        // SPEC-028 : sémantique par défaut = position rail (1-indexed), pour
+        // s'aligner avec ce que l'utilisateur voit. Pour cibler un stage_id
+        // stable, ajouter `--by-id` (ex: `roadie stage switch --by-id 5`).
         guard args.count >= 4 else { printUsage(); exit(64) }
         var reqArgs = scopeOverrides
-        reqArgs["stage_id"] = args[3]
+        let byID = args.contains("--by-id")
+        let selector = args.dropFirst(3).first { !$0.hasPrefix("-") } ?? args[3]
+        reqArgs["stage_id"] = String(selector)
+        if !byID { reqArgs["by_position"] = "true" }
+        sendAndPrint(Request(command: "stage.switch", args: reqArgs))
+    case "next", "prev":
+        // SPEC-028 — navigation relative dans le rail courant. Alt+↑ / Alt+↓.
+        // Le daemon résout via la position active du scope. Clampé aux extrémités.
+        var reqArgs = scopeOverrides
+        reqArgs["stage_id"] = "0"  // ignoré quand by_relative présent
+        reqArgs["by_relative"] = arg2 == "next" ? "1" : "-1"
         sendAndPrint(Request(command: "stage.switch", args: reqArgs))
     case "assign":
         guard args.count >= 4 else { printUsage(); exit(64) }
@@ -403,11 +415,13 @@ func handleStage(args: [String]) {
         reqArgs["position"] = args[2] == "move-after" ? "after" : "before"
         sendAndPrint(Request(command: "stage.reorder", args: reqArgs))
     default:
-        // arg2 est le stage_id pour switch. SPEC-019 : honorer aussi les flags
-        // `--display <sel>` / `--desktop <id>` pour cibler un scope précis (utile
-        // au rail qui envoie le scope de son panel d'origine).
+        // SPEC-028 : `roadie stage <N>` = switch par position rail (1-indexed).
+        // C'est l'usage canonical pour les raccourcis BTT (alt+N → roadie stage N).
+        // Les flags `--display <sel>` / `--desktop <id>` permettent de cibler
+        // un scope précis (utile au rail qui envoie le scope de son panel).
         var reqArgs = scopeOverrides
         reqArgs["stage_id"] = arg2
+        reqArgs["by_position"] = "true"
         sendAndPrint(Request(command: "stage.switch", args: reqArgs))
     }
 }

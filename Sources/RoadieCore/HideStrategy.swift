@@ -25,6 +25,17 @@ public enum HideStrategyImpl {
         if let frame = AXReader.bounds(element), isOnScreen(frame) {
             registry.update(wid) { $0.expectedFrame = frame }
         }
+        // SPEC-028 — log chaque corner-hide pour traçabilité (qui appelle, quand,
+        // depuis quelle frame). Permet de distinguer un corner-hide intentionnel
+        // (stage switch) d'une frame externe qui ressemble à corner par hasard.
+        let frameNow = AXReader.bounds(element).map {
+            "\(Int($0.origin.x)),\(Int($0.origin.y)) \(Int($0.width))x\(Int($0.height))"
+        } ?? "?"
+        logInfo("hide_strategy_apply", [
+            "wid": String(wid),
+            "strategy": "\(strategy)",
+            "frame_pre_hide": frameNow
+        ])
         switch strategy {
         case .corner:
             moveOffScreen(element)
@@ -64,7 +75,7 @@ public enum HideStrategyImpl {
                 "wid": String(wid),
                 "expected_frame_zero": String(state.expectedFrame == .zero),
                 "state_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
-                "fallback": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))",
+                "fallback": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))"
             ])
         }
         // SPEC-025 T070 — log debug pour traçabilité de chaque show().
@@ -76,7 +87,7 @@ public enum HideStrategyImpl {
             "path": path,
             "expected_frame": "\(Int(state.expectedFrame.origin.x)),\(Int(state.expectedFrame.origin.y))",
             "state_frame": "\(Int(state.frame.origin.x)),\(Int(state.frame.origin.y))",
-            "target": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))",
+            "target": "\(Int(target.origin.x)),\(Int(target.origin.y)) \(Int(target.width))x\(Int(target.height))"
         ])
         switch strategy {
         case .corner:

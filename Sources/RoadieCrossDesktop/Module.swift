@@ -34,7 +34,7 @@ public final class CrossDesktopModule: @unchecked Sendable {
     public func setConfig(_ cfg: CrossDesktopConfig) {
         lock.lock(); config = cfg; lock.unlock()
         // Recompute handler avec nouvelles rules
-        let _ = makeHandler()
+        _ = makeHandler()
     }
 
     private func handle(event: FXEvent) {

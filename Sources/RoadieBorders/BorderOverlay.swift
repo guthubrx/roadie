@@ -127,8 +127,7 @@ public final class BorderOverlay {
     /// pour n'afficher que la bordure de la fenêtre focused tout en gardant
     /// les frames synchronisés des autres overlays.
     public func setHidden(_ hidden: Bool) {
-        if hidden { window.orderOut(nil) }
-        else { window.orderFront(nil) }
+        if hidden { window.orderOut(nil) } else { window.orderFront(nil) }
     }
 
     /// Ferme l'overlay et libère la NSWindow.

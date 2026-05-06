@@ -11,7 +11,7 @@ final class LayoutEngineMultiDisplayTests: XCTestCase {
 
     private let display1ID: CGDirectDisplayID = 1001
     private let display2ID: CGDirectDisplayID = 1002
-    private let rect1 = CGRect(x: 0,    y: 0, width: 1280, height: 800)
+    private let rect1 = CGRect(x: 0, y: 0, width: 1280, height: 800)
     private let rect2 = CGRect(x: 1280, y: 0, width: 2560, height: 1440)
 
     override func setUp() {

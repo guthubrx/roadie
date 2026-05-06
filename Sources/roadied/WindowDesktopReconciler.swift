@@ -135,7 +135,7 @@ public final class WindowDesktopReconciler {
                 logInfo("integrity_fix_degenerate_frame", [
                     "wid": String(state.cgWindowID),
                     "old": "\(Int(frame.size.width))x\(Int(frame.size.height))",
-                    "new": "\(Int(cg.size.width))x\(Int(cg.size.height))",
+                    "new": "\(Int(cg.size.width))x\(Int(cg.size.height))"
                 ])
             }
         }
@@ -177,7 +177,7 @@ public final class WindowDesktopReconciler {
                         logInfo("integrity_drift_fullscreen_synced", [
                             "wid": String(state.cgWindowID),
                             "scope": "\(scope.displayUUID):\(scope.desktopID):\(scope.stageID.value)",
-                            "frame_center": "\(Int(center.x)),\(Int(center.y))",
+                            "frame_center": "\(Int(center.x)),\(Int(center.y))"
                         ])
                     }
                     continue
@@ -187,7 +187,7 @@ public final class WindowDesktopReconciler {
                 logInfo("integrity_drift_offscreen_active", [
                     "wid": String(state.cgWindowID),
                     "scope": "\(scope.displayUUID):\(scope.desktopID):\(scope.stageID.value)",
-                    "frame_center": "\(Int(center.x)),\(Int(center.y))",
+                    "frame_center": "\(Int(center.x)),\(Int(center.y))"
                 ])
             }
         }
@@ -213,7 +213,7 @@ public final class WindowDesktopReconciler {
                         "wid": String(wid),
                         "tree_display": String(key.displayID),
                         "scope_display_uuid": scope.displayUUID,
-                        "tree_stage": key.stageID.value,
+                        "tree_stage": key.stageID.value
                     ])
                     if autoFix {
                         engine.removeWindow(wid)
@@ -249,7 +249,7 @@ public final class WindowDesktopReconciler {
                     "wid": String(state.cgWindowID),
                     "scope_display_uuid": scope.displayUUID,
                     "physical_display_uuid": physicalDisplay.uuid,
-                    "frame_center": "\(Int(center.x)),\(Int(center.y))",
+                    "frame_center": "\(Int(center.x)),\(Int(center.y))"
                 ])
                 if autoFix {
                     let mode = await dReg.mode
@@ -290,7 +290,7 @@ public final class WindowDesktopReconciler {
                 "offscreen_active": String(report.offscreenWithActiveScope),
                 "leaf_wrong_display": String(report.treeLeafWrongDisplay),
                 "member_wrong_display": String(report.memberOnWrongDisplay),
-                "auto_fix": String(autoFix),
+                "auto_fix": String(autoFix)
             ])
         }
         return report

@@ -65,7 +65,7 @@ public final class MouseDragHandler {
         let mask: NSEvent.EventTypeMask = [
             .leftMouseDown, .leftMouseDragged, .leftMouseUp,
             .rightMouseDown, .rightMouseDragged, .rightMouseUp,
-            .otherMouseDown, .otherMouseDragged, .otherMouseUp,
+            .otherMouseDown, .otherMouseDragged, .otherMouseUp
         ]
         monitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             let location = NSEvent.mouseLocation
@@ -75,7 +75,7 @@ public final class MouseDragHandler {
             "modifier": config.modifier.rawValue,
             "left": config.actionLeft.rawValue,
             "right": config.actionRight.rawValue,
-            "middle": config.actionMiddle.rawValue,
+            "middle": config.actionMiddle.rawValue
         ])
     }
 
@@ -168,7 +168,7 @@ public final class MouseDragHandler {
         }
         guard let wid = topmostWindowID(at: cgPoint) else {
             logInfo("mouse-drag: no window under cursor", [
-                "cg": "\(Int(cgPoint.x)),\(Int(cgPoint.y))",
+                "cg": "\(Int(cgPoint.x)),\(Int(cgPoint.y))"
             ])
             return
         }
@@ -202,7 +202,7 @@ public final class MouseDragHandler {
             "wid": String(wid),
             "mode": action.rawValue,
             "quadrant": quadrant.rawValue,
-            "slow_factor": String(format: "%.2f", factor),
+            "slow_factor": String(format: "%.2f", factor)
         ])
     }
 
@@ -277,7 +277,7 @@ public final class MouseDragHandler {
         }
         logInfo("mouse-drag-end", [
             "wid": String(session.wid),
-            "mode": session.mode.rawValue,
+            "mode": session.mode.rawValue
         ])
         self.session = nil
     }

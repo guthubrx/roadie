@@ -384,15 +384,23 @@ public struct FocusConfig: Codable, Sendable, Equatable {
     public var focusFollowsMouse: Bool
     /// SPEC-026 US5 — curseur saute sur la fenêtre focalisée par raccourci. Default false.
     public var mouseFollowsFocus: Bool
+    /// SPEC-028 — comportement focus à `stage.switch` / `desktop.focus`.
+    /// "last_focused" (default, parité yabai/AeroSpace/i3) : focus la fenêtre
+    ///   la plus récemment focused dans la stage/desktop cible.
+    /// "frontmost" : focus la 1ère fenêtre disponible (sans mémoire).
+    /// "none" : ne pas toucher au focus (comportement antérieur).
+    public var focusOnSwitch: String
 
     public init(stageFollowsFocus: Bool = false,
                 assignFollowsFocus: Bool = true,
                 focusFollowsMouse: Bool = false,
-                mouseFollowsFocus: Bool = false) {
+                mouseFollowsFocus: Bool = false,
+                focusOnSwitch: String = "last_focused") {
         self.stageFollowsFocus = stageFollowsFocus
         self.assignFollowsFocus = assignFollowsFocus
         self.focusFollowsMouse = focusFollowsMouse
         self.mouseFollowsFocus = mouseFollowsFocus
+        self.focusOnSwitch = focusOnSwitch
     }
 
     enum CodingKeys: String, CodingKey {
@@ -400,6 +408,7 @@ public struct FocusConfig: Codable, Sendable, Equatable {
         case assignFollowsFocus = "assign_follows_focus"
         case focusFollowsMouse = "focus_follows_mouse"
         case mouseFollowsFocus = "mouse_follows_focus"
+        case focusOnSwitch = "focus_on_switch"
     }
 
     public init(from decoder: Decoder) throws {
@@ -408,6 +417,8 @@ public struct FocusConfig: Codable, Sendable, Equatable {
         self.assignFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .assignFollowsFocus) ?? true
         self.focusFollowsMouse = try c.decodeIfPresent(Bool.self, forKey: .focusFollowsMouse) ?? false
         self.mouseFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .mouseFollowsFocus) ?? false
+        let raw = try c.decodeIfPresent(String.self, forKey: .focusOnSwitch) ?? "last_focused"
+        self.focusOnSwitch = ["last_focused", "frontmost", "none"].contains(raw) ? raw : "last_focused"
     }
 }
 

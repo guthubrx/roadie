@@ -125,7 +125,7 @@ public final class BSPTiler: Tiler {
                 "tree_depth_after": String(depthAfter),
                 "tree_leaves_count": String(leafCount),
                 "tree_structure_after": String(root.compactStructure.prefix(200)),
-                "tree_is_flat": "false",
+                "tree_is_flat": "false"
             ])
             BSPTiler.lastDepthByRoot[ObjectIdentifier(root)] = depthAfter
             return
@@ -166,7 +166,7 @@ public final class BSPTiler: Tiler {
                 "actual": "fallback_parent_opposite",
                 "expected": "axis_orthogonal_to_target_longest_side",
                 "wid": String(leaf.windowID),
-                "target_wid": String(target.windowID),
+                "target_wid": String(target.windowID)
             ])
         }
 
@@ -184,7 +184,7 @@ public final class BSPTiler: Tiler {
                 "depth_last_insert": String(lastKnownDepth),
                 "depth_now": String(depthBeforeInsert),
                 "delta": String(lastKnownDepth - depthBeforeInsert),
-                "structure_now": String(root.compactStructure.prefix(200)),
+                "structure_now": String(root.compactStructure.prefix(200))
             ])
         }
 
@@ -221,7 +221,7 @@ public final class BSPTiler: Tiler {
             "tree_depth_after": String(depthAfter),
             "tree_leaves_count": String(leafCount),
             "tree_structure_after": String(root.compactStructure.prefix(200)),
-            "tree_is_flat": String(isFlat),
+            "tree_is_flat": String(isFlat)
         ])
         // Si le tree est plat alors qu'on a > 2 leaves → la politique BSP
         // (qu'elle soit largest_dim ou dwindle) n'a pas pu construire un arbre
@@ -233,7 +233,7 @@ public final class BSPTiler: Tiler {
                 "leaves_count": String(leafCount),
                 "tree_depth": String(depthAfter),
                 "structure": String(root.compactStructure.prefix(200)),
-                "expected": "depth >= ~log2(leaves_count)",
+                "expected": "depth >= ~log2(leaves_count)"
             ])
         }
         BSPTiler.lastDepthByRoot[rootKey] = depthAfter

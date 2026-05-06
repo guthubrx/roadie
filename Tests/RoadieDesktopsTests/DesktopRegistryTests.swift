@@ -110,7 +110,7 @@ final class DesktopRegistryTests: XCTestCase {
                 WindowEntry(cgwid: 10, bundleID: "a", title: "A",
                             expectedFrame: .zero, stageID: 1),
                 WindowEntry(cgwid: 20, bundleID: "b", title: "B",
-                            expectedFrame: .zero, stageID: 1),
+                            expectedFrame: .zero, stageID: 1)
             ]
         )
         try await registry.save(desktop)

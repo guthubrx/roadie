@@ -38,7 +38,7 @@ final class DesktopPersistenceTests: XCTestCase {
                 cgwid: 67890,
                 bundleID: "com.apple.Safari",
                 titlePrefix: "Apple",
-                expectedFrame: CGRect(x: 0, y: 0, width: 800, height: 600)),
+                expectedFrame: CGRect(x: 0, y: 0, width: 800, height: 600))
         ]
         DesktopPersistence.saveDesktopWindows(
             configDir: tempDir, displayUUID: uuid, desktopID: 2, windows: snaps)
