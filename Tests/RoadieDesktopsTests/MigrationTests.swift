@@ -30,7 +30,7 @@ final class MigrationTests: XCTestCase {
             "tiler_strategy = \"bsp\"",
             "last_active_at = 2026-01-01T00:00:00Z",
             "",
-            "[[members]]",
+            "[[members]]"
         ]
         for (i, m) in members.enumerated() {
             if i > 0 { lines.append("[[members]]") }
@@ -43,7 +43,7 @@ final class MigrationTests: XCTestCase {
                 "y = 100.0",
                 "w = 800.0",
                 "h = 600.0",
-                "",
+                ""
             ]
         }
         return lines.joined(separator: "\n")

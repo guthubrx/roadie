@@ -7,7 +7,7 @@ import AppKit
 // Hover sur la cellule déclenche un micro-bounce spring.
 
 public final class Parallax45Renderer: StageRenderer {
-    public static let rendererID:  String = "parallax-45"
+    public static let rendererID: String = "parallax-45"
     public static let displayName: String = "Parallax 45\u{00B0}"
 
     public init() {}
@@ -21,21 +21,21 @@ public final class Parallax45Renderer: StageRenderer {
 
 // MARK: - Constantes
 
-private let maxVisible:     Int     = 5
-private let hoverScale:     CGFloat = 1.04
+private let maxVisible: Int     = 5
+private let hoverScale: CGFloat = 1.04
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
 
 // MARK: - View
 
 private struct Parallax45View: View {
-    let context:   StageRenderContext
+    let context: StageRenderContext
     let callbacks: StageRendererCallbacks
 
-    @State private var isHovered:     Bool = false
+    @State private var isHovered: Bool = false
     @State private var isDropTargeted: Bool = false
 
-    private var stage:      StageVM                   { context.stage }
-    private var windows:    [CGWindowID: WindowVM]    { context.windows }
+    private var stage: StageVM { context.stage }
+    private var windows: [CGWindowID: WindowVM] { context.windows }
     private var thumbnails: [CGWindowID: ThumbnailVM] { context.thumbnails }
 
     var body: some View {
@@ -118,7 +118,37 @@ private struct Parallax45View: View {
                         previewHeight: CGFloat(context.previewHeight),
                         borderColor: Color(hex: context.resolvedBorderColor()),
                         borderWidth: CGFloat(context.borderWidth),
-                        borderStyle: context.borderStyle
+                        borderStyle: context.borderStyle,
+                        onMoveUp: context.prevStageID.map { id in
+                            { callbacks.onDropAssign(wid, id) }
+                        },
+                        onSummon: stage.isActive ? nil : {
+                            callbacks.onSummonWindow(wid)
+                        },
+                        onMoveDown: context.nextStageID.map { id in
+                            { callbacks.onDropAssign(wid, id) }
+                        },
+                        showSummonButton: context.summonButtonEnabled,
+                        enableSummonDoubleClick: context.summonDoubleClickEnabled,
+                        // SPEC-028 — la vignette idx 0 est la frontmost en
+                        // parallax (pile inclinée). Elle porte les chevrons
+                        // reorder-stage qui héritent ainsi de la rotation 3D
+                        // appliquée à WindowPreview ci-dessous.
+                        isStageRepresentative: idx == 0,
+                        onMoveStageUp: idx == 0
+                            ? context.prevStageID.map { id in
+                                { callbacks.onReorderStages(stage.id, id) }
+                            }
+                            : nil,
+                        onMoveStageDown: idx == 0
+                            ? context.nextStageID.map { id in
+                                { callbacks.onReorderStages(id, stage.id) }
+                            }
+                            : nil,
+                        chevronsAlwaysVisible: context.chevronsAlwaysVisible,
+                        moveZoneWidth: CGFloat(context.chevronsMoveZoneWidth),
+                        reorderZoneHeight: CGFloat(context.chevronsReorderZoneHeight),
+                        fadeoutMs: context.chevronsFadeoutMs
                     )
                     .rotation3DEffect(
                         .degrees(rot),
@@ -145,12 +175,12 @@ private struct Parallax45View: View {
         //   leading_padding   = bord gauche ↔ couche la plus en arrière
         //   trailing_padding  = bord droit  ↔ hero (idx=0, sans décalage à droite)
         //   vertical_padding  = haut ↔ couche en arrière, bas ↔ hero
-        .padding(.leading,  CGFloat(context.leadingPadding)
+        .padding(.leading, CGFloat(context.leadingPadding)
                           + CGFloat(max(0, visibleWids.count - 1)) * CGFloat(context.parallaxOffsetX))
         .padding(.trailing, CGFloat(context.trailingPadding))
-        .padding(.top,      CGFloat(context.verticalPadding)
+        .padding(.top, CGFloat(context.verticalPadding)
                           + CGFloat(max(0, visibleWids.count - 1)) * CGFloat(context.parallaxOffsetY))
-        .padding(.bottom,   CGFloat(context.verticalPadding))
+        .padding(.bottom, CGFloat(context.verticalPadding))
     }
 
     // MARK: - Halo & drop highlight

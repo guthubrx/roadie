@@ -6,43 +6,40 @@ import RoadieCore
 // Pas de header, stacks centrés verticalement, hint discret en bas.
 
 private let stackSpacing: CGFloat = 56
-private let hintOpacity:  CGFloat = 0.28
+private let hintOpacity: CGFloat = 0.28
 
 struct StageStackView: View {
     @Bindable var state: RailState
     @ObservedObject private var badgeState = StageNumbersBadgeState.shared
-    /// SPEC-027 US3 — état de survol par cellule de stage (clé = stage.id).
-    /// Détermine la visibilité des flèches ↑↓ de réordonnancement.
-    @State private var cellHovered: [String: Bool] = [:]
     /// SPEC-019 — UUID du display sur lequel ce panel est posé. Utilisé pour
     /// piocher `state.stagesByDisplay[displayUUID]`. Vide → fallback `state.stages`
     /// (compat). Sans cette donnée par-panel, les 2 panels affichaient le même
     /// `state.stages` partagé (bug observé avec 2 écrans).
-    var displayUUID:   String                       = ""
+    var displayUUID: String                       = ""
     // SPEC-018 polish — halo de la stage active (couleur + intensité + radius lus depuis [fx.rail]).
-    var haloColorHex:  String                       = "#34C759"
+    var haloColorHex: String                       = "#34C759"
     var haloIntensity: Double                       = 0.75
-    var haloRadius:    Double                       = 18
+    var haloRadius: Double                       = 18
     // SPEC-019 — id du renderer actif (lu depuis [fx.rail].renderer). nil → fallback default.
-    var rendererID:    String?                      = nil
+    var rendererID: String?
     // SPEC-019 — paramètres scatter renderer "stacked-previews", lus depuis
     // [fx.rail.stacked] TOML. Defaults marqués (effet polaroïds éparpillés).
-    var stackedOffsetX:   Double = 60
-    var stackedOffsetY:   Double = 80
-    var stackedRotation:  Double = 12
-    var stackedScale:     Double = 0.06
-    var stackedOpacity:   Double = 0.10
+    var stackedOffsetX: Double = 60
+    var stackedOffsetY: Double = 80
+    var stackedRotation: Double = 12
+    var stackedScale: Double = 0.06
+    var stackedOpacity: Double = 0.10
     var stackedScatterMode: String = "compass"
     // SPEC-019 — paramètres renderer "parallax-45", lus depuis [fx.rail.parallax].
     var parallaxRotation: Double = 35
-    var parallaxOffsetX:  Double = 18
-    var parallaxOffsetY:  Double = 8
-    var parallaxScale:    Double = 0.05
-    var parallaxOpacity:  Double = 0.10
+    var parallaxOffsetX: Double = 18
+    var parallaxOffsetY: Double = 8
+    var parallaxScale: Double = 0.05
+    var parallaxOpacity: Double = 0.10
     // SPEC-019 — taille vignettes et distance bord gauche, lus depuis [fx.rail.preview].
-    var previewWidth:    Double = 200
-    var previewHeight:   Double = 130
-    var leadingPadding:  Double = 8
+    var previewWidth: Double = 200
+    var previewHeight: Double = 130
+    var leadingPadding: Double = 8
     var trailingPadding: Double = 16
     var verticalPadding: Double = 20
     // SPEC-019 — bordure des vignettes, paramétrable par renderer.
@@ -54,21 +51,35 @@ struct StageStackView: View {
     var haloEnabled: Bool = true
     // SPEC-019 — assombrissement par couche pour parallax.
     var parallaxDarkenPerLayer: Double = 0.0
+    // SPEC-028 — UI summon : bouton + menu contextuel (toggles indépendants).
+    var summonButtonEnabled: Bool = true
+    var summonDoubleClickEnabled: Bool = true
+    /// SPEC-028 — visibilité des chevrons : "proximity" ou "always".
+    var chevronsVisibility: String = "proximity"
+    /// SPEC-028 — largeur (px) de la zone trigger move-window.
+    var chevronsMoveZoneWidth: Double = 30
+    /// SPEC-028 — hauteur (px) des zones trigger reorder-stage.
+    var chevronsReorderZoneHeight: Double = 30
+    /// SPEC-028 — délai (ms) avant masquage post-sortie de zone.
+    var chevronsFadeoutMs: Int    = 200
     // SPEC-014 T041 (US2) : callback de tap, câblé par RailController.
-    var onTapStage:   (String) -> Void              = { _ in }
+    var onTapStage: (String) -> Void              = { _ in }
     // SPEC-014 T052 (US3) : callback de drop, (wid, target_stage_id).
     var onDropAssign: (CGWindowID, String) -> Void  = { _, _ in }
     // SPEC-014 T070 (US5) : callbacks menu contextuel.
-    var onRename:     (String, String) -> Void      = { _, _ in }
+    var onRename: (String, String) -> Void      = { _, _ in }
     var onAddFocused: (String) -> Void              = { _ in }
-    var onDelete:     (String) -> Void              = { _ in }
+    var onDelete: (String) -> Void              = { _ in }
     // SPEC-027 US3 — drag-reorder : (sourceStageID, targetStageID) — la stage
     // source vient se placer juste avant la stage target dans l'ordre rail.
     var onReorderStages: (String, String) -> Void   = { _, _ in }
+    // SPEC-028 alt — clic bouton « → » bas-gauche d'une vignette = summon
+    // de la wid vers la stage active du display de ce panel.
+    var onSummonWindow: (CGWindowID) -> Void       = { _ in }
     // Click bureau Apple : zone vide du rail = hide stage active du display.
-    var emptyClickHideActive:   Bool       = true
+    var emptyClickHideActive: Bool       = true
     var emptyClickSafetyMargin: Double     = 12
-    var onEmptyClick:           () -> Void = {}
+    var onEmptyClick: () -> Void = {}
 
     /// Rects des thumbnails dans le coordinate space du rail. Mis à jour par
     /// `ThumbRectsKey` quand les renderers se rendent. Sert à filtrer les taps
@@ -152,8 +163,15 @@ struct StageStackView: View {
                                         .frame(maxWidth: .infinity)
                                         .frame(height: cellHeight)
                                         .overlay(alignment: .topLeading) {
+                                            // SPEC-028 — afficher le label
+                                            // uniquement si custom (renommé
+                                            // via stage.rename). Sinon vide :
+                                            // l'ordre vertical du rail suffit
+                                            // comme identité.
                                             StageNumberBadge(
-                                                number: stage.displayName,
+                                                number: stage.displayName != stage.id
+                                                    ? stage.displayName
+                                                    : "",
                                                 colorHex: stageBorderOverrides[stage.id]
                                                     ?? (stage.isActive ? borderColor : borderColorInactive)
                                             )
@@ -171,6 +189,17 @@ struct StageStackView: View {
                             // via l'id [fx.rail].renderer, fallback "stacked-previews"). Le consommateur
                             // ne connaît pas la stratégie concrète du rendu de cellule.
                             let renderer = StageRendererRegistry.makeOrFallback(id: rendererID)
+                            // SPEC-028 — prev/next dans l'ordre AFFICHÉ du
+                            // rail (allStages = ce qui est rendu visuellement).
+                            // Les chevrons up/down de WindowPreview sautent
+                            // ainsi les stages absentes du rail.
+                            let railIdx = allStages.firstIndex(where: { $0.id == stage.id })
+                            let prevID = (railIdx ?? 0) > 0
+                                ? allStages[(railIdx ?? 0) - 1].id
+                                : nil
+                            let nextID = (railIdx ?? 0) < allStages.count - 1
+                                ? allStages[(railIdx ?? 0) + 1].id
+                                : nil
                             let context = StageRenderContext(
                                 stage: stage,
                                 windows: state.windows,
@@ -200,20 +229,25 @@ struct StageStackView: View {
                                 borderStyle: borderStyle,
                                 stageBorderOverrides: stageBorderOverrides,
                                 haloEnabled: haloEnabled,
-                                parallaxDarkenPerLayer: parallaxDarkenPerLayer
+                                parallaxDarkenPerLayer: parallaxDarkenPerLayer,
+                                summonButtonEnabled: summonButtonEnabled,
+                                summonDoubleClickEnabled: summonDoubleClickEnabled,
+                                prevStageID: prevID,
+                                nextStageID: nextID,
+                                chevronsAlwaysVisible: chevronsVisibility == "always",
+                                chevronsMoveZoneWidth: chevronsMoveZoneWidth,
+                                chevronsReorderZoneHeight: chevronsReorderZoneHeight,
+                                chevronsFadeoutMs: chevronsFadeoutMs
                             )
                             let cb = StageRendererCallbacks(
-                                onTap:        { onTapStage(stage.id) },
+                                onTap: { onTapStage(stage.id) },
                                 onDropAssign: onDropAssign,
-                                onRename:     onRename,
+                                onRename: onRename,
                                 onAddFocused: onAddFocused,
-                                onDelete:     onDelete
+                                onDelete: onDelete,
+                                onSummonWindow: onSummonWindow,
+                                onReorderStages: onReorderStages
                             )
-                            // SPEC-027 US3 — index de la stage courante pour
-                            // déterminer l'état des flèches ↑↓ (extrémités).
-                            let stageIdx = allStages.firstIndex(where: { $0.id == stage.id }) ?? 0
-                            let canUp   = stageIdx > 0
-                            let canDown = stageIdx < allStages.count - 1
                             renderer.render(context: context, callbacks: cb)
                             // Aligner à gauche (vs centre) — demande utilisateur.
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -229,43 +263,11 @@ struct StageStackView: View {
                                     )
                                 }
                             )
-                            // SPEC-027 US3 — handle drag-reorder (icône ≡) en
-                            // overlay top-leading. Seule zone draggable de la
-                            // cellule, donc pas de conflit avec le .draggable
-                            // des WindowChip/WindowPreview enfants. Drop sur la
-                            // cellule (renderer ou ses enfants) : intercepté par
-                            // .onDrop ci-dessous quand le payload est un stage_id.
-                            // SPEC-027 US3 — flèches ↑↓ qui apparaissent au
-                            // survol de la cellule. Drag-drop SwiftUI testé
-                            // mais ne fonctionne pas dans le contexte
-                            // LSUIElement+NSPanel (5 itérations), pattern
-                            // bouton retenu pour fiabilité.
-                            .overlay(alignment: .topLeading) {
-                                if cellHovered[stage.id] == true {
-                                    StageReorderArrows(
-                                        canMoveUp:   canUp,
-                                        canMoveDown: canDown,
-                                        onMoveUp: {
-                                            guard canUp else { return }
-                                            let prev = allStages[stageIdx - 1].id
-                                            onReorderStages(stage.id, prev)
-                                        },
-                                        onMoveDown: {
-                                            guard canDown else { return }
-                                            // Descendre = swap avec next : on
-                                            // place next avant stage.id (= next
-                                            // remonte, donc stage.id descend).
-                                            let next = allStages[stageIdx + 1].id
-                                            onReorderStages(next, stage.id)
-                                        }
-                                    )
-                                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                                }
-                            }
-                            .animation(.easeInOut(duration: 0.12), value: cellHovered[stage.id])
-                            .onHover { hovering in
-                                cellHovered[stage.id] = hovering
-                            }
+                            // SPEC-028 v2 — les chevrons reorder-stage sont
+                            // désormais portés par la WindowPreview frontmost
+                            // de chaque renderer (= idx 0 / hero). Ils
+                            // héritent ainsi de la rotation 3D du parallax-45
+                            // et utilisent leurs propres zones de proximité.
                             }
                         }
                     }

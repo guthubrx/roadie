@@ -6,7 +6,7 @@ import AppKit
 // Maximum 9 vignettes visibles, indicateur "+N" si overflow.
 
 public final class MosaicRenderer: StageRenderer {
-    public static let rendererID:  String = "mosaic"
+    public static let rendererID: String = "mosaic"
     public static let displayName: String = "Mosaic"
 
     public init() {}
@@ -20,7 +20,7 @@ public final class MosaicRenderer: StageRenderer {
 
 // MARK: - Grille adaptative
 
-private let maxVisible:  Int    = 9
+private let maxVisible: Int    = 9
 private let cellPadding: CGFloat = 3
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
 
@@ -37,13 +37,13 @@ private func columnCount(for total: Int) -> Int {
 // MARK: - View
 
 private struct MosaicView: View {
-    let context:   StageRenderContext
+    let context: StageRenderContext
     let callbacks: StageRendererCallbacks
 
     @State private var isDropTargeted: Bool = false
 
-    private var stage:      StageVM                   { context.stage }
-    private var windows:    [CGWindowID: WindowVM]    { context.windows }
+    private var stage: StageVM { context.stage }
+    private var windows: [CGWindowID: WindowVM] { context.windows }
     private var thumbnails: [CGWindowID: ThumbnailVM] { context.thumbnails }
 
     var body: some View {
@@ -59,7 +59,7 @@ private struct MosaicView: View {
                 isDropTargeted = hovering
             }
             // SPEC-019 — paddings outer driven by context (override via [fx.rail.mosaic]).
-            .padding(.leading,  CGFloat(context.leadingPadding))
+            .padding(.leading, CGFloat(context.leadingPadding))
             .padding(.trailing, CGFloat(context.trailingPadding))
             .padding(.vertical, CGFloat(context.verticalPadding))
     }
@@ -119,7 +119,7 @@ private struct MosaicView: View {
         GeometryReader { geo in
             ZStack(alignment: .bottomTrailing) {
                 LazyVGrid(columns: columns, spacing: cellPadding) {
-                    ForEach(wids, id: \.self) { wid in
+                    ForEach(Array(wids.enumerated()), id: \.element) { idx, wid in
                         if let win = windows[wid] {
                             WindowPreview(
                                 wid: wid,
@@ -130,7 +130,36 @@ private struct MosaicView: View {
                                 sourceStageID: stage.id,
                                 borderColor: Color(hex: context.resolvedBorderColor()),
                                 borderWidth: CGFloat(context.borderWidth),
-                                borderStyle: context.borderStyle
+                                borderStyle: context.borderStyle,
+                                onMoveUp: context.prevStageID.map { id in
+                                    { callbacks.onDropAssign(wid, id) }
+                                },
+                                onSummon: stage.isActive ? nil : {
+                                    callbacks.onSummonWindow(wid)
+                                },
+                                onMoveDown: context.nextStageID.map { id in
+                                    { callbacks.onDropAssign(wid, id) }
+                                },
+                                showSummonButton: context.summonButtonEnabled,
+                                enableSummonDoubleClick: context.summonDoubleClickEnabled,
+                                // SPEC-028 — première vignette de la grille =
+                                // représentante de la stage pour les chevrons
+                                // reorder-stage. Mosaic à plat → pas de rotation.
+                                isStageRepresentative: idx == 0,
+                                onMoveStageUp: idx == 0
+                                    ? context.prevStageID.map { id in
+                                        { callbacks.onReorderStages(stage.id, id) }
+                                    }
+                                    : nil,
+                                onMoveStageDown: idx == 0
+                                    ? context.nextStageID.map { id in
+                                        { callbacks.onReorderStages(id, stage.id) }
+                                    }
+                                    : nil,
+                                chevronsAlwaysVisible: context.chevronsAlwaysVisible,
+                                moveZoneWidth: CGFloat(context.chevronsMoveZoneWidth),
+                                reorderZoneHeight: CGFloat(context.chevronsReorderZoneHeight),
+                                fadeoutMs: context.chevronsFadeoutMs
                             )
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }

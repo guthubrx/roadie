@@ -39,7 +39,7 @@ public actor DesktopSwitcher {
     private let onDesktopChanged: (@Sendable (Int) async -> Void)?
 
     private var inFlight: Bool = false
-    private var pendingTarget: Int? = nil
+    private var pendingTarget: Int?
 
     public init(registry: DesktopRegistry,
                 stageOps: (any DesktopStageOps)? = nil,
@@ -67,7 +67,7 @@ public actor DesktopSwitcher {
         guard (1...config.count).contains(id) else {
             logWarn("desktop_switch_rejected", [
                 "to": String(id), "reason": "out_of_range",
-                "count": String(config.count),
+                "count": String(config.count)
             ])
             throw DesktopError.unknownDesktop(id)
         }
@@ -75,14 +75,14 @@ public actor DesktopSwitcher {
         let currentID = await registry.currentID
         logInfo("desktop_switch_requested", [
             "from": String(currentID), "to": String(id),
-            "in_flight": String(inFlight),
+            "in_flight": String(inFlight)
         ])
 
         // FR-006 : idempotence + back-and-forth
         if id == currentID {
             if config.backAndForth, let recent = await registry.recentID {
                 logInfo("desktop_switch_back_and_forth", [
-                    "current": String(currentID), "recent": String(recent),
+                    "current": String(currentID), "recent": String(recent)
                 ])
                 try await performSwitch(to: recent)
             } else {
@@ -183,7 +183,7 @@ public actor DesktopSwitcher {
                 "to": String(targetID),
                 "display_id": String(primaryID),
                 "mode": "global",
-                "ts": String(ts),
+                "ts": String(ts)
             ]
         ))
 

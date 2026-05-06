@@ -12,7 +12,7 @@ public final class StageNumbersBadgeState: ObservableObject {
     public static let shared = StageNumbersBadgeState()
 
     @Published public var configEnabled: Bool = false
-    @Published public var flashUntil: Date? = nil
+    @Published public var flashUntil: Date?
     /// SPEC-026 — paramètres visuels du badge, settable depuis main.swift au boot et au reload.
     @Published public var offsetX: Double = 4
     @Published public var offsetY: Double = -30

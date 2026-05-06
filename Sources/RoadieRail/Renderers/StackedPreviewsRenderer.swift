@@ -7,7 +7,7 @@ import AppKit
 // référence du design "Stage Manager natif" SPEC-014.
 
 public final class StackedPreviewsRenderer: StageRenderer {
-    public static let rendererID:  String = "stacked-previews"
+    public static let rendererID: String = "stacked-previews"
     public static let displayName: String = "Stacked previews"
 
     public init() {}
@@ -21,9 +21,9 @@ public final class StackedPreviewsRenderer: StageRenderer {
 
 // MARK: - Constantes locales
 
-private let maxVisible:    Int     = 5
+private let maxVisible: Int     = 5
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.15)
-private let appIconSize:        CGFloat = 24
+private let appIconSize: CGFloat = 24
 
 /// Pseudo-random déterministe : la même wid donne TOUJOURS le même décalage
 /// → la vignette ne saute pas à chaque refresh (toutes les 2 s). Bornes passées
@@ -55,17 +55,17 @@ private func scatterFor(wid: CGWindowID,
 // MARK: - View
 
 private struct StackedPreviewsView: View {
-    let context:   StageRenderContext
+    let context: StageRenderContext
     let callbacks: StageRendererCallbacks
 
     @State private var isDropTargeted: Bool   = false
-    @State private var renameSheet:    Bool   = false
-    @State private var renameField:    String = ""
-    @State private var deleteConfirm:  Bool   = false
+    @State private var renameSheet: Bool   = false
+    @State private var renameField: String = ""
+    @State private var deleteConfirm: Bool   = false
 
-    private var stage:       StageVM                       { context.stage }
-    private var thumbnails:  [CGWindowID: ThumbnailVM]     { context.thumbnails }
-    private var windows:     [CGWindowID: WindowVM]        { context.windows }
+    private var stage: StageVM { context.stage }
+    private var thumbnails: [CGWindowID: ThumbnailVM] { context.thumbnails }
+    private var windows: [CGWindowID: WindowVM] { context.windows }
 
     var body: some View {
         haloed(content: content)
@@ -88,7 +88,7 @@ private struct StackedPreviewsView: View {
             Text("Windows will be moved back to stage 1.")
         }
         // SPEC-019 — paddings outer driven by context (override possible via [fx.rail.stacked]).
-        .padding(.leading,  CGFloat(context.leadingPadding))
+        .padding(.leading, CGFloat(context.leadingPadding))
         .padding(.trailing, CGFloat(context.trailingPadding))
         .padding(.vertical, CGFloat(context.verticalPadding))
     }
@@ -188,7 +188,36 @@ private struct StackedPreviewsView: View {
                         previewHeight: CGFloat(context.previewHeight),
                         borderColor: Color(hex: context.resolvedBorderColor()),
                         borderWidth: CGFloat(context.borderWidth),
-                        borderStyle: context.borderStyle
+                        borderStyle: context.borderStyle,
+                        onMoveUp: context.prevStageID.map { id in
+                            { callbacks.onDropAssign(wid, id) }
+                        },
+                        onSummon: stage.isActive ? nil : {
+                            callbacks.onSummonWindow(wid)
+                        },
+                        onMoveDown: context.nextStageID.map { id in
+                            { callbacks.onDropAssign(wid, id) }
+                        },
+                        showSummonButton: context.summonButtonEnabled,
+                        enableSummonDoubleClick: context.summonDoubleClickEnabled,
+                        // SPEC-028 — la vignette idx 0 (hero centrée) porte les
+                        // chevrons reorder-stage. Les autres : nil (les params
+                        // reorder seront ignorés par WindowPreview).
+                        isStageRepresentative: idx == 0,
+                        onMoveStageUp: idx == 0
+                            ? context.prevStageID.map { id in
+                                { callbacks.onReorderStages(stage.id, id) }
+                            }
+                            : nil,
+                        onMoveStageDown: idx == 0
+                            ? context.nextStageID.map { id in
+                                { callbacks.onReorderStages(id, stage.id) }
+                            }
+                            : nil,
+                        chevronsAlwaysVisible: context.chevronsAlwaysVisible,
+                        moveZoneWidth: CGFloat(context.chevronsMoveZoneWidth),
+                        reorderZoneHeight: CGFloat(context.chevronsReorderZoneHeight),
+                        fadeoutMs: context.chevronsFadeoutMs
                     )
                     .rotationEffect(.degrees(scatter.angle))
                     .scaleEffect(1.0 - CGFloat(depth) * CGFloat(context.stackedScale))
@@ -200,7 +229,7 @@ private struct StackedPreviewsView: View {
         }
         // Padding adapté à l'amplitude max du scatter.
         .padding(.horizontal, mxX + 4)
-        .padding(.vertical,   mxY + 4)
+        .padding(.vertical, mxY + 4)
     }
 
     @ViewBuilder

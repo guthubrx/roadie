@@ -99,12 +99,7 @@ final class WallpaperStageCoordinator {
     /// SPEC-022 : en perDisplay union de stagesV2 (toutes scopes) car le V1 dict
     /// stages peut être incomplet (collisions cross-scope sur stage "1").
     private func nextStageID(in sm: StageManager) -> Int {
-        let nums: [Int]
-        if sm.stageMode == .perDisplay {
-            nums = sm.stagesV2.keys.compactMap { Int($0.stageID.value) }
-        } else {
-            nums = sm.stages.keys.compactMap { Int($0.value) }
-        }
+        let nums: [Int] = sm.stagesV2.keys.compactMap { Int($0.stageID.value) }
         return (nums.max() ?? 0) + 1
     }
 }

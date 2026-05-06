@@ -36,7 +36,7 @@ final class PersistenceTests: XCTestCase {
             activeStageID: 2,
             stages: [
                 DesktopStage(id: 1, label: "dev", windows: [100, 200]),
-                DesktopStage(id: 2, label: "test", windows: [300]),
+                DesktopStage(id: 2, label: "test", windows: [300])
             ],
             windows: [
                 WindowEntry(cgwid: 100, bundleID: "com.apple.Terminal",
@@ -47,7 +47,7 @@ final class PersistenceTests: XCTestCase {
                             stageID: 1),
                 WindowEntry(cgwid: 300, bundleID: "com.apple.Xcode",
                             title: "Xcode", expectedFrame: CGRect(x: 0, y: 610, width: 1600, height: 400),
-                            stageID: 2),
+                            stageID: 2)
             ]
         )
     }
@@ -64,7 +64,7 @@ final class PersistenceTests: XCTestCase {
             windows: [
                 WindowEntry(cgwid: 400, bundleID: "com.tinyspeck.slackmacgap",
                             title: "Slack", expectedFrame: CGRect(x: 0, y: 0, width: 1600, height: 900),
-                            stageID: 1),
+                            stageID: 1)
             ]
         )
     }

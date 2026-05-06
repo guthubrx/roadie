@@ -16,12 +16,17 @@ public struct StageNumberBadge: View {
     }
 
     public var body: some View {
-        Text(number)
-            .font(.system(size: CGFloat(state.fontSize), weight: .black, design: .rounded))
-            .foregroundColor(Color(hex: colorHex).opacity(state.opacity))
-            .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
-            .offset(x: CGFloat(state.offsetX), y: CGFloat(state.offsetY))
-            .allowsHitTesting(false)
-            .fixedSize()
+        // SPEC-028 — badge vide → rien rendu. La position dans le rail (en
+        // ordre vertical) suffit comme identité visuelle. Le badge n'affiche
+        // que les labels custom (stages renommées par stage.rename).
+        if !number.isEmpty {
+            Text(number)
+                .font(.system(size: CGFloat(state.fontSize), weight: .black, design: .rounded))
+                .foregroundColor(Color(hex: colorHex).opacity(state.opacity))
+                .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
+                .offset(x: CGFloat(state.offsetX), y: CGFloat(state.offsetY))
+                .allowsHitTesting(false)
+                .fixedSize()
+        }
     }
 }

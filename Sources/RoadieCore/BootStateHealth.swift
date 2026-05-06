@@ -44,7 +44,7 @@ public struct BootStateHealth: Codable, Sendable {
             "offscreen_at_restore": String(widsOffscreenAtRestore),
             "zombies_purged": String(widsZombiesPurged),
             "drifts_fixed": String(widToScopeDriftsFixed),
-            "verdict": verdict.rawValue,
+            "verdict": verdict.rawValue
         ]
     }
 }

@@ -63,7 +63,7 @@ final class DisplayEventsTests: XCTestCase {
             payload: [
                 "display_index": "2",
                 "display_id": "724592257",
-                "ts": "1746000000000",
+                "ts": "1746000000000"
             ]
         )
         let line = event.toJSONLine()

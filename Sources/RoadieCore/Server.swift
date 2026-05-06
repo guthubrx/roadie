@@ -124,7 +124,7 @@ public final class Server: @unchecked Sendable {
             "window_created", "window_destroyed", "window_focused",
             "display_changed", "display_configuration_changed",
             "wallpaper_click", "thumbnail_updated", "config_reloaded",
-            "migration_v1_to_v2",
+            "migration_v1_to_v2"
         ]
         if let unknown = requestedTypes.first(where: { !knownTypes.contains($0) }) {
             let errResp = Response.error(.invalidArgument, "invalid_filter: unknown event type \"\(unknown)\"")
@@ -141,7 +141,7 @@ public final class Server: @unchecked Sendable {
             let subID = UUID().uuidString
             let ack = Response.success([
                 "subscription_id": AnyCodable(subID),
-                "subscribed_types": AnyCodable(requestedTypes.isEmpty ? Array(knownTypes) : Array(requestedTypes)),
+                "subscribed_types": AnyCodable(requestedTypes.isEmpty ? Array(knownTypes) : Array(requestedTypes))
             ])
             self?.send(ack, on: connection)
             let stream = EventBus.shared.subscribe()

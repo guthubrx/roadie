@@ -1,0 +1,32 @@
+disabled_rules:
+  - identifier_name
+  - force_cast
+  - force_try
+  - cyclomatic_complexity
+  - large_tuple
+  - function_body_length
+  - type_body_length
+  - non_optional_string_data_conversion
+  - inclusive_language
+  - xctfail_message
+  - nesting
+  - for_where
+  - vertical_parameter_alignment
+  - function_parameter_count
+  - orphaned_doc_comment
+  - file_length
+  - todo
+
+opt_in_rules: []
+
+excluded:
+  - .build
+  - .worktrees
+  - DerivedData
+
+line_length:
+  warning: 250
+  error: 400
+
+trailing_whitespace:
+  ignores_empty_lines: true

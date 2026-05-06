@@ -194,8 +194,7 @@ func addToStage(_ N: Int, _ ref: WindowRef) {
 	var refs = readStage(N)
 	if !refs.contains(where: { $0.cgWindowID == ref.cgWindowID }) {
 		refs.append(ref)
-		do { try writeStage(N, refs) }
-		catch { fputs("stage : ecriture \(stagePath(N)) impossible : \(error)\n", stderr); exit(1) }
+		do { try writeStage(N, refs) } catch { fputs("stage : ecriture \(stagePath(N)) impossible : \(error)\n", stderr); exit(1) }
 	}
 }
 
@@ -235,14 +234,12 @@ func cmdSwitch(_ N: Int) -> Never {
 			hadError = true
 		}
 	}
-	do { try writeCurrent(N) }
-	catch { fputs("stage : ecriture \(currentPath()) impossible : \(error)\n", stderr); exit(1) }
+	do { try writeCurrent(N) } catch { fputs("stage : ecriture \(currentPath()) impossible : \(error)\n", stderr); exit(1) }
 	exit(hadError ? 1 : 0)
 }
 
 func cmdAssign(_ N: Int) -> Never {
-	do { try ensureStageDir() }
-	catch { fputs("stage : creation \(STAGE_DIR) impossible : \(error)\n", stderr); exit(1) }
+	do { try ensureStageDir() } catch { fputs("stage : creation \(STAGE_DIR) impossible : \(error)\n", stderr); exit(1) }
 	guard let ref = frontmostWindowRef() else { exit(1) }
 	removeFromAllStages(ref.cgWindowID)
 	addToStage(N, ref)

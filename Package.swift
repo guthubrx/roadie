@@ -28,17 +28,17 @@ let package = Package(
         // SPEC-009 RoadieBlur module opt-in
         .library(name: "RoadieBlur", type: .dynamic, targets: ["RoadieBlur"]),
         // SPEC-010 RoadieCrossDesktop module opt-in
-        .library(name: "RoadieCrossDesktop", type: .dynamic, targets: ["RoadieCrossDesktop"]),
+        .library(name: "RoadieCrossDesktop", type: .dynamic, targets: ["RoadieCrossDesktop"])
     ],
     dependencies: [
         // TOML parser — justifié dans plan.md Complexity Tracking
-        .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0"),
+        .package(url: "https://github.com/LebJe/TOMLKit.git", from: "0.6.0")
     ],
     targets: [
         .target(
             name: "RoadieCore",
             dependencies: [
-                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ],
             path: "Sources/RoadieCore",
             linkerSettings: [
@@ -47,7 +47,7 @@ let package = Package(
                 // l'activation inter-app fiable sur Sonoma+/Sequoia/Tahoe).
                 // Standard de l'industrie macOS WM (yabai, AeroSpace, Hammerspoon).
                 .unsafeFlags(["-F", "/System/Library/PrivateFrameworks"]),
-                .linkedFramework("SkyLight"),
+                .linkedFramework("SkyLight")
             ]
         ),
         .target(
@@ -65,7 +65,7 @@ let package = Package(
             name: "RoadieDesktops",
             dependencies: [
                 "RoadieCore",
-                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ],
             path: "Sources/RoadieDesktops"
         ),
@@ -105,7 +105,7 @@ let package = Package(
             name: "RoadieFXCore",
             dependencies: [
                 "RoadieCore",
-                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ],
             path: "Sources/RoadieFXCore"
         ),
@@ -153,7 +153,7 @@ let package = Package(
             dependencies: [
                 "RoadieCore",
                 "RoadieFXCore",
-                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ],
             path: "Sources/RoadieBorders"
         ),
@@ -190,7 +190,7 @@ let package = Package(
             name: "RoadieRail",
             dependencies: [
                 "RoadieCore",
-                .product(name: "TOMLKit", package: "TOMLKit"),
+                .product(name: "TOMLKit", package: "TOMLKit")
             ],
             path: "Sources/RoadieRail"
         ),
@@ -198,6 +198,6 @@ let package = Package(
             name: "RoadieRailTests",
             dependencies: ["RoadieRail"],
             path: "Tests/RoadieRailTests"
-        ),
+        )
     ]
 )

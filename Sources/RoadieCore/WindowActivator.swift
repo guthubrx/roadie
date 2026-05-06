@@ -104,3 +104,59 @@ private func CGSDisableUpdate(_ cid: Int32) -> Int32
 
 @_silgen_name("CGSReenableUpdate")
 private func CGSReenableUpdate(_ cid: Int32) -> Int32
+
+// MARK: - Spaces inspection (CGSCopySpacesForWindows / CGSGetActiveSpace)
+
+/// SPEC-028 diagnostic — vérifier si une wid summoned est sur un Mission
+/// Control Space différent du Space actif. Si oui, aucun setBounds/raise/
+/// activate ne la fera apparaître ; il faut SIP-off + Dock injection.
+public enum CGSSpaces {
+    /// Liste des Mission Control Space IDs où est posée la wid donnée.
+    /// Mask 7 = `kCGSAllSpacesMask` (current + others + user).
+    public static func spacesForWindow(_ wid: CGWindowID) -> [UInt64] {
+        let cid = CGSMainConnectionID()
+        let widArray: CFArray = [wid] as CFArray
+        guard let result = CGSCopySpacesForWindows(cid, 7, widArray) as? [NSNumber] else {
+            return []
+        }
+        return result.map { $0.uint64Value }
+    }
+
+    /// Space ID actif (= visible au user) sur le display courant.
+    public static func currentSpace() -> UInt64 {
+        return CGSGetActiveSpace(CGSMainConnectionID())
+    }
+}
+
+@_silgen_name("CGSGetActiveSpace")
+private func CGSGetActiveSpace(_ cid: Int32) -> UInt64
+
+@_silgen_name("CGSCopySpacesForWindows")
+private func CGSCopySpacesForWindows(_ cid: Int32, _ mask: Int32, _ wids: CFArray) -> CFArray?
+
+// MARK: - SLEventPostToPid (post events directement au PID, bypass HID tap)
+
+/// SPEC-028 — Post un event CGEvent directement à un PID via SkyLight,
+/// sans passer par le HID tap. yabai-style, utilisé par cua-driver pour
+/// driver des apps en background. Sur Tahoe, c'est la seule façon fiable
+/// d'amener un mouseDown event à une app cible quand HID tap est filtré.
+public enum SLEvents {
+    /// Post un mouseClicked (down + up) au pid à la position donnée.
+    /// Ne déplace PAS le curseur visible (l'event est virtuel).
+    public static func postClick(pid: pid_t, at point: CGPoint) {
+        guard let down = CGEvent(mouseEventSource: nil,
+                                  mouseType: .leftMouseDown,
+                                  mouseCursorPosition: point,
+                                  mouseButton: .left),
+              let up = CGEvent(mouseEventSource: nil,
+                                mouseType: .leftMouseUp,
+                                mouseCursorPosition: point,
+                                mouseButton: .left)
+        else { return }
+        SLEventPostToPid(pid, down)
+        SLEventPostToPid(pid, up)
+    }
+}
+
+@_silgen_name("SLEventPostToPid")
+private func SLEventPostToPid(_ pid: pid_t, _ event: CGEvent)

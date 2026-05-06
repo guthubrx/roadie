@@ -74,7 +74,7 @@ final class DesktopSwitcherTests: XCTestCase {
                 WindowEntry(cgwid: 100, bundleID: "a", title: "A",
                             expectedFrame: CGRect(x: 100, y: 100, width: 800, height: 600), stageID: 1),
                 WindowEntry(cgwid: 200, bundleID: "b", title: "B",
-                            expectedFrame: CGRect(x: 950, y: 100, width: 600, height: 600), stageID: 1),
+                            expectedFrame: CGRect(x: 950, y: 100, width: 600, height: 600), stageID: 1)
             ]
         )
         let d2 = RoadieDesktop(
@@ -83,7 +83,7 @@ final class DesktopSwitcherTests: XCTestCase {
                 WindowEntry(cgwid: 300, bundleID: "c", title: "C",
                             expectedFrame: CGRect(x: 200, y: 200, width: 800, height: 600), stageID: 1),
                 WindowEntry(cgwid: 400, bundleID: "d", title: "D",
-                            expectedFrame: CGRect(x: 50, y: 50, width: 400, height: 300), stageID: 1),
+                            expectedFrame: CGRect(x: 50, y: 50, width: 400, height: 300), stageID: 1)
             ]
         )
         try? await registry.save(d1)

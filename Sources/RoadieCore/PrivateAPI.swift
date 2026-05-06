@@ -15,4 +15,3 @@ public func axWindowID(of element: AXUIElement) -> WindowID? {
     let err = _AXUIElementGetWindow(element, &wid)
     return (err == .success && wid != 0) ? wid : nil
 }
-

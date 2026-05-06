@@ -56,7 +56,7 @@ public final class MasterStackTiler: Tiler {
             "after_op": op,
             "wid": String(wid),
             "leaves_count": String(root.allLeaves.count),
-            "structure": String(root.compactStructure.prefix(200)),
+            "structure": String(root.compactStructure.prefix(200))
         ])
     }
 
@@ -115,7 +115,7 @@ public final class MasterStackTiler: Tiler {
                 "tree_depth_after": String(root.maxDepth),
                 "tree_leaves_count": String(root.allLeaves.count),
                 "tree_structure_after": String(root.compactStructure.prefix(200)),
-                "tree_is_flat": "false",
+                "tree_is_flat": "false"
             ])
             checkAndLogStructure(root, after: "insert_case1", wid: leaf.windowID)
             return
@@ -136,7 +136,7 @@ public final class MasterStackTiler: Tiler {
                 "tree_depth_after": String(root.maxDepth),
                 "tree_leaves_count": String(root.allLeaves.count),
                 "tree_structure_after": String(root.compactStructure.prefix(200)),
-                "tree_is_flat": "false",
+                "tree_is_flat": "false"
             ])
             checkAndLogStructure(root, after: "insert_case2", wid: leaf.windowID)
             return
@@ -153,7 +153,7 @@ public final class MasterStackTiler: Tiler {
                 "tree_depth_after": String(root.maxDepth),
                 "tree_leaves_count": String(root.allLeaves.count),
                 "tree_structure_after": String(root.compactStructure.prefix(200)),
-                "tree_is_flat": "false",
+                "tree_is_flat": "false"
             ])
             checkAndLogStructure(root, after: "insert_case3", wid: leaf.windowID)
             return
@@ -168,7 +168,7 @@ public final class MasterStackTiler: Tiler {
             "actual": "root.children[1]_is_not_a_container",
             "expected": "children[0]=master_leaf children[1]=stack_container",
             "wid": String(leaf.windowID),
-            "root_children_count": String(root.children.count),
+            "root_children_count": String(root.children.count)
         ])
         checkAndLogStructure(root, after: "insert_fallback", wid: leaf.windowID)
     }

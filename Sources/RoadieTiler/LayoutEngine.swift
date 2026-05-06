@@ -3,6 +3,18 @@ import ApplicationServices
 import AppKit
 import RoadieCore
 
+// MARK: - Display UUID helper (logging)
+
+/// Retourne un préfixe 8-char du UUID d'un display (ou "?" si résolution KO).
+/// Utilisé pour enrichir les logs critiques avec l'identité stable du display
+/// (le `CGDirectDisplayID` numérique change à chaque hotplug).
+private func displayUUIDShort(_ id: CGDirectDisplayID) -> String {
+    guard let cf = CGDisplayCreateUUIDFromDisplayID(id)?.takeRetainedValue(),
+          let s = CFUUIDCreateString(nil, cf) as String?
+    else { return "?" }
+    return String(s.prefix(8))
+}
+
 // MARK: - StageDisplayKey
 
 /// Clé composite (stageID, displayID) pour indexer un arbre BSP par stage×écran.
@@ -90,7 +102,7 @@ public final class LayoutEngine {
         }
         logInfo("layout_engine_active_stage_display", [
             "stage": stageID?.value ?? "nil",
-            "display": String(displayID),
+            "display": String(displayID)
         ])
     }
 
@@ -116,7 +128,7 @@ public final class LayoutEngine {
         if inserted > 0 {
             logInfo("ensure_tree_populated", [
                 "stage": sid.value, "display": String(displayID),
-                "inserted": String(inserted), "total": String(wids.count),
+                "inserted": String(inserted), "total": String(wids.count)
             ])
         }
         return inserted
@@ -147,7 +159,7 @@ public final class LayoutEngine {
             logInfo("tile_cross_stage_fixed", [
                 "wid": String(move.wid),
                 "from_tree_stage": move.fromKey.stageID.value,
-                "to_stage": move.toStage.value,
+                "to_stage": move.toStage.value
             ])
         }
         return fixedCount
@@ -369,7 +381,7 @@ public final class LayoutEngine {
             tiler.insert(leaf: newLeaf, near: nil, in: newRoot)
             logInfo("layout_reassign_insert", [
                 "wid": String(wid),
-                "stage": newStageID.value,
+                "stage": newStageID.value
             ])
             return
         }
@@ -396,7 +408,7 @@ public final class LayoutEngine {
             "display": String(displayID),
             "was_visible": String(wasVisible),
             "now_visible": String(newLeaf.isVisible),
-            "target_stage_active": String(isTargetStageActive),
+            "target_stage_active": String(isTargetStageActive)
         ])
     }
 
@@ -468,10 +480,12 @@ public final class LayoutEngine {
         dstTiler.insert(leaf: newLeaf, near: nearLeaf, in: dstRoot)
         logInfo("move_window_cross_display", [
             "wid": String(wid),
-            "from": String(src),
-            "to": String(dst),
+            "src_display": displayUUIDShort(src),
+            "src_display_id": String(src),
+            "dst_display": displayUUIDShort(dst),
+            "dst_display_id": String(dst),
             "stage": sid.value,
-            "near": nearLeaf.map { String($0.windowID) } ?? "nil",
+            "near": nearLeaf.map { String($0.windowID) } ?? "nil"
         ])
         return true
     }
@@ -487,7 +501,7 @@ public final class LayoutEngine {
                 logDebug("setLeafVisible_outcome", [
                     "wid": String(wid),
                     "visible": String(visible),
-                    "found": "true",
+                    "found": "true"
                 ])
                 return true
             }
@@ -500,7 +514,7 @@ public final class LayoutEngine {
         logWarn("setLeafVisible_no_leaf_found", [
             "wid": String(wid),
             "visible_requested": String(visible),
-            "trees_count": String(workspace.rootsByStageDisplay.count),
+            "trees_count": String(workspace.rootsByStageDisplay.count)
         ])
         return false
     }
@@ -573,7 +587,7 @@ public final class LayoutEngine {
                     "wid": String(wid),
                     "direction": direction.rawValue,
                     "from": String(srcDisplayID),
-                    "to": String(dstID),
+                    "to": String(dstID)
                 ])
                 return moveWindow(wid, fromDisplay: srcDisplayID, toDisplay: dstID, near: nil)
             }
@@ -587,7 +601,7 @@ public final class LayoutEngine {
                 logInfo("warp_intra", [
                     "wid": String(wid),
                     "direction": direction.rawValue,
-                    "near": String(neighbor.windowID),
+                    "near": String(neighbor.windowID)
                 ])
                 return true
             }
@@ -596,7 +610,7 @@ public final class LayoutEngine {
                     "wid": String(wid),
                     "direction": direction.rawValue,
                     "from": String(srcDisplayID),
-                    "to": String(dstID),
+                    "to": String(dstID)
                 ])
                 return moveWindow(wid, fromDisplay: srcDisplayID, toDisplay: dstID, near: nil)
             }
@@ -662,10 +676,10 @@ public final class LayoutEngine {
                 let topDelta    = oldFrame.minY - newFrame.minY
                 let bottomDelta = newFrame.maxY - oldFrame.maxY
                 var changed = false
-                if abs(leftDelta)   > threshold { adjustEdge(leaf: leaf, direction: .left,  deltaPixels: leftDelta);   changed = true }
+                if abs(leftDelta)   > threshold { adjustEdge(leaf: leaf, direction: .left, deltaPixels: leftDelta);   changed = true }
                 if abs(rightDelta)  > threshold { adjustEdge(leaf: leaf, direction: .right, deltaPixels: rightDelta);  changed = true }
-                if abs(topDelta)    > threshold { adjustEdge(leaf: leaf, direction: .up,    deltaPixels: topDelta);    changed = true }
-                if abs(bottomDelta) > threshold { adjustEdge(leaf: leaf, direction: .down,  deltaPixels: bottomDelta); changed = true }
+                if abs(topDelta)    > threshold { adjustEdge(leaf: leaf, direction: .up, deltaPixels: topDelta);    changed = true }
+                if abs(bottomDelta) > threshold { adjustEdge(leaf: leaf, direction: .down, deltaPixels: bottomDelta); changed = true }
                 return changed
             }
         }
@@ -746,10 +760,10 @@ public final class LayoutEngine {
             var gaps: OuterGaps
             if useSoloGaps {
                 gaps = OuterGaps(
-                    top:    smartGapsSoloSides.contains("top")    ? 0 : baseGaps.top,
+                    top: smartGapsSoloSides.contains("top")    ? 0 : baseGaps.top,
                     bottom: smartGapsSoloSides.contains("bottom") ? 0 : baseGaps.bottom,
-                    left:   smartGapsSoloSides.contains("left")   ? 0 : baseGaps.left,
-                    right:  smartGapsSoloSides.contains("right")  ? 0 : baseGaps.right)
+                    left: smartGapsSoloSides.contains("left")   ? 0 : baseGaps.left,
+                    right: smartGapsSoloSides.contains("right")  ? 0 : baseGaps.right)
             } else {
                 gaps = baseGaps
             }
@@ -773,7 +787,7 @@ public final class LayoutEngine {
                     "root_orientation": displayRoot.orientation.rawValue,
                     "child_orientation": onlyChild.orientation.rawValue,
                     "leaves_count": String(displayRoot.allLeaves.count),
-                    "structure": String(displayRoot.compactStructure.prefix(200)),
+                    "structure": String(displayRoot.compactStructure.prefix(200))
                 ])
             }
             workspace.lastAppliedRectsByDisplay[display.id] = usable
@@ -810,14 +824,14 @@ public final class LayoutEngine {
                             logDebug("tiler_extreme_aspect_skipped_user_origin", [
                                 "wid": String(wid),
                                 "aspect": String(format: "%.2f", aspect),
-                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))",
+                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))"
                             ])
                         } else {
                             logWarn("tiler_extreme_aspect", [
                                 "wid": String(wid),
                                 "display": String(display.id),
                                 "aspect": String(format: "%.2f", aspect),
-                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))",
+                                "frame": "\(Int(innerFrame.width))x\(Int(innerFrame.height))"
                             ])
                         }
                     }
@@ -832,10 +846,11 @@ public final class LayoutEngine {
                     if totalDelta > 1 {
                         let fields: [String: String] = [
                             "wid": String(wid),
-                            "display": String(display.id),
+                            "display": displayUUIDShort(display.id),
+                            "display_id": String(display.id),
                             "from": "\(Int(prev.origin.x)),\(Int(prev.origin.y)) \(Int(prev.width))x\(Int(prev.height))",
                             "to": "\(Int(innerFrame.origin.x)),\(Int(innerFrame.origin.y)) \(Int(innerFrame.width))x\(Int(innerFrame.height))",
-                            "position_delta_px": String(Int(positionDelta)),
+                            "position_delta_px": String(Int(positionDelta))
                         ]
                         // Ajustement < 50px = stabilisation/redim normaux → debug.
                         // Saut ≥ 50px = repositionnement notable (= explique le

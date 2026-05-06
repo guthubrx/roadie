@@ -7,7 +7,7 @@ import AppKit
 // Style "inventaire" hérité de l'ancien yabai_stage_rail.swift.
 
 public final class IconsOnlyRenderer: StageRenderer {
-    public static let rendererID:  String = "icons-only"
+    public static let rendererID: String = "icons-only"
     public static let displayName: String = "Icons only"
 
     public init() {}
@@ -19,19 +19,19 @@ public final class IconsOnlyRenderer: StageRenderer {
     }
 }
 
-private let iconSize:    CGFloat = 32
-private let maxVisible:  Int     = 6
-private let cellWidth:   CGFloat = 200
+private let iconSize: CGFloat = 32
+private let maxVisible: Int     = 6
+private let cellWidth: CGFloat = 200
 private let dropHighlightColor: Color = Color(red: 0.47, green: 0.76, blue: 0.95).opacity(0.18)
 
 private struct IconsOnlyView: View {
-    let context:   StageRenderContext
+    let context: StageRenderContext
     let callbacks: StageRendererCallbacks
 
     @State private var isDropTargeted: Bool = false
 
-    private var stage:   StageVM                  { context.stage }
-    private var windows: [CGWindowID: WindowVM]   { context.windows }
+    private var stage: StageVM { context.stage }
+    private var windows: [CGWindowID: WindowVM] { context.windows }
 
     var body: some View {
         haloed(content: VStack(alignment: .leading, spacing: 6) {
@@ -61,7 +61,7 @@ private struct IconsOnlyView: View {
                 .disabled(stage.id == "1")
         }
         // SPEC-019 — paddings outer driven by context (override via [fx.rail.icons-only]).
-        .padding(.leading,  CGFloat(context.leadingPadding))
+        .padding(.leading, CGFloat(context.leadingPadding))
         .padding(.trailing, CGFloat(context.trailingPadding))
         .padding(.vertical, CGFloat(context.verticalPadding))
     }

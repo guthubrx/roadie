@@ -36,7 +36,7 @@ public final class WindowRegistry {
             "wid": String(s.cgWindowID),
             "bundle": s.bundleID,
             "subrole": s.subrole.rawValue,
-            "wasEverTileable": String(s.wasEverTileable),
+            "wasEverTileable": String(s.wasEverTileable)
         ])
     }
 
@@ -63,7 +63,7 @@ public final class WindowRegistry {
         if frame.size.width < minDim || frame.size.height < minDim {
             logWarn("updateFrame: rejected degenerate frame", [
                 "wid": String(wid),
-                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.size.width))x\(Int(frame.size.height))",
+                "frame": "\(Int(frame.origin.x)),\(Int(frame.origin.y)) \(Int(frame.size.width))x\(Int(frame.size.height))"
             ])
             return
         }

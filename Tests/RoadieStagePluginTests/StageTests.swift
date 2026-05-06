@@ -7,7 +7,7 @@ final class StageTests: XCTestCase {
         var stage = Stage(id: StageID("dev"), displayName: "Development")
         stage.memberWindows = [
             StageMember(cgWindowID: 100, bundleID: "com.apple.Terminal",
-                       titleHint: "~/code", savedFrame: SavedRect(CGRect(x: 0, y: 0, width: 100, height: 200))),
+                       titleHint: "~/code", savedFrame: SavedRect(CGRect(x: 0, y: 0, width: 100, height: 200)))
         ]
         let encoder = JSONEncoder()
         let data = try encoder.encode(stage)

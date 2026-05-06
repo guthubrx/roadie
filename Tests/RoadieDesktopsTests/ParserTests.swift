@@ -21,7 +21,7 @@ final class ParserTests: XCTestCase {
                             stageID: 1),
                 WindowEntry(cgwid: 67890, bundleID: "com.apple.mail",
                             title: "Mail", expectedFrame: CGRect(x: 950, y: 100, width: 600, height: 600),
-                            stageID: 1),
+                            stageID: 1)
             ]
         )
     }
@@ -36,7 +36,7 @@ final class ParserTests: XCTestCase {
             activeStageID: 2,
             stages: [
                 DesktopStage(id: 1, label: "alpha", windows: [11111]),
-                DesktopStage(id: 2, label: "beta", windows: [22222]),
+                DesktopStage(id: 2, label: "beta", windows: [22222])
             ],
             windows: [
                 WindowEntry(cgwid: 11111, bundleID: "com.tinyspeck.slackmacgap",
@@ -44,7 +44,7 @@ final class ParserTests: XCTestCase {
                             stageID: 1),
                 WindowEntry(cgwid: 22222, bundleID: "com.apple.safari",
                             title: "Safari", expectedFrame: CGRect(x: 200, y: 200, width: 1400, height: 900),
-                            stageID: 2),
+                            stageID: 2)
             ]
         )
     }

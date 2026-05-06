@@ -28,9 +28,8 @@ struct WindowChip: View {
         }
         .frame(width: 56, height: 36)
         .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID)) {
-            // SPEC-028 — preview du drag. Sert aussi à notifier le tracker
-            // qu'un drag de wid démarre (pour summoner si drop hors-rail).
-            // La preview elle-même reproduit la vignette pour visuel.
+            // Preview du drag : reproduit la vignette pour le visuel pendant
+            // le drag inter-stage (réassignation par drop sur une autre cellule).
             ZStack {
                 RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.15))
                 Image(nsImage: appIcon)
@@ -39,9 +38,6 @@ struct WindowChip: View {
                     .frame(width: 22, height: 22)
             }
             .frame(width: 56, height: 36)
-            .onAppear {
-                DragSummonTracker.shared.startDrag(wid: wid)
-            }
         }
     }
 

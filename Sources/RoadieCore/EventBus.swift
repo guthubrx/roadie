@@ -22,7 +22,7 @@ public struct DesktopEvent: Sendable {
         var dict: [String: Any] = [
             "event": name,
             "ts": isoFormatter.string(from: ts),
-            "version": Self.schemaVersion,
+            "version": Self.schemaVersion
         ]
         for (k, v) in payload { dict[k] = v }
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
@@ -75,7 +75,7 @@ public extension DesktopEvent {
         DesktopEvent(name: "wallpaper_click", payload: [
             "x": String(x),
             "y": String(y),
-            "display_id": String(displayID),
+            "display_id": String(displayID)
         ])
     }
 
@@ -94,7 +94,7 @@ public extension DesktopEvent {
             "old_name": oldName,
             "new_name": newName,
             "display_uuid": displayUUID,
-            "desktop_id": String(desktopID),
+            "desktop_id": String(desktopID)
         ])
     }
 
@@ -110,7 +110,7 @@ public extension DesktopEvent {
             "stage_id": stageID,
             "display_name": displayName,
             "display_uuid": displayUUID,
-            "desktop_id": String(desktopID),
+            "desktop_id": String(desktopID)
         ])
     }
 
@@ -124,7 +124,7 @@ public extension DesktopEvent {
         DesktopEvent(name: "stage_deleted", payload: [
             "stage_id": stageID,
             "display_uuid": displayUUID,
-            "desktop_id": String(desktopID),
+            "desktop_id": String(desktopID)
         ])
     }
 
@@ -140,7 +140,7 @@ public extension DesktopEvent {
             "wid": String(wid),
             "stage_id": stageID,
             "display_uuid": displayUUID,
-            "desktop_id": String(desktopID),
+            "desktop_id": String(desktopID)
         ])
     }
 
@@ -148,7 +148,7 @@ public extension DesktopEvent {
     /// Le rail peut alors fetch via window.thumbnail.
     static func thumbnailUpdated(wid: CGWindowID) -> DesktopEvent {
         DesktopEvent(name: "thumbnail_updated", payload: [
-            "wid": String(wid),
+            "wid": String(wid)
         ])
     }
 
@@ -166,7 +166,7 @@ public extension DesktopEvent {
             "migrated_count": String(migratedCount),
             "backup_path": backupPath,
             "target_display_uuid": targetUUID,
-            "duration_ms": String(durationMs),
+            "duration_ms": String(durationMs)
         ])
     }
 }

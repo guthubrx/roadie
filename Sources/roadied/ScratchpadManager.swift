@@ -58,7 +58,7 @@ public final class ScratchpadManager {
                 logInfo("scratchpad_attached", [
                     "name": name,
                     "wid": String(wid),
-                    "bundle_id": bid,
+                    "bundle_id": bid
                 ])
                 return
             }

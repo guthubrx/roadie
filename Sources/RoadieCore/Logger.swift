@@ -49,7 +49,7 @@ public final class Logger: @unchecked Sendable {
             var entry: [String: String] = [
                 "ts": Logger.isoFormatter.string(from: Date()),
                 "level": level.rawValue,
-                "msg": message,
+                "msg": message
             ]
             for (k, v) in fields { entry[k] = v }
             guard let line = self.encode(entry) else { return }

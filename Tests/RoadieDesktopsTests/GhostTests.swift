@@ -32,20 +32,20 @@ final class GhostTests: XCTestCase {
                 WindowEntry(cgwid: 10, bundleID: "a", title: "A",
                             expectedFrame: CGRect(x: 100, y: 100, width: 800, height: 600), stageID: 1),
                 WindowEntry(cgwid: 11, bundleID: "b", title: "B",
-                            expectedFrame: CGRect(x: 950, y: 100, width: 600, height: 600), stageID: 1),
+                            expectedFrame: CGRect(x: 950, y: 100, width: 600, height: 600), stageID: 1)
             ]),
             (2, [
                 WindowEntry(cgwid: 20, bundleID: "c", title: "C",
                             expectedFrame: CGRect(x: 200, y: 200, width: 800, height: 600), stageID: 1),
                 WindowEntry(cgwid: 21, bundleID: "d", title: "D",
-                            expectedFrame: CGRect(x: 50, y: 50, width: 400, height: 300), stageID: 1),
+                            expectedFrame: CGRect(x: 50, y: 50, width: 400, height: 300), stageID: 1)
             ]),
             (3, [
                 WindowEntry(cgwid: 30, bundleID: "e", title: "E",
                             expectedFrame: CGRect(x: 300, y: 300, width: 700, height: 500), stageID: 1),
                 WindowEntry(cgwid: 31, bundleID: "f", title: "F",
-                            expectedFrame: CGRect(x: 400, y: 400, width: 600, height: 400), stageID: 1),
-            ]),
+                            expectedFrame: CGRect(x: 400, y: 400, width: 600, height: 400), stageID: 1)
+            ])
         ]
 
         for (id, wins) in desktops {
