@@ -1,4 +1,5 @@
 import SwiftUI
+import RoadieCore
 
 // SPEC-014 T028 — Vue racine SwiftUI du rail. Design "Stage Manager natif".
 // Reçoit RailState en @Bindable (pattern @Observable macOS 14+).
@@ -10,6 +11,9 @@ private let hintOpacity:  CGFloat = 0.28
 struct StageStackView: View {
     @Bindable var state: RailState
     @ObservedObject private var badgeState = StageNumbersBadgeState.shared
+    /// SPEC-027 US3 — état de survol par cellule de stage (clé = stage.id).
+    /// Détermine la visibilité des flèches ↑↓ de réordonnancement.
+    @State private var cellHovered: [String: Bool] = [:]
     /// SPEC-019 — UUID du display sur lequel ce panel est posé. Utilisé pour
     /// piocher `state.stagesByDisplay[displayUUID]`. Vide → fallback `state.stages`
     /// (compat). Sans cette donnée par-panel, les 2 panels affichaient le même
@@ -205,6 +209,11 @@ struct StageStackView: View {
                                 onAddFocused: onAddFocused,
                                 onDelete:     onDelete
                             )
+                            // SPEC-027 US3 — index de la stage courante pour
+                            // déterminer l'état des flèches ↑↓ (extrémités).
+                            let stageIdx = allStages.firstIndex(where: { $0.id == stage.id }) ?? 0
+                            let canUp   = stageIdx > 0
+                            let canDown = stageIdx < allStages.count - 1
                             renderer.render(context: context, callbacks: cb)
                             // Aligner à gauche (vs centre) — demande utilisateur.
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -226,27 +235,36 @@ struct StageStackView: View {
                             // des WindowChip/WindowPreview enfants. Drop sur la
                             // cellule (renderer ou ses enfants) : intercepté par
                             // .onDrop ci-dessous quand le payload est un stage_id.
+                            // SPEC-027 US3 — flèches ↑↓ qui apparaissent au
+                            // survol de la cellule. Drag-drop SwiftUI testé
+                            // mais ne fonctionne pas dans le contexte
+                            // LSUIElement+NSPanel (5 itérations), pattern
+                            // bouton retenu pour fiabilité.
                             .overlay(alignment: .topLeading) {
-                                StageReorderHandle(
-                                    stageID: stage.id,
-                                    onReorderStages: onReorderStages
-                                )
-                            }
-                            // Drop receiver pour le drag d'un autre handle. Le
-                            // payload est une NSString stage_id ; le drag-source
-                            // wid (UTI com.roadie.window-drag) ne match pas
-                            // [.text] et part au .dropDestination interne du
-                            // renderer (assignWindow inchangé).
-                            .onDrop(of: [.text], isTargeted: nil) { providers in
-                                guard let p = providers.first else { return false }
-                                _ = p.loadObject(ofClass: NSString.self) { obj, _ in
-                                    guard let srcID = obj as? String,
-                                          srcID != stage.id else { return }
-                                    Task { @MainActor in
-                                        onReorderStages(srcID, stage.id)
-                                    }
+                                if cellHovered[stage.id] == true {
+                                    StageReorderArrows(
+                                        canMoveUp:   canUp,
+                                        canMoveDown: canDown,
+                                        onMoveUp: {
+                                            guard canUp else { return }
+                                            let prev = allStages[stageIdx - 1].id
+                                            onReorderStages(stage.id, prev)
+                                        },
+                                        onMoveDown: {
+                                            guard canDown else { return }
+                                            // Descendre = swap avec next : on
+                                            // place next avant stage.id (= next
+                                            // remonte, donc stage.id descend).
+                                            let next = allStages[stageIdx + 1].id
+                                            onReorderStages(next, stage.id)
+                                        }
+                                    )
+                                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
                                 }
-                                return true
+                            }
+                            .animation(.easeInOut(duration: 0.12), value: cellHovered[stage.id])
+                            .onHover { hovering in
+                                cellHovered[stage.id] = hovering
                             }
                             }
                         }
