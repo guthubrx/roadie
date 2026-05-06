@@ -380,13 +380,23 @@ public final class LayoutEngine {
         let newKey = StageDisplayKey(stageID: newStageID, displayID: displayID)
         let newRoot = root(for: newKey)
         let newLeaf = WindowLeaf(windowID: wid)
-        newLeaf.isVisible = wasVisible
+        // SPEC-028 fix : si la nouvelle stage est la stage active du display,
+        // forcer `isVisible = true`. Sans ça, une wid réassignée depuis une
+        // stage cachée garde `wasVisible=false` → le tiler la skip dans
+        // `frames` → pas de setBounds → la fenêtre reste à sa position
+        // offscreen (= invisible) malgré qu'elle soit tilée dans la stage
+        // active. Bug observé sur summon (drag wid hors-rail).
+        let isTargetStageActive = (workspace.activeStageByDisplay[displayID] == newStageID)
+        newLeaf.isVisible = wasVisible || isTargetStageActive
         tiler.insert(leaf: newLeaf, near: newRoot.allLeaves.first, in: newRoot)
         logInfo("layout_reassign", [
             "wid": String(wid),
             "from_stage": oldKey.stageID.value,
             "to_stage": newStageID.value,
             "display": String(displayID),
+            "was_visible": String(wasVisible),
+            "now_visible": String(newLeaf.isVisible),
+            "target_stage_active": String(isTargetStageActive),
         ])
     }
 
@@ -778,6 +788,12 @@ public final class LayoutEngine {
                 // ne pas polluer info en prod (un applyAll = N setBounds). Active
                 // via [daemon].log_level = "debug" pour analyse post-mortem.
                 let prevFrame = registry.get(wid)?.frame
+                // SPEC-028 — si la wid est minimisée au niveau AX (iTerm
+                // peut l'auto-minimiser quand setBounds offscreen est appelé
+                // en chaîne), force unminimize avant le setBounds suivant.
+                if AXReader.isMinimized(element) {
+                    AXReader.setMinimized(element, false)
+                }
                 AXReader.setBounds(element, frame: innerFrame)
                 registry.updateFrame(wid, frame: innerFrame)
                 // Signal "layout sub-optimal" : aspect ratio extrême (> 3.5 ou < 0.28).

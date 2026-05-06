@@ -845,13 +845,13 @@ public final class RailController {
     }
 
     /// SPEC-028 — drop d'une vignette wid hors-rail = "ramène-moi cette
-    /// fenêtre dans la stage active de ce display". Version V1 minimale :
-    /// assignWindow seul. La wid est ajoutée au tree de la stage active mais
-    /// l'apparition visuelle complète (re-tiling des voisines + raise z-order)
-    /// peut nécessiter un click utilisateur sur le bureau ou un switch de
-    /// stage. Limitation acceptée — les tentatives de force apply+focus+raise
-    /// dans cette session ont produit des comportements pires (fenêtre dans
-    /// la mauvaise stage, focus qui rebondit, etc.).
+    /// fenêtre dans la stage active de ce display".
+    /// Pipeline : assignWindow puis stage.switch sur la stage active.
+    /// Le switch (même sur stage déjà active) déclenche un applyAll plus
+    /// complet que le seul daemon.apply_layout : re-setBounds TOUTES les
+    /// wids du tree, ce qui résout le chevauchement entre la wid summoned
+    /// et les wids déjà présentes. Pas de window.focus explicite — laisse
+    /// macOS dispatcher le focus naturellement post-tile.
     func summonWindow(_ wid: CGWindowID, displayUUID: String) {
         let scoped = state.stagesByDisplay[displayUUID] ?? state.stages
         guard let activeStage = scoped.first(where: { $0.isActive }) else {
@@ -859,6 +859,14 @@ public final class RailController {
             return
         }
         assignWindow(wid, to: activeStage.id, displayUUID: displayUUID)
+        Task {
+            // delay pour laisser stage.assign se propager côté daemon avant
+            // le switch (sinon le switch peut voir un state pas-encore-mis-à-jour).
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            await MainActor.run { [weak self] in
+                self?.switchToStage(activeStage.id, displayUUID: displayUUID)
+            }
+        }
     }
 
     // MARK: - SPEC-014 US5 (T071-T073) : menu contextuel daemon-side.

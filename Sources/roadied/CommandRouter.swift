@@ -914,6 +914,34 @@ enum CommandRouter {
                 }
             }
             daemon.applyLayout()
+            // SPEC-028 — quand la stage cible est déjà la stage active du
+            // display, force un sm.switchTo malgré tout. C'est le mécanisme
+            // qui marche quand l'utilisateur click sur la cellule du rail :
+            // hide les wids des autres stages, **show explicitement les wids
+            // de la stage cible** (incluant la wid summoned, via
+            // HideStrategyImpl.show = setBounds + setMinimized=false), set
+            // active stage, applyLayout. Le combo show explicite est ce qui
+            // déverrouille la visibilité pour iTerm/Firefox post-offscreen.
+            let isStageActiveOnTarget: Bool = {
+                if sm.stageMode == .perDisplay, let scope = assignedScope {
+                    let key = DesktopKey(displayUUID: scope.displayUUID,
+                                          desktopID: scope.desktopID)
+                    return sm.activeStageByDesktop[key] == stageID
+                }
+                return sm.currentStageID == stageID
+            }()
+            if isStageActiveOnTarget {
+                if let scope = assignedScope {
+                    sm.switchTo(stageID: stageID, scope: scope)
+                } else {
+                    sm.switchTo(stageID: stageID)
+                }
+                logInfo("stage_assign_force_switch", [
+                    "wid": String(wid),
+                    "stage": stageStr,
+                    "reason": "summon_to_active_stage",
+                ])
+            }
             // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).
             let assignUUID: String
             let assignDesktopID: Int
