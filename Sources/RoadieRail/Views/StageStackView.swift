@@ -220,12 +220,34 @@ struct StageStackView: View {
                                     )
                                 }
                             )
-                            // SPEC-027 US3 — drag-reorder via UI désactivé : SwiftUI
-                            // priorise le `.draggable` des WindowChip/WindowPreview
-                            // enfants pour le hit-test, donc `.onDrag` au niveau
-                            // cellule n'est jamais déclenché. Pour réordonner, le
-                            // CLI `roadie stage move-before/move-after` reste la
-                            // voie nominale ; un handle dédié sera ajouté en V2.
+                            // SPEC-027 US3 — handle drag-reorder (icône ≡) en
+                            // overlay top-leading. Seule zone draggable de la
+                            // cellule, donc pas de conflit avec le .draggable
+                            // des WindowChip/WindowPreview enfants. Drop sur la
+                            // cellule (renderer ou ses enfants) : intercepté par
+                            // .onDrop ci-dessous quand le payload est un stage_id.
+                            .overlay(alignment: .topLeading) {
+                                StageReorderHandle(
+                                    stageID: stage.id,
+                                    onReorderStages: onReorderStages
+                                )
+                            }
+                            // Drop receiver pour le drag d'un autre handle. Le
+                            // payload est une NSString stage_id ; le drag-source
+                            // wid (UTI com.roadie.window-drag) ne match pas
+                            // [.text] et part au .dropDestination interne du
+                            // renderer (assignWindow inchangé).
+                            .onDrop(of: [.text], isTargeted: nil) { providers in
+                                guard let p = providers.first else { return false }
+                                _ = p.loadObject(ofClass: NSString.self) { obj, _ in
+                                    guard let srcID = obj as? String,
+                                          srcID != stage.id else { return }
+                                    Task { @MainActor in
+                                        onReorderStages(srcID, stage.id)
+                                    }
+                                }
+                                return true
+                            }
                             }
                         }
                     }
