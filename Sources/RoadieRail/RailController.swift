@@ -297,10 +297,6 @@ public final class RailController {
     let fetcher: ThumbnailFetcher
 
     private var panels: [CGDirectDisplayID: StageRailPanel] = [:]
-    /// SPEC-028 — overlay panels qui captent les drops de WindowDragData hors
-    /// rail (= ailleurs que sur les vignettes du rail) et déclenchent un
-    /// summon vers la stage active du display. 1 panel par display.
-    private var dropPanels: [CGDirectDisplayID: StageDropPanel] = [:]
     private var config: RailConfig = .init()
     /// Tasks de fade-out différé par display, indexées par `displayID`. Permet
     /// d'annuler le hide programmé si le curseur revient sur l'edge avant
@@ -577,9 +573,6 @@ public final class RailController {
     private func buildPanels() {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
-        // SPEC-028 — tear-down des drop panels avant rebuild (sinon fuite).
-        dropPanels.values.forEach { $0.orderOut(nil) }
-        dropPanels.removeAll()
         // SPEC-014 T090 (US7) : si mode "global" → 1 seul panel sur primary.
         let targetScreens: [NSScreen]
         if config.displayMode == "global" {
@@ -673,16 +666,6 @@ public final class RailController {
             let panel = StageRailPanel(rootView: view)
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
             panels[id] = panel
-
-            // SPEC-028 — overlay panel pour summon-by-drag.
-            let dropPanel = StageDropPanel(screen: screen)
-            dropPanel.onSummon = { [weak self] wid in
-                Task { @MainActor [weak self] in
-                    self?.summonWindow(wid, displayUUID: panelUUID)
-                }
-            }
-            dropPanel.orderFront(nil)
-            dropPanels[id] = dropPanel
         }
         let panelUUIDs = panels.keys.map { id -> String in
             guard let scr = NSScreen.screens.first(where: { displayID(for: $0) == id }) else {
@@ -859,9 +842,11 @@ public final class RailController {
 
     // MARK: - SPEC-014 US5 (T071-T073) : menu contextuel daemon-side.
 
-    /// SPEC-027 US3 — drag-reorder dans le rail. Envoie au daemon dans le scope
-    /// du panel d'origine. Le daemon réécrit les `order` côté StageManager et
-    /// `state_changed` rafraîchira la vue.
+    /// SPEC-027 US3 — reorder via flèches ↑↓ du rail (ou CLI move-before).
+    /// Envoie l'IPC dans le scope du panel d'origine, puis force un
+    /// `loadInitialStages()` pour rafraîchir le rail immédiatement (le daemon
+    /// n'émet pas d'event `state_changed` après reorder, donc sans refresh
+    /// explicite la nouvelle ordre n'apparaît qu'après un autre event).
     func reorderStage(_ src: String, before target: String, displayUUID: String) {
         Task {
             do {
@@ -870,6 +855,10 @@ public final class RailController {
                                               "target_id": target,
                                               "position": "before",
                                               "display": displayUUID])
+                // Refresh sync : recharge l'état des stages depuis le daemon.
+                await MainActor.run { [weak self] in
+                    self?.loadInitialStages()
+                }
             } catch {
                 logErr("rail: stage.reorder \(src)→before(\(target)) failed: \(error)")
             }
