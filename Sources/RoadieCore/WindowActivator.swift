@@ -74,3 +74,33 @@ private func GetProcessForPID(
     _ pid: pid_t,
     _ psn: UnsafeMutablePointer<ProcessSerialNumber>
 ) -> OSStatus
+
+// MARK: - Compositor batching (CGSDisableUpdate / CGSReenableUpdate)
+
+/// SPEC-028 — Batch atomique des mutations de fenêtres pour forcer le
+/// compositor macOS à flusher en un seul frame. Sur Tahoe, le compositor
+/// peut ignorer des AX setBounds successifs (= la fenêtre reste invisible
+/// jusqu'à un event mouse natif). En les enrobant dans un disable/reenable,
+/// on garantit que le compositor re-évalue tout en sortie de bloc.
+///
+/// API privée CoreGraphics (`/System/Library/Frameworks/CoreGraphics.framework`).
+/// Auto-reenable de sécurité après 1s côté WindowServer.
+public enum CGSCompositor {
+    /// Exécute `block` entre `CGSDisableUpdate` et `CGSReenableUpdate`. Garantit
+    /// le reenable même en cas d'exception (defer).
+    public static func batch<T>(_ block: () throws -> T) rethrows -> T {
+        let cid = CGSMainConnectionID()
+        _ = CGSDisableUpdate(cid)
+        defer { _ = CGSReenableUpdate(cid) }
+        return try block()
+    }
+}
+
+@_silgen_name("CGSMainConnectionID")
+private func CGSMainConnectionID() -> Int32
+
+@_silgen_name("CGSDisableUpdate")
+private func CGSDisableUpdate(_ cid: Int32) -> Int32
+
+@_silgen_name("CGSReenableUpdate")
+private func CGSReenableUpdate(_ cid: Int32) -> Int32

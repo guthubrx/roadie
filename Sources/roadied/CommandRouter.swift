@@ -941,23 +941,32 @@ enum CommandRouter {
                     "stage": stageStr,
                     "reason": "summon_to_active_stage",
                 ])
-                // SPEC-028 — pattern AeroSpace pour rendre la wid visible :
-                // 1) attendre que setBounds settle, 2) kAXMain + kAXRaiseAction
-                // + app.activate(.activateIgnoringOtherApps), TOUT EN ASYNC.
-                // AeroSpace n'utilise PAS de SkyLight private ni kAXFocused —
-                // juste ces 3 calls dans un Task. Notre version synchrone avec
-                // bringToFront SkyLight ne marche pas (probablement race).
+                // SPEC-028 — pour forcer le compositor Tahoe à flusher après
+                // setBounds AX (qui sinon est ignoré jusqu'à un mouse event
+                // natif), on enrobe les calls focus dans un CGSDisableUpdate
+                // / CGSReenableUpdate. À la sortie du bloc, le WindowServer
+                // re-compose tout en un frame, ce qui force le rendu visuel.
                 Task { @MainActor [registry = daemon.registry] in
                     try? await Task.sleep(nanoseconds: 100_000_000)
                     guard let element = registry.axElement(for: wid),
                           let state = registry.get(wid) else { return }
-                    AXUIElementSetAttributeValue(element,
-                                                  kAXMainAttribute as CFString,
-                                                  kCFBooleanTrue)
-                    AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-                    NSRunningApplication(processIdentifier: state.pid)?
-                        .activate(options: [.activateIgnoringOtherApps])
-                    logInfo("stage_assign_aerospace_focus", [
+                    CGSCompositor.batch {
+                        AXUIElementSetAttributeValue(element,
+                                                      kAXMainAttribute as CFString,
+                                                      kCFBooleanTrue)
+                        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+                        NSRunningApplication(processIdentifier: state.pid)?
+                            .activate(options: [.activateIgnoringOtherApps])
+                        // Nudge +1px puis restore : double flush compositor.
+                        if let current = AXReader.bounds(element) {
+                            let nudged = CGRect(origin: current.origin,
+                                                size: CGSize(width: current.width + 1,
+                                                              height: current.height))
+                            AXReader.setBounds(element, frame: nudged)
+                            AXReader.setBounds(element, frame: current)
+                        }
+                    }
+                    logInfo("stage_assign_compositor_flush", [
                         "wid": String(wid),
                         "pid": String(state.pid),
                     ])
