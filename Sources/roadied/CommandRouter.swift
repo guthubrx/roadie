@@ -345,6 +345,37 @@ enum CommandRouter {
                 "current": AnyCodable(id),
             ])
 
+        case "daemon.apply_layout":
+            // SPEC-028 — force un applyLayout complet. Utilisé par le rail
+            // summon après stage.assign : sans ce force, applyAll qui suit
+            // l'assign re-setBounds la wid nouvelle mais peut ne pas re-tiler
+            // les wids déjà présentes du tree (idempotence trop large), donc
+            // les fenêtres se chevauchent.
+            daemon.applyLayout()
+            return .success()
+
+        case "window.focus":
+            // SPEC-028 — focus explicite par wid. setFocusFromShortcut pose
+            // le flag anti-feedback (focus_follows_mouse) + warp curseur,
+            // puis on applique le combo complet click-to-raise (cf. MouseRaiser) :
+            // WindowActivator.bringToFront (SkyLight `_SLPSSetFrontProcessWithOptions`,
+            // mode 0x200 raise + click event simulé) + activate ignoringOtherApps.
+            // Sans `bringToFront`, sur Sonoma+/Sequoia/Tahoe la wid reste à la
+            // bonne frame mais sous-classe dans le z-order (= invisible jusqu'au
+            // prochain clic de l'user).
+            guard let widStr = request.args?["wid"],
+                  let widInt = UInt32(widStr) else {
+                return .error(.invalidArgument, "missing or invalid wid")
+            }
+            let wid = WindowID(widInt)
+            daemon.focusManager.setFocusFromShortcut(to: wid)
+            if let state = daemon.registry.get(wid) {
+                WindowActivator.bringToFront(pid: state.pid, windowID: CGWindowID(wid))
+                NSRunningApplication(processIdentifier: state.pid)?
+                    .activate(options: [.activateIgnoringOtherApps])
+            }
+            return .success(["focused": AnyCodable(Int(widInt))])
+
         case "focus":
             guard let dirStr = request.args?["direction"],
                   let direction = Direction(rawValue: dirStr) else {

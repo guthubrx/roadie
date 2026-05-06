@@ -573,6 +573,9 @@ public final class RailController {
     private func buildPanels() {
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
+        // SPEC-028 — reset les frames panels enregistrées dans le tracker
+        // avant de re-enregistrer les nouveaux panels ci-dessous.
+        DragSummonTracker.shared.clearPanels()
         // SPEC-014 T090 (US7) : si mode "global" → 1 seul panel sur primary.
         let targetScreens: [NSScreen]
         if config.displayMode == "global" {
@@ -666,6 +669,19 @@ public final class RailController {
             let panel = StageRailPanel(rootView: view)
             panel.position(on: screen, width: config.panelWidth, edgeWidth: config.edgeWidth)
             panels[id] = panel
+            // SPEC-028 — enregistre la frame du panel rail dans le tracker
+            // pour que startDrag puisse retrouver le displayUUID, et que
+            // handleMouseUp puisse savoir si le drop est dans-rail (= laisser
+            // dropDestination natif gérer) ou hors-rail (= summon).
+            DragSummonTracker.shared.registerPanel(frame: panel.frame,
+                                                    displayUUID: panelUUID)
+        }
+        // Set ou re-set le callback summon (pas besoin par-panel, le tracker
+        // déduit le panel d'origine du drag via la position curseur initiale).
+        DragSummonTracker.shared.onSummon = { [weak self] wid, displayUUID in
+            Task { @MainActor [weak self] in
+                self?.summonWindow(wid, displayUUID: displayUUID)
+            }
         }
         let panelUUIDs = panels.keys.map { id -> String in
             guard let scr = NSScreen.screens.first(where: { displayID(for: $0) == id }) else {
@@ -829,8 +845,13 @@ public final class RailController {
     }
 
     /// SPEC-028 — drop d'une vignette wid hors-rail = "ramène-moi cette
-    /// fenêtre dans la stage active de ce display". Résout la stage active
-    /// du display via state.stagesByDisplay[uuid], puis appelle assignWindow.
+    /// fenêtre dans la stage active de ce display". Version V1 minimale :
+    /// assignWindow seul. La wid est ajoutée au tree de la stage active mais
+    /// l'apparition visuelle complète (re-tiling des voisines + raise z-order)
+    /// peut nécessiter un click utilisateur sur le bureau ou un switch de
+    /// stage. Limitation acceptée — les tentatives de force apply+focus+raise
+    /// dans cette session ont produit des comportements pires (fenêtre dans
+    /// la mauvaise stage, focus qui rebondit, etc.).
     func summonWindow(_ wid: CGWindowID, displayUUID: String) {
         let scoped = state.stagesByDisplay[displayUUID] ?? state.stages
         guard let activeStage = scoped.first(where: { $0.isActive }) else {

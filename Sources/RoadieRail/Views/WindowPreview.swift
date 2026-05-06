@@ -34,7 +34,19 @@ struct WindowPreview: View {
         .clipShape(RoundedRectangle(cornerRadius: previewRadius))
         .overlay(borderShape)
         .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
-        .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID))
+        .draggable(WindowDragData(wid: wid, sourceStageID: sourceStageID)) {
+            // SPEC-028 — preview : reproduit la vignette + notifie le tracker.
+            ZStack {
+                RoundedRectangle(cornerRadius: previewRadius)
+                    .fill(Color.white.opacity(0.15))
+                previewContent
+            }
+            .frame(width: previewWidth, height: previewHeight)
+            .clipShape(RoundedRectangle(cornerRadius: previewRadius))
+            .onAppear {
+                DragSummonTracker.shared.startDrag(wid: wid)
+            }
+        }
     }
 
     /// Bordure : tracé continu, pointillé long, ou pointillé fin selon `borderStyle`.
