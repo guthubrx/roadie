@@ -941,6 +941,27 @@ enum CommandRouter {
                     "stage": stageStr,
                     "reason": "summon_to_active_stage",
                 ])
+                // SPEC-028 — pattern AeroSpace pour rendre la wid visible :
+                // 1) attendre que setBounds settle, 2) kAXMain + kAXRaiseAction
+                // + app.activate(.activateIgnoringOtherApps), TOUT EN ASYNC.
+                // AeroSpace n'utilise PAS de SkyLight private ni kAXFocused —
+                // juste ces 3 calls dans un Task. Notre version synchrone avec
+                // bringToFront SkyLight ne marche pas (probablement race).
+                Task { @MainActor [registry = daemon.registry] in
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    guard let element = registry.axElement(for: wid),
+                          let state = registry.get(wid) else { return }
+                    AXUIElementSetAttributeValue(element,
+                                                  kAXMainAttribute as CFString,
+                                                  kCFBooleanTrue)
+                    AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+                    NSRunningApplication(processIdentifier: state.pid)?
+                        .activate(options: [.activateIgnoringOtherApps])
+                    logInfo("stage_assign_aerospace_focus", [
+                        "wid": String(wid),
+                        "pid": String(state.pid),
+                    ])
+                }
             }
             // SPEC-018 FR-017 : émettre stage_assigned enrichi (display_uuid + desktop_id).
             let assignUUID: String
