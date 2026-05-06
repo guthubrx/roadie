@@ -28,9 +28,15 @@ final class StageDropPanel: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
-        ignoresMouseEvents = true
+        // SPEC-028 fix : ignoresMouseEvents=true casse aussi le dispatch de
+        // drag-drop sur certaines versions macOS. On garde le panel sous
+        // toutes les fenêtres applicatives via level=desktopIcon → les clics
+        // normaux atteignent les apps au-dessus, et le drop ne nous arrive
+        // que si l'utilisateur lâche dans une zone vide (= bureau ou par-
+        // dessus une app qui ne refuse pas le drop). Compromise acceptable.
+        ignoresMouseEvents = false
         hasShadow = false
-        level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)))
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         let view = StageDropView()
         view.frame = screen.frame

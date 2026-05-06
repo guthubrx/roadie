@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 // SPEC-014 T028 — Vue racine SwiftUI du rail. Design "Stage Manager natif".
 // Reçoit RailState en @Bindable (pattern @Observable macOS 14+).
@@ -221,22 +220,12 @@ struct StageStackView: View {
                                     )
                                 }
                             )
-                            // SPEC-027 US3 — drag-reorder source. La cellule est
-                            // draggable ; le payload est le stage_id encodé en string.
-                            .onDrag { NSItemProvider(object: stage.id as NSString) }
-                            // SPEC-027 US3 — drop target : si le payload est un stage_id
-                            // de la même liste, on appelle onReorderStages(source, target).
-                            .onDrop(of: [.text], isTargeted: nil) { providers in
-                                guard let p = providers.first else { return false }
-                                _ = p.loadObject(ofClass: NSString.self) { obj, _ in
-                                    guard let srcID = obj as? String,
-                                          srcID != stage.id else { return }
-                                    Task { @MainActor in
-                                        onReorderStages(srcID, stage.id)
-                                    }
-                                }
-                                return true
-                            }
+                            // SPEC-027 US3 — drag-reorder via UI désactivé : SwiftUI
+                            // priorise le `.draggable` des WindowChip/WindowPreview
+                            // enfants pour le hit-test, donc `.onDrag` au niveau
+                            // cellule n'est jamais déclenché. Pour réordonner, le
+                            // CLI `roadie stage move-before/move-after` reste la
+                            // voie nominale ; un handle dédié sera ajouté en V2.
                             }
                         }
                     }
