@@ -1,4 +1,4 @@
-.PHONY: test build permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test config clean
+.PHONY: test build permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config clean
 
 test:
 	./scripts/test
@@ -52,6 +52,9 @@ doctor:
 
 self-test:
 	./scripts/roadie self-test
+
+events:
+	./scripts/roadie events tail 30
 
 clean:
 	./scripts/with-xcode swift package clean

@@ -17,6 +17,7 @@ func printUsage() {
       roadie config show
       roadie doctor
       roadie self-test
+      roadie events tail [N]
       roadie permissions [--prompt]
       roadie focus status
       roadie focus|move|warp|wrap|resize left|right|up|down
@@ -137,6 +138,13 @@ case "self-test":
     let report = SelfTestService(service: service).run()
     print(TextFormatter.selfTest(report))
     exit(report.failed ? 1 : 0)
+case "events":
+    guard args.dropFirst().first == "tail" else {
+        printUsage()
+        exit(64)
+    }
+    let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
+    print(EventLog().tail(limit: limit).joined(separator: "\n"))
 case "config":
     guard args.dropFirst().first == "show" else {
         printUsage()

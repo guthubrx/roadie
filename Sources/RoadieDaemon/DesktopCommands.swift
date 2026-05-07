@@ -6,10 +6,12 @@ import RoadieCore
 public struct DesktopCommandService {
     private let service: SnapshotService
     private let store: StageStore
+    private let events: EventLog
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore()) {
+    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
         self.service = service
         self.store = store
+        self.events = events
     }
 
     public func list() -> StageCommandResult {
@@ -129,6 +131,11 @@ public struct DesktopCommandService {
 
         let hidden = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
         let result = service.apply(service.applyPlan(from: service.snapshot()))
+        events.append(RoadieEvent(
+            type: "window_desktop",
+            scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID),
+            details: ["windowID": String(active.window.id.rawValue), "follow": String(follow), "layout": String(result.attempted)]
+        ))
         return StageCommandResult(
             message: "window desktop \(desktopID.rawValue): hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
@@ -184,6 +191,17 @@ public struct DesktopCommandService {
            let focused = windowsByID[focusedID] {
             _ = service.focus(focused)
         }
+        events.append(RoadieEvent(
+            type: "desktop_focus",
+            scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: targetScope.activeStageID),
+            details: [
+                "previousDesktopID": String(previousDesktopID.rawValue),
+                "hidden": String(previousWindowIDs.subtracting(targetWindowIDs).count),
+                "shown": String(targetWindowIDs.count),
+                "applied": String(applied),
+                "layout": String(result.attempted)
+            ]
+        ))
 
         return StageCommandResult(
             message: "desktop focus \(desktopID.rawValue): hidden=\(previousWindowIDs.subtracting(targetWindowIDs).count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(result.attempted)",

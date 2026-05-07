@@ -5,10 +5,12 @@ import RoadieCore
 public struct DisplayCommandService {
     private let service: SnapshotService
     private let store: StageStore
+    private let events: EventLog
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore()) {
+    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
         self.service = service
         self.store = store
+        self.events = events
     }
 
     public func focus(index: Int) -> StageCommandResult {
@@ -31,6 +33,12 @@ public struct DisplayCommandService {
             snapshot.windows.first { $0.window.id == id && $0.scope == activeScope }?.window
         }
         let focusedResult = focused.map { service.focus($0) } ?? false
+        events.append(RoadieEvent(type: "display_focus", details: [
+            "displayIndex": String(index),
+            "displayID": display.id.rawValue,
+            "displayName": display.name,
+            "focused": String(focusedResult)
+        ]))
 
         return StageCommandResult(
             message: "display focus \(index): \(display.name) focused=\(focusedResult)",
