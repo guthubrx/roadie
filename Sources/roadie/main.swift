@@ -9,7 +9,7 @@ func printUsage() {
     print("""
     usage:
       roadie windows list [--json]
-      roadie display list [--json]
+      roadie display list|current [--json]
       roadie state dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
@@ -59,13 +59,16 @@ case "windows":
         print(TextFormatter.windows(snapshot.windows))
     }
 case "display":
-    guard args.dropFirst().first == "list" else {
+    let verb = args.dropFirst().first
+    guard verb == "list" || verb == "current" else {
         printUsage()
         exit(64)
     }
     let snapshot = service.snapshot()
     if args.contains("--json") {
         printJSON(snapshot)
+    } else if verb == "current" {
+        print(TextFormatter.currentDisplay(snapshot))
     } else {
         print(TextFormatter.displays(snapshot.displays))
     }

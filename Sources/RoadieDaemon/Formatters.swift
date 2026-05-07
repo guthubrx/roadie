@@ -27,6 +27,17 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func currentDisplay(_ snapshot: DaemonSnapshot) -> String {
+        guard let display = displayContainingFocusedWindow(in: snapshot) ?? snapshot.displays.first else {
+            return "No displays found."
+        }
+        let frame = "\(Int(display.frame.x)),\(Int(display.frame.y)) \(Int(display.frame.width))x\(Int(display.frame.height))"
+        return [
+            "INDEX\tMAIN\tNAME\tUUID\tFRAME",
+            "\(display.index)\t\(display.isMain ? "*" : "")\t\(display.name)\t\(display.id.rawValue)\t\(frame)"
+        ].joined(separator: "\n")
+    }
+
     public static func permissions(_ permissions: PermissionSnapshot) -> String {
         "accessibilityTrusted=\(permissions.accessibilityTrusted)"
     }
@@ -79,5 +90,15 @@ public enum TextFormatter {
             lines.append("wid=\(item.windowID.rawValue) status=\(item.status.rawValue) requested=\(requested) actual=\(actual)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func displayContainingFocusedWindow(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
+        guard let focusedWindowID = snapshot.focusedWindowID,
+              let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID })
+        else { return nil }
+        if let displayID = entry.scope?.displayID {
+            return snapshot.displays.first { $0.id == displayID }
+        }
+        return snapshot.displays.first { $0.frame.cgRect.contains(entry.window.frame.center) }
     }
 }
