@@ -41,6 +41,31 @@ private final class SequenceProvider: SystemSnapshotProviding, @unchecked Sendab
     }
 }
 
+private final class MultiDisplaySequenceProvider: SystemSnapshotProviding, @unchecked Sendable {
+    private let displaySnapshots: [DisplaySnapshot]
+    private let windowSnapshots: [[WindowSnapshot]]
+    private var index = 0
+
+    init(displaySnapshots: [DisplaySnapshot], windowSnapshots: [[WindowSnapshot]]) {
+        self.displaySnapshots = displaySnapshots
+        self.windowSnapshots = windowSnapshots
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot {
+        PermissionSnapshot(accessibilityTrusted: true)
+    }
+
+    func displays() -> [DisplaySnapshot] {
+        displaySnapshots
+    }
+
+    func windows() -> [WindowSnapshot] {
+        let windows = windowSnapshots[Swift.min(index, windowSnapshots.count - 1)]
+        index += 1
+        return windows
+    }
+}
+
 private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var requestedFrames: [WindowID: Rect] = [:]
 
@@ -140,25 +165,130 @@ struct LayoutMaintainerTests {
             .appendingPathComponent("roadie-manual-resize-intent-\(UUID().uuidString).json")
             .path
         let intentStore = LayoutIntentStore(path: intentPath)
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [
+                WindowID(rawValue: 1): Rect(x: 0, y: 0, width: 495, height: 500),
+                WindowID(rawValue: 2): Rect(x: 505, y: 0, width: 495, height: 500),
+            ]
+        ))
         let service = SnapshotService(
             provider: provider,
             frameWriter: writer,
             config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
             intentStore: intentStore
         )
-        let maintainer = LayoutMaintainer(service: service)
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
 
         let initial = maintainer.tick()
         let resizing = maintainer.tick()
+        let debounced = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(2)
         let settled = maintainer.tick()
 
         #expect(initial.commands == 0)
         #expect(resizing.manualResizeDetected)
         #expect(resizing.commands == 0)
+        #expect(debounced.manualResizeDetected)
+        #expect(debounced.commands == 0)
         #expect(settled.commands == 1)
         #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
-        #expect(intentStore.intent(for: StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
+        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
         try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
+    func manualResizeIsNotSuppressedByCommandIntentOnAnotherDisplay() {
+        let displayA = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let displayB = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-b"),
+            index: 2,
+            name: "B",
+            frame: Rect(x: 1000, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500),
+            isMain: false
+        )
+        let a1 = WindowID(rawValue: 1)
+        let a2 = WindowID(rawValue: 2)
+        let b1 = WindowID(rawValue: 3)
+        let b2 = WindowID(rawValue: 4)
+        func window(_ id: WindowID, _ frame: Rect) -> WindowSnapshot {
+            WindowSnapshot(
+                id: id,
+                pid: Int32(id.rawValue + 10),
+                appName: "App\(id.rawValue)",
+                bundleID: "app.\(id.rawValue)",
+                title: "Window\(id.rawValue)",
+                frame: frame,
+                isOnScreen: true,
+                isTileCandidate: true
+            )
+        }
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [displayA, displayB], windowSnapshots: [
+            [
+                window(a1, Rect(x: 0, y: 0, width: 495, height: 500)),
+                window(a2, Rect(x: 505, y: 0, width: 495, height: 500)),
+                window(b1, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                window(b2, Rect(x: 1505, y: 0, width: 495, height: 500)),
+            ],
+            [
+                window(a1, Rect(x: 0, y: 0, width: 700, height: 500)),
+                window(a2, Rect(x: 505, y: 0, width: 495, height: 500)),
+                window(b1, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                window(b2, Rect(x: 1505, y: 0, width: 495, height: 500)),
+            ],
+            [
+                window(a1, Rect(x: 0, y: 0, width: 700, height: 500)),
+                window(a2, Rect(x: 505, y: 0, width: 495, height: 500)),
+                window(b1, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                window(b2, Rect(x: 1505, y: 0, width: 495, height: 500)),
+            ],
+        ])
+        let intent = makeIntentStore()
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-cross-display-resize-stages-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        intent.store.save(LayoutIntent(
+            scope: StageScope(displayID: displayB.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")),
+            windowIDs: [b1, b2],
+            placements: [
+                b1: Rect(x: 1000, y: 0, width: 495, height: 500),
+                b2: Rect(x: 1505, y: 0, width: 495, height: 500),
+            ],
+            source: .command
+        ))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intent.store,
+            stageStore: stageStore
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        _ = maintainer.tick()
+        let resizing = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(2)
+        let settled = maintainer.tick()
+
+        #expect(resizing.manualResizeDetected)
+        #expect(settled.commands == 1)
+        #expect(writer.requestedFrames[a2] == Rect(x: 710, y: 0, width: 290, height: 500))
+        try? FileManager.default.removeItem(atPath: intent.path)
+        try? FileManager.default.removeItem(atPath: stagePath)
     }
 
     @Test
@@ -420,7 +550,7 @@ struct LayoutMaintainerTests {
             display: display,
             windowFrames: [
                 [before, right],
-                [before, Rect(x: 0, y: 20, width: 495, height: 480)],
+                [before, Rect(x: 505, y: 10, width: 495, height: 490)],
             ]
         )
         _ = SnapshotService(

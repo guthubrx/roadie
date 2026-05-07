@@ -149,6 +149,30 @@ struct LayoutPlannerTests {
     }
 
     @Test
+    func bspKeepsBottomPrioritySizeWhenOuterEdgeWasDraggedInward() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let c = WindowID(rawValue: 3)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .bsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 1000),
+            windowIDs: [a, b, c],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 495, height: 1000),
+                b: CGRect(x: 505, y: 0, width: 495, height: 495),
+                c: CGRect(x: 505, y: 505, width: 350, height: 300),
+            ],
+            priorityWindowIDs: [c],
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 640, height: 1000))
+        #expect(plan.placements[b] == CGRect(x: 650, y: 0, width: 350, height: 690))
+        #expect(plan.placements[c] == CGRect(x: 650, y: 700, width: 350, height: 300))
+    }
+
+    @Test
     func bspBalancedIgnoresStaleRatiosWithoutPriorityWindow() {
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)

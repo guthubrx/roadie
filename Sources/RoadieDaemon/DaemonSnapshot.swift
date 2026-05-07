@@ -452,8 +452,16 @@ public extension SnapshotService {
 
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let focusedWindowID = focusedWindowID()
         let commands = intent.windowIDs.compactMap { id -> ApplyCommand? in
-            guard let window = windowsByID[id], let target = intent.placements[id], !window.frame.isClose(to: target, positionTolerance: 1, sizeTolerance: 1) else {
+            guard let window = windowsByID[id], let target = intent.placements[id] else {
+                return nil
+            }
+            if id == focusedWindowID,
+               isLikelyFocusWindowChromeDelta(window.frame, baseline: target) {
+                return nil
+            }
+            guard !window.frame.isClose(to: target, positionTolerance: 1, sizeTolerance: 1) else {
                 return nil
             }
             return ApplyCommand(window: window, frame: target)
