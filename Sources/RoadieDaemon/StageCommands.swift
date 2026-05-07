@@ -87,6 +87,27 @@ public struct StageCommandService {
         return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot)
     }
 
+    public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
+        }
+        var state = store.state()
+        var scope = state.scope(displayID: display.id)
+        let stageID = scope.activeStageID
+        scope.setMode(mode, for: stageID)
+        state.update(scope)
+        store.save(state)
+
+        let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
+        service.removeLayoutIntent(scope: activeScope)
+        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        return StageCommandResult(
+            message: "mode \(mode.rawValue): stage=\(stageID.rawValue) layout=\(result.attempted)",
+            changed: true
+        )
+    }
+
     private func switchDisplay(
         _ display: DisplaySnapshot,
         to stageID: StageID,

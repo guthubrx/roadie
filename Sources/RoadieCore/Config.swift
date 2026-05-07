@@ -199,16 +199,10 @@ public enum RoadieConfigLoader {
 
 private extension WindowManagementMode {
     init?(tomlValue: String) {
-        switch tomlValue {
-        case "bsp":
-            self = .bsp
-        case "masterStack", "master_stack":
-            self = .masterStack
-        case "float":
-            self = .float
-        default:
+        guard let mode = WindowManagementMode(roadieValue: tomlValue) else {
             return nil
         }
+        self = mode
     }
 }
 
