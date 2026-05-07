@@ -4,11 +4,13 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 label="com.roadie.roadied"
 stderr_log="$HOME/.roadies/roadied.stderr.log"
+pidfile="$HOME/.roadies/roadied.pid"
 repo_root="$(cd "$script_dir/.." && pwd)"
 roadied_bin="$repo_root/bin/roadied"
 
 echo "== build =="
 "$script_dir/with-xcode" swift build --configuration debug --product roadied >/dev/null
+"$script_dir/with-xcode" swift build --configuration debug --product roadie >/dev/null
 echo "$roadied_bin"
 
 echo "== terminal accessibility =="
@@ -18,11 +20,24 @@ else
   echo "missing runtime binary; run make start"
 fi
 
+echo "== runtime =="
+if [[ -f "$pidfile" ]]; then
+  pid="$(cat "$pidfile")"
+  if ps -p "$pid" -o args= 2>/dev/null | grep -q "$roadied_bin run --yes"; then
+    echo "roadied running"
+    echo "pid: $pid"
+  else
+    echo "stale pidfile: $pidfile"
+  fi
+else
+  echo "no pidfile; run make start"
+fi
+
 echo "== launchd =="
 if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   launchctl print "gui/$(id -u)/$label" | sed -n '/state =/p;/pid =/p;/program =/p'
 else
-  echo "$label not loaded"
+  echo "$label not loaded (normal for tmux/nohup runtime)"
 fi
 
 echo "== daemon diagnostics =="
@@ -31,6 +46,9 @@ if [[ -f "$stderr_log" ]] && [[ -s "$stderr_log" ]]; then
 else
   echo "no daemon stderr"
 fi
+
+echo "== roadie self-test =="
+"$script_dir/roadie" self-test
 
 if [[ -f "$stderr_log" ]] && grep -q 'accessibilityTrusted=false' "$stderr_log"; then
   echo ""
