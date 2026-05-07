@@ -690,7 +690,7 @@ struct SnapshotServiceTests {
 
         #expect(switchResult.changed)
         #expect(switchWriter.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
-        #expect(switchWriter.requestedFrames[right.id] == right.frame)
+        #expect(switchWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
