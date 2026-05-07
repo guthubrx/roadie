@@ -7,6 +7,7 @@ public final class RailController {
     private let store: StageStore
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
+    private let events = EventLog()
     private var panels: [DisplayID: RailPanel] = [:]
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
@@ -59,13 +60,34 @@ public final class RailController {
     private func handleClick(at screenPoint: CGPoint) {
         for (displayID, panel) in panels {
             guard panel.frame.contains(screenPoint),
-                  let stageID = panel.stageID(at: screenPoint)
+                  let action = panel.action(at: screenPoint)
             else { continue }
-            print("rail click stage \(stageID.rawValue)")
-            fflush(stdout)
-            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+            perform(action, displayID: displayID)
             rebuildPanels()
             return
+        }
+    }
+
+    private func perform(_ action: RailAction, displayID: DisplayID) {
+        switch action {
+        case .switchStage(let stageID):
+            print("rail switch stage \(stageID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
+            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+        case .restoreStage(let stageID):
+            print("rail restore stage \(stageID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_stage_restore", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
+            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+        case .moveStage(let stageID, let position):
+            print("rail reorder stage \(stageID.rawValue) -> \(position)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_stage_reorder",
+                details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue, "position": String(position)]
+            ))
+            _ = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
         }
     }
 
@@ -83,10 +105,7 @@ public final class RailController {
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
             panel.position(on: screen)
-            panel.render(scope: scope, mode: renderMode) { [weak self] stageID in
-                _ = self?.commandService.switchTo(stageID.rawValue, displayID: displayID)
-                self?.rebuildPanels()
-            }
+            panel.render(scope: scope, mode: renderMode)
             if panels[displayID] == nil {
                 panels[displayID] = panel
                 panel.makeKey()
@@ -107,6 +126,12 @@ public final class RailController {
         else { return nil }
         return DisplayID(rawValue: string)
     }
+}
+
+private enum RailAction {
+    case switchStage(StageID)
+    case restoreStage(StageID)
+    case moveStage(StageID, Int)
 }
 
 @MainActor
@@ -146,29 +171,35 @@ private final class RailPanel: NSPanel {
         )
     }
 
-    func render(scope: PersistentStageScope, mode: RailRenderMode, onSelect: @escaping (StageID) -> Void) {
+    func render(scope: PersistentStageScope, mode: RailRenderMode) {
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
 
         let ids = stageIDs(from: scope)
-        for id in ids {
+        for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
-            let card = StageCardView(stage: stage, isActive: id == scope.activeStageID, mode: mode)
-            card.onClick = { onSelect(id) }
+            let card = StageCardView(
+                stage: stage,
+                isActive: id == scope.activeStageID,
+                mode: mode,
+                position: index + 1,
+                stageCount: ids.count
+            )
             stack.addArrangedSubview(card)
         }
     }
 
-    func stageID(at screenPoint: CGPoint) -> StageID? {
+    func action(at screenPoint: CGPoint) -> RailAction? {
         guard let contentView else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let contentPoint = contentView.convert(windowPoint, from: nil)
         var view = contentView.hitTest(contentPoint)
         while let current = view {
             if let card = current as? StageCardView {
-                return card.stageID
+                let local = card.convert(contentPoint, from: contentView)
+                return card.action(at: local)
             }
             view = current.superview
         }
@@ -207,21 +238,22 @@ private final class StageCardView: NSControl {
     private let stage: PersistentStage
     private let isActive: Bool
     private let mode: RailRenderMode
-    var onClick: (() -> Void)?
+    private let position: Int
+    private let stageCount: Int
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
-    init(stage: PersistentStage, isActive: Bool, mode: RailRenderMode) {
+    init(stage: PersistentStage, isActive: Bool, mode: RailRenderMode, position: Int, stageCount: Int) {
         self.stage = stage
         self.stageID = stage.id
         self.isActive = isActive
         self.mode = mode
+        self.position = position
+        self.stageCount = stageCount
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
         wantsLayer = true
-        target = self
-        action = #selector(clicked)
         translatesAutoresizingMaskIntoConstraints = false
         widthAnchor.constraint(equalToConstant: 224).isActive = true
         heightAnchor.constraint(equalToConstant: mode == .icons ? 78 : 142).isActive = true
@@ -240,10 +272,17 @@ private final class StageCardView: NSControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    @objc private func clicked() {
-        print("rail click stage \(stageID.rawValue)")
-        fflush(stdout)
-        onClick?()
+    func action(at point: CGPoint) -> RailAction {
+        if restoreRect.contains(point) {
+            return .restoreStage(stageID)
+        }
+        if upRect.contains(point), position > 1 {
+            return .moveStage(stageID, position - 1)
+        }
+        if downRect.contains(point), position < stageCount {
+            return .moveStage(stageID, position + 1)
+        }
+        return .switchStage(stageID)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -254,6 +293,7 @@ private final class StageCardView: NSControl {
     private func drawCard() {
         let rect = bounds.insetBy(dx: 12, dy: 12)
         drawTitle(in: rect)
+        drawControls()
         switch mode {
         case .stacked:
             drawStacked(in: rect.insetBy(dx: 10, dy: 18))
@@ -264,6 +304,36 @@ private final class StageCardView: NSControl {
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
+    }
+
+    private var restoreRect: CGRect {
+        CGRect(x: bounds.maxX - 38, y: bounds.maxY - 36, width: 22, height: 22)
+    }
+
+    private var upRect: CGRect {
+        CGRect(x: bounds.maxX - 66, y: bounds.maxY - 36, width: 22, height: 22)
+    }
+
+    private var downRect: CGRect {
+        CGRect(x: bounds.maxX - 94, y: bounds.maxY - 36, width: 22, height: 22)
+    }
+
+    private func drawControls() {
+        drawControl("↓", in: downRect, enabled: position < stageCount)
+        drawControl("↑", in: upRect, enabled: position > 1)
+        drawControl("↩", in: restoreRect, enabled: true)
+    }
+
+    private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
+        rounded(
+            rect,
+            radius: 8,
+            color: NSColor.white.withAlphaComponent(enabled ? (isActive ? 0.18 : 0.12) : 0.05)
+        )
+        label.draw(in: rect.insetBy(dx: 0, dy: 3), withAttributes: [
+            .foregroundColor: NSColor.white.withAlphaComponent(enabled ? 0.82 : 0.22),
+            .font: NSFont.systemFont(ofSize: 12, weight: .bold),
+        ])
     }
 
     private func drawTitle(in rect: CGRect) {
@@ -280,14 +350,14 @@ private final class StageCardView: NSControl {
             .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.92 : 0.68),
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
         ]
-        stage.name.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY + 8, width: rect.width - 42, height: 16), withAttributes: titleAttrs)
+        stage.name.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY + 8, width: rect.width - 120, height: 16), withAttributes: titleAttrs)
 
         let label = "\(stage.mode.rawValue) · \(count) \(count > 1 ? "fenêtres" : "fenêtre")"
         let labelAttrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.84 : 0.50),
             .font: NSFont.systemFont(ofSize: 10, weight: .medium),
         ]
-        label.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY - 5, width: rect.width - 42, height: 14), withAttributes: labelAttrs)
+        label.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY - 5, width: rect.width - 120, height: 14), withAttributes: labelAttrs)
     }
 
     private func drawStacked(in rect: CGRect) {

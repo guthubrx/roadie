@@ -108,9 +108,13 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage reorder: no display", changed: false)
         }
+        return reorder(rawStageID, to: position, displayID: display.id)
+    }
+
+    public func reorder(_ rawStageID: String, to position: Int, displayID: DisplayID) -> StageCommandResult {
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = activeScope(displayID: display.id, in: &state)
+        var scope = activeScope(displayID: displayID, in: &state)
         guard scope.reorderStage(stageID, to: position) else {
             return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
         }
