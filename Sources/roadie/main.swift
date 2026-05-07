@@ -20,6 +20,9 @@ func printUsage() {
       roadie window display N
       roadie window reset
       roadie desktop focus N|prev|next|last
+      roadie stage list
+      roadie stage create|delete N
+      roadie stage rename N NAME
       roadie stage switch|assign N
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
@@ -217,6 +220,35 @@ func runWindowCommand(_ args: [String]) {
 @MainActor
 func runStageCommand(_ args: [String]) {
     switch args.first {
+    case "list":
+        let result = StageCommandService(service: service).list()
+        print(result.message)
+        exit(0)
+    case "create":
+        guard let stageID = args.dropFirst().first else {
+            fputs("roadie: stage create requires a stage id\n", stderr)
+            exit(64)
+        }
+        let name = args.dropFirst(2).isEmpty ? nil : args.dropFirst(2).joined(separator: " ")
+        let result = StageCommandService(service: service).create(stageID, name: name)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "rename":
+        guard let stageID = args.dropFirst().first, !args.dropFirst(2).isEmpty else {
+            fputs("roadie: stage rename requires a stage id and name\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).rename(stageID, to: args.dropFirst(2).joined(separator: " "))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "delete":
+        guard let stageID = args.dropFirst().first else {
+            fputs("roadie: stage delete requires a stage id\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).delete(stageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "mode":
         runModeCommand(args.dropFirst().first)
     case "switch":

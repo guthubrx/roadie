@@ -46,6 +46,72 @@ public struct StageCommandService {
         return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
     }
 
+    public func list() -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage list: no display", changed: false)
+        }
+        var state = store.state()
+        let scope = state.scope(displayID: display.id)
+        state.update(scope)
+        store.save(state)
+
+        var lines = ["ACTIVE\tID\tMODE\tWINDOWS\tNAME"]
+        for stage in scope.stages.sorted(by: { $0.id < $1.id }) {
+            let active = stage.id == scope.activeStageID ? "*" : ""
+            lines.append("\(active)\t\(stage.id.rawValue)\t\(stage.mode.rawValue)\t\(stage.members.count)\t\(stage.name)")
+        }
+        return StageCommandResult(message: lines.joined(separator: "\n"), changed: false)
+    }
+
+    public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage create: no display", changed: false)
+        }
+        let stageID = StageID(rawValue: rawStageID)
+        var state = store.state()
+        var scope = state.scope(displayID: display.id)
+        guard scope.createStage(stageID, name: name) else {
+            return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
+        }
+        state.update(scope)
+        store.save(state)
+        return StageCommandResult(message: "stage create \(stageID.rawValue): \(name ?? "Stage \(stageID.rawValue)")", changed: true)
+    }
+
+    public func rename(_ rawStageID: String, to name: String) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage rename: no display", changed: false)
+        }
+        let stageID = StageID(rawValue: rawStageID)
+        var state = store.state()
+        var scope = state.scope(displayID: display.id)
+        guard scope.renameStage(stageID, to: name) else {
+            return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
+        }
+        state.update(scope)
+        store.save(state)
+        return StageCommandResult(message: "stage rename \(stageID.rawValue): \(name)", changed: true)
+    }
+
+    public func delete(_ rawStageID: String) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage delete: no display", changed: false)
+        }
+        let stageID = StageID(rawValue: rawStageID)
+        var state = store.state()
+        var scope = state.scope(displayID: display.id)
+        guard scope.deleteEmptyInactiveStage(stageID) else {
+            return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false)
+        }
+        state.update(scope)
+        store.save(state)
+        return StageCommandResult(message: "stage delete \(stageID.rawValue)", changed: true)
+    }
+
     public func switchTo(_ rawStageID: String) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
