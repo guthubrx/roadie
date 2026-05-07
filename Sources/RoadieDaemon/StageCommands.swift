@@ -124,9 +124,13 @@ public struct StageCommandService {
         scope.activeStageID = stageID
         state.update(scope)
         store.save(state)
+
+        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
+        applied += layoutResult.applied + layoutResult.clamped
+
         return StageCommandResult(
-            message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied)",
-            changed: previousID != stageID || applied > 0
+            message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
+            changed: previousID != stageID || applied > 0 || layoutResult.attempted > 0
         )
     }
 
