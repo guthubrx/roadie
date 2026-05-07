@@ -1,6 +1,17 @@
+import CoreGraphics
 import Foundation
 import Testing
+import RoadieAX
 import RoadieCore
+import RoadieDaemon
+
+private final class PointRecorder: @unchecked Sendable {
+    private(set) var points: [CGPoint] = []
+
+    func append(_ point: CGPoint) {
+        points.append(point)
+    }
+}
 
 @Suite
 struct ConfigTests {
@@ -32,5 +43,47 @@ struct ConfigTests {
         #expect(config.fx.borders.stageOverrides == [
             BorderStageOverride(stageID: "2", activeColor: "#F7768E")
         ])
+    }
+
+    @Test
+    func focusConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-focus-config-\(UUID().uuidString).toml")
+        try """
+        [focus]
+        stage_follows_focus = false
+        assign_follows_focus = true
+        focus_follows_mouse = true
+        mouse_follows_focus = true
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.focus.stageFollowsFocus == false)
+        #expect(config.focus.assignFollowsFocus)
+        #expect(config.focus.focusFollowsMouse)
+        #expect(config.focus.mouseFollowsFocus)
+    }
+
+    @Test
+    func mouseFollowerMovesToWindowCenterOnlyWhenEnabled() {
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 1,
+            appName: "App",
+            bundleID: "app",
+            title: "Window",
+            frame: Rect(x: 10, y: 20, width: 100, height: 60),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let recorder = PointRecorder()
+
+        MouseFollower(isEnabled: { false }, move: { recorder.append($0) }).follow(window)
+        #expect(recorder.points.isEmpty)
+
+        MouseFollower(isEnabled: { true }, move: { recorder.append($0) }).follow(window)
+        #expect(recorder.points == [CGPoint(x: 60, y: 50)])
     }
 }
