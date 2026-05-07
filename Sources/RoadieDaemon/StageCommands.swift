@@ -53,6 +53,50 @@ public struct StageCommandService {
         return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
     }
 
+    public func assign(windowID: WindowID, to rawStageID: String, displayID: DisplayID) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
+            return StageCommandResult(message: "stage assign: unknown display", changed: false)
+        }
+
+        let stageID = StageID(rawValue: rawStageID)
+        var state = store.state()
+        var scope = activeScope(displayID: displayID, in: &state)
+        guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+            scope.remove(windowID: windowID)
+            state.update(scope)
+            store.save(state)
+            return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
+        }
+
+        scope.assign(window: window, to: stageID)
+        state.update(scope)
+        store.save(state)
+
+        if scope.activeStageID != stageID {
+            _ = service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+        }
+
+        let activeScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
+        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
+        if scope.activeStageID == stageID {
+            _ = service.focus(window)
+        }
+        events.append(RoadieEvent(
+            type: "stage_assign_window",
+            scope: activeScope,
+            details: [
+                "stageID": stageID.rawValue,
+                "windowID": String(windowID.rawValue),
+                "layout": String(layoutResult.attempted)
+            ]
+        ))
+        return StageCommandResult(
+            message: "stage assign \(stageID.rawValue): window=\(windowID.rawValue) layout=\(layoutResult.attempted)",
+            changed: true
+        )
+    }
+
     public func list() -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
@@ -156,50 +200,10 @@ public struct StageCommandService {
         return switchDisplay(display, to: StageID(rawValue: rawStageID), snapshot: snapshot)
     }
 
-    public func summonLastWindow(from rawStageID: String, displayID: DisplayID) -> StageCommandResult {
-        let snapshot = service.snapshot()
-        guard snapshot.displays.contains(where: { $0.id == displayID }) else {
-            return StageCommandResult(message: "stage summon: unknown display", changed: false)
-        }
-
-        let sourceStageID = StageID(rawValue: rawStageID)
+    public func summon(windowID: WindowID, displayID: DisplayID) -> StageCommandResult {
         var state = store.state()
-        var scope = activeScope(displayID: displayID, in: &state)
-        guard sourceStageID != scope.activeStageID else {
-            return StageCommandResult(message: "stage summon \(sourceStageID.rawValue): already active", changed: false)
-        }
-        guard let sourceStage = scope.stages.first(where: { $0.id == sourceStageID }),
-              let windowID = sourceStage.focusedWindowID ?? sourceStage.members.last?.windowID
-        else {
-            return StageCommandResult(message: "stage summon \(sourceStageID.rawValue): empty", changed: false)
-        }
-        guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
-            scope.remove(windowID: windowID)
-            state.update(scope)
-            store.save(state)
-            return StageCommandResult(message: "stage summon \(sourceStageID.rawValue): stale window pruned", changed: true)
-        }
-
-        let targetStageID = scope.activeStageID
-        scope.assign(window: window, to: targetStageID)
-        state.update(scope)
-        store.save(state)
-
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
-        _ = service.focus(window)
-        events.append(RoadieEvent(
-            type: "stage_summon_window",
-            scope: StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: targetStageID),
-            details: [
-                "fromStageID": sourceStageID.rawValue,
-                "windowID": String(windowID.rawValue),
-                "layout": String(layoutResult.attempted)
-            ]
-        ))
-        return StageCommandResult(
-            message: "stage summon \(sourceStageID.rawValue): window=\(windowID.rawValue) target=\(targetStageID.rawValue) layout=\(layoutResult.attempted)",
-            changed: true
-        )
+        let scope = activeScope(displayID: displayID, in: &state)
+        return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
     }
 
     public func cycle(_ direction: StageCycleDirection) -> StageCommandResult {

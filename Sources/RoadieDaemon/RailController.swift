@@ -75,11 +75,19 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
             _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
-        case .summonWindow(let stageID):
-            print("rail summon from stage \(stageID.rawValue)")
+        case .summonWindow(let windowID):
+            print("rail summon window \(windowID.rawValue)")
             fflush(stdout)
-            events.append(RoadieEvent(type: "rail_stage_summon", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
-            _ = commandService.summonLastWindow(from: stageID.rawValue, displayID: displayID)
+            events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
+            _ = commandService.summon(windowID: windowID, displayID: displayID)
+        case .moveWindow(let windowID, let stageID):
+            print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_move",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
+            ))
+            _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -130,7 +138,8 @@ public final class RailController {
 
 private enum RailAction {
     case switchStage(StageID)
-    case summonWindow(StageID)
+    case summonWindow(WindowID)
+    case moveWindow(WindowID, StageID)
     case moveStage(StageID, Int)
 }
 
@@ -187,7 +196,9 @@ private final class RailPanel: NSPanel {
                 mode: config.mode,
                 accent: config.accent(for: id),
                 position: index + 1,
-                stageCount: ids.count
+                stageCount: ids.count,
+                previousStageID: index > 0 ? ids[index - 1] : nil,
+                nextStageID: index + 1 < ids.count ? ids[index + 1] : nil
             )
             stack.addArrangedSubview(card)
         }
@@ -322,12 +333,23 @@ private final class StageCardView: NSControl {
     private let accent: NSColor
     private let position: Int
     private let stageCount: Int
+    private let previousStageID: StageID?
+    private let nextStageID: StageID?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
-    init(stage: PersistentStage, isActive: Bool, mode: RailRenderMode, accent: NSColor, position: Int, stageCount: Int) {
+    init(
+        stage: PersistentStage,
+        isActive: Bool,
+        mode: RailRenderMode,
+        accent: NSColor,
+        position: Int,
+        stageCount: Int,
+        previousStageID: StageID?,
+        nextStageID: StageID?
+    ) {
         self.stage = stage
         self.stageID = stage.id
         self.isActive = isActive
@@ -335,6 +357,8 @@ private final class StageCardView: NSControl {
         self.accent = accent
         self.position = position
         self.stageCount = stageCount
+        self.previousStageID = previousStageID
+        self.nextStageID = nextStageID
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
@@ -356,8 +380,8 @@ private final class StageCardView: NSControl {
     }
 
     func action(at point: CGPoint) -> RailAction {
-        if restoreRect.contains(point) {
-            return .summonWindow(stageID)
+        if let action = windowAction(at: point) {
+            return action
         }
         if upRect.contains(point), position > 1 {
             return .moveStage(stageID, position - 1)
@@ -392,10 +416,6 @@ private final class StageCardView: NSControl {
         }
     }
 
-    private var restoreRect: CGRect {
-        CGRect(x: bounds.maxX - 38, y: bounds.maxY - 36, width: 22, height: 22)
-    }
-
     private var upRect: CGRect {
         CGRect(x: bounds.maxX - 66, y: bounds.maxY - 36, width: 22, height: 22)
     }
@@ -407,7 +427,6 @@ private final class StageCardView: NSControl {
     private func drawControls() {
         drawControl("↓", in: downRect, enabled: position < stageCount)
         drawControl("↑", in: upRect, enabled: position > 1)
-        drawControl("↩", in: restoreRect, enabled: true)
     }
 
     private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
@@ -451,11 +470,8 @@ private final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        let previews = previewRects(in: rect, maxCount: 5)
-        for (index, preview) in previews.enumerated().reversed() {
-            let offset = CGFloat(index) * 9
-            let shifted = preview.offsetBy(dx: -offset * 0.85, dy: offset * 0.45)
-            drawPreview(shifted, index: index)
+        for item in previewItems(in: rect, maxCount: 5).reversed() {
+            drawPreview(item.rect, index: item.index)
         }
     }
 
@@ -488,10 +504,8 @@ private final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        let previews = previewRects(in: rect, maxCount: 5)
-        for (index, preview) in previews.enumerated().reversed() {
-            let shifted = preview.offsetBy(dx: CGFloat(index) * -18, dy: CGFloat(index) * 7)
-            drawPreview(shifted, index: index, skewed: true)
+        for item in previewItems(in: rect, maxCount: 5).reversed() {
+            drawPreview(item.rect, index: item.index, skewed: true)
         }
     }
 
@@ -529,6 +543,22 @@ private final class StageCardView: NSControl {
         return (0..<count).map { _ in base }
     }
 
+    private func previewItems(in rect: CGRect, maxCount: Int) -> [(index: Int, rect: CGRect)] {
+        previewRects(in: rect, maxCount: maxCount).enumerated().map { item in
+            let index = item.offset
+            let preview = item.element
+            switch mode {
+            case .stacked:
+                let offset = CGFloat(index) * 9
+                return (index, preview.offsetBy(dx: -offset * 0.85, dy: offset * 0.45))
+            case .parallax:
+                return (index, preview.offsetBy(dx: CGFloat(index) * -18, dy: CGFloat(index) * 7))
+            case .mosaic, .icons:
+                return (index, preview)
+            }
+        }
+    }
+
     private func drawPreview(_ rect: CGRect, index: Int, skewed: Bool = false) {
         guard !rect.isEmpty else { return }
         let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
@@ -547,6 +577,81 @@ private final class StageCardView: NSControl {
             .foregroundColor: NSColor.white.withAlphaComponent(0.82),
             .font: NSFont.systemFont(ofSize: 10, weight: .medium),
         ])
+        drawWindowControls(in: rect, index: index)
+    }
+
+    private func drawWindowControls(in rect: CGRect, index: Int) {
+        guard stage.members[safe: index] != nil else { return }
+        if let previousStageID {
+            drawControl("↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
+        }
+        if let nextStageID {
+            drawControl("↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
+        }
+        if !isActive {
+            drawControl("→", in: summonWindowRect(in: rect), enabled: true)
+        }
+    }
+
+    private func windowAction(at point: CGPoint) -> RailAction? {
+        for item in hitPreviewItems().reversed() {
+            guard let member = stage.members[safe: item.index], item.rect.contains(point) else { continue }
+            if !isActive, summonWindowRect(in: item.rect).contains(point) {
+                return .summonWindow(member.windowID)
+            }
+            if let previousStageID, previousWindowRect(in: item.rect).contains(point) {
+                return .moveWindow(member.windowID, previousStageID)
+            }
+            if let nextStageID, nextWindowRect(in: item.rect).contains(point) {
+                return .moveWindow(member.windowID, nextStageID)
+            }
+            return nil
+        }
+        return nil
+    }
+
+    private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
+        let rect = bounds.insetBy(dx: 12, dy: 12).insetBy(dx: mode == .icons ? 8 : 10, dy: 18)
+        switch mode {
+        case .stacked, .parallax:
+            return previewItems(in: rect, maxCount: 5)
+        case .mosaic:
+            let count = min(stage.members.count, 6)
+            let cols = count <= 2 ? count : 2
+            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))
+            let gap: CGFloat = 6
+            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))
+            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))
+            return (0..<count).map { index in
+                let col = index % cols
+                let row = index / cols
+                return (
+                    index,
+                    CGRect(
+                        x: rect.minX + CGFloat(col) * (cellW + gap),
+                        y: rect.minY + CGFloat(row) * (cellH + gap),
+                        width: cellW,
+                        height: cellH
+                    )
+                )
+            }
+        case .icons:
+            return Array(stage.members.prefix(6)).enumerated().map { index, _ in
+                (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
+            }
+        }
+    }
+
+    private func previousWindowRect(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.minX + 6, y: rect.maxY - 26, width: 20, height: 20)
+    }
+
+    private func nextWindowRect(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.minX + 6, y: rect.minY + 6, width: 20, height: 20)
+    }
+
+    private func summonWindowRect(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.maxX - 26, y: rect.midY - 10, width: 20, height: 20)
     }
 
     private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {

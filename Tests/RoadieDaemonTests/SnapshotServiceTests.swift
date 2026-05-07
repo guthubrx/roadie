@@ -946,6 +946,46 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stageSummonMovesExplicitWindowToActiveStage() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let hiddenRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-summon-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: left.id, members: [
+                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hiddenRight.id, members: [
+                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: Rect(x: 505, y: 0, width: 495, height: 500)),
+                ]),
+            ]),
+        ]))
+
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, hiddenRight], focusedID: left.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+        let result = StageCommandService(service: service, store: stageStore).summon(windowID: hiddenRight.id, displayID: display)
+        var state = stageStore.state()
+        let scope = state.scope(displayID: display, desktopID: DesktopID(rawValue: 1))
+
+        #expect(result.changed)
+        #expect(scope.memberIDs(in: StageID(rawValue: "1")) == [left.id, hiddenRight.id])
+        #expect(scope.memberIDs(in: StageID(rawValue: "2")).isEmpty)
+        #expect(writer.focusedWindowIDs == [hiddenRight.id])
+        #expect(writer.requestedFrames[hiddenRight.id] != hiddenRight.frame)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func desktopFocusHidesOutgoingDesktopAndRestoresIncomingDesktop() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
