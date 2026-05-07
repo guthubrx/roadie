@@ -5,6 +5,7 @@ import RoadieDaemon
 let args = Array(CommandLine.arguments.dropFirst())
 let service = SnapshotService()
 var railController: RailController?
+var borderController: BorderController?
 
 func printUsage() {
     print("""
@@ -31,6 +32,8 @@ case "run":
         railController = RailController()
         railController?.start()
     }
+    borderController = BorderController()
+    borderController?.start()
 
     let target = MaintenanceTimerTarget(maintainer: maintainer, maxTicks: ticks) { tick in
         if tick.accessibilityDenied {

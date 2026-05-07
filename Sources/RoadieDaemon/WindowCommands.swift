@@ -407,7 +407,8 @@ public struct WindowCommandService {
                 window.frame = frame
                 return ScopedWindowSnapshot(window: window, scope: entry.scope)
             },
-            state: snapshot.state
+            state: snapshot.state,
+            focusedWindowID: snapshot.focusedWindowID
         )
     }
 
