@@ -686,7 +686,6 @@ private final class StageCardView: NSControl {
             if let nextStageID, nextWindowHitRect(in: item.rect).contains(point) {
                 return .moveWindow(member.windowID, nextStageID)
             }
-            return nil
         }
         return nil
     }
