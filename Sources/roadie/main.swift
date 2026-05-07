@@ -14,6 +14,7 @@ func printUsage() {
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie config show
+      roadie doctor
       roadie permissions [--prompt]
       roadie focus status
       roadie focus|move|warp|wrap|resize left|right|up|down
@@ -114,6 +115,10 @@ case "layout":
 case "permissions":
     let snapshot = service.snapshot(promptForPermissions: args.contains("--prompt"))
     print(TextFormatter.permissions(snapshot.permissions))
+case "doctor":
+    let snapshot = service.snapshot()
+    let plan = service.applyPlan(from: snapshot)
+    print(TextFormatter.doctor(snapshot: snapshot, plan: plan))
 case "config":
     guard args.dropFirst().first == "show" else {
         printUsage()

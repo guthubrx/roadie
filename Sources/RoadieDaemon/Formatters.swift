@@ -47,6 +47,20 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func doctor(snapshot: DaemonSnapshot, plan: ApplyPlan) -> String {
+        let tileable = snapshot.windows.filter { $0.window.isTileCandidate && $0.scope != nil }
+        let focused = snapshot.focusedWindowID.map(String.init(describing:)) ?? "-"
+        let status = snapshot.permissions.accessibilityTrusted && !snapshot.displays.isEmpty ? "ok" : "needs-attention"
+        return [
+            "status=\(status)",
+            "accessibilityTrusted=\(snapshot.permissions.accessibilityTrusted)",
+            "displays=\(snapshot.displays.count)",
+            "tileableWindows=\(tileable.count)",
+            "focusedWindow=\(focused)",
+            "pendingLayoutCommands=\(plan.commands.count)"
+        ].joined(separator: "\n")
+    }
+
     public static func applyPlan(_ plan: ApplyPlan) -> String {
         guard !plan.commands.isEmpty else { return "No layout commands." }
         var lines = ["WID\tAPP\tTITLE\tFRAME"]
