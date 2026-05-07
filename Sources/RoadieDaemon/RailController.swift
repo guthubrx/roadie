@@ -275,12 +275,18 @@ private final class StageCardView: NSControl {
         stageID.rawValue.draw(in: badgeRect.insetBy(dx: 0, dy: 3), withAttributes: attrs)
 
         let count = stage.members.count
-        let label = "\(count) \(count > 1 ? "fenêtres" : "fenêtre")"
+        let titleAttrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.92 : 0.68),
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+        ]
+        stage.name.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY + 8, width: rect.width - 42, height: 16), withAttributes: titleAttrs)
+
+        let label = "\(stage.mode.rawValue) · \(count) \(count > 1 ? "fenêtres" : "fenêtre")"
         let labelAttrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.84 : 0.50),
-            .font: NSFont.systemFont(ofSize: 11, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
         ]
-        label.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY + 3, width: rect.width - 42, height: 18), withAttributes: labelAttrs)
+        label.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY - 5, width: rect.width - 42, height: 14), withAttributes: labelAttrs)
     }
 
     private func drawStacked(in rect: CGRect) {

@@ -281,6 +281,34 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func configWorkspacesSeedPersistentStageNames() {
+        let display = DisplayID(rawValue: "display-a")
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-config-stage-names-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: []
+            ),
+            config: RoadieConfig(stageManager: StageManagerConfig(workspaces: [
+                StageDefinition(id: "1", displayName: "Work"),
+                StageDefinition(id: "2", displayName: "Com"),
+            ])),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+        let scope = stageStore.state().scopes.first { $0.displayID == display }
+
+        #expect(scope?.stages.map(\.name) == ["Work", "Com"])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func floatStageModeDoesNotReplaySavedTilingIntent() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
