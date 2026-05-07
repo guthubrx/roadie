@@ -74,6 +74,15 @@ public struct RoadieState: Equatable, Codable, Sendable {
         displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.focusedWindowID = windowID
     }
 
+    public mutating func setFocusedWindow(_ windowID: WindowID, for scope: StageScope) throws {
+        guard let stage = displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID],
+              stage.windowIDs.contains(windowID)
+        else {
+            throw RoadieStateError.unknownStage(scope)
+        }
+        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.focusedWindowID = windowID
+    }
+
     public mutating func removeWindow(_ windowID: WindowID) {
         for displayID in Array(displays.keys) {
             guard let display = displays[displayID] else { continue }
