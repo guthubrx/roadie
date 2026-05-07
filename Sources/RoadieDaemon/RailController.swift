@@ -75,11 +75,11 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
             _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
-        case .restoreStage(let stageID):
-            print("rail restore stage \(stageID.rawValue)")
+        case .summonWindow(let stageID):
+            print("rail summon from stage \(stageID.rawValue)")
             fflush(stdout)
-            events.append(RoadieEvent(type: "rail_stage_restore", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
-            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+            events.append(RoadieEvent(type: "rail_stage_summon", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
+            _ = commandService.summonLastWindow(from: stageID.rawValue, displayID: displayID)
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -94,7 +94,7 @@ public final class RailController {
     private func rebuildPanels() {
         _ = snapshotService.snapshot()
         let state = store.state()
-        let renderMode = RailRenderMode.load()
+        let config = RailVisualConfig.load()
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
         })
@@ -105,7 +105,7 @@ public final class RailController {
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
             panel.position(on: screen)
-            panel.render(scope: scope, mode: renderMode)
+            panel.render(scope: scope, displayName: screen.localizedName, config: config)
             if panels[displayID] == nil {
                 panels[displayID] = panel
                 panel.makeKey()
@@ -130,7 +130,7 @@ public final class RailController {
 
 private enum RailAction {
     case switchStage(StageID)
-    case restoreStage(StageID)
+    case summonWindow(StageID)
     case moveStage(StageID, Int)
 }
 
@@ -150,7 +150,7 @@ private final class RailPanel: NSPanel {
             defer: false
         )
         isOpaque = false
-        backgroundColor = NSColor.black.withAlphaComponent(0.36)
+        backgroundColor = NSColor(calibratedRed: 0.02, green: 0.04, blue: 0.08, alpha: 0.48)
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = false
@@ -158,8 +158,8 @@ private final class RailPanel: NSPanel {
 
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 24, left: 18, bottom: 24, right: 18)
+        stack.spacing = 13
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 18, bottom: 24, right: 18)
         contentView = stack
     }
 
@@ -171,19 +171,21 @@ private final class RailPanel: NSPanel {
         )
     }
 
-    func render(scope: PersistentStageScope, mode: RailRenderMode) {
+    func render(scope: PersistentStageScope, displayName: String, config: RailVisualConfig) {
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
 
+        stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID))
         let ids = stageIDs(from: scope)
         for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
             let card = StageCardView(
                 stage: stage,
                 isActive: id == scope.activeStageID,
-                mode: mode,
+                mode: config.mode,
+                accent: config.accent(for: id),
                 position: index + 1,
                 stageCount: ids.count
             )
@@ -216,19 +218,98 @@ private final class RailPanel: NSPanel {
 }
 
 @MainActor
+private struct RailVisualConfig {
+    var mode: RailRenderMode = .stacked
+    var stageAccents: [StageID: NSColor] = [:]
+
+    func accent(for stageID: StageID) -> NSColor {
+        stageAccents[stageID] ?? NSColor.systemGreen
+    }
+
+    static func load() -> RailVisualConfig {
+        let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
+        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return RailVisualConfig() }
+        return RailVisualConfig(mode: RailRenderMode.load(from: raw), stageAccents: loadStageAccents(from: raw))
+    }
+
+    private static func loadStageAccents(from raw: String) -> [StageID: NSColor] {
+        var accents: [StageID: NSColor] = [:]
+        var currentStageID: StageID?
+        for line in raw.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "[[fx.rail.preview.stage_overrides]]" {
+                currentStageID = nil
+                continue
+            }
+            if trimmed.hasPrefix("[") {
+                currentStageID = nil
+            }
+            if let value = quotedValue(in: trimmed, key: "stage_id") {
+                currentStageID = StageID(rawValue: value)
+            }
+            if let value = quotedValue(in: trimmed, key: "active_color"),
+               let stageID = currentStageID,
+               let color = NSColor(hex: value) {
+                accents[stageID] = color
+            }
+        }
+        return accents
+    }
+
+    private static func quotedValue(in line: String, key: String) -> String? {
+        guard line.hasPrefix("\(key)"),
+              let first = line.firstIndex(of: "\""),
+              let last = line[line.index(after: first)...].firstIndex(of: "\"")
+        else { return nil }
+        return String(line[line.index(after: first)..<last])
+    }
+}
+
+@MainActor
 private enum RailRenderMode: String {
     case stacked = "stacked-previews"
     case mosaic
     case parallax = "parallax-45"
     case icons = "icons-only"
 
-    static func load() -> RailRenderMode {
-        let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
-        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return .stacked }
+    static func load(from raw: String) -> RailRenderMode {
         if raw.contains("renderer = \"mosaic\"") { return .mosaic }
         if raw.contains("renderer = \"parallax-45\"") || raw.contains("renderer = \"parallax\"") { return .parallax }
         if raw.contains("renderer = \"icons-only\"") || raw.contains("renderer = \"icons\"") { return .icons }
         return .stacked
+    }
+}
+
+@MainActor
+private final class RailHeaderView: NSView {
+    private let displayName: String
+    private let desktopID: DesktopID
+
+    init(displayName: String, desktopID: DesktopID) {
+        self.displayName = displayName
+        self.desktopID = desktopID
+        super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 42))
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: 224).isActive = true
+        heightAnchor.constraint(equalToConstant: 42).isActive = true
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let title = displayName.isEmpty ? "Roadie" : displayName
+        title.draw(in: CGRect(x: 4, y: 19, width: 216, height: 18), withAttributes: [
+            .foregroundColor: NSColor.white.withAlphaComponent(0.86),
+            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+        ])
+        "Desktop \(desktopID)".draw(in: CGRect(x: 4, y: 3, width: 216, height: 14), withAttributes: [
+            .foregroundColor: NSColor.white.withAlphaComponent(0.42),
+            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+        ])
     }
 }
 
@@ -238,6 +319,7 @@ private final class StageCardView: NSControl {
     private let stage: PersistentStage
     private let isActive: Bool
     private let mode: RailRenderMode
+    private let accent: NSColor
     private let position: Int
     private let stageCount: Int
 
@@ -245,11 +327,12 @@ private final class StageCardView: NSControl {
         true
     }
 
-    init(stage: PersistentStage, isActive: Bool, mode: RailRenderMode, position: Int, stageCount: Int) {
+    init(stage: PersistentStage, isActive: Bool, mode: RailRenderMode, accent: NSColor, position: Int, stageCount: Int) {
         self.stage = stage
         self.stageID = stage.id
         self.isActive = isActive
         self.mode = mode
+        self.accent = accent
         self.position = position
         self.stageCount = stageCount
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
@@ -259,10 +342,10 @@ private final class StageCardView: NSControl {
         heightAnchor.constraint(equalToConstant: mode == .icons ? 78 : 142).isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
-        layer?.backgroundColor = NSColor(white: 0.08, alpha: isActive ? 0.92 : 0.58).cgColor
+        layer?.backgroundColor = NSColor(calibratedRed: 0.03, green: 0.05, blue: 0.07, alpha: isActive ? 0.94 : 0.62).cgColor
         layer?.borderWidth = isActive ? 1.8 : 0.8
-        layer?.borderColor = (isActive ? NSColor.systemGreen : NSColor.white.withAlphaComponent(0.16)).cgColor
-        layer?.shadowColor = (isActive ? NSColor.systemGreen : NSColor.black).cgColor
+        layer?.borderColor = (isActive ? accent : NSColor.white.withAlphaComponent(0.16)).cgColor
+        layer?.shadowColor = (isActive ? accent : NSColor.black).cgColor
         layer?.shadowOpacity = isActive ? 0.62 : 0.28
         layer?.shadowRadius = isActive ? 18 : 8
         layer?.shadowOffset = .zero
@@ -274,7 +357,7 @@ private final class StageCardView: NSControl {
 
     func action(at point: CGPoint) -> RailAction {
         if restoreRect.contains(point) {
-            return .restoreStage(stageID)
+            return .summonWindow(stageID)
         }
         if upRect.contains(point), position > 1 {
             return .moveStage(stageID, position - 1)
@@ -292,6 +375,9 @@ private final class StageCardView: NSControl {
 
     private func drawCard() {
         let rect = bounds.insetBy(dx: 12, dy: 12)
+        if isActive {
+            rounded(bounds.insetBy(dx: 5, dy: 5), radius: 20, color: accent.withAlphaComponent(0.10))
+        }
         drawTitle(in: rect)
         drawControls()
         switch mode {
@@ -338,7 +424,7 @@ private final class StageCardView: NSControl {
 
     private func drawTitle(in rect: CGRect) {
         let badgeRect = CGRect(x: rect.minX, y: rect.maxY - 26, width: 28, height: 22)
-        rounded(badgeRect, radius: 9, color: isActive ? .systemGreen : NSColor.white.withAlphaComponent(0.20))
+        rounded(badgeRect, radius: 9, color: isActive ? accent : NSColor.white.withAlphaComponent(0.20))
         let attrs: [NSAttributedString.Key: Any] = [
             .foregroundColor: NSColor.white,
             .font: NSFont.boldSystemFont(ofSize: 13),
@@ -482,6 +568,31 @@ private final class StageCardView: NSControl {
     private func iconLetter(for member: PersistentStageMember) -> String {
         let source = member.bundleID.split(separator: ".").last.map(String.init) ?? member.title
         return String(source.prefix(1)).uppercased()
+    }
+}
+
+private extension NSColor {
+    convenience init?(hex: String) {
+        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard clean.count == 6 || clean.count == 8,
+              let value = UInt32(clean, radix: 16)
+        else { return nil }
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+        if clean.count == 8 {
+            red = CGFloat((value >> 24) & 0xff) / 255
+            green = CGFloat((value >> 16) & 0xff) / 255
+            blue = CGFloat((value >> 8) & 0xff) / 255
+            alpha = CGFloat(value & 0xff) / 255
+        } else {
+            red = CGFloat((value >> 16) & 0xff) / 255
+            green = CGFloat((value >> 8) & 0xff) / 255
+            blue = CGFloat(value & 0xff) / 255
+            alpha = 1
+        }
+        self.init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
     }
 }
 
