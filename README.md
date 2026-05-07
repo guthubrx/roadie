@@ -29,6 +29,7 @@ make snapshot
 make state
 make plan
 make self-test
+make events
 make doctor
 ```
 
@@ -43,6 +44,7 @@ Equivalent direct commands:
 ./scripts/roadie state dump --json
 ./scripts/roadie layout plan
 ./scripts/roadie self-test
+./scripts/roadie events tail 30
 ```
 
 The first command that moves windows is explicit and guarded:
@@ -61,6 +63,7 @@ make start      # install/build bin/roadied and start LaunchAgent
 make status     # inspect launchd state
 make logs       # show recent daemon logs
 make self-test  # read-only runtime consistency checks
+make events     # recent JSONL Roadie events
 make doctor     # build + permissions + runtime diagnostics
 make stop       # stop LaunchAgent
 make restart    # stop then start

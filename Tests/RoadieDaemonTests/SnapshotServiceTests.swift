@@ -1067,6 +1067,9 @@ struct SnapshotServiceTests {
         let stagePath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-display-focus-\(UUID().uuidString).json")
             .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-focus-\(UUID().uuidString).jsonl")
+            .path
         let stageStore = StageStore(path: stagePath)
         stageStore.save(PersistentStageState(scopes: [
             PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: "1"), stages: [
@@ -1088,13 +1091,17 @@ struct SnapshotServiceTests {
             stageStore: stageStore
         )
 
-        let result = DisplayCommandService(service: service, store: stageStore).focus(index: 2)
+        let result = DisplayCommandService(service: service, store: stageStore, events: EventLog(path: eventPath)).focus(index: 2)
         let state = stageStore.state()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
         #expect(result.changed)
         #expect(state.activeDisplayID == rightDisplay)
         #expect(writer.focusedWindowIDs == [right.id])
+        #expect(events.contains("\"type\":\"display_focus\""))
+        #expect(events.contains("\"displayID\":\"display-b\""))
         try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 
     @Test
@@ -1297,6 +1304,26 @@ struct SnapshotServiceTests {
         #expect(intentStore.intent(for: liveScope) != nil)
         #expect(intentStore.intent(for: staleScope) == nil)
         try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
+    func eventLogAppendsJsonLines() throws {
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-events-\(UUID().uuidString).jsonl")
+            .path
+        let log = EventLog(path: eventPath)
+
+        log.append(RoadieEvent(type: "one", details: ["value": "1"]))
+        log.append(RoadieEvent(type: "two"))
+
+        let lines = try String(contentsOfFile: eventPath, encoding: .utf8)
+            .split(separator: "\n")
+        #expect(lines.count == 2)
+        #expect(lines[0].contains("\"type\":\"one\""))
+        #expect(lines[1].contains("\"type\":\"two\""))
+        #expect(log.tail(limit: 1).count == 1)
+        #expect(log.tail(limit: 1).first?.contains("\"type\":\"two\"") == true)
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 
     @Test

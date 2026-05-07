@@ -16,10 +16,12 @@ public struct StageCommandResult: Equatable, Sendable {
 public struct StageCommandService {
     private let service: SnapshotService
     private let store: StageStore
+    private let events: EventLog
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore()) {
+    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
         self.service = service
         self.store = store
+        self.events = events
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -43,6 +45,11 @@ public struct StageCommandService {
             }
             _ = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window)
         }
+        events.append(RoadieEvent(
+            type: "stage_assign",
+            scope: StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID),
+            details: ["windowID": String(active.window.id.rawValue)]
+        ))
         return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
     }
 
@@ -184,6 +191,11 @@ public struct StageCommandService {
         let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
         service.removeLayoutIntent(scope: activeScope)
         let result = service.apply(service.applyPlan(from: service.snapshot()))
+        events.append(RoadieEvent(
+            type: "stage_mode",
+            scope: activeScope,
+            details: ["mode": mode.rawValue, "layout": String(result.attempted)]
+        ))
         return StageCommandResult(
             message: "mode \(mode.rawValue): stage=\(stageID.rawValue) layout=\(result.attempted)",
             changed: true
@@ -234,6 +246,17 @@ public struct StageCommandService {
            let focusedWindow = windowsByID[focusedID] {
             _ = service.focus(focusedWindow)
         }
+        events.append(RoadieEvent(
+            type: "stage_switch",
+            scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+            details: [
+                "previousStageID": previousID.rawValue,
+                "hidden": String(previousMembers.subtracting(targetMembers).count),
+                "shown": String(targetMembers.count),
+                "applied": String(applied),
+                "layout": String(layoutResult.attempted)
+            ]
+        ))
 
         return StageCommandResult(
             message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",

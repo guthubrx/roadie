@@ -25,17 +25,20 @@ public struct WindowCommandService {
     private let stageStore: StageStore
     private let resizeStep: CGFloat
     private let mouseFollower: MouseFollower
+    private let events: EventLog
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
         resizeStep: CGFloat = 80,
-        mouseFollower: MouseFollower = MouseFollower()
+        mouseFollower: MouseFollower = MouseFollower(),
+        events: EventLog = EventLog()
     ) {
         self.service = service
         self.stageStore = stageStore
         self.resizeStep = resizeStep
         self.mouseFollower = mouseFollower
+        self.events = events
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
@@ -250,6 +253,18 @@ public struct WindowCommandService {
             persistDisplayTransferIntent(in: service.snapshot(), scopes: [sourceScope, targetScopeID].compactMap { $0 })
         }
         _ = focusWindow(active.window)
+        events.append(RoadieEvent(
+            type: "window_display",
+            scope: targetScopeID,
+            details: [
+                "windowID": String(active.window.id.rawValue),
+                "displayIndex": String(displayIndex),
+                "attempted": String(result.attempted),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed)
+            ]
+        ))
         return WindowCommandResult(
             message: "display \(displayIndex): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
