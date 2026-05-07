@@ -197,8 +197,8 @@ private final class RailPanel: NSPanel {
             let card = StageCardView(
                 stage: stage,
                 isActive: id == scope.activeStageID,
-                mode: config.mode,
                 accent: config.accent(for: id),
+                config: config,
                 thumbnails: thumbnails.images(for: stage.members),
                 position: index + 1,
                 stageCount: ids.count,
@@ -272,6 +272,21 @@ private final class WindowThumbnailStore {
 private struct RailVisualConfig {
     var mode: RailRenderMode = .stacked
     var stageAccents: [StageID: NSColor] = [:]
+    var previewWidth: CGFloat = 160
+    var previewHeight: CGFloat = 104
+    var leadingPadding: CGFloat = 8
+    var trailingPadding: CGFloat = 16
+    var verticalPadding: CGFloat = 20
+    var stackedOffsetX: CGFloat = 60
+    var stackedOffsetY: CGFloat = 80
+    var stackedScale: CGFloat = 0.05
+    var stackedOpacity: CGFloat = 0.08
+    var parallaxRotation: CGFloat = 35
+    var parallaxOffsetX: CGFloat = 25
+    var parallaxOffsetY: CGFloat = 18
+    var parallaxScale: CGFloat = 0.08
+    var parallaxOpacity: CGFloat = 0.20
+    var parallaxDarken: CGFloat = 0.15
 
     func accent(for stageID: StageID) -> NSColor {
         stageAccents[stageID] ?? NSColor.systemGreen
@@ -280,7 +295,58 @@ private struct RailVisualConfig {
     static func load() -> RailVisualConfig {
         let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
         guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return RailVisualConfig() }
-        return RailVisualConfig(mode: RailRenderMode.load(from: raw), stageAccents: loadStageAccents(from: raw))
+        let sections = sections(from: raw)
+        let mode = RailRenderMode.load(from: raw)
+        let preview = sections["fx.rail.preview"] ?? [:]
+        let stacked = sections["fx.rail.stacked"] ?? [:]
+        let parallax = sections["fx.rail.parallax"] ?? [:]
+        return RailVisualConfig(
+            mode: mode,
+            stageAccents: loadStageAccents(from: raw),
+            previewWidth: cg(parallax["width"] ?? preview["width"], default: 160, min: 60, max: 240),
+            previewHeight: cg(parallax["height"] ?? preview["height"], default: 104, min: 40, max: 180),
+            leadingPadding: cg(parallax["leading_padding"] ?? preview["leading_padding"], default: 8, min: 0, max: 80),
+            trailingPadding: cg(parallax["trailing_padding"] ?? preview["trailing_padding"], default: 16, min: 0, max: 80),
+            verticalPadding: cg(parallax["vertical_padding"] ?? preview["vertical_padding"], default: 20, min: 0, max: 80),
+            stackedOffsetX: cg(stacked["offset_x"], default: 60, min: 0, max: 120),
+            stackedOffsetY: cg(stacked["offset_y"], default: 80, min: 0, max: 120),
+            stackedScale: cg(stacked["scale_per_layer"], default: 0.05, min: 0, max: 0.30),
+            stackedOpacity: cg(stacked["opacity_per_layer"], default: 0.08, min: 0, max: 0.50),
+            parallaxRotation: cg(parallax["rotation"], default: 35, min: 0, max: 75),
+            parallaxOffsetX: cg(parallax["offset_x"], default: 25, min: 0, max: 80),
+            parallaxOffsetY: cg(parallax["offset_y"], default: 18, min: 0, max: 80),
+            parallaxScale: cg(parallax["scale_per_layer"], default: 0.08, min: 0, max: 0.30),
+            parallaxOpacity: cg(parallax["opacity_per_layer"], default: 0.20, min: 0, max: 0.50),
+            parallaxDarken: cg(parallax["darken_per_layer"], default: 0.15, min: 0, max: 1)
+        )
+    }
+
+    private static func sections(from raw: String) -> [String: [String: String]] {
+        var sections: [String: [String: String]] = [:]
+        var current: String?
+        for line in raw.components(separatedBy: .newlines) {
+            let trimmed = line.split(separator: "#", maxSplits: 1).first.map(String.init)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !trimmed.isEmpty else { continue }
+            if trimmed.hasPrefix("["), trimmed.hasSuffix("]"), !trimmed.hasPrefix("[[") {
+                current = String(trimmed.dropFirst().dropLast())
+                continue
+            }
+            guard let current,
+                  let equals = trimmed.firstIndex(of: "=")
+            else { continue }
+            let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)
+            let value = trimmed[trimmed.index(after: equals)...]
+                .trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            sections[current, default: [:]][key] = value
+        }
+        return sections
+    }
+
+    private static func cg(_ raw: String?, default fallback: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
+        guard let raw, let value = Double(raw) else { return fallback }
+        return Swift.max(min, Swift.min(max, CGFloat(value)))
     }
 
     private static func loadStageAccents(from raw: String) -> [StageID: NSColor] {
@@ -369,8 +435,8 @@ private final class StageCardView: NSControl {
     let stageID: StageID
     private let stage: PersistentStage
     private let isActive: Bool
-    private let mode: RailRenderMode
     private let accent: NSColor
+    private let config: RailVisualConfig
     private let thumbnails: [WindowID: NSImage]
     private let position: Int
     private let stageCount: Int
@@ -384,8 +450,8 @@ private final class StageCardView: NSControl {
     init(
         stage: PersistentStage,
         isActive: Bool,
-        mode: RailRenderMode,
         accent: NSColor,
+        config: RailVisualConfig,
         thumbnails: [WindowID: NSImage],
         position: Int,
         stageCount: Int,
@@ -395,8 +461,8 @@ private final class StageCardView: NSControl {
         self.stage = stage
         self.stageID = stage.id
         self.isActive = isActive
-        self.mode = mode
         self.accent = accent
+        self.config = config
         self.thumbnails = thumbnails
         self.position = position
         self.stageCount = stageCount
@@ -406,7 +472,7 @@ private final class StageCardView: NSControl {
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
         widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: mode == .icons ? 78 : 170).isActive = true
+        heightAnchor.constraint(equalToConstant: config.mode == .icons ? 78 : max(150, config.previewHeight + 66)).isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
         layer?.backgroundColor = NSColor(calibratedRed: 0.03, green: 0.05, blue: 0.07, alpha: isActive ? 0.94 : 0.62).cgColor
@@ -447,7 +513,7 @@ private final class StageCardView: NSControl {
         }
         drawTitle(in: rect)
         drawControls()
-        switch mode {
+        switch config.mode {
         case .stacked:
             drawStacked(in: previewArea(in: rect))
         case .mosaic:
@@ -590,11 +656,11 @@ private final class StageCardView: NSControl {
     }
 
     private func previewArea(in rect: CGRect) -> CGRect {
-        let width = min(CGFloat(160), rect.width - 40)
-        let height = min(CGFloat(104), rect.height - 42)
+        let width = min(config.previewWidth, rect.width - config.leadingPadding - config.trailingPadding)
+        let height = min(config.previewHeight, rect.height - config.verticalPadding - 28)
         return CGRect(
-            x: rect.minX + rect.width - width - 6,
-            y: rect.minY + 8,
+            x: rect.minX + rect.width - width - config.trailingPadding,
+            y: rect.minY + config.verticalPadding,
             width: width,
             height: height
         )
@@ -610,12 +676,14 @@ private final class StageCardView: NSControl {
         previewRects(in: rect, maxCount: maxCount).enumerated().map { item in
             let index = item.offset
             let preview = item.element
-            switch mode {
+            switch config.mode {
             case .stacked:
-                let offset = CGFloat(index) * 9
-                return (index, preview.offsetBy(dx: -offset * 0.85, dy: offset * 0.45))
+                let offset = CGFloat(index)
+                let dx = -offset * config.stackedOffsetX * 0.18
+                let dy = offset * config.stackedOffsetY * 0.10
+                return (index, preview.offsetBy(dx: dx, dy: dy))
             case .parallax:
-                return (index, preview.offsetBy(dx: CGFloat(index) * -18, dy: CGFloat(index) * 7))
+                return (index, preview.offsetBy(dx: CGFloat(index) * -config.parallaxOffsetX, dy: CGFloat(index) * config.parallaxOffsetY))
             case .mosaic, .icons:
                 return (index, preview)
             }
@@ -628,20 +696,26 @@ private final class StageCardView: NSControl {
         if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
-            image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: isActive ? 0.95 : 0.82)
+            let opacity = opacity(for: index)
+            image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: opacity)
             NSGraphicsContext.restoreGraphicsState()
         } else {
-            color(for: stage.members[safe: index], index: index).setFill()
+            color(for: stage.members[safe: index], index: index).withAlphaComponent(opacity(for: index)).setFill()
             path.fill()
         }
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
         path.lineWidth = 1
         path.stroke()
         if skewed {
-            NSColor.black.withAlphaComponent(0.18).setFill()
+            NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
         drawWindowControls(in: rect, index: index)
+    }
+
+    private func opacity(for index: Int) -> CGFloat {
+        let perLayer = config.mode == .stacked ? config.stackedOpacity : config.parallaxOpacity
+        return max(0.25, (isActive ? 0.95 : 0.82) - CGFloat(index) * perLayer)
     }
 
     private func aspectFillSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
@@ -692,8 +766,8 @@ private final class StageCardView: NSControl {
 
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
         let cardRect = bounds.insetBy(dx: 12, dy: 12)
-        let rect = mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
-        switch mode {
+        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
+        switch config.mode {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
         case .mosaic:
