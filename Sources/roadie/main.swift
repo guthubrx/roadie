@@ -131,7 +131,7 @@ case "permissions":
 case "doctor":
     let snapshot = service.snapshot()
     let plan = service.applyPlan(from: snapshot)
-    print(TextFormatter.doctor(snapshot: snapshot, plan: plan))
+    print(TextFormatter.doctor(snapshot: snapshot, plan: plan, persistentState: StageStore().state()))
 case "config":
     guard args.dropFirst().first == "show" else {
         printUsage()

@@ -62,14 +62,28 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
-    public static func doctor(snapshot: DaemonSnapshot, plan: ApplyPlan) -> String {
+    public static func doctor(snapshot: DaemonSnapshot, plan: ApplyPlan, persistentState: PersistentStageState? = nil) -> String {
         let tileable = snapshot.windows.filter { $0.window.isTileCandidate && $0.scope != nil }
         let focused = snapshot.focusedWindowID.map(String.init(describing:)) ?? "-"
+        let activeDisplayID = persistentState?.activeDisplayID ?? displayContainingFocusedWindow(in: snapshot)?.id
+        let activeDisplay = activeDisplayID.flatMap { id in snapshot.displays.first { $0.id == id } }
+        let activeDesktop = activeDisplayID.flatMap { persistentState?.currentDesktopID(for: $0).rawValue }
+        let activeStage = activeDisplayID.flatMap { displayID -> String? in
+            let desktopID = persistentState?.currentDesktopID(for: displayID) ?? DesktopID(rawValue: 1)
+            return persistentState?
+                .scopes
+                .first { $0.displayID == displayID && $0.desktopID == desktopID }?
+                .activeStageID
+                .rawValue
+        }
         let status = snapshot.permissions.accessibilityTrusted && !snapshot.displays.isEmpty ? "ok" : "needs-attention"
         return [
             "status=\(status)",
             "accessibilityTrusted=\(snapshot.permissions.accessibilityTrusted)",
             "displays=\(snapshot.displays.count)",
+            "activeDisplay=\(activeDisplay?.index.description ?? "-") \(activeDisplay?.name ?? "-")",
+            "activeDesktop=\(activeDesktop.map(String.init) ?? "-")",
+            "activeStage=\(activeStage ?? "-")",
             "tileableWindows=\(tileable.count)",
             "focusedWindow=\(focused)",
             "pendingLayoutCommands=\(plan.commands.count)"
