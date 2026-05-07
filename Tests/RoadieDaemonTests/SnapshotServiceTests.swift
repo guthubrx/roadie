@@ -1300,6 +1300,50 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func selfTestPassesForHealthySnapshot() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-self-test-ok-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = SelfTestService(service: service, stageStore: stageStore).run()
+
+        #expect(!report.failed)
+        #expect(report.checks.contains(SelfTestCheck(level: .ok, name: "accessibility", message: "accessibilityTrusted=true")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func selfTestFailsWhenAccessibilityIsDenied() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let provider = FakeProvider(
+            permissionSnapshot: PermissionSnapshot(accessibilityTrusted: false),
+            displaySnapshots: [displaySnapshot],
+            windowSnapshots: []
+        )
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig()
+        )
+
+        let report = SelfTestService(service: service).run()
+
+        #expect(report.failed)
+        #expect(report.checks.contains(SelfTestCheck(level: .fail, name: "accessibility", message: "accessibilityTrusted=false")))
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

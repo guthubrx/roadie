@@ -16,6 +16,7 @@ func printUsage() {
       roadie layout apply [--yes] [--json]
       roadie config show
       roadie doctor
+      roadie self-test
       roadie permissions [--prompt]
       roadie focus status
       roadie focus|move|warp|wrap|resize left|right|up|down
@@ -132,6 +133,10 @@ case "doctor":
     let snapshot = service.snapshot()
     let plan = service.applyPlan(from: snapshot)
     print(TextFormatter.doctor(snapshot: snapshot, plan: plan, persistentState: StageStore().state()))
+case "self-test":
+    let report = SelfTestService(service: service).run()
+    print(TextFormatter.selfTest(report))
+    exit(report.failed ? 1 : 0)
 case "config":
     guard args.dropFirst().first == "show" else {
         printUsage()
