@@ -32,7 +32,7 @@ public struct StageCommandService {
 
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = state.scope(displayID: displayID)
+        var scope = activeScope(displayID: displayID, in: &state)
         scope.assign(window: active.window, to: stageID)
         state.update(scope)
         store.save(state)
@@ -52,7 +52,7 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage list: no display", changed: false)
         }
         var state = store.state()
-        let scope = state.scope(displayID: display.id)
+        let scope = activeScope(displayID: display.id, in: &state)
         state.update(scope)
         store.save(state)
 
@@ -71,7 +71,7 @@ public struct StageCommandService {
         }
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         guard scope.createStage(stageID, name: name) else {
             return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
         }
@@ -87,7 +87,7 @@ public struct StageCommandService {
         }
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         guard scope.renameStage(stageID, to: name) else {
             return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
         }
@@ -103,7 +103,7 @@ public struct StageCommandService {
         }
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         guard scope.reorderStage(stageID, to: position) else {
             return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
         }
@@ -119,7 +119,7 @@ public struct StageCommandService {
         }
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         guard scope.deleteEmptyInactiveStage(stageID) else {
             return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false)
         }
@@ -151,7 +151,7 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage \(direction.rawValue): no display", changed: false)
         }
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         for id in (1...6).map({ StageID(rawValue: String($0)) }) {
             scope.ensureStage(id)
         }
@@ -175,7 +175,7 @@ public struct StageCommandService {
             return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
         }
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         let stageID = scope.activeStageID
         scope.setMode(mode, for: stageID)
         state.update(scope)
@@ -196,7 +196,7 @@ public struct StageCommandService {
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
         var state = store.state()
-        var scope = state.scope(displayID: display.id)
+        var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
         scope.ensureStage(stageID)
 
@@ -247,6 +247,10 @@ public struct StageCommandService {
             return focused
         }
         return snapshot.windows.first { $0.window.isTileCandidate }
+    }
+
+    private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {
+        state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
