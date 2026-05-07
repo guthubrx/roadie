@@ -77,6 +77,12 @@ public struct SelfTestService {
             name: "focused-window",
             message: snapshot.focusedWindowID.map { "id=\($0.rawValue)" } ?? "none"
         ))
+        let tinyTiles = tinyTileCount(in: snapshot)
+        checks.append(SelfTestCheck(
+            level: tinyTiles == 0 ? .ok : .warn,
+            name: "tile-sizes",
+            message: "tinyTiles=\(tinyTiles)"
+        ))
 
         return SelfTestReport(checks: checks)
     }
@@ -93,5 +99,22 @@ public struct SelfTestService {
     private func focusedWindowIsScoped(_ snapshot: DaemonSnapshot) -> Bool {
         guard let focusedWindowID = snapshot.focusedWindowID else { return true }
         return snapshot.windows.contains { $0.window.id == focusedWindowID && $0.scope != nil }
+    }
+
+    private func tinyTileCount(in snapshot: DaemonSnapshot) -> Int {
+        var count = 0
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
+            let windows = snapshot.windows.filter {
+                $0.scope == scope && $0.window.isTileCandidate
+            }
+            guard windows.count > 1 else { continue }
+            let container = display.visibleFrame.cgRect
+            let minimumSide = max(120, min(container.width, container.height) * 0.18)
+            count += windows.filter {
+                $0.window.frame.width < minimumSide || $0.window.frame.height < minimumSide
+            }.count
+        }
+        return count
     }
 }
