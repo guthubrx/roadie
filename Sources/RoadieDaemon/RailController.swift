@@ -383,10 +383,10 @@ private final class StageCardView: NSControl {
         if let action = windowAction(at: point) {
             return action
         }
-        if upRect.contains(point), position > 1 {
+        if upHitRect.contains(point), position > 1 {
             return .moveStage(stageID, position - 1)
         }
-        if downRect.contains(point), position < stageCount {
+        if downHitRect.contains(point), position < stageCount {
             return .moveStage(stageID, position + 1)
         }
         return .switchStage(stageID)
@@ -417,11 +417,19 @@ private final class StageCardView: NSControl {
     }
 
     private var upRect: CGRect {
-        CGRect(x: bounds.maxX - 66, y: bounds.maxY - 36, width: 22, height: 22)
+        CGRect(x: bounds.maxX - 78, y: bounds.maxY - 39, width: 30, height: 28)
     }
 
     private var downRect: CGRect {
-        CGRect(x: bounds.maxX - 94, y: bounds.maxY - 36, width: 22, height: 22)
+        CGRect(x: bounds.maxX - 116, y: bounds.maxY - 39, width: 30, height: 28)
+    }
+
+    private var upHitRect: CGRect {
+        upRect.insetBy(dx: -6, dy: -6)
+    }
+
+    private var downHitRect: CGRect {
+        downRect.insetBy(dx: -6, dy: -6)
     }
 
     private func drawControls() {
@@ -435,9 +443,9 @@ private final class StageCardView: NSControl {
             radius: 8,
             color: NSColor.white.withAlphaComponent(enabled ? (isActive ? 0.18 : 0.12) : 0.05)
         )
-        label.draw(in: rect.insetBy(dx: 0, dy: 3), withAttributes: [
+        label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 5 : 3), withAttributes: [
             .foregroundColor: NSColor.white.withAlphaComponent(enabled ? 0.82 : 0.22),
-            .font: NSFont.systemFont(ofSize: 12, weight: .bold),
+            .font: NSFont.systemFont(ofSize: rect.height > 24 ? 14 : 12, weight: .bold),
         ])
     }
 
@@ -596,13 +604,13 @@ private final class StageCardView: NSControl {
     private func windowAction(at point: CGPoint) -> RailAction? {
         for item in hitPreviewItems().reversed() {
             guard let member = stage.members[safe: item.index], item.rect.contains(point) else { continue }
-            if !isActive, summonWindowRect(in: item.rect).contains(point) {
+            if !isActive, summonWindowHitRect(in: item.rect).contains(point) {
                 return .summonWindow(member.windowID)
             }
-            if let previousStageID, previousWindowRect(in: item.rect).contains(point) {
+            if let previousStageID, previousWindowHitRect(in: item.rect).contains(point) {
                 return .moveWindow(member.windowID, previousStageID)
             }
-            if let nextStageID, nextWindowRect(in: item.rect).contains(point) {
+            if let nextStageID, nextWindowHitRect(in: item.rect).contains(point) {
                 return .moveWindow(member.windowID, nextStageID)
             }
             return nil
@@ -643,15 +651,27 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 6, y: rect.maxY - 26, width: 20, height: 20)
+        CGRect(x: rect.minX + 8, y: rect.maxY - 31, width: 28, height: 26)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 6, y: rect.minY + 6, width: 20, height: 20)
+        CGRect(x: rect.minX + 8, y: rect.minY + 6, width: 28, height: 26)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX - 26, y: rect.midY - 10, width: 20, height: 20)
+        CGRect(x: rect.maxX - 38, y: rect.midY - 13, width: 30, height: 26)
+    }
+
+    private func previousWindowHitRect(in rect: CGRect) -> CGRect {
+        previousWindowRect(in: rect).insetBy(dx: -8, dy: -8)
+    }
+
+    private func nextWindowHitRect(in rect: CGRect) -> CGRect {
+        nextWindowRect(in: rect).insetBy(dx: -8, dy: -8)
+    }
+
+    private func summonWindowHitRect(in rect: CGRect) -> CGRect {
+        summonWindowRect(in: rect).insetBy(dx: -8, dy: -8)
     }
 
     private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {
