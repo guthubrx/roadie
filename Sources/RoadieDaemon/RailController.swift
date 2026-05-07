@@ -449,11 +449,11 @@ private final class StageCardView: NSControl {
         drawControls()
         switch mode {
         case .stacked:
-            drawStacked(in: rect.insetBy(dx: 10, dy: 18))
+            drawStacked(in: previewArea(in: rect))
         case .mosaic:
-            drawMosaic(in: rect.insetBy(dx: 10, dy: 18))
+            drawMosaic(in: previewArea(in: rect))
         case .parallax:
-            drawParallax(in: rect.insetBy(dx: 10, dy: 18))
+            drawParallax(in: previewArea(in: rect))
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
@@ -589,9 +589,13 @@ private final class StageCardView: NSControl {
         rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(0.10))
     }
 
+    private func previewArea(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.minX + 28, y: rect.minY + 8, width: rect.width - 44, height: rect.height - 52)
+    }
+
     private func previewRects(in rect: CGRect, maxCount: Int) -> [CGRect] {
         let count = min(stage.members.count, maxCount)
-        let base = CGRect(x: rect.minX + 18, y: rect.minY + 6, width: rect.width - 36, height: rect.height - 44)
+        let base = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         return (0..<count).map { _ in base }
     }
 
@@ -617,12 +621,8 @@ private final class StageCardView: NSControl {
         if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
-            let drawRect = aspectFitRect(image.size, in: rect).integral
-            image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: isActive ? 0.95 : 0.82)
+            image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: isActive ? 0.95 : 0.82)
             NSGraphicsContext.restoreGraphicsState()
-            NSColor.black.withAlphaComponent(isActive ? 0.08 : 0.18).setFill()
-            NSBezierPath(rect: CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: max(0, drawRect.minY - rect.minY))).fill()
-            NSBezierPath(rect: CGRect(x: rect.minX, y: drawRect.maxY, width: rect.width, height: max(0, rect.maxY - drawRect.maxY))).fill()
         } else {
             color(for: stage.members[safe: index], index: index).setFill()
             path.fill()
@@ -635,23 +635,29 @@ private final class StageCardView: NSControl {
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
         let title = stage.members[safe: index]?.title ?? ""
-        let short = title.isEmpty ? "Window" : String(title.prefix(22))
-        short.draw(in: rect.insetBy(dx: 10, dy: 8), withAttributes: [
+        let short = title.isEmpty ? "Window" : String(title.prefix(18))
+        let labelRect = CGRect(x: rect.minX + 6, y: rect.minY + 5, width: rect.width - 12, height: 16)
+        rounded(labelRect.insetBy(dx: -3, dy: -2), radius: 4, color: NSColor.black.withAlphaComponent(0.46))
+        short.draw(in: labelRect, withAttributes: [
             .foregroundColor: NSColor.white.withAlphaComponent(0.82),
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
+            .font: NSFont.systemFont(ofSize: 9, weight: .medium),
         ])
         drawWindowControls(in: rect, index: index)
     }
 
-    private func aspectFitRect(_ imageSize: NSSize, in rect: CGRect) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0 else { return rect }
-        let scale = min(rect.width / imageSize.width, rect.height / imageSize.height)
-        let width = imageSize.width * scale
-        let height = imageSize.height * scale
+    private func aspectFillSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0, rect.width > 0, rect.height > 0 else { return .zero }
+        let sourceAspect = imageSize.width / imageSize.height
+        let targetAspect = rect.width / rect.height
+        if sourceAspect > targetAspect {
+            let width = imageSize.height * targetAspect
+            return CGRect(x: (imageSize.width - width) / 2, y: 0, width: width, height: imageSize.height)
+        }
+        let height = imageSize.width / targetAspect
         return CGRect(
-            x: rect.midX - width / 2,
-            y: rect.midY - height / 2,
-            width: width,
+            x: 0,
+            y: (imageSize.height - height) / 2,
+            width: imageSize.width,
             height: height
         )
     }
@@ -687,7 +693,8 @@ private final class StageCardView: NSControl {
     }
 
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
-        let rect = bounds.insetBy(dx: 12, dy: 12).insetBy(dx: mode == .icons ? 8 : 10, dy: 18)
+        let cardRect = bounds.insetBy(dx: 12, dy: 12)
+        let rect = mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
         switch mode {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
@@ -719,15 +726,15 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 40, y: rect.maxY - 30, width: 30, height: 26)
+        CGRect(x: rect.minX - 28, y: rect.maxY - 30, width: 24, height: 24)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 40, y: rect.midY - 13, width: 30, height: 26)
+        CGRect(x: rect.minX - 28, y: rect.midY - 12, width: 24, height: 24)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 40, y: rect.minY + 4, width: 30, height: 26)
+        CGRect(x: rect.minX - 28, y: rect.minY + 6, width: 24, height: 24)
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
