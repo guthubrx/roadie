@@ -725,15 +725,15 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.maxY - 20, width: 18, height: 14)
+        CGRect(x: rect.minX + 4, y: rect.maxY - 20, width: 18, height: 14)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.minY + 6, width: 18, height: 14)
+        CGRect(x: rect.minX + 4, y: rect.minY + 6, width: 18, height: 14)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.midY - 7, width: 18, height: 14)
+        CGRect(x: rect.minX + 4, y: rect.midY - 7, width: 18, height: 14)
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
