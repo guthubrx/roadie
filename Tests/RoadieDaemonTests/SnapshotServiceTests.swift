@@ -1033,6 +1033,42 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stageCommandsUseCurrentDesktopScope() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-stage-current-desktop-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "1")),
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "1")),
+            ],
+            desktopSelections: [PersistentDesktopSelection(displayID: display, currentDesktopID: DesktopID(rawValue: 2))]
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [window], focusedID: window.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+        let commands = StageCommandService(service: service, store: stageStore)
+
+        _ = commands.create("9", name: "D2")
+        _ = commands.assign("9")
+        let state = stageStore.state()
+        let desktop1 = state.scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 1) }
+        let desktop2 = state.scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 2) }
+
+        #expect(desktop1?.stages.contains(where: { $0.id == StageID(rawValue: "9") }) == false)
+        #expect(desktop2?.stages.contains(where: { $0.id == StageID(rawValue: "9") }) == true)
+        #expect(desktop2?.memberIDs(in: StageID(rawValue: "9")) == [window.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func snapshotPrunesClosedWindowsFromPersistentStages() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(
