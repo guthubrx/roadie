@@ -433,8 +433,8 @@ private final class StageCardView: NSControl {
     }
 
     private func drawControls() {
-        drawControl("S↓", in: downRect, enabled: position < stageCount)
-        drawControl("S↑", in: upRect, enabled: position > 1)
+        drawControl("↓", in: downRect, enabled: position < stageCount)
+        drawControl("↑", in: upRect, enabled: position > 1)
     }
 
     private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
@@ -443,7 +443,7 @@ private final class StageCardView: NSControl {
             radius: 8,
             color: NSColor.white.withAlphaComponent(enabled ? (isActive ? 0.18 : 0.12) : 0.05)
         )
-        let fontSize = label.count > 1 ? 11.0 : (rect.height > 24 ? 14.0 : 12.0)
+        let fontSize = rect.height > 24 ? 14.0 : 12.0
         label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 6 : 3), withAttributes: [
             .foregroundColor: NSColor.white.withAlphaComponent(enabled ? 0.82 : 0.22),
             .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
@@ -592,10 +592,10 @@ private final class StageCardView: NSControl {
     private func drawWindowControls(in rect: CGRect, index: Int) {
         guard stage.members[safe: index] != nil else { return }
         if let previousStageID {
-            drawControl("W↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
+            drawControl("↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
         }
         if let nextStageID {
-            drawControl("W↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
+            drawControl("↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
         }
         if !isActive {
             drawControl("→", in: summonWindowRect(in: rect), enabled: true)
@@ -652,15 +652,15 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX + 8, y: rect.maxY - 28, width: 32, height: 26)
+        CGRect(x: rect.minX - 40, y: rect.maxY - 30, width: 30, height: 26)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX + 8, y: rect.maxY - 62, width: 32, height: 26)
+        CGRect(x: rect.minX - 40, y: rect.midY - 13, width: 30, height: 26)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX + 8, y: rect.maxY - 96, width: 32, height: 26)
+        CGRect(x: rect.minX - 40, y: rect.minY + 4, width: 30, height: 26)
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
