@@ -18,6 +18,7 @@ func printUsage() {
       roadie focus|move|warp|wrap|resize left|right|up|down
       roadie mode bsp|masterStack|float
       roadie window display N
+      roadie window desktop N [--follow]
       roadie window reset
       roadie desktop list
       roadie desktop focus N|prev|next|last
@@ -206,7 +207,16 @@ func runWindowCommand(_ args: [String]) {
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "desktop":
-        runCompatibilityCommand("window", args)
+        guard args.indices.contains(1), let id = Int(args[1]), id > 0 else {
+            fputs("roadie: window desktop requires a positive id\n", stderr)
+            exit(64)
+        }
+        let result = DesktopCommandService(service: service).assignActiveWindow(
+            to: DesktopID(rawValue: id),
+            follow: args.contains("--follow")
+        )
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "swap":
         runDirectionalCommand(args.dropFirst().first, verb: "window swap") {
             WindowCommandService(service: service).move($0)

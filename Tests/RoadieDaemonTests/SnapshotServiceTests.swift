@@ -956,6 +956,47 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func windowDesktopAssignMovesActiveWindowToTargetDesktopWithoutFollowing() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-window-desktop-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: left.id, members: [
+                        PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                    ]),
+                ]),
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2)),
+            ],
+            desktopSelections: [PersistentDesktopSelection(displayID: display, currentDesktopID: DesktopID(rawValue: 1))]
+        ))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left], focusedID: left.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = DesktopCommandService(service: service, store: stageStore).assignActiveWindow(to: DesktopID(rawValue: 2))
+        let state = stageStore.state()
+        let source = state.scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 1) }
+        let target = state.scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 2) }
+
+        #expect(result.changed)
+        #expect(writer.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(source?.memberIDs(in: StageID(rawValue: "1")) == [])
+        #expect(target?.memberIDs(in: StageID(rawValue: "1")) == [left.id])
+        #expect(state.currentDesktopID(for: display) == DesktopID(rawValue: 1))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func stageCreateRenameReorderListAndDeleteEmptyInactiveStage() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
