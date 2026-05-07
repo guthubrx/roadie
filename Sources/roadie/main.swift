@@ -21,8 +21,9 @@ func printUsage() {
       roadie window display N
       roadie window desktop N [--follow]
       roadie window reset
-      roadie desktop list
+      roadie desktop list|current
       roadie desktop focus N|prev|next|last
+      roadie desktop label N NAME
       roadie stage list
       roadie stage create|delete N
       roadie stage rename N NAME
@@ -242,6 +243,21 @@ func runDesktopCommand(_ args: [String]) {
         let result = DesktopCommandService(service: service).list()
         print(result.message)
         exit(0)
+    case "current":
+        let result = DesktopCommandService(service: service).current()
+        print(result.message)
+        exit(0)
+    case "label":
+        guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0, !args.dropFirst(2).isEmpty else {
+            fputs("roadie: desktop label requires a positive id and label\n", stderr)
+            exit(64)
+        }
+        let result = DesktopCommandService(service: service).label(
+            DesktopID(rawValue: id),
+            as: args.dropFirst(2).joined(separator: " ")
+        )
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "focus":
         guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
             fputs("roadie: desktop focus requires a positive id\n", stderr)

@@ -997,6 +997,31 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func desktopLabelPersistsAndAppearsInList() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-desktop-label-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let labelResult = DesktopCommandService(service: service, store: stageStore).label(DesktopID(rawValue: 2), as: "Research")
+        let listResult = DesktopCommandService(service: service, store: stageStore).list()
+        let state = stageStore.state()
+
+        #expect(labelResult.changed)
+        #expect(state.label(displayID: display, desktopID: DesktopID(rawValue: 2)) == "Research")
+        #expect(listResult.message.contains("2\tResearch"))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func stageCreateRenameReorderListAndDeleteEmptyInactiveStage() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
