@@ -57,7 +57,7 @@ public struct StageCommandService {
         store.save(state)
 
         var lines = ["ACTIVE\tID\tMODE\tWINDOWS\tNAME"]
-        for stage in scope.stages.sorted(by: { $0.id < $1.id }) {
+        for stage in scope.stages {
             let active = stage.id == scope.activeStageID ? "*" : ""
             lines.append("\(active)\t\(stage.id.rawValue)\t\(stage.mode.rawValue)\t\(stage.members.count)\t\(stage.name)")
         }
@@ -94,6 +94,22 @@ public struct StageCommandService {
         state.update(scope)
         store.save(state)
         return StageCommandResult(message: "stage rename \(stageID.rawValue): \(name)", changed: true)
+    }
+
+    public func reorder(_ rawStageID: String, to position: Int) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage reorder: no display", changed: false)
+        }
+        let stageID = StageID(rawValue: rawStageID)
+        var state = store.state()
+        var scope = state.scope(displayID: display.id)
+        guard scope.reorderStage(stageID, to: position) else {
+            return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
+        }
+        state.update(scope)
+        store.save(state)
+        return StageCommandResult(message: "stage reorder \(stageID.rawValue): position=\(position)", changed: true)
     }
 
     public func delete(_ rawStageID: String) -> StageCommandResult {
@@ -139,7 +155,7 @@ public struct StageCommandService {
         for id in (1...6).map({ StageID(rawValue: String($0)) }) {
             scope.ensureStage(id)
         }
-        let ordered = scope.stages.map(\.id).sorted()
+        let ordered = scope.stages.map(\.id)
         let currentIndex = ordered.firstIndex(of: scope.activeStageID) ?? 0
         let nextIndex: Int
         switch direction {

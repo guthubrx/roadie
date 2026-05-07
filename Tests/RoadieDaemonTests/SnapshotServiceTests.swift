@@ -244,7 +244,11 @@ struct SnapshotServiceTests {
         let stagePath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-mode-stages-\(UUID().uuidString).json")
             .path
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-mode-intent-\(UUID().uuidString).json")
+            .path
         let stageStore = StageStore(path: stagePath)
+        let intentStore = LayoutIntentStore(path: intentPath)
         stageStore.save(PersistentStageState(scopes: [
             PersistentStageScope(
                 displayID: display,
@@ -259,6 +263,7 @@ struct SnapshotServiceTests {
                 windowSnapshots: windows
             ),
             config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore,
             stageStore: stageStore
         )
 
@@ -272,6 +277,7 @@ struct SnapshotServiceTests {
         #expect(commands[1].frame == Rect(x: 110, y: 0, width: 890, height: 245))
         #expect(commands[2].frame == Rect(x: 110, y: 255, width: 890, height: 245))
         try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intentPath)
     }
 
     @Test
@@ -847,7 +853,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func stageCreateRenameListAndDeleteEmptyInactiveStage() {
+    func stageCreateRenameReorderListAndDeleteEmptyInactiveStage() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
         let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
@@ -865,6 +871,7 @@ struct SnapshotServiceTests {
 
         let create = commands.create("9", name: "Scratch")
         let rename = commands.rename("9", to: "Inbox")
+        let reorder = commands.reorder("9", to: 1)
         let list = commands.list()
         let deleteActive = commands.delete("1")
         let deleteCreated = commands.delete("9")
@@ -872,6 +879,8 @@ struct SnapshotServiceTests {
 
         #expect(create.changed)
         #expect(rename.changed)
+        #expect(reorder.changed)
+        #expect(list.message.split(separator: "\n").dropFirst().first?.contains("\t9\tbsp\t0\tInbox") == true)
         #expect(list.message.contains("9\tbsp\t0\tInbox"))
         #expect(!deleteActive.changed)
         #expect(deleteCreated.changed)

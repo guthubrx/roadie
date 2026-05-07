@@ -23,6 +23,7 @@ func printUsage() {
       roadie stage list
       roadie stage create|delete N
       roadie stage rename N NAME
+      roadie stage reorder N POSITION
       roadie stage switch|assign N
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
@@ -239,6 +240,17 @@ func runStageCommand(_ args: [String]) {
             exit(64)
         }
         let result = StageCommandService(service: service).rename(stageID, to: args.dropFirst(2).joined(separator: " "))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "reorder":
+        guard let stageID = args.dropFirst().first,
+              let rawPosition = args.dropFirst(2).first,
+              let position = Int(rawPosition)
+        else {
+            fputs("roadie: stage reorder requires a stage id and numeric position\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).reorder(stageID, to: position)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "delete":
