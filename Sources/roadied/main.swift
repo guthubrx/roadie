@@ -6,6 +6,7 @@ let args = Array(CommandLine.arguments.dropFirst())
 let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
+var focusFollowsMouseController: FocusFollowsMouseController?
 
 func printUsage() {
     print("""
@@ -34,6 +35,8 @@ case "run":
     }
     borderController = BorderController()
     borderController?.start()
+    focusFollowsMouseController = FocusFollowsMouseController()
+    focusFollowsMouseController?.start()
 
     let target = MaintenanceTimerTarget(maintainer: maintainer, maxTicks: ticks) { tick in
         if tick.accessibilityDenied {

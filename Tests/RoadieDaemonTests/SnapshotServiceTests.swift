@@ -4,6 +4,7 @@ import Testing
 import RoadieAX
 import RoadieCore
 import RoadieDaemon
+import RoadieStages
 
 private struct FakeProvider: SystemSnapshotProviding {
     var permissionSnapshot = PermissionSnapshot(accessibilityTrusted: true)
@@ -1019,6 +1020,35 @@ struct SnapshotServiceTests {
         #expect(state.label(displayID: display, desktopID: DesktopID(rawValue: 2)) == "Research")
         #expect(listResult.message.contains("2\tResearch"))
         try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func focusFollowsMousePickerTargetsActiveStageWindowAtPoint() {
+        let display = DisplayID(rawValue: "display-a")
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let inactiveScope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        var state = RoadieState()
+        state.ensureDisplay(display)
+        try? state.createStage(id: scope.stageID, name: "Active", in: display, desktopID: scope.desktopID)
+        try? state.createStage(id: inactiveScope.stageID, name: "Inactive", in: display, desktopID: inactiveScope.desktopID)
+        try? state.switchStage(scope.stageID, in: display, desktopID: scope.desktopID)
+        let active = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "active", frame: Rect(x: 0, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true)
+        let inactive = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "inactive", frame: Rect(x: 0, y: 0, width: 80, height: 80), isOnScreen: true, isTileCandidate: true)
+        try? state.assignWindow(active.id, to: scope)
+        try? state.assignWindow(inactive.id, to: inactiveScope)
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [],
+            windows: [
+                ScopedWindowSnapshot(window: active, scope: scope),
+                ScopedWindowSnapshot(window: inactive, scope: inactiveScope),
+            ],
+            state: state
+        )
+
+        let target = FocusFollowsMousePicker.targetWindow(at: CGPoint(x: 40, y: 40), in: snapshot)
+
+        #expect(target?.window.id == active.id)
     }
 
     @Test
