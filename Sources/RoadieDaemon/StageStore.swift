@@ -43,9 +43,22 @@ public struct StageStore: Sendable {
 
 public struct PersistentStageState: Equatable, Codable, Sendable {
     public var scopes: [PersistentStageScope]
+    public var desktopSelections: [PersistentDesktopSelection]
 
-    public init(scopes: [PersistentStageScope] = []) {
+    public init(scopes: [PersistentStageScope] = [], desktopSelections: [PersistentDesktopSelection] = []) {
         self.scopes = scopes
+        self.desktopSelections = desktopSelections
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case scopes
+        case desktopSelections
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.scopes = try c.decodeIfPresent([PersistentStageScope].self, forKey: .scopes) ?? []
+        self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -75,6 +88,42 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         for scopeIndex in scopes.indices {
             scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs)
         }
+    }
+
+    public func currentDesktopID(for displayID: DisplayID) -> DesktopID {
+        desktopSelections.first { $0.displayID == displayID }?.currentDesktopID ?? DesktopID(rawValue: 1)
+    }
+
+    public func lastDesktopID(for displayID: DisplayID) -> DesktopID? {
+        desktopSelections.first { $0.displayID == displayID }?.lastDesktopID
+    }
+
+    public mutating func switchDesktop(displayID: DisplayID, to desktopID: DesktopID) {
+        if let index = desktopSelections.firstIndex(where: { $0.displayID == displayID }) {
+            let current = desktopSelections[index].currentDesktopID
+            if current != desktopID {
+                desktopSelections[index].lastDesktopID = current
+                desktopSelections[index].currentDesktopID = desktopID
+            }
+        } else {
+            desktopSelections.append(PersistentDesktopSelection(
+                displayID: displayID,
+                currentDesktopID: desktopID,
+                lastDesktopID: desktopID == DesktopID(rawValue: 1) ? nil : DesktopID(rawValue: 1)
+            ))
+        }
+    }
+}
+
+public struct PersistentDesktopSelection: Equatable, Codable, Sendable {
+    public var displayID: DisplayID
+    public var currentDesktopID: DesktopID
+    public var lastDesktopID: DesktopID?
+
+    public init(displayID: DisplayID, currentDesktopID: DesktopID = DesktopID(rawValue: 1), lastDesktopID: DesktopID? = nil) {
+        self.displayID = displayID
+        self.currentDesktopID = currentDesktopID
+        self.lastDesktopID = lastDesktopID
     }
 }
 

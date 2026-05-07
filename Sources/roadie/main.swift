@@ -19,6 +19,7 @@ func printUsage() {
       roadie mode bsp|masterStack|float
       roadie window display N
       roadie window reset
+      roadie desktop list
       roadie desktop focus N|prev|next|last
       roadie stage list
       roadie stage create|delete N
@@ -145,7 +146,7 @@ case "mode":
 case "window":
     runWindowCommand(Array(args.dropFirst()))
 case "desktop":
-    runCompatibilityCommand("desktop", Array(args.dropFirst()))
+    runDesktopCommand(Array(args.dropFirst()))
 case "stage":
     runStageCommand(Array(args.dropFirst()))
 case "balance":
@@ -212,6 +213,39 @@ func runWindowCommand(_ args: [String]) {
         }
     case "close":
         print("roadie: window close is not implemented in this build")
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runDesktopCommand(_ args: [String]) {
+    switch args.first {
+    case "list":
+        let result = DesktopCommandService(service: service).list()
+        print(result.message)
+        exit(0)
+    case "focus":
+        guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
+            fputs("roadie: desktop focus requires a positive id\n", stderr)
+            exit(64)
+        }
+        let result = DesktopCommandService(service: service).focus(DesktopID(rawValue: id))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "prev":
+        let result = DesktopCommandService(service: service).cycle(.prev)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "next":
+        let result = DesktopCommandService(service: service).cycle(.next)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "last":
+        let result = DesktopCommandService(service: service).last()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
