@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+label="com.roadie.roadied"
+stderr_log="$HOME/.roadies/roadied.stderr.log"
+repo_root="$(cd "$script_dir/.." && pwd)"
+roadied_bin="$repo_root/bin/roadied"
+
+echo "== build =="
+"$script_dir/with-xcode" swift build --configuration debug --product roadied >/dev/null
+echo "$roadied_bin"
+
+echo "== terminal accessibility =="
+if [[ -x "$roadied_bin" ]]; then
+  "$roadied_bin" permissions
+else
+  echo "missing runtime binary; run make start"
+fi
+
+echo "== launchd =="
+if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+  launchctl print "gui/$(id -u)/$label" | sed -n '/state =/p;/pid =/p;/program =/p'
+else
+  echo "$label not loaded"
+fi
+
+echo "== daemon diagnostics =="
+if [[ -f "$stderr_log" ]] && [[ -s "$stderr_log" ]]; then
+  tail -n 20 "$stderr_log"
+else
+  echo "no daemon stderr"
+fi
+
+if [[ -f "$stderr_log" ]] && grep -q 'accessibilityTrusted=false' "$stderr_log"; then
+  echo ""
+  echo "macOS blocks Accessibility for the launchd daemon."
+  echo "Add this binary in System Settings > Privacy & Security > Accessibility:"
+  echo "$roadied_bin"
+fi
