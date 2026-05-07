@@ -22,7 +22,7 @@ func printUsage() {
       roadie window desktop N [--follow]
       roadie window reset
       roadie desktop list|current
-      roadie desktop focus N|prev|next|last
+      roadie desktop focus N|prev|next|last|back
       roadie desktop label N NAME
       roadie stage list
       roadie stage create|delete N
@@ -274,7 +274,7 @@ func runDesktopCommand(_ args: [String]) {
         let result = DesktopCommandService(service: service).cycle(.next)
         print(result.message)
         exit(result.changed ? 0 : 1)
-    case "last":
+    case "last", "back":
         let result = DesktopCommandService(service: service).last()
         print(result.message)
         exit(result.changed ? 0 : 1)
