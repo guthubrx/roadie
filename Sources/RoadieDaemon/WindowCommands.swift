@@ -201,10 +201,11 @@ public struct WindowCommandService {
         }
         let sourceScope = active.scope
         var initialStageState = stageStore.state()
-        let targetActiveStageID = initialStageState.scope(displayID: display.id).activeStageID
+        let targetDesktopID = initialStageState.currentDesktopID(for: display.id)
+        let targetActiveStageID = initialStageState.scope(displayID: display.id, desktopID: targetDesktopID).activeStageID
         let targetScopeID = StageScope(
             displayID: display.id,
-            desktopID: DesktopID(rawValue: 1),
+            desktopID: targetDesktopID,
             stageID: targetActiveStageID
         )
         if sourceScope == targetScopeID {
@@ -220,7 +221,7 @@ public struct WindowCommandService {
         for scopeIndex in state.scopes.indices {
             state.scopes[scopeIndex].remove(windowID: active.window.id)
         }
-        var targetScope = state.scope(displayID: display.id)
+        var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
         let transferredWindow = WindowSnapshot(
             id: active.window.id,
             pid: active.window.pid,

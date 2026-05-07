@@ -68,7 +68,8 @@ public struct SnapshotService {
 
         for display in displays {
             state.ensureDisplay(display.id)
-            var persistentScope = persistedStages.scope(displayID: display.id)
+            let currentDesktopID = persistedStages.currentDesktopID(for: display.id)
+            var persistentScope = persistedStages.scope(displayID: display.id, desktopID: currentDesktopID)
             persistentScope.applyConfiguredStages(config.stageManager)
             persistedStages.update(persistentScope)
             let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
@@ -77,9 +78,10 @@ public struct SnapshotService {
                 name: "Stage \(persistentScope.activeStageID.rawValue)",
                 mode: activePersistentStage?.mode ?? .bsp,
                 in: display.id,
-                desktopID: DesktopID(rawValue: 1)
+                desktopID: currentDesktopID
             )
-            try? state.switchStage(persistentScope.activeStageID, in: display.id, desktopID: DesktopID(rawValue: 1))
+            try? state.switchDesktop(currentDesktopID, on: display.id)
+            try? state.switchStage(persistentScope.activeStageID, in: display.id, desktopID: currentDesktopID)
         }
 
         let fallbackDisplayID = displays.first?.id
@@ -94,18 +96,24 @@ public struct SnapshotService {
                 continue
             }
             if knownScope == nil {
-                var persistentScope = persistedStages.scope(displayID: displayID)
+                var persistentScope = persistedStages.scope(
+                    displayID: displayID,
+                    desktopID: persistedStages.currentDesktopID(for: displayID)
+                )
                 persistentScope.assign(window: window, to: persistentScope.activeStageID)
                 persistedStages.update(persistentScope)
             } else if !isHidden(window.frame.cgRect, in: displays) {
-                var persistentScope = persistedStages.scope(displayID: displayID)
+                var persistentScope = persistedStages.scope(
+                    displayID: displayID,
+                    desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID)
+                )
                 persistentScope.updateFrame(window: window)
                 persistedStages.update(persistentScope)
             }
             let scope = StageScope(
                 displayID: displayID,
-                desktopID: DesktopID(rawValue: 1),
-                stageID: knownScope?.stageID ?? persistedStages.scope(displayID: displayID).activeStageID
+                desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
+                stageID: knownScope?.stageID ?? persistedStages.scope(displayID: displayID, desktopID: persistedStages.currentDesktopID(for: displayID)).activeStageID
             )
             let persistedStage = persistedStages.scopes
                 .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
