@@ -73,6 +73,43 @@ public struct DesktopCommandService {
         return switchDisplay(display, to: last, snapshot: snapshot)
     }
 
+    public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot),
+              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays),
+              let display = snapshot.displays.first(where: { $0.id == displayID })
+        else {
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): no active window", changed: false)
+        }
+
+        var state = store.state()
+        let sourceScope = active.scope
+        var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: active.window.id)
+        }
+        targetScope.assign(window: active.window, to: targetScope.activeStageID)
+        state.update(targetScope)
+        store.save(state)
+
+        if let sourceScope {
+            service.removeLayoutIntent(scope: sourceScope)
+        }
+        service.removeLayoutIntent(scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID))
+
+        if follow {
+            return switchDisplay(display, to: desktopID, snapshot: snapshot)
+        }
+
+        let hidden = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
+        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        return StageCommandResult(
+            message: "window desktop \(desktopID.rawValue): hidden=\(hidden) layout=\(result.attempted)",
+            changed: hidden || result.attempted > 0
+        )
+    }
+
     private func switchDisplay(
         _ display: DisplaySnapshot,
         to desktopID: DesktopID,
@@ -142,6 +179,22 @@ public struct DesktopCommandService {
             return snapshot.displays.first { $0.id == displayID }
         }
         return snapshot.displays.first
+    }
+
+    private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
+        if let focusedID = service.focusedWindowID(),
+           let focused = snapshot.windows.first(where: { entry in
+               guard let scope = entry.scope else { return false }
+               return entry.window.id == focusedID
+                   && entry.window.isTileCandidate
+                   && snapshot.state.activeScope(on: scope.displayID) == scope
+           }) {
+            return focused
+        }
+        return snapshot.windows.first { entry in
+            guard let scope = entry.scope else { return false }
+            return entry.window.isTileCandidate && snapshot.state.activeScope(on: scope.displayID) == scope
+        }
     }
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
