@@ -175,9 +175,11 @@ private final class RailPanel: NSPanel {
     }
 
     private func stageIDs(from scope: PersistentStageScope) -> [StageID] {
-        let configured = scope.stages.map(\.id)
-        let defaults = (1...6).map { StageID(rawValue: String($0)) }
-        return Array(Set(configured + defaults)).sorted()
+        var ids = scope.stages.map(\.id)
+        for id in (1...6).map({ StageID(rawValue: String($0)) }) where !ids.contains(id) {
+            ids.append(id)
+        }
+        return ids
     }
 }
 

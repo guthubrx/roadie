@@ -113,6 +113,14 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         return true
     }
 
+    public mutating func reorderStage(_ id: StageID, to position: Int) -> Bool {
+        guard let index = stages.firstIndex(where: { $0.id == id }) else { return false }
+        let stage = stages.remove(at: index)
+        let targetIndex = min(max(position - 1, 0), stages.count)
+        stages.insert(stage, at: targetIndex)
+        return true
+    }
+
     public mutating func deleteEmptyInactiveStage(_ id: StageID) -> Bool {
         guard id != activeStageID,
               let index = stages.firstIndex(where: { $0.id == id }),
