@@ -78,7 +78,7 @@ case "display":
     if args.contains("--json") {
         printJSON(snapshot)
     } else if verb == "current" {
-        print(TextFormatter.currentDisplay(snapshot))
+        print(TextFormatter.currentDisplay(snapshot, state: StageStore().state()))
     } else {
         print(TextFormatter.displays(snapshot.displays))
     }

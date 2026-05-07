@@ -27,8 +27,11 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
-    public static func currentDisplay(_ snapshot: DaemonSnapshot) -> String {
-        guard let display = displayContainingFocusedWindow(in: snapshot) ?? snapshot.displays.first else {
+    public static func currentDisplay(_ snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> String {
+        let activeDisplay = state?.activeDisplayID.flatMap { id in
+            snapshot.displays.first { $0.id == id }
+        }
+        guard let display = activeDisplay ?? displayContainingFocusedWindow(in: snapshot) ?? snapshot.displays.first else {
             return "No displays found."
         }
         let frame = "\(Int(display.frame.x)),\(Int(display.frame.y)) \(Int(display.frame.width))x\(Int(display.frame.height))"
