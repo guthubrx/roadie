@@ -15,6 +15,7 @@ func printUsage() {
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie config show|validate
+      roadie rail status
       roadie doctor
       roadie self-test
       roadie events tail [N]
@@ -165,6 +166,12 @@ case "config":
         fputs("roadie: config load failed: \(error)\n", stderr)
         exit(1)
     }
+case "rail":
+    guard args.dropFirst().first == "status" else {
+        printUsage()
+        exit(64)
+    }
+    print(RailSettings.load().statusLines.joined(separator: "\n"))
 case "focus":
     if args.dropFirst().first == "status" {
         print(TextFormatter.focusStatus(service.snapshot()))
