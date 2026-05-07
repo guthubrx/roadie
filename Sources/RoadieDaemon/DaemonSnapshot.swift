@@ -68,7 +68,9 @@ public struct SnapshotService {
 
         for display in displays {
             state.ensureDisplay(display.id)
-            let persistentScope = persistedStages.scope(displayID: display.id)
+            var persistentScope = persistedStages.scope(displayID: display.id)
+            persistentScope.applyConfiguredStages(config.stageManager)
+            persistedStages.update(persistentScope)
             let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
             try? state.createStage(
                 id: persistentScope.activeStageID,

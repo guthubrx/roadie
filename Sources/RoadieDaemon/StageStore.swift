@@ -101,6 +101,22 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages.append(PersistentStage(id: id))
     }
 
+    public mutating func applyConfiguredStages(_ config: StageManagerConfig) {
+        if stages.isEmpty {
+            activeStageID = StageID(rawValue: config.defaultStage)
+        }
+        for workspace in config.workspaces {
+            let id = StageID(rawValue: workspace.id)
+            if let index = stages.firstIndex(where: { $0.id == id }) {
+                if stages[index].name == "Stage \(id.rawValue)" {
+                    stages[index].name = workspace.displayName
+                }
+            } else {
+                stages.append(PersistentStage(id: id, name: workspace.displayName))
+            }
+        }
+    }
+
     public mutating func createStage(_ id: StageID, name: String? = nil) -> Bool {
         guard !stages.contains(where: { $0.id == id }) else { return false }
         stages.append(PersistentStage(id: id, name: name))
