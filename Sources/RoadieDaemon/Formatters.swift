@@ -90,6 +90,15 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func selfTest(_ report: SelfTestReport) -> String {
+        let status = report.failed ? "fail" : "ok"
+        var lines = ["status=\(status)"]
+        for check in report.checks {
+            lines.append("\(check.level.rawValue)\t\(check.name)\t\(check.message)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func applyPlan(_ plan: ApplyPlan) -> String {
         guard !plan.commands.isEmpty else { return "No layout commands." }
         var lines = ["WID\tAPP\tTITLE\tFRAME"]
