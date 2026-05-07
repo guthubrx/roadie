@@ -5,13 +5,19 @@ import RoadieCore
 @MainActor
 public final class RailController {
     private let store: StageStore
+    private let snapshotService: SnapshotService
     private let commandService: StageCommandService
     private var panels: [DisplayID: RailPanel] = [:]
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
 
-    public init(store: StageStore = StageStore(), commandService: StageCommandService = StageCommandService()) {
+    public init(
+        store: StageStore = StageStore(),
+        snapshotService: SnapshotService = SnapshotService(),
+        commandService: StageCommandService = StageCommandService()
+    ) {
         self.store = store
+        self.snapshotService = snapshotService
         self.commandService = commandService
     }
 
@@ -64,6 +70,7 @@ public final class RailController {
     }
 
     private func rebuildPanels() {
+        _ = snapshotService.snapshot()
         let state = store.state()
         let renderMode = RailRenderMode.load()
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
