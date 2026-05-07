@@ -538,6 +538,40 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func autoIntentWithTinyTileIsInvalidated() {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 150, y: 38, width: 790, height: 1182), isOnScreen: true, isTileCandidate: true)
+        let bottomRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "bottom-right", frame: Rect(x: 950, y: 170, width: 1090, height: 1050), isOnScreen: true, isTileCandidate: true)
+        let tinyTopRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "tiny-top-right", frame: Rect(x: 950, y: 38, width: 1090, height: 122), isOnScreen: true, isTileCandidate: true)
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-tiny-intent-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+        intentStore.save(LayoutIntent(scope: scope, windowIDs: [left.id, bottomRight.id, tinyTopRight.id], placements: [
+            left.id: left.frame,
+            bottomRight.id: bottomRight.frame,
+            tinyTopRight.id: tinyTopRight.frame,
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 2048, height: 1280), visibleFrame: Rect(x: 0, y: 30, width: 2048, height: 1250), isMain: true),
+                ],
+                windowSnapshots: [left, bottomRight, tinyTopRight]
+            ),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore
+        )
+
+        let commands = service.applyPlan(from: service.snapshot()).commands
+
+        #expect(!commands.isEmpty)
+        #expect(intentStore.intent(for: scope) == nil)
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
     func configExclusionsKeepMatchingBundlesUnscoped() {
         let display = DisplayID(rawValue: "display-a")
         let window = WindowSnapshot(
@@ -1236,6 +1270,33 @@ struct SnapshotServiceTests {
 
         #expect(stageStore.state().activeDisplayID == liveDisplay)
         try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotPrunesLayoutIntentsForDisconnectedDisplays() {
+        let liveDisplay = DisplayID(rawValue: "display-live")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let liveScope = StageScope(displayID: liveDisplay, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let staleScope = StageScope(displayID: staleDisplay, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let displaySnapshot = DisplaySnapshot(id: liveDisplay, index: 1, name: "Live", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-prune-intents-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+        intentStore.save(LayoutIntent(scope: liveScope, windowIDs: [WindowID(rawValue: 1)], placements: [:]))
+        intentStore.save(LayoutIntent(scope: staleScope, windowIDs: [WindowID(rawValue: 2)], placements: [:]))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            intentStore: intentStore
+        )
+
+        _ = service.snapshot()
+
+        #expect(intentStore.intent(for: liveScope) != nil)
+        #expect(intentStore.intent(for: staleScope) == nil)
+        try? FileManager.default.removeItem(atPath: intentPath)
     }
 
     @Test

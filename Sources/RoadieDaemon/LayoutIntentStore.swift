@@ -53,7 +53,10 @@ public struct LayoutIntentStore: Sendable {
     }
 
     public static func defaultPath() -> String {
-        "~/.roadies/layout-intents.json"
+        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+            return "\(NSTemporaryDirectory())roadie-test-layout-intents-\(ProcessInfo.processInfo.processIdentifier).json"
+        }
+        return "~/.roadies/layout-intents.json"
     }
 
     public func intent(for scope: StageScope) -> LayoutIntent? {
@@ -75,6 +78,12 @@ public struct LayoutIntentStore: Sendable {
     public func remove(scope: StageScope) {
         var intents = load()
         intents.removeValue(forKey: scope.description)
+        write(intents)
+    }
+
+    public func prune(keepingDisplayIDs displayIDs: Set<DisplayID>) {
+        var intents = load()
+        intents = intents.filter { _, intent in displayIDs.contains(intent.scope.displayID) }
         write(intents)
     }
 
