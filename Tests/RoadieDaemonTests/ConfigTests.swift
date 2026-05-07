@@ -67,6 +67,45 @@ struct ConfigTests {
     }
 
     @Test
+    func railSettingsDecodeRendererGeometryAndStageAccents() {
+        let settings = RailSettings.load(raw: """
+        [fx.rail]
+        renderer = "parallax-45"
+
+        [fx.rail.preview]
+        width = 160
+        height = 104
+        leading_padding = 8
+        trailing_padding = 16
+        vertical_padding = 20
+
+        [fx.rail.parallax]
+        rotation = 35
+        offset_x = 25
+        offset_y = 18
+        scale_per_layer = 0.08
+        opacity_per_layer = 0.20
+        darken_per_layer = 0.15
+        width = 120
+        height = 78
+        leading_padding = 4
+        trailing_padding = 8
+        vertical_padding = 12
+
+        [[fx.rail.preview.stage_overrides]]
+        stage_id = "2"
+        active_color = "#6BE675"
+        """)
+
+        #expect(settings.renderer == "parallax-45")
+        #expect(settings.preview.width == 160)
+        #expect(settings.parallax.rotation == 35)
+        #expect(settings.parallax.width == 120)
+        #expect(settings.parallax.leadingPadding == 4)
+        #expect(settings.stageAccents == ["2": "#6BE675"])
+    }
+
+    @Test
     func configValidationReportsUnsupportedTablesAsWarnings() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-unsupported-config-\(UUID().uuidString).toml")

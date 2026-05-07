@@ -293,92 +293,34 @@ private struct RailVisualConfig {
     }
 
     static func load() -> RailVisualConfig {
-        let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
-        guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return RailVisualConfig() }
-        let sections = sections(from: raw)
-        let mode = RailRenderMode.load(from: raw)
-        let preview = sections["fx.rail.preview"] ?? [:]
-        let stacked = sections["fx.rail.stacked"] ?? [:]
-        let parallax = sections["fx.rail.parallax"] ?? [:]
+        let settings = RailSettings.load()
+        let mode = RailRenderMode.load(renderer: settings.renderer)
+        let accents = settings.stageAccents.reduce(into: [StageID: NSColor]()) { result, item in
+            guard let color = NSColor(hex: item.value) else { return }
+            result[StageID(rawValue: item.key)] = color
+        }
+        let preview = settings.preview
+        let parallax = settings.parallax
+        let useParallaxGeometry = mode == .parallax
         return RailVisualConfig(
             mode: mode,
-            stageAccents: loadStageAccents(from: raw),
-            previewWidth: cg(parallax["width"] ?? preview["width"], default: 160, min: 60, max: 240),
-            previewHeight: cg(parallax["height"] ?? preview["height"], default: 104, min: 40, max: 180),
-            leadingPadding: cg(parallax["leading_padding"] ?? preview["leading_padding"], default: 8, min: 0, max: 80),
-            trailingPadding: cg(parallax["trailing_padding"] ?? preview["trailing_padding"], default: 16, min: 0, max: 80),
-            verticalPadding: cg(parallax["vertical_padding"] ?? preview["vertical_padding"], default: 20, min: 0, max: 80),
-            stackedOffsetX: cg(stacked["offset_x"], default: 60, min: 0, max: 120),
-            stackedOffsetY: cg(stacked["offset_y"], default: 80, min: 0, max: 120),
-            stackedScale: cg(stacked["scale_per_layer"], default: 0.05, min: 0, max: 0.30),
-            stackedOpacity: cg(stacked["opacity_per_layer"], default: 0.08, min: 0, max: 0.50),
-            parallaxRotation: cg(parallax["rotation"], default: 35, min: 0, max: 75),
-            parallaxOffsetX: cg(parallax["offset_x"], default: 25, min: 0, max: 80),
-            parallaxOffsetY: cg(parallax["offset_y"], default: 18, min: 0, max: 80),
-            parallaxScale: cg(parallax["scale_per_layer"], default: 0.08, min: 0, max: 0.30),
-            parallaxOpacity: cg(parallax["opacity_per_layer"], default: 0.20, min: 0, max: 0.50),
-            parallaxDarken: cg(parallax["darken_per_layer"], default: 0.15, min: 0, max: 1)
+            stageAccents: accents,
+            previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
+            previewHeight: CGFloat(useParallaxGeometry ? parallax.height : preview.height),
+            leadingPadding: CGFloat(useParallaxGeometry ? parallax.leadingPadding : preview.leadingPadding),
+            trailingPadding: CGFloat(useParallaxGeometry ? parallax.trailingPadding : preview.trailingPadding),
+            verticalPadding: CGFloat(useParallaxGeometry ? parallax.verticalPadding : preview.verticalPadding),
+            stackedOffsetX: CGFloat(settings.stacked.offsetX),
+            stackedOffsetY: CGFloat(settings.stacked.offsetY),
+            stackedScale: CGFloat(settings.stacked.scalePerLayer),
+            stackedOpacity: CGFloat(settings.stacked.opacityPerLayer),
+            parallaxRotation: CGFloat(parallax.rotation),
+            parallaxOffsetX: CGFloat(parallax.offsetX),
+            parallaxOffsetY: CGFloat(parallax.offsetY),
+            parallaxScale: CGFloat(parallax.scalePerLayer),
+            parallaxOpacity: CGFloat(parallax.opacityPerLayer),
+            parallaxDarken: CGFloat(parallax.darkenPerLayer)
         )
-    }
-
-    private static func sections(from raw: String) -> [String: [String: String]] {
-        var sections: [String: [String: String]] = [:]
-        var current: String?
-        for line in raw.components(separatedBy: .newlines) {
-            let trimmed = line.split(separator: "#", maxSplits: 1).first.map(String.init)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !trimmed.isEmpty else { continue }
-            if trimmed.hasPrefix("["), trimmed.hasSuffix("]"), !trimmed.hasPrefix("[[") {
-                current = String(trimmed.dropFirst().dropLast())
-                continue
-            }
-            guard let current,
-                  let equals = trimmed.firstIndex(of: "=")
-            else { continue }
-            let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)
-            let value = trimmed[trimmed.index(after: equals)...]
-                .trimmingCharacters(in: .whitespaces)
-                .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-            sections[current, default: [:]][key] = value
-        }
-        return sections
-    }
-
-    private static func cg(_ raw: String?, default fallback: CGFloat, min: CGFloat, max: CGFloat) -> CGFloat {
-        guard let raw, let value = Double(raw) else { return fallback }
-        return Swift.max(min, Swift.min(max, CGFloat(value)))
-    }
-
-    private static func loadStageAccents(from raw: String) -> [StageID: NSColor] {
-        var accents: [StageID: NSColor] = [:]
-        var currentStageID: StageID?
-        for line in raw.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed == "[[fx.rail.preview.stage_overrides]]" {
-                currentStageID = nil
-                continue
-            }
-            if trimmed.hasPrefix("[") {
-                currentStageID = nil
-            }
-            if let value = quotedValue(in: trimmed, key: "stage_id") {
-                currentStageID = StageID(rawValue: value)
-            }
-            if let value = quotedValue(in: trimmed, key: "active_color"),
-               let stageID = currentStageID,
-               let color = NSColor(hex: value) {
-                accents[stageID] = color
-            }
-        }
-        return accents
-    }
-
-    private static func quotedValue(in line: String, key: String) -> String? {
-        guard line.hasPrefix("\(key)"),
-              let first = line.firstIndex(of: "\""),
-              let last = line[line.index(after: first)...].firstIndex(of: "\"")
-        else { return nil }
-        return String(line[line.index(after: first)..<last])
     }
 }
 
@@ -389,11 +331,17 @@ private enum RailRenderMode: String {
     case parallax = "parallax-45"
     case icons = "icons-only"
 
-    static func load(from raw: String) -> RailRenderMode {
-        if raw.contains("renderer = \"mosaic\"") { return .mosaic }
-        if raw.contains("renderer = \"parallax-45\"") || raw.contains("renderer = \"parallax\"") { return .parallax }
-        if raw.contains("renderer = \"icons-only\"") || raw.contains("renderer = \"icons\"") { return .icons }
-        return .stacked
+    static func load(renderer: String) -> RailRenderMode {
+        switch renderer {
+        case "mosaic":
+            return .mosaic
+        case "parallax-45", "parallax":
+            return .parallax
+        case "icons-only", "icons":
+            return .icons
+        default:
+            return .stacked
+        }
     }
 }
 
@@ -692,11 +640,14 @@ private final class StageCardView: NSControl {
             switch config.mode {
             case .stacked:
                 let offset = CGFloat(index)
+                let scale = 1 - offset * config.stackedScale
                 let dx = -offset * config.stackedOffsetX * 0.18
                 let dy = offset * config.stackedOffsetY * 0.10
-                return (index, preview.offsetBy(dx: dx, dy: dy))
+                return (index, preview.scaled(by: scale).offsetBy(dx: dx, dy: dy))
             case .parallax:
-                return (index, preview.offsetBy(dx: CGFloat(index) * -config.parallaxOffsetX, dy: CGFloat(index) * config.parallaxOffsetY))
+                let offset = CGFloat(index)
+                let scale = 1 - offset * config.parallaxScale
+                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * config.parallaxOffsetX, dy: offset * config.parallaxOffsetY))
             case .mosaic, .icons:
                 return (index, preview)
             }
@@ -705,6 +656,18 @@ private final class StageCardView: NSControl {
 
     private func drawPreview(_ rect: CGRect, index: Int, skewed: Bool = false) {
         guard !rect.isEmpty else { return }
+        if skewed {
+            guard let context = NSGraphicsContext.current?.cgContext else { return }
+            context.saveGState()
+            applyParallaxTransform(for: rect, in: context)
+            drawPreviewBody(rect, index: index, darkened: true)
+            context.restoreGState()
+            return
+        }
+        drawPreviewBody(rect, index: index, darkened: false)
+    }
+
+    private func drawPreviewBody(_ rect: CGRect, index: Int, darkened: Bool) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
         if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
@@ -719,11 +682,20 @@ private final class StageCardView: NSControl {
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
         path.lineWidth = 1
         path.stroke()
-        if skewed {
+        if darkened {
             NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
         drawWindowControls(in: rect, index: index)
+    }
+
+    private func applyParallaxTransform(for rect: CGRect, in context: CGContext) {
+        let angle = min(config.parallaxRotation, 75) * .pi / 180
+        let xScale = max(0.55, cos(angle))
+        let perspective = -sin(angle) * 0.06
+        context.translateBy(x: rect.midX, y: rect.midY)
+        context.concatenate(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
+        context.translateBy(x: -rect.midX, y: -rect.midY)
     }
 
     private func opacity(for index: Int) -> CGFloat {
@@ -751,13 +723,13 @@ private final class StageCardView: NSControl {
     private func drawWindowControls(in rect: CGRect, index: Int) {
         guard stage.members[safe: index] != nil else { return }
         if let previousStageID {
-            drawControl("↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
+            drawControl("⌃", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
         }
         if let nextStageID {
-            drawControl("↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
+            drawControl("⌄", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
         }
         if !isActive {
-            drawControl("→", in: summonWindowRect(in: rect), enabled: true)
+            drawControl("›", in: summonWindowRect(in: rect), enabled: true)
         }
     }
 
@@ -907,6 +879,20 @@ private extension NSColor {
             alpha = 1
         }
         self.init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+
+private extension CGRect {
+    func scaled(by rawScale: CGFloat) -> CGRect {
+        let scale = max(0.35, rawScale)
+        let newWidth = width * scale
+        let newHeight = height * scale
+        return CGRect(
+            x: midX - newWidth / 2,
+            y: midY - newHeight / 2,
+            width: newWidth,
+            height: newHeight
+        )
     }
 }
 
