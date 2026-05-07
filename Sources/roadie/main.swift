@@ -80,7 +80,7 @@ case "display":
     } else if verb == "current" {
         print(TextFormatter.currentDisplay(snapshot, state: StageStore().state()))
     } else {
-        print(TextFormatter.displays(snapshot.displays))
+        print(TextFormatter.displays(snapshot.displays, state: StageStore().state()))
     }
 case "state":
     guard args.dropFirst().first == "dump" else {
