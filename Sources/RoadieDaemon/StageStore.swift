@@ -70,6 +70,12 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
         return nil
     }
+
+    public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
+        for scopeIndex in scopes.indices {
+            scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs)
+        }
+    }
 }
 
 public struct PersistentStageScope: Equatable, Codable, Sendable {
@@ -121,6 +127,12 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
                 continue
             }
             stages[stageIndex].members[memberIndex].frame = window.frame
+        }
+    }
+
+    public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
+        for stageIndex in stages.indices {
+            stages[stageIndex].members.removeAll { !liveWindowIDs.contains($0.windowID) }
         }
     }
 

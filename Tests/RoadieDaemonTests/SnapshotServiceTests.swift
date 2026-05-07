@@ -695,6 +695,57 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotPrunesClosedWindowsFromPersistentStages() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(
+            id: display,
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let live = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "live",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let closed = WindowID(rawValue: 2)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-prune-stages-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display,
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                        PersistentStageMember(windowID: closed, bundleID: "gone", title: "closed", frame: Rect(x: 505, y: 0, width: 495, height: 500)),
+                    ]),
+                ]
+            ),
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [live], focusedID: live.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+
+        let scope = stageStore.state().scopes.first { $0.displayID == display }
+        #expect(scope?.memberIDs(in: StageID(rawValue: "1")) == [live.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

@@ -59,6 +59,10 @@ public struct SnapshotService {
         let displays = provider.displays()
         let windows = provider.windows()
         var persistedStages = stageStore.state()
+        let liveWindowIDs = Set(windows.compactMap { window in
+            window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
+        })
+        persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
 
