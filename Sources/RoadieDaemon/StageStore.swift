@@ -101,6 +101,27 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages.append(PersistentStage(id: id))
     }
 
+    public mutating func createStage(_ id: StageID, name: String? = nil) -> Bool {
+        guard !stages.contains(where: { $0.id == id }) else { return false }
+        stages.append(PersistentStage(id: id, name: name))
+        return true
+    }
+
+    public mutating func renameStage(_ id: StageID, to name: String) -> Bool {
+        guard let index = stages.firstIndex(where: { $0.id == id }) else { return false }
+        stages[index].name = name
+        return true
+    }
+
+    public mutating func deleteEmptyInactiveStage(_ id: StageID) -> Bool {
+        guard id != activeStageID,
+              let index = stages.firstIndex(where: { $0.id == id }),
+              stages[index].members.isEmpty
+        else { return false }
+        stages.remove(at: index)
+        return true
+    }
+
     public mutating func assign(window: WindowSnapshot, to stageID: StageID) {
         ensureStage(stageID)
         for index in stages.indices {
