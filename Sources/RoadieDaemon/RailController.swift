@@ -406,7 +406,7 @@ private final class StageCardView: NSControl {
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
         widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: mode == .icons ? 78 : 142).isActive = true
+        heightAnchor.constraint(equalToConstant: mode == .icons ? 78 : 170).isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
         layer?.backgroundColor = NSColor(calibratedRed: 0.03, green: 0.05, blue: 0.07, alpha: isActive ? 0.94 : 0.62).cgColor
@@ -590,7 +590,14 @@ private final class StageCardView: NSControl {
     }
 
     private func previewArea(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 28, y: rect.minY + 8, width: rect.width - 44, height: rect.height - 52)
+        let width = min(CGFloat(160), rect.width - 40)
+        let height = min(CGFloat(104), rect.height - 42)
+        return CGRect(
+            x: rect.minX + rect.width - width - 6,
+            y: rect.minY + 8,
+            width: width,
+            height: height
+        )
     }
 
     private func previewRects(in rect: CGRect, maxCount: Int) -> [CGRect] {
@@ -634,14 +641,6 @@ private final class StageCardView: NSControl {
             NSColor.black.withAlphaComponent(0.18).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
-        let title = stage.members[safe: index]?.title ?? ""
-        let short = title.isEmpty ? "Window" : String(title.prefix(18))
-        let labelRect = CGRect(x: rect.minX + 6, y: rect.minY + 5, width: rect.width - 12, height: 16)
-        rounded(labelRect.insetBy(dx: -3, dy: -2), radius: 4, color: NSColor.black.withAlphaComponent(0.46))
-        short.draw(in: labelRect, withAttributes: [
-            .foregroundColor: NSColor.white.withAlphaComponent(0.82),
-            .font: NSFont.systemFont(ofSize: 9, weight: .medium),
-        ])
         drawWindowControls(in: rect, index: index)
     }
 
@@ -726,15 +725,15 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.maxY - 30, width: 24, height: 24)
+        CGRect(x: rect.minX - 28, y: rect.maxY - 20, width: 18, height: 14)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.midY - 12, width: 24, height: 24)
+        CGRect(x: rect.minX - 28, y: rect.minY + 6, width: 18, height: 14)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX - 28, y: rect.minY + 6, width: 24, height: 24)
+        CGRect(x: rect.minX - 28, y: rect.midY - 7, width: 18, height: 14)
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
