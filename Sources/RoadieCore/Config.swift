@@ -7,19 +7,22 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
     public var fx: EffectsConfig
+    public var focus: FocusConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
         desktops: DesktopsConfig = DesktopsConfig(),
         stageManager: StageManagerConfig = StageManagerConfig(),
         exclusions: ExclusionsConfig = ExclusionsConfig(),
-        fx: EffectsConfig = EffectsConfig()
+        fx: EffectsConfig = EffectsConfig(),
+        focus: FocusConfig = FocusConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
         self.stageManager = stageManager
         self.exclusions = exclusions
         self.fx = fx
+        self.focus = focus
     }
 
     enum CodingKeys: String, CodingKey {
@@ -28,6 +31,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case stageManager = "stage_manager"
         case exclusions
         case fx
+        case focus
     }
 
     public init(from decoder: Decoder) throws {
@@ -37,6 +41,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? StageManagerConfig()
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? ExclusionsConfig()
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
+        self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
     }
 }
 
@@ -184,6 +189,32 @@ public struct ExclusionsConfig: Equatable, Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case floatingBundles = "floating_bundles"
+    }
+}
+
+public struct FocusConfig: Equatable, Codable, Sendable {
+    public var stageFollowsFocus: Bool
+    public var assignFollowsFocus: Bool
+    public var focusFollowsMouse: Bool
+    public var mouseFollowsFocus: Bool
+
+    public init(
+        stageFollowsFocus: Bool = true,
+        assignFollowsFocus: Bool = false,
+        focusFollowsMouse: Bool = false,
+        mouseFollowsFocus: Bool = false
+    ) {
+        self.stageFollowsFocus = stageFollowsFocus
+        self.assignFollowsFocus = assignFollowsFocus
+        self.focusFollowsMouse = focusFollowsMouse
+        self.mouseFollowsFocus = mouseFollowsFocus
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case stageFollowsFocus = "stage_follows_focus"
+        case assignFollowsFocus = "assign_follows_focus"
+        case focusFollowsMouse = "focus_follows_mouse"
+        case mouseFollowsFocus = "mouse_follows_focus"
     }
 }
 

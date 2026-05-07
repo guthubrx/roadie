@@ -24,15 +24,18 @@ public struct WindowCommandService {
     private let service: SnapshotService
     private let stageStore: StageStore
     private let resizeStep: CGFloat
+    private let mouseFollower: MouseFollower
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
-        resizeStep: CGFloat = 80
+        resizeStep: CGFloat = 80,
+        mouseFollower: MouseFollower = MouseFollower()
     ) {
         self.service = service
         self.stageStore = stageStore
         self.resizeStep = resizeStep
+        self.mouseFollower = mouseFollower
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
@@ -40,7 +43,7 @@ public struct WindowCommandService {
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
             return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
         }
-        let ok = service.focus(pair.neighbor.window)
+        let ok = focusWindow(pair.neighbor.window)
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
     }
 
@@ -73,7 +76,7 @@ public struct WindowCommandService {
                 result: result
             )
         }
-        _ = service.focus(pair.active.window)
+        _ = focusWindow(pair.active.window)
         return WindowCommandResult(
             message: "move \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
@@ -108,7 +111,7 @@ public struct WindowCommandService {
                 result: result
             )
         }
-        _ = service.focus(pair.active.window)
+        _ = focusWindow(pair.active.window)
         return WindowCommandResult(
             message: "warp \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
@@ -128,7 +131,7 @@ public struct WindowCommandService {
             ApplyCommand(window: active.window, frame: Rect(frame)),
         ]))
         guard resizeResult.attempted > 0 && resizeResult.failed < resizeResult.attempted else {
-            _ = service.focus(active.window)
+            _ = focusWindow(active.window)
             return WindowCommandResult(
                 message: "resize \(direction.rawValue): attempted=\(resizeResult.attempted) applied=\(resizeResult.applied) clamped=\(resizeResult.clamped) failed=\(resizeResult.failed)",
                 changed: false
@@ -149,7 +152,7 @@ public struct WindowCommandService {
                 result: result
             )
         }
-        _ = service.focus(active.window)
+        _ = focusWindow(active.window)
         return WindowCommandResult(
             message: "resize \(direction.rawValue): direct=\(resizeResult.applied + resizeResult.clamped) layout=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: true
@@ -184,7 +187,7 @@ public struct WindowCommandService {
 
         let updatedSnapshot = service.snapshot()
         let result = service.apply(service.applyPlan(from: updatedSnapshot))
-        _ = service.focus(active.window)
+        _ = focusWindow(active.window)
         return WindowCommandResult(
             message: "window reset: zoom=\(zoomed) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed == 0
@@ -246,7 +249,7 @@ public struct WindowCommandService {
         if result.attempted > 0 && result.failed < result.attempted {
             persistDisplayTransferIntent(in: service.snapshot(), scopes: [sourceScope, targetScopeID].compactMap { $0 })
         }
-        _ = service.focus(active.window)
+        _ = focusWindow(active.window)
         return WindowCommandResult(
             message: "display \(displayIndex): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
@@ -268,6 +271,14 @@ public struct WindowCommandService {
         neighborScore(from: active.window.frame.cgRect, to: neighbor.window.frame.cgRect, direction: direction).isFinite
         else { return nil }
         return (active, neighbor)
+    }
+
+    private func focusWindow(_ window: WindowSnapshot) -> Bool {
+        let ok = service.focus(window)
+        if ok {
+            mouseFollower.follow(window)
+        }
+        return ok
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
