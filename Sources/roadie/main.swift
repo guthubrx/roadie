@@ -15,6 +15,14 @@ func printUsage() {
       roadie layout apply [--yes] [--json]
       roadie config show
       roadie permissions [--prompt]
+      roadie focus|move|warp|wrap|resize left|right|up|down
+      roadie window display N
+      roadie window reset
+      roadie desktop focus N|prev|next|last
+      roadie stage switch|assign N
+      roadie stage prev|next
+      roadie balance
+      roadie daemon restart
     """)
 }
 
@@ -110,7 +118,152 @@ case "config":
         fputs("roadie: config load failed: \(error)\n", stderr)
         exit(1)
     }
+case "focus":
+    runDirectionalCommand(args.dropFirst().first, verb: "focus") {
+        WindowCommandService(service: service).focus($0)
+    }
+case "move":
+    runDirectionalCommand(args.dropFirst().first, verb: "move") {
+        WindowCommandService(service: service).move($0)
+    }
+case "warp", "wrap":
+    runDirectionalCommand(args.dropFirst().first, verb: "warp") {
+        WindowCommandService(service: service).warp($0)
+    }
+case "resize":
+    runDirectionalCommand(args.dropFirst().first, verb: "resize") {
+        WindowCommandService(service: service).resize($0)
+    }
+case "window":
+    runWindowCommand(Array(args.dropFirst()))
+case "desktop":
+    runCompatibilityCommand("desktop", Array(args.dropFirst()))
+case "stage":
+    runStageCommand(Array(args.dropFirst()))
+case "balance":
+    let snapshot = service.snapshot()
+    service.removeLayoutIntents(in: snapshot)
+    let result = service.apply(service.applyPlan(from: service.snapshot()))
+    print(TextFormatter.applyResult(result))
+case "daemon":
+    if args.dropFirst().first == "restart" {
+        runShell("/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/start", [])
+    } else {
+        printUsage()
+        exit(64)
+    }
+case "toggle":
+    let subject = args.dropFirst().first ?? ""
+    switch subject {
+    case "floating", "fullscreen", "native-fullscreen":
+        print("roadie: \(args.joined(separator: " ")) is not implemented in this build")
+    default:
+        printUsage()
+        exit(64)
+    }
 default:
     printUsage()
     exit(args.isEmpty ? 0 : 64)
+}
+
+@MainActor
+func runDirectionalCommand(
+    _ rawDirection: String?,
+    verb: String,
+    action: (Direction) -> WindowCommandResult
+) {
+    guard let rawDirection, let direction = Direction(rawValue: rawDirection) else {
+        fputs("roadie: \(verb) requires left|right|up|down\n", stderr)
+        exit(64)
+    }
+    let result = action(direction)
+    print(result.message)
+    exit(result.changed ? 0 : 1)
+}
+
+@MainActor
+func runWindowCommand(_ args: [String]) {
+    switch args.first {
+    case "display":
+        guard args.indices.contains(1), let index = Int(args[1]) else {
+            fputs("roadie: window display requires an index\n", stderr)
+            exit(64)
+        }
+        let result = WindowCommandService(service: service).sendToDisplay(index)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "reset":
+        let result = WindowCommandService(service: service).reset()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "desktop":
+        runCompatibilityCommand("window", args)
+    case "swap":
+        runDirectionalCommand(args.dropFirst().first, verb: "window swap") {
+            WindowCommandService(service: service).move($0)
+        }
+    case "close":
+        print("roadie: window close is not implemented in this build")
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runStageCommand(_ args: [String]) {
+    switch args.first {
+    case "switch":
+        guard let stageID = args.dropFirst().first else {
+            fputs("roadie: stage switch requires a stage id\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).switchTo(stageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "assign":
+        guard let stageID = args.dropFirst().first else {
+            fputs("roadie: stage assign requires a stage id\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).assign(stageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "prev":
+        let result = StageCommandService(service: service).cycle(.prev)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "next":
+        let result = StageCommandService(service: service).cycle(.next)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case .some(let rawStageID):
+        let result = StageCommandService(service: service).switchTo(rawStageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case nil:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runCompatibilityCommand(_ group: String, _ args: [String]) {
+    print("roadie: \(group) \(args.joined(separator: " ")) accepted; persistent \(group) state is not implemented in this build")
+}
+
+@MainActor
+func runShell(_ executable: String, _ arguments: [String]) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    process.currentDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    do {
+        try process.run()
+        process.waitUntilExit()
+        exit(process.terminationStatus)
+    } catch {
+        fputs("roadie: failed to run \(executable): \(error)\n", stderr)
+        exit(1)
+    }
 }

@@ -7,25 +7,42 @@ label="com.roadie.roadied"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 log_dir="$HOME/.roadies"
 runtime_bin_dir="$repo_root/bin"
+local_bin_dir="$HOME/.local/bin"
 pidfile="$log_dir/roadied.pid"
 tmux_session="roadied"
 
-mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir"
+mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
 : > "$log_dir/roadied.stdout.log"
 : > "$log_dir/roadied.stderr.log"
 
 "$script_dir/with-xcode" swift build --configuration debug --product roadied
+"$script_dir/with-xcode" swift build --configuration debug --product roadie
 bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration debug)"
 build_bin="$bin_dir/roadied"
+build_cli="$bin_dir/roadie"
 roadied_bin="$runtime_bin_dir/roadied"
+roadie_bin="$runtime_bin_dir/roadie"
+local_roadied_bin="$local_bin_dir/roadied"
+local_roadie_bin="$local_bin_dir/roadie"
 
 if [[ ! -x "$build_bin" ]]; then
   echo "roadied binary not found: $build_bin" >&2
   exit 1
 fi
+if [[ ! -x "$build_cli" ]]; then
+  echo "roadie binary not found: $build_cli" >&2
+  exit 1
+fi
 cp "$build_bin" "$roadied_bin"
+cp "$build_cli" "$roadie_bin"
+cp "$build_bin" "$local_roadied_bin"
+cp "$build_cli" "$local_roadie_bin"
 chmod +x "$roadied_bin"
+chmod +x "$roadie_bin" "$local_roadied_bin" "$local_roadie_bin"
 codesign --force --sign - "$roadied_bin" >/dev/null 2>&1 || true
+codesign --force --sign - "$roadie_bin" >/dev/null 2>&1 || true
+codesign --force --sign - "$local_roadied_bin" >/dev/null 2>&1 || true
+codesign --force --sign - "$local_roadie_bin" >/dev/null 2>&1 || true
 
 cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
