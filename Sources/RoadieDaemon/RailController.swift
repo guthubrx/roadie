@@ -613,12 +613,16 @@ private final class StageCardView: NSControl {
 
     private func drawPreview(_ rect: CGRect, index: Int, skewed: Bool = false) {
         guard !rect.isEmpty else { return }
-        let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
         if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
-            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: isActive ? 0.92 : 0.76)
+            let drawRect = aspectFitRect(image.size, in: rect).integral
+            image.draw(in: drawRect, from: .zero, operation: .sourceOver, fraction: isActive ? 0.95 : 0.82)
             NSGraphicsContext.restoreGraphicsState()
+            NSColor.black.withAlphaComponent(isActive ? 0.08 : 0.18).setFill()
+            NSBezierPath(rect: CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: max(0, drawRect.minY - rect.minY))).fill()
+            NSBezierPath(rect: CGRect(x: rect.minX, y: drawRect.maxY, width: rect.width, height: max(0, rect.maxY - drawRect.maxY))).fill()
         } else {
             color(for: stage.members[safe: index], index: index).setFill()
             path.fill()
@@ -628,7 +632,7 @@ private final class StageCardView: NSControl {
         path.stroke()
         if skewed {
             NSColor.black.withAlphaComponent(0.18).setFill()
-            NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 8, yRadius: 8).fill()
+            NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
         let title = stage.members[safe: index]?.title ?? ""
         let short = title.isEmpty ? "Window" : String(title.prefix(22))
@@ -637,6 +641,19 @@ private final class StageCardView: NSControl {
             .font: NSFont.systemFont(ofSize: 10, weight: .medium),
         ])
         drawWindowControls(in: rect, index: index)
+    }
+
+    private func aspectFitRect(_ imageSize: NSSize, in rect: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return rect }
+        let scale = min(rect.width / imageSize.width, rect.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        return CGRect(
+            x: rect.midX - width / 2,
+            y: rect.midY - height / 2,
+            width: width,
+            height: height
+        )
     }
 
     private func drawWindowControls(in rect: CGRect, index: Int) {
