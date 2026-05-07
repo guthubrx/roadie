@@ -139,6 +139,7 @@ public struct SnapshotService {
             var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
             persistentScope.setFocusedWindow(focusedID, in: focusedScope.stageID)
             persistedStages.update(persistentScope)
+            persistedStages.focusDisplay(focusedScope.displayID)
             try? state.setFocusedWindow(focusedID, for: focusedScope)
         }
         stageStore.save(persistedStages)
