@@ -1344,6 +1344,40 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func selfTestWarnsOnTinyLiveTiles() {
+        let display = DisplayID(rawValue: "display-a")
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 2048, height: 1280), visibleFrame: Rect(x: 0, y: 30, width: 2048, height: 1250), isMain: true)
+        let normal = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "normal", frame: Rect(x: 0, y: 30, width: 1000, height: 1190), isOnScreen: true, isTileCandidate: true)
+        let tiny = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "tiny", frame: Rect(x: 1010, y: 30, width: 1000, height: 122), isOnScreen: true, isTileCandidate: true)
+        var state = PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: scope.stageID, stages: [
+                PersistentStage(id: scope.stageID, members: [
+                    PersistentStageMember(windowID: normal.id, bundleID: normal.bundleID, title: normal.title, frame: normal.frame),
+                    PersistentStageMember(windowID: tiny.id, bundleID: tiny.bundleID, title: tiny.title, frame: tiny.frame),
+                ]),
+            ]),
+        ])
+        state.focusDisplay(display)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-self-test-tiny-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(state)
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [normal, tiny]),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = SelfTestService(service: service, stageStore: stageStore).run()
+
+        #expect(report.checks.contains(SelfTestCheck(level: .warn, name: "tile-sizes", message: "tinyTiles=1")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
