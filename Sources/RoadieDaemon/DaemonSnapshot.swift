@@ -122,6 +122,13 @@ public struct SnapshotService {
             try? state.assignWindow(window.id, to: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
+        if let focusedID = provider.focusedWindowID(),
+           let focusedScope = scopedWindows.first(where: { $0.window.id == focusedID })?.scope {
+            var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+            persistentScope.setFocusedWindow(focusedID, in: focusedScope.stageID)
+            persistedStages.update(persistentScope)
+            try? state.setFocusedWindow(focusedID, for: focusedScope)
+        }
         stageStore.save(persistedStages)
 
         return DaemonSnapshot(

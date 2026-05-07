@@ -309,6 +309,35 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotPersistsFocusedWindowInStage() {
+        let display = DisplayID(rawValue: "display-a")
+        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 400, height: 500), isOnScreen: true, isTileCandidate: true)
+        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 410, y: 0, width: 400, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-focused-stage-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [first, second],
+                focusedID: first.id
+            ),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let persistedStage = stageStore.state().scopes.first { $0.displayID == display }?.stages.first { $0.id == scope.stageID }
+
+        #expect(snapshot.state.stage(scope: scope)?.focusedWindowID == first.id)
+        #expect(persistedStage?.focusedWindowID == first.id)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func floatStageModeDoesNotReplaySavedTilingIntent() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
@@ -877,6 +906,7 @@ struct SnapshotServiceTests {
         #expect(switchResult.changed)
         #expect(switchWriter.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
         #expect(switchWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
+        #expect(switchWriter.focusedWindowIDs == [right.id])
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 

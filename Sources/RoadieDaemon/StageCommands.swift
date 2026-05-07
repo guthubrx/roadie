@@ -230,6 +230,10 @@ public struct StageCommandService {
 
         let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
         applied += layoutResult.applied + layoutResult.clamped
+        if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+           let focusedWindow = windowsByID[focusedID] {
+            _ = service.focus(focusedWindow)
+        }
 
         return StageCommandResult(
             message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
