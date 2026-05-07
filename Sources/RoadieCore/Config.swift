@@ -303,6 +303,173 @@ public enum RoadieConfigLoader {
         let raw = try String(contentsOfFile: resolved, encoding: .utf8)
         return try TOMLDecoder().decode(RoadieConfig.self, from: raw)
     }
+
+    public static func validate(path: String? = nil) -> ConfigValidationReport {
+        let resolved = path ?? defaultConfigPath()
+        guard FileManager.default.fileExists(atPath: resolved) else {
+            return ConfigValidationReport(items: [
+                ConfigValidationItem(level: .warning, path: resolved, message: "config file not found; defaults will be used")
+            ])
+        }
+
+        do {
+            _ = try load(from: resolved)
+            let raw = try String(contentsOfFile: resolved, encoding: .utf8)
+            var items = ConfigValidationRules.validate(rawToml: raw)
+            if items.isEmpty {
+                items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
+            }
+            return ConfigValidationReport(items: items)
+        } catch {
+            return ConfigValidationReport(items: [
+                ConfigValidationItem(level: .error, path: resolved, message: "config decode failed: \(error)")
+            ])
+        }
+    }
+}
+
+public enum ConfigValidationLevel: String, Codable, Sendable {
+    case ok
+    case warning
+    case error
+}
+
+public struct ConfigValidationItem: Equatable, Codable, Sendable {
+    public var level: ConfigValidationLevel
+    public var path: String
+    public var message: String
+
+    public init(level: ConfigValidationLevel, path: String, message: String) {
+        self.level = level
+        self.path = path
+        self.message = message
+    }
+}
+
+public struct ConfigValidationReport: Equatable, Codable, Sendable {
+    public var items: [ConfigValidationItem]
+
+    public init(items: [ConfigValidationItem]) {
+        self.items = items
+    }
+
+    public var hasErrors: Bool {
+        items.contains { $0.level == .error }
+    }
+}
+
+private enum ConfigValidationRules {
+    private static let supportedTables: Set<String> = [
+        "tiling",
+        "desktops",
+        "stage_manager",
+        "stage_manager.workspaces",
+        "exclusions",
+        "fx",
+        "fx.borders",
+        "fx.borders.stage_overrides",
+        "focus"
+    ]
+
+    private static let knownUnsupportedTables: Set<String> = [
+        "daemon",
+        "mouse",
+        "scratchpads",
+        "sticky",
+        "signals",
+        "signals.hooks",
+        "fx.animations",
+        "fx.opacity",
+        "fx.opacity.stage_hide",
+        "fx.rail",
+        "fx.rail.stacked",
+        "fx.rail.preview",
+        "fx.rail.preview.stage_overrides",
+        "fx.rail.parallax"
+    ]
+
+    static func validate(rawToml: String) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        let tables = tableNames(in: rawToml)
+        for table in tables.sorted() {
+            if supportedTables.contains(table) {
+                continue
+            }
+            if knownUnsupportedTables.contains(table) {
+                items.append(ConfigValidationItem(
+                    level: .warning,
+                    path: table,
+                    message: "known but not fully supported yet"
+                ))
+            } else {
+                items.append(ConfigValidationItem(
+                    level: .warning,
+                    path: table,
+                    message: "unknown table ignored"
+                ))
+            }
+        }
+        items.append(contentsOf: scalarTypeChecks(rawToml: rawToml))
+        return items
+    }
+
+    private static func tableNames(in rawToml: String) -> Set<String> {
+        var result: Set<String> = []
+        for line in rawToml.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("[") else { continue }
+            let withoutComment = trimmed.split(separator: "#", maxSplits: 1).first.map(String.init) ?? trimmed
+            let table = withoutComment
+                .trimmingCharacters(in: CharacterSet(charactersIn: "[]").union(.whitespaces))
+            guard !table.isEmpty else { continue }
+            result.insert(table)
+        }
+        return result
+    }
+
+    private static func scalarTypeChecks(rawToml: String) -> [ConfigValidationItem] {
+        let numericKeys: Set<String> = [
+            "gaps_outer",
+            "gaps_outer_top",
+            "gaps_outer_right",
+            "gaps_outer_bottom",
+            "gaps_outer_left",
+            "gaps_inner",
+            "master_ratio",
+            "count",
+            "thickness",
+            "corner_radius"
+        ]
+        var items: [ConfigValidationItem] = []
+        var currentTable = ""
+        for line in rawToml.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
+            if trimmed.hasPrefix("[") {
+                currentTable = trimmed
+                    .split(separator: "#", maxSplits: 1)
+                    .first
+                    .map(String.init)?
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "[]").union(.whitespaces)) ?? ""
+                continue
+            }
+            let parts = trimmed.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            let key = parts[0].trimmingCharacters(in: .whitespaces)
+            let value = parts[1]
+                .split(separator: "#", maxSplits: 1)
+                .first
+                .map(String.init)?
+                .trimmingCharacters(in: .whitespaces) ?? ""
+            guard numericKeys.contains(key), value.hasPrefix("\"") else { continue }
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: [currentTable, key].filter { !$0.isEmpty }.joined(separator: "."),
+                message: "expected numeric value, got string"
+            ))
+        }
+        return items
+    }
 }
 
 private extension WindowManagementMode {

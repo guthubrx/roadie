@@ -67,6 +67,45 @@ struct ConfigTests {
     }
 
     @Test
+    func configValidationReportsUnsupportedTablesAsWarnings() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-unsupported-config-\(UUID().uuidString).toml")
+        try """
+        [tiling]
+        default_strategy = "bsp"
+
+        [mouse]
+        modifier = "cmd"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(!report.hasErrors)
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .warning,
+            path: "mouse",
+            message: "known but not fully supported yet"
+        )))
+    }
+
+    @Test
+    func configValidationReportsDecodeErrors() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-invalid-config-\(UUID().uuidString).toml")
+        try """
+        [tiling]
+        gaps_inner = "not-a-number"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(report.hasErrors)
+        #expect(report.items.first?.level == .error)
+    }
+
+    @Test
     func mouseFollowerMovesToWindowCenterOnlyWhenEnabled() {
         let window = WindowSnapshot(
             id: WindowID(rawValue: 1),

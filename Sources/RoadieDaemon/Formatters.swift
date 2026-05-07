@@ -99,6 +99,15 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func configValidation(_ report: ConfigValidationReport) -> String {
+        let status = report.hasErrors ? "error" : "ok"
+        var lines = ["status=\(status)"]
+        for item in report.items {
+            lines.append("\(item.level.rawValue)\t\(item.path)\t\(item.message)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func applyPlan(_ plan: ApplyPlan) -> String {
         guard !plan.commands.isEmpty else { return "No layout commands." }
         var lines = ["WID\tAPP\tTITLE\tFRAME"]

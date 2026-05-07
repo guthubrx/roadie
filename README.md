@@ -28,6 +28,7 @@ make windows
 make snapshot
 make state
 make plan
+make config-validate
 make self-test
 make events
 make doctor
@@ -43,6 +44,7 @@ Equivalent direct commands:
 ./scripts/roadied snapshot
 ./scripts/roadie state dump --json
 ./scripts/roadie layout plan
+./scripts/roadie config validate
 ./scripts/roadie self-test
 ./scripts/roadie events tail 30
 ```
