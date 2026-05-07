@@ -1,4 +1,5 @@
 import Foundation
+import RoadieAX
 import RoadieCore
 
 public struct MaintenanceTick: Equatable, Codable, Sendable {
@@ -29,13 +30,16 @@ public struct MaintenanceTick: Equatable, Codable, Sendable {
 public final class LayoutMaintainer {
     private let service: SnapshotService
     private let intervalSeconds: TimeInterval
+    private let commandIntentHoldSeconds: TimeInterval
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
+    private var lastCommandIntentAt: Date?
 
     public init(service: SnapshotService = SnapshotService(), intervalSeconds: TimeInterval = 0.5) {
         self.service = service
         self.intervalSeconds = intervalSeconds
+        self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
     }
 
     public func tick() -> MaintenanceTick {
@@ -43,22 +47,68 @@ public final class LayoutMaintainer {
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
+
+        let hiddenInactive = hideInactiveStageWindows(in: snapshot)
+        if hiddenInactive > 0 {
+            return MaintenanceTick(commands: hiddenInactive, applied: hiddenInactive, clamped: 0, failed: 0)
+        }
+
         let observedFrames = scopedFrames(in: snapshot)
         let changedWindowIDs = changedWindows(in: observedFrames)
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-commandIntentHoldSeconds)
+
+        if shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff) {
+            lastCommandIntentAt = now
+            priorityWindowIDs = []
+            lastObservedFrames = observedFrames
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+
         if !changedWindowIDs.isEmpty {
+            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames) {
+                lastObservedFrames = observedFrames
+                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            }
+
+            if changedWindowIDs.count >= 2 {
+                lastObservedFrames = observedFrames
+                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            }
+
             priorityWindowIDs = changedWindowIDs
             lastObservedFrames = observedFrames
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
         }
-        lastObservedFrames = observedFrames
 
+        if let lastCommandIntentAt,
+           now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
+        {
+            priorityWindowIDs = []
+            lastObservedFrames = observedFrames
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+
+        lastObservedFrames = observedFrames
         let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
         guard !plan.commands.isEmpty else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
-        let result = service.apply(plan)
+        var result = service.apply(plan)
+        result = stabilizeClampedPositions(result, from: plan)
+        if !priorityWindowIDs.isEmpty {
+            persistLayoutIntent(in: snapshot, result: result)
+        }
         record(result)
-        lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
+        let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
+        if result.clamped > 0 {
+            priorityWindowIDs = Set(result.items.compactMap { item in
+                item.status == .clamped ? item.windowID : nil
+            })
+        } else {
+            priorityWindowIDs = []
+        }
+        lastObservedFrames = appliedFrames
         return MaintenanceTick(
             commands: plan.commands.count,
             applied: result.applied,
@@ -99,6 +149,40 @@ public final class LayoutMaintainer {
         }
     }
 
+    private func stabilizeClampedPositions(_ result: ApplyResult, from plan: ApplyPlan) -> ApplyResult {
+        var stabilizedItems = result.items
+        let commandsByID = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0) })
+
+        for index in stabilizedItems.indices {
+            var item = stabilizedItems[index]
+            guard item.status == .clamped,
+                  let actual = item.actual,
+                  let command = commandsByID[item.windowID]
+            else { continue }
+
+            let anchored = Rect(
+                x: item.requested.x,
+                y: item.requested.y,
+                width: actual.width,
+                height: actual.height
+            )
+            guard !actual.isClose(to: anchored, positionTolerance: 2, sizeTolerance: 2),
+                  let stabilized = service.setFrame(anchored.cgRect, of: command.window)
+            else { continue }
+
+            item.actual = Rect(stabilized)
+            stabilizedItems[index] = item
+        }
+
+        return ApplyResult(
+            attempted: result.attempted,
+            applied: result.applied,
+            clamped: result.clamped,
+            failed: result.failed,
+            items: stabilizedItems
+        )
+    }
+
     private func scopedFrames(in snapshot: DaemonSnapshot) -> [UInt32: Rect] {
         Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry in
             guard entry.scope != nil else { return nil }
@@ -114,6 +198,32 @@ public final class LayoutMaintainer {
         return frames
     }
 
+    private func persistLayoutIntent(in snapshot: DaemonSnapshot, result: ApplyResult) {
+        let resultFrames = Dictionary(uniqueKeysWithValues: result.items.compactMap { item -> (WindowID, Rect)? in
+            guard item.status == .applied else { return nil }
+            return (item.windowID, item.actual ?? item.requested)
+        })
+        let touchedScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard let scope = entry.scope,
+                  resultFrames[entry.window.id] != nil || priorityWindowIDs.contains(entry.window.id)
+            else { return nil }
+            return snapshot.state.activeScope(on: scope.displayID) == scope ? scope : nil
+        })
+
+        for scope in touchedScopes {
+            guard let stage = snapshot.state.stage(scope: scope) else { continue }
+            var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+                return (entry.window.id, entry.window.frame)
+            })
+            for (id, frame) in resultFrames {
+                placements[id] = frame
+            }
+            guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
+            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)
+        }
+    }
+
     private func changedWindows(in frames: [UInt32: Rect]) -> Set<WindowID> {
         guard let previous = lastObservedFrames else { return [] }
         var result: Set<WindowID> = []
@@ -124,6 +234,109 @@ public final class LayoutMaintainer {
             }
         }
         return result
+    }
+
+    private func changedFramesMatchSavedIntent(in snapshot: DaemonSnapshot, frames: [UInt32: Rect]) -> Bool {
+        let focusedWindowID = service.focusedWindowID()
+        let scopes = Set(snapshot.windows.compactMap(\.scope))
+        return scopes.contains { scope in
+            service.hasMatchingIntent(scope: scope, frames: frames, focusedWindowID: focusedWindowID)
+        }
+    }
+
+    private func shouldIgnoreRecentCommandReflow(in snapshot: DaemonSnapshot, since date: Date) -> Bool {
+        let activeScopes = Set(snapshot.windows.compactMap(\.scope))
+        guard !activeScopes.isEmpty else {
+            return false
+        }
+        let now = Date()
+        for scope in activeScopes {
+            if service.hasMatchingCommandIntent(scope: scope, in: snapshot) {
+                service.touchCommandIntent(scope: scope, at: now)
+                return true
+            }
+            if service.hasRecentCommandIntent(scope: scope, since: date) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func hideInactiveStageWindows(in snapshot: DaemonSnapshot) -> Int {
+        var applied = 0
+        for entry in snapshot.windows {
+            guard let scope = entry.scope,
+                  entry.window.isTileCandidate,
+                  let activeScope = snapshot.state.activeScope(on: scope.displayID),
+                  scope != activeScope,
+                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+            else { continue }
+
+            let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            if service.setFrame(frame, of: entry.window) != nil {
+                applied += 1
+            }
+        }
+        return applied
+    }
+
+    private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
+        let visible = display.visibleFrame.cgRect
+        switch optimalHideCorner(for: display, among: displays) {
+        case .bottomLeft:
+            return CGRect(
+                x: visible.minX + 1 - frame.width,
+                y: visible.maxY - 1,
+                width: frame.width,
+                height: frame.height
+            ).integral
+        case .bottomRight:
+            return CGRect(
+                x: visible.maxX - 1,
+                y: visible.maxY - 1,
+                width: frame.width,
+                height: frame.height
+            ).integral
+        }
+    }
+
+    private func optimalHideCorner(for display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> HideCorner {
+        let frame = display.frame.cgRect
+        let xOffset = frame.width * 0.1
+        let yOffset = frame.height * 0.1
+        let bottomLeft = CGPoint(x: frame.minX, y: frame.maxY)
+        let bottomRight = CGPoint(x: frame.maxX, y: frame.maxY)
+
+        let leftScore = overlapScore(points: [
+            CGPoint(x: bottomLeft.x - 2, y: bottomLeft.y - yOffset),
+            CGPoint(x: bottomLeft.x + xOffset, y: bottomLeft.y + 2),
+            CGPoint(x: bottomLeft.x - 2, y: bottomLeft.y + 2),
+        ], displays: displays)
+        let rightScore = overlapScore(points: [
+            CGPoint(x: bottomRight.x + 2, y: bottomRight.y - yOffset),
+            CGPoint(x: bottomRight.x - xOffset, y: bottomRight.y + 2),
+            CGPoint(x: bottomRight.x + 2, y: bottomRight.y + 2),
+        ], displays: displays)
+        return leftScore < rightScore ? .bottomLeft : .bottomRight
+    }
+
+    private func overlapScore(points: [CGPoint], displays: [DisplaySnapshot]) -> Int {
+        points.enumerated().reduce(0) { score, item in
+            let weight = item.offset == 2 ? 10 : 1
+            let overlaps = displays.filter { $0.frame.cgRect.contains(item.element) }.count
+            return score + weight * overlaps
+        }
+    }
+
+    private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        displays.contains { display in
+            let visible = display.visibleFrame.cgRect
+            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
+            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
+            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
+            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        }
     }
 }
 
@@ -137,6 +350,11 @@ private struct ClampedFrame {
     }
 }
 
+private enum HideCorner {
+    case bottomLeft
+    case bottomRight
+}
+
 private extension Rect {
     func isClose(to other: Rect, positionTolerance: Double = 48, sizeTolerance: Double = 48) -> Bool {
         abs(x - other.x) <= positionTolerance
@@ -145,3 +363,5 @@ private extension Rect {
             && abs(height - other.height) <= sizeTolerance
     }
 }
+// MARK: - Temporary Focus-Jitter Guard
+// Keep focus-only geometry jitter from mouse clicks from forcing a full relayout.

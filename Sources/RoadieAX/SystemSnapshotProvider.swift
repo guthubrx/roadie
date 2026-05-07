@@ -2,14 +2,48 @@ import AppKit
 import CoreGraphics
 import RoadieCore
 
+@_silgen_name("_AXUIElementGetWindow")
+private func AXUIElementGetWindowID(_ element: AXUIElement, _ identifier: UnsafeMutablePointer<CGWindowID>) -> AXError
+
 public protocol SystemSnapshotProviding: Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot
     func displays() -> [DisplaySnapshot]
     func windows() -> [WindowSnapshot]
+    func focusedWindowID() -> WindowID?
+}
+
+public extension SystemSnapshotProviding {
+    func focusedWindowID() -> WindowID? { nil }
 }
 
 public protocol WindowFrameWriting: Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect?
+    func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
+    func focus(_ window: WindowSnapshot) -> Bool
+    func reset(_ window: WindowSnapshot) -> Bool
+}
+
+public extension WindowFrameWriting {
+    func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        var results: [WindowID: CGRect?] = [:]
+        for update in updates {
+            results[update.window.id] = setFrame(update.frame, of: update.window)
+        }
+        return results
+    }
+
+    func focus(_ window: WindowSnapshot) -> Bool { false }
+    func reset(_ window: WindowSnapshot) -> Bool { false }
+}
+
+public struct WindowFrameUpdate: Sendable {
+    public var window: WindowSnapshot
+    public var frame: CGRect
+
+    public init(window: WindowSnapshot, frame: CGRect) {
+        self.window = window
+        self.frame = frame
+    }
 }
 
 public struct DisplaySnapshot: Equatable, Codable, Sendable {
@@ -124,10 +158,32 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 isTileCandidate: tileCandidate
             )
         }
-        .sorted { lhs, rhs in
-            if lhs.pid != rhs.pid { return lhs.pid < rhs.pid }
-            return lhs.id < rhs.id
+    }
+
+    public func focusedWindowID() -> WindowID? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        let axApp = AXUIElementCreateApplication(app.processIdentifier)
+        var rawFocused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &rawFocused) == .success,
+              let focused = rawFocused
+        else { return nil }
+
+        let focusedElement = focused as! AXUIElement
+        let appWindows = windows().filter { $0.pid == app.processIdentifier }
+        if let id = windowID(of: focusedElement),
+           appWindows.contains(where: { $0.id.rawValue == id }) {
+            return WindowID(rawValue: id)
         }
+
+        let focusedFrame = AXWindowFrameWriter().frame(of: focusedElement)
+        if let focusedFrame,
+           let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame.cgRect) }) {
+            return match.id
+        }
+
+        let focusedTitle = title(of: focusedElement)
+        let titleMatches = appWindows.filter { !focusedTitle.isEmpty && $0.title == focusedTitle }
+        return titleMatches.count == 1 ? titleMatches.first?.id : nil
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -160,12 +216,63 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         }
         return visibleFrame
     }
+
+    private func title(of element: AXUIElement) -> String {
+        var rawTitle: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &rawTitle) == .success,
+              let title = rawTitle as? String
+        else { return "" }
+        return title
+    }
+
+    private func windowID(of element: AXUIElement) -> CGWindowID? {
+        var id = CGWindowID()
+        return AXUIElementGetWindowID(element, &id) == .success && id > 0 ? id : nil
+    }
+
+    private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.minX - rhs.minX) < 48
+            && abs(lhs.minY - rhs.minY) < 48
+            && abs(lhs.width - rhs.width) < 48
+            && abs(lhs.height - rhs.height) < 48
+    }
 }
 
 public struct AXWindowFrameWriter: WindowFrameWriting {
     public init() {}
 
     public func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        guard let element = element(matching: window) else { return nil }
+        return set(frame, on: element)
+    }
+
+    public func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        let resolved = updates.map { update in
+            (update: update, element: element(matching: update.window))
+        }
+        return Dictionary(uniqueKeysWithValues: resolved.map { item in
+            guard let element = item.element else {
+                return (item.update.window.id, nil)
+            }
+            return (item.update.window.id, set(item.update.frame, on: element))
+        })
+    }
+
+    public func focus(_ window: WindowSnapshot) -> Bool {
+        guard let element = element(matching: window) else { return false }
+        NSRunningApplication(processIdentifier: window.pid)?.activate(options: [.activateIgnoringOtherApps])
+        let app = AXUIElementCreateApplication(window.pid)
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
+        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        return true
+    }
+
+    public func reset(_ window: WindowSnapshot) -> Bool {
+        guard let element = element(matching: window) else { return false }
+        return AXUIElementPerformAction(element, "AXZoomWindow" as CFString) == .success
+    }
+
+    private func element(matching window: WindowSnapshot) -> AXUIElement? {
         let app = AXUIElementCreateApplication(window.pid)
         var rawWindows: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
@@ -173,28 +280,44 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         else { return nil }
 
         for element in windows {
-            if matches(element, expected: window) {
-                return set(frame, on: element)
+            if windowID(of: element) == window.id.rawValue {
+                return element
             }
         }
-        return nil
+
+        for element in windows {
+            if matchesByFrame(element, expected: window) {
+                return element
+            }
+        }
+
+        let titleMatches = windows.filter { element in
+            title(of: element) == window.title && !window.title.isEmpty
+        }
+        return titleMatches.count == 1 ? titleMatches.first : nil
     }
 
-    private func matches(_ element: AXUIElement, expected: WindowSnapshot) -> Bool {
+    private func windowID(of element: AXUIElement) -> CGWindowID? {
+        var id = CGWindowID()
+        return AXUIElementGetWindowID(element, &id) == .success && id > 0 ? id : nil
+    }
+
+    private func matchesByFrame(_ element: AXUIElement, expected: WindowSnapshot) -> Bool {
         if let frame = frame(of: element) {
             return abs(frame.minX - expected.frame.x) < 48
                 && abs(frame.minY - expected.frame.y) < 48
                 && abs(frame.width - expected.frame.width) < 48
                 && abs(frame.height - expected.frame.height) < 48
         }
-
-        var rawTitle: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &rawTitle) == .success,
-           let title = rawTitle as? String,
-           title == expected.title {
-            return true
-        }
         return false
+    }
+
+    private func title(of element: AXUIElement) -> String {
+        var rawTitle: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &rawTitle) == .success,
+              let title = rawTitle as? String
+        else { return "" }
+        return title
     }
 
     private func set(_ frame: CGRect, on element: AXUIElement) -> CGRect? {
@@ -204,13 +327,30 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
               let axSize = AXValueCreate(.cgSize, &size)
         else { return nil }
 
-        let posResult = AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, axPosition)
+        let initialPosResult = AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, axPosition)
+        Thread.sleep(forTimeInterval: 0.01)
         let sizeResult = AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, axSize)
-        guard posResult == .success && sizeResult == .success else { return nil }
+        let posResult = AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, axPosition)
+        guard initialPosResult == .success && posResult == .success && sizeResult == .success else { return nil }
+
+        if let actual = self.frame(of: element), framesAreClose(actual, frame) {
+            return actual
+        }
+
+        Thread.sleep(forTimeInterval: 0.02)
+        _ = AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, axSize)
+        _ = AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, axPosition)
         return self.frame(of: element)
     }
 
-    private func frame(of element: AXUIElement) -> CGRect? {
+    private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.minX - rhs.minX) <= 2
+            && abs(lhs.minY - rhs.minY) <= 2
+            && abs(lhs.width - rhs.width) <= 2
+            && abs(lhs.height - rhs.height) <= 2
+    }
+
+    public func frame(of element: AXUIElement) -> CGRect? {
         var rawPosition: CFTypeRef?
         var rawSize: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &rawPosition) == .success,

@@ -15,7 +15,7 @@ func containsPriority(_ windowIDs: ArraySlice<WindowID>, _ priorityWindowIDs: Se
 }
 
 extension CGFloat {
-    func isClose(to other: CGFloat, tolerance: CGFloat = 48) -> Bool {
+    func isClose(to other: CGFloat, tolerance: CGFloat = 160) -> Bool {
         abs(self - other) <= tolerance
     }
 

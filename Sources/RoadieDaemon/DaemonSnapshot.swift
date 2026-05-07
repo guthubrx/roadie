@@ -37,26 +37,41 @@ public struct SnapshotService {
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
     private let config: RoadieConfig
+    private let intentStore: LayoutIntentStore
+    private let stageStore: StageStore
 
     public init(
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
         frameWriter: any WindowFrameWriting = AXWindowFrameWriter(),
-        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
+        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
+        intentStore: LayoutIntentStore = LayoutIntentStore(),
+        stageStore: StageStore = StageStore()
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
         self.config = config
+        self.intentStore = intentStore
+        self.stageStore = stageStore
     }
 
     public func snapshot(promptForPermissions: Bool = false) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let windows = provider.windows()
+        var persistedStages = stageStore.state()
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
 
         for display in displays {
             state.ensureDisplay(display.id)
+            let persistentScope = persistedStages.scope(displayID: display.id)
+            try? state.createStage(
+                id: persistentScope.activeStageID,
+                name: "Stage \(persistentScope.activeStageID.rawValue)",
+                in: display.id,
+                desktopID: DesktopID(rawValue: 1)
+            )
+            try? state.switchStage(persistentScope.activeStageID, in: display.id, desktopID: DesktopID(rawValue: 1))
         }
 
         let fallbackDisplayID = displays.first?.id
@@ -65,18 +80,30 @@ public struct SnapshotService {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
-            guard let displayID = displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID else {
+            let knownScope = persistedStages.stageScope(for: window.id)
+            guard let displayID = knownScope?.displayID ?? displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
+            }
+            if knownScope == nil {
+                var persistentScope = persistedStages.scope(displayID: displayID)
+                persistentScope.assign(window: window, to: persistentScope.activeStageID)
+                persistedStages.update(persistentScope)
+            } else if !isHidden(window.frame.cgRect, in: displays) {
+                var persistentScope = persistedStages.scope(displayID: displayID)
+                persistentScope.updateFrame(window: window)
+                persistedStages.update(persistentScope)
             }
             let scope = StageScope(
                 displayID: displayID,
                 desktopID: DesktopID(rawValue: 1),
-                stageID: StageID(rawValue: "1")
+                stageID: knownScope?.stageID ?? persistedStages.scope(displayID: displayID).activeStageID
             )
+            try? state.createStage(id: scope.stageID, name: "Stage \(scope.stageID.rawValue)", in: scope.displayID, desktopID: scope.desktopID)
             try? state.assignWindow(window.id, to: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
+        stageStore.save(persistedStages)
 
         return DaemonSnapshot(
             permissions: permissions,
@@ -88,6 +115,19 @@ public struct SnapshotService {
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
         displays.first { $0.frame.cgRect.contains(point) }?.id
+    }
+
+    private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        if frame.maxX < -1000 || frame.minX < -10000 {
+            return true
+        }
+        return displays.contains { display in
+            let visible = display.visibleFrame.cgRect
+            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
+            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
+            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
+            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        }
     }
 }
 
@@ -153,43 +193,279 @@ public extension SnapshotService {
     ) -> ApplyPlan {
         var commands: [ApplyCommand] = []
         for display in snapshot.displays {
-            guard let scope = snapshot.state.activeScope(on: display.id),
-                  let stage = snapshot.state.stage(scope: scope)
-            else { continue }
+            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
 
-            let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-            let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
-                windowsByID[id].map { (id, $0.frame.cgRect) }
-            })
             let effectiveMode = mode ?? config.tiling.defaultStrategy
-            let orderedWindowIDs = effectiveMode == .bsp
-                ? spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
-                : stage.windowIDs
-            let plan = LayoutPlanner.plan(LayoutRequest(
-                scope: scope,
-                mode: effectiveMode,
-                container: display.visibleFrame.cgRect,
-                windowIDs: orderedWindowIDs,
-                currentFrames: currentFrames,
-                priorityWindowIDs: priorityWindowIDs,
-                splitPolicy: config.tiling.splitPolicy,
-                outerGaps: outerGaps(windowCount: stage.windowIDs.count),
-                innerGap: config.tiling.gapsInner
-            ))
-            let currentPlan = LayoutPlan(placements: currentFrames)
-
-            for command in LayoutDiff.commands(previous: currentPlan, next: plan) {
-                guard let window = windowsByID[command.windowID] else { continue }
-                commands.append(ApplyCommand(window: window, frame: Rect(command.frame)))
+            if let intent = validIntent(for: scope, from: snapshot) {
+                commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
+            } else {
+                let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
+                commands.append(contentsOf: applyPlan(
+                    from: snapshot,
+                    scope: scope,
+                    orderedWindowIDs: orderedWindowIDs,
+                    mode: effectiveMode,
+                    priorityWindowIDs: priorityWindowIDs
+                ).commands)
             }
+        }
+        return ApplyPlan(commands: commands)
+    }
+
+    func orderedWindowIDs(
+        in scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        mode: WindowManagementMode? = nil
+    ) -> [WindowID] {
+        guard let stage = snapshot.state.stage(scope: scope),
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else { return [] }
+
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+            windowsByID[id].map { (id, $0.frame.cgRect) }
+        })
+        let effectiveMode = mode ?? config.tiling.defaultStrategy
+        guard effectiveMode == .bsp else { return stage.windowIDs }
+
+        return spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
+    }
+
+    func innerGap() -> Double {
+        config.tiling.gapsInner
+    }
+
+    func saveLayoutIntent(scope: StageScope, windowIDs: [WindowID], placements: [WindowID: Rect]) {
+        saveLayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: .auto)
+    }
+
+    func saveLayoutIntent(
+        scope: StageScope,
+        windowIDs: [WindowID],
+        placements: [WindowID: Rect],
+        source: LayoutIntent.Source
+    ) {
+        intentStore.save(LayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: source))
+    }
+
+    func removeLayoutIntent(scope: StageScope) {
+        intentStore.remove(scope: scope)
+    }
+
+    func removeLayoutIntents(in snapshot: DaemonSnapshot) {
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
+            intentStore.remove(scope: scope)
+        }
+    }
+
+    func hasMatchingIntent(
+        scope: StageScope,
+        frames: [UInt32: Rect],
+        focusedWindowID: WindowID? = nil
+    ) -> Bool {
+        guard let intent = intentStore.intent(for: scope) else { return false }
+        return intent.placements.allSatisfy { id, frame in
+            guard let observed = frames[id.rawValue] else { return false }
+            if id == focusedWindowID {
+                return isLikelyFocusWindowChromeDelta(observed, baseline: frame) || observed.isClose(to: frame, positionTolerance: 12, sizeTolerance: 36)
+            }
+            return observed.isClose(to: frame, positionTolerance: 8, sizeTolerance: 8)
+        }
+    }
+
+    func hasMatchingCommandIntent(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
+        guard let intent = intentStore.intent(for: scope),
+              intent.source == .command
+        else { return false }
+
+        let focusedWindowID = focusedWindowID()
+
+        let currentFrames: [WindowID: Rect] = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry in
+            guard entry.scope == scope else { return nil }
+            return (entry.window.id, entry.window.frame)
+        })
+        guard Set(currentFrames.keys) == Set(intent.windowIDs) else { return false }
+
+        return intent.placements.allSatisfy { id, frame in
+            guard let observed = currentFrames[id] else { return false }
+            if id == focusedWindowID {
+                return isLikelyFocusWindowChromeDelta(observed, baseline: frame) || observed.isClose(to: frame, positionTolerance: 12, sizeTolerance: 36)
+            }
+            return observed.isClose(to: frame, positionTolerance: 4, sizeTolerance: 4)
+        }
+    }
+
+    func touchCommandIntent(scope: StageScope, at date: Date = Date()) {
+        intentStore.touch(scope: scope, at: date)
+    }
+
+    func hasRecentCommandIntent(scope: StageScope, since date: Date) -> Bool {
+        guard let intent = intentStore.intent(for: scope) else { return false }
+        return intent.source == .command && intent.createdAt >= date
+    }
+
+    func applyPlan(
+        from snapshot: DaemonSnapshot,
+        scope: StageScope,
+        orderedWindowIDs: [WindowID],
+        mode: WindowManagementMode? = nil,
+        priorityWindowIDs: Set<WindowID> = []
+    ) -> ApplyPlan {
+        guard let stage = snapshot.state.stage(scope: scope),
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else { return ApplyPlan(commands: []) }
+
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+            windowsByID[id].map { (id, $0.frame.cgRect) }
+        })
+        let effectiveMode = mode ?? config.tiling.defaultStrategy
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: effectiveMode,
+            container: display.visibleFrame.cgRect,
+            windowIDs: orderedWindowIDs,
+            currentFrames: currentFrames,
+            priorityWindowIDs: priorityWindowIDs,
+            splitPolicy: config.tiling.splitPolicy,
+            outerGaps: outerGaps(windowCount: stage.windowIDs.count),
+            innerGap: config.tiling.gapsInner
+        ))
+        let currentPlan = LayoutPlan(placements: currentFrames)
+
+        let commands = LayoutDiff.commands(previous: currentPlan, next: plan).compactMap { command -> ApplyCommand? in
+            guard let window = windowsByID[command.windowID] else { return nil }
+            return ApplyCommand(window: window, frame: Rect(command.frame))
+        }
+        return ApplyPlan(commands: commands)
+    }
+
+    private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
+        guard let intent = intentStore.intent(for: scope) else { return nil }
+        let scopedIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
+        })
+        guard scopedIDs == Set(intent.windowIDs) else {
+            intentStore.remove(scope: scope)
+            return nil
+        }
+        if intent.source == .command,
+           isRecentCommandIntent(intent),
+           hasCommandIntentShape(for: intent, snapshot: snapshot, scope: scope) {
+            return intent
+        }
+        guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot) else {
+            intentStore.remove(scope: scope)
+            return nil
+        }
+        return intent
+    }
+
+    private func intentStillTilesCurrentContainer(
+        _ intent: LayoutIntent,
+        scope: StageScope,
+        from snapshot: DaemonSnapshot
+    ) -> Bool {
+        guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+              !intent.windowIDs.isEmpty
+        else { return false }
+
+        let targetArea = canonicalTiledArea(for: intent, display: display)
+        guard targetArea > 0 else { return false }
+
+        let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: intent.windowIDs.count))
+        let frames = intent.windowIDs.compactMap { intent.placements[$0]?.cgRect }
+        guard frames.count == intent.windowIDs.count else { return false }
+        guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
+        guard !framesContainSignificantOverlap(frames) else { return false }
+
+        let intentArea = frames.reduce(CGFloat(0)) { $0 + $1.area }
+        return intentArea >= targetArea * 0.95
+    }
+
+    private func hasCommandIntentShape(
+        for intent: LayoutIntent,
+        snapshot: DaemonSnapshot,
+        scope: StageScope
+    ) -> Bool {
+        let tolerance: Double = 32
+        let scopedFrames = snapshot.windows.compactMap { entry -> (WindowID, CGRect)? in
+            guard entry.scope == scope,
+                  intent.placements[entry.window.id] != nil
+            else { return nil }
+            return (entry.window.id, entry.window.frame.cgRect)
+        }
+        for (id, observed) in scopedFrames {
+            guard let target = intent.placements[id]?.cgRect,
+                  abs(observed.minX - target.minX) <= tolerance,
+                  abs(observed.minY - target.minY) <= tolerance,
+                  abs(observed.width - target.width) <= tolerance,
+                  abs(observed.height - target.height) <= tolerance
+            else { return false }
+        }
+        return true
+    }
+
+    private func isRecentCommandIntent(_ intent: LayoutIntent) -> Bool {
+        let now = Date()
+        let freshness = TimeInterval(5)
+        return now.timeIntervalSince(intent.createdAt) <= freshness
+    }
+
+    private func canonicalTiledArea(for intent: LayoutIntent, display: DisplaySnapshot) -> CGFloat {
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: intent.scope,
+            mode: config.tiling.defaultStrategy,
+            container: display.visibleFrame.cgRect,
+            windowIDs: intent.windowIDs,
+            splitPolicy: config.tiling.splitPolicy,
+            outerGaps: outerGaps(windowCount: intent.windowIDs.count),
+            innerGap: config.tiling.gapsInner
+        ))
+        return plan.placements.values.reduce(CGFloat(0)) { $0 + $1.area }
+    }
+
+    private func framesContainSignificantOverlap(_ frames: [CGRect]) -> Bool {
+        guard frames.count > 1 else { return false }
+        for index in frames.indices {
+            for otherIndex in frames.index(after: index)..<frames.endIndex {
+                if frames[index].intersection(frames[otherIndex]).area > 16 {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private func isLikelyFocusWindowChromeDelta(_ observed: Rect, baseline: Rect) -> Bool {
+        let dx = abs(observed.x - baseline.x)
+        let dy = abs(observed.y - baseline.y)
+        let dw = abs(observed.width - baseline.width)
+        let dh = abs(observed.height - baseline.height)
+        return dx <= 8 && (dy <= 12 || dh <= 12) && (dw <= 2 && dh <= 80)
+    }
+
+    private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let commands = intent.windowIDs.compactMap { id -> ApplyCommand? in
+            guard let window = windowsByID[id], let target = intent.placements[id], !window.frame.isClose(to: target, positionTolerance: 1, sizeTolerance: 1) else {
+                return nil
+            }
+            return ApplyCommand(window: window, frame: target)
         }
         return ApplyPlan(commands: commands)
     }
 
     func apply(_ plan: ApplyPlan) -> ApplyResult {
         var items: [ApplyResultItem] = []
+        let updates = plan.commands.map { command in
+            WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
+        }
+        let actualFrames = frameWriter.setFrames(updates)
+
         for command in plan.commands {
-            guard let actual = frameWriter.setFrame(command.frame.cgRect, of: command.window) else {
+            guard let rawActual = actualFrames[command.window.id], let actual = rawActual else {
                 items.append(ApplyResultItem(
                     windowID: command.window.id,
                     status: .failed,
@@ -216,6 +492,22 @@ public extension SnapshotService {
             failed: failed,
             items: items
         )
+    }
+
+    func focus(_ window: WindowSnapshot) -> Bool {
+        frameWriter.focus(window)
+    }
+
+    func reset(_ window: WindowSnapshot) -> Bool {
+        frameWriter.reset(window)
+    }
+
+    func focusedWindowID() -> WindowID? {
+        provider.focusedWindowID()
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        frameWriter.setFrame(frame, of: window)
     }
 }
 
@@ -306,6 +598,19 @@ private extension Rect {
             && abs(y - other.y) <= positionTolerance
             && abs(width - other.width) <= sizeTolerance
             && abs(height - other.height) <= sizeTolerance
+    }
+}
+
+private extension CGRect {
+    var area: CGFloat {
+        max(0, width) * max(0, height)
+    }
+
+    func contains(_ other: CGRect, tolerance: CGFloat) -> Bool {
+        other.minX >= minX - tolerance
+            && other.minY >= minY - tolerance
+            && other.maxX <= maxX + tolerance
+            && other.maxY <= maxY + tolerance
     }
 }
 

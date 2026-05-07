@@ -1,13 +1,15 @@
 import Foundation
+import AppKit
 import RoadieDaemon
 
 let args = Array(CommandLine.arguments.dropFirst())
 let service = SnapshotService()
+var railController: RailController?
 
 func printUsage() {
     print("""
     usage:
-      roadied run --yes [--interval-ms N] [--ticks N]
+      roadied run --yes [--interval-ms N] [--ticks N] [--no-rail]
       roadied snapshot [--json] [--prompt-permissions]
       roadied permissions [--prompt]
     """)
@@ -21,9 +23,16 @@ case "run":
     }
     let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
     let ticks = value(after: "--ticks").flatMap(Int.init)
-    let maintainer = LayoutMaintainer(intervalSeconds: max(100, intervalMs) / 1000)
+    let shouldStartRail = !args.contains("--no-rail")
+    let interval = max(100, intervalMs) / 1000
+    let maintainer = LayoutMaintainer(intervalSeconds: interval)
     var reportedAccessibilityDenied = false
-    maintainer.run(maxTicks: ticks) { tick in
+    if shouldStartRail {
+        railController = RailController()
+        railController?.start()
+    }
+
+    let target = MaintenanceTimerTarget(maintainer: maintainer, maxTicks: ticks) { tick in
         if tick.accessibilityDenied {
             if !reportedAccessibilityDenied {
                 fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
@@ -38,6 +47,9 @@ case "run":
             fflush(stdout)
         }
     }
+    let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
+    RunLoop.main.add(timer, forMode: .common)
+    NSApplication.shared.run()
 case "snapshot":
     let snapshot = service.snapshot(promptForPermissions: args.contains("--prompt-permissions"))
     if args.contains("--json") {
@@ -65,4 +77,26 @@ func value(after flag: String) -> String? {
         return nil
     }
     return args[index + 1]
+}
+
+private final class MaintenanceTimerTarget: NSObject {
+    private let maintainer: LayoutMaintainer
+    private let maxTicks: Int?
+    private let onTick: (MaintenanceTick) -> Void
+    private var tickCount = 0
+
+    init(maintainer: LayoutMaintainer, maxTicks: Int?, onTick: @escaping (MaintenanceTick) -> Void) {
+        self.maintainer = maintainer
+        self.maxTicks = maxTicks
+        self.onTick = onTick
+    }
+
+    @MainActor @objc func tick(_ timer: Timer) {
+        onTick(maintainer.tick())
+        tickCount += 1
+        if let maxTicks, tickCount >= maxTicks {
+            timer.invalidate()
+            NSApplication.shared.terminate(nil)
+        }
+    }
 }
