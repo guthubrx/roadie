@@ -1216,6 +1216,29 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotPrunesDisconnectedActiveDisplay() {
+        let liveDisplay = DisplayID(rawValue: "display-live")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let displaySnapshot = DisplaySnapshot(id: liveDisplay, index: 1, name: "Live", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-prune-display-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(activeDisplayID: staleDisplay))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+
+        #expect(stageStore.state().activeDisplayID == liveDisplay)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

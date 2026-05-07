@@ -62,6 +62,11 @@ public struct SnapshotService {
         let displays = provider.displays()
         let windows = provider.windows()
         var persistedStages = stageStore.state()
+        let liveDisplayIDs = Set(displays.map(\.id))
+        if let activeDisplayID = persistedStages.activeDisplayID,
+           !liveDisplayIDs.contains(activeDisplayID) {
+            persistedStages.activeDisplayID = displays.first?.id
+        }
         let liveWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
         })
