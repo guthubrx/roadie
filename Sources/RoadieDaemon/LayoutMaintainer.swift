@@ -29,6 +29,7 @@ public struct MaintenanceTick: Equatable, Codable, Sendable {
 
 public final class LayoutMaintainer {
     private let service: SnapshotService
+    private let events: EventLog
     private let intervalSeconds: TimeInterval
     private let commandIntentHoldSeconds: TimeInterval
     private let manualResizeDebounceSeconds: TimeInterval
@@ -41,10 +42,12 @@ public final class LayoutMaintainer {
 
     public init(
         service: SnapshotService = SnapshotService(),
+        events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
+        self.events = events
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(1.2, intervalSeconds * 3)
@@ -59,6 +62,7 @@ public final class LayoutMaintainer {
 
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
         if hiddenInactive > 0 {
+            events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive)]))
             return MaintenanceTick(commands: hiddenInactive, applied: hiddenInactive, clamped: 0, failed: 0)
         }
 
@@ -82,6 +86,10 @@ public final class LayoutMaintainer {
             manualResizeApplyAfter = now.addingTimeInterval(manualResizeDebounceSeconds)
             removeLayoutIntents(for: changedWindowIDs, in: snapshot)
             lastObservedFrames = observedFrames
+            events.append(RoadieEvent(type: "manual_resize_detected", details: [
+                "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                "applyAfter": String(manualResizeApplyAfter?.timeIntervalSince1970 ?? 0)
+            ]))
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
         }
 
@@ -118,6 +126,14 @@ public final class LayoutMaintainer {
             persistLayoutIntent(in: snapshot, result: result)
         }
         record(result)
+        events.append(RoadieEvent(type: "layout_apply", details: [
+            "commands": String(plan.commands.count),
+            "applied": String(result.applied),
+            "clamped": String(result.clamped),
+            "failed": String(result.failed),
+            "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ",")
+        ]))
+        appendItemEvents(result)
         let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
         priorityWindowIDs = []
         manualResizeApplyAfter = nil
@@ -160,6 +176,30 @@ public final class LayoutMaintainer {
                 break
             }
         }
+    }
+
+    private func appendItemEvents(_ result: ApplyResult) {
+        for item in result.items {
+            switch item.status {
+            case .clamped:
+                events.append(RoadieEvent(type: "layout_clamped", details: [
+                    "windowID": String(item.windowID.rawValue),
+                    "requested": frameDescription(item.requested),
+                    "actual": item.actual.map(frameDescription) ?? "-"
+                ]))
+            case .failed:
+                events.append(RoadieEvent(type: "layout_failed", details: [
+                    "windowID": String(item.windowID.rawValue),
+                    "requested": frameDescription(item.requested)
+                ]))
+            case .applied:
+                break
+            }
+        }
+    }
+
+    private func frameDescription(_ frame: Rect) -> String {
+        "\(Int(frame.x)),\(Int(frame.y)) \(Int(frame.width))x\(Int(frame.height))"
     }
 
     private func stabilizeClampedPositions(_ result: ApplyResult, from plan: ApplyPlan) -> ApplyResult {

@@ -164,6 +164,9 @@ struct LayoutMaintainerTests {
         let intentPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-manual-resize-intent-\(UUID().uuidString).json")
             .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-manual-resize-events-\(UUID().uuidString).jsonl")
+            .path
         let intentStore = LayoutIntentStore(path: intentPath)
         let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
         intentStore.save(LayoutIntent(
@@ -181,7 +184,7 @@ struct LayoutMaintainerTests {
             intentStore: intentStore
         )
         var currentTime = Date(timeIntervalSince1970: 0)
-        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), now: { currentTime })
 
         let initial = maintainer.tick()
         let resizing = maintainer.tick()
@@ -197,7 +200,11 @@ struct LayoutMaintainerTests {
         #expect(settled.commands == 1)
         #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
         #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(events.contains("\"type\":\"manual_resize_detected\""))
+        #expect(events.contains("\"type\":\"layout_apply\""))
         try? FileManager.default.removeItem(atPath: intentPath)
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 
     @Test
@@ -348,6 +355,9 @@ struct LayoutMaintainerTests {
         let intentPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-clamp-intent-\(UUID().uuidString).json")
             .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-clamp-events-\(UUID().uuidString).jsonl")
+            .path
         let intentStore = LayoutIntentStore(path: intentPath)
         let config = RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
 
@@ -363,12 +373,15 @@ struct LayoutMaintainerTests {
             config: config,
             intentStore: intentStore
         )
-        let maintainer = LayoutMaintainer(service: clampingService)
+        let maintainer = LayoutMaintainer(service: clampingService, events: EventLog(path: eventPath))
 
         let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
         #expect(tick.commands == 2)
         #expect(tick.clamped == 1)
+        #expect(events.contains("\"type\":\"layout_apply\""))
+        #expect(events.contains("\"type\":\"layout_clamped\""))
         #expect(intentStore.intent(for: StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))) == nil)
         #expect(maintainer.tick().commands == 0)
 
@@ -384,6 +397,7 @@ struct LayoutMaintainerTests {
 
         #expect(!restartedService.applyPlan(from: restartedService.snapshot()).commands.isEmpty)
         try? FileManager.default.removeItem(atPath: intentPath)
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 
     @Test
