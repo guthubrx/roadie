@@ -15,6 +15,7 @@ func printUsage() {
       roadie layout apply [--yes] [--json]
       roadie config show
       roadie permissions [--prompt]
+      roadie focus status
       roadie focus|move|warp|wrap|resize left|right|up|down
       roadie mode bsp|masterStack|float
       roadie window display N
@@ -127,8 +128,13 @@ case "config":
         exit(1)
     }
 case "focus":
-    runDirectionalCommand(args.dropFirst().first, verb: "focus") {
-        WindowCommandService(service: service).focus($0)
+    if args.dropFirst().first == "status" {
+        print(TextFormatter.focusStatus(service.snapshot()))
+        exit(0)
+    } else {
+        runDirectionalCommand(args.dropFirst().first, verb: "focus") {
+            WindowCommandService(service: service).focus($0)
+        }
     }
 case "move":
     runDirectionalCommand(args.dropFirst().first, verb: "move") {

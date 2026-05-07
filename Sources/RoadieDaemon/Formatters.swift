@@ -31,6 +31,22 @@ public enum TextFormatter {
         "accessibilityTrusted=\(permissions.accessibilityTrusted)"
     }
 
+    public static func focusStatus(_ snapshot: DaemonSnapshot) -> String {
+        guard let focusedWindowID = snapshot.focusedWindowID else {
+            return "No focused tileable window."
+        }
+        guard let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }) else {
+            return "Focused window \(focusedWindowID.rawValue) is not tileable."
+        }
+        let window = entry.window
+        let scope = entry.scope?.description ?? "-"
+        let frame = "\(Int(window.frame.x)),\(Int(window.frame.y)) \(Int(window.frame.width))x\(Int(window.frame.height))"
+        return [
+            "WID\tAPP\tTITLE\tSCOPE\tFRAME",
+            "\(window.id.rawValue)\t\(window.appName)\t\(window.title)\t\(scope)\t\(frame)"
+        ].joined(separator: "\n")
+    }
+
     public static func applyPlan(_ plan: ApplyPlan) -> String {
         guard !plan.commands.isEmpty else { return "No layout commands." }
         var lines = ["WID\tAPP\tTITLE\tFRAME"]
