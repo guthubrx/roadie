@@ -16,13 +16,14 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
-    public static func displays(_ displays: [DisplaySnapshot]) -> String {
+    public static func displays(_ displays: [DisplaySnapshot], state: PersistentStageState? = nil) -> String {
         guard !displays.isEmpty else { return "No displays found." }
-        var lines = ["INDEX\tMAIN\tNAME\tUUID\tFRAME"]
+        var lines = ["ACTIVE\tINDEX\tMAIN\tNAME\tUUID\tFRAME"]
         for display in displays {
             let main = display.isMain ? "*" : ""
+            let active = display.id == state?.activeDisplayID ? "*" : ""
             let frame = "\(Int(display.frame.x)),\(Int(display.frame.y)) \(Int(display.frame.width))x\(Int(display.frame.height))"
-            lines.append("\(display.index)\t\(main)\t\(display.name)\t\(display.id.rawValue)\t\(frame)")
+            lines.append("\(active)\t\(display.index)\t\(main)\t\(display.name)\t\(display.id.rawValue)\t\(frame)")
         }
         return lines.joined(separator: "\n")
     }
