@@ -137,23 +137,54 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         priorityWindowIDs: Set<WindowID>
     ) -> CGFloat {
         guard let leftFrame = unionFrame(for: left, in: currentFrames),
-              let rightFrame = unionFrame(for: right, in: currentFrames),
-              isManagedSplit(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal)
+              let rightFrame = unionFrame(for: right, in: currentFrames)
         else { return 0.5 }
 
         let usableExtent = horizontal ? rect.width - innerGap : rect.height - innerGap
         guard usableExtent > 0 else { return 0.5 }
 
+        let priorityLeftFrame = unionPriorityFrame(for: left, in: currentFrames, priorityWindowIDs: priorityWindowIDs)
+        let priorityRightFrame = unionPriorityFrame(for: right, in: currentFrames, priorityWindowIDs: priorityWindowIDs)
+
+        guard isManagedSplit(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal) else {
+            if let priorityLeftFrame {
+                let extent = horizontal ? priorityLeftFrame.width : priorityLeftFrame.height
+                return (extent / usableExtent).clamped(to: 0.1...0.9)
+            }
+            if let priorityRightFrame {
+                let extent = horizontal ? priorityRightFrame.width : priorityRightFrame.height
+                return ((usableExtent - extent) / usableExtent).clamped(to: 0.1...0.9)
+            }
+            return 0.5
+        }
+
         let leftEdge = horizontal ? leftFrame.maxX - rect.minX : leftFrame.maxY - rect.minY
         let rightEdge = horizontal ? rightFrame.minX - innerGap - rect.minX : rightFrame.minY - innerGap - rect.minY
 
-        if containsPriority(left, priorityWindowIDs) {
-            return (leftEdge / usableExtent).clamped(to: 0.1...0.9)
+        if let priorityLeftFrame {
+            let priorityExtent = horizontal ? priorityLeftFrame.width : priorityLeftFrame.height
+            let ratio = containsOnlyPriority(left, priorityWindowIDs) ? leftEdge / usableExtent : priorityExtent / usableExtent
+            return ratio.clamped(to: 0.1...0.9)
         }
-        if containsPriority(right, priorityWindowIDs) {
-            return (rightEdge / usableExtent).clamped(to: 0.1...0.9)
+        if let priorityRightFrame {
+            let priorityExtent = horizontal ? priorityRightFrame.width : priorityRightFrame.height
+            let ratio = containsOnlyPriority(right, priorityWindowIDs) ? rightEdge / usableExtent : (usableExtent - priorityExtent) / usableExtent
+            return ratio.clamped(to: 0.1...0.9)
         }
         return 0.5
+    }
+
+    private func unionPriorityFrame(
+        for windows: ArraySlice<WindowID>,
+        in currentFrames: [WindowID: CGRect],
+        priorityWindowIDs: Set<WindowID>
+    ) -> CGRect? {
+        let filtered = windows.filter { priorityWindowIDs.contains($0) }
+        return unionFrame(for: filtered[...], in: currentFrames)
+    }
+
+    private func containsOnlyPriority(_ windows: ArraySlice<WindowID>, _ priorityWindowIDs: Set<WindowID>) -> Bool {
+        windows.allSatisfy { priorityWindowIDs.contains($0) }
     }
 
     private func isManagedSplit(leftFrame: CGRect, rightFrame: CGRect, rect: CGRect, horizontal: Bool) -> Bool {

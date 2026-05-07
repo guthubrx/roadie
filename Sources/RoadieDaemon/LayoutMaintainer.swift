@@ -31,15 +31,24 @@ public final class LayoutMaintainer {
     private let service: SnapshotService
     private let intervalSeconds: TimeInterval
     private let commandIntentHoldSeconds: TimeInterval
+    private let manualResizeDebounceSeconds: TimeInterval
+    private let now: () -> Date
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
+    private var manualResizeApplyAfter: Date?
 
-    public init(service: SnapshotService = SnapshotService(), intervalSeconds: TimeInterval = 0.5) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        intervalSeconds: TimeInterval = 0.5,
+        now: @escaping () -> Date = Date.init
+    ) {
         self.service = service
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
+        self.manualResizeDebounceSeconds = max(1.2, intervalSeconds * 3)
+        self.now = now
     }
 
     public func tick() -> MaintenanceTick {
@@ -55,18 +64,11 @@ public final class LayoutMaintainer {
 
         let observedFrames = scopedFrames(in: snapshot)
         let changedWindowIDs = changedWindows(in: observedFrames)
-        let now = Date()
+        let now = now()
         let cutoff = now.addingTimeInterval(-commandIntentHoldSeconds)
 
-        if shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff) {
-            lastCommandIntentAt = now
-            priorityWindowIDs = []
-            lastObservedFrames = observedFrames
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-        }
-
         if !changedWindowIDs.isEmpty {
-            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames) {
+            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
                 lastObservedFrames = observedFrames
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
             }
@@ -77,11 +79,27 @@ public final class LayoutMaintainer {
             }
 
             priorityWindowIDs = changedWindowIDs
+            manualResizeApplyAfter = now.addingTimeInterval(manualResizeDebounceSeconds)
+            removeLayoutIntents(for: changedWindowIDs, in: snapshot)
             lastObservedFrames = observedFrames
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
         }
 
+        if let manualResizeApplyAfter, now < manualResizeApplyAfter {
+            lastObservedFrames = observedFrames
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
+        }
+        manualResizeApplyAfter = nil
+
+        if priorityWindowIDs.isEmpty && shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff) {
+            lastCommandIntentAt = now
+            priorityWindowIDs = []
+            lastObservedFrames = observedFrames
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+
         if let lastCommandIntentAt,
+           priorityWindowIDs.isEmpty,
            now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
         {
             priorityWindowIDs = []
@@ -101,13 +119,8 @@ public final class LayoutMaintainer {
         }
         record(result)
         let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
-        if result.clamped > 0 {
-            priorityWindowIDs = Set(result.items.compactMap { item in
-                item.status == .clamped ? item.windowID : nil
-            })
-        } else {
-            priorityWindowIDs = []
-        }
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
         lastObservedFrames = appliedFrames
         return MaintenanceTick(
             commands: plan.commands.count,
@@ -236,11 +249,29 @@ public final class LayoutMaintainer {
         return result
     }
 
-    private func changedFramesMatchSavedIntent(in snapshot: DaemonSnapshot, frames: [UInt32: Rect]) -> Bool {
+    private func changedFramesMatchSavedIntent(
+        in snapshot: DaemonSnapshot,
+        frames: [UInt32: Rect],
+        changedWindowIDs: Set<WindowID>
+    ) -> Bool {
         let focusedWindowID = service.focusedWindowID()
-        let scopes = Set(snapshot.windows.compactMap(\.scope))
-        return scopes.contains { scope in
+        let changedScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard changedWindowIDs.contains(entry.window.id) else { return nil }
+            return entry.scope
+        })
+        guard !changedScopes.isEmpty else { return false }
+        return changedScopes.allSatisfy { scope in
             service.hasMatchingIntent(scope: scope, frames: frames, focusedWindowID: focusedWindowID)
+        }
+    }
+
+    private func removeLayoutIntents(for windowIDs: Set<WindowID>, in snapshot: DaemonSnapshot) {
+        let scopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard windowIDs.contains(entry.window.id) else { return nil }
+            return entry.scope
+        })
+        for scope in scopes {
+            service.removeLayoutIntent(scope: scope)
         }
     }
 
