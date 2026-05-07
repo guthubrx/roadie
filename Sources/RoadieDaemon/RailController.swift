@@ -78,8 +78,9 @@ public final class RailController {
         })
 
         for (displayID, screen) in screensByDisplayID {
-            let scope = state.scopes.first { $0.displayID == displayID }
-                ?? PersistentStageScope(displayID: displayID)
+            let desktopID = state.currentDesktopID(for: displayID)
+            let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
+                ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
             panel.position(on: screen)
             panel.render(scope: scope, mode: renderMode) { [weak self] stageID in
