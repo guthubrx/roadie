@@ -44,21 +44,29 @@ public struct StageStore: Sendable {
 public struct PersistentStageState: Equatable, Codable, Sendable {
     public var scopes: [PersistentStageScope]
     public var desktopSelections: [PersistentDesktopSelection]
+    public var desktopLabels: [PersistentDesktopLabel]
 
-    public init(scopes: [PersistentStageScope] = [], desktopSelections: [PersistentDesktopSelection] = []) {
+    public init(
+        scopes: [PersistentStageScope] = [],
+        desktopSelections: [PersistentDesktopSelection] = [],
+        desktopLabels: [PersistentDesktopLabel] = []
+    ) {
         self.scopes = scopes
         self.desktopSelections = desktopSelections
+        self.desktopLabels = desktopLabels
     }
 
     enum CodingKeys: String, CodingKey {
         case scopes
         case desktopSelections
+        case desktopLabels
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.scopes = try c.decodeIfPresent([PersistentStageScope].self, forKey: .scopes) ?? []
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
+        self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -98,6 +106,17 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopSelections.first { $0.displayID == displayID }?.lastDesktopID
     }
 
+    public func label(displayID: DisplayID, desktopID: DesktopID) -> String? {
+        desktopLabels.first { $0.displayID == displayID && $0.desktopID == desktopID }?.label
+    }
+
+    public mutating func setLabel(_ label: String, displayID: DisplayID, desktopID: DesktopID) {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        desktopLabels.removeAll { $0.displayID == displayID && $0.desktopID == desktopID }
+        guard !trimmed.isEmpty else { return }
+        desktopLabels.append(PersistentDesktopLabel(displayID: displayID, desktopID: desktopID, label: trimmed))
+    }
+
     public mutating func switchDesktop(displayID: DisplayID, to desktopID: DesktopID) {
         if let index = desktopSelections.firstIndex(where: { $0.displayID == displayID }) {
             let current = desktopSelections[index].currentDesktopID
@@ -112,6 +131,18 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                 lastDesktopID: desktopID == DesktopID(rawValue: 1) ? nil : DesktopID(rawValue: 1)
             ))
         }
+    }
+}
+
+public struct PersistentDesktopLabel: Equatable, Codable, Sendable {
+    public var displayID: DisplayID
+    public var desktopID: DesktopID
+    public var label: String
+
+    public init(displayID: DisplayID, desktopID: DesktopID, label: String) {
+        self.displayID = displayID
+        self.desktopID = desktopID
+        self.label = label
     }
 }
 

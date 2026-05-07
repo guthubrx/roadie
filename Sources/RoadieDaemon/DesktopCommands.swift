@@ -20,14 +20,39 @@ public struct DesktopCommandService {
         let state = store.state()
         let current = state.currentDesktopID(for: display.id)
         let ids = desktopIDs(for: display.id, in: state)
-        var lines = ["ACTIVE\tID\tSTAGES\tWINDOWS"]
+        var lines = ["ACTIVE\tID\tLABEL\tSTAGES\tWINDOWS"]
         for id in ids {
             let scopes = state.scopes.filter { $0.displayID == display.id && $0.desktopID == id }
             let stageCount = scopes.flatMap(\.stages).count
             let windowCount = scopes.flatMap(\.stages).flatMap(\.members).count
-            lines.append("\(id == current ? "*" : "")\t\(id.rawValue)\t\(stageCount)\t\(windowCount)")
+            let label = state.label(displayID: display.id, desktopID: id) ?? "-"
+            lines.append("\(id == current ? "*" : "")\t\(id.rawValue)\t\(label)\t\(stageCount)\t\(windowCount)")
         }
         return StageCommandResult(message: lines.joined(separator: "\n"), changed: false)
+    }
+
+    public func current() -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "desktop current: no display", changed: false)
+        }
+        let state = store.state()
+        let current = state.currentDesktopID(for: display.id)
+        let label = state.label(displayID: display.id, desktopID: current) ?? "-"
+        return StageCommandResult(message: "desktop current \(current.rawValue) \(label)", changed: false)
+    }
+
+    public func label(_ desktopID: DesktopID, as label: String) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "desktop label: no display", changed: false)
+        }
+        var state = store.state()
+        _ = state.scope(displayID: display.id, desktopID: desktopID)
+        state.setLabel(label, displayID: display.id, desktopID: desktopID)
+        store.save(state)
+        let visibleLabel = state.label(displayID: display.id, desktopID: desktopID) ?? "-"
+        return StageCommandResult(message: "desktop label \(desktopID.rawValue) \(visibleLabel)", changed: true)
     }
 
     public func focus(_ desktopID: DesktopID) -> StageCommandResult {
