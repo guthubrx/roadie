@@ -6,17 +6,20 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var desktops: DesktopsConfig
     public var stageManager: StageManagerConfig
     public var exclusions: ExclusionsConfig
+    public var fx: EffectsConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
         desktops: DesktopsConfig = DesktopsConfig(),
         stageManager: StageManagerConfig = StageManagerConfig(),
-        exclusions: ExclusionsConfig = ExclusionsConfig()
+        exclusions: ExclusionsConfig = ExclusionsConfig(),
+        fx: EffectsConfig = EffectsConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
         self.stageManager = stageManager
         self.exclusions = exclusions
+        self.fx = fx
     }
 
     enum CodingKeys: String, CodingKey {
@@ -24,6 +27,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case desktops
         case stageManager = "stage_manager"
         case exclusions
+        case fx
     }
 
     public init(from decoder: Decoder) throws {
@@ -32,6 +36,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? DesktopsConfig()
         self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? StageManagerConfig()
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? ExclusionsConfig()
+        self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
     }
 }
 
@@ -179,6 +184,78 @@ public struct ExclusionsConfig: Equatable, Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case floatingBundles = "floating_bundles"
+    }
+}
+
+public struct EffectsConfig: Equatable, Codable, Sendable {
+    public var borders: BorderConfig
+
+    public init(borders: BorderConfig = BorderConfig()) {
+        self.borders = borders
+    }
+}
+
+public struct BorderConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var thickness: Double
+    public var cornerRadius: Double
+    public var activeColor: String
+    public var inactiveColor: String
+    public var pulseOnFocus: Bool
+    public var stageOverrides: [BorderStageOverride]
+
+    public init(
+        enabled: Bool = false,
+        thickness: Double = 2,
+        cornerRadius: Double = 10,
+        activeColor: String = "#7AA2F7",
+        inactiveColor: String = "#414868",
+        pulseOnFocus: Bool = false,
+        stageOverrides: [BorderStageOverride] = []
+    ) {
+        self.enabled = enabled
+        self.thickness = thickness
+        self.cornerRadius = cornerRadius
+        self.activeColor = activeColor
+        self.inactiveColor = inactiveColor
+        self.pulseOnFocus = pulseOnFocus
+        self.stageOverrides = stageOverrides
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case thickness
+        case cornerRadius = "corner_radius"
+        case activeColor = "active_color"
+        case inactiveColor = "inactive_color"
+        case pulseOnFocus = "pulse_on_focus"
+        case stageOverrides = "stage_overrides"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        self.thickness = try c.decodeFlexibleDouble(forKey: .thickness) ?? 2
+        self.cornerRadius = try c.decodeFlexibleDouble(forKey: .cornerRadius) ?? 10
+        self.activeColor = try c.decodeIfPresent(String.self, forKey: .activeColor) ?? "#7AA2F7"
+        self.inactiveColor = try c.decodeIfPresent(String.self, forKey: .inactiveColor) ?? "#414868"
+        self.pulseOnFocus = try c.decodeIfPresent(Bool.self, forKey: .pulseOnFocus) ?? false
+        self.stageOverrides = try c.decodeIfPresent([BorderStageOverride].self, forKey: .stageOverrides) ?? []
+    }
+}
+
+public struct BorderStageOverride: Equatable, Codable, Sendable {
+    public var stageID: String
+    public var activeColor: String?
+
+    public init(stageID: String, activeColor: String? = nil) {
+        self.stageID = stageID
+        self.activeColor = activeColor
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case stageID = "stage_id"
+        case activeColor = "active_color"
     }
 }
 

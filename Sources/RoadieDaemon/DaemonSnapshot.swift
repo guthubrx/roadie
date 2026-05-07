@@ -9,17 +9,20 @@ public struct DaemonSnapshot: Equatable, Codable, Sendable {
     public var displays: [DisplaySnapshot]
     public var windows: [ScopedWindowSnapshot]
     public var state: RoadieState
+    public var focusedWindowID: WindowID?
 
     public init(
         permissions: PermissionSnapshot,
         displays: [DisplaySnapshot],
         windows: [ScopedWindowSnapshot],
-        state: RoadieState
+        state: RoadieState,
+        focusedWindowID: WindowID? = nil
     ) {
         self.permissions = permissions
         self.displays = displays
         self.windows = windows
         self.state = state
+        self.focusedWindowID = focusedWindowID
     }
 }
 
@@ -130,7 +133,8 @@ public struct SnapshotService {
             try? state.assignWindow(window.id, to: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
-        if let focusedID = provider.focusedWindowID(),
+        let focusedID = provider.focusedWindowID()
+        if let focusedID,
            let focusedScope = scopedWindows.first(where: { $0.window.id == focusedID })?.scope {
             var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
             persistentScope.setFocusedWindow(focusedID, in: focusedScope.stageID)
@@ -143,7 +147,8 @@ public struct SnapshotService {
             permissions: permissions,
             displays: displays,
             windows: scopedWindows,
-            state: state
+            state: state,
+            focusedWindowID: focusedID
         )
     }
 
