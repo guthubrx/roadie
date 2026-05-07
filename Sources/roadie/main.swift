@@ -10,6 +10,7 @@ func printUsage() {
     usage:
       roadie windows list [--json]
       roadie display list|current [--json]
+      roadie display focus N
       roadie state dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
@@ -60,9 +61,18 @@ case "windows":
     }
 case "display":
     let verb = args.dropFirst().first
-    guard verb == "list" || verb == "current" else {
+    guard verb == "list" || verb == "current" || verb == "focus" else {
         printUsage()
         exit(64)
+    }
+    if verb == "focus" {
+        guard let rawIndex = args.dropFirst(2).first, let index = Int(rawIndex), index > 0 else {
+            fputs("roadie: display focus requires a positive index\n", stderr)
+            exit(64)
+        }
+        let result = DisplayCommandService(service: service).focus(index: index)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     }
     let snapshot = service.snapshot()
     if args.contains("--json") {

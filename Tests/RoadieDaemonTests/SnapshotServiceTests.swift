@@ -1023,6 +1023,47 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func displayFocusPersistsActiveDisplayAndRestoresFocusedStageWindow() {
+        let leftDisplay = DisplayID(rawValue: "display-a")
+        let rightDisplay = DisplayID(rawValue: "display-b")
+        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500), isMain: false)
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 1000, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-focus-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: left.id, members: [
+                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: right.id, members: [
+                    PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
+                ]),
+            ]),
+        ]))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [leftSnapshot, rightSnapshot], windowSnapshots: [left, right], focusedID: right.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = DisplayCommandService(service: service, store: stageStore).focus(index: 2)
+        let state = stageStore.state()
+
+        #expect(result.changed)
+        #expect(state.activeDisplayID == rightDisplay)
+        #expect(writer.focusedWindowIDs == [right.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func focusFollowsMousePickerTargetsActiveStageWindowAtPoint() {
         let display = DisplayID(rawValue: "display-a")
         let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))

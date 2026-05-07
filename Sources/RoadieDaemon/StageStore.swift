@@ -45,21 +45,25 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var scopes: [PersistentStageScope]
     public var desktopSelections: [PersistentDesktopSelection]
     public var desktopLabels: [PersistentDesktopLabel]
+    public var activeDisplayID: DisplayID?
 
     public init(
         scopes: [PersistentStageScope] = [],
         desktopSelections: [PersistentDesktopSelection] = [],
-        desktopLabels: [PersistentDesktopLabel] = []
+        desktopLabels: [PersistentDesktopLabel] = [],
+        activeDisplayID: DisplayID? = nil
     ) {
         self.scopes = scopes
         self.desktopSelections = desktopSelections
         self.desktopLabels = desktopLabels
+        self.activeDisplayID = activeDisplayID
     }
 
     enum CodingKeys: String, CodingKey {
         case scopes
         case desktopSelections
         case desktopLabels
+        case activeDisplayID
     }
 
     public init(from decoder: Decoder) throws {
@@ -67,6 +71,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.scopes = try c.decodeIfPresent([PersistentStageScope].self, forKey: .scopes) ?? []
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
+        self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -104,6 +109,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
 
     public func lastDesktopID(for displayID: DisplayID) -> DesktopID? {
         desktopSelections.first { $0.displayID == displayID }?.lastDesktopID
+    }
+
+    public mutating func focusDisplay(_ displayID: DisplayID) {
+        activeDisplayID = displayID
     }
 
     public func label(displayID: DisplayID, desktopID: DesktopID) -> String? {

@@ -254,6 +254,11 @@ public struct StageCommandService {
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
+        let state = store.state()
+        if let activeDisplayID = state.activeDisplayID,
+           let display = snapshot.displays.first(where: { $0.id == activeDisplayID }) {
+            return display
+        }
         if let active = activeWindow(in: snapshot),
            let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays) {
             return snapshot.displays.first { $0.id == displayID }

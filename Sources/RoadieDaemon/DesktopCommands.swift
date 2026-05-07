@@ -198,6 +198,11 @@ public struct DesktopCommandService {
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
+        let state = store.state()
+        if let activeDisplayID = state.activeDisplayID,
+           let display = snapshot.displays.first(where: { $0.id == activeDisplayID }) {
+            return display
+        }
         if let focusedID = service.focusedWindowID(),
            let entry = snapshot.windows.first(where: { $0.window.id == focusedID }),
            let displayID = entry.scope?.displayID ?? displayID(containing: entry.window.frame.center, in: snapshot.displays) {
