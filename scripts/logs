@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+log_dir="$HOME/.roadies"
+stdout="$log_dir/roadied.stdout.log"
+stderr="$log_dir/roadied.stderr.log"
+
+echo "== stdout =="
+if [[ -f "$stdout" ]]; then
+  tail -n 80 "$stdout"
+else
+  echo "missing: $stdout"
+fi
+
+echo "== stderr =="
+if [[ -f "$stderr" ]]; then
+  tail -n 80 "$stderr"
+else
+  echo "missing: $stderr"
+fi

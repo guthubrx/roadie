@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/opt/homebrew/sbin"
+
+unset SDKROOT
+unset CC
+unset CXX
+unset LD
+unset LDFLAGS
+unset CFLAGS
+unset CXXFLAGS
+unset CPPFLAGS
+unset LIBRARY_PATH
+unset CPATH
+unset DYLD_LIBRARY_PATH
+unset DYLD_FRAMEWORK_PATH
+
+cd "$repo_root"
+exec "$@"

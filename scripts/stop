@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+label="com.roadie.roadied"
+plist="$HOME/Library/LaunchAgents/$label.plist"
+pidfile="$HOME/.roadies/roadied.pid"
+
+if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+  launchctl bootout "gui/$(id -u)/$label"
+  echo "$label stopped"
+else
+  echo "$label is not loaded"
+fi
+
+if [[ -f "$plist" ]]; then
+  echo "plist kept: $plist"
+fi
+
+if [[ -f "$pidfile" ]]; then
+  pid="$(cat "$pidfile")"
+  if ps -p "$pid" -o args= 2>/dev/null | grep -q 'roadied run --yes'; then
+    kill "$pid"
+    sleep 1
+    echo "roadied pid $pid stopped"
+  else
+    echo "stale pidfile removed: $pidfile"
+  fi
+  rm -f "$pidfile"
+fi
