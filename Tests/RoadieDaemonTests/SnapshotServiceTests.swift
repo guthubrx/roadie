@@ -17,6 +17,29 @@ private struct FakeProvider: SystemSnapshotProviding {
     func focusedWindowID() -> WindowID? { focusedID }
 }
 
+private final class SequenceSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
+    var permissionSnapshot = PermissionSnapshot(accessibilityTrusted: true)
+    let displaySnapshots: [DisplaySnapshot]
+    let windowSnapshots: [[WindowSnapshot]]
+    let focusedID: WindowID?
+    private var index = 0
+
+    init(displaySnapshots: [DisplaySnapshot], windowSnapshots: [[WindowSnapshot]], focusedID: WindowID? = nil) {
+        self.displaySnapshots = displaySnapshots
+        self.windowSnapshots = windowSnapshots
+        self.focusedID = focusedID
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { permissionSnapshot }
+    func displays() -> [DisplaySnapshot] { displaySnapshots }
+    func windows() -> [WindowSnapshot] {
+        let windows = windowSnapshots[Swift.min(index, windowSnapshots.count - 1)]
+        index += 1
+        return windows
+    }
+    func focusedWindowID() -> WindowID? { focusedID }
+}
+
 private struct FakeWriter: WindowFrameWriting {
     var actualFrames: [WindowID: Rect]
 
@@ -735,6 +758,53 @@ struct SnapshotServiceTests {
         #expect(result.changed)
         #expect(writer.requestedFrames.keys.contains(bottomRight.id))
         #expect(writer.focusedWindowIDs == [bottomRight.id])
+    }
+
+    @Test
+    func resizeCommandReflowsLayoutAroundResizedWindowAndPersistsIntent() {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let resizedRight = WindowSnapshot(id: right.id, pid: right.pid, appName: right.appName, bundleID: right.bundleID, title: right.title, frame: Rect(x: 505, y: 0, width: 575, height: 500), isOnScreen: true, isTileCandidate: true)
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let provider = SequenceSnapshotProvider(
+            displaySnapshots: [displaySnapshot],
+            windowSnapshots: [
+                [left, right],
+                [left, resizedRight],
+            ],
+            focusedID: right.id
+        )
+        let writer = RecordingWriter()
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-resize-command-intent-\(UUID().uuidString).json")
+            .path
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-resize-command-stages-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+        let stageStore = StageStore(path: stagePath)
+        let service = WindowCommandService(
+            service: SnapshotService(
+                provider: provider,
+                frameWriter: writer,
+                config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+                intentStore: intentStore,
+                stageStore: stageStore
+            )
+        )
+
+        let result = service.resize(.right)
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let intent = intentStore.intent(for: scope)
+
+        #expect(result.changed)
+        #expect(writer.requestedFrames[right.id] == Rect(x: 425, y: 0, width: 575, height: 500))
+        #expect(writer.requestedFrames[left.id] == Rect(x: 0, y: 0, width: 415, height: 500))
+        #expect(intent?.source == .command)
+        #expect(intent?.placements[right.id] == Rect(x: 425, y: 0, width: 575, height: 500))
+        try? FileManager.default.removeItem(atPath: intentPath)
+        try? FileManager.default.removeItem(atPath: stagePath)
     }
 
     @Test

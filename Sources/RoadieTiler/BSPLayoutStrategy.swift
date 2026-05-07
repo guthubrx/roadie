@@ -188,9 +188,12 @@ public struct BSPLayoutStrategy: LayoutStrategy {
     }
 
     private func isManagedSplit(leftFrame: CGRect, rightFrame: CGRect, rect: CGRect, horizontal: Bool) -> Bool {
+        let tolerance = CGFloat(12)
         if horizontal {
-            return leftFrame.minX.isClose(to: rect.minX) && rightFrame.maxX.isClose(to: rect.maxX)
+            return leftFrame.minX.isClose(to: rect.minX, tolerance: tolerance)
+                && rightFrame.maxX.isClose(to: rect.maxX, tolerance: tolerance)
         }
-        return leftFrame.minY.isClose(to: rect.minY) && rightFrame.maxY.isClose(to: rect.maxY)
+        return leftFrame.minY.isClose(to: rect.minY, tolerance: tolerance)
+            && rightFrame.maxY.isClose(to: rect.maxY, tolerance: tolerance)
     }
 }

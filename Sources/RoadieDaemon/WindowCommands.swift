@@ -117,17 +117,42 @@ public struct WindowCommandService {
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot) else {
+        guard let active = activeWindow(in: snapshot),
+              let scope = active.scope
+        else {
             return WindowCommandResult(message: "no active window", changed: false)
         }
         let frame = resizedFrame(active.window.frame.cgRect, direction: direction)
-        let result = service.apply(ApplyPlan(commands: [
+        service.removeLayoutIntent(scope: scope)
+        let resizeResult = service.apply(ApplyPlan(commands: [
             ApplyCommand(window: active.window, frame: Rect(frame)),
         ]))
+        guard resizeResult.attempted > 0 && resizeResult.failed < resizeResult.attempted else {
+            _ = service.focus(active.window)
+            return WindowCommandResult(
+                message: "resize \(direction.rawValue): attempted=\(resizeResult.attempted) applied=\(resizeResult.applied) clamped=\(resizeResult.clamped) failed=\(resizeResult.failed)",
+                changed: false
+            )
+        }
+
+        let actualFrame = resizeResult.items.first(where: { $0.windowID == active.window.id })?.actual ?? Rect(frame)
+        let updatedSnapshot = snapshotByUpdating(windowID: active.window.id, to: actualFrame, in: snapshot)
+        let plan = service.applyPlan(from: updatedSnapshot, priorityWindowIDs: [active.window.id])
+        let result = service.apply(plan)
+        if result.failed < result.attempted {
+            let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)
+            persistIntentAfterCommand(
+                from: updatedSnapshot,
+                scope: scope,
+                orderedWindowIDs: ordered,
+                plan: plan,
+                result: result
+            )
+        }
         _ = service.focus(active.window)
         return WindowCommandResult(
-            message: "resize \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: result.attempted > 0 && result.failed < result.attempted
+            message: "resize \(direction.rawValue): direct=\(resizeResult.applied + resizeResult.clamped) layout=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            changed: true
         )
     }
 
@@ -368,6 +393,20 @@ public struct WindowCommandService {
             windowIDs: orderedWindowIDs.sorted(),
             placements: placements,
             source: .command
+        )
+    }
+
+    private func snapshotByUpdating(windowID: WindowID, to frame: Rect, in snapshot: DaemonSnapshot) -> DaemonSnapshot {
+        DaemonSnapshot(
+            permissions: snapshot.permissions,
+            displays: snapshot.displays,
+            windows: snapshot.windows.map { entry in
+                guard entry.window.id == windowID else { return entry }
+                var window = entry.window
+                window.frame = frame
+                return ScopedWindowSnapshot(window: window, scope: entry.scope)
+            },
+            state: snapshot.state
         )
     }
 
