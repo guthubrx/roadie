@@ -211,6 +211,88 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func persistentActiveStageModeControlsApplyPlan() {
+        let display = DisplayID(rawValue: "display-a")
+        let windows = [
+            WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true),
+            WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 100, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true),
+            WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "three", frame: Rect(x: 200, y: 0, width: 100, height: 100), isOnScreen: true, isTileCandidate: true),
+        ]
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-mode-stages-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display,
+                stages: [PersistentStage(id: StageID(rawValue: "1"), mode: .masterStack)]
+            ),
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: windows
+            ),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let commands = service.applyPlan(from: snapshot).commands
+
+        #expect(snapshot.state.stage(scope: scope)?.mode == .masterStack)
+        #expect(commands.map(\.window.id) == windows.map(\.id))
+        #expect(commands[0].frame == Rect(x: 0, y: 0, width: 100, height: 500))
+        #expect(commands[1].frame == Rect(x: 110, y: 0, width: 890, height: 245))
+        #expect(commands[2].frame == Rect(x: 110, y: 255, width: 890, height: 245))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func floatStageModeDoesNotReplaySavedTilingIntent() {
+        let display = DisplayID(rawValue: "display-a")
+        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
+        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 300, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-float-stages-\(UUID().uuidString).json")
+            .path
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-float-intent-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let intentStore = LayoutIntentStore(path: intentPath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display,
+                stages: [PersistentStage(id: scope.stageID, mode: .float)]
+            ),
+        ]))
+        intentStore.save(LayoutIntent(scope: scope, windowIDs: [first.id, second.id], placements: [
+            first.id: Rect(x: 0, y: 0, width: 495, height: 500),
+            second.id: Rect(x: 505, y: 0, width: 495, height: 500),
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [first, second]
+            ),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore,
+            stageStore: stageStore
+        )
+
+        #expect(service.applyPlan(from: service.snapshot()).commands.isEmpty)
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
     func bspUsesSpatialOrderAfterManualReposition() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(

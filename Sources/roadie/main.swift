@@ -16,10 +16,12 @@ func printUsage() {
       roadie config show
       roadie permissions [--prompt]
       roadie focus|move|warp|wrap|resize left|right|up|down
+      roadie mode bsp|masterStack|float
       roadie window display N
       roadie window reset
       roadie desktop focus N|prev|next|last
       roadie stage switch|assign N
+      roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
       roadie daemon restart
@@ -134,6 +136,8 @@ case "resize":
     runDirectionalCommand(args.dropFirst().first, verb: "resize") {
         WindowCommandService(service: service).resize($0)
     }
+case "mode":
+    runModeCommand(args.dropFirst().first)
 case "window":
     runWindowCommand(Array(args.dropFirst()))
 case "desktop":
@@ -213,6 +217,8 @@ func runWindowCommand(_ args: [String]) {
 @MainActor
 func runStageCommand(_ args: [String]) {
     switch args.first {
+    case "mode":
+        runModeCommand(args.dropFirst().first)
     case "switch":
         guard let stageID = args.dropFirst().first else {
             fputs("roadie: stage switch requires a stage id\n", stderr)
@@ -245,6 +251,17 @@ func runStageCommand(_ args: [String]) {
         printUsage()
         exit(64)
     }
+}
+
+@MainActor
+func runModeCommand(_ rawMode: String?) {
+    guard let rawMode, let mode = WindowManagementMode(roadieValue: rawMode) else {
+        fputs("roadie: mode requires bsp|masterStack|float\n", stderr)
+        exit(64)
+    }
+    let result = StageCommandService(service: service).setMode(mode)
+    print(result.message)
+    exit(result.changed ? 0 : 1)
 }
 
 @MainActor

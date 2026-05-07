@@ -115,6 +115,12 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         ))
     }
 
+    public mutating func setMode(_ mode: WindowManagementMode, for stageID: StageID) {
+        ensureStage(stageID)
+        guard let index = stages.firstIndex(where: { $0.id == stageID }) else { return }
+        stages[index].mode = mode
+    }
+
     public mutating func remove(windowID: WindowID) {
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == windowID }
@@ -144,12 +150,34 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
 public struct PersistentStage: Equatable, Codable, Sendable {
     public var id: StageID
     public var name: String
+    public var mode: WindowManagementMode
     public var members: [PersistentStageMember]
 
-    public init(id: StageID, name: String? = nil, members: [PersistentStageMember] = []) {
+    public init(
+        id: StageID,
+        name: String? = nil,
+        mode: WindowManagementMode = .bsp,
+        members: [PersistentStageMember] = []
+    ) {
         self.id = id
         self.name = name ?? "Stage \(id.rawValue)"
+        self.mode = mode
         self.members = members
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case mode
+        case members
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(StageID.self, forKey: .id)
+        self.name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Stage \(id.rawValue)"
+        self.mode = try c.decodeIfPresent(WindowManagementMode.self, forKey: .mode) ?? .bsp
+        self.members = try c.decodeIfPresent([PersistentStageMember].self, forKey: .members) ?? []
     }
 }
 

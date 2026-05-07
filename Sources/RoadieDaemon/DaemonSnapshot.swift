@@ -69,9 +69,11 @@ public struct SnapshotService {
         for display in displays {
             state.ensureDisplay(display.id)
             let persistentScope = persistedStages.scope(displayID: display.id)
+            let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
             try? state.createStage(
                 id: persistentScope.activeStageID,
                 name: "Stage \(persistentScope.activeStageID.rawValue)",
+                mode: activePersistentStage?.mode ?? .bsp,
                 in: display.id,
                 desktopID: DesktopID(rawValue: 1)
             )
@@ -103,7 +105,18 @@ public struct SnapshotService {
                 desktopID: DesktopID(rawValue: 1),
                 stageID: knownScope?.stageID ?? persistedStages.scope(displayID: displayID).activeStageID
             )
-            try? state.createStage(id: scope.stageID, name: "Stage \(scope.stageID.rawValue)", in: scope.displayID, desktopID: scope.desktopID)
+            let persistedStage = persistedStages.scopes
+                .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages
+                .first { $0.id == scope.stageID }
+            try? state.createStage(
+                id: scope.stageID,
+                name: "Stage \(scope.stageID.rawValue)",
+                mode: persistedStage?.mode ?? config.tiling.defaultStrategy,
+                in: scope.displayID,
+                desktopID: scope.desktopID
+            )
+            try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             try? state.assignWindow(window.id, to: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
@@ -199,8 +212,9 @@ public extension SnapshotService {
         for display in snapshot.displays {
             guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
 
-            let effectiveMode = mode ?? config.tiling.defaultStrategy
-            if let intent = validIntent(for: scope, from: snapshot) {
+            guard let stage = snapshot.state.stage(scope: scope) else { continue }
+            let effectiveMode = mode ?? stage.mode
+            if effectiveMode != .float, let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
@@ -229,7 +243,7 @@ public extension SnapshotService {
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
-        let effectiveMode = mode ?? config.tiling.defaultStrategy
+        let effectiveMode = mode ?? stage.mode
         guard effectiveMode == .bsp else { return stage.windowIDs }
 
         return spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
@@ -324,7 +338,7 @@ public extension SnapshotService {
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
-        let effectiveMode = mode ?? config.tiling.defaultStrategy
+        let effectiveMode = mode ?? stage.mode
         let plan = LayoutPlanner.plan(LayoutRequest(
             scope: scope,
             mode: effectiveMode,
