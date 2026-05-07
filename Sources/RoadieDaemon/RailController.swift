@@ -417,11 +417,11 @@ private final class StageCardView: NSControl {
     }
 
     private var upRect: CGRect {
-        CGRect(x: bounds.maxX - 78, y: bounds.maxY - 39, width: 30, height: 28)
+        CGRect(x: bounds.maxX - 54, y: bounds.maxY - 39, width: 32, height: 28)
     }
 
     private var downRect: CGRect {
-        CGRect(x: bounds.maxX - 116, y: bounds.maxY - 39, width: 30, height: 28)
+        CGRect(x: bounds.maxX - 98, y: bounds.maxY - 39, width: 32, height: 28)
     }
 
     private var upHitRect: CGRect {
@@ -433,8 +433,8 @@ private final class StageCardView: NSControl {
     }
 
     private func drawControls() {
-        drawControl("↓", in: downRect, enabled: position < stageCount)
-        drawControl("↑", in: upRect, enabled: position > 1)
+        drawControl("S↓", in: downRect, enabled: position < stageCount)
+        drawControl("S↑", in: upRect, enabled: position > 1)
     }
 
     private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
@@ -443,9 +443,10 @@ private final class StageCardView: NSControl {
             radius: 8,
             color: NSColor.white.withAlphaComponent(enabled ? (isActive ? 0.18 : 0.12) : 0.05)
         )
-        label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 5 : 3), withAttributes: [
+        let fontSize = label.count > 1 ? 11.0 : (rect.height > 24 ? 14.0 : 12.0)
+        label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 6 : 3), withAttributes: [
             .foregroundColor: NSColor.white.withAlphaComponent(enabled ? 0.82 : 0.22),
-            .font: NSFont.systemFont(ofSize: rect.height > 24 ? 14 : 12, weight: .bold),
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
         ])
     }
 
@@ -591,10 +592,10 @@ private final class StageCardView: NSControl {
     private func drawWindowControls(in rect: CGRect, index: Int) {
         guard stage.members[safe: index] != nil else { return }
         if let previousStageID {
-            drawControl("↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
+            drawControl("W↑", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
         }
         if let nextStageID {
-            drawControl("↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
+            drawControl("W↓", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
         }
         if !isActive {
             drawControl("→", in: summonWindowRect(in: rect), enabled: true)
@@ -603,7 +604,7 @@ private final class StageCardView: NSControl {
 
     private func windowAction(at point: CGPoint) -> RailAction? {
         for item in hitPreviewItems().reversed() {
-            guard let member = stage.members[safe: item.index], item.rect.contains(point) else { continue }
+            guard let member = stage.members[safe: item.index] else { continue }
             if !isActive, summonWindowHitRect(in: item.rect).contains(point) {
                 return .summonWindow(member.windowID)
             }
@@ -651,27 +652,27 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 8, y: rect.maxY - 31, width: 28, height: 26)
+        CGRect(x: rect.maxX + 8, y: rect.maxY - 28, width: 32, height: 26)
     }
 
     private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 8, y: rect.minY + 6, width: 28, height: 26)
+        CGRect(x: rect.maxX + 8, y: rect.maxY - 62, width: 32, height: 26)
     }
 
     private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.maxX - 38, y: rect.midY - 13, width: 30, height: 26)
+        CGRect(x: rect.maxX + 8, y: rect.maxY - 96, width: 32, height: 26)
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
-        previousWindowRect(in: rect).insetBy(dx: -8, dy: -8)
+        previousWindowRect(in: rect).insetBy(dx: -6, dy: -6)
     }
 
     private func nextWindowHitRect(in rect: CGRect) -> CGRect {
-        nextWindowRect(in: rect).insetBy(dx: -8, dy: -8)
+        nextWindowRect(in: rect).insetBy(dx: -6, dy: -6)
     }
 
     private func summonWindowHitRect(in rect: CGRect) -> CGRect {
-        summonWindowRect(in: rect).insetBy(dx: -8, dy: -8)
+        summonWindowRect(in: rect).insetBy(dx: -6, dy: -6)
     }
 
     private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {
