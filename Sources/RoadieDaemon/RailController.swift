@@ -8,6 +8,7 @@ public final class RailController {
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
     private let events = EventLog()
+    private let thumbnails = WindowThumbnailStore()
     private var panels: [DisplayID: RailPanel] = [:]
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
@@ -103,6 +104,9 @@ public final class RailController {
         _ = snapshotService.snapshot()
         let state = store.state()
         let config = RailVisualConfig.load()
+        thumbnails.prune(keeping: Set(state.scopes.flatMap { scope in
+            scope.stages.flatMap { stage in stage.members.map(\.windowID) }
+        }))
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
         })
@@ -113,7 +117,7 @@ public final class RailController {
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
             panel.position(on: screen)
-            panel.render(scope: scope, displayName: screen.localizedName, config: config)
+            panel.render(scope: scope, displayName: screen.localizedName, config: config, thumbnails: thumbnails)
             if panels[displayID] == nil {
                 panels[displayID] = panel
                 panel.makeKey()
@@ -180,7 +184,7 @@ private final class RailPanel: NSPanel {
         )
     }
 
-    func render(scope: PersistentStageScope, displayName: String, config: RailVisualConfig) {
+    func render(scope: PersistentStageScope, displayName: String, config: RailVisualConfig, thumbnails: WindowThumbnailStore) {
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -195,6 +199,7 @@ private final class RailPanel: NSPanel {
                 isActive: id == scope.activeStageID,
                 mode: config.mode,
                 accent: config.accent(for: id),
+                thumbnails: thumbnails.images(for: stage.members),
                 position: index + 1,
                 stageCount: ids.count,
                 previousStageID: index > 0 ? ids[index - 1] : nil,
@@ -225,6 +230,41 @@ private final class RailPanel: NSPanel {
             ids.append(id)
         }
         return ids
+    }
+}
+
+@MainActor
+private final class WindowThumbnailStore {
+    private var images: [WindowID: NSImage] = [:]
+
+    func images(for members: [PersistentStageMember]) -> [WindowID: NSImage] {
+        Dictionary(uniqueKeysWithValues: members.compactMap { member in
+            guard let image = image(for: member) else { return nil }
+            return (member.windowID, image)
+        })
+    }
+
+    func prune(keeping liveIDs: Set<WindowID>) {
+        images = images.filter { liveIDs.contains($0.key) }
+    }
+
+    private func image(for member: PersistentStageMember) -> NSImage? {
+        if let cached = images[member.windowID] {
+            return cached
+        }
+        guard let cgImage = CGWindowListCreateImage(
+            .null,
+            .optionIncludingWindow,
+            CGWindowID(member.windowID.rawValue),
+            [.boundsIgnoreFraming, .bestResolution]
+        ),
+              !cgImage.looksBlank
+        else {
+            return nil
+        }
+        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        images[member.windowID] = image
+        return image
     }
 }
 
@@ -331,6 +371,7 @@ private final class StageCardView: NSControl {
     private let isActive: Bool
     private let mode: RailRenderMode
     private let accent: NSColor
+    private let thumbnails: [WindowID: NSImage]
     private let position: Int
     private let stageCount: Int
     private let previousStageID: StageID?
@@ -345,6 +386,7 @@ private final class StageCardView: NSControl {
         isActive: Bool,
         mode: RailRenderMode,
         accent: NSColor,
+        thumbnails: [WindowID: NSImage],
         position: Int,
         stageCount: Int,
         previousStageID: StageID?,
@@ -355,6 +397,7 @@ private final class StageCardView: NSControl {
         self.isActive = isActive
         self.mode = mode
         self.accent = accent
+        self.thumbnails = thumbnails
         self.position = position
         self.stageCount = stageCount
         self.previousStageID = previousStageID
@@ -571,8 +614,15 @@ private final class StageCardView: NSControl {
     private func drawPreview(_ rect: CGRect, index: Int, skewed: Bool = false) {
         guard !rect.isEmpty else { return }
         let path = NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12)
-        color(for: stage.members[safe: index], index: index).setFill()
-        path.fill()
+        if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: isActive ? 0.92 : 0.76)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            color(for: stage.members[safe: index], index: index).setFill()
+            path.fill()
+        }
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
         path.lineWidth = 1
         path.stroke()
@@ -694,6 +744,35 @@ private final class StageCardView: NSControl {
     private func iconLetter(for member: PersistentStageMember) -> String {
         let source = member.bundleID.split(separator: ".").last.map(String.init) ?? member.title
         return String(source.prefix(1)).uppercased()
+    }
+}
+
+private extension CGImage {
+    var looksBlank: Bool {
+        guard width > 0, height > 0,
+              let provider = dataProvider,
+              let data = provider.data,
+              let bytes = CFDataGetBytePtr(data)
+        else { return true }
+        let length = CFDataGetLength(data)
+        guard length > 0 else { return true }
+
+        let stride = max(1, length / 512)
+        var darkSamples = 0
+        var totalSamples = 0
+        var previous: UInt8?
+        var changes = 0
+        var index = 0
+        while index < length {
+            let value = bytes[index]
+            if value < 8 { darkSamples += 1 }
+            if let previous, abs(Int(previous) - Int(value)) > 6 { changes += 1 }
+            previous = value
+            totalSamples += 1
+            index += stride
+        }
+        guard totalSamples > 0 else { return true }
+        return Double(darkSamples) / Double(totalSamples) > 0.96 && changes < 4
     }
 }
 
