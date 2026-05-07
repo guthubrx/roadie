@@ -63,6 +63,7 @@ public struct SnapshotService {
         let windows = provider.windows()
         var persistedStages = stageStore.state()
         let liveDisplayIDs = Set(displays.map(\.id))
+        intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
         if let activeDisplayID = persistedStages.activeDisplayID,
            !liveDisplayIDs.contains(activeDisplayID) {
             persistedStages.activeDisplayID = displays.first?.id
@@ -425,9 +426,18 @@ public extension SnapshotService {
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
+        guard framesHaveReasonableTileSizes(frames, in: container) else { return false }
 
         let intentArea = frames.reduce(CGFloat(0)) { $0 + $1.area }
         return intentArea >= targetArea * 0.95
+    }
+
+    private func framesHaveReasonableTileSizes(_ frames: [CGRect], in container: CGRect) -> Bool {
+        guard frames.count > 1 else { return true }
+        let minimumSide = max(120, min(container.width, container.height) * 0.18)
+        return frames.allSatisfy { frame in
+            frame.width >= minimumSide && frame.height >= minimumSide
+        }
     }
 
     private func hasCommandIntentShape(
