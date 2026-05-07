@@ -24,6 +24,9 @@ state:
 config:
 	./scripts/roadie config show
 
+config-validate:
+	./scripts/roadie config validate
+
 plan:
 	./scripts/roadie layout plan
 

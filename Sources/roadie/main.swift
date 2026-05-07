@@ -14,7 +14,7 @@ func printUsage() {
       roadie state dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
-      roadie config show
+      roadie config show|validate
       roadie doctor
       roadie self-test
       roadie events tail [N]
@@ -146,9 +146,15 @@ case "events":
     let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
     print(EventLog().tail(limit: limit).joined(separator: "\n"))
 case "config":
-    guard args.dropFirst().first == "show" else {
+    let verb = args.dropFirst().first
+    guard verb == "show" || verb == "validate" else {
         printUsage()
         exit(64)
+    }
+    if verb == "validate" {
+        let report = RoadieConfigLoader.validate()
+        print(TextFormatter.configValidation(report))
+        exit(report.hasErrors ? 1 : 0)
     }
     do {
         let config = try RoadieConfigLoader.load()
