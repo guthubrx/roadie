@@ -515,11 +515,11 @@ private final class StageCardView: NSControl {
         drawControls()
         switch config.mode {
         case .stacked:
-            drawStacked(in: previewArea(in: rect))
+            drawStacked(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
         case .mosaic:
-            drawMosaic(in: previewArea(in: rect))
+            drawMosaic(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
         case .parallax:
-            drawParallax(in: previewArea(in: rect))
+            drawParallax(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
@@ -655,11 +655,24 @@ private final class StageCardView: NSControl {
         rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(0.10))
     }
 
-    private func previewArea(in rect: CGRect) -> CGRect {
+    private var visiblePreviewCount: Int {
+        min(stage.members.count, 5)
+    }
+
+    private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
         let width = min(config.previewWidth, rect.width - config.leadingPadding - config.trailingPadding)
         let height = min(config.previewHeight, rect.height - config.verticalPadding - 28)
+        let leftCompensation: CGFloat
+        switch config.mode {
+        case .parallax:
+            leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.parallaxOffsetX
+        case .stacked:
+            leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.stackedOffsetX * 0.18
+        case .mosaic, .icons:
+            leftCompensation = 0
+        }
         return CGRect(
-            x: rect.minX + rect.width - width - config.trailingPadding,
+            x: rect.minX + config.leadingPadding + leftCompensation,
             y: rect.minY + config.verticalPadding,
             width: width,
             height: height
@@ -766,7 +779,7 @@ private final class StageCardView: NSControl {
 
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
         let cardRect = bounds.insetBy(dx: 12, dy: 12)
-        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect)
+        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
         switch config.mode {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
