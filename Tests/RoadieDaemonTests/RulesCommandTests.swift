@@ -71,6 +71,6 @@ struct RulesCommandTests {
     }
 }
 
-private func fixturePath() throws -> String {
+func fixturePath() throws -> String {
     try #require(Bundle.module.url(forResource: "Spec002Rules", withExtension: "toml")).path
 }
