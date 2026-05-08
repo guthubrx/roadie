@@ -29,7 +29,7 @@
 
 **Critical**: Aucun scénario utilisateur ne doit commencer avant la fin de cette phase.
 
-- [ ] T008 Créer le modèle versionné `RoadieEventEnvelope` dans `Sources/RoadieCore/AutomationEvent.swift`
+- [X] T008 Créer le modèle versionné `RoadieEventEnvelope` dans `Sources/RoadieCore/AutomationEvent.swift`
 - [ ] T009 Créer les types `AutomationSubject`, `AutomationScope`, `AutomationCause` et `AutomationPayload` dans `Sources/RoadieCore/AutomationEvent.swift`
 - [ ] T010 [P] Créer le modèle `RoadieStateSnapshot` dans `Sources/RoadieCore/AutomationSnapshot.swift`
 - [ ] T011 [P] Créer le modèle `LayoutCommandIntent` dans `Sources/RoadieCore/LayoutCommandIntent.swift`

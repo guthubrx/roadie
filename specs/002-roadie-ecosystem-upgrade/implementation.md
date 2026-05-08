@@ -102,7 +102,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T007 : Déclaration des fixtures dans Package.swift
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `3a7fe41` - test(002): Register daemon fixtures
 - **Fichiers modifiés** :
   - `Package.swift` (ressources `Fixtures` pour `RoadieDaemonTests`)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T007 cochée)
@@ -111,3 +111,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : réservé à la phase fondation
 - **Notes** : Les fixtures JSONL/JSON/TOML sont maintenant déclarées comme ressources SwiftPM du target de test.
+
+### T008 : Modèle RoadieEventEnvelope
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/AutomationEvent.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T008 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec T014/T016
+- **Notes** : Enveloppe versionnée créée avec champs contractuels. Les types dédiés scope/subject/cause/payload seront enrichis dans T009.
