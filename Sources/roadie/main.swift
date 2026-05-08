@@ -20,7 +20,7 @@ func printUsage() {
       roadie doctor
       roadie self-test
       roadie events tail [N]
-      roadie events subscribe
+      roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
@@ -516,13 +516,22 @@ func runStageCommand(_ args: [String]) {
     }
 }
 
+@MainActor
 func runEventSubscription(_ args: [String]) -> Never {
+    let options = parseEventSubscriptionOptions(args)
     let subscription = EventSubscriptionService()
-    var cursor = subscription.start()
+    var cursor = subscription.start(options: options)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
+    for event in subscription.initialEvents(snapshot: service.snapshot().automationSnapshot(), options: options) {
+        if let data = try? encoder.encode(event),
+           let line = String(data: data, encoding: .utf8) {
+            print(line)
+        }
+    }
+    fflush(stdout)
     while true {
-        let result = subscription.readAvailable(from: cursor)
+        let result = subscription.readAvailable(from: cursor, options: options)
         cursor = result.cursor
         for event in result.events {
             if let data = try? encoder.encode(event),
@@ -533,6 +542,42 @@ func runEventSubscription(_ args: [String]) -> Never {
         fflush(stdout)
         Thread.sleep(forTimeInterval: 0.2)
     }
+}
+
+func parseEventSubscriptionOptions(_ args: [String]) -> EventSubscriptionOptions {
+    var fromNow = false
+    var initialState = false
+    var types = Set<String>()
+    var scopes = Set<AutomationScope>()
+    var index = 0
+    while index < args.count {
+        switch args[index] {
+        case "--from-now":
+            fromNow = true
+            index += 1
+        case "--initial-state":
+            initialState = true
+            index += 1
+        case "--type":
+            guard args.indices.contains(index + 1) else {
+                fputs("roadie: events subscribe --type requires a value\n", stderr)
+                exit(64)
+            }
+            types.insert(args[index + 1])
+            index += 2
+        case "--scope":
+            guard args.indices.contains(index + 1) else {
+                fputs("roadie: events subscribe --scope requires a value\n", stderr)
+                exit(64)
+            }
+            scopes.insert(AutomationScope(rawValue: args[index + 1]))
+            index += 2
+        case let unknown:
+            fputs("roadie: unknown events subscribe option \(unknown)\n", stderr)
+            exit(64)
+        }
+    }
+    return EventSubscriptionOptions(fromNow: fromNow, initialState: initialState, types: types, scopes: scopes)
 }
 
 @MainActor

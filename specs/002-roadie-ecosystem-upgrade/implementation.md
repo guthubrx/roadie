@@ -331,7 +331,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T025 : Commande roadie events subscribe
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `5ddb6a1` - feat(002): Add events subscribe command
 - **Fichiers modifiés** :
   - `Sources/roadie/main.swift` (commande `events subscribe`)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T025 cochée)
@@ -339,3 +339,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift build`
 - **Notes** : La commande suit le journal JSONL et écrit les enveloppes sur stdout jusqu'à interruption utilisateur.
+
+### T026 : Options de subscription CLI
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/roadie/main.swift` (parsing options subscription)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T026 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+- **Notes** : `events subscribe` supporte `--from-now`, `--initial-state`, `--type` et `--scope`.
