@@ -306,7 +306,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T023 : AutomationSnapshotService
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `3e9fc18` - feat(002): Add automation snapshot service
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/AutomationSnapshotService.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T023 cochée)
@@ -315,3 +315,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : couverture dédiée prévue par les tests de snapshot/query ultérieurs
 - **Notes** : Le service projette `DaemonSnapshot` vers `RoadieStateSnapshot` avec displays, desktops, stages et windows.
+
+### T024 : Projection automation depuis DaemonSnapshot
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/DaemonSnapshot.swift` (extension `automationSnapshot`)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T024 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+- **Notes** : Les futurs endpoints CLI peuvent obtenir un `RoadieStateSnapshot` directement depuis un `DaemonSnapshot`.
