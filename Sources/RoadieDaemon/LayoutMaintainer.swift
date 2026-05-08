@@ -34,6 +34,7 @@ public final class LayoutMaintainer {
     private let commandIntentHoldSeconds: TimeInterval
     private let manualResizeDebounceSeconds: TimeInterval
     private let now: () -> Date
+    private let ruleEngine: WindowRuleEngine?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
@@ -44,6 +45,7 @@ public final class LayoutMaintainer {
         service: SnapshotService = SnapshotService(),
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
+        ruleEngine: WindowRuleEngine? = LayoutMaintainer.defaultRuleEngine(),
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
@@ -51,6 +53,7 @@ public final class LayoutMaintainer {
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
+        self.ruleEngine = ruleEngine
         self.now = now
     }
 
@@ -59,6 +62,7 @@ public final class LayoutMaintainer {
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
+        evaluateRules(in: snapshot)
 
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
         if hiddenInactive > 0 {
@@ -188,6 +192,114 @@ public final class LayoutMaintainer {
             ticks += 1
             Thread.sleep(forTimeInterval: intervalSeconds)
         }
+    }
+
+    public static func defaultRuleEngine() -> WindowRuleEngine? {
+        guard let config = try? RoadieConfigLoader.load(), !config.rules.isEmpty else {
+            return nil
+        }
+        return WindowRuleEngine(rules: config.rules)
+    }
+
+    private func evaluateRules(in snapshot: DaemonSnapshot) {
+        guard let ruleEngine else { return }
+        guard ruleEngine.validationErrors.isEmpty else {
+            appendRuleFailedEvents(ruleEngine.validationErrors)
+            return
+        }
+        for entry in snapshot.windows where entry.window.isOnScreen {
+            let context = WindowRuleMatchContext(
+                display: entry.scope?.displayID.rawValue,
+                desktop: entry.scope.map { String($0.desktopID.rawValue) },
+                stage: entry.scope?.stageID.rawValue
+            )
+            let application = ruleEngine.evaluate(window: entry.window, context: context)
+            appendRuleEvents(application, window: entry.window)
+        }
+    }
+
+    private func appendRuleFailedEvents(_ validationErrors: [ConfigValidationItem]) {
+        for item in validationErrors {
+            events.append(RoadieEventEnvelope(
+                id: "rule_\(UUID().uuidString)",
+                type: "rule.failed",
+                scope: .rule,
+                subject: AutomationSubject(kind: "config", id: "rules"),
+                cause: .system,
+                payload: [
+                    "path": .string(item.path),
+                    "message": .string(item.message)
+                ]
+            ))
+        }
+    }
+
+    private func appendRuleEvents(_ application: WindowRuleApplication, window: WindowSnapshot) {
+        guard !application.evaluations.isEmpty else { return }
+        let subject = AutomationSubject(kind: "window", id: String(window.id.rawValue))
+        let basePayload: [String: AutomationPayload] = [
+            "windowID": .string(String(window.id.rawValue)),
+            "app": .string(window.appName),
+            "title": .string(window.title)
+        ]
+
+        guard let matchedRuleID = application.matchedRuleID else {
+            events.append(RoadieEventEnvelope(
+                id: "rule_\(UUID().uuidString)",
+                type: "rule.skipped",
+                scope: .window,
+                subject: subject,
+                cause: .system,
+                payload: basePayload.merging([
+                    "reason": .string("no matching rule")
+                ]) { _, new in new }
+            ))
+            return
+        }
+
+        let matchedPayload = basePayload.merging([
+            "ruleID": .string(matchedRuleID)
+        ]) { _, new in new }
+        events.append(RoadieEventEnvelope(
+            id: "rule_\(UUID().uuidString)",
+            type: "rule.matched",
+            scope: .window,
+            subject: subject,
+            cause: .system,
+            payload: matchedPayload
+        ))
+        events.append(RoadieEventEnvelope(
+            id: "rule_\(UUID().uuidString)",
+            type: "rule.applied",
+            scope: .window,
+            subject: subject,
+            cause: .system,
+            payload: matchedPayload.merging(ruleActionPayload(application)) { _, new in new }
+        ))
+    }
+
+    private func ruleActionPayload(_ application: WindowRuleApplication) -> [String: AutomationPayload] {
+        var payload: [String: AutomationPayload] = [:]
+        payload["excluded"] = .bool(application.excluded)
+        if let assignDesktop = application.assignDesktop {
+            payload["assignDesktop"] = .string(assignDesktop)
+        }
+        if let assignStage = application.assignStage {
+            payload["assignStage"] = .string(assignStage)
+        }
+        if let floating = application.floating {
+            payload["floating"] = .bool(floating)
+        }
+        if let layout = application.layout {
+            payload["layout"] = .string(layout)
+        }
+        if let gapOverride = application.gapOverride {
+            payload["gapOverride"] = .int(gapOverride)
+        }
+        if let scratchpad = application.scratchpad {
+            payload["scratchpad"] = .string(scratchpad)
+        }
+        return payload
     }
 
     private func suppressKnownClamps(in plan: ApplyPlan) -> ApplyPlan {

@@ -78,6 +78,25 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Fournit des commandes CLI faciles à brancher dans BetterTouchTool, Karabiner, des scripts shell ou un launcher.
 - Persiste les stages et l’état du layout entre les redémarrages du daemon.
 - Expose des commandes d’état, santé, métriques, événements et audit pour diagnostiquer.
+- Publie des événements automation JSONL et des projections JSON stables via `roadie query ...`.
+- Supporte des rules TOML avec validation, explain et événements runtime `rule.*`.
+- Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
+- Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
+
+## Documentation
+
+La documentation complete existe en francais et en anglais :
+
+- [Documentation francaise](docs/fr/README.md)
+- [English documentation](docs/en/README.md)
+
+Guides principaux :
+
+- [Vue d'ensemble des fonctionnalites](docs/fr/features.md)
+- [Commandes CLI](docs/fr/cli.md)
+- [Configuration et rules](docs/fr/configuration-rules.md)
+- [Evenements et Query API](docs/fr/events-query.md)
+- [Cas d'usage](docs/fr/use-cases.md)
 
 ## Prérequis
 
@@ -201,6 +220,14 @@ Afficher la configuration chargée :
 ./bin/roadie config show
 ```
 
+Valider et inspecter les rules :
+
+```bash
+./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+./bin/roadie rules list --json
+./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
+```
+
 ## Usage Quotidien
 
 Démarrer ou redémarrer le daemon :
@@ -238,6 +265,7 @@ Déplacer le focus ou les fenêtres :
 ```bash
 ./bin/roadie focus left
 ./bin/roadie focus right
+./bin/roadie focus back-and-forth
 ./bin/roadie move left
 ./bin/roadie warp right
 ./bin/roadie resize left
@@ -271,6 +299,7 @@ Ramener dans la stage active une fenêtre d’une stage inactive :
 
 ```bash
 ./bin/roadie stage summon WINDOW_ID
+./bin/roadie stage move-to-display 2
 ```
 
 ## Desktops Roadie
@@ -284,7 +313,57 @@ Les desktops Roadie sont des desktops virtuels gérés par Roadie. Ils ne créen
 ./bin/roadie desktop focus next
 ./bin/roadie desktop focus prev
 ./bin/roadie desktop focus back
+./bin/roadie desktop back-and-forth
+./bin/roadie desktop summon 3
 ./bin/roadie desktop label 2 DeepWork
+```
+
+## Commandes Layout Power-User
+
+```bash
+./bin/roadie layout split horizontal
+./bin/roadie layout split vertical
+./bin/roadie layout insert right
+./bin/roadie layout join-with left
+./bin/roadie layout flatten
+./bin/roadie layout zoom-parent
+```
+
+Ces commandes persistent l'intention de layout quand c'est pertinent, pour eviter que le maintainer annule immediatement une structure manuelle volontaire.
+
+## Groupes De Fenetres
+
+```bash
+./bin/roadie group create terminals 12345 67890
+./bin/roadie group add terminals 11111
+./bin/roadie group focus terminals 67890
+./bin/roadie group remove terminals 12345
+./bin/roadie group dissolve terminals
+./bin/roadie group list
+```
+
+Les groupes sont persistés dans l'état des stages Roadie et exposes via `roadie query groups`.
+
+## Automation
+
+Suivre les evenements live :
+
+```bash
+./bin/roadie events subscribe --from-now --initial-state
+```
+
+Lire les projections JSON stables :
+
+```bash
+./bin/roadie query state
+./bin/roadie query windows
+./bin/roadie query displays
+./bin/roadie query desktops
+./bin/roadie query stages
+./bin/roadie query groups
+./bin/roadie query rules
+./bin/roadie query health
+./bin/roadie query events
 ```
 
 Envoyer la fenêtre active vers un autre desktop Roadie :

@@ -11,6 +11,7 @@ public struct RailSettings: Equatable, Sendable {
     public var animationMS: Double
     public var hideDelayMS: Double
     public var layoutMode: String
+    public var dynamicLeftGap: Bool
     public var emptyClickHideActive: Bool
     public var emptyClickSafetyMargin: Double
     public var preview: Preview
@@ -127,6 +128,7 @@ public struct RailSettings: Equatable, Sendable {
             animationMS: number(rail["animation_ms"], default: 160, min: 0, max: 1000),
             hideDelayMS: number(rail["hide_delay_ms"], default: 350, min: 0, max: 5000),
             layoutMode: normalizedLayoutMode(rail["layout_mode"]),
+            dynamicLeftGap: bool(rail["dynamic_left_gap"], default: false),
             emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
@@ -207,6 +209,7 @@ public struct RailSettings: Equatable, Sendable {
             "animation_ms=\(animationMS)",
             "hide_delay_ms=\(hideDelayMS)",
             "layout_mode=\(layoutMode)",
+            "dynamic_left_gap=\(dynamicLeftGap)",
             "empty_click_hide_active=\(emptyClickHideActive)",
             "empty_click_safety_margin=\(emptyClickSafetyMargin)",
             "preview.width=\(preview.width)",
@@ -271,6 +274,7 @@ public struct RailSettings: Equatable, Sendable {
         animationMS: 160,
         hideDelayMS: 350,
         layoutMode: "overlay",
+        dynamicLeftGap: false,
         emptyClickHideActive: true,
         emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),

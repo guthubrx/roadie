@@ -315,6 +315,52 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func applyPlanUsesCollapsedRailWidthWhenDynamicLeftGapIsEnabled() {
+        let display = DisplayID(rawValue: "display-a")
+        let first = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "one",
+            frame: Rect(x: 0, y: 0, width: 100, height: 100),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let second = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 11,
+            appName: "B",
+            bundleID: "b",
+            title: "two",
+            frame: Rect(x: 100, y: 0, width: 100, height: 100),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [first, second]
+            ),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 8, gapsOuterLeft: 150, gapsInner: 10)),
+            railSettings: RailSettings.load(raw: """
+            [fx.rail]
+            auto_hide = true
+            edge_hit_width = 8
+            dynamic_left_gap = true
+            """)
+        )
+
+        let plan = service.applyPlan(from: service.snapshot())
+
+        #expect(plan.commands.map(\.window.id) == [first.id, second.id])
+        #expect(plan.commands[0].frame == Rect(x: 8, y: 8, width: 487, height: 484))
+        #expect(plan.commands[1].frame == Rect(x: 505, y: 8, width: 487, height: 484))
+    }
+
+    @Test
     func applyPlanSkipsWindowsAlreadyAtTargetFrames() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(

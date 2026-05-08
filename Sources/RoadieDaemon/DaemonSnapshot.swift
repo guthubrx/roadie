@@ -26,6 +26,12 @@ public struct DaemonSnapshot: Equatable, Codable, Sendable {
     }
 }
 
+public extension DaemonSnapshot {
+    func automationSnapshot(generatedAt: Date = Date(), service: AutomationSnapshotService = AutomationSnapshotService()) -> RoadieStateSnapshot {
+        service.snapshot(from: self, generatedAt: generatedAt)
+    }
+}
+
 public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var scope: StageScope?
@@ -156,7 +162,9 @@ public struct SnapshotService {
                 desktopID: scope.desktopID
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
+            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             try? state.assignWindow(window.id, to: scope)
+            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
         var focusedID: WindowID?
@@ -738,7 +746,9 @@ private extension SnapshotService {
                     left = min(left, visibleWidth ?? railSettings.edgeHitWidth)
                 }
             default:
-                left = min(left, railSettings.edgeHitWidth)
+                if railSettings.dynamicLeftGap {
+                    left = min(left, railSettings.edgeHitWidth)
+                }
             }
         }
 

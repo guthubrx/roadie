@@ -1,10 +1,16 @@
 .DS_Store
+Thumbs.db
+*.tmp
+*.swp
 /.build
 /bin
 /dist
 /Packages
+*.swiftpm/
 xcuserdata/
 DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+.vscode/
+.idea/
 .netrc

@@ -78,6 +78,25 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Provides keyboard-friendly CLI commands for BetterTouchTool, Karabiner, shell scripts, or any launcher.
 - Persists stage membership and layout state across daemon restarts.
 - Exposes state, health, metrics, events, and audit commands for debugging.
+- Publishes JSONL automation events and stable `roadie query ...` JSON projections.
+- Supports TOML window rules with validation, explain, and runtime `rule.*` events.
+- Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
+- Persists and exposes window groups for stack/tab-like workflows.
+
+## Documentation
+
+Full documentation is available in English and French:
+
+- [English documentation](docs/en/README.md)
+- [Documentation francaise](docs/fr/README.md)
+
+Main guides:
+
+- [Feature overview](docs/en/features.md)
+- [CLI commands](docs/en/cli.md)
+- [Configuration and rules](docs/en/configuration-rules.md)
+- [Events and Query API](docs/en/events-query.md)
+- [Use cases](docs/en/use-cases.md)
 
 ## Requirements
 
@@ -201,6 +220,14 @@ Inspect the loaded configuration:
 ./bin/roadie config show
 ```
 
+Validate and inspect rules:
+
+```bash
+./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+./bin/roadie rules list --json
+./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
+```
+
 ## Daily Use
 
 Start or restart the daemon:
@@ -238,6 +265,7 @@ Move focus or windows:
 ```bash
 ./bin/roadie focus left
 ./bin/roadie focus right
+./bin/roadie focus back-and-forth
 ./bin/roadie move left
 ./bin/roadie warp right
 ./bin/roadie resize left
@@ -272,6 +300,7 @@ Bring an inactive-stage window back into the active stage:
 
 ```bash
 ./bin/roadie stage summon WINDOW_ID
+./bin/roadie stage move-to-display 2
 ```
 
 ## Roadie Desktops
@@ -285,7 +314,57 @@ Roadie desktops are virtual desktops managed by Roadie. They do not create, swit
 ./bin/roadie desktop focus next
 ./bin/roadie desktop focus prev
 ./bin/roadie desktop focus back
+./bin/roadie desktop back-and-forth
+./bin/roadie desktop summon 3
 ./bin/roadie desktop label 2 DeepWork
+```
+
+## Power-User Layout Commands
+
+```bash
+./bin/roadie layout split horizontal
+./bin/roadie layout split vertical
+./bin/roadie layout insert right
+./bin/roadie layout join-with left
+./bin/roadie layout flatten
+./bin/roadie layout zoom-parent
+```
+
+These commands persist layout intent where applicable, so the maintainer does not immediately undo deliberate manual structure.
+
+## Window Groups
+
+```bash
+./bin/roadie group create terminals 12345 67890
+./bin/roadie group add terminals 11111
+./bin/roadie group focus terminals 67890
+./bin/roadie group remove terminals 12345
+./bin/roadie group dissolve terminals
+./bin/roadie group list
+```
+
+Groups are persisted in Roadie's stage state and exposed through `roadie query groups`.
+
+## Automation
+
+Subscribe to live events:
+
+```bash
+./bin/roadie events subscribe --from-now --initial-state
+```
+
+Read stable JSON projections:
+
+```bash
+./bin/roadie query state
+./bin/roadie query windows
+./bin/roadie query displays
+./bin/roadie query desktops
+./bin/roadie query stages
+./bin/roadie query groups
+./bin/roadie query rules
+./bin/roadie query health
+./bin/roadie query events
 ```
 
 Move the focused window to another Roadie desktop:

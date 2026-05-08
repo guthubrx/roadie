@@ -1,4 +1,5 @@
 import Foundation
+import RoadieAX
 import RoadieCore
 import RoadieDaemon
 
@@ -15,21 +16,30 @@ func printUsage() {
       roadie tree dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
+      roadie layout split horizontal|vertical
+      roadie layout join-with|insert left|right|up|down
+      roadie layout flatten|zoom-parent
       roadie config show|validate
+      roadie rules validate|list|explain [--json] [--config PATH]
+      roadie group create|add|remove|focus|dissolve|list ...
+      roadie query state|windows|displays|desktops|stages|groups|rules|health|events
       roadie rail status
       roadie doctor
       roadie self-test
       roadie events tail [N]
+      roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
-      roadie focus|move|warp|wrap|resize left|right|up|down
+      roadie focus back-and-forth|left|right|up|down
+      roadie move|warp|wrap|resize left|right|up|down
       roadie mode bsp|masterStack|float
       roadie window display N
       roadie window desktop N [--follow]
       roadie window reset
       roadie desktop list|current
-      roadie desktop focus N|prev|next|last|back
+      roadie desktop focus N|prev|next|last|back|back-and-forth
+      roadie desktop summon N
       roadie desktop label N NAME
       roadie stage list
       roadie stage create|delete N
@@ -37,6 +47,7 @@ func printUsage() {
       roadie stage reorder N POSITION
       roadie stage switch|assign N
       roadie stage summon WINDOW_ID
+      roadie stage move-to-display N
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
@@ -166,6 +177,34 @@ case "layout":
         } else {
             print(TextFormatter.applyResult(result))
         }
+    case "flatten":
+        let result = LayoutCommandService(service: service).flatten()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "split":
+        let result = LayoutCommandService(service: service).split(args.dropFirst(2).first ?? "")
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "insert":
+        guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
+            fputs("roadie: layout insert requires left|right|up|down\n", stderr)
+            exit(64)
+        }
+        let result = LayoutCommandService(service: service).insert(direction)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "join-with":
+        guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
+            fputs("roadie: layout join-with requires left|right|up|down\n", stderr)
+            exit(64)
+        }
+        let result = LayoutCommandService(service: service).join(with: direction)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "zoom-parent":
+        let result = LayoutCommandService(service: service).zoomParent()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -198,12 +237,17 @@ case "self-test":
     print(TextFormatter.selfTest(report))
     exit(report.failed ? 1 : 0)
 case "events":
-    guard args.dropFirst().first == "tail" else {
+    let verb = args.dropFirst().first
+    guard verb == "tail" || verb == "subscribe" else {
         printUsage()
         exit(64)
     }
-    let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
-    print(EventLog().tail(limit: limit).joined(separator: "\n"))
+    if verb == "tail" {
+        let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
+        print(EventLog().tail(limit: limit).joined(separator: "\n"))
+    } else {
+        runEventSubscription(Array(args.dropFirst(2)))
+    }
 case "metrics":
     let metrics = MetricsService(service: service).collect()
     if args.contains("--json") {
@@ -236,6 +280,12 @@ case "config":
         fputs("roadie: config load failed: \(error)\n", stderr)
         exit(1)
     }
+case "rules":
+    runRulesCommand(Array(args.dropFirst()))
+case "group":
+    runGroupCommand(Array(args.dropFirst()))
+case "query":
+    runQueryCommand(Array(args.dropFirst()))
 case "rail":
     guard args.dropFirst().first == "status" else {
         printUsage()
@@ -246,6 +296,10 @@ case "focus":
     if args.dropFirst().first == "status" {
         print(TextFormatter.focusStatus(service.snapshot()))
         exit(0)
+    } else if args.dropFirst().first == "back-and-forth" {
+        let result = WindowCommandService(service: service).focusBackAndForth()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     } else {
         runDirectionalCommand(args.dropFirst().first, verb: "focus") {
             WindowCommandService(service: service).focus($0)
@@ -321,6 +375,17 @@ case "toggle":
 default:
     printUsage()
     exit(args.isEmpty ? 0 : 64)
+}
+
+func printCodableJSON<T: Encodable>(_ value: T) {
+    do {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        print(String(decoding: try encoder.encode(value), as: UTF8.self))
+    } catch {
+        fputs("roadie: failed to encode JSON: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 @MainActor
@@ -418,6 +483,18 @@ func runDesktopCommand(_ args: [String]) {
         let result = DesktopCommandService(service: service).last()
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "back-and-forth":
+        let result = DesktopCommandService(service: service).backAndForth()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "summon":
+        guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
+            fputs("roadie: desktop summon requires a positive id\n", stderr)
+            exit(64)
+        }
+        let result = DesktopCommandService(service: service).summon(DesktopID(rawValue: id))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -501,6 +578,14 @@ func runStageCommand(_ args: [String]) {
         let result = StageCommandService(service: service).summon(windowID: WindowID(rawValue: id), displayID: activeDisplayID)
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "move-to-display":
+        guard let rawIndex = args.dropFirst().first, let index = Int(rawIndex), index > 0 else {
+            fputs("roadie: stage move-to-display requires a positive display index\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).moveActiveStageToDisplay(index: index)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "prev":
         let result = StageCommandService(service: service).cycle(.prev)
         print(result.message)
@@ -517,6 +602,319 @@ func runStageCommand(_ args: [String]) {
         printUsage()
         exit(64)
     }
+}
+
+@MainActor
+func runEventSubscription(_ args: [String]) -> Never {
+    let options = parseEventSubscriptionOptions(args)
+    let subscription = EventSubscriptionService()
+    var cursor = subscription.start(options: options)
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    let correlationId = emitCommandEvent(
+        type: "command.received",
+        command: "events.subscribe",
+        result: "received"
+    )
+    for event in subscription.initialEvents(snapshot: service.snapshot().automationSnapshot(), options: options) {
+        if let data = try? encoder.encode(event),
+           let line = String(data: data, encoding: .utf8) {
+            print(line)
+        }
+    }
+    emitCommandEvent(
+        type: "command.applied",
+        command: "events.subscribe",
+        result: "streaming",
+        correlationId: correlationId
+    )
+    fflush(stdout)
+    while true {
+        let result = subscription.readAvailable(from: cursor, options: options)
+        cursor = result.cursor
+        for event in result.events {
+            if let data = try? encoder.encode(event),
+               let line = String(data: data, encoding: .utf8) {
+                print(line)
+            }
+        }
+        fflush(stdout)
+        Thread.sleep(forTimeInterval: 0.2)
+    }
+}
+
+@discardableResult
+func emitCommandEvent(type: String, command: String, result: String, correlationId: String = UUID().uuidString) -> String {
+    EventLog().append(RoadieEventEnvelope(
+        id: "cmd_\(UUID().uuidString)",
+        type: type,
+        scope: .command,
+        subject: AutomationSubject(kind: "command", id: command),
+        correlationId: correlationId,
+        cause: .command,
+        payload: [
+            "command": .string(command),
+            "result": .string(result)
+        ]
+    ))
+    return correlationId
+}
+
+func parseEventSubscriptionOptions(_ args: [String]) -> EventSubscriptionOptions {
+    var fromNow = false
+    var initialState = false
+    var types = Set<String>()
+    var scopes = Set<AutomationScope>()
+    var index = 0
+    while index < args.count {
+        switch args[index] {
+        case "--from-now":
+            fromNow = true
+            index += 1
+        case "--initial-state":
+            initialState = true
+            index += 1
+        case "--type":
+            guard args.indices.contains(index + 1) else {
+                fputs("roadie: events subscribe --type requires a value\n", stderr)
+                exit(64)
+            }
+            types.insert(args[index + 1])
+            index += 2
+        case "--scope":
+            guard args.indices.contains(index + 1) else {
+                fputs("roadie: events subscribe --scope requires a value\n", stderr)
+                exit(64)
+            }
+            scopes.insert(AutomationScope(rawValue: args[index + 1]))
+            index += 2
+        case let unknown:
+            fputs("roadie: unknown events subscribe option \(unknown)\n", stderr)
+            exit(64)
+        }
+    }
+    return EventSubscriptionOptions(fromNow: fromNow, initialState: initialState, types: types, scopes: scopes)
+}
+
+func runRulesCommand(_ args: [String]) -> Never {
+    guard let verb = args.first, ["validate", "list", "explain"].contains(verb) else {
+        printUsage()
+        exit(64)
+    }
+    let options = parseRulesOptions(Array(args.dropFirst()))
+    let service = RulesCommandService(configPath: options.configPath)
+
+    switch verb {
+    case "validate":
+        let report = service.validate()
+        if options.json {
+            printCodableJSON(report)
+        } else {
+            print(TextFormatter.configValidation(report))
+        }
+        exit(report.hasErrors ? 1 : 0)
+    case "list":
+        do {
+            let rules = try service.list()
+            if options.json {
+                printCodableJSON(rules)
+            } else {
+                print(TextFormatter.rules(rules))
+            }
+            exit(0)
+        } catch {
+            fputs("roadie: rules list failed: \(error)\n", stderr)
+            exit(1)
+        }
+    case "explain":
+        guard let app = options.app else {
+            fputs("roadie: rules explain requires --app APP\n", stderr)
+            exit(64)
+        }
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 0,
+            appName: app,
+            bundleID: options.bundleID ?? "",
+            title: options.title ?? "",
+            frame: Rect(x: 0, y: 0, width: 1, height: 1),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let context = WindowRuleMatchContext(
+            role: options.role,
+            subrole: options.subrole,
+            display: options.display,
+            desktop: options.desktop,
+            stage: options.stage,
+            isFloating: options.isFloating
+        )
+        do {
+            let explanation = try service.explain(window: window, context: context)
+            if options.json {
+                printCodableJSON(explanation)
+            } else {
+                print(TextFormatter.ruleExplanation(explanation))
+            }
+            exit(explanation.matchedRuleID == nil ? 1 : 0)
+        } catch {
+            fputs("roadie: rules explain failed: \(error)\n", stderr)
+            exit(1)
+        }
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+func runGroupCommand(_ args: [String]) -> Never {
+    let service = WindowGroupCommandService()
+    switch args.first {
+    case "list":
+        let result = service.list()
+        print(result.message)
+        exit(0)
+    case "create":
+        guard let id = args.dropFirst().first else {
+            fputs("roadie: group create requires an id\n", stderr)
+            exit(64)
+        }
+        let ids = args.dropFirst(2).compactMap(UInt32.init).map(WindowID.init(rawValue:))
+        let result = service.create(id: id, windowIDs: ids)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "add":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group add requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.add(windowID: WindowID(rawValue: windowID), to: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "remove":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group remove requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.remove(windowID: WindowID(rawValue: windowID), from: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "focus":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group focus requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.focus(windowID: WindowID(rawValue: windowID), in: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "dissolve":
+        guard let id = args.dropFirst().first else {
+            fputs("roadie: group dissolve requires GROUP_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.dissolve(id: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runQueryCommand(_ args: [String]) -> Never {
+    guard let name = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let result = AutomationQueryService(service: service).query(name)
+    if case .object(let object) = result.data,
+       object["error"] != nil {
+        printCodableJSON(result)
+        exit(64)
+    }
+    printCodableJSON(result)
+    exit(0)
+}
+
+struct RulesOptions {
+    var json = false
+    var configPath: String?
+    var app: String?
+    var bundleID: String?
+    var title: String?
+    var role: String?
+    var subrole: String?
+    var display: String?
+    var desktop: String?
+    var stage: String?
+    var isFloating: Bool?
+}
+
+func parseRulesOptions(_ args: [String]) -> RulesOptions {
+    var options = RulesOptions()
+    var index = 0
+    while index < args.count {
+        switch args[index] {
+        case "--json":
+            options.json = true
+            index += 1
+        case "--config":
+            options.configPath = requiredRulesOption(args, index: index, name: "--config")
+            index += 2
+        case "--app":
+            options.app = requiredRulesOption(args, index: index, name: "--app")
+            index += 2
+        case "--bundle-id":
+            options.bundleID = requiredRulesOption(args, index: index, name: "--bundle-id")
+            index += 2
+        case "--title":
+            options.title = requiredRulesOption(args, index: index, name: "--title")
+            index += 2
+        case "--role":
+            options.role = requiredRulesOption(args, index: index, name: "--role")
+            index += 2
+        case "--subrole":
+            options.subrole = requiredRulesOption(args, index: index, name: "--subrole")
+            index += 2
+        case "--display":
+            options.display = requiredRulesOption(args, index: index, name: "--display")
+            index += 2
+        case "--desktop":
+            options.desktop = requiredRulesOption(args, index: index, name: "--desktop")
+            index += 2
+        case "--stage":
+            options.stage = requiredRulesOption(args, index: index, name: "--stage")
+            index += 2
+        case "--floating":
+            options.isFloating = true
+            index += 1
+        case "--tiled":
+            options.isFloating = false
+            index += 1
+        case let unknown:
+            fputs("roadie: unknown rules option \(unknown)\n", stderr)
+            exit(64)
+        }
+    }
+    return options
+}
+
+func requiredRulesOption(_ args: [String], index: Int, name: String) -> String {
+    guard args.indices.contains(index + 1) else {
+        fputs("roadie: rules \(name) requires a value\n", stderr)
+        exit(64)
+    }
+    return args[index + 1]
 }
 
 @MainActor

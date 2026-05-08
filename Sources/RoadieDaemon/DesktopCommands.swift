@@ -100,6 +100,18 @@ public struct DesktopCommandService {
         return switchDisplay(display, to: last, snapshot: snapshot)
     }
 
+    public func backAndForth() -> StageCommandResult {
+        last()
+    }
+
+    public func summon(_ desktopID: DesktopID) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "desktop summon: no display", changed: false)
+        }
+        return switchDisplay(display, to: desktopID, snapshot: snapshot)
+    }
+
     public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
