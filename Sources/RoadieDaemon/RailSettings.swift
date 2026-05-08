@@ -3,6 +3,8 @@ import Foundation
 public struct RailSettings: Equatable, Sendable {
     public var renderer: String
     public var width: Double
+    public var backgroundColor: String
+    public var backgroundOpacity: Double
     public var emptyClickHideActive: Bool
     public var emptyClickSafetyMargin: Double
     public var preview: Preview
@@ -56,6 +58,8 @@ public struct RailSettings: Equatable, Sendable {
         return RailSettings(
             renderer: rail["renderer"] ?? renderer(from: raw),
             width: number(rail["width"], default: 150, min: 90, max: 320),
+            backgroundColor: rail["background_color"] ?? "#000000",
+            backgroundOpacity: number(rail["background_opacity"], default: 0, min: 0, max: 1),
             emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
@@ -92,6 +96,8 @@ public struct RailSettings: Equatable, Sendable {
         [
             "renderer=\(renderer)",
             "width=\(width)",
+            "background_color=\(backgroundColor)",
+            "background_opacity=\(backgroundOpacity)",
             "empty_click_hide_active=\(emptyClickHideActive)",
             "empty_click_safety_margin=\(emptyClickSafetyMargin)",
             "preview.width=\(preview.width)",
@@ -120,6 +126,8 @@ public struct RailSettings: Equatable, Sendable {
     private static let defaults = RailSettings(
         renderer: "stacked-previews",
         width: 150,
+        backgroundColor: "#000000",
+        backgroundOpacity: 0,
         emptyClickHideActive: true,
         emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
@@ -151,8 +159,7 @@ public struct RailSettings: Equatable, Sendable {
         var sections: [String: [String: String]] = [:]
         var current: String?
         for line in raw.components(separatedBy: .newlines) {
-            let trimmed = line.split(separator: "#", maxSplits: 1).first.map(String.init)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let trimmed = stripComment(from: line).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             if trimmed.hasPrefix("["), trimmed.hasSuffix("]"), !trimmed.hasPrefix("[[") {
                 current = String(trimmed.dropFirst().dropLast())
@@ -166,6 +173,23 @@ public struct RailSettings: Equatable, Sendable {
             sections[current, default: [:]][key] = value
         }
         return sections
+    }
+
+    private static func stripComment(from line: String) -> String {
+        var inQuotes = false
+        var result = ""
+        for character in line {
+            if character == "\"" {
+                inQuotes.toggle()
+                result.append(character)
+                continue
+            }
+            if character == "#", !inQuotes {
+                break
+            }
+            result.append(character)
+        }
+        return result
     }
 
     private static func stageAccents(from raw: String) -> [String: String] {

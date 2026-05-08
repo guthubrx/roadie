@@ -103,6 +103,8 @@ struct ConfigTests {
         [fx.rail]
         renderer = "parallax-45"
         width = 150
+        background_color = "#101820"
+        background_opacity = 0.35
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
@@ -133,6 +135,8 @@ struct ConfigTests {
 
         #expect(settings.renderer == "parallax-45")
         #expect(settings.width == 150)
+        #expect(settings.backgroundColor == "#101820")
+        #expect(settings.backgroundOpacity == 0.35)
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
         #expect(settings.preview.width == 160)
