@@ -44,8 +44,7 @@ public struct WindowCommandService {
     public func focus(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
-            let result = DisplayCommandService(service: service, store: stageStore, events: events).focus(direction)
-            return WindowCommandResult(message: result.message, changed: result.changed)
+            return focusAdjacentDisplayWindow(direction, from: snapshot)
         }
         let ok = focusWindow(pair.neighbor.window)
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
@@ -306,6 +305,43 @@ public struct WindowCommandService {
         )
     }
 
+    private func focusAdjacentDisplayWindow(_ direction: Direction, from snapshot: DaemonSnapshot) -> WindowCommandResult {
+        guard let active = activeWindow(in: snapshot),
+              let display = activeDisplay(for: active, in: snapshot)
+        else {
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+        }
+        guard let targetDisplay = DisplayTopology.neighbor(from: display, direction: direction, in: snapshot.displays),
+              let targetScope = snapshot.state.activeScope(on: targetDisplay.id)
+        else {
+            return WindowCommandResult(message: "display focus \(direction.rawValue): no display", changed: false)
+        }
+        let candidates = snapshot.windows.filter {
+            $0.scope == targetScope && $0.window.isTileCandidate
+        }
+        guard let target = candidates.min(by: { lhs, rhs in
+            crossDisplayFocusScore(from: active.window.frame.cgRect, to: lhs.window.frame.cgRect, direction: direction)
+                < crossDisplayFocusScore(from: active.window.frame.cgRect, to: rhs.window.frame.cgRect, direction: direction)
+        }) else {
+            let result = DisplayCommandService(service: service, store: stageStore, events: events).focus(direction)
+            return WindowCommandResult(message: result.message, changed: result.changed)
+        }
+
+        var state = stageStore.state()
+        state.focusDisplay(targetDisplay.id)
+        if var scope = state.scopes.first(where: { $0.displayID == targetScope.displayID && $0.desktopID == targetScope.desktopID }) {
+            scope.setFocusedWindow(target.window.id, in: targetScope.stageID)
+            state.update(scope)
+        }
+        stageStore.save(state)
+
+        let ok = focusWindow(target.window)
+        return WindowCommandResult(
+            message: ok ? "focused \(target.window.id) on display \(targetDisplay.index)" : "focus failed",
+            changed: ok
+        )
+    }
+
     private func activeDisplay(for active: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
         if let displayID = active.scope?.displayID,
            let display = snapshot.displays.first(where: { $0.id == displayID }) {
@@ -555,6 +591,19 @@ public struct WindowCommandService {
             return abs(dy) + abs(dx) * 0.35
         default:
             return .infinity
+        }
+    }
+
+    private func crossDisplayFocusScore(from active: CGRect, to candidate: CGRect, direction: Direction) -> CGFloat {
+        switch direction {
+        case .left:
+            return abs(active.midY - candidate.midY) * 2 + abs(active.minX - candidate.maxX) * 0.2
+        case .right:
+            return abs(active.midY - candidate.midY) * 2 + abs(candidate.minX - active.maxX) * 0.2
+        case .up:
+            return abs(active.midX - candidate.midX) * 2 + abs(active.minY - candidate.maxY) * 0.2
+        case .down:
+            return abs(active.midX - candidate.midX) * 2 + abs(candidate.minY - active.maxY) * 0.2
         }
     }
 
