@@ -229,7 +229,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T017 : Tests du catalogue minimal d'événements
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `55d4f3b` - test(002): Cover event catalog
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/EventCatalogTests.swift` (créé)
   - `Sources/RoadieCore/AutomationEventCatalog.swift` (catalogue minimal compilable)
@@ -238,3 +238,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventCatalogTests`
 - **Notes** : Le catalogue minimal est ajouté avec les tests pour conserver un commit vert ; T021 reste responsable de l'intégration complète du catalogue dans l'implémentation US1.
+
+### T018 : Tests subscribe --from-now
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (créé)
+  - `Sources/RoadieDaemon/EventSubscriptionService.swift` (service minimal)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T018 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventSubscriptionTests`
+- **Notes** : Le test valide qu'un abonnement démarré avec `fromNow` ignore les événements déjà écrits.
