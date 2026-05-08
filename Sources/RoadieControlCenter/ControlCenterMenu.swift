@@ -29,10 +29,10 @@ public struct ControlCenterMenuModel: Equatable, Sendable {
 
     public init(state: ControlCenterState) {
         var items: [ControlCenterMenuItem] = [
-            ControlCenterMenuItem(title: "Roadie: \(state.daemonStatus.rawValue)"),
-            ControlCenterMenuItem(title: "Config: \(state.configStatus.rawValue)"),
-            ControlCenterMenuItem(title: "Desktop: \(state.activeDesktop ?? "-") / Stage: \(state.activeStage ?? "-")"),
-            ControlCenterMenuItem(title: "Windows: \(state.windowCount)")
+            ControlCenterMenuItem(title: "Roadie: \(state.daemonStatus.rawValue)", isEnabled: false),
+            ControlCenterMenuItem(title: "Config: \(state.configStatus.rawValue)", isEnabled: false),
+            ControlCenterMenuItem(title: "Desktop: \(state.activeDesktop ?? "-") / Stage: \(state.activeStage ?? "-")", isEnabled: false),
+            ControlCenterMenuItem(title: "Windows: \(state.windowCount)", isEnabled: false)
         ]
         if let lastError = state.lastError {
             items.append(ControlCenterMenuItem(title: "Erreur: \(lastError)", isEnabled: false))
@@ -45,7 +45,7 @@ public struct ControlCenterMenuModel: Equatable, Sendable {
             ControlCenterMenuItem(title: "Reveler l'etat", action: .revealState, isEnabled: state.actions.canRevealState),
             ControlCenterMenuItem(title: "Ouvrir les logs", action: .openLogs),
             ControlCenterMenuItem(title: "Doctor", action: .runDoctor),
-            ControlCenterMenuItem(title: "Quitter Roadie", action: .quitSafely, isEnabled: state.actions.canQuitSafely)
+            ControlCenterMenuItem(title: "Quitter le Control Center", action: .quitSafely, isEnabled: state.actions.canQuitSafely)
         ])
         self.items = items
     }
