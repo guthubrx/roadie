@@ -199,6 +199,67 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func applyPlanLetsDisplayOverrideBaseGapOverrideGlobalSideGaps() {
+        let displayA = DisplayID(rawValue: "display-a")
+        let displayB = DisplayID(rawValue: "display-b")
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-gap-stages-\(UUID().uuidString).json")
+            .path
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-gap-intents-\(UUID().uuidString).json")
+            .path
+        let first = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "one",
+            frame: Rect(x: 0, y: 0, width: 100, height: 100),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let second = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 11,
+            appName: "B",
+            bundleID: "b",
+            title: "two",
+            frame: Rect(x: 1200, y: 0, width: 100, height: 100),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: displayA, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                    DisplaySnapshot(id: displayB, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500), isMain: false),
+                ],
+                windowSnapshots: [first, second]
+            ),
+            config: RoadieConfig(tiling: TilingConfig(
+                gapsOuter: 8,
+                gapsOuterLeft: 150,
+                displayOverrides: [
+                    DisplayTilingOverride(displayID: displayB.rawValue, gapsOuter: 20)
+                ],
+                gapsInner: 10
+            )),
+            intentStore: LayoutIntentStore(path: intentPath),
+            stageStore: StageStore(path: stagePath)
+        )
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: intentPath)
+        }
+
+        let plan = service.applyPlan(from: service.snapshot())
+
+        #expect(plan.commands.map(\.window.id) == [first.id, second.id])
+        #expect(plan.commands[0].frame == Rect(x: 150, y: 8, width: 842, height: 484))
+        #expect(plan.commands[1].frame == Rect(x: 1020, y: 20, width: 960, height: 460))
+    }
+
+    @Test
     func applyPlanSkipsWindowsAlreadyAtTargetFrames() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(

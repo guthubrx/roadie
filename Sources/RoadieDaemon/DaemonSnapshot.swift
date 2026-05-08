@@ -720,10 +720,10 @@ private extension SnapshotService {
     func outerGaps(windowCount: Int, display: DisplaySnapshot? = nil) -> Insets {
         let override = display.flatMap(displayOverride)
         let base = override?.gapsOuter ?? config.tiling.gapsOuter
-        var top = override?.gapsOuterTop ?? config.tiling.gapsOuterTop ?? base
-        var right = override?.gapsOuterRight ?? config.tiling.gapsOuterRight ?? base
-        var bottom = override?.gapsOuterBottom ?? config.tiling.gapsOuterBottom ?? base
-        var left = override?.gapsOuterLeft ?? config.tiling.gapsOuterLeft ?? base
+        var top = override?.gapsOuterTop ?? override?.gapsOuter ?? config.tiling.gapsOuterTop ?? base
+        var right = override?.gapsOuterRight ?? override?.gapsOuter ?? config.tiling.gapsOuterRight ?? base
+        var bottom = override?.gapsOuterBottom ?? override?.gapsOuter ?? config.tiling.gapsOuterBottom ?? base
+        var left = override?.gapsOuterLeft ?? override?.gapsOuter ?? config.tiling.gapsOuterLeft ?? base
 
         if config.tiling.smartGapsSolo && windowCount == 1 {
             let sides = config.tiling.smartGapsSoloSides

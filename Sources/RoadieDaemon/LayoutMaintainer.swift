@@ -99,7 +99,7 @@ public final class LayoutMaintainer {
         }
         manualResizeApplyAfter = nil
 
-        let commandProtectedScopes = recentCommandScopes(in: snapshot, since: cutoff, windowIDs: priorityWindowIDs)
+        let commandProtectedScopes = recentCommandScopes(in: snapshot, since: cutoff, now: now, windowIDs: priorityWindowIDs)
         if !commandProtectedScopes.isEmpty {
             lastCommandIntentAt = now
             priorityWindowIDs = []
@@ -116,7 +116,7 @@ public final class LayoutMaintainer {
            priorityWindowIDs.isEmpty,
            now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
         {
-            let protectedScopes = recentCommandScopes(in: snapshot, since: cutoff)
+            let protectedScopes = recentCommandScopes(in: snapshot, since: cutoff, now: now)
             priorityWindowIDs = []
             return applyPlan(from: snapshot, observedFrames: observedFrames, excluding: protectedScopes)
         }
@@ -352,6 +352,7 @@ public final class LayoutMaintainer {
     private func recentCommandScopes(
         in snapshot: DaemonSnapshot,
         since date: Date,
+        now: Date,
         windowIDs: Set<WindowID> = []
     ) -> Set<StageScope> {
         let activeScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
@@ -362,7 +363,6 @@ public final class LayoutMaintainer {
         guard !activeScopes.isEmpty else {
             return []
         }
-        let now = Date()
         var result: Set<StageScope> = []
         for scope in activeScopes {
             if service.hasMatchingCommandIntent(scope: scope, in: snapshot) {
