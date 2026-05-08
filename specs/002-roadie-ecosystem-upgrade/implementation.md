@@ -205,7 +205,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T015 : Tests AutomationSnapshot
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `80116ff` - test(002): Cover automation snapshots
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/AutomationSnapshotTests.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T015 cochée)
@@ -213,3 +213,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter AutomationSnapshotTests`
 - **Notes** : Les tests couvrent round-trip du snapshot contractuel et décodage de la fixture Spec002Snapshot.
+
+### T016 : Checkpoint fondation AutomationEvent
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T016 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [x] `swift test --filter AutomationEventTests`
+- **Notes** : Checkpoint fondation validé. SwiftPM a attendu la fin du build parallèle puis les 2 tests AutomationEvent sont passés.

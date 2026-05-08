@@ -37,7 +37,7 @@
 - [X] T013 Ajouter les helpers de compatibilité legacy `RoadieEvent` vers `RoadieEventEnvelope` dans `Sources/RoadieDaemon/EventLog.swift`
 - [X] T014 Ajouter les tests de sérialisation et compatibilité événementielle dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
 - [X] T015 Ajouter les tests de snapshot contractuel dans `Tests/RoadieDaemonTests/AutomationSnapshotTests.swift`
-- [ ] T016 Lancer `swift build` puis `swift test --filter AutomationEventTests` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T016 Lancer `swift build` puis `swift test --filter AutomationEventTests` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: Les types automation sont disponibles, testés, et le journal existant reste lisible.
 
