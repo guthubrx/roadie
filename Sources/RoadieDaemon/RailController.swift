@@ -1449,7 +1449,10 @@ private final class StageCardView: NSControl {
         let leftCompensation: CGFloat
         switch config.mode {
         case .parallax:
-            leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.parallaxOffsetX
+            let deepestOffset = CGFloat(max(visibleCount - 1, 0))
+            let deepestScale = max(0, 1 - deepestOffset * config.parallaxScale)
+            let scaledInset = width * (1 - deepestScale) / 2
+            leftCompensation = max(0, deepestOffset * config.parallaxOffsetX - scaledInset)
         case .stacked:
             leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.stackedOffsetX * 0.18
         case .mosaic, .icons:
