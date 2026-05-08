@@ -564,6 +564,7 @@ private final class WindowThumbnailStore {
     private var signatures: [WindowID: String] = [:]
     private var capturedAt: [WindowID: Date] = [:]
     private let drmRefreshInterval: TimeInterval = 2
+    private let refreshInterval: TimeInterval = 5
 
     func images(for members: [PersistentStageMember], protectedWindowIDs: Set<WindowID>) -> [WindowID: NSImage] {
         Dictionary(uniqueKeysWithValues: members.compactMap { member in
@@ -593,7 +594,8 @@ private final class WindowThumbnailStore {
         }
         if let cached = images[member.windowID], !cached.looksBlank {
             let age = now.timeIntervalSince(capturedAt[member.windowID] ?? .distantPast)
-            guard isDRMSensitive, age >= drmRefreshInterval else {
+            let interval = isDRMSensitive ? drmRefreshInterval : refreshInterval
+            guard age >= interval else {
                 return cached
             }
         }
