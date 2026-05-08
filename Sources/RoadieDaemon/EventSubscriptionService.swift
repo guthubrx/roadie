@@ -26,6 +26,8 @@ public struct EventSubscriptionCursor: Equatable, Sendable {
 public struct EventSubscriptionService: Sendable {
     private let url: URL
 
+    public var path: String { url.path }
+
     public init(path: String = EventLog.defaultPath()) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
@@ -90,6 +92,10 @@ public struct EventSubscriptionService: Sendable {
         } catch {
             return ([], cursor)
         }
+    }
+
+    public func readAll(options: EventSubscriptionOptions = EventSubscriptionOptions()) -> [RoadieEventEnvelope] {
+        readAvailable(from: EventSubscriptionCursor(offset: 0), options: options).events
     }
 
     private func decodeEnvelope(_ line: String) -> RoadieEventEnvelope? {
