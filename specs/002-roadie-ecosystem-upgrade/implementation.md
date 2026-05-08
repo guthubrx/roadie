@@ -115,7 +115,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T008 : Modèle RoadieEventEnvelope
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `ca7af2f` - feat(002): Add event envelope model
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/AutomationEvent.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T008 cochée)
@@ -124,3 +124,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec T014/T016
 - **Notes** : Enveloppe versionnée créée avec champs contractuels. Les types dédiés scope/subject/cause/payload seront enrichis dans T009.
+
+### T009 : Types d'événements automation
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/AutomationEvent.swift` (types scope, subject, cause, payload)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T009 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec T014/T016
+- **Notes** : `AutomationPayload` supporte les valeurs JSON primitives, objets, tableaux et null pour éviter les payloads string-only.
