@@ -17,6 +17,8 @@ public final class RailController {
     private var dragGhost: RailDragGhostWindow?
     private let dropPreview = DropPreviewController()
     private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
+    private var focusedWindowID: WindowID?
+    private var protectedBlurredWindows: [WindowID: Date] = [:]
 
     public init(
         store: StageStore = StageStore(),
@@ -153,7 +155,7 @@ public final class RailController {
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
             if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: drag.displayID) {
-                perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs), displayID: candidate.displayID)
+                perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs, candidate.placements), displayID: candidate.displayID)
             } else {
                 perform(.summonWindow(drag.windowID), displayID: drag.displayID)
             }
@@ -187,14 +189,14 @@ public final class RailController {
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
             ))
             _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
-        case .placeWindow(let windowID, let orderedWindowIDs):
+        case .placeWindow(let windowID, let orderedWindowIDs, let placements):
             print("rail place window \(windowID.rawValue)")
             fflush(stdout)
             events.append(RoadieEvent(
                 type: "rail_window_place",
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
             ))
-            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs)
+            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -207,7 +209,8 @@ public final class RailController {
     }
 
     private func rebuildPanels() {
-        _ = snapshotService.snapshot()
+        let snapshot = snapshotService.snapshot()
+        updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
         let config = RailVisualConfig.load()
         thumbnails.prune(keeping: Set(state.scopes.flatMap { scope in
@@ -224,7 +227,13 @@ public final class RailController {
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
             panel.position(on: screen)
-            panel.render(scope: scope, displayName: screen.localizedName, config: config, thumbnails: thumbnails)
+            panel.render(
+                scope: scope,
+                displayName: screen.localizedName,
+                config: config,
+                thumbnails: thumbnails,
+                protectedWindowIDs: Set(protectedBlurredWindows.keys)
+            )
             if panels[displayID] == nil {
                 panels[displayID] = panel
                 panel.makeKey()
@@ -237,6 +246,31 @@ public final class RailController {
             panels.removeValue(forKey: displayID)
             screenFrames.removeValue(forKey: displayID)
         }
+    }
+
+    private func updateFocusSensitiveCaptureProtection(from snapshot: DaemonSnapshot) {
+        let now = Date()
+        protectedBlurredWindows = protectedBlurredWindows.filter { $0.value > now }
+        defer { focusedWindowID = snapshot.focusedWindowID }
+
+        guard let previous = focusedWindowID,
+              previous != snapshot.focusedWindowID,
+              let entry = snapshot.windows.first(where: { $0.window.id == previous }),
+              Self.isDRMSensitiveBundle(entry.window.bundleID)
+        else { return }
+
+        protectedBlurredWindows[previous] = now.addingTimeInterval(3)
+    }
+
+    private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
+        [
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "com.operasoftware.Opera",
+            "org.mozilla.firefox",
+        ].contains(bundleID)
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -252,7 +286,7 @@ private enum RailAction {
     case switchStage(StageID)
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID)
-    case placeWindow(WindowID, [WindowID])
+    case placeWindow(WindowID, [WindowID], [WindowID: Rect])
     case moveStage(StageID, Int)
 }
 
@@ -403,7 +437,13 @@ private final class RailPanel: NSPanel {
         )
     }
 
-    func render(scope: PersistentStageScope, displayName: String, config: RailVisualConfig, thumbnails: WindowThumbnailStore) {
+    func render(
+        scope: PersistentStageScope,
+        displayName: String,
+        config: RailVisualConfig,
+        thumbnails: WindowThumbnailStore,
+        protectedWindowIDs: Set<WindowID>
+    ) {
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -421,11 +461,9 @@ private final class RailPanel: NSPanel {
                 isActive: id == scope.activeStageID,
                 accent: config.accent(for: id),
                 config: config,
-                thumbnails: thumbnails.images(for: stage.members),
+                thumbnails: thumbnails.images(for: stage.members, protectedWindowIDs: protectedWindowIDs),
                 position: index + 1,
-                stageCount: ids.count,
-                previousStageID: index > 0 ? ids[index - 1] : nil,
-                nextStageID: index + 1 < ids.count ? ids[index + 1] : nil
+                stageCount: ids.count
             )
             stack.addArrangedSubview(card)
         }
@@ -519,9 +557,9 @@ private final class RailPanel: NSPanel {
 private final class WindowThumbnailStore {
     private var images: [WindowID: NSImage] = [:]
 
-    func images(for members: [PersistentStageMember]) -> [WindowID: NSImage] {
+    func images(for members: [PersistentStageMember], protectedWindowIDs: Set<WindowID>) -> [WindowID: NSImage] {
         Dictionary(uniqueKeysWithValues: members.compactMap { member in
-            guard let image = image(for: member) else { return nil }
+            guard let image = image(for: member, captureAllowed: !protectedWindowIDs.contains(member.windowID)) else { return nil }
             return (member.windowID, image)
         })
     }
@@ -534,10 +572,11 @@ private final class WindowThumbnailStore {
         images[windowID]
     }
 
-    private func image(for member: PersistentStageMember) -> NSImage? {
+    private func image(for member: PersistentStageMember, captureAllowed: Bool) -> NSImage? {
         if let cached = images[member.windowID] {
             return cached
         }
+        guard captureAllowed else { return nil }
         guard let cgImage = CGWindowListCreateImage(
             .null,
             .optionIncludingWindow,
@@ -674,8 +713,6 @@ private final class StageCardView: NSControl {
     private let thumbnails: [WindowID: NSImage]
     private let position: Int
     private let stageCount: Int
-    private let previousStageID: StageID?
-    private let nextStageID: StageID?
     private let contentInset: CGFloat = 4
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -689,9 +726,7 @@ private final class StageCardView: NSControl {
         config: RailVisualConfig,
         thumbnails: [WindowID: NSImage],
         position: Int,
-        stageCount: Int,
-        previousStageID: StageID?,
-        nextStageID: StageID?
+        stageCount: Int
     ) {
         self.stage = stage
         self.stageID = stage.id
@@ -701,8 +736,6 @@ private final class StageCardView: NSControl {
         self.thumbnails = thumbnails
         self.position = position
         self.stageCount = stageCount
-        self.previousStageID = previousStageID
-        self.nextStageID = nextStageID
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
@@ -728,9 +761,6 @@ private final class StageCardView: NSControl {
     }
 
     func action(at point: CGPoint) -> RailAction? {
-        if let action = windowAction(at: point) {
-            return action
-        }
         if dragPayload(at: point) != nil {
             return nil
         }
@@ -954,7 +984,6 @@ private final class StageCardView: NSControl {
             NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
-        drawWindowControls(in: rect, index: index)
     }
 
     private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
@@ -1026,35 +1055,6 @@ private final class StageCardView: NSControl {
         )
     }
 
-    private func drawWindowControls(in rect: CGRect, index: Int) {
-        guard stage.members[safe: index] != nil else { return }
-        if let previousStageID {
-            drawControl("⌃", in: previousWindowRect(in: rect), enabled: !isActive || previousStageID != stageID)
-        }
-        if let nextStageID {
-            drawControl("⌄", in: nextWindowRect(in: rect), enabled: !isActive || nextStageID != stageID)
-        }
-        if !isActive {
-            drawControl("›", in: summonWindowRect(in: rect), enabled: true)
-        }
-    }
-
-    private func windowAction(at point: CGPoint) -> RailAction? {
-        for item in hitPreviewItemsFrontToBack() {
-            guard let member = stage.members[safe: item.index] else { continue }
-            if !isActive, summonWindowHitRect(in: item.rect).contains(point) {
-                return .summonWindow(member.windowID)
-            }
-            if let previousStageID, previousWindowHitRect(in: item.rect).contains(point) {
-                return .moveWindow(member.windowID, previousStageID)
-            }
-            if let nextStageID, nextWindowHitRect(in: item.rect).contains(point) {
-                return .moveWindow(member.windowID, nextStageID)
-            }
-        }
-        return nil
-    }
-
     func dragPayload(at point: CGPoint) -> RailDragPayload? {
         for item in hitPreviewItemsFrontToBack() {
             guard item.rect.contains(point),
@@ -1108,30 +1108,6 @@ private final class StageCardView: NSControl {
                 (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
             }
         }
-    }
-
-    private func previousWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 4, y: rect.maxY - 20, width: 18, height: 14)
-    }
-
-    private func nextWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 4, y: rect.minY + 6, width: 18, height: 14)
-    }
-
-    private func summonWindowRect(in rect: CGRect) -> CGRect {
-        CGRect(x: rect.minX + 4, y: rect.midY - 7, width: 18, height: 14)
-    }
-
-    private func previousWindowHitRect(in rect: CGRect) -> CGRect {
-        previousWindowRect(in: rect).insetBy(dx: -12, dy: -10)
-    }
-
-    private func nextWindowHitRect(in rect: CGRect) -> CGRect {
-        nextWindowRect(in: rect).insetBy(dx: -12, dy: -10)
-    }
-
-    private func summonWindowHitRect(in rect: CGRect) -> CGRect {
-        summonWindowRect(in: rect).insetBy(dx: -12, dy: -10)
     }
 
     private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {

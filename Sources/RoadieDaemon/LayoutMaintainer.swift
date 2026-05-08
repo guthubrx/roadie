@@ -50,7 +50,7 @@ public final class LayoutMaintainer {
         self.events = events
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
-        self.manualResizeDebounceSeconds = max(1.2, intervalSeconds * 3)
+        self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
         self.now = now
     }
 
@@ -99,10 +99,12 @@ public final class LayoutMaintainer {
         }
         manualResizeApplyAfter = nil
 
-        if priorityWindowIDs.isEmpty && shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff) {
+        if shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff, windowIDs: priorityWindowIDs) {
             lastCommandIntentAt = now
             priorityWindowIDs = []
+            manualResizeApplyAfter = nil
             lastObservedFrames = observedFrames
+            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent"))
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
 
@@ -315,8 +317,16 @@ public final class LayoutMaintainer {
         }
     }
 
-    private func shouldIgnoreRecentCommandReflow(in snapshot: DaemonSnapshot, since date: Date) -> Bool {
-        let activeScopes = Set(snapshot.windows.compactMap(\.scope))
+    private func shouldIgnoreRecentCommandReflow(
+        in snapshot: DaemonSnapshot,
+        since date: Date,
+        windowIDs: Set<WindowID> = []
+    ) -> Bool {
+        let activeScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard let scope = entry.scope else { return nil }
+            guard windowIDs.isEmpty || windowIDs.contains(entry.window.id) else { return nil }
+            return scope
+        })
         guard !activeScopes.isEmpty else {
             return false
         }
