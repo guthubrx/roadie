@@ -98,3 +98,12 @@ Roadie publie des événements JSON Lines. Une ligne = un événement complet.
 - supporter `--scope <scope>` répétable.
 - supporter `--initial-state` pour émettre un événement synthétique `state.snapshot`.
 - terminer proprement sur SIGINT sans corrompre le journal.
+
+Comportement implémenté en US1 :
+
+- `--from-now` démarre le curseur à la fin du journal courant.
+- sans `--from-now`, la commande rejoue les lignes existantes puis suit les nouvelles lignes.
+- `--initial-state` émet un événement `state.snapshot` avant la boucle de suivi.
+- `--type` et `--scope` filtrent les événements lus depuis le journal.
+- la commande publie `command.received` puis `command.applied` dans le journal avant d'entrer en streaming.
+- les lignes legacy `RoadieEvent` peuvent être relues et converties en `RoadieEventEnvelope`.
