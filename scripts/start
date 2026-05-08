@@ -9,11 +9,15 @@ log_dir="$HOME/.roadies"
 runtime_bin_dir="$repo_root/bin"
 local_bin_dir="$HOME/.local/bin"
 pidfile="$log_dir/roadied.pid"
+control_center_pidfile="$log_dir/roadie-control-center.pid"
 tmux_session="roadied"
+control_center_tmux_session="roadie-control-center"
 
 mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
 : > "$log_dir/roadied.stdout.log"
 : > "$log_dir/roadied.stderr.log"
+: > "$log_dir/roadie-control-center.stdout.log"
+: > "$log_dir/roadie-control-center.stderr.log"
 
 "$script_dir/with-xcode" swift build --configuration debug --product roadied
 "$script_dir/with-xcode" swift build --configuration debug --product roadie
@@ -90,11 +94,17 @@ if command -v tmux >/dev/null 2>&1; then
   tmux new-session -d -s "$tmux_session" "cd '$repo_root' && exec '$roadied_bin' run --yes >> '$log_dir/roadied.stdout.log' 2>> '$log_dir/roadied.stderr.log'"
   pid="$(tmux list-panes -t "$tmux_session" -F '#{pane_pid}')"
   echo "$pid" > "$pidfile"
+  tmux kill-session -t "$control_center_tmux_session" >/dev/null 2>&1 || true
+  tmux new-session -d -s "$control_center_tmux_session" "cd '$repo_root' && exec '$roadied_bin' control-center >> '$log_dir/roadie-control-center.stdout.log' 2>> '$log_dir/roadie-control-center.stderr.log'"
+  control_center_pid="$(tmux list-panes -t "$control_center_tmux_session" -F '#{pane_pid}')"
+  echo "$control_center_pid" > "$control_center_pidfile"
 else
   (
     cd "$repo_root"
     nohup "$roadied_bin" run --yes >> "$log_dir/roadied.stdout.log" 2>> "$log_dir/roadied.stderr.log" < /dev/null &
     echo "$!" > "$pidfile"
+    nohup "$roadied_bin" control-center >> "$log_dir/roadie-control-center.stdout.log" 2>> "$log_dir/roadie-control-center.stderr.log" < /dev/null &
+    echo "$!" > "$control_center_pidfile"
   )
 fi
 
@@ -107,5 +117,11 @@ fi
 
 echo "roadied started"
 echo "pid: $pid"
+if [[ -f "$control_center_pidfile" ]] && ps -p "$(cat "$control_center_pidfile")" >/dev/null 2>&1; then
+  echo "control center started"
+  echo "control center pid: $(cat "$control_center_pidfile")"
+else
+  echo "control center failed to start; logs: $log_dir/roadie-control-center.stderr.log" >&2
+fi
 echo "plist: $plist"
-echo "logs: $log_dir/roadied.stdout.log $log_dir/roadied.stderr.log"
+echo "logs: $log_dir/roadied.stdout.log $log_dir/roadied.stderr.log $log_dir/roadie-control-center.stdout.log $log_dir/roadie-control-center.stderr.log"

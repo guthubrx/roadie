@@ -3,12 +3,24 @@ set -euo pipefail
 
 label="com.roadie.roadied"
 pidfile="$HOME/.roadies/roadied.pid"
+control_center_pidfile="$HOME/.roadies/roadie-control-center.pid"
 
 if [[ -f "$pidfile" ]]; then
   pid="$(cat "$pidfile")"
   if ps -p "$pid" -o args= 2>/dev/null | grep -q 'roadied run --yes'; then
     echo "roadied running"
     echo "pid: $pid"
+    if [[ -f "$control_center_pidfile" ]]; then
+      control_center_pid="$(cat "$control_center_pidfile")"
+      if ps -p "$control_center_pid" -o args= 2>/dev/null | grep -q 'roadied control-center'; then
+        echo "control center running"
+        echo "control center pid: $control_center_pid"
+      else
+        echo "control center pidfile stale: $control_center_pidfile"
+      fi
+    else
+      echo "control center not running"
+    fi
     exit 0
   fi
   echo "roadied pidfile stale: $pidfile"

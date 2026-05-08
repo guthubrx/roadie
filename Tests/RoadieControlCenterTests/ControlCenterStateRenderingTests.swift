@@ -21,6 +21,7 @@ struct ControlCenterStateRenderingTests {
         #expect(titles.contains("Roadie: degraded"))
         #expect(titles.contains("Config: reloadFailed"))
         #expect(titles.contains("Windows: 2"))
+        #expect(model.items.first { $0.title == "Roadie: degraded" }?.isEnabled == false)
         #expect(model.items.contains { $0.action == .reloadConfig })
         #expect(model.items.contains { $0.action == .quitSafely })
     }

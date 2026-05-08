@@ -4,6 +4,7 @@ set -euo pipefail
 label="com.roadie.roadied"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 pidfile="$HOME/.roadies/roadied.pid"
+control_center_pidfile="$HOME/.roadies/roadie-control-center.pid"
 
 if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   launchctl bootout "gui/$(id -u)/$label"
@@ -26,4 +27,16 @@ if [[ -f "$pidfile" ]]; then
     echo "stale pidfile removed: $pidfile"
   fi
   rm -f "$pidfile"
+fi
+
+if [[ -f "$control_center_pidfile" ]]; then
+  pid="$(cat "$control_center_pidfile")"
+  if ps -p "$pid" -o args= 2>/dev/null | grep -q 'roadied control-center'; then
+    kill "$pid"
+    sleep 1
+    echo "control center pid $pid stopped"
+  else
+    echo "stale pidfile removed: $control_center_pidfile"
+  fi
+  rm -f "$control_center_pidfile"
 fi
