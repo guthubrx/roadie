@@ -53,6 +53,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var gapsOuterRight: Double?
     public var gapsOuterBottom: Double?
     public var gapsOuterLeft: Double?
+    public var displayOverrides: [DisplayTilingOverride]
     public var gapsInner: Double
     public var masterRatio: Double
     public var smartGapsSolo: Bool
@@ -66,6 +67,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         gapsOuterRight: Double? = nil,
         gapsOuterBottom: Double? = nil,
         gapsOuterLeft: Double? = nil,
+        displayOverrides: [DisplayTilingOverride] = [],
         gapsInner: Double = 4,
         masterRatio: Double = 0.6,
         smartGapsSolo: Bool = false,
@@ -78,6 +80,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.gapsOuterRight = gapsOuterRight
         self.gapsOuterBottom = gapsOuterBottom
         self.gapsOuterLeft = gapsOuterLeft
+        self.displayOverrides = displayOverrides
         self.gapsInner = gapsInner
         self.masterRatio = masterRatio
         self.smartGapsSolo = smartGapsSolo
@@ -92,6 +95,7 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case gapsOuterRight = "gaps_outer_right"
         case gapsOuterBottom = "gaps_outer_bottom"
         case gapsOuterLeft = "gaps_outer_left"
+        case displayOverrides = "display_overrides"
         case gapsInner = "gaps_inner"
         case masterRatio = "master_ratio"
         case smartGapsSolo = "smart_gaps_solo"
@@ -108,11 +112,61 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.gapsOuterRight = try c.decodeFlexibleDouble(forKey: .gapsOuterRight)
         self.gapsOuterBottom = try c.decodeFlexibleDouble(forKey: .gapsOuterBottom)
         self.gapsOuterLeft = try c.decodeFlexibleDouble(forKey: .gapsOuterLeft)
+        self.displayOverrides = try c.decodeIfPresent([DisplayTilingOverride].self, forKey: .displayOverrides) ?? []
         self.gapsInner = try c.decodeFlexibleDouble(forKey: .gapsInner) ?? 4
         self.masterRatio = try c.decodeFlexibleDouble(forKey: .masterRatio) ?? 0.6
         self.smartGapsSolo = try c.decodeIfPresent(Bool.self, forKey: .smartGapsSolo) ?? false
         let sides = try c.decodeIfPresent([String].self, forKey: .smartGapsSoloSides) ?? GapSide.allCases.map(\.rawValue)
         self.smartGapsSoloSides = sides.compactMap(GapSide.init(rawValue:))
+    }
+}
+
+public struct DisplayTilingOverride: Equatable, Codable, Sendable {
+    public var displayID: String?
+    public var displayName: String?
+    public var gapsOuter: Double?
+    public var gapsOuterTop: Double?
+    public var gapsOuterRight: Double?
+    public var gapsOuterBottom: Double?
+    public var gapsOuterLeft: Double?
+
+    public init(
+        displayID: String? = nil,
+        displayName: String? = nil,
+        gapsOuter: Double? = nil,
+        gapsOuterTop: Double? = nil,
+        gapsOuterRight: Double? = nil,
+        gapsOuterBottom: Double? = nil,
+        gapsOuterLeft: Double? = nil
+    ) {
+        self.displayID = displayID
+        self.displayName = displayName
+        self.gapsOuter = gapsOuter
+        self.gapsOuterTop = gapsOuterTop
+        self.gapsOuterRight = gapsOuterRight
+        self.gapsOuterBottom = gapsOuterBottom
+        self.gapsOuterLeft = gapsOuterLeft
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case displayID = "display_id"
+        case displayName = "display_name"
+        case gapsOuter = "gaps_outer"
+        case gapsOuterTop = "gaps_outer_top"
+        case gapsOuterRight = "gaps_outer_right"
+        case gapsOuterBottom = "gaps_outer_bottom"
+        case gapsOuterLeft = "gaps_outer_left"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.displayID = try c.decodeIfPresent(String.self, forKey: .displayID)
+        self.displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        self.gapsOuter = try c.decodeFlexibleDouble(forKey: .gapsOuter)
+        self.gapsOuterTop = try c.decodeFlexibleDouble(forKey: .gapsOuterTop)
+        self.gapsOuterRight = try c.decodeFlexibleDouble(forKey: .gapsOuterRight)
+        self.gapsOuterBottom = try c.decodeFlexibleDouble(forKey: .gapsOuterBottom)
+        self.gapsOuterLeft = try c.decodeFlexibleDouble(forKey: .gapsOuterLeft)
     }
 }
 
@@ -364,6 +418,7 @@ private enum ConfigValidationRules {
         "desktops",
         "stage_manager",
         "stage_manager.workspaces",
+        "tiling.display_overrides",
         "exclusions",
         "fx",
         "fx.borders",

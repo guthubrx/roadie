@@ -67,6 +67,37 @@ struct ConfigTests {
     }
 
     @Test
+    func displayTilingOverridesDecodeFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-gap-config-\(UUID().uuidString).toml")
+        try """
+        [tiling]
+        gaps_outer = 8
+        gaps_outer_left = 150
+
+        [[tiling.display_overrides]]
+        display_name = "LG HDR 4K"
+        gaps_outer_left = 180
+
+        [[tiling.display_overrides]]
+        display_id = "builtin-uuid"
+        gaps_outer_left = 140
+        gaps_outer_bottom = 48
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.tiling.gapsOuter == 8)
+        #expect(config.tiling.gapsOuterLeft == 150)
+        #expect(config.tiling.displayOverrides.count == 2)
+        #expect(config.tiling.displayOverrides[0].displayName == "LG HDR 4K")
+        #expect(config.tiling.displayOverrides[0].gapsOuterLeft == 180)
+        #expect(config.tiling.displayOverrides[1].displayID == "builtin-uuid")
+        #expect(config.tiling.displayOverrides[1].gapsOuterBottom == 48)
+    }
+
+    @Test
     func railSettingsDecodeRendererGeometryAndStageAccents() {
         let settings = RailSettings.load(raw: """
         [fx.rail]

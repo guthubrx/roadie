@@ -462,7 +462,7 @@ public extension SnapshotService {
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
             splitPolicy: config.tiling.splitPolicy,
-            outerGaps: outerGaps(windowCount: orderedWindowIDs.count),
+            outerGaps: outerGaps(windowCount: orderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner
         ))
     }
@@ -500,7 +500,7 @@ public extension SnapshotService {
         let targetArea = canonicalTiledArea(for: intent, display: display)
         guard targetArea > 0 else { return false }
 
-        let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: intent.windowIDs.count))
+        let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: intent.windowIDs.count, display: display))
         let frames = intent.windowIDs.compactMap { intent.placements[$0]?.cgRect }
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
@@ -555,7 +555,7 @@ public extension SnapshotService {
             container: display.visibleFrame.cgRect,
             windowIDs: intent.windowIDs,
             splitPolicy: config.tiling.splitPolicy,
-            outerGaps: outerGaps(windowCount: intent.windowIDs.count),
+            outerGaps: outerGaps(windowCount: intent.windowIDs.count, display: display),
             innerGap: config.tiling.gapsInner
         ))
         return plan.placements.values.reduce(CGFloat(0)) { $0 + $1.area }
@@ -717,11 +717,13 @@ private extension SnapshotService {
         windowIDs.compactMap { frames[$0] }
     }
 
-    func outerGaps(windowCount: Int) -> Insets {
-        var top = config.tiling.gapsOuterTop ?? config.tiling.gapsOuter
-        var right = config.tiling.gapsOuterRight ?? config.tiling.gapsOuter
-        var bottom = config.tiling.gapsOuterBottom ?? config.tiling.gapsOuter
-        var left = config.tiling.gapsOuterLeft ?? config.tiling.gapsOuter
+    func outerGaps(windowCount: Int, display: DisplaySnapshot? = nil) -> Insets {
+        let override = display.flatMap(displayOverride)
+        let base = override?.gapsOuter ?? config.tiling.gapsOuter
+        var top = override?.gapsOuterTop ?? config.tiling.gapsOuterTop ?? base
+        var right = override?.gapsOuterRight ?? config.tiling.gapsOuterRight ?? base
+        var bottom = override?.gapsOuterBottom ?? config.tiling.gapsOuterBottom ?? base
+        var left = override?.gapsOuterLeft ?? config.tiling.gapsOuterLeft ?? base
 
         if config.tiling.smartGapsSolo && windowCount == 1 {
             let sides = config.tiling.smartGapsSoloSides
@@ -732,6 +734,12 @@ private extension SnapshotService {
         }
 
         return Insets(top: top, right: right, bottom: bottom, left: left)
+    }
+
+    private func displayOverride(for display: DisplaySnapshot) -> DisplayTilingOverride? {
+        config.tiling.displayOverrides.first { override in
+            override.displayID == display.id.rawValue || override.displayName == display.name
+        }
     }
 }
 
