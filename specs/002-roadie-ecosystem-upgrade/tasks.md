@@ -170,20 +170,20 @@
 
 ### Tests for User Story 5
 
-- [ ] T072 [US5] Ajouter les tests de schéma `query state` et `query windows` dans `Tests/RoadieDaemonTests/QueryCommandTests.swift`
-- [ ] T073 [US5] Ajouter les tests de schéma `query displays|desktops|stages|groups|rules` dans `Tests/RoadieDaemonTests/QueryCommandTests.swift`
-- [ ] T074 [P] [US5] Ajouter les tests de schéma `query health` et `query events` dans `Tests/RoadieDaemonTests/QueryHealthEventsTests.swift`
-- [ ] T075 [P] [US5] Ajouter les tests de compatibilité avec `state`, `tree` et `windows list --json` dans `Tests/RoadieDaemonTests/LegacyQueryCompatibilityTests.swift`
+- [X] T072 [US5] Ajouter les tests de schéma `query state` et `query windows` dans `Tests/RoadieDaemonTests/QueryCommandTests.swift`
+- [X] T073 [US5] Ajouter les tests de schéma `query displays|desktops|stages|groups|rules` dans `Tests/RoadieDaemonTests/QueryCommandTests.swift`
+- [X] T074 [P] [US5] Ajouter les tests de schéma `query health` et `query events` dans `Tests/RoadieDaemonTests/QueryHealthEventsTests.swift`
+- [X] T075 [P] [US5] Ajouter les tests de compatibilité avec `state`, `tree` et `windows list --json` dans `Tests/RoadieDaemonTests/LegacyQueryCompatibilityTests.swift`
 
 ### Implementation for User Story 5
 
-- [ ] T076 [US5] Créer `AutomationQueryService` dans `Sources/RoadieDaemon/AutomationQueryService.swift`
-- [ ] T077 [US5] Ajouter les projections fenêtres/écrans/desktops/stages dans `Sources/RoadieDaemon/AutomationQueryService.swift`
-- [ ] T078 [US5] Ajouter les projections groupes et règles dans `Sources/RoadieDaemon/AutomationQueryService.swift`
-- [ ] T079 [US5] Ajouter les projections santé et événements récents dans `Sources/RoadieDaemon/AutomationQueryService.swift`
-- [ ] T080 [US5] Ajouter les commandes `roadie query state|windows|displays|desktops|stages|groups|rules|health|events` dans `Sources/roadie/main.swift`
-- [ ] T081 [US5] Mettre à jour le contrat CLI final dans `specs/002-roadie-ecosystem-upgrade/contracts/cli.md`
-- [ ] T082 [US5] Lancer `swift build` puis `swift test --filter Query` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T076 [US5] Créer `AutomationQueryService` dans `Sources/RoadieDaemon/AutomationQueryService.swift`
+- [X] T077 [US5] Ajouter les projections fenêtres/écrans/desktops/stages dans `Sources/RoadieDaemon/AutomationQueryService.swift`
+- [X] T078 [US5] Ajouter les projections groupes et règles dans `Sources/RoadieDaemon/AutomationQueryService.swift`
+- [X] T079 [US5] Ajouter les projections santé et événements récents dans `Sources/RoadieDaemon/AutomationQueryService.swift`
+- [X] T080 [US5] Ajouter les commandes `roadie query state|windows|displays|desktops|stages|groups|rules|health|events` dans `Sources/roadie/main.swift`
+- [X] T081 [US5] Mettre à jour le contrat CLI final dans `specs/002-roadie-ecosystem-upgrade/contracts/cli.md`
+- [X] T082 [US5] Lancer `swift build` puis `swift test --filter Query` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: US5 stabilise la surface de lecture pour intégrations externes.
 

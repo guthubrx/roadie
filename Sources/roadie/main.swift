@@ -22,6 +22,7 @@ func printUsage() {
       roadie config show|validate
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
+      roadie query state|windows|displays|desktops|stages|groups|rules|health|events
       roadie rail status
       roadie doctor
       roadie self-test
@@ -274,6 +275,8 @@ case "rules":
     runRulesCommand(Array(args.dropFirst()))
 case "group":
     runGroupCommand(Array(args.dropFirst()))
+case "query":
+    runQueryCommand(Array(args.dropFirst()))
 case "rail":
     guard args.dropFirst().first == "status" else {
         printUsage()
@@ -816,6 +819,22 @@ func runGroupCommand(_ args: [String]) -> Never {
         printUsage()
         exit(64)
     }
+}
+
+@MainActor
+func runQueryCommand(_ args: [String]) -> Never {
+    guard let name = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let result = AutomationQueryService(service: service).query(name)
+    if case .object(let object) = result.data,
+       object["error"] != nil {
+        printCodableJSON(result)
+        exit(64)
+    }
+    printCodableJSON(result)
+    exit(0)
 }
 
 struct RulesOptions {

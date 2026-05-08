@@ -532,3 +532,18 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter WindowGroup` : 5 tests, 4 suites, succès
 - **Notes** : Le layout reste compatible en gardant les membres dans le stage; l'état groupé est persistant, commandable et exposé aux snapshots automation.
+
+### T072-T082 : US5 query API
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Add automation query API
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/AutomationQueryService.swift`
+  - `Sources/roadie/main.swift` (`roadie query ...`)
+  - `Tests/RoadieDaemonTests/QueryCommandTests.swift`
+  - `Tests/RoadieDaemonTests/QueryHealthEventsTests.swift`
+  - `Tests/RoadieDaemonTests/LegacyQueryCompatibilityTests.swift`
+  - `specs/002-roadie-ecosystem-upgrade/contracts/cli.md`
+- **Tests exécutés** :
+  - [x] `swift test --filter Query` : 4 tests, 3 suites, succès
+- **Notes** : Les queries retournent un wrapper JSON stable `{kind,data}` et gardent les commandes legacy disponibles.

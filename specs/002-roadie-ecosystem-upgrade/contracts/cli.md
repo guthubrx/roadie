@@ -16,28 +16,29 @@ roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SC
 ## State Queries
 
 ```bash
-roadie query state --json
-roadie query windows --json [--display ID] [--desktop ID] [--stage ID]
-roadie query displays --json
-roadie query desktops --json [--display ID]
-roadie query stages --json [--desktop ID]
-roadie query groups --json [--stage ID]
-roadie query rules --json
-roadie query health --json
-roadie query events --json [--limit N] [--type TYPE]
+roadie query state
+roadie query windows
+roadie query displays
+roadie query desktops
+roadie query stages
+roadie query groups
+roadie query rules
+roadie query health
+roadie query events
 ```
 
 **Compatibility**:
 
 - Les commandes existantes `roadie state`, `roadie tree`, `roadie windows list --json` restent disponibles.
-- Les nouvelles commandes privilégient un schéma stable plutôt qu'un dump de debug.
+- Les nouvelles commandes retournent toujours JSON avec `{ "kind": "...", "data": ... }`.
+- Les commandes existantes restent disponibles pour compatibilité opérateur.
 
 ## Rules
 
 ```bash
 roadie rules validate [--config PATH] [--json]
 roadie rules list [--json]
-roadie rules explain --window WINDOW_ID [--json]
+roadie rules explain --app APP [--title TITLE] [--role ROLE] [--stage STAGE] [--json]
 ```
 
 **Acceptance**:
@@ -48,16 +49,16 @@ roadie rules explain --window WINDOW_ID [--json]
 ## Tree Commands
 
 ```bash
-roadie layout split horizontal|vertical|opposite
-roadie layout join-with north|east|south|west
+roadie layout split horizontal|vertical
+roadie layout join-with left|right|up|down
 roadie layout flatten
-roadie layout insert north|east|south|west|stack|auto
-roadie layout zoom-parent toggle
+roadie layout insert left|right|up|down
+roadie layout zoom-parent
 roadie focus back-and-forth
 roadie desktop back-and-forth
 roadie desktop summon DESKTOP_ID
-roadie stage summon STAGE_ID
-roadie stage move-to-display STAGE_ID DISPLAY_ID
+roadie stage summon WINDOW_ID
+roadie stage move-to-display DISPLAY_INDEX
 ```
 
 **Acceptance**:
@@ -69,16 +70,16 @@ roadie stage move-to-display STAGE_ID DISPLAY_ID
 ## Groups
 
 ```bash
-roadie group create [--window WINDOW_ID ...]
-roadie group add WINDOW_ID
-roadie group remove WINDOW_ID
-roadie group focus next|prev|WINDOW_ID
+roadie group create GROUP_ID [WINDOW_ID ...]
+roadie group add GROUP_ID WINDOW_ID
+roadie group remove GROUP_ID WINDOW_ID
+roadie group focus GROUP_ID WINDOW_ID
 roadie group dissolve GROUP_ID
-roadie group list --json
+roadie group list
 ```
 
 **Acceptance**:
 
-- un groupe occupe un seul slot de layout.
-- le membre actif est celui qui reçoit le focus.
+- un groupe est persisté dans l'état de stage et exposé aux snapshots/query.
+- le membre actif est suivi dans l'état du groupe.
 - les changements publient `window.grouped`, `window.ungrouped` ou `group.*` si ajouté au catalogue.
