@@ -105,6 +105,10 @@ struct ConfigTests {
         width = 150
         background_color = "#101820"
         background_opacity = 0.35
+        auto_hide = true
+        edge_hit_width = 10
+        animation_ms = 120
+        hide_delay_ms = 250
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
@@ -137,6 +141,10 @@ struct ConfigTests {
         #expect(settings.width == 150)
         #expect(settings.backgroundColor == "#101820")
         #expect(settings.backgroundOpacity == 0.35)
+        #expect(settings.autoHide == true)
+        #expect(settings.edgeHitWidth == 10)
+        #expect(settings.animationMS == 120)
+        #expect(settings.hideDelayMS == 250)
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
         #expect(settings.preview.width == 160)

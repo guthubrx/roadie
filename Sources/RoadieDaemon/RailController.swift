@@ -12,6 +12,7 @@ public final class RailController {
     private var panels: [DisplayID: RailPanel] = [:]
     private var screenFrames: [DisplayID: CGRect] = [:]
     private var refreshTimer: Timer?
+    private var hoverTimer: Timer?
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var dragGhost: RailDragGhostWindow?
@@ -34,6 +35,7 @@ public final class RailController {
         NSApplication.shared.setActivationPolicy(.accessory)
         rebuildPanels()
         startClickMonitors()
+        startHoverTimer()
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels() }
@@ -65,6 +67,22 @@ public final class RailController {
         }
     }
 
+    private func startHoverTimer() {
+        hoverTimer?.invalidate()
+        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateRailHover()
+            }
+        }
+        RunLoop.main.add(hoverTimer!, forMode: .common)
+    }
+
+    private func updateRailHover() {
+        let point = NSEvent.mouseLocation
+        let canHide = pendingDrag == nil
+        panels.values.forEach { $0.updateAutoHide(mouse: point, canHide: canHide) }
+    }
+
     private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) {
         switch type {
         case .leftMouseDown:
@@ -83,6 +101,9 @@ public final class RailController {
         dropPreview.hide()
         for (displayID, panel) in panels {
             guard panel.frame.contains(screenPoint) else { continue }
+            if panel.revealIfCollapsed() {
+                return
+            }
             if let payload = panel.dragPayload(at: screenPoint) {
                 pendingDrag = PendingRailDrag(
                     displayID: displayID,
@@ -227,7 +248,7 @@ public final class RailController {
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
-            panel.position(on: screen, width: config.railWidth)
+            panel.position(on: screen, config: config)
             panel.render(
                 scope: scope,
                 displayName: screen.localizedName,
@@ -410,6 +431,14 @@ private final class RailPanel: NSPanel {
     private var emptyStageIDs: [StageID] = []
     private var emptyClickHideActive = true
     private var emptyClickSafetyMargin: CGFloat = 12
+    private var autoHide = false
+    private var edgeHitWidth: CGFloat = 8
+    private var animationDuration: TimeInterval = 0.16
+    private var hideDelay: TimeInterval = 0.35
+    private var expandedFrame = CGRect.zero
+    private var collapsedFrame = CGRect.zero
+    private var isCollapsed = false
+    private var hideAfter: Date?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -435,12 +464,85 @@ private final class RailPanel: NSPanel {
         contentView = stack
     }
 
-    func position(on screen: NSScreen, width: CGFloat) {
+    func position(on screen: NSScreen, config: RailVisualConfig) {
         let frame = screen.frame
-        setFrame(
-            CGRect(x: frame.minX, y: frame.minY, width: width, height: frame.height),
-            display: true
-        )
+        let wasAutoHide = autoHide
+        autoHide = config.autoHide
+        edgeHitWidth = config.edgeHitWidth
+        animationDuration = config.animationDuration
+        hideDelay = config.hideDelay
+        expandedFrame = CGRect(x: frame.minX, y: frame.minY, width: config.railWidth, height: frame.height)
+        collapsedFrame = CGRect(x: frame.minX, y: frame.minY, width: edgeHitWidth, height: frame.height)
+        if !autoHide {
+            isCollapsed = false
+        } else if !wasAutoHide {
+            isCollapsed = true
+        }
+        applyAutoHideFrame(animated: false)
+    }
+
+    func updateAutoHide(mouse: CGPoint, canHide: Bool) {
+        guard autoHide else { return }
+        if isCollapsed {
+            if collapsedFrame.contains(mouse) {
+                setCollapsed(false, animated: true)
+            }
+            return
+        }
+        if expandedFrame.contains(mouse) {
+            hideAfter = nil
+            return
+        }
+        guard canHide else { return }
+        if hideDelay <= 0 {
+            setCollapsed(true, animated: true)
+            return
+        }
+        let now = Date()
+        if hideAfter == nil {
+            hideAfter = now.addingTimeInterval(hideDelay)
+        }
+        if let hideAfter, now >= hideAfter {
+            setCollapsed(true, animated: true)
+        }
+    }
+
+    func revealIfCollapsed() -> Bool {
+        guard autoHide, isCollapsed else { return false }
+        setCollapsed(false, animated: true)
+        return true
+    }
+
+    private func setCollapsed(_ collapsed: Bool, animated: Bool) {
+        guard autoHide else { return }
+        guard isCollapsed != collapsed else { return }
+        isCollapsed = collapsed
+        hideAfter = nil
+        applyAutoHideFrame(animated: animated)
+    }
+
+    private func applyAutoHideFrame(animated: Bool) {
+        let target = autoHide && isCollapsed ? collapsedFrame : expandedFrame
+        if !isCollapsed {
+            stack.isHidden = false
+        }
+        guard animated, animationDuration > 0 else {
+            setFrame(target, display: true)
+            stack.isHidden = autoHide && isCollapsed
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animationDuration
+            animator().setFrame(target, display: true)
+        } completionHandler: { [weak self] in
+            Task { @MainActor in
+                self?.finishAutoHideFrame()
+            }
+        }
+    }
+
+    private func finishAutoHideFrame() {
+        stack.isHidden = autoHide && isCollapsed
     }
 
     func render(
@@ -712,6 +814,10 @@ private struct RailVisualConfig {
     var railWidth: CGFloat = 150
     var backgroundColor: NSColor = .black
     var backgroundOpacity: CGFloat = 0
+    var autoHide: Bool = false
+    var edgeHitWidth: CGFloat = 8
+    var animationDuration: TimeInterval = 0.16
+    var hideDelay: TimeInterval = 0.35
     var emptyClickHideActive: Bool = true
     var emptyClickSafetyMargin: CGFloat = 12
     var previewWidth: CGFloat = 160
@@ -750,6 +856,10 @@ private struct RailVisualConfig {
             railWidth: CGFloat(settings.width),
             backgroundColor: NSColor(hex: settings.backgroundColor) ?? .black,
             backgroundOpacity: CGFloat(settings.backgroundOpacity),
+            autoHide: settings.autoHide,
+            edgeHitWidth: CGFloat(settings.edgeHitWidth),
+            animationDuration: settings.animationMS / 1000,
+            hideDelay: settings.hideDelayMS / 1000,
             emptyClickHideActive: settings.emptyClickHideActive,
             emptyClickSafetyMargin: CGFloat(settings.emptyClickSafetyMargin),
             previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
