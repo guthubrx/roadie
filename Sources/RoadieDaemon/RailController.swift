@@ -227,7 +227,7 @@ public final class RailController {
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
-            panel.position(on: screen)
+            panel.position(on: screen, width: config.railWidth)
             panel.render(
                 scope: scope,
                 displayName: screen.localizedName,
@@ -405,7 +405,6 @@ private final class RailDragGhostView: NSView {
 @MainActor
 private final class RailPanel: NSPanel {
     private let stack = NSStackView()
-    private let width: CGFloat = 260
     private let horizontalInset: CGFloat = 6
     private var visibleStageIDs: [StageID] = []
     private var emptyStageIDs: [StageID] = []
@@ -434,7 +433,7 @@ private final class RailPanel: NSPanel {
         contentView = stack
     }
 
-    func position(on screen: NSScreen) {
+    func position(on screen: NSScreen, width: CGFloat) {
         let frame = screen.frame
         setFrame(
             CGRect(x: frame.minX, y: frame.minY, width: width, height: frame.height),
@@ -679,6 +678,7 @@ private final class WindowThumbnailStore {
 private struct RailVisualConfig {
     var mode: RailRenderMode = .stacked
     var stageAccents: [StageID: NSColor] = [:]
+    var railWidth: CGFloat = 150
     var previewWidth: CGFloat = 160
     var previewHeight: CGFloat = 104
     var leadingPadding: CGFloat = 8
@@ -712,6 +712,7 @@ private struct RailVisualConfig {
         return RailVisualConfig(
             mode: mode,
             stageAccents: accents,
+            railWidth: CGFloat(settings.width),
             previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
             previewHeight: CGFloat(useParallaxGeometry ? parallax.height : preview.height),
             leadingPadding: CGFloat(useParallaxGeometry ? parallax.leadingPadding : preview.leadingPadding),

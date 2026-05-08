@@ -102,6 +102,7 @@ struct ConfigTests {
         let settings = RailSettings.load(raw: """
         [fx.rail]
         renderer = "parallax-45"
+        width = 150
 
         [fx.rail.preview]
         width = 160
@@ -129,6 +130,7 @@ struct ConfigTests {
         """)
 
         #expect(settings.renderer == "parallax-45")
+        #expect(settings.width == 150)
         #expect(settings.preview.width == 160)
         #expect(settings.parallax.rotation == 35)
         #expect(settings.parallax.width == 120)
