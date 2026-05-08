@@ -367,7 +367,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T028 : Contrat events subscription
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `96a6e20` - docs(002): Document event subscription behavior
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/contracts/events.md` (comportement implémenté)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T028 cochée)
@@ -376,3 +376,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] Relecture contrat vs implémentation US1
   - [ ] `swift build` : non applicable, documentation seule
 - **Notes** : Le contrat documente `from-now`, replay par défaut, initial state, filtres, command events et conversion legacy.
+
+### T029 : Checkpoint US1 EventSubscription
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T029 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [x] `swift test --filter EventSubscriptionTests`
+- **Notes** : Les 4 tests EventSubscription sont passés. SwiftPM a attendu la fin du build parallèle avant d'exécuter les tests.
