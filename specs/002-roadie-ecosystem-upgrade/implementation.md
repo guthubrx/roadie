@@ -419,7 +419,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T032/T038 : Matching des rules
 
 - **Statut** : Complété
-- **Commit** : Ce commit - test(002): Cover rule matching
+- **Commit** : `f9fb6d1` - test(002): Cover rule matching
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/WindowRuleMatcher.swift` (matcher)
   - `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift` (tests matcher)
@@ -428,3 +428,18 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter WindowRuleMatcherTests`
 - **Notes** : Le matcher combine les critères par AND, supporte exact/regex, stage/role via contexte, ignore les rules désactivées et priorise `priority` puis `id`.
+
+### T033/T042 : Commandes rules
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Add rules commands
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/RulesCommandService.swift` (service validate/list/explain)
+  - `Sources/RoadieDaemon/Formatters.swift` (format texte rules)
+  - `Sources/roadie/main.swift` (commande `rules`)
+  - `Tests/RoadieDaemonTests/RulesCommandTests.swift` (tests commandes)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T033/T042 cochées)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter RulesCommandTests`
+- **Notes** : `rules validate`, `rules list` et `rules explain` supportent `--json` et `--config PATH`; `explain` accepte les critères synthétiques `--app`, `--title`, `--role`, `--stage`, etc.

@@ -1,4 +1,5 @@
 import Foundation
+import RoadieAX
 import RoadieCore
 import RoadieDaemon
 
@@ -16,6 +17,7 @@ func printUsage() {
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie config show|validate
+      roadie rules validate|list|explain [--json] [--config PATH]
       roadie rail status
       roadie doctor
       roadie self-test
@@ -233,6 +235,8 @@ case "config":
         fputs("roadie: config load failed: \(error)\n", stderr)
         exit(1)
     }
+case "rules":
+    runRulesCommand(Array(args.dropFirst()))
 case "rail":
     guard args.dropFirst().first == "status" else {
         printUsage()
@@ -318,6 +322,17 @@ case "toggle":
 default:
     printUsage()
     exit(args.isEmpty ? 0 : 64)
+}
+
+func printCodableJSON<T: Encodable>(_ value: T) {
+    do {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        print(String(decoding: try encoder.encode(value), as: UTF8.self))
+    } catch {
+        fputs("roadie: failed to encode JSON: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 @MainActor
@@ -606,6 +621,148 @@ func parseEventSubscriptionOptions(_ args: [String]) -> EventSubscriptionOptions
         }
     }
     return EventSubscriptionOptions(fromNow: fromNow, initialState: initialState, types: types, scopes: scopes)
+}
+
+func runRulesCommand(_ args: [String]) -> Never {
+    guard let verb = args.first, ["validate", "list", "explain"].contains(verb) else {
+        printUsage()
+        exit(64)
+    }
+    let options = parseRulesOptions(Array(args.dropFirst()))
+    let service = RulesCommandService(configPath: options.configPath)
+
+    switch verb {
+    case "validate":
+        let report = service.validate()
+        if options.json {
+            printCodableJSON(report)
+        } else {
+            print(TextFormatter.configValidation(report))
+        }
+        exit(report.hasErrors ? 1 : 0)
+    case "list":
+        do {
+            let rules = try service.list()
+            if options.json {
+                printCodableJSON(rules)
+            } else {
+                print(TextFormatter.rules(rules))
+            }
+            exit(0)
+        } catch {
+            fputs("roadie: rules list failed: \(error)\n", stderr)
+            exit(1)
+        }
+    case "explain":
+        guard let app = options.app else {
+            fputs("roadie: rules explain requires --app APP\n", stderr)
+            exit(64)
+        }
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 0),
+            pid: 0,
+            appName: app,
+            bundleID: options.bundleID ?? "",
+            title: options.title ?? "",
+            frame: Rect(x: 0, y: 0, width: 1, height: 1),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let context = WindowRuleMatchContext(
+            role: options.role,
+            subrole: options.subrole,
+            display: options.display,
+            desktop: options.desktop,
+            stage: options.stage,
+            isFloating: options.isFloating
+        )
+        do {
+            let explanation = try service.explain(window: window, context: context)
+            if options.json {
+                printCodableJSON(explanation)
+            } else {
+                print(TextFormatter.ruleExplanation(explanation))
+            }
+            exit(explanation.matchedRuleID == nil ? 1 : 0)
+        } catch {
+            fputs("roadie: rules explain failed: \(error)\n", stderr)
+            exit(1)
+        }
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+struct RulesOptions {
+    var json = false
+    var configPath: String?
+    var app: String?
+    var bundleID: String?
+    var title: String?
+    var role: String?
+    var subrole: String?
+    var display: String?
+    var desktop: String?
+    var stage: String?
+    var isFloating: Bool?
+}
+
+func parseRulesOptions(_ args: [String]) -> RulesOptions {
+    var options = RulesOptions()
+    var index = 0
+    while index < args.count {
+        switch args[index] {
+        case "--json":
+            options.json = true
+            index += 1
+        case "--config":
+            options.configPath = requiredRulesOption(args, index: index, name: "--config")
+            index += 2
+        case "--app":
+            options.app = requiredRulesOption(args, index: index, name: "--app")
+            index += 2
+        case "--bundle-id":
+            options.bundleID = requiredRulesOption(args, index: index, name: "--bundle-id")
+            index += 2
+        case "--title":
+            options.title = requiredRulesOption(args, index: index, name: "--title")
+            index += 2
+        case "--role":
+            options.role = requiredRulesOption(args, index: index, name: "--role")
+            index += 2
+        case "--subrole":
+            options.subrole = requiredRulesOption(args, index: index, name: "--subrole")
+            index += 2
+        case "--display":
+            options.display = requiredRulesOption(args, index: index, name: "--display")
+            index += 2
+        case "--desktop":
+            options.desktop = requiredRulesOption(args, index: index, name: "--desktop")
+            index += 2
+        case "--stage":
+            options.stage = requiredRulesOption(args, index: index, name: "--stage")
+            index += 2
+        case "--floating":
+            options.isFloating = true
+            index += 1
+        case "--tiled":
+            options.isFloating = false
+            index += 1
+        case let unknown:
+            fputs("roadie: unknown rules option \(unknown)\n", stderr)
+            exit(64)
+        }
+    }
+    return options
+}
+
+func requiredRulesOption(_ args: [String], index: Int, name: String) -> String {
+    guard args.indices.contains(index + 1) else {
+        fputs("roadie: rules \(name) requires a value\n", stderr)
+        exit(64)
+    }
+    return args[index + 1]
 }
 
 @MainActor
