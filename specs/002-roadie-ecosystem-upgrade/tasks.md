@@ -60,7 +60,7 @@
 
 - [X] T021 [US1] Créer le catalogue d'événements `AutomationEventCatalog` dans `Sources/RoadieCore/AutomationEventCatalog.swift`
 - [X] T022 [US1] Créer `EventSubscriptionService` pour suivre `events.jsonl` dans `Sources/RoadieDaemon/EventSubscriptionService.swift`
-- [ ] T023 [US1] Créer `AutomationSnapshotService` pour produire `state.snapshot` dans `Sources/RoadieDaemon/AutomationSnapshotService.swift`
+- [X] T023 [US1] Créer `AutomationSnapshotService` pour produire `state.snapshot` dans `Sources/RoadieDaemon/AutomationSnapshotService.swift`
 - [ ] T024 [US1] Intégrer `AutomationSnapshotService` avec `DaemonSnapshot` dans `Sources/RoadieDaemon/DaemonSnapshot.swift`
 - [ ] T025 [US1] Ajouter la commande `roadie events subscribe` dans `Sources/roadie/main.swift`
 - [ ] T026 [US1] Ajouter les filtres `--from-now`, `--initial-state`, `--type` et `--scope` dans `Sources/roadie/main.swift`

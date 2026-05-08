@@ -293,7 +293,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T022 : EventSubscriptionService
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `b59e981` - feat(002): Complete event subscription service
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/EventSubscriptionService.swift` (service subscription)
   - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (filtrage et lecture complète)
@@ -302,3 +302,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventSubscriptionTests`
 - **Notes** : Le service expose `start`, `readAvailable`, `readAll`, filtres type/scope et chemin effectif.
+
+### T023 : AutomationSnapshotService
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/AutomationSnapshotService.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T023 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : couverture dédiée prévue par les tests de snapshot/query ultérieurs
+- **Notes** : Le service projette `DaemonSnapshot` vers `RoadieStateSnapshot` avec displays, desktops, stages et windows.
