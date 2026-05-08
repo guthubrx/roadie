@@ -36,15 +36,14 @@ public final class BorderController {
 
         let snapshot = snapshotService.snapshot()
         guard let focusedWindowID = snapshot.focusedWindowID,
-              let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID && $0.window.isTileCandidate }),
-              let scope = entry.scope,
+              let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               !isHidden(entry.window.frame.cgRect, in: snapshot.displays)
         else {
             panel.orderOut(nil)
             return
         }
 
-        let color = activeColor(for: scope.stageID, config: config)
+        let color = activeColor(for: entry.scope?.stageID, config: config)
         panel.render(
             frame: Self.axToNS(entry.window.frame.cgRect),
             color: color,
@@ -53,11 +52,14 @@ public final class BorderController {
         )
     }
 
-    private func activeColor(for stageID: StageID, config: BorderConfig) -> NSColor {
-        let rawColor = config.stageOverrides
-            .first { $0.stageID == stageID.rawValue }?
-            .activeColor
-            ?? config.activeColor
+    private func activeColor(for stageID: StageID?, config: BorderConfig) -> NSColor {
+        let rawColor: String
+        if let stageID,
+           let override = config.stageOverrides.first(where: { $0.stageID == stageID.rawValue }) {
+            rawColor = override.activeColor ?? config.activeColor
+        } else {
+            rawColor = config.activeColor
+        }
         return NSColor(hex: rawColor) ?? NSColor.systemBlue
     }
 
