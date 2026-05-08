@@ -20,6 +20,7 @@ func printUsage() {
       roadie doctor
       roadie self-test
       roadie events tail [N]
+      roadie events subscribe
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
@@ -189,12 +190,17 @@ case "self-test":
     print(TextFormatter.selfTest(report))
     exit(report.failed ? 1 : 0)
 case "events":
-    guard args.dropFirst().first == "tail" else {
+    let verb = args.dropFirst().first
+    guard verb == "tail" || verb == "subscribe" else {
         printUsage()
         exit(64)
     }
-    let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
-    print(EventLog().tail(limit: limit).joined(separator: "\n"))
+    if verb == "tail" {
+        let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
+        print(EventLog().tail(limit: limit).joined(separator: "\n"))
+    } else {
+        runEventSubscription(Array(args.dropFirst(2)))
+    }
 case "metrics":
     let metrics = MetricsService(service: service).collect()
     if args.contains("--json") {
@@ -507,6 +513,25 @@ func runStageCommand(_ args: [String]) {
     case nil:
         printUsage()
         exit(64)
+    }
+}
+
+func runEventSubscription(_ args: [String]) -> Never {
+    let subscription = EventSubscriptionService()
+    var cursor = subscription.start()
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    while true {
+        let result = subscription.readAvailable(from: cursor)
+        cursor = result.cursor
+        for event in result.events {
+            if let data = try? encoder.encode(event),
+               let line = String(data: data, encoding: .utf8) {
+                print(line)
+            }
+        }
+        fflush(stdout)
+        Thread.sleep(forTimeInterval: 0.2)
     }
 }
 

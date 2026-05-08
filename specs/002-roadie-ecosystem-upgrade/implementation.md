@@ -319,7 +319,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T024 : Projection automation depuis DaemonSnapshot
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `cd7382f` - feat(002): Expose automation snapshot projection
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/DaemonSnapshot.swift` (extension `automationSnapshot`)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T024 cochée)
@@ -327,3 +327,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift build`
 - **Notes** : Les futurs endpoints CLI peuvent obtenir un `RoadieStateSnapshot` directement depuis un `DaemonSnapshot`.
+
+### T025 : Commande roadie events subscribe
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/roadie/main.swift` (commande `events subscribe`)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T025 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+- **Notes** : La commande suit le journal JSONL et écrit les enveloppes sur stdout jusqu'à interruption utilisateur.

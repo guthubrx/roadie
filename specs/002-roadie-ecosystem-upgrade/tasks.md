@@ -62,7 +62,7 @@
 - [X] T022 [US1] Créer `EventSubscriptionService` pour suivre `events.jsonl` dans `Sources/RoadieDaemon/EventSubscriptionService.swift`
 - [X] T023 [US1] Créer `AutomationSnapshotService` pour produire `state.snapshot` dans `Sources/RoadieDaemon/AutomationSnapshotService.swift`
 - [X] T024 [US1] Intégrer `AutomationSnapshotService` avec `DaemonSnapshot` dans `Sources/RoadieDaemon/DaemonSnapshot.swift`
-- [ ] T025 [US1] Ajouter la commande `roadie events subscribe` dans `Sources/roadie/main.swift`
+- [X] T025 [US1] Ajouter la commande `roadie events subscribe` dans `Sources/roadie/main.swift`
 - [ ] T026 [US1] Ajouter les filtres `--from-now`, `--initial-state`, `--type` et `--scope` dans `Sources/roadie/main.swift`
 - [ ] T027 [US1] Publier `command.received`, `command.applied` et `command.failed` depuis les commandes CLI concernées dans `Sources/roadie/main.swift`
 - [ ] T028 [US1] Documenter le comportement final de subscription dans `specs/002-roadie-ecosystem-upgrade/contracts/events.md`
