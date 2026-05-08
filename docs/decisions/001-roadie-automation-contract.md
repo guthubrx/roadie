@@ -44,3 +44,21 @@ Roadie ne crée pas de hotkey daemon natif, ne pilote pas les Spaces Apple, ne d
 - Tests de validation TOML rules.
 - Tests CLI sur `subscribe`, `query`, `rules validate`.
 - Scénarios d'acceptation documentés dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`.
+
+## Suivi Spec 002
+
+La spec 002 est exécutée dans le worktree dédié `.worktrees/002-roadie-ecosystem-upgrade/`.
+
+Gates obligatoires pour les tâches de code :
+
+1. `swift build`
+2. `swift test` ou filtre Swift Testing ciblé
+3. validation CLI manuelle quand la tâche touche `roadie`
+4. journalisation dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+5. commit dédié par tâche validée
+
+Décisions à surveiller pendant l'implémentation :
+
+- si `events subscribe` par suivi JSONL ne respecte pas la latence SC-001, rouvrir l'ADR pour évaluer un socket dédié.
+- si `scratchpad` ne peut pas être appliqué sans workflow complet, conserver au minimum le marqueur contractuel dans les règles et queries.
+- si l'indicateur visuel des groupes surcharge les bordures existantes, limiter la première version à l'état JSON + variation de border stable.
