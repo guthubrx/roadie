@@ -88,8 +88,15 @@ public final class RailController {
                 )
                 return
             }
-            guard let action = panel.action(at: screenPoint) else { continue }
-            perform(action, displayID: displayID)
+            if let action = panel.action(at: screenPoint) {
+                perform(action, displayID: displayID)
+            } else if let stageID = panel.emptyStageID() {
+                print("rail empty switch stage \(stageID.rawValue)")
+                fflush(stdout)
+                perform(.switchStage(stageID), displayID: displayID)
+            } else {
+                return
+            }
             rebuildPanels()
             return
         }
@@ -430,7 +437,11 @@ private final class RailPanel: NSPanel {
             return id
         }
         guard frame.contains(screenPoint) else { return nil }
-        return emptyStageIDs.first ?? nextGeneratedStageID()
+        return emptyStageID()
+    }
+
+    func emptyStageID() -> StageID? {
+        emptyStageIDs.first ?? nextGeneratedStageID()
     }
 
     func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
