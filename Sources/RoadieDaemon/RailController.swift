@@ -12,6 +12,7 @@ public final class RailController {
     private var panels: [DisplayID: RailPanel] = [:]
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
+    private var pendingDrag: PendingRailDrag?
 
     public init(
         store: StageStore = StageStore(),
@@ -43,30 +44,80 @@ public final class RailController {
 
     private func startClickMonitors() {
         guard clickMonitors.isEmpty else { return }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] event in
-            self?.handleClick(at: NSEvent.mouseLocation)
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+            self?.handleMouse(event.type, at: NSEvent.mouseLocation)
             return event
         }) {
             clickMonitors.append(local)
         }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown, handler: { [weak self] _ in
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
             DispatchQueue.main.async {
-                self?.handleClick(at: NSEvent.mouseLocation)
+                self?.handleMouse(event.type, at: NSEvent.mouseLocation)
             }
         }) {
             clickMonitors.append(global)
         }
     }
 
-    private func handleClick(at screenPoint: CGPoint) {
+    private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) {
+        switch type {
+        case .leftMouseDown:
+            handleMouseDown(at: screenPoint)
+        case .leftMouseDragged:
+            handleMouseDragged(to: screenPoint)
+        case .leftMouseUp:
+            handleMouseUp(at: screenPoint)
+        default:
+            break
+        }
+    }
+
+    private func handleMouseDown(at screenPoint: CGPoint) {
         for (displayID, panel) in panels {
-            guard panel.frame.contains(screenPoint),
-                  let action = panel.action(at: screenPoint)
-            else { continue }
+            guard panel.frame.contains(screenPoint) else { continue }
+            if let payload = panel.dragPayload(at: screenPoint) {
+                pendingDrag = PendingRailDrag(
+                    displayID: displayID,
+                    windowID: payload.windowID,
+                    sourceStageID: payload.sourceStageID,
+                    startPoint: screenPoint,
+                    didDrag: false
+                )
+                return
+            }
+            guard let action = panel.action(at: screenPoint) else { continue }
             perform(action, displayID: displayID)
             rebuildPanels()
             return
         }
+    }
+
+    private func handleMouseDragged(to screenPoint: CGPoint) {
+        guard var drag = pendingDrag else { return }
+        if hypot(screenPoint.x - drag.startPoint.x, screenPoint.y - drag.startPoint.y) > 6 {
+            drag.didDrag = true
+            pendingDrag = drag
+        }
+    }
+
+    private func handleMouseUp(at screenPoint: CGPoint) {
+        guard let drag = pendingDrag else { return }
+        pendingDrag = nil
+
+        guard drag.didDrag else {
+            perform(.switchStage(drag.sourceStageID), displayID: drag.displayID)
+            rebuildPanels()
+            return
+        }
+
+        guard let panel = panels[drag.displayID],
+              let targetStageID = panel.stageID(at: screenPoint),
+              targetStageID != drag.sourceStageID
+        else { return }
+        print("rail drag window \(drag.windowID.rawValue) -> stage \(targetStageID.rawValue)")
+        fflush(stdout)
+        perform(.moveWindow(drag.windowID, targetStageID), displayID: drag.displayID)
+        rebuildPanels()
     }
 
     private func perform(_ action: RailAction, displayID: DisplayID) {
@@ -145,6 +196,19 @@ private enum RailAction {
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID)
     case moveStage(StageID, Int)
+}
+
+private struct RailDragPayload {
+    var windowID: WindowID
+    var sourceStageID: StageID
+}
+
+private struct PendingRailDrag {
+    var displayID: DisplayID
+    var windowID: WindowID
+    var sourceStageID: StageID
+    var startPoint: CGPoint
+    var didDrag: Bool
 }
 
 @MainActor
@@ -231,6 +295,35 @@ private final class RailPanel: NSPanel {
             if let card = current as? StageCardView {
                 let local = card.convert(contentPoint, from: contentView)
                 return card.action(at: local)
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    func stageID(at screenPoint: CGPoint) -> StageID? {
+        guard let contentView, frame.contains(screenPoint) else { return nil }
+        let windowPoint = convertPoint(fromScreen: screenPoint)
+        let contentPoint = contentView.convert(windowPoint, from: nil)
+        var view = contentView.hitTest(contentPoint)
+        while let current = view {
+            if let card = current as? StageCardView {
+                return card.stageID
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
+        guard let contentView, frame.contains(screenPoint) else { return nil }
+        let windowPoint = convertPoint(fromScreen: screenPoint)
+        let contentPoint = contentView.convert(windowPoint, from: nil)
+        var view = contentView.hitTest(contentPoint)
+        while let current = view {
+            if let card = current as? StageCardView {
+                let local = card.convert(contentPoint, from: contentView)
+                return card.dragPayload(at: local)
             }
             view = current.superview
         }
@@ -454,9 +547,12 @@ private final class StageCardView: NSControl {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func action(at point: CGPoint) -> RailAction {
+    func action(at point: CGPoint) -> RailAction? {
         if let action = windowAction(at: point) {
             return action
+        }
+        if dragPayload(at: point) != nil {
+            return nil
         }
         if upHitRect.contains(point), position > 1 {
             return .moveStage(stageID, position - 1)
@@ -775,6 +871,16 @@ private final class StageCardView: NSControl {
             if let nextStageID, nextWindowHitRect(in: item.rect).contains(point) {
                 return .moveWindow(member.windowID, nextStageID)
             }
+        }
+        return nil
+    }
+
+    func dragPayload(at point: CGPoint) -> RailDragPayload? {
+        for item in hitPreviewItems().reversed() {
+            guard item.rect.contains(point),
+                  let member = stage.members[safe: item.index]
+            else { continue }
+            return RailDragPayload(windowID: member.windowID, sourceStageID: stageID)
         }
         return nil
     }
