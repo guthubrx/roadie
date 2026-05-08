@@ -103,6 +103,8 @@ struct ConfigTests {
         [fx.rail]
         renderer = "parallax-45"
         width = 150
+        empty_click_hide_active = false
+        empty_click_safety_margin = 24
 
         [fx.rail.preview]
         width = 160
@@ -131,6 +133,8 @@ struct ConfigTests {
 
         #expect(settings.renderer == "parallax-45")
         #expect(settings.width == 150)
+        #expect(settings.emptyClickHideActive == false)
+        #expect(settings.emptyClickSafetyMargin == 24)
         #expect(settings.preview.width == 160)
         #expect(settings.parallax.rotation == 35)
         #expect(settings.parallax.width == 120)

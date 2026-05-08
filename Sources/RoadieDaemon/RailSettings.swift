@@ -3,6 +3,8 @@ import Foundation
 public struct RailSettings: Equatable, Sendable {
     public var renderer: String
     public var width: Double
+    public var emptyClickHideActive: Bool
+    public var emptyClickSafetyMargin: Double
     public var preview: Preview
     public var stacked: Stacked
     public var parallax: Parallax
@@ -54,6 +56,8 @@ public struct RailSettings: Equatable, Sendable {
         return RailSettings(
             renderer: rail["renderer"] ?? renderer(from: raw),
             width: number(rail["width"], default: 150, min: 90, max: 320),
+            emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
+            emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
                 width: number(preview["width"], default: 160, min: 60, max: 240),
                 height: number(preview["height"], default: 104, min: 40, max: 180),
@@ -88,6 +92,8 @@ public struct RailSettings: Equatable, Sendable {
         [
             "renderer=\(renderer)",
             "width=\(width)",
+            "empty_click_hide_active=\(emptyClickHideActive)",
+            "empty_click_safety_margin=\(emptyClickSafetyMargin)",
             "preview.width=\(preview.width)",
             "preview.height=\(preview.height)",
             "preview.leading_padding=\(preview.leadingPadding)",
@@ -114,6 +120,8 @@ public struct RailSettings: Equatable, Sendable {
     private static let defaults = RailSettings(
         renderer: "stacked-previews",
         width: 150,
+        emptyClickHideActive: true,
+        emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
         stacked: Stacked(offsetX: 60, offsetY: 80, scalePerLayer: 0.05, opacityPerLayer: 0.08),
         parallax: Parallax(
@@ -194,5 +202,17 @@ public struct RailSettings: Equatable, Sendable {
     private static func number(_ raw: String?, default fallback: Double, min: Double, max: Double) -> Double {
         guard let raw, let value = Double(raw) else { return fallback }
         return Swift.max(min, Swift.min(max, value))
+    }
+
+    private static func bool(_ raw: String?, default fallback: Bool) -> Bool {
+        guard let raw else { return fallback }
+        switch raw.lowercased() {
+        case "true", "yes", "1":
+            return true
+        case "false", "no", "0":
+            return false
+        default:
+            return fallback
+        }
     }
 }
