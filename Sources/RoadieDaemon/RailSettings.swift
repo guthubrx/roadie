@@ -2,6 +2,7 @@ import Foundation
 
 public struct RailSettings: Equatable, Sendable {
     public var renderer: String
+    public var width: Double
     public var preview: Preview
     public var stacked: Stacked
     public var parallax: Parallax
@@ -52,6 +53,7 @@ public struct RailSettings: Equatable, Sendable {
         let parallax = sections["fx.rail.parallax"] ?? [:]
         return RailSettings(
             renderer: rail["renderer"] ?? renderer(from: raw),
+            width: number(rail["width"], default: 150, min: 90, max: 320),
             preview: Preview(
                 width: number(preview["width"], default: 160, min: 60, max: 240),
                 height: number(preview["height"], default: 104, min: 40, max: 180),
@@ -85,6 +87,7 @@ public struct RailSettings: Equatable, Sendable {
     public var statusLines: [String] {
         [
             "renderer=\(renderer)",
+            "width=\(width)",
             "preview.width=\(preview.width)",
             "preview.height=\(preview.height)",
             "preview.leading_padding=\(preview.leadingPadding)",
@@ -110,6 +113,7 @@ public struct RailSettings: Equatable, Sendable {
 
     private static let defaults = RailSettings(
         renderer: "stacked-previews",
+        width: 150,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
         stacked: Stacked(offsetX: 60, offsetY: 80, scalePerLayer: 0.05, opacityPerLayer: 0.08),
         parallax: Parallax(
