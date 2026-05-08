@@ -84,7 +84,7 @@
 - [X] T031 [P] [US2] Ajouter les tests de validation de conflits dans `Tests/RoadieDaemonTests/WindowRuleValidationTests.swift`
 - [X] T032 [P] [US2] Ajouter les tests de matching app/title/role/stage dans `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift`
 - [X] T033 [P] [US2] Ajouter les tests CLI `rules validate` et `rules explain` dans `Tests/RoadieDaemonTests/RulesCommandTests.swift`
-- [ ] T034 [P] [US2] Ajouter les tests du marqueur `scratchpad` dans `Tests/RoadieDaemonTests/WindowRuleScratchpadTests.swift`
+- [X] T034 [P] [US2] Ajouter les tests du marqueur `scratchpad` dans `Tests/RoadieDaemonTests/WindowRuleScratchpadTests.swift`
 
 ### Implementation for User Story 2
 
@@ -92,11 +92,11 @@
 - [X] T036 [US2] Étendre le parsing TOML de `[[rules]]` dans `Sources/RoadieCore/Config.swift`
 - [X] T037 [US2] Créer `WindowRuleValidator` dans `Sources/RoadieDaemon/WindowRuleValidator.swift`
 - [X] T038 [US2] Créer `WindowRuleMatcher` dans `Sources/RoadieDaemon/WindowRuleMatcher.swift`
-- [ ] T039 [US2] Créer `WindowRuleEngine` pour évaluer et appliquer les actions dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
+- [X] T039 [US2] Créer `WindowRuleEngine` pour évaluer et appliquer les actions dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
 - [ ] T040 [US2] Intégrer les règles à la détection ou actualisation fenêtre dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
 - [ ] T041 [US2] Publier `rule.matched`, `rule.applied`, `rule.skipped` et `rule.failed` via `Sources/RoadieDaemon/EventLog.swift`
 - [X] T042 [US2] Ajouter les commandes `roadie rules validate`, `roadie rules list` et `roadie rules explain` dans `Sources/roadie/main.swift`
-- [ ] T043 [US2] Stocker et exposer le marqueur `scratchpad` dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
+- [X] T043 [US2] Stocker et exposer le marqueur `scratchpad` dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
 - [ ] T044 [US2] Mettre à jour le contrat TOML réel dans `specs/002-roadie-ecosystem-upgrade/contracts/config-rules.toml.md`
 - [ ] T045 [US2] Lancer `swift build` puis `swift test --filter WindowRule` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 

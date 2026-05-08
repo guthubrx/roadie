@@ -659,7 +659,7 @@ func runRulesCommand(_ args: [String]) -> Never {
             exit(64)
         }
         let window = WindowSnapshot(
-            id: WindowID(rawValue: 0),
+            id: WindowID(rawValue: 1),
             pid: 0,
             appName: app,
             bundleID: options.bundleID ?? "",
