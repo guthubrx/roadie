@@ -20,4 +20,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 
 ## Progression
 
-Aucune tâche d'implémentation n'a encore été démarrée.
+### T001 : Fixtures d'événements Spec 002
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/Fixtures/Spec002Events.jsonl` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T001 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] Validation JSONL via `jq`
+  - [x] `swift build`
+  - [ ] `swift test` : non requis pour fixture seule
+- **Notes** : La fixture couvre snapshot initial, fenêtre créée/détruite, focus, desktop, stage, règle appliquée et commande appliquée.
