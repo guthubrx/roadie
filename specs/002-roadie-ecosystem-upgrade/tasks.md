@@ -35,7 +35,7 @@
 - [X] T011 [P] Créer le modèle `LayoutCommandIntent` dans `Sources/RoadieCore/LayoutCommandIntent.swift`
 - [X] T012 Adapter `Sources/RoadieDaemon/EventLog.swift` pour écrire et relire `RoadieEventEnvelope` sans casser l'ancien journal
 - [X] T013 Ajouter les helpers de compatibilité legacy `RoadieEvent` vers `RoadieEventEnvelope` dans `Sources/RoadieDaemon/EventLog.swift`
-- [ ] T014 Ajouter les tests de sérialisation et compatibilité événementielle dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
+- [X] T014 Ajouter les tests de sérialisation et compatibilité événementielle dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
 - [ ] T015 Ajouter les tests de snapshot contractuel dans `Tests/RoadieDaemonTests/AutomationSnapshotTests.swift`
 - [ ] T016 Lancer `swift build` puis `swift test --filter AutomationEventTests` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
