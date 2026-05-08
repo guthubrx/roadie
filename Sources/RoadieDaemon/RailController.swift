@@ -13,6 +13,7 @@ public final class RailController {
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
+    private var dragGhost: RailDragGhostWindow?
 
     public init(
         store: StageStore = StageStore(),
@@ -73,6 +74,7 @@ public final class RailController {
     }
 
     private func handleMouseDown(at screenPoint: CGPoint) {
+        dragGhost?.hide()
         for (displayID, panel) in panels {
             guard panel.frame.contains(screenPoint) else { continue }
             if let payload = panel.dragPayload(at: screenPoint) {
@@ -95,6 +97,14 @@ public final class RailController {
     private func handleMouseDragged(to screenPoint: CGPoint) {
         guard var drag = pendingDrag else { return }
         if hypot(screenPoint.x - drag.startPoint.x, screenPoint.y - drag.startPoint.y) > 6 {
+            if !drag.didDrag {
+                if dragGhost == nil {
+                    dragGhost = RailDragGhostWindow()
+                }
+                dragGhost?.show(image: thumbnails.cachedImage(for: drag.windowID), at: screenPoint)
+            } else {
+                dragGhost?.move(to: screenPoint)
+            }
             drag.didDrag = true
             pendingDrag = drag
         }
@@ -103,6 +113,7 @@ public final class RailController {
     private func handleMouseUp(at screenPoint: CGPoint) {
         guard let drag = pendingDrag else { return }
         pendingDrag = nil
+        dragGhost?.hide()
 
         guard drag.didDrag else {
             perform(.switchStage(drag.sourceStageID), displayID: drag.displayID)
@@ -209,6 +220,92 @@ private struct PendingRailDrag {
     var sourceStageID: StageID
     var startPoint: CGPoint
     var didDrag: Bool
+}
+
+@MainActor
+private final class RailDragGhostWindow: NSPanel {
+    private let ghostView = RailDragGhostView()
+
+    init() {
+        super.init(
+            contentRect: CGRect(x: 0, y: 0, width: 150, height: 96),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        isOpaque = false
+        backgroundColor = .clear
+        level = .floating
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        ignoresMouseEvents = true
+        hasShadow = false
+        alphaValue = 0.86
+        contentView = ghostView
+    }
+
+    func show(image: NSImage?, at point: CGPoint) {
+        ghostView.image = image
+        setContentSize(ghostView.preferredSize(for: image))
+        move(to: point)
+        orderFrontRegardless()
+        ghostView.needsDisplay = true
+    }
+
+    func move(to point: CGPoint) {
+        setFrameOrigin(CGPoint(x: point.x + 18, y: point.y - frame.height / 2))
+    }
+
+    func hide() {
+        orderOut(nil)
+    }
+}
+
+@MainActor
+private final class RailDragGhostView: NSView {
+    var image: NSImage?
+
+    func preferredSize(for image: NSImage?) -> CGSize {
+        guard let image, image.size.width > 0, image.size.height > 0 else {
+            return CGSize(width: 148, height: 92)
+        }
+        let maxSize = CGSize(width: 170, height: 110)
+        let scale = min(maxSize.width / image.size.width, maxSize.height / image.size.height, 1)
+        return CGSize(width: image.size.width * scale + 10, height: image.size.height * scale + 10)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let rect = bounds.insetBy(dx: 5, dy: 5)
+        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowBlurRadius = 16
+        shadow.shadowOffset = .zero
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        shadow.set()
+        NSColor.black.withAlphaComponent(0.30).setFill()
+        path.fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        if let image {
+            NSGraphicsContext.saveGraphicsState()
+            path.addClip()
+            image.draw(in: rect, from: aspectFitSourceRect(image.size, for: rect), operation: .sourceOver, fraction: 0.92)
+            NSGraphicsContext.restoreGraphicsState()
+        } else {
+            NSColor.systemGreen.withAlphaComponent(0.45).setFill()
+            path.fill()
+        }
+
+        NSColor.white.withAlphaComponent(0.42).setStroke()
+        path.lineWidth = 1
+        path.stroke()
+    }
+
+    private func aspectFitSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
+        CGRect(origin: .zero, size: imageSize)
+    }
 }
 
 @MainActor
@@ -352,6 +449,10 @@ private final class WindowThumbnailStore {
 
     func prune(keeping liveIDs: Set<WindowID>) {
         images = images.filter { liveIDs.contains($0.key) }
+    }
+
+    func cachedImage(for windowID: WindowID) -> NSImage? {
+        images[windowID]
     }
 
     private func image(for member: PersistentStageMember) -> NSImage? {
