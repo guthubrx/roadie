@@ -1001,7 +1001,7 @@ private final class StageCardView: NSControl {
     }
 
     private func windowAction(at point: CGPoint) -> RailAction? {
-        for item in hitPreviewItems().reversed() {
+        for item in hitPreviewItemsFrontToBack() {
             guard let member = stage.members[safe: item.index] else { continue }
             if !isActive, summonWindowHitRect(in: item.rect).contains(point) {
                 return .summonWindow(member.windowID)
@@ -1017,13 +1017,18 @@ private final class StageCardView: NSControl {
     }
 
     func dragPayload(at point: CGPoint) -> RailDragPayload? {
-        for item in hitPreviewItems().reversed() {
+        for item in hitPreviewItemsFrontToBack() {
             guard item.rect.contains(point),
                   let member = stage.members[safe: item.index]
             else { continue }
             return RailDragPayload(windowID: member.windowID, sourceStageID: stageID)
         }
         return nil
+    }
+
+    private func hitPreviewItemsFrontToBack() -> [(index: Int, rect: CGRect)] {
+        // Stacked/parallax previews are drawn back-to-front, so index 0 is visually on top.
+        hitPreviewItems()
     }
 
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
