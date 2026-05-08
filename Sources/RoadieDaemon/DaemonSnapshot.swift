@@ -40,6 +40,7 @@ public struct SnapshotService {
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
     private let config: RoadieConfig
+    private let railSettings: RailSettings
     private let intentStore: LayoutIntentStore
     private let stageStore: StageStore
 
@@ -47,12 +48,14 @@ public struct SnapshotService {
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
         frameWriter: any WindowFrameWriting = AXWindowFrameWriter(),
         config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
+        railSettings: RailSettings = RailSettings.load(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
         stageStore: StageStore = StageStore()
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
         self.config = config
+        self.railSettings = railSettings
         self.intentStore = intentStore
         self.stageStore = stageStore
     }
@@ -724,6 +727,9 @@ private extension SnapshotService {
         var right = override?.gapsOuterRight ?? override?.gapsOuter ?? config.tiling.gapsOuterRight ?? base
         var bottom = override?.gapsOuterBottom ?? override?.gapsOuter ?? config.tiling.gapsOuterBottom ?? base
         var left = override?.gapsOuterLeft ?? override?.gapsOuter ?? config.tiling.gapsOuterLeft ?? base
+        if railSettings.autoHide && railSettings.dynamicLeftGap {
+            left = min(left, railSettings.edgeHitWidth)
+        }
 
         if config.tiling.smartGapsSolo && windowCount == 1 {
             let sides = config.tiling.smartGapsSoloSides

@@ -7,8 +7,10 @@ public struct RailSettings: Equatable, Sendable {
     public var backgroundOpacity: Double
     public var autoHide: Bool
     public var edgeHitWidth: Double
+    public var edgeMagnetismWidth: Double
     public var animationMS: Double
     public var hideDelayMS: Double
+    public var dynamicLeftGap: Bool
     public var emptyClickHideActive: Bool
     public var emptyClickSafetyMargin: Double
     public var preview: Preview
@@ -66,8 +68,10 @@ public struct RailSettings: Equatable, Sendable {
             backgroundOpacity: number(rail["background_opacity"], default: 0, min: 0, max: 1),
             autoHide: bool(rail["auto_hide"], default: false),
             edgeHitWidth: number(rail["edge_hit_width"], default: 8, min: 1, max: 40),
+            edgeMagnetismWidth: number(rail["edge_magnetism_width"], default: 24, min: 0, max: 160),
             animationMS: number(rail["animation_ms"], default: 160, min: 0, max: 1000),
             hideDelayMS: number(rail["hide_delay_ms"], default: 350, min: 0, max: 5000),
+            dynamicLeftGap: bool(rail["dynamic_left_gap"], default: false),
             emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
@@ -108,8 +112,10 @@ public struct RailSettings: Equatable, Sendable {
             "background_opacity=\(backgroundOpacity)",
             "auto_hide=\(autoHide)",
             "edge_hit_width=\(edgeHitWidth)",
+            "edge_magnetism_width=\(edgeMagnetismWidth)",
             "animation_ms=\(animationMS)",
             "hide_delay_ms=\(hideDelayMS)",
+            "dynamic_left_gap=\(dynamicLeftGap)",
             "empty_click_hide_active=\(emptyClickHideActive)",
             "empty_click_safety_margin=\(emptyClickSafetyMargin)",
             "preview.width=\(preview.width)",
@@ -142,8 +148,10 @@ public struct RailSettings: Equatable, Sendable {
         backgroundOpacity: 0,
         autoHide: false,
         edgeHitWidth: 8,
+        edgeMagnetismWidth: 24,
         animationMS: 160,
         hideDelayMS: 350,
+        dynamicLeftGap: false,
         emptyClickHideActive: true,
         emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
