@@ -402,3 +402,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter WindowRuleConfigTests`
 - **Notes** : La config décode `[[rules]]`, `[rules.match]` et `[rules.action]` depuis la fixture Spec 002.
+
+### T031/T037 : Validation des rules
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/WindowRuleValidator.swift` (validateur)
+  - `Tests/RoadieDaemonTests/WindowRuleValidationTests.swift` (tests conflits)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T031/T035/T036/T037 cochées)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowRuleValidationTests`
+- **Notes** : Le validateur refuse les rules sans matcher, les IDs dupliqués, les regex invalides et `exclude` combiné à des actions de layout/placement.
