@@ -121,7 +121,7 @@ La génération de tâches doit séparer strictement les lots suivants :
 - [x] Phase 0: Research complete
 - [x] Phase 1: Design complete
 - [x] Phase 2: Task planning approach defined
-- [ ] Phase 3: Tasks generated
+- [x] Phase 3: Tasks generated
 - [ ] Phase 4: Implementation
 - [ ] Phase 5: Validation
 
