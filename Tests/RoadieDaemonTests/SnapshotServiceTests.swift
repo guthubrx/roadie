@@ -1399,6 +1399,50 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func directionalWindowFocusChoosesGeometricEntryWindowOnAdjacentDisplay() {
+        let leftDisplay = DisplayID(rawValue: "display-a")
+        let rightDisplay = DisplayID(rawValue: "display-b")
+        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true)
+        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: "B", frame: Rect(x: 1000, y: -400, width: 1600, height: 1200), visibleFrame: Rect(x: 1000, y: -400, width: 1600, height: 1200), isMain: false)
+        let source = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "Terminal", bundleID: "term", title: "source", frame: Rect(x: 0, y: 0, width: 1000, height: 800), isOnScreen: true, isTileCandidate: true)
+        let lowerLeft = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "Terminal", bundleID: "term", title: "lower-left", frame: Rect(x: 1000, y: 400, width: 800, height: 400), isOnScreen: true, isTileCandidate: true)
+        let lowerRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 3, appName: "Grayjay", bundleID: "grayjay", title: "lower-right", frame: Rect(x: 1800, y: 400, width: 800, height: 400), isOnScreen: true, isTileCandidate: true)
+        let upperLeft = WindowSnapshot(id: WindowID(rawValue: 4), pid: 4, appName: "Browser", bundleID: "browser", title: "upper-left", frame: Rect(x: 1000, y: -400, width: 800, height: 400), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-window-focus-entry-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: source.id, members: [
+                    PersistentStageMember(windowID: source.id, bundleID: source.bundleID, title: source.title, frame: source.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: lowerRight.id, members: [
+                    PersistentStageMember(windowID: lowerLeft.id, bundleID: lowerLeft.bundleID, title: lowerLeft.title, frame: lowerLeft.frame),
+                    PersistentStageMember(windowID: lowerRight.id, bundleID: lowerRight.bundleID, title: lowerRight.title, frame: lowerRight.frame),
+                    PersistentStageMember(windowID: upperLeft.id, bundleID: upperLeft.bundleID, title: upperLeft.title, frame: upperLeft.frame),
+                ]),
+            ]),
+        ], activeDisplayID: leftDisplay))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [leftSnapshot, rightSnapshot], windowSnapshots: [source, lowerLeft, lowerRight, upperLeft], focusedID: source.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = WindowCommandService(service: service, stageStore: stageStore).focus(.right)
+
+        #expect(result.changed)
+        #expect(writer.focusedWindowIDs == [lowerLeft.id])
+        #expect(stageStore.state().activeDisplayID == rightDisplay)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func focusFollowsMousePickerTargetsActiveStageWindowAtPoint() {
         let display = DisplayID(rawValue: "display-a")
         let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
