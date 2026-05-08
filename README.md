@@ -27,6 +27,7 @@ make displays
 make windows
 make snapshot
 make state
+make status
 make plan
 make config-validate
 make self-test
@@ -43,9 +44,15 @@ Equivalent direct commands:
 ./scripts/roadie windows list
 ./scripts/roadied snapshot
 ./scripts/roadie state dump --json
+./scripts/roadie state audit
+./scripts/roadie state heal
+./scripts/roadie tree dump
+./scripts/roadie metrics
 ./scripts/roadie layout plan
 ./scripts/roadie config validate
 ./scripts/roadie self-test
+./scripts/roadie daemon health
+./scripts/roadie daemon heal
 ./scripts/roadie events tail 30
 ```
 
@@ -67,8 +74,20 @@ make logs       # show recent daemon logs
 make self-test  # read-only runtime consistency checks
 make events     # recent JSONL Roadie events
 make doctor     # build + permissions + runtime diagnostics
+./bin/roadie daemon health  # pid + self-test + state audit
+./bin/roadie daemon heal    # repair state + reconcile layout
 make stop       # stop LaunchAgent
 make restart    # stop then start
+```
+
+Useful runtime inspection commands:
+
+```bash
+./bin/roadie state audit       # durable state consistency checks
+./bin/roadie state heal        # conservative persistent-state repair
+./bin/roadie tree dump         # display > desktop > stage > window hierarchy
+./bin/roadie metrics --json    # compact counters for automation
+./bin/roadie stage summon WID  # bring an inactive-stage window to the active stage
 ```
 
 For `launchd`, macOS may require Accessibility permission for the stable
