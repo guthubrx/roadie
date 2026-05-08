@@ -249,9 +249,6 @@ public struct WindowCommandService {
 
         let updatedSnapshot = service.snapshot()
         let result = service.apply(service.applyPlan(from: updatedSnapshot))
-        if result.attempted > 0 && result.failed < result.attempted {
-            persistDisplayTransferIntent(in: service.snapshot(), scopes: [sourceScope, targetScopeID].compactMap { $0 })
-        }
         _ = focusWindow(active.window)
         events.append(RoadieEvent(
             type: "window_display",
@@ -436,27 +433,6 @@ public struct WindowCommandService {
             state: snapshot.state,
             focusedWindowID: snapshot.focusedWindowID
         )
-    }
-
-    private func persistDisplayTransferIntent(in snapshot: DaemonSnapshot, scopes: [StageScope]) {
-        let uniqueScopes = Set(scopes)
-        for scope in uniqueScopes {
-            guard let stage = snapshot.state.stage(scope: scope),
-                  !stage.windowIDs.isEmpty
-            else { continue }
-
-            var placements: [WindowID: Rect] = [:]
-            for entry in snapshot.windows where entry.scope == scope && entry.window.isTileCandidate {
-                placements[entry.window.id] = entry.window.frame
-            }
-            guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
-            service.saveLayoutIntent(
-                scope: scope,
-                windowIDs: stage.windowIDs,
-                placements: placements,
-                source: .command
-            )
-        }
     }
 
     private func swappedWindowIDs(

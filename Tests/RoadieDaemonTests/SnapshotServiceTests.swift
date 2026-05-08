@@ -1974,6 +1974,10 @@ struct SnapshotServiceTests {
             .appendingPathComponent("roadie-display-stages-\(UUID().uuidString).json")
             .path
         let stageStore = StageStore(path: stagePath)
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-intents-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
         let writer = RecordingWriter()
         let config = RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
         let service = SnapshotService(
@@ -1984,6 +1988,7 @@ struct SnapshotServiceTests {
             ),
             frameWriter: writer,
             config: config,
+            intentStore: intentStore,
             stageStore: stageStore
         )
 
@@ -1998,6 +2003,13 @@ struct SnapshotServiceTests {
         #expect(writer.requestedFrames[left.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
         #expect(writer.requestedFrames[moving.id] == Rect(x: 1000, y: 0, width: 495, height: 500))
         #expect(writer.requestedFrames[target.id] == Rect(x: 1505, y: 0, width: 495, height: 500))
+        if let sourceScope {
+            #expect(intentStore.intent(for: StageScope(displayID: sourceScope.displayID, desktopID: sourceScope.desktopID, stageID: sourceScope.activeStageID)) == nil)
+        }
+        if let targetScope {
+            #expect(intentStore.intent(for: StageScope(displayID: targetScope.displayID, desktopID: targetScope.desktopID, stageID: targetScope.activeStageID)) == nil)
+        }
         try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intentPath)
     }
 }
