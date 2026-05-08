@@ -557,6 +557,8 @@ private final class RailPanel: NSPanel {
 private final class WindowThumbnailStore {
     private var images: [WindowID: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
+    private var capturedAt: [WindowID: Date] = [:]
+    private let drmRefreshInterval: TimeInterval = 2
 
     func images(for members: [PersistentStageMember], protectedWindowIDs: Set<WindowID>) -> [WindowID: NSImage] {
         Dictionary(uniqueKeysWithValues: members.compactMap { member in
@@ -568,6 +570,7 @@ private final class WindowThumbnailStore {
     func prune(keeping liveIDs: Set<WindowID>) {
         images = images.filter { liveIDs.contains($0.key) }
         signatures = signatures.filter { liveIDs.contains($0.key) }
+        capturedAt = capturedAt.filter { liveIDs.contains($0.key) }
     }
 
     func cachedImage(for windowID: WindowID) -> NSImage? {
@@ -575,23 +578,34 @@ private final class WindowThumbnailStore {
     }
 
     private func image(for member: PersistentStageMember, captureAllowed: Bool) -> NSImage? {
+        let now = Date()
+        let isDRMSensitive = Self.isDRMSensitiveBundle(member.bundleID)
         let signature = "\(member.bundleID)\n\(member.title)"
         if signatures[member.windowID] != signature {
             images.removeValue(forKey: member.windowID)
+            capturedAt.removeValue(forKey: member.windowID)
             signatures[member.windowID] = signature
         }
         if let cached = images[member.windowID], !cached.looksBlank {
-            return cached
+            let age = now.timeIntervalSince(capturedAt[member.windowID] ?? .distantPast)
+            guard isDRMSensitive, age >= drmRefreshInterval else {
+                return cached
+            }
         }
-        images.removeValue(forKey: member.windowID)
-        guard captureAllowed else { return fallbackImage(for: member) }
+        if images[member.windowID]?.looksBlank == true {
+            images.removeValue(forKey: member.windowID)
+        }
+        guard captureAllowed else {
+            return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
+        }
 
         if let captured = capture(member.windowID) {
             images[member.windowID] = captured
+            capturedAt[member.windowID] = now
             return captured
         }
 
-        return fallbackImage(for: member)
+        return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
     }
 
     private func capture(_ windowID: WindowID) -> NSImage? {
@@ -633,12 +647,24 @@ private final class WindowThumbnailStore {
         return image
     }
 
-    private func fallbackImage(for member: PersistentStageMember) -> NSImage? {
+    private func fallbackImage(for member: PersistentStageMember, capturedAt date: Date) -> NSImage? {
         let image = appIcon(for: member)
         if let image {
             images[member.windowID] = image
+            capturedAt[member.windowID] = date
         }
         return image
+    }
+
+    private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
+        [
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "com.operasoftware.Opera",
+            "org.mozilla.firefox",
+        ].contains(bundleID)
     }
 }
 
