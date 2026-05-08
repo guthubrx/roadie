@@ -65,7 +65,7 @@
 - [X] T025 [US1] Ajouter la commande `roadie events subscribe` dans `Sources/roadie/main.swift`
 - [X] T026 [US1] Ajouter les filtres `--from-now`, `--initial-state`, `--type` et `--scope` dans `Sources/roadie/main.swift`
 - [X] T027 [US1] Publier `command.received`, `command.applied` et `command.failed` depuis les commandes CLI concernées dans `Sources/roadie/main.swift`
-- [ ] T028 [US1] Documenter le comportement final de subscription dans `specs/002-roadie-ecosystem-upgrade/contracts/events.md`
+- [X] T028 [US1] Documenter le comportement final de subscription dans `specs/002-roadie-ecosystem-upgrade/contracts/events.md`
 - [ ] T029 [US1] Lancer `swift build` puis `swift test --filter EventSubscriptionTests` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: US1 est livrable seule comme MVP observable par CLI.

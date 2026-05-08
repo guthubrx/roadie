@@ -355,7 +355,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T027 : Événements command.* CLI
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `7f1cdeb` - feat(002): Emit subscribe command events
 - **Fichiers modifiés** :
   - `Sources/roadie/main.swift` (helper `emitCommandEvent`)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T027 cochée)
@@ -363,3 +363,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift build`
 - **Notes** : `events subscribe` publie `command.received` et `command.applied`; le helper commun permet d'ajouter `command.failed` sur les commandes suivantes.
+
+### T028 : Contrat events subscription
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/contracts/events.md` (comportement implémenté)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T028 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] Relecture contrat vs implémentation US1
+  - [ ] `swift build` : non applicable, documentation seule
+- **Notes** : Le contrat documente `from-now`, replay par défaut, initial state, filtres, command events et conversion legacy.
