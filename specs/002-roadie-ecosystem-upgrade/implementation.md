@@ -51,7 +51,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T003 : Fixture de règles Spec 002
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `225ce75` - test(002): Add rules fixture
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/Fixtures/Spec002Rules.toml` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T003 cochée)
@@ -60,3 +60,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : non requis pour fixture seule
 - **Notes** : La fixture contient deux règles valides et trois exemples invalides pour parsing, conflits et regex invalide.
+
+### T004 : Matrice de couverture automation
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/automation-coverage.md` (existant, validé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T004 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] Relecture de couverture SC-002
+  - [ ] `swift build` : non applicable, documentation seule
+- **Notes** : La matrice justifie le seuil SC-002 à 93,3 % hors refus documentés.
