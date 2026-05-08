@@ -180,7 +180,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T013 : Conversion legacy RoadieEvent
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `4b51cd3` - feat(002): Convert legacy events
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/EventLog.swift` (conversion legacy)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T013 cochée)
@@ -189,3 +189,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec T014/T016
 - **Notes** : `envelopes(limit:)` tente d'abord le format enveloppe, puis convertit les anciennes lignes `RoadieEvent`.
+
+### T014 : Tests AutomationEvent
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/AutomationEventTests.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T014 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter AutomationEventTests`
+- **Notes** : Les tests couvrent round-trip JSON payloads et lecture mixte enveloppe + legacy event.
