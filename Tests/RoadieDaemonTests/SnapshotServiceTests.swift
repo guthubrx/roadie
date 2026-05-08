@@ -1760,6 +1760,77 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func daemonHealthReportsRunningPidAndHealthyState() throws {
+        let display = DisplayID(rawValue: "display-a")
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-stage-\(UUID().uuidString).json")
+            .path
+        let pidPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-pid-\(UUID().uuidString).pid")
+            .path
+        try String(ProcessInfo.processInfo.processIdentifier).write(toFile: pidPath, atomically: true, encoding: .utf8)
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: window.id, members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [window],
+                focusedID: window.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = DaemonHealthService(service: service, stageStore: stageStore, pidFilePath: pidPath).run()
+
+        #expect(!report.failed)
+        #expect(report.checks.contains(DaemonHealthCheck(level: .ok, name: "self-test", message: "failed=false")))
+        #expect(report.checks.contains(DaemonHealthCheck(level: .ok, name: "state-audit", message: "failed=false")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: pidPath)
+    }
+
+    @Test
+    func daemonHealthWarnsWhenPidfileIsMissing() {
+        let display = DisplayID(rawValue: "display-a")
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-missing-\(UUID().uuidString).json")
+            .path
+        let missingPidPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-missing-\(UUID().uuidString).pid")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: []
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = DaemonHealthService(service: service, stageStore: stageStore, pidFilePath: missingPidPath).run()
+
+        #expect(!report.failed)
+        #expect(report.checks.contains(DaemonHealthCheck(level: .warn, name: "pidfile", message: "missing")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

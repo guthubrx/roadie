@@ -37,6 +37,7 @@ func printUsage() {
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
+      roadie daemon health [--json]
       roadie daemon restart
     """)
 }
@@ -236,7 +237,20 @@ case "balance":
     let result = service.apply(service.applyPlan(from: service.snapshot()))
     print(TextFormatter.applyResult(result))
 case "daemon":
-    if args.dropFirst().first == "restart" {
+    if args.dropFirst().first == "health" {
+        let report = DaemonHealthService(service: service).run()
+        if args.contains("--json") {
+            do {
+                print(try SnapshotEncoding.json(report))
+            } catch {
+                fputs("roadie: failed to encode daemon health: \(error)\n", stderr)
+                exit(1)
+            }
+        } else {
+            print(TextFormatter.daemonHealth(report))
+        }
+        exit(report.failed ? 1 : 0)
+    } else if args.dropFirst().first == "restart" {
         runShell("/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/start", [])
     } else {
         printUsage()
