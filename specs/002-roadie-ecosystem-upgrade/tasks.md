@@ -98,7 +98,7 @@
 - [X] T042 [US2] Ajouter les commandes `roadie rules validate`, `roadie rules list` et `roadie rules explain` dans `Sources/roadie/main.swift`
 - [X] T043 [US2] Stocker et exposer le marqueur `scratchpad` dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
 - [X] T044 [US2] Mettre à jour le contrat TOML réel dans `specs/002-roadie-ecosystem-upgrade/contracts/config-rules.toml.md`
-- [ ] T045 [US2] Lancer `swift build` puis `swift test --filter WindowRule` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T045 [US2] Lancer `swift build` puis `swift test --filter WindowRule` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: US2 fonctionne sans dépendre des futures commandes d'arbre ou groupes.
 

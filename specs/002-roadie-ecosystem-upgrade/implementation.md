@@ -476,7 +476,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T044 : Contrat TOML rules
 
 - **Statut** : Complété
-- **Commit** : Ce commit - docs(002): Update rules config contract
+- **Commit** : `100c83a` - docs(002): Update rules config contract
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/contracts/config-rules.toml.md` (contrat réel)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T044 cochée)
@@ -484,3 +484,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] Relecture contrat vs implémentation US2
 - **Notes** : Le contrat documente les champs supportés, l'ordre de priorité réel, les conflits validés, les commandes CLI et les événements runtime.
+
+### T045 : Checkpoint US2 WindowRule
+
+- **Statut** : Complété
+- **Commit** : Ce commit - test(002): Validate window rules checkpoint
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T045 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (résultats validation)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [x] `swift test --filter WindowRule` : 16 tests, 5 suites, succès
+  - [x] `swift test --filter RulesCommandTests` : 4 tests, 1 suite, succès
+- **Notes** : US2 est livrable : parsing, validation, matching, commandes CLI, moteur scratchpad et événements runtime sont couverts.
