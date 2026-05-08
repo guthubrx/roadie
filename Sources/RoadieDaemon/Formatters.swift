@@ -114,6 +114,15 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func daemonHealth(_ report: DaemonHealthReport) -> String {
+        let status = report.failed ? "fail" : "ok"
+        var lines = ["status=\(status)"]
+        for check in report.checks {
+            lines.append("\(check.level.rawValue)\t\(check.name)\t\(check.message)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func configValidation(_ report: ConfigValidationReport) -> String {
         let status = report.hasErrors ? "error" : "ok"
         var lines = ["status=\(status)"]
