@@ -77,7 +77,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T005 : Initialisation du journal d'implémentation
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `49a4169` - docs(002): Initialize implementation journal
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal initialisé et enrichi)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T005 cochée)
@@ -85,3 +85,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] Relecture du protocole `1 tâche = 1 commit`
   - [ ] `swift build` : non applicable, documentation seule
 - **Notes** : Le journal contient la règle d'exécution et l'historique des premières tâches.
+
+### T006 : Suivi Spec 002 dans l'ADR
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `docs/decisions/001-roadie-automation-contract.md` (section suivi Spec 002)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T006 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] Relecture de cohérence ADR/plan/tasks
+  - [ ] `swift build` : non applicable, documentation seule
+- **Notes** : L'ADR rappelle le worktree, les gates Swift, le commit atomique et les points de décision à surveiller.
