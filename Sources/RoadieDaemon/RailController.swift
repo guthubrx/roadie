@@ -606,8 +606,23 @@ private final class WindowThumbnailStore {
             return nil
         }
         let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 128, height: 128)
-        return icon
+        let size = NSSize(width: 160, height: 104)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
+        NSBezierPath(roundedRect: CGRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
+        NSColor.white.withAlphaComponent(0.08).setStroke()
+        let border = NSBezierPath(roundedRect: CGRect(x: 0.5, y: 0.5, width: size.width - 1, height: size.height - 1), xRadius: 10, yRadius: 10)
+        border.lineWidth = 1
+        border.stroke()
+        icon.draw(
+            in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+        image.unlockFocus()
+        return image
     }
 }
 
