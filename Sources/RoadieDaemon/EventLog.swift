@@ -20,6 +20,30 @@ public struct RoadieEvent: Codable, Equatable, Sendable {
     }
 }
 
+public extension RoadieEventEnvelope {
+    init(legacy event: RoadieEvent) {
+        let sanitizedType = event.type
+            .replacingOccurrences(of: " ", with: "_")
+            .replacingOccurrences(of: "/", with: "_")
+        let milliseconds = Int(event.timestamp.timeIntervalSince1970 * 1000)
+        let payload = event.details.mapValues { AutomationPayload.string($0) }
+        let subject = event.scope.map {
+            AutomationSubject(kind: "stage", id: $0.description)
+        }
+        self.init(
+            schemaVersion: 1,
+            id: "legacy_\(milliseconds)_\(sanitizedType)",
+            timestamp: event.timestamp,
+            type: event.type,
+            scope: event.scope == nil ? nil : .stage,
+            subject: subject,
+            correlationId: nil,
+            cause: .system,
+            payload: payload
+        )
+    }
+}
+
 public struct EventLog: Sendable {
     private let url: URL
     private static let jsonNewline = Data("\n".utf8)
@@ -74,7 +98,13 @@ public struct EventLog: Sendable {
         decoder.dateDecodingStrategy = .iso8601
         return tail(limit: limit).compactMap { line in
             guard let data = line.data(using: .utf8) else { return nil }
-            return try? decoder.decode(RoadieEventEnvelope.self, from: data)
+            if let envelope = try? decoder.decode(RoadieEventEnvelope.self, from: data) {
+                return envelope
+            }
+            if let legacy = try? decoder.decode(RoadieEvent.self, from: data) {
+                return RoadieEventEnvelope(legacy: legacy)
+            }
+            return nil
         }
     }
 }
