@@ -37,7 +37,7 @@ func printUsage() {
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
-      roadie daemon health [--json]
+      roadie daemon health|heal [--json]
       roadie daemon restart
     """)
 }
@@ -248,6 +248,19 @@ case "daemon":
             }
         } else {
             print(TextFormatter.daemonHealth(report))
+        }
+        exit(report.failed ? 1 : 0)
+    } else if args.dropFirst().first == "heal" {
+        let report = DaemonHealthService(service: service).heal()
+        if args.contains("--json") {
+            do {
+                print(try SnapshotEncoding.json(report))
+            } catch {
+                fputs("roadie: failed to encode daemon heal: \(error)\n", stderr)
+                exit(1)
+            }
+        } else {
+            print(TextFormatter.daemonHeal(report))
         }
         exit(report.failed ? 1 : 0)
     } else if args.dropFirst().first == "restart" {

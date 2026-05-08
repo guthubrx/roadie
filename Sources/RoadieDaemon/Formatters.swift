@@ -123,6 +123,18 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func daemonHeal(_ report: DaemonHealReport) -> String {
+        [
+            "status=\(report.failed ? "fail" : "ok")",
+            "stateRepaired=\(report.state.repaired)",
+            "layoutAttempted=\(report.layout.attempted)",
+            "layoutApplied=\(report.layout.applied)",
+            "layoutClamped=\(report.layout.clamped)",
+            "layoutFailed=\(report.layout.failed)",
+            "healthFailed=\(report.health.failed)"
+        ].joined(separator: "\n")
+    }
+
     public static func configValidation(_ report: ConfigValidationReport) -> String {
         let status = report.hasErrors ? "error" : "ok"
         var lines = ["status=\(status)"]

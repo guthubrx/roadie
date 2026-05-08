@@ -1831,6 +1831,46 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func daemonHealRepairsStateAndAppliesPendingLayout() throws {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 300, height: 500), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 300, y: 0, width: 300, height: 500), isOnScreen: true, isTileCandidate: true)
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-daemon-heal-\(UUID().uuidString).json")
+            .path
+        let pidPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-daemon-heal-\(UUID().uuidString).pid")
+            .path
+        try String(ProcessInfo.processInfo.processIdentifier).write(toFile: pidPath, atomically: true, encoding: .utf8)
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                    PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, right], focusedID: left.id),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            stageStore: stageStore
+        )
+
+        let report = DaemonHealthService(service: service, stageStore: stageStore, pidFilePath: pidPath).heal()
+
+        #expect(!report.failed)
+        #expect(report.layout.attempted == 2)
+        #expect(writer.requestedFrames[left.id] == Rect(x: 0, y: 0, width: 495, height: 500))
+        #expect(writer.requestedFrames[right.id] == Rect(x: 505, y: 0, width: 495, height: 500))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: pidPath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
