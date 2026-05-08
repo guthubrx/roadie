@@ -547,3 +547,21 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter Query` : 4 tests, 3 suites, succès
 - **Notes** : Les queries retournent un wrapper JSON stable `{kind,data}` et gardent les commandes legacy disponibles.
+
+### T083-T089 : Finitions Spec 002
+
+- **Statut** : Complété
+- **Commit** : Ce commit - chore(002): Finalize ecosystem upgrade
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/quickstart.md`
+  - `docs/decisions/001-roadie-automation-contract.md`
+  - `Tests/RoadieDaemonTests/Spec002RegressionTests.swift`
+  - `.specify/memory/sessions/index.md`
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md`
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [x] `swift test` : 138 tests, 27 suites, succès
+  - [x] `swift run roadie events subscribe --from-now --initial-state` : flux JSONL démarré, `state.snapshot`, `command.received`, `command.applied` observés avant interruption automatique.
+  - [x] Scan `rg` API privée/SIP/Spaces/hotkey : aucune API privée, SIP off, SkyLight/CGS, hotkey daemon ou Carbon ajoutés; seules occurrences `canJoinAllSpaces` correspondent aux overlays NSWindow existants.
+- **Notes** : Session 002 marquée implémentée.

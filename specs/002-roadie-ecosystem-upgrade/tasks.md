@@ -193,13 +193,13 @@
 
 **Purpose**: Durcir l'ensemble, vérifier la non-régression et finaliser la documentation.
 
-- [ ] T083 [P] Mettre à jour le quickstart final avec les commandes réelles dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`
-- [ ] T084 [P] Mettre à jour l'ADR avec les écarts décidés pendant l'implémentation dans `docs/decisions/001-roadie-automation-contract.md`
-- [ ] T085 Ajouter les tests de non-régression existants Spec 002 dans `Tests/RoadieDaemonTests/Spec002RegressionTests.swift`
-- [ ] T086 Lancer `swift build` puis `swift test` et corriger les régressions dans `Sources/` et `Tests/`
-- [ ] T087 Exécuter manuellement le scénario quickstart via `swift run roadie events subscribe --from-now --initial-state` et noter le résultat dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`
-- [ ] T088 Vérifier qu'aucune commande Spec 002 n'introduit API privée, SIP off, Spaces natifs Apple ou daemon hotkey dans `Sources/`
-- [ ] T089 Mettre à jour le statut de session 002 dans `.specify/memory/sessions/index.md`
+- [X] T083 [P] Mettre à jour le quickstart final avec les commandes réelles dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`
+- [X] T084 [P] Mettre à jour l'ADR avec les écarts décidés pendant l'implémentation dans `docs/decisions/001-roadie-automation-contract.md`
+- [X] T085 Ajouter les tests de non-régression existants Spec 002 dans `Tests/RoadieDaemonTests/Spec002RegressionTests.swift`
+- [X] T086 Lancer `swift build` puis `swift test` et corriger les régressions dans `Sources/` et `Tests/`
+- [X] T087 Exécuter manuellement le scénario quickstart via `swift run roadie events subscribe --from-now --initial-state` et noter le résultat dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`
+- [X] T088 Vérifier qu'aucune commande Spec 002 n'introduit API privée, SIP off, Spaces natifs Apple ou daemon hotkey dans `Sources/`
+- [X] T089 Mettre à jour le statut de session 002 dans `.specify/memory/sessions/index.md`
 
 ---
 
