@@ -787,6 +787,8 @@ private final class RailHeaderView: NSView {
 
 @MainActor
 private final class StageCardView: NSControl {
+    private static var appIconCache: [String: NSImage] = [:]
+
     let stageID: StageID
     private let stage: PersistentStage
     private let isActive: Bool
@@ -1063,15 +1065,19 @@ private final class StageCardView: NSControl {
 
     private func drawPreviewBody(_ rect: CGRect, index: Int, darkened: Bool) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
-        if let image = visualMembers[safe: index].flatMap({ thumbnails[$0.windowID] }) {
+        let member = visualMembers[safe: index]
+        if let image = member.flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
             let opacity = opacity(for: index)
             image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: opacity)
             NSGraphicsContext.restoreGraphicsState()
         } else {
-            color(for: visualMembers[safe: index], index: index).withAlphaComponent(opacity(for: index)).setFill()
+            color(for: member, index: index).withAlphaComponent(opacity(for: index)).setFill()
             path.fill()
+        }
+        if let member {
+            drawAppIcon(for: member, in: rect, opacity: opacity(for: index))
         }
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
         path.lineWidth = 1
@@ -1080,6 +1086,37 @@ private final class StageCardView: NSControl {
             NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
+    }
+
+    private func drawAppIcon(for member: PersistentStageMember, in rect: CGRect, opacity: CGFloat) {
+        guard let icon = Self.appIcon(for: member.bundleID) else { return }
+        let iconSize = min(max(rect.height * 0.30, 18), 30)
+        let padding: CGFloat = 6
+        let iconRect = CGRect(
+            x: rect.minX + padding,
+            y: rect.minY + padding,
+            width: iconSize,
+            height: iconSize
+        )
+        icon.draw(
+            in: iconRect,
+            from: CGRect(origin: .zero, size: icon.size),
+            operation: .sourceOver,
+            fraction: min(1, 0.92 * opacity)
+        )
+    }
+
+    private static func appIcon(for bundleID: String) -> NSImage? {
+        if let cached = appIconCache[bundleID] {
+            return cached
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 64, height: 64)
+        appIconCache[bundleID] = icon
+        return icon
     }
 
     private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
