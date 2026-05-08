@@ -1019,6 +1019,7 @@ struct SnapshotServiceTests {
         #expect(result.changed)
         #expect(scope.memberIDs(in: StageID(rawValue: "1")) == [left.id, hiddenRight.id])
         #expect(scope.memberIDs(in: StageID(rawValue: "2")).isEmpty)
+        #expect(scope.stages.first { $0.id == StageID(rawValue: "2") }?.focusedWindowID == nil)
         #expect(writer.focusedWindowIDs == [hiddenRight.id])
         #expect(writer.requestedFrames[hiddenRight.id] != hiddenRight.frame)
         try? FileManager.default.removeItem(atPath: stagePath)

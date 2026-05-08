@@ -257,6 +257,9 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         ensureStage(stageID)
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == window.id }
+            if stages[index].focusedWindowID == window.id {
+                stages[index].focusedWindowID = stages[index].members.last?.windowID
+            }
         }
         guard let index = stages.firstIndex(where: { $0.id == stageID }) else { return }
         stages[index].members.append(PersistentStageMember(
