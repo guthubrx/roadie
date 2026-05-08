@@ -16,6 +16,7 @@ public struct RailSettings: Equatable, Sendable {
     public var preview: Preview
     public var stacked: Stacked
     public var parallax: Parallax
+    public var header: Header
     public var stageAccents: [String: String]
 
     public struct Preview: Equatable, Sendable {
@@ -47,6 +48,25 @@ public struct RailSettings: Equatable, Sendable {
         public var verticalPadding: Double
     }
 
+    public struct Header: Equatable, Sendable {
+        public var enabled: Bool
+        public var placement: String
+        public var alignment: String
+        public var topPadding: Double
+        public var bottomPadding: Double
+        public var height: Double
+        public var width: Double
+        public var titleColor: String
+        public var subtitleColor: String
+        public var titleFontSize: Double
+        public var subtitleFontSize: Double
+        public var fontFamily: String
+        public var titleWeight: String
+        public var subtitleWeight: String
+        public var titleTemplate: String
+        public var subtitleTemplate: String
+    }
+
     public static func load(path: String = "~/.config/roadies/roadies.toml") -> RailSettings {
         let expanded = NSString(string: path).expandingTildeInPath
         guard let raw = try? String(contentsOfFile: expanded, encoding: .utf8) else {
@@ -61,6 +81,7 @@ public struct RailSettings: Equatable, Sendable {
         let preview = sections["fx.rail.preview"] ?? [:]
         let stacked = sections["fx.rail.stacked"] ?? [:]
         let parallax = sections["fx.rail.parallax"] ?? [:]
+        let header = sections["fx.rail.header"] ?? [:]
         return RailSettings(
             renderer: rail["renderer"] ?? renderer(from: raw),
             width: number(rail["width"], default: 150, min: 90, max: 320),
@@ -100,6 +121,24 @@ public struct RailSettings: Equatable, Sendable {
                 trailingPadding: number(parallax["trailing_padding"] ?? preview["trailing_padding"], default: 16, min: 0, max: 80),
                 verticalPadding: number(parallax["vertical_padding"] ?? preview["vertical_padding"], default: 20, min: 0, max: 80)
             ),
+            header: Header(
+                enabled: bool(header["enabled"], default: true),
+                placement: normalizedChoice(header["placement"], allowed: ["top", "center"], default: "top"),
+                alignment: normalizedChoice(header["alignment"], allowed: ["left", "center", "right"], default: "center"),
+                topPadding: number(header["top_padding"], default: 26, min: 0, max: 240),
+                bottomPadding: number(header["bottom_padding"], default: 16, min: 0, max: 240),
+                height: number(header["height"], default: 42, min: 0, max: 120),
+                width: number(header["width"], default: 0, min: 0, max: 320),
+                titleColor: header["title_color"] ?? "#FFFFFFDB",
+                subtitleColor: header["subtitle_color"] ?? "#FFFFFF6B",
+                titleFontSize: number(header["title_font_size"], default: 13, min: 6, max: 40),
+                subtitleFontSize: number(header["subtitle_font_size"], default: 10, min: 6, max: 32),
+                fontFamily: header["font_family"] ?? "system",
+                titleWeight: normalizedChoice(header["title_weight"], allowed: ["regular", "medium", "semibold", "bold"], default: "bold"),
+                subtitleWeight: normalizedChoice(header["subtitle_weight"], allowed: ["regular", "medium", "semibold", "bold"], default: "medium"),
+                titleTemplate: header["title_template"] ?? "{display}",
+                subtitleTemplate: header["subtitle_template"] ?? "Desktop {desktop}"
+            ),
             stageAccents: stageAccents(from: raw)
         )
     }
@@ -138,6 +177,22 @@ public struct RailSettings: Equatable, Sendable {
             "parallax.leading_padding=\(parallax.leadingPadding)",
             "parallax.trailing_padding=\(parallax.trailingPadding)",
             "parallax.vertical_padding=\(parallax.verticalPadding)",
+            "header.enabled=\(header.enabled)",
+            "header.placement=\(header.placement)",
+            "header.alignment=\(header.alignment)",
+            "header.top_padding=\(header.topPadding)",
+            "header.bottom_padding=\(header.bottomPadding)",
+            "header.height=\(header.height)",
+            "header.width=\(header.width)",
+            "header.title_color=\(header.titleColor)",
+            "header.subtitle_color=\(header.subtitleColor)",
+            "header.title_font_size=\(header.titleFontSize)",
+            "header.subtitle_font_size=\(header.subtitleFontSize)",
+            "header.font_family=\(header.fontFamily)",
+            "header.title_weight=\(header.titleWeight)",
+            "header.subtitle_weight=\(header.subtitleWeight)",
+            "header.title_template=\(header.titleTemplate)",
+            "header.subtitle_template=\(header.subtitleTemplate)",
         ]
     }
 
@@ -168,6 +223,24 @@ public struct RailSettings: Equatable, Sendable {
             leadingPadding: 8,
             trailingPadding: 16,
             verticalPadding: 20
+        ),
+        header: Header(
+            enabled: true,
+            placement: "top",
+            alignment: "center",
+            topPadding: 26,
+            bottomPadding: 16,
+            height: 42,
+            width: 0,
+            titleColor: "#FFFFFFDB",
+            subtitleColor: "#FFFFFF6B",
+            titleFontSize: 13,
+            subtitleFontSize: 10,
+            fontFamily: "system",
+            titleWeight: "bold",
+            subtitleWeight: "medium",
+            titleTemplate: "{display}",
+            subtitleTemplate: "Desktop {desktop}"
         ),
         stageAccents: [:]
     )
@@ -271,5 +344,11 @@ public struct RailSettings: Equatable, Sendable {
         default:
             return "overlay"
         }
+    }
+
+    private static func normalizedChoice(_ raw: String?, allowed: Set<String>, default fallback: String) -> String {
+        guard let raw else { return fallback }
+        let normalized = raw.lowercased()
+        return allowed.contains(normalized) ? normalized : fallback
     }
 }

@@ -114,6 +114,24 @@ struct ConfigTests {
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
+        [fx.rail.header]
+        enabled = true
+        placement = "top"
+        alignment = "center"
+        top_padding = 18
+        bottom_padding = 9
+        height = 44
+        width = 132
+        title_color = "#FFFFFFFF"
+        subtitle_color = "#FFFFFF88"
+        title_font_size = 14
+        subtitle_font_size = 11
+        font_family = "Avenir Next"
+        title_weight = "semibold"
+        subtitle_weight = "regular"
+        title_template = "{display}"
+        subtitle_template = "Bureau {desktop}"
+
         [fx.rail.preview]
         width = 160
         height = 104
@@ -151,6 +169,21 @@ struct ConfigTests {
         #expect(settings.layoutMode == "resize")
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
+        #expect(settings.header.enabled == true)
+        #expect(settings.header.placement == "top")
+        #expect(settings.header.alignment == "center")
+        #expect(settings.header.topPadding == 18)
+        #expect(settings.header.bottomPadding == 9)
+        #expect(settings.header.height == 44)
+        #expect(settings.header.width == 132)
+        #expect(settings.header.titleColor == "#FFFFFFFF")
+        #expect(settings.header.subtitleColor == "#FFFFFF88")
+        #expect(settings.header.titleFontSize == 14)
+        #expect(settings.header.subtitleFontSize == 11)
+        #expect(settings.header.fontFamily == "Avenir Next")
+        #expect(settings.header.titleWeight == "semibold")
+        #expect(settings.header.subtitleWeight == "regular")
+        #expect(settings.header.subtitleTemplate == "Bureau {desktop}")
         #expect(settings.preview.width == 160)
         #expect(settings.parallax.rotation == 35)
         #expect(settings.parallax.width == 120)

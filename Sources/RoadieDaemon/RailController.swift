@@ -594,7 +594,9 @@ private final class RailPanel: NSPanel {
             view.removeFromSuperview()
         }
 
-        stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID))
+        if config.headerEnabled {
+            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
+        }
         let ids = stageIDs(from: scope)
         visibleStageIDs = ids
         emptyStageIDs = scope.stages.filter(\.members.isEmpty).map(\.id)
@@ -620,13 +622,16 @@ private final class RailPanel: NSPanel {
 
     private func centerStages(count: Int, config: RailVisualConfig) {
         let cardHeight = StageCardView.height(for: config)
-        let headerHeight: CGFloat = 42
-        let itemCount = count + 1
+        let headerHeight = config.headerEnabled ? config.headerHeight + config.headerBottomPadding : 0
+        let itemCount = count + (headerHeight > 0 ? 1 : 0)
         let totalHeight = headerHeight
             + CGFloat(count) * cardHeight
             + CGFloat(max(0, itemCount - 1)) * stack.spacing
-        let verticalInset = max(20, floor((frame.height - totalHeight) / 2))
-        stack.edgeInsets = NSEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: 18)
+        let topInset = config.headerEnabled && config.headerPlacement == .top
+            ? config.headerTopPadding
+            : max(20, floor((frame.height - totalHeight) / 2))
+        let bottomInset = max(20, floor((frame.height - totalHeight - topInset) / 2))
+        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
@@ -873,6 +878,22 @@ private struct RailVisualConfig {
     var parallaxScale: CGFloat = 0.08
     var parallaxOpacity: CGFloat = 0.20
     var parallaxDarken: CGFloat = 0.15
+    var headerEnabled: Bool = true
+    var headerPlacement: RailHeaderPlacement = .top
+    var headerAlignment: RailHeaderAlignment = .center
+    var headerTopPadding: CGFloat = 26
+    var headerBottomPadding: CGFloat = 16
+    var headerHeight: CGFloat = 42
+    var headerWidth: CGFloat = 0
+    var headerTitleColor: NSColor = .white
+    var headerSubtitleColor: NSColor = .white
+    var headerTitleFontSize: CGFloat = 13
+    var headerSubtitleFontSize: CGFloat = 10
+    var headerFontFamily: String = "system"
+    var headerTitleWeight: NSFont.Weight = .bold
+    var headerSubtitleWeight: NSFont.Weight = .medium
+    var headerTitleTemplate: String = "{display}"
+    var headerSubtitleTemplate: String = "Desktop {desktop}"
 
     func accent(for stageID: StageID) -> NSColor {
         stageAccents[stageID] ?? NSColor.systemGreen
@@ -887,6 +908,7 @@ private struct RailVisualConfig {
         }
         let preview = settings.preview
         let parallax = settings.parallax
+        let header = settings.header
         let useParallaxGeometry = mode == .parallax
         return RailVisualConfig(
             mode: mode,
@@ -915,9 +937,38 @@ private struct RailVisualConfig {
             parallaxOffsetY: CGFloat(parallax.offsetY),
             parallaxScale: CGFloat(parallax.scalePerLayer),
             parallaxOpacity: CGFloat(parallax.opacityPerLayer),
-            parallaxDarken: CGFloat(parallax.darkenPerLayer)
+            parallaxDarken: CGFloat(parallax.darkenPerLayer),
+            headerEnabled: header.enabled,
+            headerPlacement: RailHeaderPlacement(rawValue: header.placement) ?? .top,
+            headerAlignment: RailHeaderAlignment(rawValue: header.alignment) ?? .center,
+            headerTopPadding: CGFloat(header.topPadding),
+            headerBottomPadding: CGFloat(header.bottomPadding),
+            headerHeight: CGFloat(header.height),
+            headerWidth: CGFloat(header.width),
+            headerTitleColor: NSColor(hex: header.titleColor) ?? .white.withAlphaComponent(0.86),
+            headerSubtitleColor: NSColor(hex: header.subtitleColor) ?? .white.withAlphaComponent(0.42),
+            headerTitleFontSize: CGFloat(header.titleFontSize),
+            headerSubtitleFontSize: CGFloat(header.subtitleFontSize),
+            headerFontFamily: header.fontFamily,
+            headerTitleWeight: NSFont.Weight.toml(header.titleWeight),
+            headerSubtitleWeight: NSFont.Weight.toml(header.subtitleWeight),
+            headerTitleTemplate: header.titleTemplate,
+            headerSubtitleTemplate: header.subtitleTemplate
         )
     }
+}
+
+@MainActor
+private enum RailHeaderPlacement: String {
+    case top
+    case center
+}
+
+@MainActor
+private enum RailHeaderAlignment: String {
+    case left
+    case center
+    case right
 }
 
 @MainActor
@@ -945,14 +996,17 @@ private enum RailRenderMode: String {
 private final class RailHeaderView: NSView {
     private let displayName: String
     private let desktopID: DesktopID
+    private let config: RailVisualConfig
 
-    init(displayName: String, desktopID: DesktopID) {
+    init(displayName: String, desktopID: DesktopID, config: RailVisualConfig) {
         self.displayName = displayName
         self.desktopID = desktopID
-        super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 42))
+        self.config = config
+        let width = config.headerWidth > 0 ? config.headerWidth : max(1, config.railWidth - 12)
+        super.init(frame: CGRect(x: 0, y: 0, width: width, height: config.headerHeight))
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: 42).isActive = true
+        widthAnchor.constraint(equalToConstant: width).isActive = true
+        heightAnchor.constraint(equalToConstant: config.headerHeight).isActive = true
         wantsLayer = true
     }
 
@@ -962,15 +1016,56 @@ private final class RailHeaderView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let title = displayName.isEmpty ? "Roadie" : displayName
-        title.draw(in: CGRect(x: 4, y: 19, width: 216, height: 18), withAttributes: [
-            .foregroundColor: NSColor.white.withAlphaComponent(0.86),
-            .font: NSFont.systemFont(ofSize: 13, weight: .bold),
+        let title = render(template: config.headerTitleTemplate)
+        let subtitle = render(template: config.headerSubtitleTemplate)
+        let titleHeight = max(config.headerTitleFontSize + 5, 1)
+        let subtitleHeight = max(config.headerSubtitleFontSize + 4, 1)
+        let gap: CGFloat = subtitle.isEmpty ? 0 : 2
+        let blockHeight = titleHeight + gap + (subtitle.isEmpty ? 0 : subtitleHeight)
+        let top = max(0, (bounds.height - blockHeight) / 2)
+        let subtitleY = top
+        let titleY = subtitle.isEmpty ? top : top + subtitleHeight + gap
+
+        title.draw(in: CGRect(x: 0, y: titleY, width: bounds.width, height: titleHeight), withAttributes: [
+            .foregroundColor: config.headerTitleColor,
+            .font: headerFont(size: config.headerTitleFontSize, weight: config.headerTitleWeight),
+            .paragraphStyle: paragraphStyle(),
         ])
-        "Desktop \(desktopID)".draw(in: CGRect(x: 4, y: 3, width: 216, height: 14), withAttributes: [
-            .foregroundColor: NSColor.white.withAlphaComponent(0.42),
-            .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .medium),
+        guard !subtitle.isEmpty else { return }
+        subtitle.draw(in: CGRect(x: 0, y: subtitleY, width: bounds.width, height: subtitleHeight), withAttributes: [
+            .foregroundColor: config.headerSubtitleColor,
+            .font: headerFont(size: config.headerSubtitleFontSize, weight: config.headerSubtitleWeight),
+            .paragraphStyle: paragraphStyle(),
         ])
+    }
+
+    private func render(template: String) -> String {
+        template
+            .replacingOccurrences(of: "{display}", with: displayName.isEmpty ? "Roadie" : displayName)
+            .replacingOccurrences(of: "{desktop}", with: String(desktopID.rawValue))
+    }
+
+    private func paragraphStyle() -> NSParagraphStyle {
+        let style = NSMutableParagraphStyle()
+        switch config.headerAlignment {
+        case .left:
+            style.alignment = .left
+        case .center:
+            style.alignment = .center
+        case .right:
+            style.alignment = .right
+        }
+        style.lineBreakMode = .byTruncatingTail
+        return style
+    }
+
+    private func headerFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
+        let family = config.headerFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !family.isEmpty, family.lowercased() != "system",
+           let font = NSFont(name: family, size: size) {
+            return font
+        }
+        return NSFont.systemFont(ofSize: size, weight: weight)
     }
 }
 
@@ -1619,6 +1714,21 @@ private extension NSColor {
             alpha = 1
         }
         self.init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
+    }
+}
+
+private extension NSFont.Weight {
+    static func toml(_ value: String) -> NSFont.Weight {
+        switch value.lowercased() {
+        case "regular":
+            return .regular
+        case "semibold":
+            return .semibold
+        case "bold":
+            return .bold
+        default:
+            return .medium
+        }
     }
 }
 
