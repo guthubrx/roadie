@@ -207,7 +207,12 @@ public struct StageCommandService {
         return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
     }
 
-    public func place(windowID: WindowID, displayID: DisplayID, orderedWindowIDs: [WindowID]) -> StageCommandResult {
+    public func place(
+        windowID: WindowID,
+        displayID: DisplayID,
+        orderedWindowIDs: [WindowID],
+        placements providedPlacements: [WindowID: Rect] = [:]
+    ) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
@@ -225,8 +230,8 @@ public struct StageCommandService {
         service.removeLayoutIntent(scope: scope)
         let updated = service.snapshot()
         let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
-        let layout = service.layoutPlan(from: updated, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [windowID])
-        let applyPlan = service.applyPlan(from: updated, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [windowID])
+        let layout = layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
+        let applyPlan = applyPlan(from: updated, scope: scope, ordered: ordered, layout: layout)
         let result = service.apply(applyPlan)
         persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
         _ = service.focus(window)
@@ -411,6 +416,39 @@ public struct StageCommandService {
         }
         guard Set(placements.keys) == Set(orderedWindowIDs) else { return }
         service.saveLayoutIntent(scope: scope, windowIDs: orderedWindowIDs, placements: placements, source: .command)
+    }
+
+    private func layoutPlan(
+        from snapshot: DaemonSnapshot,
+        scope: StageScope,
+        ordered: [WindowID],
+        providedPlacements: [WindowID: Rect]
+    ) -> LayoutPlan {
+        guard Set(providedPlacements.keys) == Set(ordered) else {
+            return service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: Set(ordered))
+        }
+        return LayoutPlan(placements: Dictionary(uniqueKeysWithValues: providedPlacements.map { ($0.key, $0.value.cgRect) }))
+    }
+
+    private func applyPlan(
+        from snapshot: DaemonSnapshot,
+        scope: StageScope,
+        ordered: [WindowID],
+        layout: LayoutPlan
+    ) -> ApplyPlan {
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let currentFrames = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, CGRect)? in
+            guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+            return (entry.window.id, entry.window.frame.cgRect)
+        })
+        let current = LayoutPlan(placements: currentFrames)
+        let commands = LayoutDiff.commands(previous: current, next: layout).compactMap { command -> ApplyCommand? in
+            guard ordered.contains(command.windowID),
+                  let window = windowsByID[command.windowID]
+            else { return nil }
+            return ApplyCommand(window: window, frame: Rect(command.frame))
+        }
+        return ApplyPlan(commands: commands)
     }
 
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {

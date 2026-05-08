@@ -101,7 +101,7 @@ private final class BorderPanel: NSPanel {
         )
         isOpaque = false
         backgroundColor = .clear
-        level = .floating
+        level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = true
         hasShadow = false

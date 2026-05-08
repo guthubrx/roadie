@@ -39,6 +39,7 @@ struct DropPreviewCandidate: Equatable {
     var displayID: DisplayID
     var scope: StageScope
     var orderedWindowIDs: [WindowID]
+    var placements: [WindowID: Rect]
     var frame: CGRect
     var operation: DropPreviewOperation
 }
@@ -91,22 +92,34 @@ struct DropPreviewEngine {
             .sorted { $0.window.frame.cgRect.area < $1.window.frame.cgRect.area }
             .first
 
+        var placements: [WindowID: CGRect] = [:]
         let operation: DropPreviewOperation
         if let target {
             operation = dropOperation(at: axPoint, in: target.window.frame.cgRect, sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID })
             ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
+            placements = structuralPlacements(
+                sourceID: sourceWindowID,
+                target: target.window,
+                operation: operation,
+                activeEntries: activeEntries,
+                display: display
+            ) ?? [:]
         } else {
             operation = .append
             ordered = ordered.filter { $0 != sourceWindowID } + [sourceWindowID]
         }
 
         let plan = service.layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [sourceWindowID])
-        guard let frame = plan.placements[sourceWindowID], !frame.isEmpty else { return nil }
+        if placements.isEmpty {
+            placements = plan.placements
+        }
+        guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
         return DropPreviewCandidate(
             sourceWindowID: sourceWindowID,
             displayID: display.id,
             scope: scope,
             orderedWindowIDs: ordered,
+            placements: Dictionary(uniqueKeysWithValues: placements.map { ($0.key, Rect($0.value.integral)) }),
             frame: frame.integral,
             operation: operation
         )
@@ -154,6 +167,151 @@ struct DropPreviewEngine {
         }
         result.insert(sourceID, at: insertionIndex)
         return result
+    }
+
+    private func structuralPlacements(
+        sourceID: WindowID,
+        target: WindowSnapshot,
+        operation: DropPreviewOperation,
+        activeEntries: [ScopedWindowSnapshot],
+        display: DisplaySnapshot
+    ) -> [WindowID: CGRect]? {
+        guard operation != .swap, operation != .append else { return nil }
+        let horizontal: Bool
+        switch operation {
+        case .insertLeft, .insertUp:
+            horizontal = operation == .insertLeft
+        case .insertRight, .insertDown:
+            horizontal = operation == .insertRight
+        case .append, .swap:
+            return nil
+        }
+        guard let sourceFrame = activeEntries.first(where: { $0.window.id == sourceID })?.window.frame.cgRect,
+              let container = union(activeEntries.map { $0.window.frame.cgRect })
+        else { return nil }
+
+        let gap = CGFloat(service.innerGap())
+        let targetSideIDs = Set(activeEntries.compactMap { entry -> WindowID? in
+            guard entry.window.id != sourceID,
+                  isOnTargetSide(entry.window.frame.cgRect, from: sourceFrame, operation: operation)
+            else { return nil }
+            return entry.window.id
+        })
+        var targetGroupWindows = activeEntries.map(\.window).filter { targetSideIDs.contains($0.id) || $0.id == target.id }
+        targetGroupWindows.removeAll { $0.id == sourceID }
+        let sourceGroupWindows = activeEntries.map(\.window).filter { entry in
+            entry.id != sourceID && !targetGroupWindows.contains(where: { $0.id == entry.id })
+        }
+        guard !targetGroupWindows.isEmpty, !sourceGroupWindows.isEmpty else { return nil }
+
+        let targetGroup = orderedTargetGroup(
+            sourceID: sourceID,
+            targetID: target.id,
+            peers: spatiallySorted(targetGroupWindows, in: union(targetGroupWindows.map { $0.frame.cgRect }) ?? target.frame.cgRect),
+            operation: operation
+        )
+        let sourceGroup = spatiallySorted(sourceGroupWindows, in: union(sourceGroupWindows.map { $0.frame.cgRect }) ?? sourceFrame)
+        let targetFirst = operation == .insertLeft || operation == .insertUp
+        let rects = split(container, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
+        let targetRect = targetFirst ? rects.first : rects.second
+        let sourceRect = targetFirst ? rects.second : rects.first
+
+        var result: [WindowID: CGRect] = [:]
+        result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
+        result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
+        return result
+    }
+
+    private func orderedTargetGroup(sourceID: WindowID, targetID: WindowID, peers: [WindowID], operation: DropPreviewOperation) -> [WindowID] {
+        var result = peers.filter { $0 != sourceID }
+        guard let targetIndex = result.firstIndex(of: targetID) else {
+            return [sourceID] + result
+        }
+        result.removeAll { $0 == sourceID }
+        switch operation {
+        case .insertLeft, .insertUp:
+            result.insert(sourceID, at: targetIndex)
+        case .insertRight, .insertDown:
+            result.insert(sourceID, at: min(targetIndex + 1, result.count))
+        case .append, .swap:
+            result.append(sourceID)
+        }
+        return result
+    }
+
+    private func spatiallySorted(_ windows: [WindowSnapshot], in container: CGRect) -> [WindowID] {
+        let horizontal = container.width >= container.height
+        return windows.sorted { lhs, rhs in
+            if horizontal {
+                if abs(lhs.frame.cgRect.midX - rhs.frame.cgRect.midX) > 48 {
+                    return lhs.frame.cgRect.midX < rhs.frame.cgRect.midX
+                }
+                return lhs.frame.cgRect.midY < rhs.frame.cgRect.midY
+            }
+            if abs(lhs.frame.cgRect.midY - rhs.frame.cgRect.midY) > 48 {
+                return lhs.frame.cgRect.midY < rhs.frame.cgRect.midY
+            }
+            return lhs.frame.cgRect.midX < rhs.frame.cgRect.midX
+        }.map(\.id)
+    }
+
+    private func union(_ frames: [CGRect]) -> CGRect? {
+        guard var result = frames.first else { return nil }
+        for frame in frames.dropFirst() {
+            result = result.union(frame)
+        }
+        return result
+    }
+
+    private func isOnTargetSide(_ candidate: CGRect, from source: CGRect, operation: DropPreviewOperation) -> Bool {
+        switch operation {
+        case .insertLeft:
+            return candidate.midX < source.midX
+        case .insertRight:
+            return candidate.midX > source.midX
+        case .insertUp:
+            return candidate.midY < source.midY
+        case .insertDown:
+            return candidate.midY > source.midY
+        case .append, .swap:
+            return false
+        }
+    }
+
+    private func split(
+        _ rect: CGRect,
+        horizontally: Bool,
+        gap: CGFloat,
+        firstCount: Int,
+        secondCount: Int
+    ) -> (first: CGRect, second: CGRect) {
+        let total = CGFloat(firstCount + secondCount)
+        let ratio = total > 0 ? CGFloat(firstCount) / total : 0.5
+        if horizontally {
+            let usable = max(0, rect.width - gap)
+            let firstWidth = floor(usable * ratio)
+            return (
+                CGRect(x: rect.minX, y: rect.minY, width: firstWidth, height: rect.height),
+                CGRect(x: rect.minX + firstWidth + gap, y: rect.minY, width: usable - firstWidth, height: rect.height)
+            )
+        }
+
+        let usable = max(0, rect.height - gap)
+        let firstHeight = floor(usable * ratio)
+        return (
+            CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: firstHeight),
+            CGRect(x: rect.minX, y: rect.minY + firstHeight + gap, width: rect.width, height: usable - firstHeight)
+        )
+    }
+
+    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {
+        guard let first = windowIDs.first else { return [:] }
+        guard windowIDs.count > 1 else { return [first: rect.integral] }
+
+        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)
+        var placements = [first: parts.first.integral]
+        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
+        return placements
     }
 }
 
@@ -208,7 +366,8 @@ final class WindowDragReorderController {
         let result = commandService.place(
             windowID: candidate.sourceWindowID,
             displayID: candidate.displayID,
-            orderedWindowIDs: candidate.orderedWindowIDs
+            orderedWindowIDs: candidate.orderedWindowIDs,
+            placements: candidate.placements
         )
         events.append(RoadieEvent(type: "window_drag_apply", scope: candidate.scope, details: [
             "windowID": String(candidate.sourceWindowID.rawValue),
