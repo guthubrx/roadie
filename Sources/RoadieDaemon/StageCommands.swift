@@ -319,11 +319,19 @@ public struct StageCommandService {
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        if let focusedID = service.focusedWindowID(),
-           let focused = snapshot.windows.first(where: { $0.window.id == focusedID && $0.window.isTileCandidate }) {
+        if let focusedID = snapshot.focusedWindowID,
+           let focused = snapshot.windows.first(where: { entry in
+               guard let scope = entry.scope else { return false }
+               return entry.window.id == focusedID
+                   && entry.window.isTileCandidate
+                   && snapshot.state.activeScope(on: scope.displayID) == scope
+           }) {
             return focused
         }
-        return snapshot.windows.first { $0.window.isTileCandidate }
+        return snapshot.windows.first { entry in
+            guard let scope = entry.scope else { return false }
+            return entry.window.isTileCandidate && snapshot.state.activeScope(on: scope.displayID) == scope
+        }
     }
 
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {

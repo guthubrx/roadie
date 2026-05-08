@@ -151,6 +151,7 @@ private enum RailAction {
 private final class RailPanel: NSPanel {
     private let stack = NSStackView()
     private let width: CGFloat = 260
+    private let horizontalInset: CGFloat = 6
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -163,16 +164,16 @@ private final class RailPanel: NSPanel {
             defer: false
         )
         isOpaque = false
-        backgroundColor = NSColor(calibratedRed: 0.02, green: 0.04, blue: 0.08, alpha: 0.48)
+        backgroundColor = .clear
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = false
-        hasShadow = true
+        hasShadow = false
 
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 13
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: 18, bottom: 24, right: 18)
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: horizontalInset, bottom: 20, right: 18)
         contentView = stack
     }
 
@@ -192,6 +193,7 @@ private final class RailPanel: NSPanel {
 
         stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID))
         let ids = stageIDs(from: scope)
+        centerStages(count: ids.count, config: config)
         for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
             let card = StageCardView(
@@ -207,6 +209,17 @@ private final class RailPanel: NSPanel {
             )
             stack.addArrangedSubview(card)
         }
+    }
+
+    private func centerStages(count: Int, config: RailVisualConfig) {
+        let cardHeight = StageCardView.height(for: config)
+        let headerHeight: CGFloat = 42
+        let itemCount = count + 1
+        let totalHeight = headerHeight
+            + CGFloat(count) * cardHeight
+            + CGFloat(max(0, itemCount - 1)) * stack.spacing
+        let verticalInset = max(20, floor((frame.height - totalHeight) / 2))
+        stack.edgeInsets = NSEdgeInsets(top: verticalInset, left: horizontalInset, bottom: verticalInset, right: 18)
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
@@ -226,8 +239,8 @@ private final class RailPanel: NSPanel {
 
     private func stageIDs(from scope: PersistentStageScope) -> [StageID] {
         var ids = scope.stages.map(\.id)
-        for id in (1...6).map({ StageID(rawValue: String($0)) }) where !ids.contains(id) {
-            ids.append(id)
+        ids = ids.filter { id in
+            scope.stages.first { $0.id == id }?.members.isEmpty == false
         }
         return ids
     }
@@ -390,6 +403,7 @@ private final class StageCardView: NSControl {
     private let stageCount: Int
     private let previousStageID: StageID?
     private let nextStageID: StageID?
+    private let contentInset: CGFloat = 4
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -420,16 +434,20 @@ private final class StageCardView: NSControl {
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
         widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: config.mode == .icons ? 78 : max(150, config.previewHeight + 66)).isActive = true
+        heightAnchor.constraint(equalToConstant: Self.height(for: config)).isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
-        layer?.backgroundColor = NSColor(calibratedRed: 0.03, green: 0.05, blue: 0.07, alpha: isActive ? 0.94 : 0.62).cgColor
-        layer?.borderWidth = isActive ? 1.8 : 0.8
-        layer?.borderColor = (isActive ? accent : NSColor.white.withAlphaComponent(0.16)).cgColor
-        layer?.shadowColor = (isActive ? accent : NSColor.black).cgColor
-        layer?.shadowOpacity = isActive ? 0.62 : 0.28
-        layer?.shadowRadius = isActive ? 18 : 8
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.borderColor = NSColor.clear.cgColor
+        layer?.shadowColor = accent.cgColor
+        layer?.shadowOpacity = 0
+        layer?.shadowRadius = 0
         layer?.shadowOffset = .zero
+    }
+
+    static func height(for config: RailVisualConfig) -> CGFloat {
+        config.mode == .icons ? 78 : max(150, config.previewHeight + 66)
     }
 
     required init?(coder: NSCoder) {
@@ -455,12 +473,7 @@ private final class StageCardView: NSControl {
     }
 
     private func drawCard() {
-        let rect = bounds.insetBy(dx: 12, dy: 12)
-        if isActive {
-            rounded(bounds.insetBy(dx: 5, dy: 5), radius: 20, color: accent.withAlphaComponent(0.10))
-        }
-        drawTitle(in: rect)
-        drawControls()
+        let rect = bounds.insetBy(dx: contentInset, dy: 12)
         switch config.mode {
         case .stacked:
             drawStacked(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
@@ -471,14 +484,17 @@ private final class StageCardView: NSControl {
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
+        drawControls()
     }
 
     private var upRect: CGRect {
-        CGRect(x: bounds.maxX - 54, y: bounds.maxY - 39, width: 32, height: 28)
+        let preview = previewArea(in: bounds.insetBy(dx: contentInset, dy: 12), visibleCount: visiblePreviewCount)
+        return CGRect(x: preview.midX - 16, y: preview.maxY + 6, width: 32, height: 24)
     }
 
     private var downRect: CGRect {
-        CGRect(x: bounds.maxX - 98, y: bounds.maxY - 39, width: 32, height: 28)
+        let preview = previewArea(in: bounds.insetBy(dx: contentInset, dy: 12), visibleCount: visiblePreviewCount)
+        return CGRect(x: preview.midX - 16, y: preview.minY - 30, width: 32, height: 24)
     }
 
     private var upHitRect: CGRect {
@@ -490,45 +506,17 @@ private final class StageCardView: NSControl {
     }
 
     private func drawControls() {
-        drawControl("↓", in: downRect, enabled: position < stageCount)
-        drawControl("↑", in: upRect, enabled: position > 1)
+        drawControl("⌃", in: upRect, enabled: position > 1)
+        drawControl("⌄", in: downRect, enabled: position < stageCount)
     }
 
     private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
-        rounded(
-            rect,
-            radius: 8,
-            color: NSColor.white.withAlphaComponent(enabled ? (isActive ? 0.18 : 0.12) : 0.05)
-        )
+        guard enabled else { return }
         let fontSize = rect.height > 24 ? 14.0 : 12.0
         label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 6 : 3), withAttributes: [
-            .foregroundColor: NSColor.white.withAlphaComponent(enabled ? 0.82 : 0.22),
-            .font: NSFont.systemFont(ofSize: fontSize, weight: .bold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.70),
+            .font: NSFont.systemFont(ofSize: fontSize, weight: .semibold),
         ])
-    }
-
-    private func drawTitle(in rect: CGRect) {
-        let badgeRect = CGRect(x: rect.minX, y: rect.maxY - 26, width: 28, height: 22)
-        rounded(badgeRect, radius: 9, color: isActive ? accent : NSColor.white.withAlphaComponent(0.20))
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: NSFont.boldSystemFont(ofSize: 13),
-        ]
-        stageID.rawValue.draw(in: badgeRect.insetBy(dx: 0, dy: 3), withAttributes: attrs)
-
-        let count = stage.members.count
-        let titleAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.92 : 0.68),
-            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-        ]
-        stage.name.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY + 8, width: rect.width - 120, height: 16), withAttributes: titleAttrs)
-
-        let label = "\(stage.mode.rawValue) · \(count) \(count > 1 ? "fenêtres" : "fenêtre")"
-        let labelAttrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white.withAlphaComponent(isActive ? 0.84 : 0.50),
-            .font: NSFont.systemFont(ofSize: 10, weight: .medium),
-        ]
-        label.draw(in: CGRect(x: badgeRect.maxX + 8, y: badgeRect.minY - 5, width: rect.width - 120, height: 14), withAttributes: labelAttrs)
     }
 
     private func drawStacked(in rect: CGRect) {
@@ -536,7 +524,9 @@ private final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        for item in previewItems(in: rect, maxCount: 5).reversed() {
+        let items = previewItems(in: rect, maxCount: 5)
+        drawActiveStageShadowBehind(items)
+        for item in items.reversed() {
             drawPreview(item.rect, index: item.index)
         }
     }
@@ -570,7 +560,9 @@ private final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        for item in previewItems(in: rect, maxCount: 5).reversed() {
+        let items = previewItems(in: rect, maxCount: 5)
+        drawActiveStageShadowBehind(items)
+        for item in items.reversed() {
             drawPreview(item.rect, index: item.index, skewed: true)
         }
     }
@@ -609,7 +601,7 @@ private final class StageCardView: NSControl {
 
     private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
         let width = min(config.previewWidth, rect.width - config.leadingPadding - config.trailingPadding)
-        let height = min(config.previewHeight, rect.height - config.verticalPadding - 28)
+        let height = min(config.previewHeight, rect.height - 60)
         let leftCompensation: CGFloat
         switch config.mode {
         case .parallax:
@@ -621,7 +613,7 @@ private final class StageCardView: NSControl {
         }
         return CGRect(
             x: rect.minX + config.leadingPadding + leftCompensation,
-            y: rect.minY + config.verticalPadding,
+            y: rect.midY - height / 2,
             width: width,
             height: height
         )
@@ -689,10 +681,48 @@ private final class StageCardView: NSControl {
         drawWindowControls(in: rect, index: index)
     }
 
+    private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
+        guard isActive, let first = items.first?.rect else { return }
+        let union = items.dropFirst().reduce(first) { $0.union($1.rect) }
+        let center = CGPoint(x: union.midX, y: union.midY)
+        guard let context = NSGraphicsContext.current?.cgContext,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let gradient = CGGradient(
+                  colorsSpace: colorSpace,
+                  colors: [
+                      accent.withAlphaComponent(0.24).cgColor,
+                      accent.withAlphaComponent(0.11).cgColor,
+                      accent.withAlphaComponent(0.035).cgColor,
+                      accent.withAlphaComponent(0).cgColor,
+                  ] as CFArray,
+                  locations: [0, 0.28, 0.58, 1]
+        )
+        else { return }
+        let xScale: CGFloat = 1.45
+        let yScale: CGFloat = 0.92
+        let availableLeft = max(12, center.x - bounds.minX - 4)
+        let availableRight = max(12, bounds.maxX - center.x - 4)
+        let maxHorizontalRadius = min(availableLeft, availableRight) / xScale
+        let desiredRadius = max(union.width, union.height) * 0.95
+        let radius = max(24, min(desiredRadius, maxHorizontalRadius))
+        context.saveGState()
+        context.translateBy(x: center.x, y: center.y)
+        context.scaleBy(x: xScale, y: yScale)
+        context.drawRadialGradient(
+            gradient,
+            startCenter: .zero,
+            startRadius: 0,
+            endCenter: .zero,
+            endRadius: radius,
+            options: [.drawsAfterEndLocation]
+        )
+        context.restoreGState()
+    }
+
     private func applyParallaxTransform(for rect: CGRect, in context: CGContext) {
         let angle = min(config.parallaxRotation, 75) * .pi / 180
-        let xScale = max(0.55, cos(angle))
-        let perspective = -sin(angle) * 0.06
+        let xScale = max(0.45, cos(angle))
+        let perspective = sin(angle) * 0.12
         context.translateBy(x: rect.midX, y: rect.midY)
         context.concatenate(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
         context.translateBy(x: -rect.midX, y: -rect.midY)
@@ -750,7 +780,7 @@ private final class StageCardView: NSControl {
     }
 
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
-        let cardRect = bounds.insetBy(dx: 12, dy: 12)
+        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
         let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
         switch config.mode {
         case .stacked, .parallax:

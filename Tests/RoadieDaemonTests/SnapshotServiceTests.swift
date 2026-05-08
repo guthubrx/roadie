@@ -339,6 +339,43 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotIgnoresMacFocusWhenItPointsToHiddenInactiveStage() {
+        let display = DisplayID(rawValue: "display-a")
+        let active = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "active", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let hidden = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "hidden", frame: Rect(x: 999, y: 499, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-hidden-focus-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: active.id, members: [
+                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hidden.id, members: [
+                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: hidden.frame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [active, hidden],
+                focusedID: hidden.id
+            ),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+
+        #expect(snapshot.focusedWindowID == active.id)
+        #expect(snapshot.state.activeScope(on: display) == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func floatStageModeDoesNotReplaySavedTilingIntent() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
@@ -1386,6 +1423,151 @@ struct SnapshotServiceTests {
 
         #expect(!report.failed)
         #expect(report.checks.contains(SelfTestCheck(level: .ok, name: "accessibility", message: "accessibilityTrusted=true")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotMigratesDisconnectedDisplayScopesToFallbackDisplay() {
+        let liveDisplay = DisplayID(rawValue: "display-live")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let desktop = DesktopID(rawValue: 1)
+        let displaySnapshot = DisplaySnapshot(
+            id: liveDisplay,
+            index: 1,
+            name: "Built-in",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 600),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 600),
+            isMain: true
+        )
+        let liveWindow = WindowSnapshot(id: WindowID(rawValue: 10), pid: 10, appName: "Terminal", bundleID: "term", title: "live", frame: Rect(x: 0, y: 0, width: 500, height: 600), isOnScreen: true, isTileCandidate: true)
+        let movedWindow = WindowSnapshot(id: WindowID(rawValue: 20), pid: 20, appName: "Firefox", bundleID: "firefox", title: "moved", frame: Rect(x: 500, y: 0, width: 500, height: 600), isOnScreen: true, isTileCandidate: true)
+        let hiddenWindow = WindowSnapshot(id: WindowID(rawValue: 30), pid: 30, appName: "Terminal", bundleID: "term", title: "hidden", frame: Rect(x: 999, y: 599, width: 500, height: 400), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-disconnected-display-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: liveDisplay, desktopID: desktop, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: liveWindow.id, bundleID: liveWindow.bundleID, title: liveWindow.title, frame: liveWindow.frame),
+                    ]),
+                ]),
+                PersistentStageScope(displayID: staleDisplay, desktopID: desktop, activeStageID: StageID(rawValue: "2"), stages: [
+                    PersistentStage(id: StageID(rawValue: "2"), members: [
+                        PersistentStageMember(windowID: movedWindow.id, bundleID: movedWindow.bundleID, title: movedWindow.title, frame: movedWindow.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "4"), members: [
+                        PersistentStageMember(windowID: hiddenWindow.id, bundleID: hiddenWindow.bundleID, title: hiddenWindow.title, frame: hiddenWindow.frame),
+                    ]),
+                ]),
+            ],
+            desktopSelections: [
+                PersistentDesktopSelection(displayID: liveDisplay, currentDesktopID: desktop),
+                PersistentDesktopSelection(displayID: staleDisplay, currentDesktopID: desktop),
+            ],
+            desktopLabels: [
+                PersistentDesktopLabel(displayID: staleDisplay, desktopID: desktop, label: "External"),
+            ],
+            activeDisplayID: staleDisplay
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [displaySnapshot],
+                windowSnapshots: [liveWindow, movedWindow, hiddenWindow],
+                focusedID: movedWindow.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+        let migrated = stageStore.state()
+        let liveScope = migrated.scopes.first { $0.displayID == liveDisplay && $0.desktopID == desktop }
+
+        #expect(migrated.scopes.allSatisfy { $0.displayID == liveDisplay })
+        #expect(migrated.desktopSelections.allSatisfy { $0.displayID == liveDisplay })
+        #expect(migrated.desktopLabels.isEmpty)
+        #expect(migrated.activeDisplayID == liveDisplay)
+        #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")) == [liveWindow.id])
+        #expect(liveScope?.memberIDs(in: StageID(rawValue: "2")) == [movedWindow.id])
+        #expect(liveScope?.memberIDs(in: StageID(rawValue: "4")) == [hiddenWindow.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotMigratesDisconnectedDisplayScopesToActiveLiveDisplayWhenSeveralRemain() {
+        let displayA = DisplayID(rawValue: "display-a")
+        let displayB = DisplayID(rawValue: "display-b")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let desktop = DesktopID(rawValue: 1)
+        let first = DisplaySnapshot(id: displayA, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 600), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 600), isMain: true)
+        let second = DisplaySnapshot(id: displayB, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 600), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 600), isMain: false)
+        let window = WindowSnapshot(id: WindowID(rawValue: 40), pid: 40, appName: "Terminal", bundleID: "term", title: "migrated", frame: Rect(x: 1000, y: 0, width: 500, height: 600), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-disconnected-display-active-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: displayA, desktopID: desktop, activeStageID: StageID(rawValue: "1")),
+                PersistentStageScope(displayID: displayB, desktopID: desktop, activeStageID: StageID(rawValue: "1")),
+                PersistentStageScope(displayID: staleDisplay, desktopID: desktop, activeStageID: StageID(rawValue: "3"), stages: [
+                    PersistentStage(id: StageID(rawValue: "3"), members: [
+                        PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                    ]),
+                ]),
+            ],
+            activeDisplayID: displayB
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [first, second], windowSnapshots: [window], focusedID: window.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+        let migrated = stageStore.state()
+        let scopeA = migrated.scopes.first { $0.displayID == displayA && $0.desktopID == desktop }
+        let scopeB = migrated.scopes.first { $0.displayID == displayB && $0.desktopID == desktop }
+
+        #expect(migrated.scopes.allSatisfy { $0.displayID != staleDisplay })
+        #expect(migrated.activeDisplayID == displayB)
+        #expect(scopeA?.memberIDs(in: StageID(rawValue: "3")).isEmpty ?? true)
+        #expect(scopeB?.memberIDs(in: StageID(rawValue: "3")) == [window.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotCreatesEmptyScopeForNewlyConnectedDisplay() {
+        let existingDisplay = DisplayID(rawValue: "display-existing")
+        let newDisplay = DisplayID(rawValue: "display-new")
+        let desktop = DesktopID(rawValue: 1)
+        let first = DisplaySnapshot(id: existingDisplay, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 600), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 600), isMain: true)
+        let second = DisplaySnapshot(id: newDisplay, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 600), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 600), isMain: false)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-new-display-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: existingDisplay, desktopID: desktop, activeStageID: StageID(rawValue: "1")),
+        ], activeDisplayID: existingDisplay))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [first, second], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+        let state = stageStore.state()
+        let newScope = state.scopes.first { $0.displayID == newDisplay && $0.desktopID == desktop }
+
+        #expect(newScope?.activeStageID == StageID(rawValue: "1"))
+        #expect(newScope?.stages.map(\.id).contains(StageID(rawValue: "1")) == true)
+        #expect(state.activeDisplayID == existingDisplay)
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
