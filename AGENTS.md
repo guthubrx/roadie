@@ -1,6 +1,15 @@
 <!-- SPECKIT START -->
+Current SpecKit feature: `002-roadie-ecosystem-upgrade`.
+
 For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+shell commands, contracts, and architectural decisions, read:
+
+- `specs/002-roadie-ecosystem-upgrade/spec.md`
+- `specs/002-roadie-ecosystem-upgrade/plan.md`
+- `specs/002-roadie-ecosystem-upgrade/research.md`
+- `specs/002-roadie-ecosystem-upgrade/data-model.md`
+- `specs/002-roadie-ecosystem-upgrade/contracts/`
+- `docs/decisions/001-roadie-automation-contract.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

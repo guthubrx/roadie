@@ -52,7 +52,10 @@ let package = Package(
         ),
         .testTarget(
             name: "RoadieDaemonTests",
-            dependencies: ["RoadieDaemon"]
+            dependencies: ["RoadieDaemon"],
+            resources: [
+                .process("Fixtures")
+            ]
         ),
         .testTarget(
             name: "RoadieStagesTests",

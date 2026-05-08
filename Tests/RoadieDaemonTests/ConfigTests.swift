@@ -111,6 +111,7 @@ struct ConfigTests {
         animation_ms = 120
         hide_delay_ms = 250
         layout_mode = "resize"
+        dynamic_left_gap = true
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
@@ -185,6 +186,7 @@ struct ConfigTests {
         #expect(settings.animationMS == 120)
         #expect(settings.hideDelayMS == 250)
         #expect(settings.layoutMode == "resize")
+        #expect(settings.dynamicLeftGap == true)
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
         #expect(settings.layout.headerPosition == "top")
