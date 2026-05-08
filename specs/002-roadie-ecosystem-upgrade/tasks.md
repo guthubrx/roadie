@@ -32,7 +32,7 @@
 - [X] T008 Créer le modèle versionné `RoadieEventEnvelope` dans `Sources/RoadieCore/AutomationEvent.swift`
 - [X] T009 Créer les types `AutomationSubject`, `AutomationScope`, `AutomationCause` et `AutomationPayload` dans `Sources/RoadieCore/AutomationEvent.swift`
 - [X] T010 [P] Créer le modèle `RoadieStateSnapshot` dans `Sources/RoadieCore/AutomationSnapshot.swift`
-- [ ] T011 [P] Créer le modèle `LayoutCommandIntent` dans `Sources/RoadieCore/LayoutCommandIntent.swift`
+- [X] T011 [P] Créer le modèle `LayoutCommandIntent` dans `Sources/RoadieCore/LayoutCommandIntent.swift`
 - [ ] T012 Adapter `Sources/RoadieDaemon/EventLog.swift` pour écrire et relire `RoadieEventEnvelope` sans casser l'ancien journal
 - [ ] T013 Ajouter les helpers de compatibilité legacy `RoadieEvent` vers `RoadieEventEnvelope` dans `Sources/RoadieDaemon/EventLog.swift`
 - [ ] T014 Ajouter les tests de sérialisation et compatibilité événementielle dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
