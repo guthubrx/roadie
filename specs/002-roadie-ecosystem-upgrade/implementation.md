@@ -280,7 +280,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T021 : Catalogue AutomationEventCatalog
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `dd72521` - feat(002): Complete event catalog
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/AutomationEventCatalog.swift` (API contains/filter)
   - `Tests/RoadieDaemonTests/EventCatalogTests.swift` (test de filtrage)
@@ -289,3 +289,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventCatalogTests`
 - **Notes** : Le catalogue expose la liste minimale, une vérification d'existence et un filtrage par scope.
+
+### T022 : EventSubscriptionService
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/EventSubscriptionService.swift` (service subscription)
+  - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (filtrage et lecture complète)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T022 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventSubscriptionTests`
+- **Notes** : Le service expose `start`, `readAvailable`, `readAll`, filtres type/scope et chemin effectif.

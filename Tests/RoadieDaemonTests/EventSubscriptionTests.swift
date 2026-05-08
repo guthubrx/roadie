@@ -73,6 +73,23 @@ struct EventSubscriptionTests {
         #expect(elapsed < 1.0)
     }
 
+    @Test
+    func spec002SubscriptionServiceCanReadAllWithFilters() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-filter-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = EventLog(path: url.path)
+        let service = EventSubscriptionService(path: url.path)
+
+        log.append(event(id: "evt-window", type: "window.focused", scope: .window))
+        log.append(event(id: "evt-desktop", type: "desktop.changed", scope: .desktop))
+
+        let events = service.readAll(options: EventSubscriptionOptions(scopes: [.desktop]))
+
+        #expect(service.path == url.path)
+        #expect(events.map(\.id) == ["evt-desktop"])
+    }
+
     private func event(id: String, type: String, scope: AutomationScope = .window) -> RoadieEventEnvelope {
         RoadieEventEnvelope(
             id: id,
