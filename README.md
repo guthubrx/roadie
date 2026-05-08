@@ -237,6 +237,7 @@ Move focus or windows:
 ./bin/roadie move left
 ./bin/roadie warp right
 ./bin/roadie resize left
+./bin/roadie display focus right
 ```
 
 Move the focused window to another display:

@@ -594,7 +594,7 @@ private final class RailPanel: NSPanel {
             view.removeFromSuperview()
         }
 
-        if config.headerEnabled {
+        if config.headerVisible {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
         let ids = stageIDs(from: scope)
@@ -622,15 +622,23 @@ private final class RailPanel: NSPanel {
 
     private func centerStages(count: Int, config: RailVisualConfig) {
         let cardHeight = StageCardView.height(for: config)
-        let headerHeight = config.headerEnabled ? config.headerHeight + config.headerBottomPadding : 0
+        stack.spacing = config.layoutSpacing
+        let headerHeight = config.headerVisible ? config.headerHeight + config.layoutBottomPadding : 0
         let itemCount = count + (headerHeight > 0 ? 1 : 0)
         let totalHeight = headerHeight
             + CGFloat(count) * cardHeight
             + CGFloat(max(0, itemCount - 1)) * stack.spacing
-        let topInset = config.headerEnabled && config.headerPlacement == .top
-            ? config.headerTopPadding
-            : max(20, floor((frame.height - totalHeight) / 2))
-        let bottomInset = max(20, floor((frame.height - totalHeight - topInset) / 2))
+        let centeredInset = max(20, floor((frame.height - totalHeight) / 2))
+        let topInset: CGFloat
+        switch config.stagesPosition {
+        case .top:
+            topInset = config.layoutTopPadding
+        case .bottom:
+            topInset = max(20, frame.height - totalHeight - config.layoutBottomPadding)
+        case .center:
+            topInset = config.headerPosition == .top ? config.layoutTopPadding : centeredInset
+        }
+        let bottomInset = max(20, frame.height - totalHeight - topInset)
         stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
     }
 
@@ -878,22 +886,19 @@ private struct RailVisualConfig {
     var parallaxScale: CGFloat = 0.08
     var parallaxOpacity: CGFloat = 0.20
     var parallaxDarken: CGFloat = 0.15
-    var headerEnabled: Bool = true
-    var headerPlacement: RailHeaderPlacement = .top
-    var headerAlignment: RailHeaderAlignment = .center
-    var headerTopPadding: CGFloat = 26
-    var headerBottomPadding: CGFloat = 16
+    var headerPosition: RailHeaderPosition = .top
+    var stagesPosition: RailStagesPosition = .center
+    var layoutSpacing: CGFloat = 13
+    var layoutTopPadding: CGFloat = 26
+    var layoutBottomPadding: CGFloat = 16
     var headerHeight: CGFloat = 42
     var headerWidth: CGFloat = 0
-    var headerTitleColor: NSColor = .white
-    var headerSubtitleColor: NSColor = .white
-    var headerTitleFontSize: CGFloat = 13
-    var headerSubtitleFontSize: CGFloat = 10
-    var headerFontFamily: String = "system"
-    var headerTitleWeight: NSFont.Weight = .bold
-    var headerSubtitleWeight: NSFont.Weight = .medium
-    var headerTitleTemplate: String = "{display}"
-    var headerSubtitleTemplate: String = "Desktop {desktop}"
+    var displayLabel: RailLabelConfig = .displayDefault
+    var desktopLabel: RailLabelConfig = .desktopDefault
+
+    var headerVisible: Bool {
+        headerPosition != .hidden && (displayLabel.enabled || desktopLabel.enabled)
+    }
 
     func accent(for stageID: StageID) -> NSColor {
         stageAccents[stageID] ?? NSColor.systemGreen
@@ -908,7 +913,8 @@ private struct RailVisualConfig {
         }
         let preview = settings.preview
         let parallax = settings.parallax
-        let header = settings.header
+        let displayLabel = settings.displayLabel
+        let desktopLabel = settings.desktopLabel
         let useParallaxGeometry = mode == .parallax
         return RailVisualConfig(
             mode: mode,
@@ -938,37 +944,111 @@ private struct RailVisualConfig {
             parallaxScale: CGFloat(parallax.scalePerLayer),
             parallaxOpacity: CGFloat(parallax.opacityPerLayer),
             parallaxDarken: CGFloat(parallax.darkenPerLayer),
-            headerEnabled: header.enabled,
-            headerPlacement: RailHeaderPlacement(rawValue: header.placement) ?? .top,
-            headerAlignment: RailHeaderAlignment(rawValue: header.alignment) ?? .center,
-            headerTopPadding: CGFloat(header.topPadding),
-            headerBottomPadding: CGFloat(header.bottomPadding),
-            headerHeight: CGFloat(header.height),
-            headerWidth: CGFloat(header.width),
-            headerTitleColor: NSColor(hex: header.titleColor) ?? .white.withAlphaComponent(0.86),
-            headerSubtitleColor: NSColor(hex: header.subtitleColor) ?? .white.withAlphaComponent(0.42),
-            headerTitleFontSize: CGFloat(header.titleFontSize),
-            headerSubtitleFontSize: CGFloat(header.subtitleFontSize),
-            headerFontFamily: header.fontFamily,
-            headerTitleWeight: NSFont.Weight.toml(header.titleWeight),
-            headerSubtitleWeight: NSFont.Weight.toml(header.subtitleWeight),
-            headerTitleTemplate: header.titleTemplate,
-            headerSubtitleTemplate: header.subtitleTemplate
+            headerPosition: RailHeaderPosition(rawValue: settings.layout.headerPosition) ?? .top,
+            stagesPosition: RailStagesPosition(rawValue: settings.stages.position) ?? RailStagesPosition(rawValue: settings.layout.stagesPosition) ?? .center,
+            layoutSpacing: CGFloat(settings.stages.gap > 0 ? settings.stages.gap : settings.layout.spacing),
+            layoutTopPadding: CGFloat(settings.layout.topPadding),
+            layoutBottomPadding: CGFloat(settings.layout.bottomPadding),
+            headerHeight: max(CGFloat(displayLabel.fontSize + desktopLabel.fontSize + 12), 1),
+            headerWidth: 0,
+            displayLabel: RailLabelConfig(settings: displayLabel, fallbackColor: .white.withAlphaComponent(0.86)),
+            desktopLabel: RailLabelConfig(settings: desktopLabel, fallbackColor: .white.withAlphaComponent(0.42))
         )
     }
 }
 
 @MainActor
-private enum RailHeaderPlacement: String {
+private enum RailHeaderPosition: String {
     case top
-    case center
+    case bottom
+    case hidden
 }
 
 @MainActor
-private enum RailHeaderAlignment: String {
+private enum RailStagesPosition: String {
+    case top
+    case center
+    case bottom
+}
+
+@MainActor
+private enum RailTextAlignment: String {
     case left
     case center
     case right
+}
+
+@MainActor
+private struct RailLabelConfig {
+    var enabled: Bool
+    var template: String
+    var color: NSColor
+    var fontSize: CGFloat
+    var fontFamily: String
+    var weight: NSFont.Weight
+    var alignment: RailTextAlignment
+    var offsetX: CGFloat
+    var offsetY: CGFloat
+
+    static let displayDefault = RailLabelConfig(
+        enabled: true,
+        template: "{display}",
+        color: .white.withAlphaComponent(0.86),
+        fontSize: 13,
+        fontFamily: "system",
+        weight: .bold,
+        alignment: .center,
+        offsetX: 0,
+        offsetY: 0
+    )
+
+    static let desktopDefault = RailLabelConfig(
+        enabled: true,
+        template: "Desktop {desktop}",
+        color: .white.withAlphaComponent(0.42),
+        fontSize: 10,
+        fontFamily: "system",
+        weight: .medium,
+        alignment: .center,
+        offsetX: 0,
+        offsetY: 0
+    )
+
+    init(
+        enabled: Bool,
+        template: String,
+        color: NSColor,
+        fontSize: CGFloat,
+        fontFamily: String,
+        weight: NSFont.Weight,
+        alignment: RailTextAlignment,
+        offsetX: CGFloat,
+        offsetY: CGFloat
+    ) {
+        self.enabled = enabled
+        self.template = template
+        self.color = color
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
+        self.weight = weight
+        self.alignment = alignment
+        self.offsetX = offsetX
+        self.offsetY = offsetY
+    }
+
+    init(settings: RailSettings.Label, fallbackColor: NSColor) {
+        self.init(
+            enabled: settings.enabled,
+            template: settings.template,
+            color: (NSColor(hex: settings.color) ?? fallbackColor).withAlphaComponent(CGFloat(settings.opacity)),
+            fontSize: CGFloat(settings.fontSize),
+            fontFamily: settings.fontFamily,
+            weight: NSFont.Weight.toml(settings.weight),
+            alignment: RailTextAlignment(rawValue: settings.alignment) ?? .center,
+            offsetX: CGFloat(settings.offsetX),
+            offsetY: CGFloat(settings.offsetY)
+        )
+    }
 }
 
 @MainActor
@@ -1016,27 +1096,26 @@ private final class RailHeaderView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let title = render(template: config.headerTitleTemplate)
-        let subtitle = render(template: config.headerSubtitleTemplate)
-        let titleHeight = max(config.headerTitleFontSize + 5, 1)
-        let subtitleHeight = max(config.headerSubtitleFontSize + 4, 1)
-        let gap: CGFloat = subtitle.isEmpty ? 0 : 2
-        let blockHeight = titleHeight + gap + (subtitle.isEmpty ? 0 : subtitleHeight)
+        let labels = [
+            (config.displayLabel, render(template: config.displayLabel.template)),
+            (config.desktopLabel, render(template: config.desktopLabel.template)),
+        ].filter { $0.0.enabled && !$0.1.isEmpty }
+        guard !labels.isEmpty else { return }
+        let lineHeights = labels.map { max($0.0.fontSize + 5, 1) }
+        let gap: CGFloat = labels.count > 1 ? 2 : 0
+        let blockHeight = lineHeights.reduce(0, +) + gap * CGFloat(max(0, labels.count - 1))
         let top = max(0, (bounds.height - blockHeight) / 2)
-        let subtitleY = top
-        let titleY = subtitle.isEmpty ? top : top + subtitleHeight + gap
-
-        title.draw(in: CGRect(x: 0, y: titleY, width: bounds.width, height: titleHeight), withAttributes: [
-            .foregroundColor: config.headerTitleColor,
-            .font: headerFont(size: config.headerTitleFontSize, weight: config.headerTitleWeight),
-            .paragraphStyle: paragraphStyle(),
-        ])
-        guard !subtitle.isEmpty else { return }
-        subtitle.draw(in: CGRect(x: 0, y: subtitleY, width: bounds.width, height: subtitleHeight), withAttributes: [
-            .foregroundColor: config.headerSubtitleColor,
-            .font: headerFont(size: config.headerSubtitleFontSize, weight: config.headerSubtitleWeight),
-            .paragraphStyle: paragraphStyle(),
-        ])
+        var y = top + blockHeight
+        for (index, item) in labels.enumerated() {
+            let lineHeight = lineHeights[index]
+            y -= lineHeight
+            item.1.draw(in: CGRect(x: item.0.offsetX, y: y + item.0.offsetY, width: bounds.width, height: lineHeight), withAttributes: [
+                .foregroundColor: item.0.color,
+                .font: headerFont(label: item.0),
+                .paragraphStyle: paragraphStyle(for: item.0),
+            ])
+            y -= gap
+        }
     }
 
     private func render(template: String) -> String {
@@ -1045,9 +1124,9 @@ private final class RailHeaderView: NSView {
             .replacingOccurrences(of: "{desktop}", with: String(desktopID.rawValue))
     }
 
-    private func paragraphStyle() -> NSParagraphStyle {
+    private func paragraphStyle(for label: RailLabelConfig) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        switch config.headerAlignment {
+        switch label.alignment {
         case .left:
             style.alignment = .left
         case .center:
@@ -1059,13 +1138,13 @@ private final class RailHeaderView: NSView {
         return style
     }
 
-    private func headerFont(size: CGFloat, weight: NSFont.Weight) -> NSFont {
-        let family = config.headerFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func headerFont(label: RailLabelConfig) -> NSFont {
+        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
         if !family.isEmpty, family.lowercased() != "system",
-           let font = NSFont(name: family, size: size) {
+           let font = NSFont(name: family, size: label.fontSize) {
             return font
         }
-        return NSFont.systemFont(ofSize: size, weight: weight)
+        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
     }
 }
 
