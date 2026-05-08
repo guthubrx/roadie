@@ -13,7 +13,7 @@
 
 **Purpose**: Préparer les fixtures, la traçabilité et la matrice de couverture avant le code.
 
-- [ ] T001 Créer les fixtures d'événements Spec 002 dans `Tests/RoadieDaemonTests/Fixtures/Spec002Events.jsonl`
+- [X] T001 Créer les fixtures d'événements Spec 002 dans `Tests/RoadieDaemonTests/Fixtures/Spec002Events.jsonl`
 - [ ] T002 [P] Créer les fixtures de snapshot Spec 002 dans `Tests/RoadieDaemonTests/Fixtures/Spec002Snapshot.json`
 - [ ] T003 [P] Créer les fixtures de règles valides et invalides dans `Tests/RoadieDaemonTests/Fixtures/Spec002Rules.toml`
 - [ ] T004 Créer la matrice de couverture yabai/AeroSpace/Hyprland dans `specs/002-roadie-ecosystem-upgrade/automation-coverage.md`
