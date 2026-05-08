@@ -757,4 +757,18 @@ public enum SnapshotEncoding {
         let data = try encoder.encode(result)
         return String(decoding: data, as: UTF8.self)
     }
+
+    public static func json(_ report: StateAuditReport, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(report)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func json(_ report: StateHealReport, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(report)
+        return String(decoding: data, as: UTF8.self)
+    }
 }
