@@ -193,7 +193,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T014 : Tests AutomationEvent
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `e715f1a` - test(002): Cover automation events
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/AutomationEventTests.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T014 cochée)
@@ -201,3 +201,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter AutomationEventTests`
 - **Notes** : Les tests couvrent round-trip JSON payloads et lecture mixte enveloppe + legacy event.
+
+### T015 : Tests AutomationSnapshot
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/AutomationSnapshotTests.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T015 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter AutomationSnapshotTests`
+- **Notes** : Les tests couvrent round-trip du snapshot contractuel et décodage de la fixture Spec002Snapshot.
