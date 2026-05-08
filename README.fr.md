@@ -1,0 +1,265 @@
+# Roadie
+
+[English](README.md) | Français
+
+Roadie est un petit gestionnaire de fenêtres tiling pour macOS, écrit en Swift.
+
+Il combine le tiling automatique avec un stage manager intégré : les fenêtres sont regroupées en stages, les stages peuvent être affichées ou masquées, et chaque écran conserve son desktop courant, sa stage active et son layout.
+
+Roadie est encore en cours de développement. Il est utilisable, mais il évolue vite.
+
+## Ce Que Fait Roadie
+
+- Tile les fenêtres visibles avec les modes `bsp`, `masterStack` ou `float`.
+- Gère des groupes de fenêtres par stage, écran et desktop Roadie.
+- Fournit des desktops virtuels Roadie sans contrôler les Spaces macOS natifs.
+- Supporte plusieurs écrans indépendamment.
+- Affiche un nav rail natif avec les thumbnails des stages.
+- Permet de déplacer des thumbnails entre stages ou vers la scène active.
+- Affiche une bordure autour de la fenêtre active.
+- Fournit des commandes CLI faciles à brancher dans BetterTouchTool, Karabiner, des scripts shell ou un launcher.
+- Persiste les stages et l’état du layout entre les redémarrages du daemon.
+- Expose des commandes d’état, santé, métriques, événements et audit pour diagnostiquer.
+
+## Prérequis
+
+- macOS.
+- Xcode Command Line Tools.
+- Permission Accessibilité pour `roadied`.
+- Permission Enregistrement d’écran si tu veux les vraies thumbnails dans le rail.
+
+Installer Xcode Command Line Tools si besoin :
+
+```bash
+xcode-select --install
+```
+
+## Build
+
+Depuis la racine du dépôt :
+
+```bash
+make test
+make start
+```
+
+Les scripts du projet forcent la toolchain Xcode et évitent les environnements shell qui peuvent injecter des flags linker incompatibles.
+
+Commandes utiles :
+
+```bash
+make test
+make start
+make stop
+make restart
+make status
+make logs
+make doctor
+```
+
+Équivalents directs :
+
+```bash
+./scripts/test
+./scripts/start
+./scripts/stop
+./scripts/status
+./scripts/logs
+./scripts/roadie daemon health
+```
+
+## Permissions
+
+Roadie a besoin de la permission Accessibilité pour lire et déplacer les fenêtres.
+
+Après build et lancement du daemon, ajoute ce binaire dans Réglages Système > Confidentialité et sécurité > Accessibilité :
+
+```text
+/Users/moi/Nextcloud/10.Scripts/39.roadie/bin/roadied
+```
+
+Puis redémarre le daemon :
+
+```bash
+make restart
+```
+
+La permission Enregistrement d’écran est optionnelle mais recommandée. Sans elle, le nav rail peut afficher des icônes d’app fallback au lieu des thumbnails live.
+
+## Configuration
+
+Le fichier de configuration utilisateur est :
+
+```text
+~/.config/roadies/roadies.toml
+```
+
+Valider la configuration :
+
+```bash
+./bin/roadie config validate
+```
+
+Afficher la configuration chargée :
+
+```bash
+./bin/roadie config show
+```
+
+## Usage Quotidien
+
+Démarrer ou redémarrer le daemon :
+
+```bash
+make restart
+```
+
+Vérifier l’état runtime :
+
+```bash
+./bin/roadie daemon health
+./bin/roadie state audit
+./bin/roadie metrics
+./bin/roadie tree dump
+```
+
+Lister les fenêtres et les écrans :
+
+```bash
+./bin/roadie windows list
+./bin/roadie display list
+```
+
+Changer le mode de layout de la stage courante :
+
+```bash
+./bin/roadie mode bsp
+./bin/roadie mode masterStack
+./bin/roadie mode float
+```
+
+Déplacer le focus ou les fenêtres :
+
+```bash
+./bin/roadie focus left
+./bin/roadie focus right
+./bin/roadie move left
+./bin/roadie warp right
+./bin/roadie resize left
+```
+
+Envoyer la fenêtre active vers un autre écran :
+
+```bash
+./bin/roadie window display 2
+```
+
+## Stages
+
+Les stages sont des groupes de fenêtres. Seule la stage active est visible ; les stages inactives sont masquées et représentées dans le nav rail.
+
+Commandes courantes :
+
+```bash
+./bin/roadie stage list
+./bin/roadie stage create 4
+./bin/roadie stage rename 4 Comms
+./bin/roadie stage switch 2
+./bin/roadie stage assign 2
+./bin/roadie stage reorder 2 1
+./bin/roadie stage delete 4
+./bin/roadie stage prev
+./bin/roadie stage next
+```
+
+Ramener dans la stage active une fenêtre d’une stage inactive :
+
+```bash
+./bin/roadie stage summon WINDOW_ID
+```
+
+## Desktops Roadie
+
+Les desktops Roadie sont des desktops virtuels gérés par Roadie. Ils ne créent, ne switchent et ne contrôlent pas les Spaces macOS natifs.
+
+```bash
+./bin/roadie desktop list
+./bin/roadie desktop current
+./bin/roadie desktop focus 2
+./bin/roadie desktop focus next
+./bin/roadie desktop focus prev
+./bin/roadie desktop focus back
+./bin/roadie desktop label 2 DeepWork
+```
+
+Envoyer la fenêtre active vers un autre desktop Roadie :
+
+```bash
+./bin/roadie window desktop 2
+./bin/roadie window desktop 2 --follow
+```
+
+## Nav Rail
+
+Le nav rail est un panneau latéral natif par écran.
+
+Il affiche les stages non vides, les thumbnails live quand elles sont disponibles, des icônes d’app fallback quand la capture n’est pas disponible, et un halo autour de la stage active.
+
+Interactions supportées :
+
+- Cliquer sur une pile de thumbnails pour changer de stage.
+- Cliquer dans une zone vide du rail pour masquer la stage active et passer sur une stage vide.
+- Drag une thumbnail vers une autre stage pour y déplacer la fenêtre.
+- Drag une thumbnail vers la scène active pour la ramener.
+- Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
+- Utiliser les chevrons au-dessus et au-dessous d’une stage pour réordonner les stages.
+
+Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
+
+## Dépannage
+
+Lancer les vérifications rapides :
+
+```bash
+./bin/roadie daemon health
+./bin/roadie state audit
+./bin/roadie self-test
+```
+
+Réparer les problèmes d’état conservateurs :
+
+```bash
+./bin/roadie state heal
+./bin/roadie daemon heal
+```
+
+Inspecter logs et événements :
+
+```bash
+make logs
+./bin/roadie events tail 50
+```
+
+Si les fenêtres ne bougent plus après un rebuild, revérifie Accessibilité pour `bin/roadied`, puis redémarre :
+
+```bash
+make restart
+```
+
+## Organisation Du Dépôt
+
+```text
+Sources/RoadieAX       Snapshots système et Accessibilité
+Sources/RoadieCore     Types partagés, géométrie, configuration
+Sources/RoadieTiler    Stratégies de layout pures
+Sources/RoadieStages   État persistant desktops et stages Roadie
+Sources/RoadieDaemon   Services daemon, rail, bordure, commandes
+Sources/roadie         CLI
+Sources/roadied        Point d’entrée daemon
+Tests                  Tests unitaires
+scripts                Helpers build et runtime
+```
+
+## Statut
+
+Roadie est d’abord construit pour un usage quotidien personnel. Les commandes, les clés de configuration et le comportement du rail peuvent encore changer pendant la stabilisation.
