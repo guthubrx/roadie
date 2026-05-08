@@ -123,9 +123,9 @@ public final class RailController {
             } else {
                 dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }
-            if displayID(at: screenPoint) != nil,
+            if let targetDisplayID = displayID(at: screenPoint),
                panels.values.allSatisfy({ !$0.frame.contains(screenPoint) }) {
-                _ = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint)
+                _ = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: targetDisplayID)
             } else {
                 dropPreview.hide()
             }
@@ -155,7 +155,7 @@ public final class RailController {
             guard displayID(at: screenPoint) != nil else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
-            if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint) {
+            if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: targetDisplayID) {
                 perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs, candidate.placements), displayID: candidate.displayID)
             } else {
                 perform(.summonWindow(drag.windowID), displayID: targetDisplayID)

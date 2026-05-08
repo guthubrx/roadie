@@ -103,6 +103,11 @@ struct DropPreviewEngine {
                 operation: operation,
                 activeEntries: activeEntries,
                 display: display
+            ) ?? externalSourcePlacements(
+                sourceID: sourceWindowID,
+                target: target.window,
+                operation: operation,
+                activeEntries: activeEntries
             ) ?? [:]
         } else {
             operation = .append
@@ -219,6 +224,43 @@ struct DropPreviewEngine {
         var result: [WindowID: CGRect] = [:]
         result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
         result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
+        return result
+    }
+
+    private func externalSourcePlacements(
+        sourceID: WindowID,
+        target: WindowSnapshot,
+        operation: DropPreviewOperation,
+        activeEntries: [ScopedWindowSnapshot]
+    ) -> [WindowID: CGRect]? {
+        guard operation != .swap, operation != .append,
+              activeEntries.allSatisfy({ $0.window.id != sourceID })
+        else { return nil }
+
+        let horizontal: Bool
+        let sourceFirst: Bool
+        switch operation {
+        case .insertLeft:
+            horizontal = true
+            sourceFirst = true
+        case .insertRight:
+            horizontal = true
+            sourceFirst = false
+        case .insertUp:
+            horizontal = false
+            sourceFirst = true
+        case .insertDown:
+            horizontal = false
+            sourceFirst = false
+        case .append, .swap:
+            return nil
+        }
+
+        let gap = CGFloat(service.innerGap())
+        let splitRects = split(target.frame.cgRect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
+        var result = Dictionary(uniqueKeysWithValues: activeEntries.map { ($0.window.id, $0.window.frame.cgRect.integral) })
+        result[sourceID] = (sourceFirst ? splitRects.first : splitRects.second).integral
+        result[target.id] = (sourceFirst ? splitRects.second : splitRects.first).integral
         return result
     }
 
