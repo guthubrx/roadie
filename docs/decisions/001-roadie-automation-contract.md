@@ -1,6 +1,6 @@
 # ADR 001: Roadie Automation Contract
 
-**Status**: Proposed  
+**Status**: Accepted  
 **Date**: 2026-05-08  
 **Feature**: `002-roadie-ecosystem-upgrade`
 
@@ -44,6 +44,14 @@ Roadie ne crée pas de hotkey daemon natif, ne pilote pas les Spaces Apple, ne d
 - Tests de validation TOML rules.
 - Tests CLI sur `subscribe`, `query`, `rules validate`.
 - Scénarios d'acceptation documentés dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`.
+
+## Écarts actés pendant l'implémentation
+
+- `events subscribe` reste basé sur JSONL append-only pour cette tranche; le socket bidirectionnel complet est reporté.
+- `scratchpad` est implémenté comme marqueur de règle exposé par l'évaluation, pas comme UX scratchpad complète.
+- Les groupes de fenêtres sont persistés, commandables et exposés aux snapshots; le rendu tabbed complet reste hors scope de cette tranche.
+- `query ...` retourne un wrapper stable `{kind,data}` sans filtres CLI avancés; les filtres pourront être ajoutés sans casser le schéma.
+- Les commandes power-user privilégient les primitives existantes de Roadie (`LayoutIntentStore`, stages virtuels) et ne touchent pas aux Spaces Apple.
 
 ## Suivi Spec 002
 
