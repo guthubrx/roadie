@@ -31,6 +31,22 @@ public struct DaemonHealthReport: Equatable, Codable, Sendable {
     }
 }
 
+public struct DaemonHealReport: Equatable, Codable, Sendable {
+    public var state: StateHealReport
+    public var layout: ApplyResult
+    public var health: DaemonHealthReport
+
+    public init(state: StateHealReport, layout: ApplyResult, health: DaemonHealthReport) {
+        self.state = state
+        self.layout = layout
+        self.health = health
+    }
+
+    public var failed: Bool {
+        state.audit.failed || layout.failed > 0 || health.failed
+    }
+}
+
 public struct DaemonHealthService {
     private let service: SnapshotService
     private let stageStore: StageStore
@@ -61,6 +77,14 @@ public struct DaemonHealthService {
             message: "failed=\(audit.failed)"
         ))
         return DaemonHealthReport(checks: checks)
+    }
+
+    public func heal() -> DaemonHealReport {
+        let stateReport = StateAuditService(service: service, stageStore: stageStore).heal()
+        let snapshot = service.snapshot()
+        let layoutResult = service.apply(service.applyPlan(from: snapshot))
+        let healthReport = run()
+        return DaemonHealReport(state: stateReport, layout: layoutResult, health: healthReport)
     }
 
     private func pidCheck() -> DaemonHealthCheck {
