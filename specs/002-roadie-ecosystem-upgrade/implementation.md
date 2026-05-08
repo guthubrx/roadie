@@ -89,7 +89,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T006 : Suivi Spec 002 dans l'ADR
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `d486852` - docs(002): Add ADR implementation tracking
 - **Fichiers modifiés** :
   - `docs/decisions/001-roadie-automation-contract.md` (section suivi Spec 002)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T006 cochée)
@@ -98,3 +98,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] Relecture de cohérence ADR/plan/tasks
   - [ ] `swift build` : non applicable, documentation seule
 - **Notes** : L'ADR rappelle le worktree, les gates Swift, le commit atomique et les points de décision à surveiller.
+
+### T007 : Déclaration des fixtures dans Package.swift
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Package.swift` (ressources `Fixtures` pour `RoadieDaemonTests`)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T007 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : réservé à la phase fondation
+- **Notes** : Les fixtures JSONL/JSON/TOML sont maintenant déclarées comme ressources SwiftPM du target de test.
