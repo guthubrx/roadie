@@ -38,6 +38,7 @@ public final class BorderController {
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID && $0.window.isTileCandidate }),
               let scope = entry.scope,
+              !Self.isDRMSensitiveBundle(entry.window.bundleID),
               !isHidden(entry.window.frame.cgRect, in: snapshot.displays)
         else {
             panel.orderOut(nil)
@@ -85,6 +86,17 @@ public final class BorderController {
             width: rect.width,
             height: rect.height
         )
+    }
+
+    private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
+        [
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "com.operasoftware.Opera",
+            "org.mozilla.firefox",
+        ].contains(bundleID)
     }
 }
 
