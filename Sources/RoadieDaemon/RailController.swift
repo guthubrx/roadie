@@ -83,6 +83,7 @@ public final class RailController {
                     displayID: displayID,
                     windowID: payload.windowID,
                     sourceStageID: payload.sourceStageID,
+                    grabUnit: payload.grabUnit,
                     startPoint: screenPoint,
                     didDrag: false
                 )
@@ -109,9 +110,9 @@ public final class RailController {
                 if dragGhost == nil {
                     dragGhost = RailDragGhostWindow()
                 }
-                dragGhost?.show(image: thumbnails.cachedImage(for: drag.windowID), at: screenPoint)
+                dragGhost?.show(image: thumbnails.cachedImage(for: drag.windowID), at: screenPoint, grabUnit: drag.grabUnit)
             } else {
-                dragGhost?.move(to: screenPoint)
+                dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }
             drag.didDrag = true
             pendingDrag = drag
@@ -228,12 +229,14 @@ private enum RailAction {
 private struct RailDragPayload {
     var windowID: WindowID
     var sourceStageID: StageID
+    var grabUnit: CGPoint
 }
 
 private struct PendingRailDrag {
     var displayID: DisplayID
     var windowID: WindowID
     var sourceStageID: StageID
+    var grabUnit: CGPoint
     var startPoint: CGPoint
     var didDrag: Bool
 }
@@ -259,16 +262,22 @@ private final class RailDragGhostWindow: NSPanel {
         contentView = ghostView
     }
 
-    func show(image: NSImage?, at point: CGPoint) {
+    func show(image: NSImage?, at point: CGPoint, grabUnit: CGPoint) {
         ghostView.image = image
         setContentSize(ghostView.preferredSize(for: image))
-        move(to: point)
+        move(to: point, grabUnit: grabUnit)
         orderFrontRegardless()
         ghostView.needsDisplay = true
     }
 
-    func move(to point: CGPoint) {
-        setFrameOrigin(CGPoint(x: point.x + 18, y: point.y - frame.height / 2))
+    func move(to point: CGPoint, grabUnit: CGPoint) {
+        let contentInset: CGFloat = 5
+        let contentWidth = max(1, frame.width - contentInset * 2)
+        let contentHeight = max(1, frame.height - contentInset * 2)
+        setFrameOrigin(CGPoint(
+            x: point.x - (contentInset + grabUnit.x * contentWidth),
+            y: point.y - (contentInset + grabUnit.y * contentHeight)
+        ))
     }
 
     func hide() {
@@ -1021,7 +1030,14 @@ private final class StageCardView: NSControl {
             guard item.rect.contains(point),
                   let member = stage.members[safe: item.index]
             else { continue }
-            return RailDragPayload(windowID: member.windowID, sourceStageID: stageID)
+            return RailDragPayload(
+                windowID: member.windowID,
+                sourceStageID: stageID,
+                grabUnit: CGPoint(
+                    x: min(1, max(0, (point.x - item.rect.minX) / max(1, item.rect.width))),
+                    y: min(1, max(0, (point.y - item.rect.minY) / max(1, item.rect.height)))
+                )
+            )
         }
         return nil
     }
