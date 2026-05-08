@@ -1115,8 +1115,9 @@ private final class StageCardView: NSControl {
         }
         let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
         icon.size = NSSize(width: 64, height: 64)
-        appIconCache[bundleID] = icon
-        return icon
+        let cleanedIcon = icon.removingEdgeWhiteBackground()
+        appIconCache[bundleID] = cleanedIcon
+        return cleanedIcon
     }
 
     private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
@@ -1314,6 +1315,85 @@ private extension CGImage {
         return Double(darkSamples) / Double(totalSamples) > 0.96
             && Double(brightSamples) / Double(totalSamples) < 0.01
             && lumaChanges < 8
+    }
+}
+
+private extension NSImage {
+    func removingEdgeWhiteBackground() -> NSImage {
+        let pixelWidth = 64
+        let pixelHeight = 64
+        let bytesPerPixel = 4
+        let bytesPerRow = pixelWidth * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: pixelHeight * bytesPerRow)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: &pixels,
+                  width: pixelWidth,
+                  height: pixelHeight,
+                  bitsPerComponent: 8,
+                  bytesPerRow: bytesPerRow,
+                  space: colorSpace,
+                  bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
+              ),
+              let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else {
+            return self
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+
+        func offset(_ x: Int, _ y: Int) -> Int {
+            y * bytesPerRow + x * bytesPerPixel
+        }
+
+        func isEdgeWhite(_ x: Int, _ y: Int) -> Bool {
+            let i = offset(x, y)
+            let red = pixels[i]
+            let green = pixels[i + 1]
+            let blue = pixels[i + 2]
+            let alpha = pixels[i + 3]
+            return alpha > 0 && red >= 238 && green >= 238 && blue >= 238
+        }
+
+        var visited = [Bool](repeating: false, count: pixelWidth * pixelHeight)
+        var queue: [(x: Int, y: Int)] = []
+
+        func enqueue(_ x: Int, _ y: Int) {
+            guard x >= 0, x < pixelWidth, y >= 0, y < pixelHeight else { return }
+            let index = y * pixelWidth + x
+            guard !visited[index], isEdgeWhite(x, y) else { return }
+            visited[index] = true
+            queue.append((x, y))
+        }
+
+        for x in 0..<pixelWidth {
+            enqueue(x, 0)
+            enqueue(x, pixelHeight - 1)
+        }
+        for y in 0..<pixelHeight {
+            enqueue(0, y)
+            enqueue(pixelWidth - 1, y)
+        }
+
+        var cursor = 0
+        while cursor < queue.count {
+            let point = queue[cursor]
+            cursor += 1
+            let i = offset(point.x, point.y)
+            pixels[i] = 0
+            pixels[i + 1] = 0
+            pixels[i + 2] = 0
+            pixels[i + 3] = 0
+            enqueue(point.x + 1, point.y)
+            enqueue(point.x - 1, point.y)
+            enqueue(point.x, point.y + 1)
+            enqueue(point.x, point.y - 1)
+        }
+
+        guard let cleaned = context.makeImage() else {
+            return self
+        }
+        return NSImage(cgImage: cleaned, size: NSSize(width: pixelWidth, height: pixelHeight))
     }
 }
 
