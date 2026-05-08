@@ -176,6 +176,30 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func rules(_ rules: [WindowRule]) -> String {
+        guard !rules.isEmpty else { return "No rules configured." }
+        var lines = ["ID\tENABLED\tPRIORITY\tMATCH\tACTION"]
+        for rule in rules {
+            lines.append([
+                rule.id,
+                String(rule.enabled),
+                String(rule.priority),
+                rule.match.summary,
+                rule.action.summary
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func ruleExplanation(_ explanation: RuleExplanation) -> String {
+        var lines = ["matchedRule=\(explanation.matchedRuleID ?? "-")"]
+        for evaluation in explanation.evaluations {
+            let actions = evaluation.actionsApplied.isEmpty ? "-" : evaluation.actionsApplied.joined(separator: ",")
+            lines.append("\(evaluation.matched ? "match" : "skip")\t\(evaluation.ruleId)\t\(actions)\t\(evaluation.reason)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func applyPlan(_ plan: ApplyPlan) -> String {
         guard !plan.commands.isEmpty else { return "No layout commands." }
         var lines = ["WID\tAPP\tTITLE\tFRAME"]
@@ -204,5 +228,38 @@ public enum TextFormatter {
             return snapshot.displays.first { $0.id == displayID }
         }
         return snapshot.displays.first { $0.frame.cgRect.contains(entry.window.frame.center) }
+    }
+}
+
+private extension RuleMatch {
+    var summary: String {
+        [
+            app.map { "app=\($0)" },
+            appRegex.map { "app_regex=\($0)" },
+            title.map { "title=\($0)" },
+            titleRegex.map { "title_regex=\($0)" },
+            role.map { "role=\($0)" },
+            subrole.map { "subrole=\($0)" },
+            display.map { "display=\($0)" },
+            desktop.map { "desktop=\($0)" },
+            stage.map { "stage=\($0)" },
+            isFloating.map { "is_floating=\($0)" }
+        ].compactMap(\.self).joined(separator: ",")
+    }
+}
+
+private extension RuleAction {
+    var summary: String {
+        [
+            manage.map { "manage=\($0)" },
+            exclude.map { "exclude=\($0)" },
+            assignDesktop.map { "assign_desktop=\($0)" },
+            assignStage.map { "assign_stage=\($0)" },
+            floating.map { "floating=\($0)" },
+            layout.map { "layout=\($0)" },
+            gapOverride.map { "gap_override=\($0)" },
+            scratchpad.map { "scratchpad=\($0)" },
+            emitEvent.map { "emit_event=\($0)" }
+        ].compactMap(\.self).joined(separator: ",")
     }
 }
