@@ -7,6 +7,7 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
+var displayChangeObserver: NSObjectProtocol?
 
 func printUsage() {
     print("""
@@ -37,6 +38,15 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
+    displayChangeObserver = NotificationCenter.default.addObserver(
+        forName: NSApplication.didChangeScreenParametersNotification,
+        object: nil,
+        queue: .main
+    ) { _ in
+        let report = DaemonHealthService().heal()
+        print("display-change-heal state=\(report.state.repaired) layout=\(report.layout.attempted) failed=\(report.failed)")
+        fflush(stdout)
+    }
 
     let target = MaintenanceTimerTarget(maintainer: maintainer, maxTicks: ticks) { tick in
         if tick.accessibilityDenied {
