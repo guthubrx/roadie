@@ -123,9 +123,9 @@ public final class RailController {
             } else {
                 dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }
-            if screenFrames[drag.displayID]?.contains(screenPoint) == true,
+            if displayID(at: screenPoint) != nil,
                panels.values.allSatisfy({ !$0.frame.contains(screenPoint) }) {
-                _ = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: drag.displayID)
+                _ = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint)
             } else {
                 dropPreview.hide()
             }
@@ -149,15 +149,16 @@ public final class RailController {
             return
         }
 
-        guard let panel = panels[drag.displayID] else { return }
+        let targetDisplayID = displayID(at: screenPoint) ?? drag.displayID
+        guard let panel = panels[targetDisplayID] ?? panels[drag.displayID] else { return }
         guard let targetStageID = panel.dropStageID(at: screenPoint) else {
-            guard screenFrames[drag.displayID]?.contains(screenPoint) == true else { return }
+            guard displayID(at: screenPoint) != nil else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
-            if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: drag.displayID) {
+            if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint) {
                 perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs, candidate.placements), displayID: candidate.displayID)
             } else {
-                perform(.summonWindow(drag.windowID), displayID: drag.displayID)
+                perform(.summonWindow(drag.windowID), displayID: targetDisplayID)
             }
             rebuildPanels()
             return
@@ -165,7 +166,7 @@ public final class RailController {
         guard targetStageID != drag.sourceStageID else { return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(targetStageID.rawValue)")
         fflush(stdout)
-        perform(.moveWindow(drag.windowID, targetStageID), displayID: drag.displayID)
+        perform(.moveWindow(drag.windowID, targetStageID), displayID: targetDisplayID)
         rebuildPanels()
     }
 
@@ -260,6 +261,10 @@ public final class RailController {
         else { return }
 
         protectedBlurredWindows[previous] = now.addingTimeInterval(3)
+    }
+
+    private func displayID(at screenPoint: CGPoint) -> DisplayID? {
+        screenFrames.first { _, frame in frame.contains(screenPoint) }?.key
     }
 
     private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {

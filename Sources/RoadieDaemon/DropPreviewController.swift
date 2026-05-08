@@ -345,7 +345,7 @@ final class WindowDragReorderController {
         guard var drag = pending else { return }
         guard hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y) > 8 else { return }
         drag.didDrag = true
-        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point, displayID: drag.displayID),
+        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point),
            candidate != drag.lastCandidate {
             events.append(RoadieEvent(type: "window_drag_preview", scope: candidate.scope, details: [
                 "windowID": String(candidate.sourceWindowID.rawValue),
@@ -361,7 +361,7 @@ final class WindowDragReorderController {
         pending = nil
         defer { preview.hide() }
         guard drag.didDrag,
-              let candidate = preview.update(sourceWindowID: drag.windowID, at: point, displayID: drag.displayID)
+              let candidate = preview.update(sourceWindowID: drag.windowID, at: point)
         else { return }
         let result = commandService.place(
             windowID: candidate.sourceWindowID,

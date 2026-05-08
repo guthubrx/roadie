@@ -70,6 +70,10 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
         }
 
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: windowID)
+        }
+        scope = activeScope(displayID: displayID, in: &state)
         scope.assign(window: window, to: stageID)
         state.update(scope)
         store.save(state)
@@ -219,6 +223,9 @@ public struct StageCommandService {
         }
 
         var state = store.state()
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: windowID)
+        }
         var persistentScope = activeScope(displayID: displayID, in: &state)
         let stageID = persistentScope.activeStageID
         persistentScope.assign(window: window, to: stageID)
