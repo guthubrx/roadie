@@ -432,7 +432,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T033/T042 : Commandes rules
 
 - **Statut** : Complété
-- **Commit** : Ce commit - feat(002): Add rules commands
+- **Commit** : `c20bcd6` - feat(002): Add rules commands
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/RulesCommandService.swift` (service validate/list/explain)
   - `Sources/RoadieDaemon/Formatters.swift` (format texte rules)
@@ -443,3 +443,18 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter RulesCommandTests`
 - **Notes** : `rules validate`, `rules list` et `rules explain` supportent `--json` et `--config PATH`; `explain` accepte les critères synthétiques `--app`, `--title`, `--role`, `--stage`, etc.
+
+### T034/T039/T043 : Moteur rules et marqueur scratchpad
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Add rule engine scratchpad markers
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/WindowRuleEngine.swift` (évaluation et marqueurs scratchpad)
+  - `Sources/RoadieDaemon/RulesCommandService.swift` (réutilisation des noms d'actions)
+  - `Sources/roadie/main.swift` (ID synthétique valide pour explain)
+  - `Tests/RoadieDaemonTests/WindowRuleScratchpadTests.swift` (tests scratchpad)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T034/T039/T043 cochées)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowRuleScratchpadTests`
+- **Notes** : Le moteur conserve les marqueurs scratchpad par `WindowID` et expose un snapshot de ces marqueurs pour les futures queries.

@@ -68,19 +68,3 @@ public struct RulesCommandService: Sendable {
         return RuleExplanation(matchedRuleID: matchedRuleID, evaluations: evaluations)
     }
 }
-
-private extension RuleAction {
-    var names: [String] {
-        var result: [String] = []
-        if manage != nil { result.append("manage") }
-        if exclude != nil { result.append("exclude") }
-        if assignDesktop != nil { result.append("assign_desktop") }
-        if assignStage != nil { result.append("assign_stage") }
-        if floating != nil { result.append("floating") }
-        if layout != nil { result.append("layout") }
-        if gapOverride != nil { result.append("gap_override") }
-        if scratchpad != nil { result.append("scratchpad") }
-        if emitEvent != nil { result.append("emit_event") }
-        return result
-    }
-}
