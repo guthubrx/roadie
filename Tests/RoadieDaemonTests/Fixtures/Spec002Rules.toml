@@ -1,0 +1,67 @@
+# Valid rules
+
+[[rules]]
+id = "terminal-dev"
+enabled = true
+priority = 10
+stop_processing = true
+
+[rules.match]
+app = "Terminal"
+title_regex = "roadie|zsh"
+role = "AXWindow"
+stage = "dev"
+
+[rules.action]
+assign_desktop = "dev"
+assign_stage = "shell"
+floating = false
+layout = "tile"
+gap_override = 4
+emit_event = true
+
+[[rules]]
+id = "browser-docs"
+enabled = true
+priority = 20
+
+[rules.match]
+app_regex = "Safari|Firefox|Chrome"
+title_regex = "Docs|Documentation"
+
+[rules.action]
+assign_desktop = "docs"
+assign_stage = "reading"
+layout = "master"
+scratchpad = "research"
+emit_event = true
+
+# Invalid examples kept in the same fixture for validator tests.
+
+[[invalid_rules]]
+id = "missing-match"
+priority = 100
+
+[invalid_rules.action]
+layout = "tile"
+
+[[invalid_rules]]
+id = "conflicting-actions"
+priority = 110
+
+[invalid_rules.match]
+app = "System Settings"
+
+[invalid_rules.action]
+exclude = true
+layout = "tile"
+
+[[invalid_rules]]
+id = "bad-regex"
+priority = 120
+
+[invalid_rules.match]
+title_regex = "[unterminated"
+
+[invalid_rules.action]
+floating = true
