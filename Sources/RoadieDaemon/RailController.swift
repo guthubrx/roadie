@@ -249,6 +249,9 @@ public final class RailController {
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
+            panel.onVisibleWidthChanged = { [weak self] displayID in
+                self?.relayoutAfterRailWidthChange(on: displayID)
+            }
             panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
             panel.render(
                 scope: scope,
@@ -269,6 +272,17 @@ public final class RailController {
             panels.removeValue(forKey: displayID)
             screenFrames.removeValue(forKey: displayID)
         }
+    }
+
+    private func relayoutAfterRailWidthChange(on displayID: DisplayID) {
+        let snapshot = snapshotService.snapshot()
+        let commands = snapshotService.applyPlan(from: snapshot).commands.filter { command in
+            snapshot.windows.first { $0.window.id == command.window.id }?.scope?.displayID == displayID
+        }
+        guard !commands.isEmpty else { return }
+        let result = snapshotService.apply(ApplyPlan(commands: commands))
+        print("rail relayout display=\(displayID.rawValue) commands=\(commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)")
+        fflush(stdout)
     }
 
     private func updateFocusSensitiveCaptureProtection(from snapshot: DaemonSnapshot) {
@@ -439,9 +453,11 @@ private final class RailPanel: NSPanel {
     private var hideDelay: TimeInterval = 0.35
     private var displayID: DisplayID?
     private var runtimeStore: RailRuntimeStateStore?
+    var onVisibleWidthChanged: ((DisplayID) -> Void)?
     private var expandedFrame = CGRect.zero
     private var collapsedFrame = CGRect.zero
     private var isCollapsed = false
+    private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
 
     override var canBecomeKey: Bool { true }
@@ -533,10 +549,10 @@ private final class RailPanel: NSPanel {
         if !isCollapsed {
             stack.isHidden = false
         }
+        persistVisibleWidth()
         guard animated, animationDuration > 0 else {
             setFrame(target, display: true)
             stack.isHidden = autoHide && isCollapsed
-            persistVisibleWidth()
             return
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -551,13 +567,15 @@ private final class RailPanel: NSPanel {
 
     private func finishAutoHideFrame() {
         stack.isHidden = autoHide && isCollapsed
-        persistVisibleWidth()
     }
 
     private func persistVisibleWidth() {
         guard let displayID else { return }
         let visibleWidth = autoHide && isCollapsed ? edgeHitWidth : expandedFrame.width
+        guard lastPersistedVisibleWidth != Double(visibleWidth) else { return }
+        lastPersistedVisibleWidth = Double(visibleWidth)
         runtimeStore?.setVisibleWidth(Double(visibleWidth), for: displayID)
+        onVisibleWidthChanged?(displayID)
     }
 
     private var revealFrame: CGRect {
