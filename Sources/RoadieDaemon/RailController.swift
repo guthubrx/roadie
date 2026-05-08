@@ -573,23 +573,41 @@ private final class WindowThumbnailStore {
     }
 
     private func image(for member: PersistentStageMember, captureAllowed: Bool) -> NSImage? {
-        if let cached = images[member.windowID] {
+        if let cached = images[member.windowID], !cached.looksBlank {
             return cached
         }
-        guard captureAllowed else { return nil }
+        images.removeValue(forKey: member.windowID)
+        guard captureAllowed else { return appIcon(for: member) }
+
+        if let captured = capture(member.windowID) {
+            images[member.windowID] = captured
+            return captured
+        }
+
+        return appIcon(for: member)
+    }
+
+    private func capture(_ windowID: WindowID) -> NSImage? {
         guard let cgImage = CGWindowListCreateImage(
             .null,
             .optionIncludingWindow,
-            CGWindowID(member.windowID.rawValue),
-            [.boundsIgnoreFraming, .bestResolution]
+            CGWindowID(windowID.rawValue),
+            [.boundsIgnoreFraming, .nominalResolution]
         ),
               !cgImage.looksBlank
         else {
             return nil
         }
-        let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-        images[member.windowID] = image
-        return image
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+
+    private func appIcon(for member: PersistentStageMember) -> NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: member.bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 128, height: 128)
+        return icon
     }
 }
 
@@ -1134,30 +1152,60 @@ private final class StageCardView: NSControl {
 
 private extension CGImage {
     var looksBlank: Bool {
-        guard width > 0, height > 0,
-              let provider = dataProvider,
-              let data = provider.data,
-              let bytes = CFDataGetBytePtr(data)
-        else { return true }
-        let length = CFDataGetLength(data)
-        guard length > 0 else { return true }
+        guard width > 0, height > 0 else { return true }
 
-        let stride = max(1, length / 512)
+        let sampleWidth = 32
+        let sampleHeight = 32
+        let bytesPerPixel = 4
+        let bytesPerRow = sampleWidth * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: sampleHeight * bytesPerRow)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: &pixels,
+                  width: sampleWidth,
+                  height: sampleHeight,
+                  bitsPerComponent: 8,
+                  bytesPerRow: bytesPerRow,
+                  space: colorSpace,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return true }
+
+        context.interpolationQuality = .low
+        context.draw(self, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
+
         var darkSamples = 0
+        var brightSamples = 0
         var totalSamples = 0
-        var previous: UInt8?
-        var changes = 0
+        var previousLuma: Int?
+        var lumaChanges = 0
         var index = 0
-        while index < length {
-            let value = bytes[index]
-            if value < 8 { darkSamples += 1 }
-            if let previous, abs(Int(previous) - Int(value)) > 6 { changes += 1 }
-            previous = value
+        while index + 3 < pixels.count {
+            let r = Int(pixels[index])
+            let g = Int(pixels[index + 1])
+            let b = Int(pixels[index + 2])
+            let alpha = Int(pixels[index + 3])
+            if alpha > 8 {
+                let luma = (r * 299 + g * 587 + b * 114) / 1000
+                if luma < 10 { darkSamples += 1 }
+                if luma > 32 { brightSamples += 1 }
+                if let previousLuma, abs(previousLuma - luma) > 8 { lumaChanges += 1 }
+                previousLuma = luma
+            }
             totalSamples += 1
-            index += stride
+            index += bytesPerPixel
         }
         guard totalSamples > 0 else { return true }
-        return Double(darkSamples) / Double(totalSamples) > 0.96 && changes < 4
+        return Double(darkSamples) / Double(totalSamples) > 0.96
+            && Double(brightSamples) / Double(totalSamples) < 0.01
+            && lumaChanges < 8
+    }
+}
+
+private extension NSImage {
+    var looksBlank: Bool {
+        guard let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return true }
+        return cgImage.looksBlank
     }
 }
 
