@@ -343,7 +343,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T026 : Options de subscription CLI
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `d1c320a` - feat(002): Add subscribe filters
 - **Fichiers modifiés** :
   - `Sources/roadie/main.swift` (parsing options subscription)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T026 cochée)
@@ -351,3 +351,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift build`
 - **Notes** : `events subscribe` supporte `--from-now`, `--initial-state`, `--type` et `--scope`.
+
+### T027 : Événements command.* CLI
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/roadie/main.swift` (helper `emitCommandEvent`)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T027 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+- **Notes** : `events subscribe` publie `command.received` et `command.applied`; le helper commun permet d'ajouter `command.failed` sur les commandes suivantes.

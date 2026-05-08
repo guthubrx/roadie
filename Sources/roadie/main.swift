@@ -523,12 +523,23 @@ func runEventSubscription(_ args: [String]) -> Never {
     var cursor = subscription.start(options: options)
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
+    let correlationId = emitCommandEvent(
+        type: "command.received",
+        command: "events.subscribe",
+        result: "received"
+    )
     for event in subscription.initialEvents(snapshot: service.snapshot().automationSnapshot(), options: options) {
         if let data = try? encoder.encode(event),
            let line = String(data: data, encoding: .utf8) {
             print(line)
         }
     }
+    emitCommandEvent(
+        type: "command.applied",
+        command: "events.subscribe",
+        result: "streaming",
+        correlationId: correlationId
+    )
     fflush(stdout)
     while true {
         let result = subscription.readAvailable(from: cursor, options: options)
@@ -542,6 +553,23 @@ func runEventSubscription(_ args: [String]) -> Never {
         fflush(stdout)
         Thread.sleep(forTimeInterval: 0.2)
     }
+}
+
+@discardableResult
+func emitCommandEvent(type: String, command: String, result: String, correlationId: String = UUID().uuidString) -> String {
+    EventLog().append(RoadieEventEnvelope(
+        id: "cmd_\(UUID().uuidString)",
+        type: type,
+        scope: .command,
+        subject: AutomationSubject(kind: "command", id: command),
+        correlationId: correlationId,
+        cause: .command,
+        payload: [
+            "command": .string(command),
+            "result": .string(result)
+        ]
+    ))
+    return correlationId
 }
 
 func parseEventSubscriptionOptions(_ args: [String]) -> EventSubscriptionOptions {
