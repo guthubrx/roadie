@@ -167,7 +167,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T012 : EventLog compatible RoadieEventEnvelope
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `3de38ea` - feat(002): Support event envelopes in log
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/EventLog.swift` (append/read enveloppes)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T012 cochée)
@@ -176,3 +176,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec T014/T016
 - **Notes** : `append(RoadieEvent)` reste disponible ; `append(RoadieEventEnvelope)` et `envelopes(limit:)` ajoutent la nouvelle surface sans rupture.
+
+### T013 : Conversion legacy RoadieEvent
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/EventLog.swift` (conversion legacy)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T013 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec T014/T016
+- **Notes** : `envelopes(limit:)` tente d'abord le format enveloppe, puis convertit les anciennes lignes `RoadieEvent`.
