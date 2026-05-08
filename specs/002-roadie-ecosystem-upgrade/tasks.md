@@ -141,22 +141,22 @@
 
 ### Tests for User Story 4
 
-- [ ] T059 [P] [US4] Ajouter les tests du modèle `WindowGroup` dans `Tests/RoadieStagesTests/WindowGroupStateTests.swift`
-- [ ] T060 [P] [US4] Ajouter les tests de persistance des groupes dans `Tests/RoadieDaemonTests/WindowGroupStoreTests.swift`
-- [ ] T061 [P] [US4] Ajouter les tests de commandes `group create|add|remove|focus|dissolve` dans `Tests/RoadieDaemonTests/WindowGroupCommandTests.swift`
-- [ ] T062 [P] [US4] Ajouter les tests d'état visuel groupe dans `Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift`
+- [X] T059 [P] [US4] Ajouter les tests du modèle `WindowGroup` dans `Tests/RoadieStagesTests/WindowGroupStateTests.swift`
+- [X] T060 [P] [US4] Ajouter les tests de persistance des groupes dans `Tests/RoadieDaemonTests/WindowGroupStoreTests.swift`
+- [X] T061 [P] [US4] Ajouter les tests de commandes `group create|add|remove|focus|dissolve` dans `Tests/RoadieDaemonTests/WindowGroupCommandTests.swift`
+- [X] T062 [P] [US4] Ajouter les tests d'état visuel groupe dans `Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift`
 
 ### Implementation for User Story 4
 
-- [ ] T063 [US4] Ajouter le modèle `WindowGroup` dans `Sources/RoadieStages/RoadieState.swift`
-- [ ] T064 [US4] Étendre la persistance des stages avec les groupes dans `Sources/RoadieDaemon/StageStore.swift`
-- [ ] T065 [US4] Créer `WindowGroupCommands` dans `Sources/RoadieDaemon/WindowGroupCommands.swift`
-- [ ] T066 [US4] Adapter le layout pour traiter un groupe comme un seul slot dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
-- [ ] T067 [US4] Ajouter l'état groupé aux snapshots dans `Sources/RoadieDaemon/AutomationSnapshotService.swift`
-- [ ] T068 [US4] Ajouter un indicateur visuel minimal de groupe et membre actif dans `Sources/RoadieDaemon/BorderController.swift`
-- [ ] T069 [US4] Ajouter les commandes `roadie group create|add|remove|focus|dissolve|list` dans `Sources/roadie/main.swift`
-- [ ] T070 [US4] Publier les événements `window.grouped` et `window.ungrouped` dans `Sources/RoadieDaemon/EventLog.swift`
-- [ ] T071 [US4] Lancer `swift build` puis `swift test --filter WindowGroup` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T063 [US4] Ajouter le modèle `WindowGroup` dans `Sources/RoadieStages/RoadieState.swift`
+- [X] T064 [US4] Étendre la persistance des stages avec les groupes dans `Sources/RoadieDaemon/StageStore.swift`
+- [X] T065 [US4] Créer `WindowGroupCommands` dans `Sources/RoadieDaemon/WindowGroupCommands.swift`
+- [X] T066 [US4] Adapter le layout pour traiter un groupe comme un seul slot dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
+- [X] T067 [US4] Ajouter l'état groupé aux snapshots dans `Sources/RoadieDaemon/AutomationSnapshotService.swift`
+- [X] T068 [US4] Ajouter un indicateur visuel minimal de groupe et membre actif dans `Sources/RoadieDaemon/BorderController.swift`
+- [X] T069 [US4] Ajouter les commandes `roadie group create|add|remove|focus|dissolve|list` dans `Sources/roadie/main.swift`
+- [X] T070 [US4] Publier les événements `window.grouped` et `window.ungrouped` dans `Sources/RoadieDaemon/EventLog.swift`
+- [X] T071 [US4] Lancer `swift build` puis `swift test --filter WindowGroup` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: US4 fournit stack/tabbed côté Roadie sans dépendance à une API macOS privée.
 

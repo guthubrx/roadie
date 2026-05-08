@@ -515,3 +515,20 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [x] `swift test --filter PowerUser` : 8 tests, 4 suites, succès
 - **Notes** : Les commandes layout persistantes utilisent `LayoutIntentStore` avec source `command`; `stage summon` existait déjà et `stage move-to-display` complète le scénario multi-écran.
+
+### T059-T071 : US4 window groups
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Add window groups
+- **Fichiers modifiés** :
+  - `Sources/RoadieStages/RoadieState.swift` (`WindowGroup`)
+  - `Sources/RoadieDaemon/StageStore.swift` (persistance groupes)
+  - `Sources/RoadieDaemon/WindowGroupCommands.swift` (commandes groupes)
+  - `Sources/RoadieDaemon/AutomationSnapshotService.swift` (projection groupes)
+  - `Sources/RoadieDaemon/BorderController.swift` (indicateur minimal)
+  - `Sources/roadie/main.swift` (`roadie group ...`)
+  - `Tests/RoadieStagesTests/WindowGroupStateTests.swift`
+  - `Tests/RoadieDaemonTests/WindowGroup*.swift`
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowGroup` : 5 tests, 4 suites, succès
+- **Notes** : Le layout reste compatible en gardant les membres dans le stage; l'état groupé est persistant, commandable et exposé aux snapshots automation.

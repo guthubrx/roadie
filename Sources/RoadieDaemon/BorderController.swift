@@ -44,6 +44,7 @@ public final class BorderController {
         }
 
         let color = activeColor(for: entry.scope?.stageID, config: config)
+        _ = groupIndicator(for: focusedWindowID, snapshot: snapshot)
         panel.render(
             frame: Self.axToNS(entry.window.frame.cgRect),
             color: color,
@@ -61,6 +62,19 @@ public final class BorderController {
             rawColor = config.activeColor
         }
         return NSColor(hex: rawColor) ?? NSColor.systemBlue
+    }
+
+    public func groupIndicator(for windowID: WindowID, snapshot: DaemonSnapshot) -> String? {
+        for display in snapshot.state.displays.values {
+            for desktop in display.desktops.values {
+                for stage in desktop.stages.values {
+                    if let group = stage.groups.first(where: { $0.windowIDs.contains(windowID) }) {
+                        return "\(group.id):\(group.activeWindowID?.rawValue ?? windowID.rawValue)/\(group.windowIDs.count)"
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {

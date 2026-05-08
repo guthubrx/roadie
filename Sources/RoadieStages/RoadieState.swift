@@ -65,6 +65,13 @@ public struct RoadieState: Equatable, Codable, Sendable {
         displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.mode = mode
     }
 
+    public mutating func setGroups(_ groups: [WindowGroup], for scope: StageScope) throws {
+        guard displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID] != nil else {
+            throw RoadieStateError.unknownStage(scope)
+        }
+        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.groups = groups
+    }
+
     public mutating func assignWindow(_ windowID: WindowID, to scope: StageScope) throws {
         guard displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID] != nil else {
             throw RoadieStateError.unknownStage(scope)
@@ -145,13 +152,15 @@ public struct StageState: Equatable, Codable, Sendable {
     public var mode: WindowManagementMode
     public private(set) var windowIDs: [WindowID]
     public var focusedWindowID: WindowID?
+    public var groups: [WindowGroup]
 
-    public init(id: StageID, name: String, mode: WindowManagementMode = .bsp, windowIDs: [WindowID] = []) {
+    public init(id: StageID, name: String, mode: WindowManagementMode = .bsp, windowIDs: [WindowID] = [], groups: [WindowGroup] = []) {
         self.id = id
         self.name = name
         self.mode = mode
         self.windowIDs = []
         self.focusedWindowID = nil
+        self.groups = groups
         for windowID in windowIDs {
             insert(windowID)
         }
@@ -164,9 +173,55 @@ public struct StageState: Equatable, Codable, Sendable {
 
     public mutating func remove(_ windowID: WindowID) {
         windowIDs.removeAll { $0 == windowID }
+        groups = groups.compactMap { group in
+            var updated = group
+            updated.remove(windowID)
+            return updated.windowIDs.count >= 2 ? updated : nil
+        }
         if focusedWindowID == windowID {
             focusedWindowID = windowIDs.last
         }
+    }
+}
+
+public struct WindowGroup: Equatable, Codable, Sendable {
+    public var id: String
+    public var windowIDs: [WindowID]
+    public var activeWindowID: WindowID?
+    public var presentation: String
+
+    public init(id: String, windowIDs: [WindowID] = [], activeWindowID: WindowID? = nil, presentation: String = "tabbed") {
+        self.id = id
+        self.windowIDs = []
+        self.activeWindowID = activeWindowID
+        self.presentation = presentation
+        for windowID in windowIDs {
+            add(windowID)
+        }
+        if self.activeWindowID == nil {
+            self.activeWindowID = self.windowIDs.first
+        }
+    }
+
+    public mutating func add(_ windowID: WindowID) {
+        windowIDs.removeAll { $0 == windowID }
+        windowIDs.append(windowID)
+        if activeWindowID == nil {
+            activeWindowID = windowID
+        }
+    }
+
+    public mutating func remove(_ windowID: WindowID) {
+        windowIDs.removeAll { $0 == windowID }
+        if activeWindowID == windowID {
+            activeWindowID = windowIDs.first
+        }
+    }
+
+    public mutating func focus(_ windowID: WindowID) -> Bool {
+        guard windowIDs.contains(windowID) else { return false }
+        activeWindowID = windowID
+        return true
     }
 }
 

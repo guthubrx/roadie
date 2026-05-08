@@ -26,7 +26,7 @@ public struct AutomationSnapshotService: Sendable {
             desktops: desktopSnapshots(from: daemonSnapshot.state),
             stages: stageSnapshots(from: daemonSnapshot.state),
             windows: windowSnapshots(from: daemonSnapshot),
-            groups: [],
+            groups: groupSnapshots(from: daemonSnapshot.state),
             rules: []
         )
     }
@@ -96,5 +96,25 @@ public struct AutomationSnapshotService: Sendable {
                 isFloating: scoped.scope == nil
             )
         }
+    }
+
+    private func groupSnapshots(from state: RoadieState) -> [AutomationGroupSnapshot] {
+        state.displays.values
+            .flatMap { display in
+                display.desktops.values.flatMap { desktop in
+                    desktop.stages.values.flatMap { stage in
+                        stage.groups.map { group in
+                            AutomationGroupSnapshot(
+                                id: group.id,
+                                stageId: stage.id.rawValue,
+                                memberIds: group.windowIDs.map { String($0.rawValue) },
+                                activeMemberId: group.activeWindowID.map { String($0.rawValue) },
+                                presentation: group.presentation
+                            )
+                        }
+                    }
+                }
+            }
+            .sorted { $0.id < $1.id }
     }
 }

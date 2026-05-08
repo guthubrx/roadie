@@ -1,6 +1,7 @@
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieStages
 
 public struct StageStore: Sendable {
     private let url: URL
@@ -257,6 +258,11 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         ensureStage(stageID)
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == window.id }
+            stages[index].groups = stages[index].groups.compactMap { group in
+                var updated = group
+                updated.remove(window.id)
+                return updated.windowIDs.count >= 2 ? updated : nil
+            }
             if stages[index].focusedWindowID == window.id {
                 stages[index].previousFocusedWindowID = stages[index].focusedWindowID
                 stages[index].focusedWindowID = stages[index].members.last?.windowID
@@ -281,6 +287,11 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     public mutating func remove(windowID: WindowID) {
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == windowID }
+            stages[index].groups = stages[index].groups.compactMap { group in
+                var updated = group
+                updated.remove(windowID)
+                return updated.windowIDs.count >= 2 ? updated : nil
+            }
             if stages[index].focusedWindowID == windowID {
                 stages[index].previousFocusedWindowID = stages[index].focusedWindowID
                 stages[index].focusedWindowID = stages[index].members.last?.windowID
@@ -326,6 +337,13 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
         for stageIndex in stages.indices {
             stages[stageIndex].members.removeAll { !liveWindowIDs.contains($0.windowID) }
+            stages[stageIndex].groups = stages[stageIndex].groups.compactMap { group in
+                var updated = group
+                for windowID in group.windowIDs where !liveWindowIDs.contains(windowID) {
+                    updated.remove(windowID)
+                }
+                return updated.windowIDs.count >= 2 ? updated : nil
+            }
             if let focusedWindowID = stages[stageIndex].focusedWindowID,
                !liveWindowIDs.contains(focusedWindowID) {
                 stages[stageIndex].focusedWindowID = stages[stageIndex].members.last?.windowID
@@ -366,6 +384,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
     public var focusedWindowID: WindowID?
     public var previousFocusedWindowID: WindowID?
     public var members: [PersistentStageMember]
+    public var groups: [WindowGroup]
 
     public init(
         id: StageID,
@@ -373,7 +392,8 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         mode: WindowManagementMode = .bsp,
         focusedWindowID: WindowID? = nil,
         previousFocusedWindowID: WindowID? = nil,
-        members: [PersistentStageMember] = []
+        members: [PersistentStageMember] = [],
+        groups: [WindowGroup] = []
     ) {
         self.id = id
         self.name = name ?? "Stage \(id.rawValue)"
@@ -381,6 +401,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.focusedWindowID = focusedWindowID
         self.previousFocusedWindowID = previousFocusedWindowID
         self.members = members
+        self.groups = groups
     }
 
     enum CodingKeys: String, CodingKey {
@@ -390,6 +411,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         case focusedWindowID
         case previousFocusedWindowID
         case members
+        case groups
     }
 
     public init(from decoder: Decoder) throws {
@@ -400,6 +422,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.focusedWindowID = try c.decodeIfPresent(WindowID.self, forKey: .focusedWindowID)
         self.previousFocusedWindowID = try c.decodeIfPresent(WindowID.self, forKey: .previousFocusedWindowID)
         self.members = try c.decodeIfPresent([PersistentStageMember].self, forKey: .members) ?? []
+        self.groups = try c.decodeIfPresent([WindowGroup].self, forKey: .groups) ?? []
     }
 }
 
