@@ -1,14 +1,72 @@
+<div align="center">
+  <img src="docs/assets/roadie-logo.svg" alt="Logo Roadie" width="128" height="128">
+</div>
+
+<div align="center">
+
 # Roadie
+
+**Projet en cours. Il faut s’attendre à des aspérités, des changements cassants et du polish manquant.**
 
 [English](README.md) | Français
 
-Roadie est un petit gestionnaire de fenêtres tiling pour macOS, écrit en Swift.
+</div>
 
-Il combine le tiling automatique avec un stage manager intégré : les fenêtres sont regroupées en stages, les stages peuvent être affichées ou masquées, et chaque écran conserve son desktop courant, sa stage active et son layout.
+Roadie est un petit gestionnaire de fenêtres tiling pour macOS, écrit en Swift, construit autour d’une idée simple : le tiling automatique et un workflow de type Stage Manager devraient pouvoir cohabiter.
 
-Roadie est encore en cours de développement. Il est utilisable, mais il évolue vite.
+<p align="center">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Capture Roadie multi-écran" width="100%">
+</p>
 
-## Ce Que Fait Roadie
+## Pourquoi Ce Projet Existe
+
+À l’origine, je ne voulais pas écrire un window manager. Pendant des années, [yabai](https://github.com/koekeishiya/yabai) a été la base de mon poste macOS : puissant, précis, et profondément structurant pour tous ceux qui font du tiling sur macOS. Roadie doit beaucoup à yabai, fonctionnellement et culturellement.
+
+Le déclencheur a été personnel : je n’ai jamais réussi à faire cohabiter proprement yabai avec le workflow Stage Manager que je voulais. Je voulais des groupes de fenêtres nommés, masquables, restaurables, tout en gardant le tiling automatique pour les fenêtres visibles.
+
+Roadie se concentre donc sur cette combinaison précise :
+
+- Tiling `bsp` et `masterStack` pour les fenêtres visibles.
+- Stages Roadie : groupes de fenêtres nommés, masquables, restaurables, réordonnables et représentés visuellement.
+- Desktops virtuels Roadie sans contrôle des Spaces macOS natifs.
+- Support multi-écran où chaque écran garde son desktop courant, sa stage active et son layout.
+
+Roadie n’essaie pas de remplacer yabai. yabai est plus large, plus ancien et beaucoup plus mature. Roadie est volontairement plus petit, et très orienté autour de mon workflow.
+
+## L’Influence AeroSpace
+
+La deuxième grande influence est [AeroSpace](https://github.com/nikitabobko/AeroSpace).
+
+Au lieu d’essayer de manipuler les Spaces natifs de macOS, Roadie suit la même grande direction : garder SIP activé, éviter les APIs privées d’écriture, et gérer des workspaces virtuels côté Roadie. Changer de desktop Roadie signifie masquer les fenêtres du desktop sortant et restaurer celles du desktop entrant.
+
+Le résultat est un petit hybride :
+
+- Un modèle de tiling inspiré de l’ergonomie concrète de yabai sur macOS.
+- Un modèle de desktops virtuels inspiré du refus d’AeroSpace de se battre contre les Spaces natifs.
+- Une couche de stages pour les personnes qui veulent un workflow de type Stage Manager au-dessus du tiling.
+
+Si tu veux un window manager macOS généraliste et mature, regarde d’abord yabai ou AeroSpace. Roadie existe pour le cas plus étroit où tiling, desktops virtuels et groupes de stages doivent former un seul workflow.
+
+## Positionnement Fonctionnel
+
+Ce n’est pas un tableau de supériorité. Il sert seulement à clarifier le périmètre de Roadie.
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Tiling BSP | oui | oui | oui |
+| Layout master-stack | partiel | oui | oui |
+| Contrôle des Spaces macOS natifs | oui, avec configuration système supplémentaire | non | non |
+| Desktops virtuels sans Spaces natifs | non | oui | oui |
+| Stages nommées dans un desktop | non | non | oui |
+| Nav rail avec thumbnails | non | non | oui |
+| Tiling multi-écran | oui | oui | oui |
+| Focus follows mouse | oui | oui | oui |
+| Bordure de focus overlay | non | non | oui |
+| Usage CLI-first | oui | oui | oui |
+
+Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour découvrir et déplacer les fenêtres, et Enregistrement d’écran uniquement pour les thumbnails du rail.
+
+## Ce Que Fait Roadie Aujourd’hui
 
 - Tile les fenêtres visibles avec les modes `bsp`, `masterStack` ou `float`.
 - Gère des groupes de fenêtres par stage, écran et desktop Roadie.

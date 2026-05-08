@@ -1,14 +1,72 @@
+<div align="center">
+  <img src="docs/assets/roadie-logo.svg" alt="Roadie logo" width="128" height="128">
+</div>
+
+<div align="center">
+
 # Roadie
+
+**Work in progress. Expect rough edges, breaking changes, and missing polish.**
 
 English | [Français](README.fr.md)
 
-Roadie is a small macOS tiling window manager written in Swift.
+</div>
 
-It combines automatic window tiling with a built-in stage manager: windows are grouped into stages, stages can be switched or hidden, and each display keeps its own current desktop, active stage, and layout.
+Roadie is a small macOS tiling window manager written in Swift, built around one idea: automatic tiling and a Stage Manager-like workflow should be able to live together.
 
-Roadie is currently a work in progress. It is usable, but still evolving quickly.
+<p align="center">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Roadie multi-display screenshot" width="100%">
+</p>
 
-## What It Does
+## Why This Project Exists
+
+I never set out to write a window manager. For years, [yabai](https://github.com/koekeishiya/yabai) has been the foundation of my macOS workstation: sharp, powerful, and deeply influential for anyone who cares about tiling on macOS. Roadie owes a lot to yabai, both functionally and culturally.
+
+The trigger was personal: I never managed to make yabai coexist cleanly with the Stage Manager workflow I wanted. I wanted named, hideable, restorable groups of windows, while still keeping automatic tiling for the visible windows.
+
+So Roadie focuses on that specific combination:
+
+- `bsp` and `masterStack` tiling for the visible windows.
+- Roadie stages: named groups of windows that can be hidden, restored, reordered, and represented visually.
+- Roadie virtual desktops managed without controlling native macOS Spaces.
+- Multi-display support where each display keeps its own current desktop, active stage, and layout.
+
+Roadie is not trying to replace yabai. yabai is broader, older, and much more mature. Roadie is intentionally smaller and opinionated around my workflow.
+
+## The AeroSpace Influence
+
+The second major influence is [AeroSpace](https://github.com/nikitabobko/AeroSpace).
+
+Instead of trying to manipulate native macOS Spaces, Roadie follows the same broad direction: keep SIP on, avoid private write APIs, and manage virtual workspaces on Roadie's side. Switching a Roadie desktop means hiding windows from the outgoing desktop and restoring windows from the incoming one.
+
+The result is a small hybrid:
+
+- A tiling model inspired by yabai's practical macOS window-manager ergonomics.
+- A virtual desktop model inspired by AeroSpace's refusal to fight native Spaces.
+- A stage layer built for people who want a Stage Manager-like workflow on top of tiling.
+
+If you need a mature general-purpose macOS WM, look at yabai or AeroSpace first. Roadie exists for the narrower case where tiling, virtual desktops, and stage groups need to be one workflow.
+
+## Feature Positioning
+
+This is not a superiority table. It is only meant to make Roadie's scope clear.
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| BSP tiling | yes | yes | yes |
+| Master-stack layout | partial | yes | yes |
+| Native macOS Spaces control | yes, with extra system setup | no | no |
+| Virtual desktops without native Spaces | no | yes | yes |
+| Named stages inside a desktop | no | no | yes |
+| Stage rail with thumbnails | no | no | yes |
+| Multi-display tiling | yes | yes | yes |
+| Focus follows mouse | yes | yes | yes |
+| Focus border overlay | no | no | yes |
+| CLI-first operation | yes | yes | yes |
+
+Roadie does not require disabling SIP. It uses Accessibility for window discovery and movement, and Screen Recording only for rail thumbnails.
+
+## What Roadie Does Today
 
 - Tiles visible windows with `bsp`, `masterStack`, or `float` modes.
 - Keeps stage groups per display and Roadie desktop.
