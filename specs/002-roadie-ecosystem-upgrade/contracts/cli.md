@@ -23,6 +23,8 @@ roadie query desktops --json [--display ID]
 roadie query stages --json [--desktop ID]
 roadie query groups --json [--stage ID]
 roadie query rules --json
+roadie query health --json
+roadie query events --json [--limit N] [--type TYPE]
 ```
 
 **Compatibility**:
@@ -54,12 +56,15 @@ roadie layout zoom-parent toggle
 roadie focus back-and-forth
 roadie desktop back-and-forth
 roadie desktop summon DESKTOP_ID
+roadie stage summon STAGE_ID
+roadie stage move-to-display STAGE_ID DISPLAY_ID
 ```
 
 **Acceptance**:
 
 - chaque commande publie `command.received` puis `command.applied` ou `command.failed`.
 - les erreurs utilisateur sont lisibles en texte et disponibles en JSON si demandé.
+- les commandes stage échouent sans effet si le stage ou l'écran cible n'existe plus.
 
 ## Groups
 

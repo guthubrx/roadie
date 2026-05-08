@@ -2,7 +2,7 @@
 
 **Branche**: `002-roadie-ecosystem-upgrade`  
 **Créé le**: 2026-05-08  
-**Statut**: Brouillon  
+**Statut**: Prêt pour implémentation après validation du worktree dédié  
 **Entrée**: Description utilisateur : "SpecKit specify l'ensemble des améliorations évoquées pour faire évoluer Roadie vers un écosystème plus ouvert inspiré de yabai, AeroSpace et Hyprland : bus d'événements, subscribe, moteur de règles, commandes power-user, groupes/stack/tabbed, surfaces CLI et intégrations externes."
 
 ## Scénarios utilisateur et tests *(obligatoire)*
@@ -130,7 +130,7 @@ Un utilisateur ou un script veut obtenir des listes normalisées des fenêtres, 
 ### Résultats mesurables
 
 - **SC-001**: Une barre de statut ou un script peut mettre à jour les indicateurs d'écran actif, desktop, stage et fenêtre focalisée en moins d'une seconde après un changement d'état Roadie, sans interroger l'état complet en boucle.
-- **SC-002**: Au moins 90 % des cas d'automatisation courants identifiés dans la comparaison yabai/AeroSpace/Hyprland sont couverts par des événements, règles ou commandes documentés, hors fonctionnalités compositor ou Spaces natifs explicitement rejetées.
+- **SC-002**: Au moins 90 % des cas d'automatisation courants identifiés dans la matrice de comparaison yabai/AeroSpace/Hyprland sont couverts par des événements, règles ou commandes documentés, hors fonctionnalités compositor ou Spaces natifs explicitement rejetées.
 - **SC-003**: Un utilisateur peut exprimer au moins cinq politiques courantes de placement de fenêtres via des règles sans écrire de glue shell.
 - **SC-004**: Les règles invalides sont détectées avant les actions runtime, avec une sortie de validation actionnable pour chaque règle invalide dans une configuration de test.
 - **SC-005**: Les commandes power-user de retour focus, retour desktop, aplatissement et cible d'insertion réussissent dans des tests contrôlés et ne laissent aucun membership de fenêtre dupliqué ou orphelin.

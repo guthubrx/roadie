@@ -47,7 +47,7 @@ At least one match field is required.
 - `floating`: boolean.
 - `layout`: `tile`, `float`, `master`, `bsp`, or future-supported mode.
 - `gap_override`: integer pixels, non-negative.
-- `scratchpad`: scratchpad name, reserved for later if scratchpad routing is available.
+- `scratchpad`: scratchpad name. Si le workflow scratchpad complet n'est pas encore disponible, Roadie doit au minimum stocker et exposer ce marqueur dans l'évaluation de règle et les queries.
 - `emit_event`: boolean, default `true`.
 
 ## Conflict Rules
