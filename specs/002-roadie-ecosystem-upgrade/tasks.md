@@ -82,7 +82,7 @@
 
 - [X] T030 [P] [US2] Ajouter les tests de parsing `[[rules]]` dans `Tests/RoadieDaemonTests/WindowRuleConfigTests.swift`
 - [X] T031 [P] [US2] Ajouter les tests de validation de conflits dans `Tests/RoadieDaemonTests/WindowRuleValidationTests.swift`
-- [ ] T032 [P] [US2] Ajouter les tests de matching app/title/role/stage dans `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift`
+- [X] T032 [P] [US2] Ajouter les tests de matching app/title/role/stage dans `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift`
 - [ ] T033 [P] [US2] Ajouter les tests CLI `rules validate` et `rules explain` dans `Tests/RoadieDaemonTests/RulesCommandTests.swift`
 - [ ] T034 [P] [US2] Ajouter les tests du marqueur `scratchpad` dans `Tests/RoadieDaemonTests/WindowRuleScratchpadTests.swift`
 
@@ -91,7 +91,7 @@
 - [X] T035 [US2] Ajouter les modèles `WindowRule`, `RuleMatch`, `RuleAction` et `RuleEvaluation` dans `Sources/RoadieCore/WindowRule.swift`
 - [X] T036 [US2] Étendre le parsing TOML de `[[rules]]` dans `Sources/RoadieCore/Config.swift`
 - [X] T037 [US2] Créer `WindowRuleValidator` dans `Sources/RoadieDaemon/WindowRuleValidator.swift`
-- [ ] T038 [US2] Créer `WindowRuleMatcher` dans `Sources/RoadieDaemon/WindowRuleMatcher.swift`
+- [X] T038 [US2] Créer `WindowRuleMatcher` dans `Sources/RoadieDaemon/WindowRuleMatcher.swift`
 - [ ] T039 [US2] Créer `WindowRuleEngine` pour évaluer et appliquer les actions dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
 - [ ] T040 [US2] Intégrer les règles à la détection ou actualisation fenêtre dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
 - [ ] T041 [US2] Publier `rule.matched`, `rule.applied`, `rule.skipped` et `rule.failed` via `Sources/RoadieDaemon/EventLog.swift`
