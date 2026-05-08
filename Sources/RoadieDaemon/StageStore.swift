@@ -293,6 +293,20 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages[index].focusedWindowID = windowID
     }
 
+    public mutating func orderMembers(_ orderedWindowIDs: [WindowID], in stageID: StageID) {
+        guard let index = stages.firstIndex(where: { $0.id == stageID }) else { return }
+        let membersByID = Dictionary(uniqueKeysWithValues: stages[index].members.map { ($0.windowID, $0) })
+        var seen: Set<WindowID> = []
+        var ordered: [PersistentStageMember] = []
+        for id in orderedWindowIDs {
+            guard let member = membersByID[id], !seen.contains(id) else { continue }
+            ordered.append(member)
+            seen.insert(id)
+        }
+        ordered.append(contentsOf: stages[index].members.filter { !seen.contains($0.windowID) })
+        stages[index].members = ordered
+    }
+
     public mutating func updateFrame(window: WindowSnapshot) {
         for stageIndex in stages.indices {
             guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {

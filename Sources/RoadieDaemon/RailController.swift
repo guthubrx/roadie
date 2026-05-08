@@ -15,6 +15,8 @@ public final class RailController {
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var dragGhost: RailDragGhostWindow?
+    private let dropPreview = DropPreviewController()
+    private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
 
     public init(
         store: StageStore = StageStore(),
@@ -76,6 +78,7 @@ public final class RailController {
 
     private func handleMouseDown(at screenPoint: CGPoint) {
         dragGhost?.hide()
+        dropPreview.hide()
         for (displayID, panel) in panels {
             guard panel.frame.contains(screenPoint) else { continue }
             if let payload = panel.dragPayload(at: screenPoint) {
@@ -101,10 +104,14 @@ public final class RailController {
             rebuildPanels()
             return
         }
+        windowDragController.handleMouseDown(at: screenPoint)
     }
 
     private func handleMouseDragged(to screenPoint: CGPoint) {
-        guard var drag = pendingDrag else { return }
+        guard var drag = pendingDrag else {
+            windowDragController.handleMouseDragged(to: screenPoint)
+            return
+        }
         if hypot(screenPoint.x - drag.startPoint.x, screenPoint.y - drag.startPoint.y) > 6 {
             if !drag.didDrag {
                 if dragGhost == nil {
@@ -114,15 +121,25 @@ public final class RailController {
             } else {
                 dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }
+            if screenFrames[drag.displayID]?.contains(screenPoint) == true,
+               panels.values.allSatisfy({ !$0.frame.contains(screenPoint) }) {
+                _ = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: drag.displayID)
+            } else {
+                dropPreview.hide()
+            }
             drag.didDrag = true
             pendingDrag = drag
         }
     }
 
     private func handleMouseUp(at screenPoint: CGPoint) {
-        guard let drag = pendingDrag else { return }
+        guard let drag = pendingDrag else {
+            windowDragController.handleMouseUp(at: screenPoint)
+            return
+        }
         pendingDrag = nil
         dragGhost?.hide()
+        defer { dropPreview.hide() }
 
         guard drag.didDrag else {
             perform(.switchStage(drag.sourceStageID), displayID: drag.displayID)
@@ -135,7 +152,11 @@ public final class RailController {
             guard screenFrames[drag.displayID]?.contains(screenPoint) == true else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
-            perform(.summonWindow(drag.windowID), displayID: drag.displayID)
+            if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: drag.displayID) {
+                perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs), displayID: candidate.displayID)
+            } else {
+                perform(.summonWindow(drag.windowID), displayID: drag.displayID)
+            }
             rebuildPanels()
             return
         }
@@ -166,6 +187,14 @@ public final class RailController {
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
             ))
             _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
+        case .placeWindow(let windowID, let orderedWindowIDs):
+            print("rail place window \(windowID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_place",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
+            ))
+            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs)
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -223,6 +252,7 @@ private enum RailAction {
     case switchStage(StageID)
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID)
+    case placeWindow(WindowID, [WindowID])
     case moveStage(StageID, Int)
 }
 

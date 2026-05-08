@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieTiler
 
 public struct StageCommandResult: Equatable, Sendable {
     public var message: String
@@ -206,6 +207,46 @@ public struct StageCommandService {
         return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
     }
 
+    public func place(windowID: WindowID, displayID: DisplayID, orderedWindowIDs: [WindowID]) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
+        }
+
+        var state = store.state()
+        var persistentScope = activeScope(displayID: displayID, in: &state)
+        let stageID = persistentScope.activeStageID
+        persistentScope.assign(window: window, to: stageID)
+        persistentScope.orderMembers(orderedWindowIDs, in: stageID)
+        state.update(persistentScope)
+        store.save(state)
+
+        let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
+        service.removeLayoutIntent(scope: scope)
+        let updated = service.snapshot()
+        let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
+        let layout = service.layoutPlan(from: updated, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [windowID])
+        let applyPlan = service.applyPlan(from: updated, scope: scope, orderedWindowIDs: ordered, priorityWindowIDs: [windowID])
+        let result = service.apply(applyPlan)
+        persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
+        _ = service.focus(window)
+        events.append(RoadieEvent(
+            type: "stage_place_window",
+            scope: scope,
+            details: [
+                "windowID": String(windowID.rawValue),
+                "commands": String(applyPlan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed)
+            ]
+        ))
+        return StageCommandResult(
+            message: "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            changed: result.failed < result.attempted || applyPlan.commands.isEmpty
+        )
+    }
+
     public func cycle(_ direction: StageCycleDirection) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
@@ -333,6 +374,43 @@ public struct StageCommandService {
             guard let scope = entry.scope else { return false }
             return entry.window.isTileCandidate && snapshot.state.activeScope(on: scope.displayID) == scope
         }
+    }
+
+    private func normalizedOrder(
+        _ orderedWindowIDs: [WindowID],
+        windowID: WindowID,
+        in snapshot: DaemonSnapshot,
+        scope: StageScope
+    ) -> [WindowID] {
+        let scopedIDs = snapshot.windows.compactMap { entry in
+            entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
+        }
+        var seen: Set<WindowID> = []
+        var result: [WindowID] = []
+        for id in orderedWindowIDs where scopedIDs.contains(id) || id == windowID {
+            guard !seen.contains(id) else { continue }
+            result.append(id)
+            seen.insert(id)
+        }
+        for id in scopedIDs where !seen.contains(id) {
+            result.append(id)
+            seen.insert(id)
+        }
+        return result
+    }
+
+    private func persistCommandIntent(
+        scope: StageScope,
+        orderedWindowIDs: [WindowID],
+        layout: LayoutPlan,
+        result: ApplyResult
+    ) {
+        var placements = Dictionary(uniqueKeysWithValues: layout.placements.map { ($0.key, Rect($0.value)) })
+        for item in result.items {
+            placements[item.windowID] = item.actual ?? item.requested
+        }
+        guard Set(placements.keys) == Set(orderedWindowIDs) else { return }
+        service.saveLayoutIntent(scope: scope, windowIDs: orderedWindowIDs, placements: placements, source: .command)
     }
 
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {

@@ -417,26 +417,18 @@ public extension SnapshotService {
         mode: WindowManagementMode? = nil,
         priorityWindowIDs: Set<WindowID> = []
     ) -> ApplyPlan {
-        guard let stage = snapshot.state.stage(scope: scope),
-              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
-        else { return ApplyPlan(commands: []) }
-
+        let plan = layoutPlan(
+            from: snapshot,
+            scope: scope,
+            orderedWindowIDs: orderedWindowIDs,
+            mode: mode,
+            priorityWindowIDs: priorityWindowIDs
+        )
+        guard let stage = snapshot.state.stage(scope: scope) else { return ApplyPlan(commands: []) }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
-        let effectiveMode = mode ?? stage.mode
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: effectiveMode,
-            container: display.visibleFrame.cgRect,
-            windowIDs: orderedWindowIDs,
-            currentFrames: currentFrames,
-            priorityWindowIDs: priorityWindowIDs,
-            splitPolicy: config.tiling.splitPolicy,
-            outerGaps: outerGaps(windowCount: stage.windowIDs.count),
-            innerGap: config.tiling.gapsInner
-        ))
         let currentPlan = LayoutPlan(placements: currentFrames)
 
         let commands = LayoutDiff.commands(previous: currentPlan, next: plan).compactMap { command -> ApplyCommand? in
@@ -444,6 +436,35 @@ public extension SnapshotService {
             return ApplyCommand(window: window, frame: Rect(command.frame))
         }
         return ApplyPlan(commands: commands)
+    }
+
+    func layoutPlan(
+        from snapshot: DaemonSnapshot,
+        scope: StageScope,
+        orderedWindowIDs: [WindowID],
+        mode: WindowManagementMode? = nil,
+        priorityWindowIDs: Set<WindowID> = []
+    ) -> LayoutPlan {
+        guard let stage = snapshot.state.stage(scope: scope),
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else { return LayoutPlan(placements: [:]) }
+
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+            windowsByID[id].map { (id, $0.frame.cgRect) }
+        })
+        let effectiveMode = mode ?? stage.mode
+        return LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: effectiveMode,
+            container: display.visibleFrame.cgRect,
+            windowIDs: orderedWindowIDs,
+            currentFrames: currentFrames,
+            priorityWindowIDs: priorityWindowIDs,
+            splitPolicy: config.tiling.splitPolicy,
+            outerGaps: outerGaps(windowCount: orderedWindowIDs.count),
+            innerGap: config.tiling.gapsInner
+        ))
     }
 
     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
