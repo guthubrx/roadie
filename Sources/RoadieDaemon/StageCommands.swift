@@ -265,6 +265,7 @@ public struct StageCommandService {
         var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
         scope.ensureStage(stageID)
+        state.focusDisplay(display.id)
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
