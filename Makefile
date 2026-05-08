@@ -1,4 +1,4 @@
-.PHONY: test build permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config clean
+.PHONY: test build permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config package-dmg clean
 
 test:
 	./scripts/test
@@ -26,6 +26,9 @@ config:
 
 config-validate:
 	./scripts/roadie config validate
+
+package-dmg:
+	./scripts/package-dmg
 
 plan:
 	./scripts/roadie layout plan

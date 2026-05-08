@@ -126,6 +126,43 @@ make doctor
 ./scripts/roadie daemon health
 ```
 
+## Build DMG Et Installation Non Signée Apple
+
+Roadie peut être packagé dans un DMG macOS classique :
+
+```bash
+make package-dmg
+```
+
+Le résultat est :
+
+```text
+dist/Roadie.dmg
+```
+
+Le DMG contient `Roadie.app` et un raccourci `/Applications`, donc l’installation se fait par drag-and-drop classique.
+
+Important : ce build est signé ad-hoc, pas signé avec un certificat Apple Developer ID, et pas notarized par Apple. macOS Gatekeeper ne le considérera donc pas comme une app publique entièrement approuvée.
+
+Pour les utilisateurs, le premier lancement attendu est :
+
+1. Glisser `Roadie.app` dans `/Applications`.
+2. L’ouvrir une première fois avec clic droit > Ouvrir, puis confirmer. Roadie démarre comme une app de fond sans menu ni fenêtre.
+3. Si macOS bloque encore l’app, lancer :
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Roadie.app
+```
+
+4. Donner les permissions à `/Applications/Roadie.app` dans Réglages Système > Confidentialité et sécurité :
+
+- Accessibilité.
+- Enregistrement d’écran, si les thumbnails live du nav rail sont souhaitées.
+
+Cette limite est normale tant que l’app n’est pas signée avec un certificat Apple Developer ID et notarized par Apple.
+
+L’app packagée démarre aujourd’hui Roadie pour la session utilisateur courante. Un futur installateur signé pourra ajouter automatiquement un login item ou un LaunchAgent ; pour l’instant, le démarrage au login reste volontairement explicite.
+
 ## Permissions
 
 Roadie a besoin de la permission Accessibilité pour lire et déplacer les fenêtres.

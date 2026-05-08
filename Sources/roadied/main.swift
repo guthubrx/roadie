@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 import RoadieDaemon
 
-let args = Array(CommandLine.arguments.dropFirst())
+let args = resolvedArguments()
 let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
@@ -93,6 +93,14 @@ func value(after flag: String) -> String? {
         return nil
     }
     return args[index + 1]
+}
+
+func resolvedArguments() -> [String] {
+    let arguments = Array(CommandLine.arguments.dropFirst())
+    if arguments.isEmpty && Bundle.main.bundleIdentifier == "com.roadie.roadied" {
+        return ["run", "--yes"]
+    }
+    return arguments
 }
 
 private final class MaintenanceTimerTarget: NSObject {

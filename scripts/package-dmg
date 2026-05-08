@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+dist_dir="$repo_root/dist"
+app_name="Roadie"
+app_bundle="$dist_dir/$app_name.app"
+dmg_path="$dist_dir/$app_name.dmg"
+iconset="$dist_dir/Roadie.iconset"
+icon_path="$repo_root/docs/assets/roadie-logo.png"
+
+cd "$repo_root"
+rm -rf "$dist_dir"
+mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources" "$iconset"
+
+"$script_dir/with-xcode" swift build --configuration release --product roadied
+"$script_dir/with-xcode" swift build --configuration release --product roadie
+bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration release)"
+
+cp "$bin_dir/roadied" "$app_bundle/Contents/MacOS/roadied"
+cp "$bin_dir/roadie" "$app_bundle/Contents/Resources/roadie"
+chmod +x "$app_bundle/Contents/MacOS/roadied" "$app_bundle/Contents/Resources/roadie"
+
+for size in 16 32 64 128 256 512; do
+  sips -z "$size" "$size" "$icon_path" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+  if [[ "$size" != "512" ]]; then
+    double=$((size * 2))
+    sips -z "$double" "$double" "$icon_path" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+  fi
+done
+cp "$iconset/icon_512x512.png" "$iconset/icon_512x512@2x.png"
+iconutil -c icns "$iconset" -o "$app_bundle/Contents/Resources/Roadie.icns"
+
+cat > "$app_bundle/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>roadied</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.roadie.roadied</string>
+  <key>CFBundleName</key>
+  <string>Roadie</string>
+  <key>CFBundleDisplayName</key>
+  <string>Roadie</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1.0</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundleIconFile</key>
+  <string>Roadie</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+codesign --force --deep --sign - "$app_bundle" >/dev/null
+
+create-dmg \
+  --volname "$app_name" \
+  --volicon "$app_bundle/Contents/Resources/Roadie.icns" \
+  --window-pos 200 120 \
+  --window-size 640 420 \
+  --icon-size 112 \
+  --icon "$app_name.app" 170 190 \
+  --app-drop-link 470 190 \
+  --hide-extension "$app_name.app" \
+  "$dmg_path" \
+  "$dist_dir"
+
+echo "$dmg_path"
