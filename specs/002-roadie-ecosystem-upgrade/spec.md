@@ -55,7 +55,7 @@ Un utilisateur veut restructurer rapidement son espace de travail avec des comma
 
 ---
 
-### Scénario 4 - Grouper des fenêtres dans un même emplacement (Priorité : P4)
+### Scénario 4 - Grouper des fenêtres dans un même emplacement (Priorité : P3, ordre 4)
 
 Un utilisateur veut regrouper plusieurs fenêtres dans un même slot de layout, avec une navigation claire entre elles, pour les cas d'usage comme terminaux multiples, documents liés ou fenêtres auxiliaires d'une même application.
 
@@ -71,7 +71,7 @@ Un utilisateur veut regrouper plusieurs fenêtres dans un même slot de layout, 
 
 ---
 
-### Scénario 5 - Explorer l'état Roadie de manière stable (Priorité : P5)
+### Scénario 5 - Explorer l'état Roadie de manière stable (Priorité : P3, ordre 5)
 
 Un utilisateur ou un script veut obtenir des listes normalisées des fenêtres, écrans, desktops, stages, règles et événements pour construire des intégrations robustes.
 
