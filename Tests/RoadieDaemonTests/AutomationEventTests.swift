@@ -75,4 +75,21 @@ struct AutomationEventTests {
         #expect(envelopes[1].subject == AutomationSubject(kind: "stage", id: scope.description))
         #expect(envelopes[1].payload["key"] == .string("value"))
     }
+
+    @Test
+    func spec003ConfigReloadPublishesFailureAndPreserveEvents() throws {
+        let valid = try #require(Bundle.module.url(forResource: "control-safety-valid", withExtension: "toml"))
+        let invalid = try #require(Bundle.module.url(forResource: "control-safety-invalid", withExtension: "toml"))
+        let eventPath = tempPath("config-reload-event-assertions")
+        let config = try RoadieConfigLoader.load(from: valid.path)
+        let log = EventLog(path: eventPath)
+        let service = ConfigReloadService(activeConfig: config, activePath: valid.path, eventLog: log)
+
+        _ = service.reload(path: invalid.path)
+        let types = log.envelopes(limit: 10).map(\.type)
+
+        #expect(types.contains("config.reload_requested"))
+        #expect(types.contains("config.reload_failed"))
+        #expect(types.contains("config.active_preserved"))
+    }
 }

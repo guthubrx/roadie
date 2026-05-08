@@ -9,6 +9,12 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var fx: EffectsConfig
     public var focus: FocusConfig
     public var rules: [WindowRule]
+    public var controlCenter: ControlCenterConfig
+    public var configReload: ConfigReloadConfig
+    public var restoreSafety: RestoreSafetyConfig
+    public var transientWindows: TransientWindowsConfig
+    public var layoutPersistence: LayoutPersistenceConfig
+    public var widthAdjustment: WidthAdjustmentConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
@@ -17,7 +23,13 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
-        rules: [WindowRule]
+        rules: [WindowRule] = [],
+        controlCenter: ControlCenterConfig = ControlCenterConfig(),
+        configReload: ConfigReloadConfig = ConfigReloadConfig(),
+        restoreSafety: RestoreSafetyConfig = RestoreSafetyConfig(),
+        transientWindows: TransientWindowsConfig = TransientWindowsConfig(),
+        layoutPersistence: LayoutPersistenceConfig = LayoutPersistenceConfig(),
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
@@ -26,6 +38,12 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.fx = fx
         self.focus = focus
         self.rules = rules
+        self.controlCenter = controlCenter
+        self.configReload = configReload
+        self.restoreSafety = restoreSafety
+        self.transientWindows = transientWindows
+        self.layoutPersistence = layoutPersistence
+        self.widthAdjustment = widthAdjustment
     }
 
     public init(
@@ -34,7 +52,13 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         stageManager: StageManagerConfig = StageManagerConfig(),
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
-        focus: FocusConfig = FocusConfig()
+        focus: FocusConfig = FocusConfig(),
+        controlCenter: ControlCenterConfig = ControlCenterConfig(),
+        configReload: ConfigReloadConfig = ConfigReloadConfig(),
+        restoreSafety: RestoreSafetyConfig = RestoreSafetyConfig(),
+        transientWindows: TransientWindowsConfig = TransientWindowsConfig(),
+        layoutPersistence: LayoutPersistenceConfig = LayoutPersistenceConfig(),
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
     ) {
         self.init(
             tiling: tiling,
@@ -43,7 +67,13 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             exclusions: exclusions,
             fx: fx,
             focus: focus,
-            rules: []
+            rules: [],
+            controlCenter: controlCenter,
+            configReload: configReload,
+            restoreSafety: restoreSafety,
+            transientWindows: transientWindows,
+            layoutPersistence: layoutPersistence,
+            widthAdjustment: widthAdjustment
         )
     }
 
@@ -55,6 +85,12 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case fx
         case focus
         case rules
+        case controlCenter = "control_center"
+        case configReload = "config_reload"
+        case restoreSafety = "restore_safety"
+        case transientWindows = "transient_windows"
+        case layoutPersistence = "layout_persistence"
+        case widthAdjustment = "width_adjustment"
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +102,12 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
+        self.controlCenter = try c.decodeIfPresent(ControlCenterConfig.self, forKey: .controlCenter) ?? ControlCenterConfig()
+        self.configReload = try c.decodeIfPresent(ConfigReloadConfig.self, forKey: .configReload) ?? ConfigReloadConfig()
+        self.restoreSafety = try c.decodeIfPresent(RestoreSafetyConfig.self, forKey: .restoreSafety) ?? RestoreSafetyConfig()
+        self.transientWindows = try c.decodeIfPresent(TransientWindowsConfig.self, forKey: .transientWindows) ?? TransientWindowsConfig()
+        self.layoutPersistence = try c.decodeIfPresent(LayoutPersistenceConfig.self, forKey: .layoutPersistence) ?? LayoutPersistenceConfig()
+        self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
     }
 }
 
@@ -368,6 +410,140 @@ public struct BorderStageOverride: Equatable, Codable, Sendable {
     }
 }
 
+public struct ControlCenterConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var showMenuBar: Bool
+    public var showRecentErrors: Bool
+
+    public init(enabled: Bool = true, showMenuBar: Bool = true, showRecentErrors: Bool = true) {
+        self.enabled = enabled
+        self.showMenuBar = showMenuBar
+        self.showRecentErrors = showRecentErrors
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case showMenuBar = "show_menu_bar"
+        case showRecentErrors = "show_recent_errors"
+    }
+}
+
+public struct ConfigReloadConfig: Equatable, Codable, Sendable {
+    public var watch: Bool
+    public var debounceMS: Int
+    public var keepPreviousOnError: Bool
+
+    public init(watch: Bool = true, debounceMS: Int = 250, keepPreviousOnError: Bool = true) {
+        self.watch = watch
+        self.debounceMS = debounceMS
+        self.keepPreviousOnError = keepPreviousOnError
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case watch
+        case debounceMS = "debounce_ms"
+        case keepPreviousOnError = "keep_previous_on_error"
+    }
+}
+
+public struct RestoreSafetyConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var restoreOnExit: Bool
+    public var crashWatcher: Bool
+    public var snapshotPath: String
+
+    public init(
+        enabled: Bool = true,
+        restoreOnExit: Bool = true,
+        crashWatcher: Bool = true,
+        snapshotPath: String = "~/.local/state/roadies/restore.json"
+    ) {
+        self.enabled = enabled
+        self.restoreOnExit = restoreOnExit
+        self.crashWatcher = crashWatcher
+        self.snapshotPath = snapshotPath
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case restoreOnExit = "restore_on_exit"
+        case crashWatcher = "crash_watcher"
+        case snapshotPath = "snapshot_path"
+    }
+}
+
+public struct TransientWindowsConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var pauseTiling: Bool
+    public var recoverOffscreen: Bool
+
+    public init(enabled: Bool = true, pauseTiling: Bool = true, recoverOffscreen: Bool = true) {
+        self.enabled = enabled
+        self.pauseTiling = pauseTiling
+        self.recoverOffscreen = recoverOffscreen
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case pauseTiling = "pause_tiling"
+        case recoverOffscreen = "recover_offscreen"
+    }
+}
+
+public struct LayoutPersistenceConfig: Equatable, Codable, Sendable {
+    public var version: Int
+    public var stableIdentity: Bool
+    public var minimumMatchScore: Double
+
+    public init(version: Int = 2, stableIdentity: Bool = true, minimumMatchScore: Double = 0.75) {
+        self.version = version
+        self.stableIdentity = stableIdentity
+        self.minimumMatchScore = minimumMatchScore
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case stableIdentity = "stable_identity"
+        case minimumMatchScore = "minimum_match_score"
+    }
+}
+
+public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
+    public var presets: [Double]
+    public var nudgeStep: Double
+    public var minimumRatio: Double
+    public var maximumRatio: Double
+
+    public init(
+        presets: [Double] = [0.5, 0.67, 0.8, 1.0],
+        nudgeStep: Double = 0.05,
+        minimumRatio: Double = 0.25,
+        maximumRatio: Double = 1.5
+    ) {
+        self.presets = Array(Set(presets)).sorted()
+        self.nudgeStep = nudgeStep
+        self.minimumRatio = minimumRatio
+        self.maximumRatio = maximumRatio
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case presets
+        case nudgeStep = "nudge_step"
+        case minimumRatio = "minimum_ratio"
+        case maximumRatio = "maximum_ratio"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            presets: try c.decodeIfPresent([Double].self, forKey: .presets) ?? [0.5, 0.67, 0.8, 1.0],
+            nudgeStep: try c.decodeFlexibleDouble(forKey: .nudgeStep) ?? 0.05,
+            minimumRatio: try c.decodeFlexibleDouble(forKey: .minimumRatio) ?? 0.25,
+            maximumRatio: try c.decodeFlexibleDouble(forKey: .maximumRatio) ?? 1.5
+        )
+    }
+}
+
 public enum RoadieConfigLoader {
     public static func defaultConfigPath() -> String {
         (NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath as String)
@@ -391,9 +567,10 @@ public enum RoadieConfigLoader {
         }
 
         do {
-            _ = try load(from: resolved)
+            let config = try load(from: resolved)
             let raw = try String(contentsOfFile: resolved, encoding: .utf8)
             var items = ConfigValidationRules.validate(rawToml: raw)
+            items.append(contentsOf: ConfigValidationRules.semanticChecks(config: config))
             if items.isEmpty {
                 items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
             }
@@ -448,6 +625,12 @@ private enum ConfigValidationRules {
         "fx.borders",
         "fx.borders.stage_overrides",
         "focus",
+        "control_center",
+        "config_reload",
+        "restore_safety",
+        "transient_windows",
+        "layout_persistence",
+        "width_adjustment",
         "rules",
         "rules.match",
         "rules.action"
@@ -549,6 +732,23 @@ private enum ConfigValidationRules {
                 path: [currentTable, key].filter { !$0.isEmpty }.joined(separator: "."),
                 message: "expected numeric value, got string"
             ))
+        }
+        return items
+    }
+
+    static func semanticChecks(config: RoadieConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if !(50...5000).contains(config.configReload.debounceMS) {
+            items.append(ConfigValidationItem(level: .error, path: "config_reload.debounce_ms", message: "must be between 50 and 5000"))
+        }
+        if !(0...1).contains(config.layoutPersistence.minimumMatchScore) {
+            items.append(ConfigValidationItem(level: .error, path: "layout_persistence.minimum_match_score", message: "must be between 0 and 1"))
+        }
+        if config.widthAdjustment.presets.isEmpty {
+            items.append(ConfigValidationItem(level: .error, path: "width_adjustment.presets", message: "must contain at least one ratio"))
+        }
+        if config.widthAdjustment.minimumRatio > config.widthAdjustment.maximumRatio {
+            items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
         }
         return items
     }

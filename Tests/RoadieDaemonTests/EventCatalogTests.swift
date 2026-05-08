@@ -43,4 +43,27 @@ struct EventCatalogTests {
         #expect(catalog.eventTypes(in: .window).contains("window.created"))
         #expect(!catalog.eventTypes(in: .window).contains("desktop.changed"))
     }
+
+    @Test
+    func spec003CatalogContainsControlSafetyEvents() {
+        let catalog = AutomationEventCatalog()
+        let required = [
+            "config.reload_requested",
+            "config.reload_applied",
+            "config.reload_failed",
+            "config.active_preserved",
+            "control_center.opened",
+            "control_center.action_invoked",
+            "restore.snapshot_written",
+            "restore.crash_detected",
+            "transient.detected",
+            "layout_identity.restore_applied",
+            "layout.width_adjust_requested",
+            "layout.width_adjust_rejected"
+        ]
+
+        for eventType in required {
+            #expect(catalog.contains(eventType))
+        }
+    }
 }

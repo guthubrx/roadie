@@ -118,3 +118,40 @@ Use this sequence after:
 - abrupt app shutdown;
 - branch switch or rebuild.
 
+## 7. Safe Config Reload
+
+Goal: edit `roadies.toml` without risking the current session.
+
+```bash
+./bin/roadie config validate
+./bin/roadie config reload --json
+./bin/roadie query config_reload
+```
+
+If validation fails, Roadie keeps the previous active config and publishes `config.reload_failed` plus `config.active_preserved`.
+
+## 8. Restore After Exit Or Crash
+
+Goal: avoid trapped or off-screen windows if the daemon exits.
+
+```bash
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadie state restore-v2 --dry-run --json
+```
+
+Use `restore apply` for a direct frame restore. Use `state restore-v2 --dry-run` first when window IDs changed and you want to inspect stable-identity matches.
+
+## 9. Handle System Dialogs And Width Tweaks
+
+Goal: keep Roadie out of the way during macOS dialogs, then tune width quickly.
+
+```bash
+./bin/roadie transient status --json
+./bin/roadie layout width next
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
+```
+
+Roadie pauses non-essential layout work while a sheet/dialog/open-save panel is active. Width commands apply only to compatible layouts and return a structured rejection otherwise.

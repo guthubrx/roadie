@@ -35,6 +35,9 @@ public final class LayoutMaintainer {
     private let manualResizeDebounceSeconds: TimeInterval
     private let now: () -> Date
     private let ruleEngine: WindowRuleEngine?
+    private let restoreSafety: RestoreSafetyService?
+    private let transientDetector: TransientWindowDetector?
+    private let config: RoadieConfig
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
@@ -46,6 +49,9 @@ public final class LayoutMaintainer {
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
         ruleEngine: WindowRuleEngine? = LayoutMaintainer.defaultRuleEngine(),
+        restoreSafety: RestoreSafetyService? = RestoreSafetyService(),
+        transientDetector: TransientWindowDetector? = TransientWindowDetector(),
+        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
@@ -54,6 +60,9 @@ public final class LayoutMaintainer {
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
         self.ruleEngine = ruleEngine
+        self.restoreSafety = restoreSafety
+        self.transientDetector = transientDetector
+        self.config = config
         self.now = now
     }
 
@@ -61,6 +70,20 @@ public final class LayoutMaintainer {
         let snapshot = service.snapshot()
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
+        }
+        if config.restoreSafety.enabled {
+            _ = restoreSafety?.save(restoreSafety?.capture(from: snapshot) ?? RestoreSafetySnapshot())
+        }
+        if config.transientWindows.enabled,
+           let transientDetector {
+            let transient = transientDetector.status(in: snapshot)
+            if transient.isActive, config.transientWindows.pauseTiling {
+                transientDetector.emitStatus(transient)
+                if transient.recoverable, config.transientWindows.recoverOffscreen {
+                    _ = transientDetector.recoverIfNeeded()
+                }
+                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            }
         }
         evaluateRules(in: snapshot)
 

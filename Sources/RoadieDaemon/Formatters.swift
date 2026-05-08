@@ -135,6 +135,18 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func controlCenter(_ state: ControlCenterState) -> String {
+        [
+            "daemon=\(state.daemonStatus.rawValue)",
+            "config=\(state.configStatus.rawValue)",
+            "configPath=\(state.configPath ?? "-")",
+            "activeDesktop=\(state.activeDesktop ?? "-")",
+            "activeStage=\(state.activeStage ?? "-")",
+            "windows=\(state.windowCount)",
+            "lastError=\(state.lastError ?? "-")"
+        ].joined(separator: "\n")
+    }
+
     public static func metrics(_ metrics: RoadieMetrics) -> String {
         [
             "displays=\(metrics.displays)",

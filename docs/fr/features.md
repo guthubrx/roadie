@@ -138,3 +138,60 @@ Cas d'usage :
 - debugger une rule ou un groupe;
 - construire un dashboard local.
 
+## Control Center
+
+Le Control Center est la surface macOS de Roadie dans la barre de menus.
+
+```bash
+./bin/roadie control status --json
+./bin/roadied control-center
+```
+
+Il expose la sante du daemon, l'etat de la config active, le desktop/stage courant, le nombre de fenetres gerees, les erreurs recentes et les actions courantes de recuperation. Le menu consomme le meme `ControlCenterState` que la CLI, donc les scripts et l'UI partagent le meme contrat de statut.
+
+## Securite et recuperation
+
+Roadie conserve un snapshot de restauration pour remettre les fenetres gerees dans des frames visibles apres un arret normal ou via un crash watcher.
+
+```bash
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadied crash-watcher --pid DAEMON_PID
+```
+
+Cas d'usage :
+
+- recuperer les fenetres apres une session daemon interrompue;
+- inspecter le dernier snapshot de securite avant de redemarrer Roadie;
+- garder la restauration scriptable pour LaunchAgent ou les workflows manuels.
+
+## Fenetres systeme transitoires
+
+Roadie detecte les sheets, dialogues, popovers, menus et panneaux open/save macOS via les roles Accessibility.
+
+```bash
+./bin/roadie transient status --json
+./bin/roadie query transient
+```
+
+Quand une fenetre transitoire est active, Roadie suspend les mutations de layout non essentielles et peut tenter une recuperation conservative si elle est hors ecran.
+
+## Layout persistence v2 et ajustements de largeur
+
+La persistance de layout v2 rapproche les fenetres avec une identite stable au lieu de dependre seulement des IDs volatils.
+
+```bash
+./bin/roadie state restore-v2 --dry-run --json
+./bin/roadie state restore-v2 --json
+./bin/roadie query identity_restore
+```
+
+Les presets et nudges de largeur ajustent les layouts compatibles `bsp` et `masterStack` tout en preservant l'intention utilisateur.
+
+```bash
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
+```

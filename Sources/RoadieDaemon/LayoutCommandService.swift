@@ -106,6 +106,27 @@ public struct LayoutCommandService {
         insert(direction)
     }
 
+    public func widthNext() -> LayoutCommandResult {
+        width(WidthAdjustmentIntent(scope: .activeWindow, mode: .presetNext))
+    }
+
+    public func widthPrevious() -> LayoutCommandResult {
+        width(WidthAdjustmentIntent(scope: .activeWindow, mode: .presetPrevious))
+    }
+
+    public func widthNudge(_ delta: Double? = nil, scope: WidthAdjustmentScope = .activeWindow) -> LayoutCommandResult {
+        width(WidthAdjustmentIntent(scope: scope, mode: .nudge, delta: delta))
+    }
+
+    public func widthRatio(_ ratio: Double, scope: WidthAdjustmentScope = .activeWindow) -> LayoutCommandResult {
+        width(WidthAdjustmentIntent(scope: scope, mode: .explicitRatio, targetRatio: ratio))
+    }
+
+    private func width(_ intent: WidthAdjustmentIntent) -> LayoutCommandResult {
+        let result = WidthAdjustmentService(service: service, events: events).apply(intent)
+        return LayoutCommandResult(message: result.message, changed: result.changed)
+    }
+
     private func activeContext() -> (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)? {
         let snapshot = service.snapshot()
         for display in snapshot.displays {

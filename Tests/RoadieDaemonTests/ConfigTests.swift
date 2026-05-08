@@ -16,6 +16,35 @@ private final class PointRecorder: @unchecked Sendable {
 @Suite
 struct ConfigTests {
     @Test
+    func controlSafetyConfigDecodesFromToml() throws {
+        let url = try #require(Bundle.module.url(forResource: "control-safety-valid", withExtension: "toml"))
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.controlCenter.enabled)
+        #expect(config.controlCenter.showMenuBar)
+        #expect(config.configReload.debounceMS == 250)
+        #expect(config.configReload.keepPreviousOnError)
+        #expect(config.restoreSafety.restoreOnExit)
+        #expect(config.restoreSafety.snapshotPath == "~/.local/state/roadies/restore.json")
+        #expect(config.transientWindows.pauseTiling)
+        #expect(config.layoutPersistence.version == 2)
+        #expect(config.layoutPersistence.minimumMatchScore == 0.75)
+        #expect(config.widthAdjustment.presets == [0.5, 0.67, 0.8, 1.0])
+        #expect(config.widthAdjustment.nudgeStep == 0.05)
+    }
+
+    @Test
+    func controlSafetyConfigValidationRejectsInvalidRanges() throws {
+        let url = try #require(Bundle.module.url(forResource: "control-safety-invalid", withExtension: "toml"))
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(report.hasErrors)
+        #expect(report.items.contains { $0.level == .error })
+    }
+
+    @Test
     func borderConfigDecodesFromToml() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-config-\(UUID().uuidString).toml")

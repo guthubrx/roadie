@@ -138,3 +138,60 @@ Use cases:
 - debug a rule or a group;
 - build a local dashboard.
 
+## Control Center
+
+The Control Center is the macOS menu bar surface for Roadie.
+
+```bash
+./bin/roadie control status --json
+./bin/roadied control-center
+```
+
+It exposes daemon health, active config status, current desktop/stage, managed window count, recent errors, and common recovery actions. The menu consumes the same `ControlCenterState` that the CLI returns, so scripts and the UI share one status contract.
+
+## Safety And Recovery
+
+Roadie keeps a restore snapshot so a normal exit or crash watcher can put managed windows back into visible frames.
+
+```bash
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadied crash-watcher --pid DAEMON_PID
+```
+
+Use cases:
+
+- recover windows after an interrupted daemon session;
+- inspect the last safety snapshot before restarting Roadie;
+- keep restore behavior scriptable for LaunchAgent or manual workflows.
+
+## Transient System Windows
+
+Roadie detects macOS sheets, dialogs, popovers, menus, and open/save panels through Accessibility role metadata.
+
+```bash
+./bin/roadie transient status --json
+./bin/roadie query transient
+```
+
+When a transient window is active, Roadie pauses non-essential layout mutations and can attempt a conservative off-screen recovery.
+
+## Layout Persistence V2 And Width Adjustments
+
+Layout persistence v2 matches windows with stable identity fields instead of relying only on volatile window IDs.
+
+```bash
+./bin/roadie state restore-v2 --dry-run --json
+./bin/roadie state restore-v2 --json
+./bin/roadie query identity_restore
+```
+
+Width presets and nudges adjust compatible `bsp` and `masterStack` layouts while preserving the user intent.
+
+```bash
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
+```

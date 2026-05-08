@@ -132,3 +132,41 @@ Detected errors:
 
 Use `explain` before adding a rule to your local production setup. It is a dry run: Roadie shows which rule would match and which actions would be applied.
 
+## Control And Safety Sections
+
+Roadie accepts additional safety sections in `roadies.toml`.
+
+```toml
+[control_center]
+enabled = true
+show_menu_bar = true
+
+[config_reload]
+watch = true
+debounce_ms = 250
+keep_previous_on_error = true
+
+[restore_safety]
+enabled = true
+restore_on_exit = true
+crash_watcher = true
+snapshot_path = "~/.local/state/roadies/restore.json"
+
+[transient_windows]
+enabled = true
+pause_tiling = true
+recover_offscreen = true
+
+[layout_persistence]
+version = 2
+stable_identity = true
+minimum_match_score = 0.75
+
+[width_adjustment]
+presets = [0.5, 0.67, 0.8, 1.0]
+nudge_step = 0.05
+minimum_ratio = 0.25
+maximum_ratio = 1.5
+```
+
+`config reload` validates the whole file before replacing the active config. Invalid reloads emit `config.reload_failed` and preserve the previous active config.

@@ -39,4 +39,17 @@ struct QueryCommandTests {
         #expect(query.query("groups").kind == "groups")
         #expect(query.query("rules").kind == "rules")
     }
+
+    @Test
+    func queryConfigReloadExposesState() {
+        let service = AutomationQueryService()
+        let result = service.query("config_reload")
+
+        #expect(result.kind == "config_reload")
+        if case .object(let object) = result.data {
+            #expect(object["lastValidation"] != nil)
+        } else {
+            Issue.record("config_reload query did not return an object")
+        }
+    }
 }
