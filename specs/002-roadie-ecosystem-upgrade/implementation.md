@@ -64,7 +64,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T004 : Matrice de couverture automation
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `465e648` - docs(002): Track automation coverage task
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/automation-coverage.md` (existant, validé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T004 cochée)
@@ -73,3 +73,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] Relecture de couverture SC-002
   - [ ] `swift build` : non applicable, documentation seule
 - **Notes** : La matrice justifie le seuil SC-002 à 93,3 % hors refus documentés.
+
+### T005 : Initialisation du journal d'implémentation
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal initialisé et enrichi)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T005 cochée)
+- **Tests exécutés** :
+  - [x] Relecture du protocole `1 tâche = 1 commit`
+  - [ ] `swift build` : non applicable, documentation seule
+- **Notes** : Le journal contient la règle d'exécution et l'historique des premières tâches.
