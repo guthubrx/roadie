@@ -141,7 +141,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T010 : Modèle RoadieStateSnapshot
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `3ad5b75` - feat(002): Add automation snapshot model
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/AutomationSnapshot.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T010 cochée)
@@ -150,3 +150,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec T015/T016
 - **Notes** : Le snapshot contractuel est découplé des types AX et expose displays, desktops, stages, windows, groups et rules.
+
+### T011 : Modèle LayoutCommandIntent
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/LayoutCommandIntent.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T011 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec les commandes power-user
+- **Notes** : Le modèle capture commande, cible, arguments, source, corrélation et horodatage.
