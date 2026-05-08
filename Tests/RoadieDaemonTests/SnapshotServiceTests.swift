@@ -1871,6 +1871,53 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func metricsExposeRuntimeAndStateCounters() {
+        let display = DisplayID(rawValue: "display-a")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let live = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "live", frame: Rect(x: 0, y: 0, width: 300, height: 500), isOnScreen: true, isTileCandidate: true)
+        let duplicate = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "duplicate", frame: Rect(x: 300, y: 0, width: 300, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-metrics-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                    PersistentStageMember(windowID: duplicate.id, bundleID: duplicate.bundleID, title: duplicate.title, frame: duplicate.frame),
+                    PersistentStageMember(windowID: WindowID(rawValue: 99), bundleID: "gone", title: "gone", frame: live.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), members: [
+                    PersistentStageMember(windowID: duplicate.id, bundleID: duplicate.bundleID, title: duplicate.title, frame: duplicate.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: staleDisplay),
+        ], activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [live, duplicate],
+                focusedID: live.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let metrics = MetricsService(service: service, stageStore: stageStore).collect()
+
+        #expect(metrics.displays == 1)
+        #expect(metrics.tileableWindows == 2)
+        #expect(metrics.scopedWindows == 2)
+        #expect(metrics.activeStages == 1)
+        #expect(metrics.duplicateWindows == 1)
+        #expect(metrics.staleMembers == 0)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

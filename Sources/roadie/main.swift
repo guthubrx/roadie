@@ -19,6 +19,7 @@ func printUsage() {
       roadie doctor
       roadie self-test
       roadie events tail [N]
+      roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
       roadie focus|move|warp|wrap|resize left|right|up|down
@@ -176,6 +177,18 @@ case "events":
     }
     let limit = args.dropFirst(2).first.flatMap(Int.init) ?? 20
     print(EventLog().tail(limit: limit).joined(separator: "\n"))
+case "metrics":
+    let metrics = MetricsService(service: service).collect()
+    if args.contains("--json") {
+        do {
+            print(try SnapshotEncoding.json(metrics))
+        } catch {
+            fputs("roadie: failed to encode metrics: \(error)\n", stderr)
+            exit(1)
+        }
+    } else {
+        print(TextFormatter.metrics(metrics))
+    }
 case "config":
     let verb = args.dropFirst().first
     guard verb == "show" || verb == "validate" else {
