@@ -55,6 +55,24 @@ struct EventSubscriptionTests {
         #expect(events[0].payload["windowCount"] == .int(1))
     }
 
+    @Test
+    func spec002SubscribeReadsAppendedEventsUnderOneSecond() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-latency-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let log = EventLog(path: url.path)
+        let service = EventSubscriptionService(path: url.path)
+        let cursor = service.start(options: EventSubscriptionOptions(fromNow: true))
+
+        let started = Date()
+        log.append(event(id: "evt-latency", type: "window.focused"))
+        let result = service.readAvailable(from: cursor)
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(result.events.map(\.id) == ["evt-latency"])
+        #expect(elapsed < 1.0)
+    }
+
     private func event(id: String, type: String, scope: AutomationScope = .window) -> RoadieEventEnvelope {
         RoadieEventEnvelope(
             id: id,

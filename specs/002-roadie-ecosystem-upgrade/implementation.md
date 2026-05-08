@@ -255,7 +255,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T019 : Tests subscribe --initial-state
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `0540cc0` - test(002): Cover initial state subscription
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (test initial-state)
   - `Sources/RoadieDaemon/EventSubscriptionService.swift` (option initialState)
@@ -264,3 +264,15 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventSubscriptionTests`
 - **Notes** : Le service peut émettre un événement synthétique `state.snapshot` depuis un `RoadieStateSnapshot`.
+
+### T020 : Test de latence subscription
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (test latence)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T020 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventSubscriptionTests`
+- **Notes** : Le chemin append + lecture disponible reste sous 1 seconde dans le test local.
