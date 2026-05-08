@@ -107,8 +107,10 @@ struct ConfigTests {
         background_opacity = 0.35
         auto_hide = true
         edge_hit_width = 10
+        edge_magnetism_width = 32
         animation_ms = 120
         hide_delay_ms = 250
+        dynamic_left_gap = true
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
@@ -143,8 +145,10 @@ struct ConfigTests {
         #expect(settings.backgroundOpacity == 0.35)
         #expect(settings.autoHide == true)
         #expect(settings.edgeHitWidth == 10)
+        #expect(settings.edgeMagnetismWidth == 32)
         #expect(settings.animationMS == 120)
         #expect(settings.hideDelayMS == 250)
+        #expect(settings.dynamicLeftGap == true)
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
         #expect(settings.preview.width == 160)
