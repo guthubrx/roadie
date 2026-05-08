@@ -51,7 +51,7 @@
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Ajouter les tests du catalogue minimal d'événements dans `Tests/RoadieDaemonTests/EventCatalogTests.swift`
+- [X] T017 [P] [US1] Ajouter les tests du catalogue minimal d'événements dans `Tests/RoadieDaemonTests/EventCatalogTests.swift`
 - [ ] T018 [US1] Ajouter les tests de suivi `subscribe --from-now` dans `Tests/RoadieDaemonTests/EventSubscriptionTests.swift`
 - [ ] T019 [US1] Ajouter le test `subscribe --initial-state` dans `Tests/RoadieDaemonTests/EventSubscriptionTests.swift`
 - [ ] T020 [US1] Ajouter le test de latence sous une seconde dans `Tests/RoadieDaemonTests/EventSubscriptionTests.swift`

@@ -217,7 +217,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T016 : Checkpoint fondation AutomationEvent
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `a270a41` - test(002): Validate event foundation
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T016 cochée)
   - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
@@ -225,3 +225,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [x] `swift test --filter AutomationEventTests`
 - **Notes** : Checkpoint fondation validé. SwiftPM a attendu la fin du build parallèle puis les 2 tests AutomationEvent sont passés.
+
+### T017 : Tests du catalogue minimal d'événements
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/EventCatalogTests.swift` (créé)
+  - `Sources/RoadieCore/AutomationEventCatalog.swift` (catalogue minimal compilable)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T017 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventCatalogTests`
+- **Notes** : Le catalogue minimal est ajouté avec les tests pour conserver un commit vert ; T021 reste responsable de l'intégration complète du catalogue dans l'implémentation US1.
