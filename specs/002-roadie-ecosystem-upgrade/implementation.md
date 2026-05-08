@@ -392,7 +392,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T030 : Parsing `[[rules]]`
 
 - **Statut** : Complété
-- **Commit** : `e3f00a3` - test(002): Cover rule config parsing
+- **Commit** : `1ff4100` - test(002): Cover rule config parsing
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/WindowRule.swift` (modèles minimum)
   - `Sources/RoadieCore/Config.swift` (champ `rules`)
@@ -406,7 +406,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T031/T037 : Validation des rules
 
 - **Statut** : Complété
-- **Commit** : `f9cb89f` - test(002): Cover rule validation
+- **Commit** : `4dd8d35` - test(002): Cover rule validation
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/WindowRuleValidator.swift` (validateur)
   - `Tests/RoadieDaemonTests/WindowRuleValidationTests.swift` (tests conflits)
@@ -415,3 +415,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter WindowRuleValidationTests`
 - **Notes** : Le validateur refuse les rules sans matcher, les IDs dupliqués, les regex invalides et `exclude` combiné à des actions de layout/placement.
+
+### T032/T038 : Matching des rules
+
+- **Statut** : Complété
+- **Commit** : Ce commit - test(002): Cover rule matching
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/WindowRuleMatcher.swift` (matcher)
+  - `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift` (tests matcher)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T032/T038 cochées)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowRuleMatcherTests`
+- **Notes** : Le matcher combine les critères par AND, supporte exact/regex, stage/role via contexte, ignore les rules désactivées et priorise `priority` puis `id`.
