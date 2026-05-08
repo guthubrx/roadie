@@ -96,7 +96,7 @@ public final class RailController {
             }
             if let action = panel.action(at: screenPoint) {
                 perform(action, displayID: displayID)
-            } else if let stageID = panel.emptyStageID() {
+            } else if let stageID = panel.emptyStageID(at: screenPoint) {
                 print("rail empty switch stage \(stageID.rawValue)")
                 fflush(stdout)
                 perform(.switchStage(stageID), displayID: displayID)
@@ -408,6 +408,8 @@ private final class RailPanel: NSPanel {
     private let horizontalInset: CGFloat = 6
     private var visibleStageIDs: [StageID] = []
     private var emptyStageIDs: [StageID] = []
+    private var emptyClickHideActive = true
+    private var emptyClickSafetyMargin: CGFloat = 12
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -457,6 +459,8 @@ private final class RailPanel: NSPanel {
         let ids = stageIDs(from: scope)
         visibleStageIDs = ids
         emptyStageIDs = scope.stages.filter(\.members.isEmpty).map(\.id)
+        emptyClickHideActive = config.emptyClickHideActive
+        emptyClickSafetyMargin = config.emptyClickSafetyMargin
         centerStages(count: ids.count, config: config)
         for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
@@ -518,11 +522,19 @@ private final class RailPanel: NSPanel {
             return id
         }
         guard frame.contains(screenPoint) else { return nil }
-        return emptyStageID()
+        return emptyStageID(at: screenPoint)
     }
 
-    func emptyStageID() -> StageID? {
-        emptyStageIDs.first ?? nextGeneratedStageID()
+    func emptyStageID(at screenPoint: CGPoint) -> StageID? {
+        guard emptyClickHideActive, isSafeEmptyClick(at: screenPoint) else { return nil }
+        return emptyStageIDs.first ?? nextGeneratedStageID()
+    }
+
+    private func isSafeEmptyClick(at screenPoint: CGPoint) -> Bool {
+        let windowPoint = convertPoint(fromScreen: screenPoint)
+        let localX = windowPoint.x
+        return localX >= emptyClickSafetyMargin
+            && localX <= frame.width - emptyClickSafetyMargin
     }
 
     func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
@@ -679,6 +691,8 @@ private struct RailVisualConfig {
     var mode: RailRenderMode = .stacked
     var stageAccents: [StageID: NSColor] = [:]
     var railWidth: CGFloat = 150
+    var emptyClickHideActive: Bool = true
+    var emptyClickSafetyMargin: CGFloat = 12
     var previewWidth: CGFloat = 160
     var previewHeight: CGFloat = 104
     var leadingPadding: CGFloat = 8
@@ -713,6 +727,8 @@ private struct RailVisualConfig {
             mode: mode,
             stageAccents: accents,
             railWidth: CGFloat(settings.width),
+            emptyClickHideActive: settings.emptyClickHideActive,
+            emptyClickSafetyMargin: CGFloat(settings.emptyClickSafetyMargin),
             previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
             previewHeight: CGFloat(useParallaxGeometry ? parallax.height : preview.height),
             leadingPadding: CGFloat(useParallaxGeometry ? parallax.leadingPadding : preview.leadingPadding),
