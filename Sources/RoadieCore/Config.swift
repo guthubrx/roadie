@@ -8,6 +8,25 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var exclusions: ExclusionsConfig
     public var fx: EffectsConfig
     public var focus: FocusConfig
+    public var rules: [WindowRule]
+
+    public init(
+        tiling: TilingConfig = TilingConfig(),
+        desktops: DesktopsConfig = DesktopsConfig(),
+        stageManager: StageManagerConfig = StageManagerConfig(),
+        exclusions: ExclusionsConfig = ExclusionsConfig(),
+        fx: EffectsConfig = EffectsConfig(),
+        focus: FocusConfig = FocusConfig(),
+        rules: [WindowRule]
+    ) {
+        self.tiling = tiling
+        self.desktops = desktops
+        self.stageManager = stageManager
+        self.exclusions = exclusions
+        self.fx = fx
+        self.focus = focus
+        self.rules = rules
+    }
 
     public init(
         tiling: TilingConfig = TilingConfig(),
@@ -17,12 +36,15 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig()
     ) {
-        self.tiling = tiling
-        self.desktops = desktops
-        self.stageManager = stageManager
-        self.exclusions = exclusions
-        self.fx = fx
-        self.focus = focus
+        self.init(
+            tiling: tiling,
+            desktops: desktops,
+            stageManager: stageManager,
+            exclusions: exclusions,
+            fx: fx,
+            focus: focus,
+            rules: []
+        )
     }
 
     enum CodingKeys: String, CodingKey {
@@ -32,6 +54,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case exclusions
         case fx
         case focus
+        case rules
     }
 
     public init(from decoder: Decoder) throws {
@@ -42,6 +65,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? ExclusionsConfig()
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
+        self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
     }
 }
 
@@ -423,7 +447,10 @@ private enum ConfigValidationRules {
         "fx",
         "fx.borders",
         "fx.borders.stage_overrides",
-        "focus"
+        "focus",
+        "rules",
+        "rules.match",
+        "rules.action"
     ]
 
     private static let knownUnsupportedTables: Set<String> = [

@@ -380,7 +380,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T029 : Checkpoint US1 EventSubscription
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `7963b0b` - test(002): Validate event subscription
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T029 cochée)
   - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
@@ -388,3 +388,17 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [x] `swift test --filter EventSubscriptionTests`
 - **Notes** : Les 4 tests EventSubscription sont passés. SwiftPM a attendu la fin du build parallèle avant d'exécuter les tests.
+
+### T030 : Parsing `[[rules]]`
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/WindowRule.swift` (modèles minimum)
+  - `Sources/RoadieCore/Config.swift` (champ `rules`)
+  - `Tests/RoadieDaemonTests/WindowRuleConfigTests.swift` (test fixture TOML)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T030 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowRuleConfigTests`
+- **Notes** : La config décode `[[rules]]`, `[rules.match]` et `[rules.action]` depuis la fixture Spec 002.

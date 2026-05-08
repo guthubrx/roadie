@@ -80,7 +80,7 @@
 
 ### Tests for User Story 2
 
-- [ ] T030 [P] [US2] Ajouter les tests de parsing `[[rules]]` dans `Tests/RoadieDaemonTests/WindowRuleConfigTests.swift`
+- [X] T030 [P] [US2] Ajouter les tests de parsing `[[rules]]` dans `Tests/RoadieDaemonTests/WindowRuleConfigTests.swift`
 - [ ] T031 [P] [US2] Ajouter les tests de validation de conflits dans `Tests/RoadieDaemonTests/WindowRuleValidationTests.swift`
 - [ ] T032 [P] [US2] Ajouter les tests de matching app/title/role/stage dans `Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift`
 - [ ] T033 [P] [US2] Ajouter les tests CLI `rules validate` et `rules explain` dans `Tests/RoadieDaemonTests/RulesCommandTests.swift`
