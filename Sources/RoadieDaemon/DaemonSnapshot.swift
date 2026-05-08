@@ -61,12 +61,26 @@ public struct SnapshotService {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let windows = provider.windows()
+        let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
         let liveDisplayIDs = Set(displays.map(\.id))
         intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
         if let activeDisplayID = persistedStages.activeDisplayID,
            !liveDisplayIDs.contains(activeDisplayID) {
-            persistedStages.activeDisplayID = displays.first?.id
+            persistedStages.activeDisplayID = fallbackDisplayID(
+                in: displays,
+                persistedStages: persistedStages,
+                focusedWindowID: providerFocusedID,
+                windows: windows
+            )
+        }
+        if let fallbackDisplayID = fallbackDisplayID(
+            in: displays,
+            persistedStages: persistedStages,
+            focusedWindowID: providerFocusedID,
+            windows: windows
+        ) {
+            persistedStages.migrateDisconnectedDisplays(keeping: liveDisplayIDs, fallbackDisplayID: fallbackDisplayID)
         }
         let liveWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
@@ -139,14 +153,18 @@ public struct SnapshotService {
             try? state.assignWindow(window.id, to: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
-        let focusedID = provider.focusedWindowID()
-        if let focusedID,
-           let focusedScope = scopedWindows.first(where: { $0.window.id == focusedID })?.scope {
+        var focusedID: WindowID?
+        if let providerFocusedID,
+           let focusedScope = scopedWindows.first(where: { $0.window.id == providerFocusedID })?.scope,
+           state.activeScope(on: focusedScope.displayID) == focusedScope {
             var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
-            persistentScope.setFocusedWindow(focusedID, in: focusedScope.stageID)
+            persistentScope.setFocusedWindow(providerFocusedID, in: focusedScope.stageID)
             persistedStages.update(persistentScope)
             persistedStages.focusDisplay(focusedScope.displayID)
-            try? state.setFocusedWindow(focusedID, for: focusedScope)
+            try? state.setFocusedWindow(providerFocusedID, for: focusedScope)
+            focusedID = providerFocusedID
+        } else {
+            focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
         stageStore.save(persistedStages)
 
@@ -163,6 +181,25 @@ public struct SnapshotService {
         displays.first { $0.frame.cgRect.contains(point) }?.id
     }
 
+    private func fallbackDisplayID(
+        in displays: [DisplaySnapshot],
+        persistedStages: PersistentStageState,
+        focusedWindowID: WindowID?,
+        windows: [WindowSnapshot]
+    ) -> DisplayID? {
+        let liveDisplayIDs = Set(displays.map(\.id))
+        if let activeDisplayID = persistedStages.activeDisplayID,
+           liveDisplayIDs.contains(activeDisplayID) {
+            return activeDisplayID
+        }
+        if let focusedWindowID,
+           let focusedWindow = windows.first(where: { $0.id == focusedWindowID }),
+           let displayID = displayID(containing: focusedWindow.frame.center, in: displays) {
+            return displayID
+        }
+        return displays.first(where: \.isMain)?.id ?? displays.first?.id
+    }
+
     private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
         if frame.maxX < -1000 || frame.minX < -10000 {
             return true
@@ -174,6 +211,27 @@ public struct SnapshotService {
             let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
             return nearBottomEdge && (nearLeftEdge || nearRightEdge)
         }
+    }
+
+    private func activeFocusedWindowID(
+        in state: RoadieState,
+        scopedWindows: [ScopedWindowSnapshot],
+        displays: [DisplaySnapshot]
+    ) -> WindowID? {
+        for display in displays {
+            guard let scope = state.activeScope(on: display.id),
+                  let stage = state.stage(scope: scope)
+            else { continue }
+            if let focusedID = stage.focusedWindowID,
+               scopedWindows.contains(where: { $0.window.id == focusedID && $0.scope == scope && $0.window.isTileCandidate }) {
+                return focusedID
+            }
+            if let lastID = stage.windowIDs.last,
+               scopedWindows.contains(where: { $0.window.id == lastID && $0.scope == scope && $0.window.isTileCandidate }) {
+                return lastID
+            }
+        }
+        return nil
     }
 }
 

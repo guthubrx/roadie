@@ -103,6 +103,24 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
     }
 
+    public mutating func migrateDisconnectedDisplays(keeping liveDisplayIDs: Set<DisplayID>, fallbackDisplayID: DisplayID) {
+        let staleScopes = scopes.filter { !liveDisplayIDs.contains($0.displayID) }
+        guard !staleScopes.isEmpty else { return }
+
+        scopes.removeAll { !liveDisplayIDs.contains($0.displayID) }
+        for staleScope in staleScopes {
+            var target = scope(displayID: fallbackDisplayID, desktopID: staleScope.desktopID)
+            target.mergeDisconnectedScope(staleScope)
+            update(target)
+        }
+
+        desktopSelections.removeAll { !liveDisplayIDs.contains($0.displayID) }
+        desktopLabels.removeAll { !liveDisplayIDs.contains($0.displayID) }
+        if activeDisplayID.map({ !liveDisplayIDs.contains($0) }) == true {
+            activeDisplayID = fallbackDisplayID
+        }
+    }
+
     public func currentDesktopID(for displayID: DisplayID) -> DesktopID {
         desktopSelections.first { $0.displayID == displayID }?.currentDesktopID ?? DesktopID(rawValue: 1)
     }
@@ -293,6 +311,27 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
 
     public func memberIDs(in stageID: StageID) -> [WindowID] {
         stages.first(where: { $0.id == stageID })?.members.map(\.windowID) ?? []
+    }
+
+    mutating func mergeDisconnectedScope(_ source: PersistentStageScope) {
+        if stages.allSatisfy(\.members.isEmpty) {
+            activeStageID = source.activeStageID
+        }
+        for sourceStage in source.stages {
+            ensureStage(sourceStage.id)
+            guard let targetIndex = stages.firstIndex(where: { $0.id == sourceStage.id }) else { continue }
+            if stages[targetIndex].members.isEmpty {
+                stages[targetIndex].mode = sourceStage.mode
+                stages[targetIndex].name = sourceStage.name
+            }
+            for member in sourceStage.members {
+                remove(windowID: member.windowID)
+                stages[targetIndex].members.append(member)
+            }
+            if let focusedWindowID = sourceStage.focusedWindowID {
+                stages[targetIndex].focusedWindowID = focusedWindowID
+            }
+        }
     }
 }
 
