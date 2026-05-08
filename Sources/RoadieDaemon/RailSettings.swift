@@ -5,6 +5,10 @@ public struct RailSettings: Equatable, Sendable {
     public var width: Double
     public var backgroundColor: String
     public var backgroundOpacity: Double
+    public var autoHide: Bool
+    public var edgeHitWidth: Double
+    public var animationMS: Double
+    public var hideDelayMS: Double
     public var emptyClickHideActive: Bool
     public var emptyClickSafetyMargin: Double
     public var preview: Preview
@@ -60,6 +64,10 @@ public struct RailSettings: Equatable, Sendable {
             width: number(rail["width"], default: 150, min: 90, max: 320),
             backgroundColor: rail["background_color"] ?? "#000000",
             backgroundOpacity: number(rail["background_opacity"], default: 0, min: 0, max: 1),
+            autoHide: bool(rail["auto_hide"], default: false),
+            edgeHitWidth: number(rail["edge_hit_width"], default: 8, min: 1, max: 40),
+            animationMS: number(rail["animation_ms"], default: 160, min: 0, max: 1000),
+            hideDelayMS: number(rail["hide_delay_ms"], default: 350, min: 0, max: 5000),
             emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
@@ -98,6 +106,10 @@ public struct RailSettings: Equatable, Sendable {
             "width=\(width)",
             "background_color=\(backgroundColor)",
             "background_opacity=\(backgroundOpacity)",
+            "auto_hide=\(autoHide)",
+            "edge_hit_width=\(edgeHitWidth)",
+            "animation_ms=\(animationMS)",
+            "hide_delay_ms=\(hideDelayMS)",
             "empty_click_hide_active=\(emptyClickHideActive)",
             "empty_click_safety_margin=\(emptyClickSafetyMargin)",
             "preview.width=\(preview.width)",
@@ -128,6 +140,10 @@ public struct RailSettings: Equatable, Sendable {
         width: 150,
         backgroundColor: "#000000",
         backgroundOpacity: 0,
+        autoHide: false,
+        edgeHitWidth: 8,
+        animationMS: 160,
+        hideDelayMS: 350,
         emptyClickHideActive: true,
         emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
