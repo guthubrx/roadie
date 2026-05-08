@@ -628,7 +628,7 @@ private final class RailPanel: NSPanel {
             view.removeFromSuperview()
         }
 
-        if config.headerVisible {
+        if config.headerVisible, config.headerPosition == .top {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
         let ids = stageIDs(from: scope)
@@ -638,7 +638,10 @@ private final class RailPanel: NSPanel {
         stack.railBackgroundOpacity = config.backgroundOpacity
         emptyClickHideActive = config.emptyClickHideActive
         emptyClickSafetyMargin = config.emptyClickSafetyMargin
-        centerStages(count: ids.count, config: config)
+        positionContent(count: ids.count, config: config)
+        if let spacer = stageLeadingSpacer(count: ids.count, config: config) {
+            stack.addArrangedSubview(spacer)
+        }
         for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
             let card = StageCardView(
@@ -652,28 +655,55 @@ private final class RailPanel: NSPanel {
             )
             stack.addArrangedSubview(card)
         }
+        if config.headerVisible, config.headerPosition == .bottom {
+            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
+        }
     }
 
-    private func centerStages(count: Int, config: RailVisualConfig) {
-        let cardHeight = StageCardView.height(for: config)
+    private func positionContent(count: Int, config: RailVisualConfig) {
         stack.spacing = config.layoutSpacing
-        let headerHeight = config.headerVisible ? config.headerHeight + config.layoutBottomPadding : 0
-        let itemCount = count + (headerHeight > 0 ? 1 : 0)
-        let totalHeight = headerHeight
-            + CGFloat(count) * cardHeight
-            + CGFloat(max(0, itemCount - 1)) * stack.spacing
-        let centeredInset = max(20, floor((frame.height - totalHeight) / 2))
         let topInset: CGFloat
+        let bottomInset: CGFloat
+        if config.headerVisible, config.headerPosition == .top {
+            topInset = config.layoutTopPadding
+            bottomInset = max(20, config.layoutBottomPadding)
+        } else if config.headerVisible, config.headerPosition == .bottom {
+            topInset = max(20, config.layoutTopPadding)
+            bottomInset = config.layoutBottomPadding
+        } else {
+            topInset = max(20, config.layoutTopPadding)
+            bottomInset = max(20, config.layoutBottomPadding)
+        }
+        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
+    }
+
+    private func stageLeadingSpacer(count: Int, config: RailVisualConfig) -> NSView? {
+        guard count > 0 else { return nil }
+        let stageHeight = CGFloat(count) * StageCardView.height(for: config)
+            + CGFloat(max(0, count - 1)) * config.layoutSpacing
+        let centeredTop = max(20, floor((frame.height - stageHeight) / 2))
+        let currentTop: CGFloat
+        switch config.headerPosition {
+        case .top where config.headerVisible:
+            currentTop = config.layoutTopPadding + config.headerHeight + config.layoutSpacing * 2
+        case .bottom, .hidden:
+            currentTop = config.layoutTopPadding + config.layoutSpacing
+        case .top:
+            currentTop = config.layoutTopPadding + config.layoutSpacing
+        }
+
+        let targetTop: CGFloat
         switch config.stagesPosition {
         case .top:
-            topInset = config.layoutTopPadding
-        case .bottom:
-            topInset = max(20, frame.height - totalHeight - config.layoutBottomPadding)
+            targetTop = currentTop
         case .center:
-            topInset = config.headerPosition == .top ? config.layoutTopPadding : centeredInset
+            targetTop = centeredTop
+        case .bottom:
+            targetTop = max(currentTop, frame.height - stageHeight - config.layoutBottomPadding)
         }
-        let bottomInset = max(20, frame.height - totalHeight - topInset)
-        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
+        let height = max(0, targetTop - currentTop)
+        guard height > 0 else { return nil }
+        return FixedHeightSpacer(height: height)
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
@@ -771,6 +801,19 @@ private final class RailStackView: NSStackView {
         guard railBackgroundOpacity > 0 else { return }
         railBackgroundColor.withAlphaComponent(railBackgroundOpacity).setFill()
         bounds.fill()
+    }
+}
+
+@MainActor
+private final class FixedHeightSpacer: NSView {
+    init(height: CGFloat) {
+        super.init(frame: CGRect(x: 0, y: 0, width: 1, height: height))
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: height).isActive = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }
 
