@@ -447,7 +447,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T034/T039/T043 : Moteur rules et marqueur scratchpad
 
 - **Statut** : Complété
-- **Commit** : Ce commit - feat(002): Add rule engine scratchpad markers
+- **Commit** : `b3d8d10` - feat(002): Add rule engine scratchpad markers
 - **Fichiers modifiés** :
   - `Sources/RoadieDaemon/WindowRuleEngine.swift` (évaluation et marqueurs scratchpad)
   - `Sources/RoadieDaemon/RulesCommandService.swift` (réutilisation des noms d'actions)
@@ -458,3 +458,17 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter WindowRuleScratchpadTests`
 - **Notes** : Le moteur conserve les marqueurs scratchpad par `WindowID` et expose un snapshot de ces marqueurs pour les futures queries.
+
+### T040/T041 : Intégration maintainer et événements rule.*
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Publish rule events from maintainer
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/LayoutMaintainer.swift` (évaluation rules par tick)
+  - `Sources/RoadieDaemon/WindowRuleEngine.swift` (erreurs de validation exposées)
+  - `Tests/RoadieDaemonTests/WindowRuleMaintainerTests.swift` (tests événements)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T040/T041 cochées)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter WindowRuleMaintainerTests`
+- **Notes** : Le maintainer publie `rule.matched`, `rule.applied`, `rule.skipped` et `rule.failed` dans le journal d'événements automation.

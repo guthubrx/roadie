@@ -42,6 +42,7 @@ public struct WindowRuleApplication: Equatable, Codable, Sendable {
 public final class WindowRuleEngine {
     private let rules: [WindowRule]
     private var scratchpadMarkers: [WindowID: String] = [:]
+    public let validationErrors: [ConfigValidationItem]
 
     public init(rules: [WindowRule]) {
         self.rules = rules.sorted { lhs, rhs in
@@ -50,6 +51,7 @@ public final class WindowRuleEngine {
             }
             return lhs.priority > rhs.priority
         }
+        self.validationErrors = WindowRuleValidator.validate(rules)
     }
 
     public func evaluate(
