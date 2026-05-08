@@ -17,7 +17,7 @@
 - [X] T002 [P] Créer les fixtures de snapshot Spec 002 dans `Tests/RoadieDaemonTests/Fixtures/Spec002Snapshot.json`
 - [X] T003 [P] Créer les fixtures de règles valides et invalides dans `Tests/RoadieDaemonTests/Fixtures/Spec002Rules.toml`
 - [X] T004 Créer la matrice de couverture yabai/AeroSpace/Hyprland dans `specs/002-roadie-ecosystem-upgrade/automation-coverage.md`
-- [ ] T005 Initialiser le journal d'implémentation par tâche dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T005 Initialiser le journal d'implémentation par tâche dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 - [ ] T006 Ajouter une section de suivi Spec 002 dans `docs/decisions/001-roadie-automation-contract.md`
 - [ ] T007 Vérifier que `Package.swift` expose les targets de test nécessaires pour les nouveaux fichiers `Tests/RoadieDaemonTests/`
 
