@@ -16,6 +16,9 @@ func printUsage() {
       roadie tree dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
+      roadie layout split horizontal|vertical
+      roadie layout join-with|insert left|right|up|down
+      roadie layout flatten|zoom-parent
       roadie config show|validate
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie rail status
@@ -26,13 +29,15 @@ func printUsage() {
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
-      roadie focus|move|warp|wrap|resize left|right|up|down
+      roadie focus back-and-forth|left|right|up|down
+      roadie move|warp|wrap|resize left|right|up|down
       roadie mode bsp|masterStack|float
       roadie window display N
       roadie window desktop N [--follow]
       roadie window reset
       roadie desktop list|current
-      roadie desktop focus N|prev|next|last|back
+      roadie desktop focus N|prev|next|last|back|back-and-forth
+      roadie desktop summon N
       roadie desktop label N NAME
       roadie stage list
       roadie stage create|delete N
@@ -40,6 +45,7 @@ func printUsage() {
       roadie stage reorder N POSITION
       roadie stage switch|assign N
       roadie stage summon WINDOW_ID
+      roadie stage move-to-display N
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
@@ -160,6 +166,34 @@ case "layout":
         } else {
             print(TextFormatter.applyResult(result))
         }
+    case "flatten":
+        let result = LayoutCommandService(service: service).flatten()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "split":
+        let result = LayoutCommandService(service: service).split(args.dropFirst(2).first ?? "")
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "insert":
+        guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
+            fputs("roadie: layout insert requires left|right|up|down\n", stderr)
+            exit(64)
+        }
+        let result = LayoutCommandService(service: service).insert(direction)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "join-with":
+        guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
+            fputs("roadie: layout join-with requires left|right|up|down\n", stderr)
+            exit(64)
+        }
+        let result = LayoutCommandService(service: service).join(with: direction)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "zoom-parent":
+        let result = LayoutCommandService(service: service).zoomParent()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -247,6 +281,10 @@ case "focus":
     if args.dropFirst().first == "status" {
         print(TextFormatter.focusStatus(service.snapshot()))
         exit(0)
+    } else if args.dropFirst().first == "back-and-forth" {
+        let result = WindowCommandService(service: service).focusBackAndForth()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     } else {
         runDirectionalCommand(args.dropFirst().first, verb: "focus") {
             WindowCommandService(service: service).focus($0)
@@ -430,6 +468,18 @@ func runDesktopCommand(_ args: [String]) {
         let result = DesktopCommandService(service: service).last()
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "back-and-forth":
+        let result = DesktopCommandService(service: service).backAndForth()
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "summon":
+        guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
+            fputs("roadie: desktop summon requires a positive id\n", stderr)
+            exit(64)
+        }
+        let result = DesktopCommandService(service: service).summon(DesktopID(rawValue: id))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -511,6 +561,14 @@ func runStageCommand(_ args: [String]) {
             exit(1)
         }
         let result = StageCommandService(service: service).summon(windowID: WindowID(rawValue: id), displayID: activeDisplayID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "move-to-display":
+        guard let rawIndex = args.dropFirst().first, let index = Int(rawIndex), index > 0 else {
+            fputs("roadie: stage move-to-display requires a positive display index\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).moveActiveStageToDisplay(index: index)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "prev":

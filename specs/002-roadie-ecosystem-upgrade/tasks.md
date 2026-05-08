@@ -112,22 +112,22 @@
 
 ### Tests for User Story 3
 
-- [ ] T046 [P] [US3] Ajouter les tests `focus back-and-forth` dans `Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift`
-- [ ] T047 [P] [US3] Ajouter les tests `desktop back-and-forth`, `desktop summon`, `stage summon` et `stage move-to-display` dans `Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift`
-- [ ] T048 [P] [US3] Ajouter les tests `layout split`, `flatten`, `insert` et `zoom-parent` dans `Tests/RoadieDaemonTests/PowerUserLayoutCommandTests.swift`
-- [ ] T049 [P] [US3] Ajouter les tests de fenêtres, écrans, stages et états obsolètes dans `Tests/RoadieDaemonTests/PowerUserCommandEdgeCaseTests.swift`
+- [X] T046 [P] [US3] Ajouter les tests `focus back-and-forth` dans `Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift`
+- [X] T047 [P] [US3] Ajouter les tests `desktop back-and-forth`, `desktop summon`, `stage summon` et `stage move-to-display` dans `Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift`
+- [X] T048 [P] [US3] Ajouter les tests `layout split`, `flatten`, `insert` et `zoom-parent` dans `Tests/RoadieDaemonTests/PowerUserLayoutCommandTests.swift`
+- [X] T049 [P] [US3] Ajouter les tests de fenêtres, écrans, stages et états obsolètes dans `Tests/RoadieDaemonTests/PowerUserCommandEdgeCaseTests.swift`
 
 ### Implementation for User Story 3
 
-- [ ] T050 [US3] Ajouter le suivi du focus précédent dans `Sources/RoadieDaemon/WindowCommands.swift`
-- [ ] T051 [US3] Ajouter le suivi du desktop précédent dans `Sources/RoadieDaemon/DesktopCommands.swift`
-- [ ] T052 [US3] Ajouter `stage summon` et `stage move-to-display` dans `Sources/RoadieDaemon/StageCommands.swift`
-- [ ] T053 [US3] Ajouter `LayoutCommandService` pour split/flatten/insert/zoom dans `Sources/RoadieDaemon/LayoutCommandService.swift`
-- [ ] T054 [US3] Brancher `LayoutCommandService` sur `LayoutIntentStore` dans `Sources/RoadieDaemon/LayoutIntentStore.swift`
-- [ ] T055 [US3] Ajouter les commandes `roadie layout split|join-with|flatten|insert|zoom-parent` dans `Sources/roadie/main.swift`
-- [ ] T056 [US3] Ajouter les commandes `roadie focus back-and-forth`, `roadie desktop back-and-forth|summon` et `roadie stage summon|move-to-display` dans `Sources/roadie/main.swift`
-- [ ] T057 [US3] Publier les résultats `command.*` des commandes power-user dans `Sources/RoadieDaemon/EventLog.swift`
-- [ ] T058 [US3] Lancer `swift build` puis `swift test --filter PowerUser` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
+- [X] T050 [US3] Ajouter le suivi du focus précédent dans `Sources/RoadieDaemon/WindowCommands.swift`
+- [X] T051 [US3] Ajouter le suivi du desktop précédent dans `Sources/RoadieDaemon/DesktopCommands.swift`
+- [X] T052 [US3] Ajouter `stage summon` et `stage move-to-display` dans `Sources/RoadieDaemon/StageCommands.swift`
+- [X] T053 [US3] Ajouter `LayoutCommandService` pour split/flatten/insert/zoom dans `Sources/RoadieDaemon/LayoutCommandService.swift`
+- [X] T054 [US3] Brancher `LayoutCommandService` sur `LayoutIntentStore` dans `Sources/RoadieDaemon/LayoutIntentStore.swift`
+- [X] T055 [US3] Ajouter les commandes `roadie layout split|join-with|flatten|insert|zoom-parent` dans `Sources/roadie/main.swift`
+- [X] T056 [US3] Ajouter les commandes `roadie focus back-and-forth`, `roadie desktop back-and-forth|summon` et `roadie stage summon|move-to-display` dans `Sources/roadie/main.swift`
+- [X] T057 [US3] Publier les résultats `command.*` des commandes power-user dans `Sources/RoadieDaemon/EventLog.swift`
+- [X] T058 [US3] Lancer `swift build` puis `swift test --filter PowerUser` et documenter le résultat dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 
 **Checkpoint**: US3 est utilisable par BTT ou scripts shell sans intégrer les groupes.
 
