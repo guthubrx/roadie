@@ -313,6 +313,8 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
                 continue
             }
             stages[stageIndex].members[memberIndex].frame = window.frame
+            stages[stageIndex].members[memberIndex].bundleID = window.bundleID
+            stages[stageIndex].members[memberIndex].title = window.title
         }
     }
 

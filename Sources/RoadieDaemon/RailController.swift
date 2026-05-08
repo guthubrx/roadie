@@ -556,6 +556,7 @@ private final class RailPanel: NSPanel {
 @MainActor
 private final class WindowThumbnailStore {
     private var images: [WindowID: NSImage] = [:]
+    private var signatures: [WindowID: String] = [:]
 
     func images(for members: [PersistentStageMember], protectedWindowIDs: Set<WindowID>) -> [WindowID: NSImage] {
         Dictionary(uniqueKeysWithValues: members.compactMap { member in
@@ -566,6 +567,7 @@ private final class WindowThumbnailStore {
 
     func prune(keeping liveIDs: Set<WindowID>) {
         images = images.filter { liveIDs.contains($0.key) }
+        signatures = signatures.filter { liveIDs.contains($0.key) }
     }
 
     func cachedImage(for windowID: WindowID) -> NSImage? {
@@ -573,18 +575,23 @@ private final class WindowThumbnailStore {
     }
 
     private func image(for member: PersistentStageMember, captureAllowed: Bool) -> NSImage? {
+        let signature = "\(member.bundleID)\n\(member.title)"
+        if signatures[member.windowID] != signature {
+            images.removeValue(forKey: member.windowID)
+            signatures[member.windowID] = signature
+        }
         if let cached = images[member.windowID], !cached.looksBlank {
             return cached
         }
         images.removeValue(forKey: member.windowID)
-        guard captureAllowed else { return appIcon(for: member) }
+        guard captureAllowed else { return fallbackImage(for: member) }
 
         if let captured = capture(member.windowID) {
             images[member.windowID] = captured
             return captured
         }
 
-        return appIcon(for: member)
+        return fallbackImage(for: member)
     }
 
     private func capture(_ windowID: WindowID) -> NSImage? {
@@ -606,6 +613,7 @@ private final class WindowThumbnailStore {
             return nil
         }
         let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 128, height: 128)
         let size = NSSize(width: 160, height: 104)
         let image = NSImage(size: size)
         image.lockFocus()
@@ -617,11 +625,19 @@ private final class WindowThumbnailStore {
         border.stroke()
         icon.draw(
             in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
-            from: .zero,
+            from: CGRect(origin: .zero, size: icon.size),
             operation: .sourceOver,
             fraction: 1
         )
         image.unlockFocus()
+        return image
+    }
+
+    private func fallbackImage(for member: PersistentStageMember) -> NSImage? {
+        let image = appIcon(for: member)
+        if let image {
+            images[member.windowID] = image
+        }
         return image
     }
 }
