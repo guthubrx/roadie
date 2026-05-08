@@ -23,7 +23,7 @@ func printUsage() {
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
       roadie query state|windows|displays|desktops|stages|groups|rules|health|events
-      roadie rail status
+      roadie rail status|pin|unpin|toggle
       roadie doctor
       roadie self-test
       roadie events tail [N]
@@ -287,11 +287,30 @@ case "group":
 case "query":
     runQueryCommand(Array(args.dropFirst()))
 case "rail":
-    guard args.dropFirst().first == "status" else {
+    guard let verb = args.dropFirst().first,
+          ["status", "pin", "unpin", "toggle"].contains(verb)
+    else {
         printUsage()
         exit(64)
     }
-    print(RailSettings.load().statusLines.joined(separator: "\n"))
+    let runtimeStore = RailRuntimeStateStore()
+    switch verb {
+    case "status":
+        let pinned = runtimeStore.load().isPinned
+        print((RailSettings.load().statusLines + ["runtime.pinned=\(pinned)"]).joined(separator: "\n"))
+    case "pin":
+        let state = runtimeStore.setPinned(true)
+        print("rail pinned=\(state.isPinned)")
+    case "unpin":
+        let state = runtimeStore.setPinned(false)
+        print("rail pinned=\(state.isPinned)")
+    case "toggle":
+        let state = runtimeStore.togglePinned()
+        print("rail pinned=\(state.isPinned)")
+    default:
+        printUsage()
+        exit(64)
+    }
 case "focus":
     if args.dropFirst().first == "status" {
         print(TextFormatter.focusStatus(service.snapshot()))

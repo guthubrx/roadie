@@ -3,9 +3,22 @@ import RoadieCore
 
 public struct RailRuntimeState: Equatable, Codable, Sendable {
     public var visibleWidths: [String: Double]
+    public var isPinned: Bool
 
-    public init(visibleWidths: [String: Double] = [:]) {
+    public init(visibleWidths: [String: Double] = [:], isPinned: Bool = false) {
         self.visibleWidths = visibleWidths
+        self.isPinned = isPinned
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case visibleWidths
+        case isPinned
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        visibleWidths = try container.decodeIfPresent([String: Double].self, forKey: .visibleWidths) ?? [:]
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
     }
 }
 
@@ -39,5 +52,21 @@ public struct RailRuntimeStateStore: Sendable {
         var state = load()
         state.visibleWidths[displayID.rawValue] = width
         save(state)
+    }
+
+    @discardableResult
+    public func setPinned(_ pinned: Bool) -> RailRuntimeState {
+        var state = load()
+        state.isPinned = pinned
+        save(state)
+        return state
+    }
+
+    @discardableResult
+    public func togglePinned() -> RailRuntimeState {
+        var state = load()
+        state.isPinned.toggle()
+        save(state)
+        return state
     }
 }

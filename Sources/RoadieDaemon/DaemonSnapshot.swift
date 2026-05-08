@@ -46,7 +46,7 @@ public struct SnapshotService {
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
     private let config: RoadieConfig
-    private let railSettings: RailSettings
+    private let railSettings: RailSettings?
     private let railRuntimeStateStore: RailRuntimeStateStore
     private let intentStore: LayoutIntentStore
     private let stageStore: StageStore
@@ -55,7 +55,7 @@ public struct SnapshotService {
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
         frameWriter: any WindowFrameWriting = AXWindowFrameWriter(),
         config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
-        railSettings: RailSettings = RailSettings.load(),
+        railSettings: RailSettings? = nil,
         railRuntimeStateStore: RailRuntimeStateStore = RailRuntimeStateStore(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
         stageStore: StageStore = StageStore()
@@ -732,6 +732,7 @@ private extension SnapshotService {
     }
 
     func outerGaps(windowCount: Int, display: DisplaySnapshot? = nil) -> Insets {
+        let railSettings = currentRailSettings()
         let override = display.flatMap(displayOverride)
         let base = override?.gapsOuter ?? config.tiling.gapsOuter
         var top = override?.gapsOuterTop ?? override?.gapsOuter ?? config.tiling.gapsOuterTop ?? base
@@ -767,6 +768,10 @@ private extension SnapshotService {
         config.tiling.displayOverrides.first { override in
             override.displayID == display.id.rawValue || override.displayName == display.name
         }
+    }
+
+    private func currentRailSettings() -> RailSettings {
+        railSettings ?? RailSettings.load()
     }
 }
 

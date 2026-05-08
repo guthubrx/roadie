@@ -223,6 +223,25 @@ struct ConfigTests {
     }
 
     @Test
+    func railSettingsDefaultsCenterStagesAndReserveHeaderTopPadding() {
+        let settings = RailSettings.load(raw: "")
+
+        #expect(settings.layout.stagesPosition == "center")
+        #expect(settings.stages.position == "center")
+        #expect(settings.layout.topPadding == 50)
+    }
+
+    @Test
+    func railRuntimeStateKeepsBackwardCompatiblePinnedDefault() throws {
+        let data = #"{"visibleWidths":{"display-a":8}}"#.data(using: .utf8)!
+
+        let state = try JSONDecoder().decode(RailRuntimeState.self, from: data)
+
+        #expect(state.visibleWidths["display-a"] == 8)
+        #expect(state.isPinned == false)
+    }
+
+    @Test
     func configValidationReportsUnsupportedTablesAsWarnings() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-unsupported-config-\(UUID().uuidString).toml")

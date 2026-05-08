@@ -292,7 +292,7 @@ public struct RailSettings: Equatable, Sendable {
             trailingPadding: 16,
             verticalPadding: 20
         ),
-        layout: Layout(headerPosition: "top", stagesPosition: "center", spacing: 13, topPadding: 26, bottomPadding: 16),
+        layout: Layout(headerPosition: "top", stagesPosition: "center", spacing: 13, topPadding: 50, bottomPadding: 16),
         displayLabel: Label(enabled: true, template: "{display}", color: "#FFFFFFDB", fontSize: 13, fontFamily: "system", weight: "bold", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
         desktopLabel: Label(enabled: true, template: "Desktop {desktop}", color: "#FFFFFF6B", fontSize: 10, fontFamily: "system", weight: "medium", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
         stages: Stages(position: "center", alignment: "center", gap: 13),
@@ -396,7 +396,7 @@ public struct RailSettings: Equatable, Sendable {
             enabled: bool(header["enabled"], default: true),
             placement: normalizedChoice(header["placement"], allowed: ["top", "center"], default: "top"),
             alignment: normalizedChoice(header["alignment"], allowed: ["left", "center", "right"], default: "center"),
-            topPadding: number(header["top_padding"], default: 26, min: 0, max: 240),
+            topPadding: number(header["top_padding"], default: 50, min: 0, max: 240),
             bottomPadding: number(header["bottom_padding"], default: 16, min: 0, max: 240),
             height: number(header["height"], default: 42, min: 0, max: 120),
             width: number(header["width"], default: 0, min: 0, max: 320),

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import RoadieCore
 
@@ -14,6 +15,8 @@ public final class RailController {
     private var screenFrames: [DisplayID: CGRect] = [:]
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
+    private var configWatcher: DispatchSourceFileSystemObject?
+    private var configWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var dragGhost: RailDragGhostWindow?
@@ -37,6 +40,7 @@ public final class RailController {
         rebuildPanels()
         startClickMonitors()
         startHoverTimer()
+        startConfigWatcher()
         refreshTimer?.invalidate()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels() }
@@ -49,6 +53,35 @@ public final class RailController {
         ) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels() }
         }
+    }
+
+    private func startConfigWatcher() {
+        configWatcher?.cancel()
+        if configWatchFileDescriptor >= 0 {
+            close(configWatchFileDescriptor)
+            configWatchFileDescriptor = -1
+        }
+        let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
+        configWatchFileDescriptor = open(path, O_EVTONLY)
+        guard configWatchFileDescriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: configWatchFileDescriptor,
+            eventMask: [.write, .rename, .delete],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.rebuildPanels()
+                if source.data.contains(.rename) || source.data.contains(.delete) {
+                    self?.startConfigWatcher()
+                }
+            }
+        }
+        source.setCancelHandler { [fd = configWatchFileDescriptor] in
+            if fd >= 0 { close(fd) }
+        }
+        configWatcher = source
+        source.resume()
     }
 
     private func startClickMonitors() {
@@ -487,9 +520,10 @@ private final class RailPanel: NSPanel {
     func position(on screen: NSScreen, displayID: DisplayID, config: RailVisualConfig, runtimeStore: RailRuntimeStateStore) {
         let frame = screen.frame
         let wasAutoHide = autoHide
+        let runtimeState = runtimeStore.load()
         self.displayID = displayID
         self.runtimeStore = runtimeStore
-        autoHide = config.autoHide
+        autoHide = config.autoHide && !runtimeState.isPinned
         edgeHitWidth = config.edgeHitWidth
         edgeMagnetismWidth = config.edgeMagnetismWidth
         animationDuration = config.animationDuration
