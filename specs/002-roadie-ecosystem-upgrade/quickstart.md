@@ -35,7 +35,7 @@ Le script consommateur doit ignorer les champs inconnus et ne dépendre que du c
 ## 4. Diagnostiquer une fenêtre
 
 ```bash
-roadie query windows --json
+roadie query windows
 roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json --config ~/.roadies/config.toml
 ```
 
