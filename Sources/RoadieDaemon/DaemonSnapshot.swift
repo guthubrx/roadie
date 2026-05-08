@@ -40,6 +40,8 @@ public struct SnapshotService {
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
     private let config: RoadieConfig
+    private let railSettings: RailSettings
+    private let railRuntimeStateStore: RailRuntimeStateStore
     private let intentStore: LayoutIntentStore
     private let stageStore: StageStore
 
@@ -47,12 +49,16 @@ public struct SnapshotService {
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
         frameWriter: any WindowFrameWriting = AXWindowFrameWriter(),
         config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
+        railSettings: RailSettings = RailSettings.load(),
+        railRuntimeStateStore: RailRuntimeStateStore = RailRuntimeStateStore(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
         stageStore: StageStore = StageStore()
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
         self.config = config
+        self.railSettings = railSettings
+        self.railRuntimeStateStore = railRuntimeStateStore
         self.intentStore = intentStore
         self.stageStore = stageStore
     }
@@ -724,6 +730,17 @@ private extension SnapshotService {
         var right = override?.gapsOuterRight ?? override?.gapsOuter ?? config.tiling.gapsOuterRight ?? base
         var bottom = override?.gapsOuterBottom ?? override?.gapsOuter ?? config.tiling.gapsOuterBottom ?? base
         var left = override?.gapsOuterLeft ?? override?.gapsOuter ?? config.tiling.gapsOuterLeft ?? base
+        if railSettings.autoHide {
+            switch railSettings.layoutMode {
+            case "resize":
+                if let display {
+                    let visibleWidth = railRuntimeStateStore.load().visibleWidths[display.id.rawValue]
+                    left = min(left, visibleWidth ?? railSettings.edgeHitWidth)
+                }
+            default:
+                left = min(left, railSettings.edgeHitWidth)
+            }
+        }
 
         if config.tiling.smartGapsSolo && windowCount == 1 {
             let sides = config.tiling.smartGapsSoloSides
