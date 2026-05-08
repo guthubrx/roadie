@@ -23,6 +23,38 @@ struct EventSubscriptionTests {
         #expect(result.cursor.offset > cursor.offset)
     }
 
+    @Test
+    func spec002SubscribeInitialStateEmitsSnapshotEvent() {
+        let service = EventSubscriptionService(path: "/tmp/roadie-missing-\(UUID().uuidString).jsonl")
+        let snapshot = RoadieStateSnapshot(
+            generatedAt: Date(timeIntervalSince1970: 1_777_777_777),
+            activeDisplayId: "display-main",
+            activeDesktopId: "desktop-1",
+            activeStageId: "stage-dev",
+            focusedWindowId: "window-terminal",
+            displays: [
+                AutomationDisplaySnapshot(
+                    id: "display-main",
+                    name: "Built-in Display",
+                    frame: Rect(x: 0, y: 0, width: 1728, height: 1117)
+                )
+            ],
+            windows: [
+                AutomationWindowSnapshot(id: "window-terminal", app: "Terminal", title: "roadie", isFocused: true)
+            ]
+        )
+
+        let events = service.initialEvents(
+            snapshot: snapshot,
+            options: EventSubscriptionOptions(initialState: true)
+        )
+
+        #expect(events.count == 1)
+        #expect(events[0].type == "state.snapshot")
+        #expect(events[0].payload["activeDisplayId"] == .string("display-main"))
+        #expect(events[0].payload["windowCount"] == .int(1))
+    }
+
     private func event(id: String, type: String, scope: AutomationScope = .window) -> RoadieEventEnvelope {
         RoadieEventEnvelope(
             id: id,

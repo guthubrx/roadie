@@ -3,11 +3,13 @@ import RoadieCore
 
 public struct EventSubscriptionOptions: Equatable, Sendable {
     public var fromNow: Bool
+    public var initialState: Bool
     public var types: Set<String>
     public var scopes: Set<AutomationScope>
 
-    public init(fromNow: Bool = false, types: Set<String> = [], scopes: Set<AutomationScope> = []) {
+    public init(fromNow: Bool = false, initialState: Bool = false, types: Set<String> = [], scopes: Set<AutomationScope> = []) {
         self.fromNow = fromNow
+        self.initialState = initialState
         self.types = types
         self.scopes = scopes
     }
@@ -36,6 +38,29 @@ public struct EventSubscriptionService: Sendable {
             return EventSubscriptionCursor(offset: 0)
         }
         return EventSubscriptionCursor(offset: size.uint64Value)
+    }
+
+    public func initialEvents(snapshot: RoadieStateSnapshot, options: EventSubscriptionOptions) -> [RoadieEventEnvelope] {
+        guard options.initialState else { return [] }
+        return [
+            RoadieEventEnvelope(
+                id: "state_snapshot_\(Int(snapshot.generatedAt.timeIntervalSince1970 * 1000))",
+                timestamp: snapshot.generatedAt,
+                type: "state.snapshot",
+                scope: .system,
+                subject: AutomationSubject(kind: "system", id: "roadie"),
+                correlationId: nil,
+                cause: .system,
+                payload: [
+                    "activeDisplayId": snapshot.activeDisplayId.map(AutomationPayload.string) ?? .null,
+                    "activeDesktopId": snapshot.activeDesktopId.map(AutomationPayload.string) ?? .null,
+                    "activeStageId": snapshot.activeStageId.map(AutomationPayload.string) ?? .null,
+                    "focusedWindowId": snapshot.focusedWindowId.map(AutomationPayload.string) ?? .null,
+                    "displayCount": .int(snapshot.displays.count),
+                    "windowCount": .int(snapshot.windows.count)
+                ]
+            )
+        ]
     }
 
     public func readAvailable(from cursor: EventSubscriptionCursor, options: EventSubscriptionOptions = EventSubscriptionOptions()) -> (events: [RoadieEventEnvelope], cursor: EventSubscriptionCursor) {

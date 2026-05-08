@@ -242,7 +242,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T018 : Tests subscribe --from-now
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `068e5d3` - test(002): Cover subscribe from now
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (créé)
   - `Sources/RoadieDaemon/EventSubscriptionService.swift` (service minimal)
@@ -251,3 +251,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventSubscriptionTests`
 - **Notes** : Le test valide qu'un abonnement démarré avec `fromNow` ignore les événements déjà écrits.
+
+### T019 : Tests subscribe --initial-state
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (test initial-state)
+  - `Sources/RoadieDaemon/EventSubscriptionService.swift` (option initialState)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T019 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventSubscriptionTests`
+- **Notes** : Le service peut émettre un événement synthétique `state.snapshot` depuis un `RoadieStateSnapshot`.
