@@ -34,4 +34,13 @@ struct EventCatalogTests {
         #expect(eventTypes.allSatisfy { !$0.isEmpty && $0.contains(".") })
         #expect(eventTypes.count >= 25)
     }
+
+    @Test
+    func spec002CatalogCanFilterByScope() {
+        let catalog = AutomationEventCatalog()
+
+        #expect(catalog.contains("window.focused"))
+        #expect(catalog.eventTypes(in: .window).contains("window.created"))
+        #expect(!catalog.eventTypes(in: .window).contains("desktop.changed"))
+    }
 }

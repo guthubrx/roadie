@@ -5,6 +5,14 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         self.eventTypes = eventTypes
     }
 
+    public func contains(_ eventType: String) -> Bool {
+        eventTypes.contains(eventType)
+    }
+
+    public func eventTypes(in scope: AutomationScope) -> [String] {
+        eventTypes.filter { $0.hasPrefix("\(scope.rawValue).") }
+    }
+
     public static let minimumEventTypes: [String] = [
         "application.launched",
         "application.terminated",

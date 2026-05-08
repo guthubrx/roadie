@@ -268,7 +268,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T020 : Test de latence subscription
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `9b008aa` - test(002): Cover subscription latency
 - **Fichiers modifiés** :
   - `Tests/RoadieDaemonTests/EventSubscriptionTests.swift` (test latence)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T020 cochée)
@@ -276,3 +276,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Tests exécutés** :
   - [x] `swift test --filter EventSubscriptionTests`
 - **Notes** : Le chemin append + lecture disponible reste sous 1 seconde dans le test local.
+
+### T021 : Catalogue AutomationEventCatalog
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/AutomationEventCatalog.swift` (API contains/filter)
+  - `Tests/RoadieDaemonTests/EventCatalogTests.swift` (test de filtrage)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T021 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift test --filter EventCatalogTests`
+- **Notes** : Le catalogue expose la liste minimale, une vérification d'existence et un filtrage par scope.
