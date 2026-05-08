@@ -122,7 +122,7 @@ public final class RailController {
         }
 
         guard let panel = panels[drag.displayID],
-              let targetStageID = panel.stageID(at: screenPoint),
+              let targetStageID = panel.dropStageID(at: screenPoint),
               targetStageID != drag.sourceStageID
         else { return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(targetStageID.rawValue)")
@@ -313,6 +313,8 @@ private final class RailPanel: NSPanel {
     private let stack = NSStackView()
     private let width: CGFloat = 260
     private let horizontalInset: CGFloat = 6
+    private var visibleStageIDs: [StageID] = []
+    private var emptyStageIDs: [StageID] = []
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -354,6 +356,8 @@ private final class RailPanel: NSPanel {
 
         stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID))
         let ids = stageIDs(from: scope)
+        visibleStageIDs = ids
+        emptyStageIDs = scope.stages.filter(\.members.isEmpty).map(\.id)
         centerStages(count: ids.count, config: config)
         for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
@@ -412,6 +416,14 @@ private final class RailPanel: NSPanel {
         return nil
     }
 
+    func dropStageID(at screenPoint: CGPoint) -> StageID? {
+        if let id = stageID(at: screenPoint) {
+            return id
+        }
+        guard frame.contains(screenPoint) else { return nil }
+        return emptyStageIDs.first ?? nextGeneratedStageID()
+    }
+
     func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
         guard let contentView, frame.contains(screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
@@ -425,6 +437,14 @@ private final class RailPanel: NSPanel {
             view = current.superview
         }
         return nil
+    }
+
+    private func nextGeneratedStageID() -> StageID {
+        let used = Set((visibleStageIDs + emptyStageIDs).map(\.rawValue))
+        for index in 1...99 where !used.contains(String(index)) {
+            return StageID(rawValue: String(index))
+        }
+        return StageID(rawValue: UUID().uuidString)
     }
 
     private func stageIDs(from scope: PersistentStageScope) -> [StageID] {
