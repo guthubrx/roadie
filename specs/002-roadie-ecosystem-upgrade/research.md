@@ -9,6 +9,27 @@
 - `Sources/RoadieDaemon/LayoutIntentStore.swift` : persistance des intentions de layout.
 - `Sources/RoadieStages/RoadieState.swift` : modèle runtime display/desktop/stage/window.
 
+## Validation constitutionnelle automation
+
+### Baseline locale
+
+- `~/.speckit/research/04-architectures-patterns.md` : red flags pertinents pour cette feature, notamment absence d'observabilité, protocole instable, documentation insuffisante et absence de chemin de migration.
+- `~/.speckit/research/03-cognitive-load-productivity.md` : red flags pertinents côté UX automation, notamment surcharge cognitive, métriques vagues et manque de validation utilisateur.
+
+### Validation live
+
+- Hyprland IPC Wiki, consulté le 2026-05-08 : Hyprland sépare socket commandes et socket événements ; le socket événements diffuse des lignes `EVENT>>DATA` en live. Source : https://wiki.hypr.land/0.41.0/IPC/
+- Hyprland hyprctl Wiki, consulté le 2026-05-08 : les appels CLI synchrones peuvent ralentir le compositor s'ils sont spammés ; la doc recommande l'usage du flux événementiel live pour les handlers. Source : https://wiki.hypr.land/Configuring/Using-hyprctl/
+- AeroSpace Guide, consulté le 2026-05-08 : `on-window-detected` et `on-focus-changed` montrent qu'un WM scriptable expose callbacks, matchers app/title/workspace et commandes déclaratives. Source : https://nikitabobko.github.io/AeroSpace/guide.html
+- yabai Commands Wiki, consulté le 2026-05-08 : yabai expose une interface message/CLI, des règles, des signaux et des queries JSON sur displays/spaces/windows. Source : https://github.com/koekeishiya/yabai/wiki/Commands
+
+### Findings appliqués au plan Roadie
+
+- Le choix `events subscribe` est validé : les WMs riches séparent commande ponctuelle et observation live pour éviter le polling.
+- Le choix d'un contrat JSON versionné est volontairement plus strict que Hyprland `EVENT>>DATA`, car Roadie vise des intégrations macOS et scripts robustes.
+- Les règles Roadie doivent rester validables avant runtime : AeroSpace et yabai montrent la valeur de matchers déclaratifs, mais Roadie doit éviter les effets partiels silencieux.
+- La charge cognitive est réduite si les commandes restent CLI-first, documentées et filtrables, plutôt qu'un plugin system ou hotkey daemon supplémentaire.
+
 ## Décision 1: contrat événementiel versionné
 
 **Decision**: garder le journal append-only `~/.roadies/events.jsonl`, mais stabiliser l'enveloppe événementielle avec `schemaVersion`, `id`, `timestamp`, `type`, `scope`, `subject`, `correlationId`, `cause`, `payload` et `schema`.
