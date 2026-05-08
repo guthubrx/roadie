@@ -1627,6 +1627,139 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stateAuditPassesForHealthyState() {
+        let display = DisplayID(rawValue: "display-a")
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-audit-ok-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: window.id, members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [window],
+                focusedID: window.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = StateAuditService(service: service, stageStore: stageStore).run()
+
+        #expect(!report.failed)
+        #expect(report.checks.contains(StateAuditCheck(level: .ok, name: "duplicate-membership", message: "windows=0")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func stateAuditFailsOnDuplicateMembership() {
+        let display = DisplayID(rawValue: "display-a")
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-audit-bad-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: WindowID(rawValue: 99), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [window],
+                focusedID: window.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = StateAuditService(service: service, stageStore: stageStore).run()
+
+        #expect(report.failed)
+        #expect(report.checks.contains(StateAuditCheck(level: .fail, name: "duplicate-membership", message: "windows=1")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func stateHealRepairsDuplicateStaleAndBrokenFocusState() {
+        let display = DisplayID(rawValue: "display-a")
+        let staleDisplay = DisplayID(rawValue: "display-stale")
+        let live = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "A", bundleID: "a", title: "live", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stale = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: "B", bundleID: "b", title: "stale", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-heal-bad-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "missing"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: WindowID(rawValue: 99), members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                        PersistentStageMember(windowID: stale.id, bundleID: stale.bundleID, title: stale.title, frame: stale.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                    ]),
+                ]),
+                PersistentStageScope(displayID: staleDisplay, activeStageID: StageID(rawValue: "1")),
+            ],
+            desktopSelections: [
+                PersistentDesktopSelection(displayID: display),
+                PersistentDesktopSelection(displayID: staleDisplay),
+            ],
+            desktopLabels: [
+                PersistentDesktopLabel(displayID: staleDisplay, desktopID: DesktopID(rawValue: 1), label: "Gone"),
+            ],
+            activeDisplayID: staleDisplay
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [live],
+                focusedID: live.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = StateAuditService(service: service, stageStore: stageStore).heal()
+        var healed = stageStore.state()
+        let scope = healed.scope(displayID: display, desktopID: DesktopID(rawValue: 1))
+
+        #expect(report.repaired > 0)
+        #expect(!report.audit.failed)
+        #expect(scope.activeStageID == StageID(rawValue: "1"))
+        #expect(scope.memberIDs(in: StageID(rawValue: "1")) == [live.id])
+        #expect(scope.memberIDs(in: StageID(rawValue: "2")).isEmpty)
+        #expect(healed.desktopSelections.allSatisfy { $0.displayID == display })
+        #expect(healed.desktopLabels.isEmpty)
+        #expect(healed.activeDisplayID == display)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

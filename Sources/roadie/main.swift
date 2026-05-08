@@ -11,7 +11,7 @@ func printUsage() {
       roadie windows list [--json]
       roadie display list|current [--json]
       roadie display focus N
-      roadie state dump [--json]
+      roadie state dump|audit|heal [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie config show|validate
@@ -86,11 +86,40 @@ case "display":
         print(TextFormatter.displays(snapshot.displays, state: StageStore().state()))
     }
 case "state":
-    guard args.dropFirst().first == "dump" else {
+    let verb = args.dropFirst().first
+    guard verb == "dump" || verb == "audit" || verb == "heal" else {
         printUsage()
         exit(64)
     }
-    printJSON(service.snapshot())
+    if verb == "dump" {
+        printJSON(service.snapshot())
+    } else if verb == "audit" {
+        let report = StateAuditService(service: service).run()
+        if args.contains("--json") {
+            do {
+                print(try SnapshotEncoding.json(report))
+            } catch {
+                fputs("roadie: failed to encode state audit: \(error)\n", stderr)
+                exit(1)
+            }
+        } else {
+            print(TextFormatter.stateAudit(report))
+        }
+        exit(report.failed ? 1 : 0)
+    } else {
+        let report = StateAuditService(service: service).heal()
+        if args.contains("--json") {
+            do {
+                print(try SnapshotEncoding.json(report))
+            } catch {
+                fputs("roadie: failed to encode state heal: \(error)\n", stderr)
+                exit(1)
+            }
+        } else {
+            print(TextFormatter.stateHeal(report))
+        }
+        exit(report.audit.failed ? 1 : 0)
+    }
 case "layout":
     let verb = args.dropFirst().first
     let snapshot = service.snapshot()
