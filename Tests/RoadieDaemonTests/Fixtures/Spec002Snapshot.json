@@ -32,6 +32,7 @@
       "id": "stage-dev",
       "desktopId": "desktop-1",
       "name": "dev",
+      "mode": "bsp",
       "windowIds": ["window-terminal", "window-editor"],
       "focusedWindowId": "window-terminal"
     },
@@ -39,6 +40,7 @@
       "id": "stage-docs",
       "desktopId": "desktop-2",
       "name": "docs",
+      "mode": "masterStack",
       "windowIds": ["window-browser"],
       "focusedWindowId": "window-browser"
     }
