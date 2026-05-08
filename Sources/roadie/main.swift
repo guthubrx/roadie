@@ -36,6 +36,7 @@ func printUsage() {
       roadie stage rename N NAME
       roadie stage reorder N POSITION
       roadie stage switch|assign N
+      roadie stage summon WINDOW_ID
       roadie stage mode bsp|masterStack|float
       roadie stage prev|next
       roadie balance
@@ -473,6 +474,22 @@ func runStageCommand(_ args: [String]) {
             exit(64)
         }
         let result = StageCommandService(service: service).assign(stageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "summon":
+        guard let rawWindowID = args.dropFirst().first, let id = UInt32(rawWindowID) else {
+            fputs("roadie: stage summon requires a window id\n", stderr)
+            exit(64)
+        }
+        let snapshot = service.snapshot()
+        let state = StageStore().state()
+        guard let activeDisplayID = state.activeDisplayID ?? snapshot.focusedWindowID.flatMap({ focusedID in
+            snapshot.windows.first { $0.window.id == focusedID }?.scope?.displayID
+        }) ?? snapshot.displays.first?.id else {
+            fputs("roadie: stage summon: no active display\n", stderr)
+            exit(1)
+        }
+        let result = StageCommandService(service: service).summon(windowID: WindowID(rawValue: id), displayID: activeDisplayID)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "prev":
