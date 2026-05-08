@@ -85,15 +85,17 @@ This is a functional inventory only. It captures product ideas from `../39.roadi
 
 ## P2: UI And Visual Feedback
 
-- Stage rail side panel.
-- Stage thumbnails via Screen Recording permission.
-- Stage renderer variants.
+- Native per-display stage rail side panel.
+- Stage thumbnails through the non-DRM capture path, with fallback when capture fails.
+- Stage renderer variants: stacked, mosaic, parallax, icons.
 - Stage number badges.
 - Rail toggle/status.
 - One rail per display by default.
 - Active-stage halo.
 - Renderer selection and renderer-specific preview config.
 - Summon inactive-stage window into active stage via explicit button/menu action.
+- Move a thumbnail to another stage by drag/drop, with a ghost thumbnail following the cursor.
+- Move a thumbnail to an empty rail area to target an empty or newly-created stage.
 - Stage reorder via explicit controls; do not overload the same gesture as summon.
 - Empty-click hide active stage is risky and should default off or be protected by safety margins.
 - Focused-window border configuration:

@@ -120,18 +120,21 @@ Border configuration is part of the functional surface:
 
 ## Rail Model
 
-The rail is deferred until the stage/desktop/tiler core works, but the product concept is retained.
+The rail is implemented in `roadied` as a native per-display overlay.
 
-Expected rail capabilities:
+Current rail capabilities:
 
-- One rail per display, or a global mode if explicitly configured.
-- Stage thumbnails, with degraded fallback when screen capture fails.
-- Active-stage halo and stage number badges.
-- Renderer variants for stage cells.
-- Rename, create, delete, assign focused window.
-- Reorder stages without confusing it with window drag/summon.
-- Summon a window from an inactive stage into the active stage by explicit action.
-- Empty-click hide active stage must be guarded by safety margins or disabled by default.
+- One rail per display.
+- Non-DRM stage thumbnails with degraded fallback when capture fails.
+- Active-stage halo.
+- Renderer variants configured from `~/.config/roadies/roadies.toml`: stacked, mosaic, parallax, icons.
+- Stage reorder via explicit chevrons above and below the thumbnail stack.
+- Window summon/move via explicit thumbnail controls.
+- Drag a thumbnail to another visible stage to move that window there.
+- Drag a thumbnail to an empty rail area to move it to the first empty stage, or create a new stage if none is available.
+- Drag feedback uses a non-interactive thumbnail ghost that follows the cursor.
+
+The rail intentionally does not own window-management policy. It calls the same stage commands as the CLI so state audit, heal, layout maintenance, and keyboard shortcuts keep one source of truth.
 
 ## Observability Model
 
