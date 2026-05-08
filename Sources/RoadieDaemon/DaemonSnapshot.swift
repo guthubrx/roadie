@@ -792,4 +792,11 @@ public enum SnapshotEncoding {
         let data = try encoder.encode(metrics)
         return String(decoding: data, as: UTF8.self)
     }
+
+    public static func json(_ dump: TreeDump, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(dump)
+        return String(decoding: data, as: UTF8.self)
+    }
 }

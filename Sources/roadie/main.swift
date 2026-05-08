@@ -12,6 +12,7 @@ func printUsage() {
       roadie display list|current [--json]
       roadie display focus N
       roadie state dump|audit|heal [--json]
+      roadie tree dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie config show|validate
@@ -158,6 +159,22 @@ case "layout":
     default:
         printUsage()
         exit(64)
+    }
+case "tree":
+    guard args.dropFirst().first == "dump" else {
+        printUsage()
+        exit(64)
+    }
+    let dump = TreeDumpService(service: service).dump()
+    if args.contains("--json") {
+        do {
+            print(try SnapshotEncoding.json(dump))
+        } catch {
+            fputs("roadie: failed to encode tree dump: \(error)\n", stderr)
+            exit(1)
+        }
+    } else {
+        print(TextFormatter.treeDump(dump))
     }
 case "permissions":
     let snapshot = service.snapshot(promptForPermissions: args.contains("--prompt"))

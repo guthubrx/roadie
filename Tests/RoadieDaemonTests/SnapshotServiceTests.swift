@@ -1918,6 +1918,47 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func treeDumpExposesDisplayDesktopStageAndWindowHierarchy() {
+        let display = DisplayID(rawValue: "display-a")
+        let live = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "Terminal", bundleID: "term", title: "live", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-tree-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "2"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), name: "One"),
+                PersistentStage(id: StageID(rawValue: "2"), name: "Two", mode: .masterStack, members: [
+                    PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                    PersistentStageMember(windowID: WindowID(rawValue: 99), bundleID: "gone.bundle", title: "gone", frame: live.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [live],
+                focusedID: live.id
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let dump = TreeDumpService(service: service, stageStore: stageStore).dump()
+
+        #expect(dump.displays.first?.desktops.first?.active == true)
+        #expect(dump.displays.first?.desktops.first?.stages.first { $0.id == StageID(rawValue: "2") }?.active == true)
+        #expect(dump.displays.first?.desktops.first?.stages.first { $0.id == StageID(rawValue: "2") }?.mode == .masterStack)
+        #expect(dump.displays.first?.desktops.first?.stages.first { $0.id == StageID(rawValue: "2") }?.windows == [
+            TreeWindow(id: live.id, appName: live.appName, title: live.title, live: true),
+        ])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")

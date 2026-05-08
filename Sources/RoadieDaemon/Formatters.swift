@@ -149,6 +149,24 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func treeDump(_ dump: TreeDump) -> String {
+        guard !dump.displays.isEmpty else { return "No displays found." }
+        var lines: [String] = []
+        for display in dump.displays {
+            lines.append("Display \(display.index): \(display.name) \(display.id.rawValue)")
+            for desktop in display.desktops {
+                lines.append("  \(desktop.active ? "*" : "-") Desktop \(desktop.id.rawValue)")
+                for stage in desktop.stages {
+                    lines.append("    \(stage.active ? "*" : "-") Stage \(stage.id.rawValue) \(stage.mode.rawValue) \(stage.name)")
+                    for window in stage.windows {
+                        lines.append("      \(window.live ? "*" : "!") \(window.id.rawValue) \(window.appName) \(window.title)")
+                    }
+                }
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func configValidation(_ report: ConfigValidationReport) -> String {
         let status = report.hasErrors ? "error" : "ok"
         var lines = ["status=\(status)"]
