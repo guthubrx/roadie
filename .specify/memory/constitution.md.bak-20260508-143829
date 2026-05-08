@@ -1,0 +1,643 @@
+# Constitution Projet
+
+<!-- Genere par ~/.speckit/scripts/sync-project.py. -->
+<!-- Source canonique: ~/.speckit/constitution.md -->
+
+# Constitution Globale SpecKit
+
+Ce fichier contient les règles transversales applicables à tous les projets utilisant SpecKit. Il est destiné à être inclus dans la constitution locale de chaque projet.
+
+**Version**: 1.5.0 | **Dernier Amendement**: 2025-12-06
+
+---
+
+## Règles Système SpecKit
+
+### I. Langue du Projet (Français)
+Toute la documentation, les spécifications, les plans, les tâches et les commentaires dans l'écosystème `.specify` (fichiers speckit) DOIVENT être rédigés en français. Cela garantit que la documentation reste accessible et cohérente pour tous les intervenants du projet.
+
+### II. Rôle de l'Agent Co-Pilote (Analyse et Idéation)
+L'agent IA agissant sur le projet doit adopter un comportement proactif selon les règles suivantes :
+1.  **Exécution Prioritaire** : La requête explicite de l'utilisateur est toujours traitée en premier et sans délai.
+2.  **Idéation par Défaut** : Après l'exécution, l'agent doit proposer des pistes d'amélioration, des fonctionnalités connexes ou des bonnes pratiques liées au contexte (sauf si l'utilisateur demande le silence).
+3.  **Non-Intrusion** : Les suggestions d'idéation doivent être clairement séparées de la réponse principale (section distincte).
+4.  **Aval Obligatoire** : L'agent ne doit JAMAIS transformer une suggestion en tâche ou en code sans l'accord explicite de l'utilisateur.
+
+### III. Processus SpecKit Obligatoire
+Toute demande d'ajout de fonctionnalité, de modification structurelle ou de mise à jour du code (hors corrections de bugs mineurs et urgents) DOIT impérativement suivre le cycle complet de spécification SpecKit :
+1.  **Spécification** : Création d'une spec détaillée via `/speckit.specify`.
+2.  **Planification** : Élaboration d'un plan technique avec recherche via `/speckit.plan`.
+3.  **Tâches** : Découpage en tâches exécutables via `/speckit.tasks`.
+4.  **Implémentation** : Exécution des tâches via `/speckit.implement`.
+
+Les modifications directes du code ("quick fix" ou ajout sauvage) sont interdites pour garantir la qualité, la maintenabilité et la documentation du projet.
+(Exception : Utiliser le script `create-hotfix.sh` pour les urgences).
+
+---
+
+## Protocole de Sécurité Anti-Dérive
+
+### IV. Règle du Disjoncteur (Circuit Breaker)
+Pour éviter l'effet tunnel lors du débogage :
+Si l'agent doit effectuer plus de **3 tentatives de correction successives** sur le même problème (ex: erreur de build persistante, bug récalcitrant) :
+1.  **STOP** immédiat. L'agent doit arrêter de proposer du code.
+2.  **ANALYSE**. L'agent doit réévaluer le plan initial et mettre à jour le fichier `tasks.md` ou `plan.md` avec les nouvelles découvertes.
+3.  **VALIDATION**. Demander confirmation à l'utilisateur avant de reprendre.
+
+### V. Gestion du Périmètre (Anti Scope-Creep)
+Toute nouvelle demande fonctionnelle arrivant pendant une tâche en cours ("Et aussi...", "Pendant qu'on y est...") doit être traitée comme une **nouvelle tâche**.
+1.  L'agent termine la tâche en cours (commit/merge).
+2.  L'agent initialise une nouvelle spec pour la demande additionnelle.
+
+### VI. Clause de Dérogation (Explicit Bypass)
+L'utilisateur possède l'autorité absolue ("Override").
+Il peut ordonner explicitement de contourner ces protocoles en utilisant des mots-clés comme : **"Mode Hotfix"**, **"Just fix it"**, ou **"Bypass process"**.
+Dans ce cas seulement, l'agent passe en exécution directe sans mise à jour des specs, mais doit signaler qu'il opère en "Mode Dégradé".
+
+---
+
+## Bonnes Pratiques de Développement
+
+### VII. Mémoire Architecturale (ADR) - IMPÉRATIF
+Toute décision structurante (changement de technologie, nouvelle architecture, résultat de POC) DOIT être historisée sous forme de "Décision Architecturale" (ADR) dans `docs/decisions/`.
+- **Format** : Fichier Markdown daté (`NNN-titre-decision.md`).
+- **Contenu** : Contexte, Décision, Conséquences (Positives/Négatives), Statut (Accepté/Rejeté/Proposé).
+- **Autonomie** : L'agent doit créer ce document proactivement dès qu'une exploration technique ou un choix impactant est réalisé, sans attendre une demande explicite.
+
+### VIII. Protocole de Débogage Forensic
+En cas de problème de données incompréhensible (ex: donnée vide malgré logique apparente) :
+
+1. **STOP** : Ne pas toucher au code de production.
+2. **FORENSICS** : Créer un script jetable (`debug_xxx.py`) qui lit la donnée source brute et l'affiche avec `repr()` pour révéler les caractères invisibles ou types inattendus.
+3. **SIMULATION** : Coder la correction dans ce script jetable et valider qu'elle produit le résultat attendu sur la donnée brute.
+4. **INTÉGRATION** : Transposer la solution validée dans le code de production **uniquement après succès de la simulation**.
+
+---
+
+## Ressources de Recherche
+
+### IX. Principe de Recherche Préalable (Idéation 2025)
+
+Pour toute nouvelle fonctionnalité majeure ou structurante liée à l'IA/automatisation, l'agent DOIT appliquer l'**approche hybride de validation** :
+
+#### Étape 1 : Baseline (Quick Check)
+Consulter les fichiers thématiques pour les métriques et patterns connus :
+
+**Répertoire** : `~/.speckit/research/`
+
+| Thème | Fichier | Cas d'usage |
+|-------|---------|-------------|
+| AI Agents | `01-ai-agents-agentic-ai.md` | Architectures agents, adoption |
+| ROI | `02-roi-business-value.md` | Justification économique |
+| Productivité | `03-cognitive-load-productivity.md` | Charge cognitive, UX |
+| Architectures | `04-architectures-patterns.md` | Patterns, protocoles |
+| Knowledge | `05-knowledge-management.md` | Documentation, RAG |
+
+#### Étape 2 : Validation Live (WebSearch)
+Utiliser les **Sources Live** (section 🔴 de chaque fichier) pour :
+- Confirmer que les métriques baseline sont toujours valides
+- Chercher des case studies récents sur le use case proposé
+- Identifier les échecs/problèmes connus de l'approche envisagée
+- Vérifier l'état actuel des frameworks/outils recommandés
+
+#### Étape 3 : Synthèse avec Sources
+Présenter l'idée avec :
+- Baseline citée (fichier + métrique)
+- Validation live (sources consultées + findings)
+- Red flags identifiés (si applicable)
+- Recommandation argumentée
+
+#### Objectifs
+- Éviter le "Agent Washing" (40% projets annulés d'ici 2027)
+- Maximiser le ROI mesurable (benchmarks Forrester)
+- Prendre en compte la charge cognitive (Cognitive Offloading)
+- Sécuriser l'architecture (Guardian Agents)
+- **Toujours citer ses sources** (baseline + live)
+
+---
+
+## Gestion des Sessions de Développement
+
+### X. Système de Sessions (Traçabilité)
+
+Les projets Speckit utilisent un système de **sessions** pour tracker le travail de manière atomique et traçable.
+
+#### Définition
+- **Session** = Unité de travail isolée (1 branche Git, 1 worktree optionnel)
+- **1 Session = N Specs** : Une session peut regrouper plusieurs specs liées
+- **Tracking** : Via fichiers MD dans `.specify/memory/sessions/`
+
+#### Structure
+```
+.specify/memory/sessions/
+├── index.md           # Registre central (WIP, progression, roadmap)
+├── session-001.md     # Archive détaillée session 1
+├── session-002.md     # Archive détaillée session 2
+└── ...
+```
+
+#### Workflow Standard
+```
+/go [N]  → Charge session (branche + worktree + TodoWrite)
+travail  → Développement (commits intermédiaires)
+/log     → Archive session (merge + cleanup + documentation)
+/next    → Voir progression et prochaines sessions
+```
+
+#### Règles
+1. **Nouvelle feature = Nouvelle session** (sauf demande explicite de continuation)
+2. **Vérifier WIP avant /go** : Ne pas démarrer une session déjà en cours
+3. **Tests obligatoires avant /log** : La session doit être fonctionnelle
+4. **Archive systématique** : Chaque session complétée a son fichier `session-XXX.md`
+
+#### Parallélisme (Worktrees)
+- Les sessions peuvent être travaillées en parallèle via worktrees Git
+- Worktrees stockées dans `.worktrees/` (doit être dans `.gitignore`)
+- Pattern : `.worktrees/session-XXX/`
+
+#### Intégration Article IX
+- Si une session concerne AI/automation, `/go` rappelle la baseline research
+- Red flags pertinents affichés au démarrage de session
+
+---
+
+## Capture d'Idées - Boîte à Idées
+
+### XI. Détection d'Idées Hors Scope
+
+**Quand l'utilisateur mentionne une nouvelle idée pendant un travail en cours, l'agent DOIT détecter et proposer de capturer.**
+
+#### Mots-clés Déclencheurs
+
+```
+- "Je veux...", "Je veux aussi...", "Je voudrais...", "Je voudrais aussi..."
+- "Et aussi...", "Pendant qu'on y est...", "On pourrait aussi..."
+- "J'ai pensé à...", "Une autre idée...", "Plus tard il faudrait..."
+- "Ce serait bien de...", "On devrait...", "Il manque..."
+- "Faudrait...", "Il faudrait...", "On pourrait..."
+```
+
+#### Réaction Obligatoire
+
+**NE PAS** commencer à implémenter l'idée immédiatement.
+
+**Proposer systématiquement :**
+
+```
+💡 Idée détectée : "[résumé court de l'idée]"
+
+Je suis en train de [tâche en cours]. Tu veux que je :
+1. 📥 Capture l'idée pour plus tard (`/speckit.idea [description]`)
+2. 🔄 Termine d'abord la tâche en cours, puis on lance `/speckit.specify`
+3. ⏸️ Mets en pause et démarre cette idée maintenant
+
+Choix ?
+```
+
+### XII. Commandes Boîte à Idées
+
+| Commande | Usage |
+|----------|-------|
+| `/speckit.idea [description]` | Capturer une idée rapidement sans interrompre |
+| `/speckit.inbox` | Voir toutes les idées en attente |
+| `/speckit.inbox spec N` | Transformer l'idée #N en spec |
+| `/speckit.inbox drop N` | Abandonner l'idée #N |
+
+### XIII. Stockage des Idées
+
+**Fichier global** : `~/.speckit/inbox.md`
+
+Ce fichier est cross-projets. Chaque idée contient :
+- ID incrémental
+- Date de capture
+- Projet d'origine
+- Description
+- Priorité (haute/moyenne/basse)
+- Statut (nouvelle/à clarifier/prête/abandonnée)
+
+### XIV. Rappel Proactif
+
+**En fin de session ou lors d'un affichage de progression :**
+- Si des idées sont en attente dans l'inbox, les mentionner :
+  ```
+  📥 Rappel : N idées en attente dans la boîte à idées.
+  💡 `/speckit.inbox` pour les voir.
+  ```
+
+---
+
+## Workflow d'Implémentation Contrôlé
+
+### XV. Principe Test-Before-Next (Qualité Release)
+
+Chaque tâche d'implémentation DOIT suivre un cycle strict garantissant que le code est **toujours prêt pour push GitHub et release automatique**.
+
+#### 1. Exécution Atomique (1 Tâche = 1 Commit)
+
+- **UNE tâche à la fois** : L'agent ne passe PAS à la tâche suivante tant que la tâche courante n'est pas validée
+- **TodoWrite obligatoire** : Chaque tâche est trackée avec statut (`pending` → `in_progress` → `completed`)
+- **1 Tâche = 1 Commit** : Chaque tâche terminée et validée fait l'objet d'un commit Git dédié
+  - Message format : `feat(XXX): [description tâche]` ou `fix(XXX): ...`
+  - Le commit n'est créé qu'APRÈS validation des tests
+
+#### 2. Batterie de Tests Obligatoire (SOTA)
+
+**AVANT de marquer une tâche "completed" et de committer**, l'agent DOIT exécuter :
+
+| Test | Commande | Critère |
+|------|----------|---------|
+| **TypeScript** | `pnpm tsc --noEmit` | 0 erreur |
+| **Lint** | `pnpm lint` | 0 erreur (warnings OK) |
+| **Build** | `pnpm build` | Exit code 0 |
+| **Tests Unitaires** | `pnpm test` | 100% pass |
+| **Test Manuel** | Demander à l'utilisateur | Validation explicite |
+
+**Règles :**
+- Si un test échoue → Corriger AVANT de passer à la suite
+- Si test manuel requis → L'agent ATTEND la validation utilisateur
+- **Aucun skip** : Pas de `--no-verify`, pas de "on verra plus tard"
+
+**🚨 RÈGLE CRITIQUE - Erreurs Préexistantes :**
+- **TOUT le projet doit être propre**, pas seulement les fichiers modifiés
+- Les erreurs lint/tsc préexistantes DOIVENT être corrigées avant commit
+- **Rationale** : Si des erreurs préexistent, c'est que les tests n'ont pas été exécutés correctement lors des commits précédents
+- **Tolérance zéro** : 0 erreur dans tout le projet = seul critère acceptable
+
+#### 3. Journalisation Continue
+
+Chaque tâche complétée est documentée dans `specs/XXX-feature/implementation.md` :
+
+```markdown
+# Journal d'Implémentation - [Nom Feature]
+
+## Métadonnées
+- **Spec** : XXX-feature-name
+- **Branche** : feature/XXX-feature-name
+- **Démarré** : YYYY-MM-DD
+- **Terminé** : YYYY-MM-DD (ou "En cours")
+
+## Progression
+
+### Tâche 1 : [Nom de la tâche]
+- **Statut** : ✅ Complété | ⚠️ Partiel | ❌ Bloqué
+- **Commit** : `abc1234` - feat(XXX): description
+- **Fichiers modifiés** :
+  - `src/components/Example.tsx` (créé)
+  - `src/hooks/useExample.ts` (modifié)
+- **Tests exécutés** :
+  - [x] TypeScript : OK
+  - [x] Lint : OK
+  - [x] Build : OK
+  - [x] Tests unitaires : OK (ou N/A)
+  - [x] Test manuel : Validé par user
+- **Notes** : Observations, découvertes, décisions prises
+
+### Tâche 2 : [Nom de la tâche]
+...
+```
+
+#### 4. Workflow Complet par Tâche
+
+```
+1. TodoWrite : Marquer tâche "in_progress"
+2. CODER : Implémenter la tâche
+3. TESTER :
+   - pnpm tsc --noEmit
+   - pnpm lint
+   - pnpm build
+   - pnpm test
+   - [Si manuel] Demander validation user
+4. SI ÉCHEC → Corriger et retour à étape 3
+5. SI OK :
+   - Mettre à jour implementation.md
+   - git add + git commit
+   - TodoWrite : Marquer tâche "completed"
+6. NEXT : Passer à la tâche suivante
+```
+
+#### 5. Objectif Qualité
+
+Ce workflow garantit que :
+- **Chaque commit est stable** : Le code compile, passe les tests, est linté
+- **Push GitHub sans risque** : Aucune régression entre commits
+- **Release automatique possible** : Le code sur main est toujours déployable
+- **Traçabilité complète** : Chaque changement est documenté avec son contexte
+
+---
+
+## Isolation des Développements
+
+### XVI. Workflow Worktree Obligatoire
+
+Tout développement (feature, hotfix, expérimentation) DOIT se faire dans un **worktree Git dédié** pour garantir isolation, traçabilité et capacité de travail parallèle.
+
+#### 1. Règles Fondamentales
+
+| Règle | Description |
+|-------|-------------|
+| **XVI.1** | Tout développement se fait dans un worktree dédié (jamais sur master/main directement) |
+| **XVI.2** | Les worktrees sont créés dans `.worktrees/NNN-short-name/` |
+| **XVI.3** | Après merge dans master, le worktree DOIT être supprimé sous 24h |
+| **XVI.4** | Maximum 5 worktrees actifs simultanément (avertissement au-delà) |
+
+#### 2. Création Automatique
+
+- `/speckit.specify` crée automatiquement le worktree après création de la branche
+- Le worktree est isolé dans `.worktrees/NNN-feature-name/`
+- Les ports sont dynamiques : `backend=8000+N`, `frontend=5173+N`
+
+#### 3. Avantages
+
+- **Isolation complète** : Chaque feature dans son propre dossier
+- **Agents parallèles** : Plusieurs Claude CLI peuvent travailler simultanément
+- **Historique isolé** : Chaque worktree a son historique Claude dans `~/.claude/projects/`
+- **Pas de pollution** : Le repo principal reste propre
+
+#### 4. Nettoyage
+
+- `/speckit.cleanup` liste les worktrees mergés et propose leur suppression
+- Vérifications de sécurité : changements non commités, processus actifs
+- Suppression automatique des branches mergées (optionnel)
+
+#### 5. Commandes Associées
+
+| Commande | Action |
+|----------|--------|
+| `/speckit.specify` | Crée branche + worktree + spec |
+| `/speckit.cleanup` | Nettoie les worktrees mergés |
+| `./claude-session.sh NNN-xxx` | Lance Claude avec historique isolé |
+| `./start.sh` | Lance serveurs avec ports dynamiques |
+| `./stop.sh` | Arrête les serveurs du worktree |
+
+#### 6. Exemple de Workflow
+
+```
+1. /speckit.specify "Ma nouvelle feature"
+   → Branche 048-ma-feature créée
+   → Worktree .worktrees/048-ma-feature/ créé
+   → Ports : backend 8048, frontend 5221
+
+2. exit  # Quitter la session Claude actuelle
+
+3. ./claude-session.sh 048-ma-feature
+   → Crée ~/.claude-sessions/048-ma-feature/ (historique persistant)
+   → Lance Claude depuis ce répertoire
+
+4. cd .worktrees/048-ma-feature  # Dans Claude
+   → Tu travailles dans le worktree
+
+5. ./start.sh
+   → Serveurs sur ports dédiés
+
+6. Développement + tests + merge
+
+7. /speckit.cleanup
+   → Supprime worktree (l'historique reste dans ~/.claude-sessions/)
+```
+
+#### 7. Isolation de l'Historique Claude
+
+Le script `claude-session.sh` permet de :
+- **Isoler l'historique** : Chaque session a son propre historique dans `~/.claude-sessions/NNN-xxx/`
+- **Persister après cleanup** : Le worktree peut être supprimé, l'historique reste
+- **Reprendre une session** : Relancer `./claude-session.sh NNN-xxx` pour retrouver le contexte
+
+---
+
+## Mémoire Développeur Persistante
+
+### XVII. DevKMS - Capture Automatique Obligatoire
+
+**DevKMS** (`~/.speckit/memory/`) est le système de mémoire persistante cross-projets. L'agent DOIT capturer AUTOMATIQUEMENT les connaissances acquises, **SANS demander confirmation**.
+
+#### 1. Principe Fondamental
+
+**🚨 CAPTURE AUTOMATIQUE = OBLIGATOIRE**
+
+L'agent ne "propose" pas de capturer. L'agent **CAPTURE** directement via `mem add`, puis informe l'utilisateur :
+
+```
+💾 Connaissance capturée dans DevKMS :
+   Type: bug | Titre: "Fix import circulaire"
+   ID: 01ARZ3NDEK...
+```
+
+#### 2. Déclencheurs de Capture AUTOMATIQUE
+
+| Événement | Type DevKMS | Action Agent |
+|-----------|-------------|--------------|
+| **Bug résolu** (tout bugfix) | `bug` | `mem add bug "Titre" -p Projet -t tags` |
+| **Disjoncteur activé** (Art. IV) | `bug` | **OBLIGATOIRE** après résolution |
+| **Forensic terminé** (Art. VIII) | `bug` + `pitfall` | Capturer problème ET piège à éviter |
+| **ADR créé** (Art. VII) | `decision` | Capturer en plus du fichier ADR |
+| **Pattern réutilisable découvert** | `pattern` | Capturer immédiatement |
+| **Piège/erreur à éviter identifié** | `pitfall` | Capturer pour prévenir récidive |
+| **Config technique importante** | `config` | Capturer avec contexte |
+
+#### 3. Capture des Recherches Web - AUTOMATIQUE
+
+**Toute recherche web (WebSearch/WebFetch) produisant une information réutilisable DOIT être capturée.**
+
+| Type d'information | Type DevKMS | Tags obligatoires |
+|--------------------|-------------|-------------------|
+| Métriques/Stats business | `reference` | `business`, `metrics`, source |
+| Best practice documentée | `pattern` | `best-practice`, techno |
+| Documentation officielle | `reference` | `docs`, `official`, techno |
+| Solution externe à problème | `bug` | `external-fix`, source |
+| Red flag / Anti-pattern | `pitfall` | `warning`, `anti-pattern` |
+| Comparatif / Benchmark | `decision` | `benchmark`, `comparison` |
+
+**Format obligatoire pour recherches web :**
+```bash
+mem add reference "Titre descriptif" \
+  -p Projet \
+  -t source-url,techno,theme \
+  -c 4  # Confiance haute si source officielle
+```
+
+Le contenu DOIT inclure :
+- **URL source** (obligatoire)
+- **Date de recherche** (obligatoire)
+- **Résumé** de ce qui a été appris
+- **Contexte** d'utilisation
+
+#### 4. Moment de Capture
+
+La capture se fait **IMMÉDIATEMENT** après l'événement déclencheur :
+
+```
+Événement → Capture DevKMS → Poursuite du travail
+            (automatique)
+```
+
+**PAS :**
+```
+❌ Événement → Fin de session → "Tu veux que je capture ?" → Oubli
+```
+
+#### 5. Qualité des Captures
+
+Chaque capture DOIT être :
+- **Atomique** : 1 connaissance = 1 entrée
+- **Contextualisée** : Projet, tags, chemin si pertinent
+- **Actionnable** : Permettre de reproduire/éviter le problème
+- **Datée** : Timestamp automatique via ULID
+
+**Niveau de confiance :**
+| Source | Confiance |
+|--------|-----------|
+| Doc officielle / RFC | 5 |
+| Source fiable (MDN, SO accepté) | 4 |
+| Testé plusieurs fois | 3 |
+| Fonctionne chez moi | 2 (défaut) |
+| Hypothèse non vérifiée | 0-1 |
+
+#### 6. Commandes DevKMS
+
+| Commande | Usage |
+|----------|-------|
+| `mem add <type> "titre"` | Ajouter une entrée |
+| `mem search "query"` | Rechercher (FTS5) |
+| `mem context` | Suggestions selon projet courant |
+| `mem show <id>` | Afficher détail |
+| `mem export --format md` | Exporter pour autre agent IA |
+
+#### 7. Consultation OBLIGATOIRE - Quand Chercher
+
+**🚨 AVANT de chercher sur internet ou de coder une solution, l'agent DOIT consulter DevKMS.**
+
+| Moment | Action | Commande |
+|--------|--------|----------|
+| **Début de session** | Voir connaissances projet | `mem context` |
+| **Avant de résoudre un bug** | Chercher bug similaire | `mem search "erreur" --type bug` |
+| **Avant recherche web** | Vérifier si déjà documenté | `mem search "sujet"` |
+| **Avant décision technique** | Voir décisions passées | `mem search "techno" --type decision` |
+| **Quand bloqué** | Chercher patterns/pièges | `mem search "problème"` |
+| **Avant d'implémenter** | Voir patterns existants | `mem search "feature" --type pattern` |
+
+**Workflow OBLIGATOIRE :**
+
+```
+1. Problème/Question détecté
+         ↓
+2. mem search "mots-clés"  ← OBLIGATOIRE AVANT toute action
+         ↓
+   ┌─────┴─────┐
+   ↓           ↓
+Trouvé?     Pas trouvé?
+   ↓           ↓
+Utiliser    WebSearch/Coder
+la solution    ↓
+            Capturer résultat (Art. XVII.2)
+```
+
+**Message type quand solution trouvée :**
+```
+🔍 Solution trouvée dans DevKMS :
+   [ID: 01ARZ3NDEK] bug: "Fix import circulaire"
+   Confiance: ★★★★☆
+
+   Applying solution...
+```
+
+**Message type quand pas trouvé :**
+```
+🔍 Aucune entrée pertinente dans DevKMS pour "import circulaire"
+   → Recherche externe nécessaire
+```
+
+#### 8. Intégration Workflow SpecKit
+
+**En début de `/speckit.implement` :**
+```bash
+mem context  # AUTOMATIQUE - Voir connaissances pertinentes au projet
+```
+
+**Pendant le développement :**
+- Consultation avant chaque problème/décision
+- Capture automatique après chaque résolution
+
+**En fin de session :**
+- Tout a été consulté et capturé au fil de l'eau
+
+#### 9. Clause de Non-Capture
+
+L'agent peut NE PAS capturer uniquement si :
+- L'information est triviale (typo, formatage)
+- L'information existe déjà dans DevKMS (`mem search` avant)
+- L'utilisateur dit explicitement "ne capture pas ça"
+
+**Dans tous les autres cas : CAPTURE OBLIGATOIRE.**
+
+#### 10. Vérification de Conformité
+
+L'agent DOIT pouvoir répondre à la question :
+> "Qu'as-tu capturé dans DevKMS pendant cette session ?"
+
+Si la réponse est "rien" après une session significative → **Non-conformité Article XVII**.
+
+---
+
+## Qualité Algorithmique
+
+### XVIII. Complexité Algorithmique - NON-NÉGOCIABLE
+
+**Principe** : la complexité algorithmique est un critère de qualité **non-négociable** au même titre que la sécurité ou les tests. Tout code introduit ou modifié DOIT être analysé sous cet angle. Ce contrôle est **obligatoire** dans `/audit` et fait partie des findings systématiques (catégorie `performance`).
+
+#### 1. Hiérarchie des Complexités (Préférence Forte)
+
+À fonctionnalité équivalente, préférer **toujours** la classe la plus basse :
+
+```
+O(1)  >  O(log n)  >  O(n)  >  O(n log n)  >  O(n²)  >  O(n³)  >  O(2ⁿ)
+```
+
+- Une amélioration d'une classe (ex: O(n²) → O(n)) **n'est pas une optimisation prématurée** — c'est une exigence de qualité.
+- Une dégradation d'une classe doit être **justifiée par écrit** (commentaire, ADR, ou note dans la spec).
+- Le bénéfice se mesure en ordre de grandeur : sur n=10⁴, O(n²) = 100 millions d'ops, O(n log n) = 130 000 ops.
+
+#### 2. Anti-Patterns Interdits (sauf justification explicite)
+
+Ces patterns sont **systématiquement signalés** par `/audit` (sévérité `high` minimum, `critical` si dans un hot path ou un endpoint à fort trafic) :
+
+- **Double boucle imbriquée sur la même collection** sans sortie précoce ni partition (`for x in xs: for y in xs: ...`)
+- **Recherche linéaire répétée dans une boucle** : `.includes()`, `.indexOf()`, `.find()`, `array.filter()[0]`, `in liste` (Python) — remplacer par `Set` / `Map` / `dict` indexé hors boucle
+- **N+1 queries** (DB, API, fichier) : une requête par élément d'une collection — remplacer par un `JOIN`, un `IN (...)`, un `bulk fetch` ou un `dataloader`
+- **Tri répété** d'une même collection dans une boucle — trier une seule fois en amont
+- **Concaténation de chaînes en boucle** dans des langages où la string est immuable (Python, JS sans `Array.join`) — utiliser un buffer / `join`
+- **Lecture/écriture I/O dans une boucle serrée** sans batching — agréger
+- **Récursion non-mémoisée** sur des sous-problèmes recouvrants — mémoiser ou itérer
+- **Copie défensive en cascade** (`{...obj, ...}` imbriqué dans une boucle) — restructurer
+
+#### 3. Documentation Obligatoire
+
+La complexité DOIT être documentée par un commentaire concis (`// O(n log n)` ou `# Complexité : O(n) — n = nombre de jobs en attente`) dans les cas suivants :
+- Fonction publique ou point d'entrée d'un service
+- Fonction dont la complexité n'est pas évidente à la lecture
+- Fonction où un compromis a été fait (ex: O(n²) accepté car n borné < 100)
+- Boucle avec lookup non-trivial (Map, Set, index)
+
+#### 4. Compromis Acceptables
+
+Une complexité supérieure peut être acceptée **uniquement si** au moins une de ces conditions est remplie ET documentée :
+- **n est borné** par construction (ex: nombre de colonnes d'une table de config, max 50) → noter la borne dans le commentaire
+- **Lisibilité critique** dans un chemin froid (script de migration one-shot, test, debug tool)
+- **Mesure empirique** prouvant que la version O(n²) est plus rapide à n typique (rare, mais ex: petites collections où la cache locality bat l'overhead d'une HashMap)
+
+Sans justification écrite, le finding `/audit` reste actif.
+
+#### 5. Vérification par `/audit`
+
+`/audit` DOIT :
+- Scanner systématiquement les patterns du §2 sur le périmètre audité
+- Lister les findings de complexité dans `aggregated-findings.json` avec `category: "performance"`
+- Proposer (mode fix) une correction concrète : structure de donnée alternative, indexation hors boucle, JOIN, batch fetch, mémoisation
+- Signaler en `critical` toute boucle imbriquée O(n²) dans un endpoint API ou un hot path GPU/worker
+- Signaler en `high` les autres anti-patterns du §2
+- Signaler en `medium` une fonction publique sans annotation de complexité quand elle n'est pas triviale
+
+**Un audit qui ignore la complexité est un audit non-conforme à l'Article XVIII.**
+
+## Addenda Projet
+
+Ajouter ici les regles propres au projet si necessaire. Conserver la constitution globale ci-dessus comme source de verite utilisateur.
