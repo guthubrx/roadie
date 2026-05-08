@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+label="com.roadie.roadied"
+plist="$HOME/Library/LaunchAgents/$label.plist"
+log_dir="$HOME/.roadies"
+runtime_bin_dir="$repo_root/bin"
+local_bin_dir="$HOME/.local/bin"
+
+mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
+
+echo "Building Roadie release binaries..."
+"$script_dir/with-xcode" swift build --configuration release --product roadied
+"$script_dir/with-xcode" swift build --configuration release --product roadie
+bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration release)"
+
+build_roadied="$bin_dir/roadied"
+build_roadie="$bin_dir/roadie"
+runtime_roadied="$runtime_bin_dir/roadied"
+runtime_roadie="$runtime_bin_dir/roadie"
+local_roadied="$local_bin_dir/roadied"
+local_roadie="$local_bin_dir/roadie"
+
+if [[ ! -x "$build_roadied" ]]; then
+  echo "roadied binary not found: $build_roadied" >&2
+  exit 1
+fi
+if [[ ! -x "$build_roadie" ]]; then
+  echo "roadie binary not found: $build_roadie" >&2
+  exit 1
+fi
+
+install_binary() {
+  local source="$1"
+  local target="$2"
+  local tmp="$target.tmp"
+  cp "$source" "$tmp"
+  chmod +x "$tmp"
+  codesign --force --sign - "$tmp" >/dev/null 2>&1 || true
+  mv "$tmp" "$target"
+}
+
+echo "Installing binaries..."
+install_binary "$build_roadied" "$runtime_roadied"
+install_binary "$build_roadie" "$runtime_roadie"
+install_binary "$build_roadied" "$local_roadied"
+install_binary "$build_roadie" "$local_roadie"
+
+cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$runtime_roadied</string>
+    <string>run</string>
+    <string>--yes</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$repo_root</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$log_dir/roadied.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>$log_dir/roadied.stderr.log</string>
+</dict>
+</plist>
+PLIST
+
+echo "Installed:"
+echo "  $runtime_roadied"
+echo "  $runtime_roadie"
+echo "  $local_roadied"
+echo "  $local_roadie"
+echo "LaunchAgent:"
+echo "  $plist"
+
+if [[ "${ROADIE_INSTALL_NO_START:-0}" == "1" ]]; then
+  echo "Start skipped because ROADIE_INSTALL_NO_START=1."
+elif launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+  echo "$label is already loaded. Run 'make restart' when you want to reload the installed binaries."
+else
+  echo "Starting $label..."
+  if launchctl bootstrap "gui/$(id -u)" "$plist" >/dev/null 2>&1; then
+    launchctl kickstart -k "gui/$(id -u)/$label" >/dev/null 2>&1 || true
+    echo "$label started."
+  else
+    echo "LaunchAgent installed but not started."
+    echo "Start manually with:"
+    echo "  launchctl bootstrap gui/$(id -u) \"$plist\""
+  fi
+fi
+
+echo "Next checks:"
+echo "  make status"
+echo "  roadie daemon health"

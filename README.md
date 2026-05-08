@@ -122,16 +122,48 @@ make start
 
 The project scripts force the Xcode toolchain and avoid shell environments that may inject incompatible linker flags.
 
+## Manual Installation
+
+For a local manual install from source, use:
+
+```bash
+make install
+```
+
+This hides the usual macOS service setup:
+
+- builds `roadie` and `roadied` in release mode;
+- installs them in `./bin` for this repository;
+- also installs them in `~/.local/bin` for shell usage;
+- ad-hoc signs both binaries;
+- creates `~/Library/LaunchAgents/com.roadie.roadied.plist`;
+- starts the LaunchAgent when it is not already loaded.
+
+If Roadie is already running, `make install` does not stop it. Run this when you want the running daemon to reload the newly installed binaries:
+
+```bash
+make restart
+```
+
+If you only want to install files without starting the LaunchAgent:
+
+```bash
+ROADIE_INSTALL_NO_START=1 make install
+```
+
 Useful commands:
 
 ```bash
 make test
+make build
+make install
 make start
 make stop
 make restart
 make status
 make logs
 make doctor
+make dmg
 ```
 
 Equivalent direct commands:
@@ -150,7 +182,7 @@ Equivalent direct commands:
 Roadie can be packaged as a classic macOS DMG:
 
 ```bash
-make package-dmg
+make dmg
 ```
 
 The output is:

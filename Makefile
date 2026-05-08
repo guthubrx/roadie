@@ -1,10 +1,13 @@
-.PHONY: test build permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config package-dmg clean
+.PHONY: test build install permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config dmg package-dmg clean
 
 test:
 	./scripts/test
 
 build:
 	./scripts/with-xcode swift build
+
+install:
+	./scripts/install
 
 permissions:
 	./scripts/roadie permissions
@@ -29,6 +32,8 @@ config-validate:
 
 package-dmg:
 	./scripts/package-dmg
+
+dmg: package-dmg
 
 plan:
 	./scripts/roadie layout plan
