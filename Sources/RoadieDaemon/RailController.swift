@@ -8,6 +8,7 @@ public final class RailController {
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
     private let events = EventLog()
+    private let railRuntimeStateStore = RailRuntimeStateStore()
     private let thumbnails = WindowThumbnailStore()
     private var panels: [DisplayID: RailPanel] = [:]
     private var screenFrames: [DisplayID: CGRect] = [:]
@@ -248,7 +249,7 @@ public final class RailController {
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
             let panel = panels[displayID] ?? RailPanel()
-            panel.position(on: screen, config: config)
+            panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
             panel.render(
                 scope: scope,
                 displayName: screen.localizedName,
@@ -433,8 +434,11 @@ private final class RailPanel: NSPanel {
     private var emptyClickSafetyMargin: CGFloat = 12
     private var autoHide = false
     private var edgeHitWidth: CGFloat = 8
+    private var edgeMagnetismWidth: CGFloat = 24
     private var animationDuration: TimeInterval = 0.16
     private var hideDelay: TimeInterval = 0.35
+    private var displayID: DisplayID?
+    private var runtimeStore: RailRuntimeStateStore?
     private var expandedFrame = CGRect.zero
     private var collapsedFrame = CGRect.zero
     private var isCollapsed = false
@@ -464,11 +468,14 @@ private final class RailPanel: NSPanel {
         contentView = stack
     }
 
-    func position(on screen: NSScreen, config: RailVisualConfig) {
+    func position(on screen: NSScreen, displayID: DisplayID, config: RailVisualConfig, runtimeStore: RailRuntimeStateStore) {
         let frame = screen.frame
         let wasAutoHide = autoHide
+        self.displayID = displayID
+        self.runtimeStore = runtimeStore
         autoHide = config.autoHide
         edgeHitWidth = config.edgeHitWidth
+        edgeMagnetismWidth = config.edgeMagnetismWidth
         animationDuration = config.animationDuration
         hideDelay = config.hideDelay
         expandedFrame = CGRect(x: frame.minX, y: frame.minY, width: config.railWidth, height: frame.height)
@@ -484,7 +491,7 @@ private final class RailPanel: NSPanel {
     func updateAutoHide(mouse: CGPoint, canHide: Bool) {
         guard autoHide else { return }
         if isCollapsed {
-            if collapsedFrame.contains(mouse) {
+            if revealFrame.contains(mouse) {
                 setCollapsed(false, animated: true)
             }
             return
@@ -529,6 +536,7 @@ private final class RailPanel: NSPanel {
         guard animated, animationDuration > 0 else {
             setFrame(target, display: true)
             stack.isHidden = autoHide && isCollapsed
+            persistVisibleWidth()
             return
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -543,6 +551,17 @@ private final class RailPanel: NSPanel {
 
     private func finishAutoHideFrame() {
         stack.isHidden = autoHide && isCollapsed
+        persistVisibleWidth()
+    }
+
+    private func persistVisibleWidth() {
+        guard let displayID else { return }
+        let visibleWidth = autoHide && isCollapsed ? edgeHitWidth : expandedFrame.width
+        runtimeStore?.setVisibleWidth(Double(visibleWidth), for: displayID)
+    }
+
+    private var revealFrame: CGRect {
+        collapsedFrame.insetBy(dx: -edgeMagnetismWidth, dy: 0)
     }
 
     func render(
@@ -816,6 +835,7 @@ private struct RailVisualConfig {
     var backgroundOpacity: CGFloat = 0
     var autoHide: Bool = false
     var edgeHitWidth: CGFloat = 8
+    var edgeMagnetismWidth: CGFloat = 24
     var animationDuration: TimeInterval = 0.16
     var hideDelay: TimeInterval = 0.35
     var emptyClickHideActive: Bool = true
@@ -858,6 +878,7 @@ private struct RailVisualConfig {
             backgroundOpacity: CGFloat(settings.backgroundOpacity),
             autoHide: settings.autoHide,
             edgeHitWidth: CGFloat(settings.edgeHitWidth),
+            edgeMagnetismWidth: CGFloat(settings.edgeMagnetismWidth),
             animationDuration: settings.animationMS / 1000,
             hideDelay: settings.hideDelayMS / 1000,
             emptyClickHideActive: settings.emptyClickHideActive,
