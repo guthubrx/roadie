@@ -26,6 +26,12 @@ public struct DaemonSnapshot: Equatable, Codable, Sendable {
     }
 }
 
+public extension DaemonSnapshot {
+    func automationSnapshot(generatedAt: Date = Date(), service: AutomationSnapshotService = AutomationSnapshotService()) -> RoadieStateSnapshot {
+        service.snapshot(from: self, generatedAt: generatedAt)
+    }
+}
+
 public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var scope: StageScope?
