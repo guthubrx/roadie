@@ -50,6 +50,28 @@ public struct WindowCommandService {
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
     }
 
+    public func focusBackAndForth() -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot), let scope = active.scope else {
+            return WindowCommandResult(message: "focus back-and-forth: no active window", changed: false)
+        }
+        var state = stageStore.state()
+        let persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+        guard let stage = persistentScope.stages.first(where: { $0.id == scope.stageID }) else {
+            return WindowCommandResult(message: "focus back-and-forth: no active stage", changed: false)
+        }
+        let targetID = stage.previousFocusedWindowID.flatMap { previous in
+            snapshot.windows.first { $0.window.id == previous && $0.scope == scope }?.window.id
+        } ?? stage.members.reversed().first { $0.windowID != active.window.id }?.windowID
+        guard let targetID,
+              let target = snapshot.windows.first(where: { $0.window.id == targetID && $0.scope == scope })?.window
+        else {
+            return WindowCommandResult(message: "focus back-and-forth: no previous window", changed: false)
+        }
+        let ok = focusWindow(target)
+        return WindowCommandResult(message: ok ? "focus back-and-forth \(target.id.rawValue)" : "focus back-and-forth failed", changed: ok)
+    }
+
     public func move(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
@@ -288,6 +310,14 @@ public struct WindowCommandService {
     private func focusWindow(_ window: WindowSnapshot) -> Bool {
         let ok = service.focus(window)
         if ok {
+            var state = stageStore.state()
+            if let scope = state.stageScope(for: window.id) {
+                var persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+                persistentScope.setFocusedWindow(window.id, in: scope.stageID)
+                state.update(persistentScope)
+                state.focusDisplay(scope.displayID)
+                stageStore.save(state)
+            }
             mouseFollower.follow(window)
         }
         return ok

@@ -497,3 +497,21 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift test --filter WindowRule` : 16 tests, 5 suites, succès
   - [x] `swift test --filter RulesCommandTests` : 4 tests, 1 suite, succès
 - **Notes** : US2 est livrable : parsing, validation, matching, commandes CLI, moteur scratchpad et événements runtime sont couverts.
+
+### T046-T058 : US3 commandes power-user
+
+- **Statut** : Complété
+- **Commit** : Ce commit - feat(002): Add power user commands
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/StageStore.swift` (focus précédent persistant)
+  - `Sources/RoadieDaemon/WindowCommands.swift` (`focusBackAndForth`)
+  - `Sources/RoadieDaemon/DesktopCommands.swift` (`backAndForth`, `summon`)
+  - `Sources/RoadieDaemon/StageCommands.swift` (`moveActiveStageToDisplay`)
+  - `Sources/RoadieDaemon/LayoutCommandService.swift` (split/flatten/insert/join/zoom)
+  - `Sources/roadie/main.swift` (CLI power-user)
+  - `Tests/RoadieDaemonTests/PowerUser*.swift` (8 tests)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T046-T058 cochées)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [x] `swift test --filter PowerUser` : 8 tests, 4 suites, succès
+- **Notes** : Les commandes layout persistantes utilisent `LayoutIntentStore` avec source `command`; `stage summon` existait déjà et `stage move-to-display` complète le scénario multi-écran.

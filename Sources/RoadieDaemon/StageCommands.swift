@@ -211,6 +211,65 @@ public struct StageCommandService {
         return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
     }
 
+    public func moveActiveStageToDisplay(index displayIndex: Int) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let sourceDisplay = activeDisplay(in: snapshot),
+              let targetDisplay = snapshot.displays.first(where: { $0.index == displayIndex })
+        else {
+            return StageCommandResult(message: "stage move-to-display: unknown display", changed: false)
+        }
+        guard sourceDisplay.id != targetDisplay.id else {
+            return StageCommandResult(message: "stage move-to-display: already on display \(displayIndex)", changed: false)
+        }
+
+        var state = store.state()
+        var sourceScope = activeScope(displayID: sourceDisplay.id, in: &state)
+        var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
+        guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == sourceScope.activeStageID }) else {
+            return StageCommandResult(message: "stage move-to-display: no active stage", changed: false)
+        }
+        let movingStage = sourceScope.stages.remove(at: movingStageIndex)
+        targetScope.stages.removeAll { $0.id == movingStage.id }
+        targetScope.stages.append(movingStage)
+        targetScope.activeStageID = movingStage.id
+        if sourceScope.stages.isEmpty {
+            sourceScope.ensureStage(StageID(rawValue: "1"))
+        }
+        if sourceScope.activeStageID == movingStage.id {
+            sourceScope.activeStageID = sourceScope.stages.first?.id ?? StageID(rawValue: "1")
+        }
+        state.update(sourceScope)
+        state.update(targetScope)
+        state.focusDisplay(targetDisplay.id)
+        store.save(state)
+
+        let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
+        var applied = 0
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        for member in movingStage.members {
+            guard let window = windowsByID[member.windowID] else { continue }
+            if service.setFrame(centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect), of: window) != nil {
+                applied += 1
+            }
+        }
+        service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: sourceScope.desktopID, stageID: movingStage.id))
+        service.removeLayoutIntent(scope: targetScopeID)
+        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        events.append(RoadieEvent(
+            type: "stage_move_display",
+            scope: targetScopeID,
+            details: [
+                "displayIndex": String(displayIndex),
+                "windows": String(movingStage.members.count),
+                "applied": String(applied + result.applied + result.clamped)
+            ]
+        ))
+        return StageCommandResult(
+            message: "stage move-to-display \(displayIndex): windows=\(movingStage.members.count) applied=\(applied + result.applied + result.clamped)",
+            changed: true
+        )
+    }
+
     public func place(
         windowID: WindowID,
         displayID: DisplayID,
@@ -526,6 +585,15 @@ public struct StageCommandService {
             let overlaps = displays.filter { $0.frame.cgRect.contains(item.element) }.count
             return score + weight * overlaps
         }
+    }
+
+    private func centeredFrame(_ frame: CGRect, in container: CGRect) -> CGRect {
+        CGRect(
+            x: container.midX - frame.width / 2,
+            y: container.midY - frame.height / 2,
+            width: frame.width,
+            height: frame.height
+        ).integral
     }
 
     private func isHidden(_ frame: CGRect) -> Bool {
