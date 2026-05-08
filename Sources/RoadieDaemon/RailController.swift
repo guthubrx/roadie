@@ -498,11 +498,11 @@ private final class StageCardView: NSControl {
     }
 
     private var upHitRect: CGRect {
-        upRect.insetBy(dx: -6, dy: -6)
+        upRect.insetBy(dx: -12, dy: -10)
     }
 
     private var downHitRect: CGRect {
-        downRect.insetBy(dx: -6, dy: -6)
+        downRect.insetBy(dx: -12, dy: -10)
     }
 
     private func drawControls() {
@@ -825,15 +825,15 @@ private final class StageCardView: NSControl {
     }
 
     private func previousWindowHitRect(in rect: CGRect) -> CGRect {
-        previousWindowRect(in: rect).insetBy(dx: -6, dy: -6)
+        previousWindowRect(in: rect).insetBy(dx: -12, dy: -10)
     }
 
     private func nextWindowHitRect(in rect: CGRect) -> CGRect {
-        nextWindowRect(in: rect).insetBy(dx: -6, dy: -6)
+        nextWindowRect(in: rect).insetBy(dx: -12, dy: -10)
     }
 
     private func summonWindowHitRect(in rect: CGRect) -> CGRect {
-        summonWindowRect(in: rect).insetBy(dx: -6, dy: -6)
+        summonWindowRect(in: rect).insetBy(dx: -12, dy: -10)
     }
 
     private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {
