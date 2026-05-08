@@ -404,7 +404,7 @@ private final class RailDragGhostView: NSView {
 
 @MainActor
 private final class RailPanel: NSPanel {
-    private let stack = NSStackView()
+    private let stack = RailStackView()
     private let horizontalInset: CGFloat = 6
     private var visibleStageIDs: [StageID] = []
     private var emptyStageIDs: [StageID] = []
@@ -459,6 +459,8 @@ private final class RailPanel: NSPanel {
         let ids = stageIDs(from: scope)
         visibleStageIDs = ids
         emptyStageIDs = scope.stages.filter(\.members.isEmpty).map(\.id)
+        stack.railBackgroundColor = config.backgroundColor
+        stack.railBackgroundOpacity = config.backgroundOpacity
         emptyClickHideActive = config.emptyClickHideActive
         emptyClickSafetyMargin = config.emptyClickSafetyMargin
         centerStages(count: ids.count, config: config)
@@ -566,6 +568,23 @@ private final class RailPanel: NSPanel {
             scope.stages.first { $0.id == id }?.members.isEmpty == false
         }
         return ids
+    }
+}
+
+@MainActor
+private final class RailStackView: NSStackView {
+    var railBackgroundColor: NSColor = .clear {
+        didSet { needsDisplay = true }
+    }
+    var railBackgroundOpacity: CGFloat = 0 {
+        didSet { needsDisplay = true }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard railBackgroundOpacity > 0 else { return }
+        railBackgroundColor.withAlphaComponent(railBackgroundOpacity).setFill()
+        bounds.fill()
     }
 }
 
@@ -691,6 +710,8 @@ private struct RailVisualConfig {
     var mode: RailRenderMode = .stacked
     var stageAccents: [StageID: NSColor] = [:]
     var railWidth: CGFloat = 150
+    var backgroundColor: NSColor = .black
+    var backgroundOpacity: CGFloat = 0
     var emptyClickHideActive: Bool = true
     var emptyClickSafetyMargin: CGFloat = 12
     var previewWidth: CGFloat = 160
@@ -727,6 +748,8 @@ private struct RailVisualConfig {
             mode: mode,
             stageAccents: accents,
             railWidth: CGFloat(settings.width),
+            backgroundColor: NSColor(hex: settings.backgroundColor) ?? .black,
+            backgroundOpacity: CGFloat(settings.backgroundOpacity),
             emptyClickHideActive: settings.emptyClickHideActive,
             emptyClickSafetyMargin: CGFloat(settings.emptyClickSafetyMargin),
             previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
