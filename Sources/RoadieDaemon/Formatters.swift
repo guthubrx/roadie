@@ -135,6 +135,20 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func metrics(_ metrics: RoadieMetrics) -> String {
+        [
+            "displays=\(metrics.displays)",
+            "tileableWindows=\(metrics.tileableWindows)",
+            "scopedWindows=\(metrics.scopedWindows)",
+            "activeStages=\(metrics.activeStages)",
+            "persistentScopes=\(metrics.persistentScopes)",
+            "pendingLayoutCommands=\(metrics.pendingLayoutCommands)",
+            "staleScopes=\(metrics.staleScopes)",
+            "duplicateWindows=\(metrics.duplicateWindows)",
+            "staleMembers=\(metrics.staleMembers)"
+        ].joined(separator: "\n")
+    }
+
     public static func configValidation(_ report: ConfigValidationReport) -> String {
         let status = report.hasErrors ? "error" : "ok"
         var lines = ["status=\(status)"]
