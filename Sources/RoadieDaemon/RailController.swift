@@ -10,6 +10,7 @@ public final class RailController {
     private let events = EventLog()
     private let thumbnails = WindowThumbnailStore()
     private var panels: [DisplayID: RailPanel] = [:]
+    private var screenFrames: [DisplayID: CGRect] = [:]
     private var refreshTimer: Timer?
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
@@ -121,10 +122,16 @@ public final class RailController {
             return
         }
 
-        guard let panel = panels[drag.displayID],
-              let targetStageID = panel.dropStageID(at: screenPoint),
-              targetStageID != drag.sourceStageID
-        else { return }
+        guard let panel = panels[drag.displayID] else { return }
+        guard let targetStageID = panel.dropStageID(at: screenPoint) else {
+            guard screenFrames[drag.displayID]?.contains(screenPoint) == true else { return }
+            print("rail drag summon window \(drag.windowID.rawValue)")
+            fflush(stdout)
+            perform(.summonWindow(drag.windowID), displayID: drag.displayID)
+            rebuildPanels()
+            return
+        }
+        guard targetStageID != drag.sourceStageID else { return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(targetStageID.rawValue)")
         fflush(stdout)
         perform(.moveWindow(drag.windowID, targetStageID), displayID: drag.displayID)
@@ -174,6 +181,7 @@ public final class RailController {
         })
 
         for (displayID, screen) in screensByDisplayID {
+            screenFrames[displayID] = screen.frame
             let desktopID = state.currentDesktopID(for: displayID)
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
@@ -190,6 +198,7 @@ public final class RailController {
         for displayID in panels.keys where screensByDisplayID[displayID] == nil {
             panels[displayID]?.orderOut(nil)
             panels.removeValue(forKey: displayID)
+            screenFrames.removeValue(forKey: displayID)
         }
     }
 

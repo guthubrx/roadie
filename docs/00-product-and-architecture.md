@@ -132,6 +132,7 @@ Current rail capabilities:
 - Window summon/move via explicit thumbnail controls.
 - Drag a thumbnail to another visible stage to move that window there.
 - Drag a thumbnail to an empty rail area to move it to the first empty stage, or create a new stage if none is available.
+- Drag a thumbnail out of the rail into the real application area to summon that window into the active stage.
 - Drag feedback uses a non-interactive thumbnail ghost that follows the cursor.
 
 The rail intentionally does not own window-management policy. It calls the same stage commands as the CLI so state audit, heal, layout maintenance, and keyboard shortcuts keep one source of truth.

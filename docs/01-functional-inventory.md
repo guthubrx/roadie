@@ -96,6 +96,7 @@ This is a functional inventory only. It captures product ideas from `../39.roadi
 - Summon inactive-stage window into active stage via explicit button/menu action.
 - Move a thumbnail to another stage by drag/drop, with a ghost thumbnail following the cursor.
 - Move a thumbnail to an empty rail area to target an empty or newly-created stage.
+- Move a thumbnail out of the rail into the application area to summon it into the active stage.
 - Stage reorder via explicit controls; do not overload the same gesture as summon.
 - Empty-click hide active stage is risky and should default off or be protected by safety margins.
 - Focused-window border configuration:
