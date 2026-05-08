@@ -70,6 +70,8 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
     public var appName: String
     public var bundleID: String
     public var title: String
+    public var role: String?
+    public var subrole: String?
     public var frame: Rect
     public var isOnScreen: Bool
     public var isTileCandidate: Bool
@@ -80,6 +82,8 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
         appName: String,
         bundleID: String,
         title: String,
+        role: String? = nil,
+        subrole: String? = nil,
         frame: Rect,
         isOnScreen: Bool,
         isTileCandidate: Bool
@@ -89,6 +93,8 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
         self.appName = appName
         self.bundleID = bundleID
         self.title = title
+        self.role = role
+        self.subrole = subrole
         self.frame = frame
         self.isOnScreen = isOnScreen
         self.isTileCandidate = isTileCandidate
@@ -141,6 +147,7 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
             let title = info[kCGWindowName as String] as? String ?? ""
             let app = NSRunningApplication(processIdentifier: pid)
             let bundleID = app?.bundleIdentifier ?? ""
+            let attributes = Self.axAttributes(forWindowID: number, pid: pid, fallbackTitle: title, fallbackFrame: rect)
             let tileCandidate = layer == 0
                 && alpha > 0
                 && rect.width >= 80
@@ -153,6 +160,8 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 appName: appName,
                 bundleID: bundleID,
                 title: title,
+                role: attributes.role,
+                subrole: attributes.subrole,
                 frame: Rect(rect),
                 isOnScreen: true,
                 isTileCandidate: tileCandidate
@@ -228,6 +237,58 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
     private func windowID(of element: AXUIElement) -> CGWindowID? {
         var id = CGWindowID()
         return AXUIElementGetWindowID(element, &id) == .success && id > 0 ? id : nil
+    }
+
+    private static func axAttributes(forWindowID id: CGWindowID, pid: Int32, fallbackTitle: String, fallbackFrame: CGRect) -> (role: String?, subrole: String?) {
+        let app = AXUIElementCreateApplication(pid)
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              let windows = rawWindows as? [AXUIElement]
+        else { return (nil, nil) }
+
+        let match = windows.first { element in
+            var rawID = CGWindowID()
+            if AXUIElementGetWindowID(element, &rawID) == .success, rawID == id {
+                return true
+            }
+            if !fallbackTitle.isEmpty, axString(kAXTitleAttribute, of: element) == fallbackTitle {
+                return true
+            }
+            guard let frame = axFrame(of: element) else { return false }
+            return abs(frame.minX - fallbackFrame.minX) < 48
+                && abs(frame.minY - fallbackFrame.minY) < 48
+                && abs(frame.width - fallbackFrame.width) < 48
+                && abs(frame.height - fallbackFrame.height) < 48
+        }
+        guard let match else { return (nil, nil) }
+        return (axString(kAXRoleAttribute, of: match), axString(kAXSubroleAttribute, of: match))
+    }
+
+    private static func axString(_ attribute: String, of element: AXUIElement) -> String? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let value = raw as? String,
+              !value.isEmpty
+        else { return nil }
+        return value
+    }
+
+    private static func axFrame(of element: AXUIElement) -> CGRect? {
+        var rawPosition: CFTypeRef?
+        var rawSize: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &rawPosition) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &rawSize) == .success,
+              let rawPosition,
+              let rawSize
+        else { return nil }
+        let positionValue = rawPosition as! AXValue
+        let sizeValue = rawSize as! AXValue
+        var point = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(positionValue, .cgPoint, &point),
+              AXValueGetValue(sizeValue, .cgSize, &size)
+        else { return nil }
+        return CGRect(origin: point, size: size)
     }
 
     private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {

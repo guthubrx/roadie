@@ -273,6 +273,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             windowID: window.id,
             bundleID: window.bundleID,
             title: window.title,
+            identity: WindowIdentityService.identity(for: window),
             frame: window.frame
         ))
         stages[index].focusedWindowID = window.id
@@ -331,6 +332,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             stages[stageIndex].members[memberIndex].frame = window.frame
             stages[stageIndex].members[memberIndex].bundleID = window.bundleID
             stages[stageIndex].members[memberIndex].title = window.title
+            stages[stageIndex].members[memberIndex].identity = WindowIdentityService.identity(for: window)
         }
     }
 
@@ -430,12 +432,14 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var windowID: WindowID
     public var bundleID: String
     public var title: String
+    public var identity: WindowIdentityV2?
     public var frame: Rect
 
-    public init(windowID: WindowID, bundleID: String, title: String, frame: Rect) {
+    public init(windowID: WindowID, bundleID: String, title: String, identity: WindowIdentityV2? = nil, frame: Rect) {
         self.windowID = windowID
         self.bundleID = bundleID
         self.title = title
+        self.identity = identity
         self.frame = frame
     }
 }

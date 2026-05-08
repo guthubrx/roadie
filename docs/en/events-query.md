@@ -78,6 +78,25 @@ Commands:
 - `command.applied`
 - `command.failed`
 
+Control and safety:
+
+- `config.reload_requested`
+- `config.reload_applied`
+- `config.reload_failed`
+- `config.active_preserved`
+- `restore.snapshot_written`
+- `restore.crash_detected`
+- `restore.crash_completed`
+- `transient.detected`
+- `transient.cleared`
+- `transient.recovery_attempted`
+- `layout_identity.restore_started`
+- `layout_identity.restore_applied`
+- `layout_identity.conflict_detected`
+- `layout.width_adjust_requested`
+- `layout.width_adjust_applied`
+- `layout.width_adjust_rejected`
+
 ## Query API
 
 ```bash
@@ -90,6 +109,10 @@ Commands:
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query config_reload
+./bin/roadie query restore
+./bin/roadie query transient
+./bin/roadie query identity_restore
 ```
 
 Stable format:
@@ -108,6 +131,9 @@ Use cases:
 - `query rules`: verify what was loaded from TOML.
 - `query health`: integrate Roadie into a local health check.
 - `query events`: debug recent events without following the live stream.
+- `query restore`: inspect the last restore safety snapshot.
+- `query transient`: inspect active transient-window pause state.
+- `query identity_restore`: inspect layout persistence v2 dry-run matches.
 
 ## SketchyBar Or Script Example
 
@@ -118,4 +144,3 @@ while read -r line; do
   echo "Focused app: $app"
 done
 ```
-

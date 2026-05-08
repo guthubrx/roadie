@@ -12,19 +12,22 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
     public var placements: [WindowID: Rect]
     public var createdAt: Date
     public var source: Source
+    public var widthAdjustment: WidthAdjustmentIntent?
 
     public init(
         scope: StageScope,
         windowIDs: [WindowID],
         placements: [WindowID: Rect],
         createdAt: Date = Date(),
-        source: Source = .auto
+        source: Source = .auto,
+        widthAdjustment: WidthAdjustmentIntent? = nil
     ) {
         self.scope = scope
         self.windowIDs = windowIDs
         self.placements = placements
         self.createdAt = createdAt
         self.source = source
+        self.widthAdjustment = widthAdjustment
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -33,6 +36,7 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         case placements
         case createdAt
         case source
+        case widthAdjustment
     }
 
     public init(from decoder: Decoder) throws {
@@ -42,6 +46,7 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         self.placements = try container.decode([WindowID: Rect].self, forKey: .placements)
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.source = (try container.decodeIfPresent(LayoutIntent.Source.self, forKey: .source)) ?? .auto
+        self.widthAdjustment = try container.decodeIfPresent(WidthAdjustmentIntent.self, forKey: .widthAdjustment)
     }
 }
 

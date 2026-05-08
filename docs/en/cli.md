@@ -58,6 +58,10 @@ Use cases:
 ./bin/roadie layout insert left|right|up|down
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
 ./bin/roadie balance
 ```
 
@@ -66,6 +70,29 @@ Use cases:
 - inspect the plan before applying it with `layout plan`;
 - persist a manual layout intent with `insert` or `zoom-parent`;
 - return to a linear layout with `flatten`.
+- adjust the active or all tiled window widths with `layout width`.
+
+## Safety Commands
+
+```bash
+./bin/roadie control status --json
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadie transient status --json
+./bin/roadie state identity inspect --json
+./bin/roadie state restore-v2 --dry-run --json
+./bin/roadie state restore-v2 --json
+```
+
+Typical use:
+
+- `config reload`: atomically validate and apply TOML, keeping the previous config on error.
+- `restore snapshot`: write a safety snapshot for managed windows.
+- `restore apply`: restore visible frames from the latest snapshot.
+- `transient status`: check whether a sheet/dialog/open-save panel is pausing layout.
+- `state restore-v2 --dry-run`: inspect stable-identity matches before applying.
 
 ## Displays, Desktops, And Stages
 
@@ -129,6 +156,10 @@ Use cases:
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query config_reload
+./bin/roadie query restore
+./bin/roadie query transient
+./bin/roadie query identity_restore
 ```
 
 Every `query` returns stable JSON:
@@ -139,4 +170,3 @@ Every `query` returns stable JSON:
   "data": []
 }
 ```
-

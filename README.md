@@ -78,6 +78,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Supports TOML window rules with validation, explain, and runtime `rule.*` events.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
 - Persists and exposes window groups for stack/tab-like workflows.
+- Provides a Control Center status surface, atomic config reload, restore safety snapshots, transient-window pause, layout persistence v2, and width preset/nudge commands.
 
 ## Documentation
 
@@ -448,6 +449,17 @@ If windows stop moving after a rebuild, re-check Accessibility for `bin/roadied`
 ```bash
 make restart
 ```
+
+## Control Center
+
+Roadie also exposes a macOS menu bar control surface for status and common actions.
+
+```bash
+./bin/roadie control status --json
+./bin/roadied control-center
+```
+
+Use it to check daemon health, active config status, active desktop/stage, recent reload errors, and actions such as reload config, reapply layout, reveal config, reveal state, open logs, run doctor, and quit safely.
 
 ## Repository Layout
 

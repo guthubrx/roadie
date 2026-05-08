@@ -1,0 +1,10 @@
+[config_reload]
+debounce_ms = 10
+
+[layout_persistence]
+minimum_match_score = 2.0
+
+[width_adjustment]
+presets = []
+minimum_ratio = 2.0
+maximum_ratio = 1.0

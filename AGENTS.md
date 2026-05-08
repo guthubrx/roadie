@@ -1,15 +1,15 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `002-roadie-ecosystem-upgrade`.
+Current SpecKit feature: `003-roadie-control-safety`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/002-roadie-ecosystem-upgrade/spec.md`
-- `specs/002-roadie-ecosystem-upgrade/plan.md`
-- `specs/002-roadie-ecosystem-upgrade/research.md`
-- `specs/002-roadie-ecosystem-upgrade/data-model.md`
-- `specs/002-roadie-ecosystem-upgrade/contracts/`
-- `docs/decisions/001-roadie-automation-contract.md`
+- `specs/003-roadie-control-safety/spec.md`
+- `specs/003-roadie-control-safety/plan.md`
+- `specs/003-roadie-control-safety/research.md`
+- `specs/003-roadie-control-safety/data-model.md`
+- `specs/003-roadie-control-safety/contracts/`
+- `specs/003-roadie-control-safety/quickstart.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

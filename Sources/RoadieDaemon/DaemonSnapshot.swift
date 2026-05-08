@@ -367,6 +367,21 @@ public extension SnapshotService {
         intentStore.save(LayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: source))
     }
 
+    func saveWidthAdjustmentIntent(
+        scope: StageScope,
+        windowIDs: [WindowID],
+        placements: [WindowID: Rect],
+        intent: WidthAdjustmentIntent
+    ) {
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: windowIDs,
+            placements: placements,
+            source: .command,
+            widthAdjustment: intent
+        ))
+    }
+
     func removeLayoutIntent(scope: StageScope) {
         intentStore.remove(scope: scope)
     }
@@ -844,6 +859,23 @@ public enum SnapshotEncoding {
         let encoder = JSONEncoder()
         encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
         let data = try encoder.encode(report)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func json(_ state: ControlCenterState, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(state)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func json(_ result: ConfigReloadResult, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(result)
         return String(decoding: data, as: UTF8.self)
     }
 

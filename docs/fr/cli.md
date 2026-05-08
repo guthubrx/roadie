@@ -58,6 +58,10 @@ Cas d'usage :
 ./bin/roadie layout insert left|right|up|down
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
 ./bin/roadie balance
 ```
 
@@ -66,6 +70,29 @@ Cas d'usage :
 - inspecter le plan avant application avec `layout plan`;
 - persister une intention manuelle avec `insert` ou `zoom-parent`;
 - revenir a un layout lineaire avec `flatten`.
+- ajuster la largeur de la fenetre active ou de toutes les fenetres tilees avec `layout width`.
+
+## Commandes de securite
+
+```bash
+./bin/roadie control status --json
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadie transient status --json
+./bin/roadie state identity inspect --json
+./bin/roadie state restore-v2 --dry-run --json
+./bin/roadie state restore-v2 --json
+```
+
+Utilisation typique :
+
+- `config reload` : valide et applique le TOML atomiquement, en gardant l'ancienne config en cas d'erreur.
+- `restore snapshot` : ecrit un snapshot de securite des fenetres gerees.
+- `restore apply` : restaure les frames visibles depuis le dernier snapshot.
+- `transient status` : indique si une sheet/dialogue/open-save panel suspend le layout.
+- `state restore-v2 --dry-run` : inspecte les matches d'identite stable avant application.
 
 ## Ecrans, desktops et stages
 
@@ -129,6 +156,10 @@ Cas d'usage :
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query config_reload
+./bin/roadie query restore
+./bin/roadie query transient
+./bin/roadie query identity_restore
 ```
 
 Chaque `query` retourne un JSON stable :
@@ -139,4 +170,3 @@ Chaque `query` retourne un JSON stable :
   "data": []
 }
 ```
-

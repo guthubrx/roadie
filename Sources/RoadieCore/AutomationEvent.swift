@@ -17,6 +17,10 @@ public struct AutomationScope: RawRepresentable, Codable, Equatable, Hashable, S
     public static let layout = AutomationScope(rawValue: "layout")
     public static let rule = AutomationScope(rawValue: "rule")
     public static let command = AutomationScope(rawValue: "command")
+    public static let config = AutomationScope(rawValue: "config")
+    public static let controlCenter = AutomationScope(rawValue: "control_center")
+    public static let restore = AutomationScope(rawValue: "restore")
+    public static let transient = AutomationScope(rawValue: "transient")
 
     public var description: String { rawValue }
 }
@@ -46,6 +50,9 @@ public struct AutomationCause: RawRepresentable, Codable, Equatable, Hashable, S
     public static let rule = AutomationCause(rawValue: "rule")
     public static let startup = AutomationCause(rawValue: "startup")
     public static let configReload = AutomationCause(rawValue: "config_reload")
+    public static let controlCenter = AutomationCause(rawValue: "control_center")
+    public static let restore = AutomationCause(rawValue: "restore")
+    public static let transient = AutomationCause(rawValue: "transient")
     public static let system = AutomationCause(rawValue: "system")
 
     public var description: String { rawValue }

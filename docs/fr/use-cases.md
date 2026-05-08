@@ -118,3 +118,40 @@ Utiliser cette sequence apres :
 - fermeture brutale d'apps;
 - changement de branche ou rebuild.
 
+## 7. Reload de config securise
+
+Objectif : modifier `roadies.toml` sans risquer la session courante.
+
+```bash
+./bin/roadie config validate
+./bin/roadie config reload --json
+./bin/roadie query config_reload
+```
+
+Si la validation echoue, Roadie conserve la config active precedente et publie `config.reload_failed` ainsi que `config.active_preserved`.
+
+## 8. Restaurer apres arret ou crash
+
+Objectif : eviter des fenetres piegees ou hors ecran si le daemon s'arrete.
+
+```bash
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --json
+./bin/roadie state restore-v2 --dry-run --json
+```
+
+Utilise `restore apply` pour restaurer directement les frames. Utilise d'abord `state restore-v2 --dry-run` quand les IDs de fenetres ont change et que tu veux inspecter les correspondances d'identite stable.
+
+## 9. Dialogues systeme et reglages de largeur
+
+Objectif : laisser Roadie en retrait pendant les dialogues macOS, puis ajuster rapidement la largeur.
+
+```bash
+./bin/roadie transient status --json
+./bin/roadie layout width next
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67 --all
+```
+
+Roadie suspend les actions de layout non essentielles pendant qu'une sheet/dialogue/open-save panel est active. Les commandes width s'appliquent seulement aux layouts compatibles et renvoient un rejet structure sinon.

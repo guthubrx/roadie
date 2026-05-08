@@ -42,6 +42,14 @@ public struct AutomationQueryService {
             return result(name, DaemonHealthService(service: service).run())
         case "events":
             return result(name, eventLog.envelopes(limit: 50))
+        case "config_reload":
+            return result(name, ConfigReloadService(activePath: configPath ?? RoadieConfigLoader.defaultConfigPath(), eventLog: eventLog).state)
+        case "restore":
+            return result(name, RestoreSafetyService(eventLog: eventLog).load() ?? RestoreSafetySnapshot())
+        case "transient":
+            return result(name, TransientWindowDetector(service: service, events: eventLog).status())
+        case "identity_restore":
+            return result(name, LayoutPersistenceV2Service(service: service, events: eventLog).dryRun())
         default:
             return AutomationQueryResult(kind: name, data: .object([
                 "error": .string("unknown query")

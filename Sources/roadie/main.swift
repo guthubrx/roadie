@@ -13,16 +13,22 @@ func printUsage() {
       roadie display list|current [--json]
       roadie display focus N|left|right|up|down
       roadie state dump|audit|heal [--json]
+      roadie state identity inspect [--json]
+      roadie state restore-v2 [--dry-run] [--json]
       roadie tree dump [--json]
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie layout split horizontal|vertical
       roadie layout join-with|insert left|right|up|down
       roadie layout flatten|zoom-parent
-      roadie config show|validate
+      roadie layout width next|prev|nudge [DELTA]|ratio RATIO [--all]
+      roadie config show|validate|reload [--json]
+      roadie restore snapshot|apply|status [--json]
+      roadie transient status [--json]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
       roadie query state|windows|displays|desktops|stages|groups|rules|health|events
+      roadie control status [--json]
       roadie rail status|pin|unpin|toggle
       roadie doctor
       roadie self-test
@@ -111,7 +117,7 @@ case "display":
     }
 case "state":
     let verb = args.dropFirst().first
-    guard verb == "dump" || verb == "audit" || verb == "heal" else {
+    guard verb == "dump" || verb == "audit" || verb == "heal" || verb == "identity" || verb == "restore-v2" else {
         printUsage()
         exit(64)
     }
@@ -130,7 +136,7 @@ case "state":
             print(TextFormatter.stateAudit(report))
         }
         exit(report.failed ? 1 : 0)
-    } else {
+    } else if verb == "heal" {
         let report = StateAuditService(service: service).heal()
         if args.contains("--json") {
             do {
@@ -143,6 +149,19 @@ case "state":
             print(TextFormatter.stateHeal(report))
         }
         exit(report.audit.failed ? 1 : 0)
+    } else if verb == "identity" {
+        guard args.dropFirst(2).first == "inspect" else {
+            fputs("roadie: state identity requires inspect\n", stderr)
+            exit(64)
+        }
+        let report = LayoutPersistenceV2Service(service: service).dryRun()
+        printCodableJSON(report)
+        exit(0)
+    } else {
+        let persistence = LayoutPersistenceV2Service(service: service)
+        let report = args.contains("--dry-run") ? persistence.dryRun() : persistence.apply()
+        printCodableJSON(report)
+        exit(report.applied || args.contains("--dry-run") ? 0 : 1)
     }
 case "layout":
     let verb = args.dropFirst().first
@@ -205,6 +224,10 @@ case "layout":
         let result = LayoutCommandService(service: service).zoomParent()
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "width":
+        let result = runWidthLayoutCommand(Array(args.dropFirst(2)))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -262,7 +285,7 @@ case "metrics":
     }
 case "config":
     let verb = args.dropFirst().first
-    guard verb == "show" || verb == "validate" else {
+    guard verb == "show" || verb == "validate" || verb == "reload" else {
         printUsage()
         exit(64)
     }
@@ -270,6 +293,22 @@ case "config":
         let report = RoadieConfigLoader.validate()
         print(TextFormatter.configValidation(report))
         exit(report.hasErrors ? 1 : 0)
+    } else if verb == "reload" {
+        let result = ConfigReloadService().reload()
+        if args.contains("--json") {
+            do {
+                print(try SnapshotEncoding.json(result))
+            } catch {
+                fputs("roadie: failed to encode config reload result: \(error)\n", stderr)
+                exit(1)
+            }
+        } else {
+            print("status=\(result.status.rawValue)")
+            if let error = result.error {
+                print("error=\(error)")
+            }
+        }
+        exit(result.status == .applied ? 0 : 1)
     }
     do {
         let config = try RoadieConfigLoader.load()
@@ -280,6 +319,26 @@ case "config":
         fputs("roadie: config load failed: \(error)\n", stderr)
         exit(1)
     }
+case "control":
+    guard args.dropFirst().first == "status" else {
+        printUsage()
+        exit(64)
+    }
+    let state = ControlCenterStateService(service: service).state()
+    if args.contains("--json") {
+        do {
+            print(try SnapshotEncoding.json(state))
+        } catch {
+            fputs("roadie: failed to encode control status: \(error)\n", stderr)
+            exit(1)
+        }
+    } else {
+        print(TextFormatter.controlCenter(state))
+    }
+case "restore":
+    runRestoreCommand(Array(args.dropFirst()))
+case "transient":
+    runTransientCommand(Array(args.dropFirst()))
 case "rules":
     runRulesCommand(Array(args.dropFirst()))
 case "group":
@@ -405,6 +464,85 @@ func printCodableJSON<T: Encodable>(_ value: T) {
         fputs("roadie: failed to encode JSON: \(error)\n", stderr)
         exit(1)
     }
+}
+
+@MainActor
+func runWidthLayoutCommand(_ args: [String]) -> LayoutCommandResult {
+    guard let verb = args.first else {
+        return LayoutCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+    }
+    let scope: WidthAdjustmentScope = args.contains("--all") ? .allWindows : .activeWindow
+    let commands = LayoutCommandService(service: service)
+    switch verb {
+    case "next":
+        return commands.widthNext()
+    case "prev", "previous":
+        return commands.widthPrevious()
+    case "nudge":
+        let delta = args.dropFirst().first.flatMap(Double.init)
+        return commands.widthNudge(delta, scope: scope)
+    case "ratio":
+        guard let raw = args.dropFirst().first, let ratio = Double(raw) else {
+            return LayoutCommandResult(message: "layout width ratio: requires numeric ratio", changed: false)
+        }
+        return commands.widthRatio(ratio, scope: scope)
+    default:
+        return LayoutCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+    }
+}
+
+@MainActor
+func runRestoreCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let restore = RestoreSafetyService()
+    switch verb {
+    case "snapshot":
+        let snapshot = restore.capture()
+        let saved = restore.save(snapshot)
+        if args.contains("--json") {
+            printCodableJSON(snapshot)
+        } else {
+            print("restore snapshot: windows=\(snapshot.windows.count) saved=\(saved)")
+        }
+        exit(saved ? 0 : 1)
+    case "apply":
+        let result = restore.restoreFromDisk()
+        if args.contains("--json") {
+            printCodableJSON(result)
+        } else {
+            print(result.message)
+        }
+        exit(result.failed == 0 && result.restored > 0 ? 0 : 1)
+    case "status":
+        let snapshot = restore.load()
+        if args.contains("--json") {
+            printCodableJSON(snapshot ?? RestoreSafetySnapshot())
+        } else {
+            print("restore status: windows=\(snapshot?.windows.count ?? 0)")
+        }
+        exit(snapshot == nil ? 1 : 0)
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runTransientCommand(_ args: [String]) -> Never {
+    guard args.first == "status" else {
+        printUsage()
+        exit(64)
+    }
+    let state = TransientWindowDetector(service: service).status()
+    if args.contains("--json") {
+        printCodableJSON(state)
+    } else {
+        print("transient active=\(state.isActive) reason=\(state.reason?.rawValue ?? "-") recoverable=\(state.recoverable)")
+    }
+    exit(0)
 }
 
 @MainActor

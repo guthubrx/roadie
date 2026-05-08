@@ -1,0 +1,17 @@
+{
+  "daemonStatus": "running",
+  "configPath": "~/.config/roadies/roadies.toml",
+  "configStatus": "valid",
+  "activeDesktop": "1",
+  "activeStage": "dev",
+  "windowCount": 3,
+  "lastError": null,
+  "lastReloadAt": null,
+  "actions": {
+    "canReloadConfig": true,
+    "canReapplyLayout": true,
+    "canRevealConfig": true,
+    "canRevealState": true,
+    "canQuitSafely": true
+  }
+}

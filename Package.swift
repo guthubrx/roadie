@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "RoadieCore", targets: ["RoadieCore"]),
         .library(name: "RoadieAX", targets: ["RoadieAX"]),
         .library(name: "RoadieDaemon", targets: ["RoadieDaemon"]),
+        .library(name: "RoadieControlCenter", targets: ["RoadieControlCenter"]),
         .library(name: "RoadieStages", targets: ["RoadieStages"]),
         .library(name: "RoadieTiler", targets: ["RoadieTiler"]),
         .executable(name: "roadied", targets: ["roadied"]),
@@ -35,6 +36,10 @@ let package = Package(
             dependencies: ["RoadieAX", "RoadieStages", "RoadieTiler"]
         ),
         .target(
+            name: "RoadieControlCenter",
+            dependencies: ["RoadieDaemon"]
+        ),
+        .target(
             name: "RoadieStages",
             dependencies: ["RoadieCore"]
         ),
@@ -44,7 +49,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "roadied",
-            dependencies: ["RoadieDaemon"]
+            dependencies: ["RoadieDaemon", "RoadieControlCenter"]
         ),
         .executableTarget(
             name: "roadie",
@@ -56,6 +61,10 @@ let package = Package(
             resources: [
                 .process("Fixtures")
             ]
+        ),
+        .testTarget(
+            name: "RoadieControlCenterTests",
+            dependencies: ["RoadieControlCenter"]
         ),
         .testTarget(
             name: "RoadieStagesTests",
