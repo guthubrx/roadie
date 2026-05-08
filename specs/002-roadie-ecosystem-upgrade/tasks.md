@@ -93,8 +93,8 @@
 - [X] T037 [US2] Créer `WindowRuleValidator` dans `Sources/RoadieDaemon/WindowRuleValidator.swift`
 - [X] T038 [US2] Créer `WindowRuleMatcher` dans `Sources/RoadieDaemon/WindowRuleMatcher.swift`
 - [X] T039 [US2] Créer `WindowRuleEngine` pour évaluer et appliquer les actions dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
-- [ ] T040 [US2] Intégrer les règles à la détection ou actualisation fenêtre dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
-- [ ] T041 [US2] Publier `rule.matched`, `rule.applied`, `rule.skipped` et `rule.failed` via `Sources/RoadieDaemon/EventLog.swift`
+- [X] T040 [US2] Intégrer les règles à la détection ou actualisation fenêtre dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
+- [X] T041 [US2] Publier `rule.matched`, `rule.applied`, `rule.skipped` et `rule.failed` via `Sources/RoadieDaemon/EventLog.swift`
 - [X] T042 [US2] Ajouter les commandes `roadie rules validate`, `roadie rules list` et `roadie rules explain` dans `Sources/roadie/main.swift`
 - [X] T043 [US2] Stocker et exposer le marqueur `scratchpad` dans `Sources/RoadieDaemon/WindowRuleEngine.swift`
 - [ ] T044 [US2] Mettre à jour le contrat TOML réel dans `specs/002-roadie-ecosystem-upgrade/contracts/config-rules.toml.md`
