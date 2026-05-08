@@ -793,6 +793,7 @@ private final class StageCardView: NSControl {
     private let accent: NSColor
     private let config: RailVisualConfig
     private let thumbnails: [WindowID: NSImage]
+    private let visualMembers: [PersistentStageMember]
     private let position: Int
     private let stageCount: Int
     private let contentInset: CGFloat = 4
@@ -816,6 +817,7 @@ private final class StageCardView: NSControl {
         self.accent = accent
         self.config = config
         self.thumbnails = thumbnails
+        self.visualMembers = Self.focusFirstMembers(stage)
         self.position = position
         self.stageCount = stageCount
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
@@ -836,6 +838,18 @@ private final class StageCardView: NSControl {
 
     static func height(for config: RailVisualConfig) -> CGFloat {
         config.mode == .icons ? 78 : max(150, config.previewHeight + 66)
+    }
+
+    private static func focusFirstMembers(_ stage: PersistentStage) -> [PersistentStageMember] {
+        guard let focusedWindowID = stage.focusedWindowID,
+              let index = stage.members.firstIndex(where: { $0.windowID == focusedWindowID })
+        else {
+            return stage.members
+        }
+        var members = stage.members
+        let focused = members.remove(at: index)
+        members.insert(focused, at: 0)
+        return members
     }
 
     required init?(coder: NSCoder) {
@@ -908,7 +922,7 @@ private final class StageCardView: NSControl {
     }
 
     private func drawStacked(in rect: CGRect) {
-        guard !stage.members.isEmpty else {
+        guard !visualMembers.isEmpty else {
             drawEmpty(in: rect)
             return
         }
@@ -920,11 +934,11 @@ private final class StageCardView: NSControl {
     }
 
     private func drawMosaic(in rect: CGRect) {
-        guard !stage.members.isEmpty else {
+        guard !visualMembers.isEmpty else {
             drawEmpty(in: rect)
             return
         }
-        let count = min(stage.members.count, 6)
+        let count = min(visualMembers.count, 6)
         let cols = count <= 2 ? count : 2
         let rows = Int(ceil(Double(count) / Double(cols)))
         let gap: CGFloat = 6
@@ -944,7 +958,7 @@ private final class StageCardView: NSControl {
     }
 
     private func drawParallax(in rect: CGRect) {
-        guard !stage.members.isEmpty else {
+        guard !visualMembers.isEmpty else {
             drawEmpty(in: rect)
             return
         }
@@ -956,11 +970,11 @@ private final class StageCardView: NSControl {
     }
 
     private func drawIcons(in rect: CGRect) {
-        guard !stage.members.isEmpty else {
+        guard !visualMembers.isEmpty else {
             drawEmpty(in: rect)
             return
         }
-        let members = Array(stage.members.prefix(6))
+        let members = Array(visualMembers.prefix(6))
         for (index, member) in members.enumerated() {
             let x = rect.minX + CGFloat(index) * 32
             let r = CGRect(x: x, y: rect.midY - 12, width: 24, height: 24)
@@ -970,8 +984,8 @@ private final class StageCardView: NSControl {
                 .font: NSFont.boldSystemFont(ofSize: 11),
             ])
         }
-        if stage.members.count > 6 {
-            "+\(stage.members.count - 6)".draw(in: CGRect(x: rect.minX + 196, y: rect.midY - 8, width: 28, height: 18), withAttributes: [
+        if visualMembers.count > 6 {
+            "+\(visualMembers.count - 6)".draw(in: CGRect(x: rect.minX + 196, y: rect.midY - 8, width: 28, height: 18), withAttributes: [
                 .foregroundColor: NSColor.white.withAlphaComponent(0.65),
                 .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             ])
@@ -984,7 +998,7 @@ private final class StageCardView: NSControl {
     }
 
     private var visiblePreviewCount: Int {
-        min(stage.members.count, 5)
+        min(visualMembers.count, 5)
     }
 
     private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
@@ -1008,7 +1022,7 @@ private final class StageCardView: NSControl {
     }
 
     private func previewRects(in rect: CGRect, maxCount: Int) -> [CGRect] {
-        let count = min(stage.members.count, maxCount)
+        let count = min(visualMembers.count, maxCount)
         let base = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
         return (0..<count).map { _ in base }
     }
@@ -1049,14 +1063,14 @@ private final class StageCardView: NSControl {
 
     private func drawPreviewBody(_ rect: CGRect, index: Int, darkened: Bool) {
         let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
-        if let image = stage.members[safe: index].flatMap({ thumbnails[$0.windowID] }) {
+        if let image = visualMembers[safe: index].flatMap({ thumbnails[$0.windowID] }) {
             NSGraphicsContext.saveGraphicsState()
             path.addClip()
             let opacity = opacity(for: index)
             image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: opacity)
             NSGraphicsContext.restoreGraphicsState()
         } else {
-            color(for: stage.members[safe: index], index: index).withAlphaComponent(opacity(for: index)).setFill()
+            color(for: visualMembers[safe: index], index: index).withAlphaComponent(opacity(for: index)).setFill()
             path.fill()
         }
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
@@ -1140,7 +1154,7 @@ private final class StageCardView: NSControl {
     func dragPayload(at point: CGPoint) -> RailDragPayload? {
         for item in hitPreviewItemsFrontToBack() {
             guard item.rect.contains(point),
-                  let member = stage.members[safe: item.index]
+                  let member = visualMembers[safe: item.index]
             else { continue }
             return RailDragPayload(
                 windowID: member.windowID,
@@ -1166,7 +1180,7 @@ private final class StageCardView: NSControl {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
         case .mosaic:
-            let count = min(stage.members.count, 6)
+            let count = min(visualMembers.count, 6)
             let cols = count <= 2 ? count : 2
             let rows = Int(ceil(Double(count) / Double(max(cols, 1))))
             let gap: CGFloat = 6
@@ -1186,7 +1200,7 @@ private final class StageCardView: NSControl {
                 )
             }
         case .icons:
-            return Array(stage.members.prefix(6)).enumerated().map { index, _ in
+            return Array(visualMembers.prefix(6)).enumerated().map { index, _ in
                 (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
             }
         }
