@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-05-08T10:00:00Z",
+  "activeDisplayId": "display-main",
+  "activeDesktopId": "desktop-1",
+  "activeStageId": "stage-dev",
+  "focusedWindowId": "window-terminal",
+  "displays": [
+    {
+      "id": "display-main",
+      "name": "Built-in Display",
+      "frame": { "x": 0, "y": 0, "width": 1728, "height": 1117 },
+      "activeDesktopId": "desktop-1"
+    }
+  ],
+  "desktops": [
+    {
+      "id": "desktop-1",
+      "displayId": "display-main",
+      "label": "dev",
+      "activeStageId": "stage-dev"
+    },
+    {
+      "id": "desktop-2",
+      "displayId": "display-main",
+      "label": "docs",
+      "activeStageId": "stage-docs"
+    }
+  ],
+  "stages": [
+    {
+      "id": "stage-dev",
+      "desktopId": "desktop-1",
+      "name": "dev",
+      "windowIds": ["window-terminal", "window-editor"],
+      "focusedWindowId": "window-terminal"
+    },
+    {
+      "id": "stage-docs",
+      "desktopId": "desktop-2",
+      "name": "docs",
+      "windowIds": ["window-browser"],
+      "focusedWindowId": "window-browser"
+    }
+  ],
+  "windows": [
+    {
+      "id": "window-terminal",
+      "app": "Terminal",
+      "title": "roadie",
+      "displayId": "display-main",
+      "desktopId": "desktop-1",
+      "stageId": "stage-dev",
+      "isFocused": true,
+      "isFloating": false
+    },
+    {
+      "id": "window-editor",
+      "app": "Xcode",
+      "title": "Roadie",
+      "displayId": "display-main",
+      "desktopId": "desktop-1",
+      "stageId": "stage-dev",
+      "isFocused": false,
+      "isFloating": false
+    },
+    {
+      "id": "window-browser",
+      "app": "Safari",
+      "title": "Roadie Docs",
+      "displayId": "display-main",
+      "desktopId": "desktop-2",
+      "stageId": "stage-docs",
+      "isFocused": false,
+      "isFloating": false
+    }
+  ],
+  "groups": [],
+  "rules": []
+}
