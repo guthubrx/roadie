@@ -22,6 +22,7 @@ public struct RoadieEvent: Codable, Equatable, Sendable {
 
 public struct EventLog: Sendable {
     private let url: URL
+    private static let jsonNewline = Data("\n".utf8)
 
     public init(path: String = Self.defaultPath()) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
@@ -35,19 +36,27 @@ public struct EventLog: Sendable {
     }
 
     public func append(_ event: RoadieEvent) {
+        write(event)
+    }
+
+    public func append(_ event: RoadieEventEnvelope) {
+        write(event)
+    }
+
+    private func write<T: Encodable>(_ value: T) {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(event)
+            let data = try encoder.encode(value)
             if FileManager.default.fileExists(atPath: url.path) {
                 let handle = try FileHandle(forWritingTo: url)
                 try handle.seekToEnd()
                 try handle.write(contentsOf: data)
-                try handle.write(contentsOf: Data("\n".utf8))
+                try handle.write(contentsOf: Self.jsonNewline)
                 try handle.close()
             } else {
-                try (data + Data("\n".utf8)).write(to: url, options: .atomic)
+                try (data + Self.jsonNewline).write(to: url, options: .atomic)
             }
         } catch {
             fputs("roadie: failed to write event log: \(error)\n", stderr)
@@ -58,5 +67,14 @@ public struct EventLog: Sendable {
         guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return [] }
         let lines = raw.split(separator: "\n").map(String.init)
         return Array(lines.suffix(max(1, limit)))
+    }
+
+    public func envelopes(limit: Int = 20) -> [RoadieEventEnvelope] {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return tail(limit: limit).compactMap { line in
+            guard let data = line.data(using: .utf8) else { return nil }
+            return try? decoder.decode(RoadieEventEnvelope.self, from: data)
+        }
     }
 }

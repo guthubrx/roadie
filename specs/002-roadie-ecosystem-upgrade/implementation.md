@@ -154,7 +154,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T011 : Modèle LayoutCommandIntent
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `daf3481` - feat(002): Add layout command intent model
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/LayoutCommandIntent.swift` (créé)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T011 cochée)
@@ -163,3 +163,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec les commandes power-user
 - **Notes** : Le modèle capture commande, cible, arguments, source, corrélation et horodatage.
+
+### T012 : EventLog compatible RoadieEventEnvelope
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieDaemon/EventLog.swift` (append/read enveloppes)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T012 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec T014/T016
+- **Notes** : `append(RoadieEvent)` reste disponible ; `append(RoadieEventEnvelope)` et `envelopes(limit:)` ajoutent la nouvelle surface sans rupture.
