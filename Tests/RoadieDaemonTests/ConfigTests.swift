@@ -114,23 +114,41 @@ struct ConfigTests {
         empty_click_hide_active = false
         empty_click_safety_margin = 24
 
-        [fx.rail.header]
-        enabled = true
-        placement = "top"
-        alignment = "center"
+        [fx.rail.layout]
+        header_position = "top"
+        stages_position = "bottom"
+        spacing = 17
         top_padding = 18
         bottom_padding = 9
-        height = 44
-        width = 132
-        title_color = "#FFFFFFFF"
-        subtitle_color = "#FFFFFF88"
-        title_font_size = 14
-        subtitle_font_size = 11
+
+        [fx.rail.header.display]
+        enabled = true
+        template = "{display}"
+        color = "#FFFFFFFF"
+        font_size = 14
         font_family = "Avenir Next"
-        title_weight = "semibold"
-        subtitle_weight = "regular"
-        title_template = "{display}"
-        subtitle_template = "Bureau {desktop}"
+        weight = "semibold"
+        alignment = "center"
+        opacity = 0.8
+        offset_x = 2
+        offset_y = 3
+
+        [fx.rail.header.desktop]
+        enabled = true
+        template = "Bureau {desktop}"
+        color = "#FFFFFF88"
+        font_size = 11
+        font_family = "Avenir Next"
+        weight = "regular"
+        alignment = "right"
+        opacity = 0.6
+        offset_x = -2
+        offset_y = -3
+
+        [fx.rail.stages]
+        position = "bottom"
+        alignment = "center"
+        gap = 19
 
         [fx.rail.preview]
         width = 160
@@ -169,21 +187,32 @@ struct ConfigTests {
         #expect(settings.layoutMode == "resize")
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
-        #expect(settings.header.enabled == true)
-        #expect(settings.header.placement == "top")
-        #expect(settings.header.alignment == "center")
-        #expect(settings.header.topPadding == 18)
-        #expect(settings.header.bottomPadding == 9)
-        #expect(settings.header.height == 44)
-        #expect(settings.header.width == 132)
-        #expect(settings.header.titleColor == "#FFFFFFFF")
-        #expect(settings.header.subtitleColor == "#FFFFFF88")
-        #expect(settings.header.titleFontSize == 14)
-        #expect(settings.header.subtitleFontSize == 11)
-        #expect(settings.header.fontFamily == "Avenir Next")
-        #expect(settings.header.titleWeight == "semibold")
-        #expect(settings.header.subtitleWeight == "regular")
-        #expect(settings.header.subtitleTemplate == "Bureau {desktop}")
+        #expect(settings.layout.headerPosition == "top")
+        #expect(settings.layout.stagesPosition == "bottom")
+        #expect(settings.layout.spacing == 17)
+        #expect(settings.layout.topPadding == 18)
+        #expect(settings.layout.bottomPadding == 9)
+        #expect(settings.displayLabel.enabled == true)
+        #expect(settings.displayLabel.template == "{display}")
+        #expect(settings.displayLabel.color == "#FFFFFFFF")
+        #expect(settings.displayLabel.fontSize == 14)
+        #expect(settings.displayLabel.fontFamily == "Avenir Next")
+        #expect(settings.displayLabel.weight == "semibold")
+        #expect(settings.displayLabel.alignment == "center")
+        #expect(settings.displayLabel.opacity == 0.8)
+        #expect(settings.displayLabel.offsetX == 2)
+        #expect(settings.displayLabel.offsetY == 3)
+        #expect(settings.desktopLabel.template == "Bureau {desktop}")
+        #expect(settings.desktopLabel.color == "#FFFFFF88")
+        #expect(settings.desktopLabel.fontSize == 11)
+        #expect(settings.desktopLabel.weight == "regular")
+        #expect(settings.desktopLabel.alignment == "right")
+        #expect(settings.desktopLabel.opacity == 0.6)
+        #expect(settings.desktopLabel.offsetX == -2)
+        #expect(settings.desktopLabel.offsetY == -3)
+        #expect(settings.stages.position == "bottom")
+        #expect(settings.stages.alignment == "center")
+        #expect(settings.stages.gap == 19)
         #expect(settings.preview.width == 160)
         #expect(settings.parallax.rotation == 35)
         #expect(settings.parallax.width == 120)

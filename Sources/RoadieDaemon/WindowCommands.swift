@@ -44,7 +44,8 @@ public struct WindowCommandService {
     public func focus(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            let result = DisplayCommandService(service: service, store: stageStore, events: events).focus(direction)
+            return WindowCommandResult(message: result.message, changed: result.changed)
         }
         let ok = focusWindow(pair.neighbor.window)
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
@@ -55,7 +56,7 @@ public struct WindowCommandService {
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "move")
         }
         service.removeLayoutIntent(scope: scope)
         let ordered = swappedWindowIDs(
@@ -91,7 +92,7 @@ public struct WindowCommandService {
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "warp")
         }
         service.removeLayoutIntent(scope: scope)
         guard let plan = structuralWarpPlan(
@@ -283,6 +284,34 @@ public struct WindowCommandService {
         neighborScore(from: active.window.frame.cgRect, to: neighbor.window.frame.cgRect, direction: direction).isFinite
         else { return nil }
         return (active, neighbor)
+    }
+
+    private func sendActiveToAdjacentDisplay(
+        _ direction: Direction,
+        from snapshot: DaemonSnapshot,
+        verb: String
+    ) -> WindowCommandResult {
+        guard let active = activeWindow(in: snapshot),
+              let display = activeDisplay(for: active, in: snapshot)
+        else {
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+        }
+        guard let target = DisplayTopology.neighbor(from: display, direction: direction, in: snapshot.displays) else {
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+        }
+        let result = sendToDisplay(target.index)
+        return WindowCommandResult(
+            message: "\(verb) \(direction.rawValue): \(result.message)",
+            changed: result.changed
+        )
+    }
+
+    private func activeDisplay(for active: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
+        if let displayID = active.scope?.displayID,
+           let display = snapshot.displays.first(where: { $0.id == displayID }) {
+            return display
+        }
+        return snapshot.displays.first { $0.frame.cgRect.contains(active.window.frame.center) }
     }
 
     private func focusWindow(_ window: WindowSnapshot) -> Bool {
