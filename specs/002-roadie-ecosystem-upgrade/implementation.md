@@ -128,7 +128,7 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 ### T009 : Types d'événements automation
 
 - **Statut** : Complété
-- **Commit** : En attente
+- **Commit** : `cac75bd` - feat(002): Add automation event types
 - **Fichiers modifiés** :
   - `Sources/RoadieCore/AutomationEvent.swift` (types scope, subject, cause, payload)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T009 cochée)
@@ -137,3 +137,16 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [x] `swift build`
   - [ ] `swift test` : prévu avec T014/T016
 - **Notes** : `AutomationPayload` supporte les valeurs JSON primitives, objets, tableaux et null pour éviter les payloads string-only.
+
+### T010 : Modèle RoadieStateSnapshot
+
+- **Statut** : Complété
+- **Commit** : En attente
+- **Fichiers modifiés** :
+  - `Sources/RoadieCore/AutomationSnapshot.swift` (créé)
+  - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T010 cochée)
+  - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
+- **Tests exécutés** :
+  - [x] `swift build`
+  - [ ] `swift test` : prévu avec T015/T016
+- **Notes** : Le snapshot contractuel est découplé des types AX et expose displays, desktops, stages, windows, groups et rules.
