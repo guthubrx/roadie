@@ -690,9 +690,9 @@ private final class StageCardView: NSControl {
               let gradient = CGGradient(
                   colorsSpace: colorSpace,
                   colors: [
-                      accent.withAlphaComponent(0.24).cgColor,
-                      accent.withAlphaComponent(0.11).cgColor,
-                      accent.withAlphaComponent(0.035).cgColor,
+                      accent.withAlphaComponent(0.32).cgColor,
+                      accent.withAlphaComponent(0.16).cgColor,
+                      accent.withAlphaComponent(0.055).cgColor,
                       accent.withAlphaComponent(0).cgColor,
                   ] as CFArray,
                   locations: [0, 0.28, 0.58, 1]
