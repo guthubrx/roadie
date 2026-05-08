@@ -1129,21 +1129,25 @@ private final class StageCardView: NSControl {
               let gradient = CGGradient(
                   colorsSpace: colorSpace,
                   colors: [
-                      accent.withAlphaComponent(0.32).cgColor,
+                      accent.withAlphaComponent(0.46).cgColor,
+                      accent.withAlphaComponent(0.30).cgColor,
                       accent.withAlphaComponent(0.16).cgColor,
                       accent.withAlphaComponent(0.055).cgColor,
                       accent.withAlphaComponent(0).cgColor,
                   ] as CFArray,
-                  locations: [0, 0.28, 0.58, 1]
+                  locations: [0, 0.18, 0.44, 0.74, 1]
         )
         else { return }
-        let xScale: CGFloat = 1.45
-        let yScale: CGFloat = 0.92
-        let availableLeft = max(12, center.x - bounds.minX - 4)
-        let availableRight = max(12, bounds.maxX - center.x - 4)
+        let xScale: CGFloat = 1.12
+        let yScale: CGFloat = 0.86
+        let availableLeft = max(12, center.x - bounds.minX - 10)
+        let availableRight = max(12, bounds.maxX - center.x - 10)
+        let availableTop = max(12, bounds.maxY - center.y - 10)
+        let availableBottom = max(12, center.y - bounds.minY - 10)
         let maxHorizontalRadius = min(availableLeft, availableRight) / xScale
-        let desiredRadius = max(union.width, union.height) * 0.95
-        let radius = max(24, min(desiredRadius, maxHorizontalRadius))
+        let maxVerticalRadius = min(availableTop, availableBottom) / yScale
+        let desiredRadius = max(union.width, union.height) * 1.45
+        let radius = max(58, min(desiredRadius, maxHorizontalRadius, maxVerticalRadius))
         context.saveGState()
         context.translateBy(x: center.x, y: center.y)
         context.scaleBy(x: xScale, y: yScale)
