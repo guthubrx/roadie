@@ -159,7 +159,9 @@ public struct SnapshotService {
                 desktopID: scope.desktopID
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
+            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             try? state.assignWindow(window.id, to: scope)
+            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
         var focusedID: WindowID?

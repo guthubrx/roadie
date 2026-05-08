@@ -21,6 +21,7 @@ func printUsage() {
       roadie layout flatten|zoom-parent
       roadie config show|validate
       roadie rules validate|list|explain [--json] [--config PATH]
+      roadie group create|add|remove|focus|dissolve|list ...
       roadie rail status
       roadie doctor
       roadie self-test
@@ -271,6 +272,8 @@ case "config":
     }
 case "rules":
     runRulesCommand(Array(args.dropFirst()))
+case "group":
+    runGroupCommand(Array(args.dropFirst()))
 case "rail":
     guard args.dropFirst().first == "status" else {
         printUsage()
@@ -746,6 +749,69 @@ func runRulesCommand(_ args: [String]) -> Never {
             fputs("roadie: rules explain failed: \(error)\n", stderr)
             exit(1)
         }
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+func runGroupCommand(_ args: [String]) -> Never {
+    let service = WindowGroupCommandService()
+    switch args.first {
+    case "list":
+        let result = service.list()
+        print(result.message)
+        exit(0)
+    case "create":
+        guard let id = args.dropFirst().first else {
+            fputs("roadie: group create requires an id\n", stderr)
+            exit(64)
+        }
+        let ids = args.dropFirst(2).compactMap(UInt32.init).map(WindowID.init(rawValue:))
+        let result = service.create(id: id, windowIDs: ids)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "add":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group add requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.add(windowID: WindowID(rawValue: windowID), to: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "remove":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group remove requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.remove(windowID: WindowID(rawValue: windowID), from: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "focus":
+        guard let id = args.dropFirst().first,
+              let rawWindowID = args.dropFirst(2).first,
+              let windowID = UInt32(rawWindowID)
+        else {
+            fputs("roadie: group focus requires GROUP_ID WINDOW_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.focus(windowID: WindowID(rawValue: windowID), in: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "dissolve":
+        guard let id = args.dropFirst().first else {
+            fputs("roadie: group dissolve requires GROUP_ID\n", stderr)
+            exit(64)
+        }
+        let result = service.dissolve(id: id)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
