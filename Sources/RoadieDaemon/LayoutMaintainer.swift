@@ -99,22 +99,26 @@ public final class LayoutMaintainer {
         }
         manualResizeApplyAfter = nil
 
-        if shouldIgnoreRecentCommandReflow(in: snapshot, since: cutoff, windowIDs: priorityWindowIDs) {
+        let commandProtectedScopes = recentCommandScopes(in: snapshot, since: cutoff, windowIDs: priorityWindowIDs)
+        if !commandProtectedScopes.isEmpty {
             lastCommandIntentAt = now
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
-            lastObservedFrames = observedFrames
-            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent"))
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: commandProtectedScopes)
+            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
+                "scopes": commandProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                "unprotectedCommands": String(tick.commands)
+            ]))
+            return tick
         }
 
         if let lastCommandIntentAt,
            priorityWindowIDs.isEmpty,
            now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
         {
+            let protectedScopes = recentCommandScopes(in: snapshot, since: cutoff)
             priorityWindowIDs = []
-            lastObservedFrames = observedFrames
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+            return applyPlan(from: snapshot, observedFrames: observedFrames, excluding: protectedScopes)
         }
 
         lastObservedFrames = observedFrames
@@ -142,6 +146,34 @@ public final class LayoutMaintainer {
         lastObservedFrames = appliedFrames
         return MaintenanceTick(
             commands: plan.commands.count,
+            applied: result.applied,
+            clamped: result.clamped,
+            failed: result.failed
+        )
+    }
+
+    private func applyPlan(
+        from snapshot: DaemonSnapshot,
+        observedFrames: [UInt32: Rect],
+        excluding protectedScopes: Set<StageScope>
+    ) -> MaintenanceTick {
+        lastObservedFrames = observedFrames
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
+        let filtered = ApplyPlan(commands: plan.commands.filter { command in
+            guard let scope = windowsByID[command.window.id]?.scope else { return true }
+            return !protectedScopes.contains(scope)
+        })
+        guard !filtered.commands.isEmpty else {
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+        var result = service.apply(filtered)
+        result = stabilizeClampedPositions(result, from: filtered)
+        record(result)
+        appendItemEvents(result)
+        lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
+        return MaintenanceTick(
+            commands: filtered.commands.count,
             applied: result.applied,
             clamped: result.clamped,
             failed: result.failed
@@ -317,30 +349,32 @@ public final class LayoutMaintainer {
         }
     }
 
-    private func shouldIgnoreRecentCommandReflow(
+    private func recentCommandScopes(
         in snapshot: DaemonSnapshot,
         since date: Date,
         windowIDs: Set<WindowID> = []
-    ) -> Bool {
+    ) -> Set<StageScope> {
         let activeScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
             guard let scope = entry.scope else { return nil }
             guard windowIDs.isEmpty || windowIDs.contains(entry.window.id) else { return nil }
             return scope
         })
         guard !activeScopes.isEmpty else {
-            return false
+            return []
         }
         let now = Date()
+        var result: Set<StageScope> = []
         for scope in activeScopes {
             if service.hasMatchingCommandIntent(scope: scope, in: snapshot) {
                 service.touchCommandIntent(scope: scope, at: now)
-                return true
+                result.insert(scope)
+                continue
             }
             if service.hasRecentCommandIntent(scope: scope, since: date) {
-                return true
+                result.insert(scope)
             }
         }
-        return false
+        return result
     }
 
     private func hideInactiveStageWindows(in snapshot: DaemonSnapshot) -> Int {
