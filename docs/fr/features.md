@@ -141,10 +141,11 @@ Cas d'usage :
 ## Control Center
 
 Le Control Center est la surface macOS de Roadie dans la barre de menus.
+Il est desactive par defaut tant qu'on le durcit. Lance-le seulement quand tu veux tester explicitement l'UI de barre de menus.
 
 ```bash
 ./bin/roadie control status --json
-./bin/roadied control-center
+./scripts/start --control-center
 ```
 
 Il expose la sante du daemon, l'etat de la config active, le desktop/stage courant, le nombre de fenetres gerees, les erreurs recentes et les actions courantes de recuperation. Le menu consomme le meme `ControlCenterState` que la CLI, donc les scripts et l'UI partagent le meme contrat de statut.
