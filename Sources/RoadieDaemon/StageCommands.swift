@@ -443,6 +443,38 @@ public struct StageCommandService {
         }
         let stateUpdatedAt = Date()
 
+        if previousID == stageID {
+            state.focusDisplay(display.id)
+            state.update(scope)
+            if state != store.state() {
+                store.save(state)
+            }
+            let completedAt = Date()
+            events.append(RoadieEvent(
+                type: "stage_switch",
+                scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+                details: [
+                    "previousStageID": previousID.rawValue,
+                    "hidden": "0",
+                    "shown": String(scope.memberIDs(in: stageID).count),
+                    "applied": "0",
+                    "layout": "0",
+                    "skipped": "0"
+                ]
+            ))
+            performance.complete(session, result: .noOp, steps: [
+                PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: stateUpdatedAt.timeIntervalSince(started) * 1000),
+                PerformanceStep(name: .hidePrevious, startedAt: stateUpdatedAt, durationMs: 0, count: 0),
+                PerformanceStep(name: .restoreTarget, startedAt: stateUpdatedAt, durationMs: 0, count: scope.memberIDs(in: stageID).count),
+                PerformanceStep(name: .layoutApply, startedAt: stateUpdatedAt, durationMs: 0, count: 0),
+                PerformanceStep(name: .focus, startedAt: stateUpdatedAt, durationMs: completedAt.timeIntervalSince(stateUpdatedAt) * 1000)
+            ], completedAt: completedAt)
+            return StageCommandResult(
+                message: "stage switch \(stageID.rawValue): already active",
+                changed: false
+            )
+        }
+
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
         let targetStage = scope.stages.first(where: { $0.id == stageID })
