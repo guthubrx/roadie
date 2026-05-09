@@ -128,4 +128,39 @@ struct RestoreSafetyTests {
         #expect(result.restored == 1)
         #expect(writer.frames[WindowID(rawValue: 99)] == saved.frame)
     }
+
+    @Test
+    func restoreMovesRoadieHiddenWindowBackToVisibleFrame() {
+        let live = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 99,
+            appName: "Terminal",
+            bundleID: "com.apple.Terminal",
+            title: "shell",
+            frame: Rect(x: 999, y: 499, width: 500, height: 400),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let provider = PowerUserProvider(windows: [live])
+        let writer = PowerUserWriter(provider: provider)
+        let restore = RestoreSafetyService(
+            service: SnapshotService(provider: provider, frameWriter: writer),
+            frameWriter: writer,
+            path: tempPath("restore-hidden-corner"),
+            eventLog: EventLog(path: tempPath("restore-hidden-corner-events"))
+        )
+        let visibleFrame = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let saved = RestoreWindowState(
+            windowID: live.id.rawValue,
+            identity: WindowIdentityV2(bundleID: live.bundleID, appName: live.appName, title: live.title),
+            frame: live.frame,
+            visibleFrame: visibleFrame,
+            wasHiddenByRoadie: true
+        )
+
+        let result = restore.restore(RestoreSafetySnapshot(windows: [saved]))
+
+        #expect(result.restored == 1)
+        #expect(writer.frames[live.id] == visibleFrame)
+    }
 }

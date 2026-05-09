@@ -57,6 +57,7 @@ public struct RestoreSafetyService {
         let activeScope = snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }.first
         let windows = snapshot.windows.compactMap { entry -> RestoreWindowState? in
             guard entry.scope != nil || entry.window.isTileCandidate else { return nil }
+            let roadieHidden = isRoadieHidden(entry.window.frame.cgRect, in: snapshot.displays)
             let visible = snapshot.displays.first { display in
                 display.visibleFrame.cgRect.intersects(entry.window.frame.cgRect)
             }?.visibleFrame ?? snapshot.displays.first?.visibleFrame ?? entry.window.frame
@@ -66,7 +67,7 @@ public struct RestoreSafetyService {
                 frame: entry.window.frame,
                 visibleFrame: visible,
                 wasManaged: entry.scope != nil,
-                wasHiddenByRoadie: !entry.window.isOnScreen,
+                wasHiddenByRoadie: roadieHidden || !entry.window.isOnScreen,
                 stageScope: entry.scope?.description,
                 groupID: nil
             )
@@ -160,10 +161,29 @@ public struct RestoreSafetyService {
     }
 
     private func visibleFrame(for saved: RestoreWindowState, liveDisplays: [DisplaySnapshot]) -> Rect {
-        if liveDisplays.contains(where: { $0.visibleFrame.cgRect.intersects(saved.frame.cgRect) }) {
+        if saved.wasHiddenByRoadie {
+            return saved.visibleFrame
+        }
+        if liveDisplays.contains(where: { display in
+            display.visibleFrame.cgRect.intersects(saved.frame.cgRect)
+                && !isRoadieHidden(saved.frame.cgRect, in: [display])
+        }) {
             return saved.frame
         }
         return liveDisplays.first?.visibleFrame ?? saved.visibleFrame
+    }
+
+    private func isRoadieHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        if frame.maxX < -1000 || frame.minX < -10000 {
+            return true
+        }
+        return displays.contains { display in
+            let visible = display.visibleFrame.cgRect
+            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
+            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
+            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
+            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        }
     }
 
     private func semanticFingerprint(_ snapshot: RestoreSafetySnapshot) -> RestoreSafetySnapshot {
