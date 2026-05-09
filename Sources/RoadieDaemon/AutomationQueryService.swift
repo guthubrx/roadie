@@ -72,7 +72,7 @@ public struct AutomationQueryService {
 
     private func readOnlyAutomationSnapshot() -> RoadieStateSnapshot {
         service
-            .snapshot(followExternalFocus: false, persistState: false)
+            .snapshot(followExternalFocus: true, persistState: false)
             .automationSnapshot()
     }
 

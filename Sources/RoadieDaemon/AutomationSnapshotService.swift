@@ -6,7 +6,10 @@ public struct AutomationSnapshotService: Sendable {
     public init() {}
 
     public func snapshot(from daemonSnapshot: DaemonSnapshot, generatedAt: Date = Date()) -> RoadieStateSnapshot {
-        let activeDisplayID = daemonSnapshot.state.displays.values
+        let focusedScope = daemonSnapshot.focusedWindowID.flatMap { focusedID in
+            daemonSnapshot.windows.first { $0.window.id == focusedID }?.scope
+        }
+        let activeDisplayID = focusedScope?.displayID.rawValue ?? daemonSnapshot.state.displays.values
             .first { display in
                 daemonSnapshot.state.activeScope(on: display.id) != nil
             }?

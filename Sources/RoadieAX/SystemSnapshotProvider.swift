@@ -10,11 +10,15 @@ public protocol SystemSnapshotProviding: Sendable {
     func displays() -> [DisplaySnapshot]
     func windows() -> [WindowSnapshot]
     func windows(includeAccessibilityAttributes: Bool) -> [WindowSnapshot]
+    func window(id: WindowID, includeAccessibilityAttributes: Bool) -> WindowSnapshot?
     func focusedWindowID() -> WindowID?
 }
 
 public extension SystemSnapshotProviding {
     func windows(includeAccessibilityAttributes: Bool) -> [WindowSnapshot] { windows() }
+    func window(id: WindowID, includeAccessibilityAttributes: Bool) -> WindowSnapshot? {
+        windows(includeAccessibilityAttributes: includeAccessibilityAttributes).first { $0.id == id }
+    }
     func focusedWindowID() -> WindowID? { nil }
 }
 
@@ -22,6 +26,7 @@ public protocol WindowFrameWriting: Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect?
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
     func focus(_ window: WindowSnapshot) -> Bool
+    func focus(windowID: WindowID, pid: Int32) -> Bool
     func reset(_ window: WindowSnapshot) -> Bool
 }
 
@@ -35,6 +40,7 @@ public extension WindowFrameWriting {
     }
 
     func focus(_ window: WindowSnapshot) -> Bool { false }
+    func focus(windowID: WindowID, pid: Int32) -> Bool { false }
     func reset(_ window: WindowSnapshot) -> Bool { false }
 }
 
@@ -104,6 +110,10 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
 }
 
 public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
+    private static let displayCache = DisplayCache()
+    private static let permissionCache = PermissionCache()
+    private static let windowCache = WindowSnapshotCache()
+
     private struct AXWindowAttributes {
         var id: CGWindowID?
         var title: String
@@ -115,12 +125,22 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
     public init() {}
 
     public func permissions(prompt: Bool) -> PermissionSnapshot {
-        AXPermissions.snapshot(prompt: prompt)
+        if !prompt, let cached = Self.permissionCache.get() {
+            return cached
+        }
+        let snapshot = AXPermissions.snapshot(prompt: prompt)
+        if !prompt {
+            Self.permissionCache.set(snapshot)
+        }
+        return snapshot
     }
 
     public func displays() -> [DisplaySnapshot] {
+        if let cached = Self.displayCache.get() {
+            return cached
+        }
         let mainID = NSScreen.main.flatMap(Self.displayID(for:))
-        return NSScreen.screens.enumerated().compactMap { index, screen in
+        let snapshots: [DisplaySnapshot] = NSScreen.screens.enumerated().compactMap { index, screen in
             guard let id = Self.displayID(for: screen) else { return nil }
             let frame = Self.nsToAX(screen.frame)
             let visibleFrame = Self.visibleAXFrame(for: screen, displayFrame: frame)
@@ -133,6 +153,8 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 isMain: id == mainID
             )
         }
+        Self.displayCache.set(snapshots)
+        return snapshots
     }
 
     public func windows() -> [WindowSnapshot] {
@@ -147,49 +169,43 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
         var axWindowsByPID: [Int32: [AXWindowAttributes]] = [:]
-        return raw.compactMap { info -> WindowSnapshot? in
-            guard let number = info[kCGWindowNumber as String] as? UInt32,
-                  number > 0,
-                  let pid = info[kCGWindowOwnerPID as String] as? Int32,
-                  pid != currentPID,
-                  let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
-                  let rect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
-            else { return nil }
-
-            let layer = info[kCGWindowLayer as String] as? Int ?? 0
-            let alpha = info[kCGWindowAlpha as String] as? Double ?? 1
-            let appName = info[kCGWindowOwnerName as String] as? String ?? ""
-            let title = info[kCGWindowName as String] as? String ?? ""
-            let app = NSRunningApplication(processIdentifier: pid)
-            let bundleID = app?.bundleIdentifier ?? ""
-            let attributes = includeAccessibilityAttributes
-                ? Self.axAttributes(
-                    forWindowID: number,
-                    pid: pid,
-                    fallbackTitle: title,
-                    fallbackFrame: rect,
-                    cache: &axWindowsByPID
-                )
-                : (role: nil, subrole: nil)
-            let tileCandidate = layer == 0
-                && alpha > 0
-                && rect.width >= 80
-                && rect.height >= 60
-                && !bundleID.hasPrefix("com.apple.WindowManager")
-
-            return WindowSnapshot(
-                id: WindowID(rawValue: number),
-                pid: pid,
-                appName: appName,
-                bundleID: bundleID,
-                title: title,
-                role: attributes.role,
-                subrole: attributes.subrole,
-                frame: Rect(rect),
-                isOnScreen: true,
-                isTileCandidate: tileCandidate
+        let snapshots = raw.compactMap { info -> WindowSnapshot? in
+            Self.windowSnapshot(
+                from: info,
+                currentPID: currentPID,
+                includeAccessibilityAttributes: includeAccessibilityAttributes,
+                axWindowsByPID: &axWindowsByPID
             )
         }
+        if !includeAccessibilityAttributes {
+            Self.windowCache.set(snapshots)
+        }
+        return snapshots
+    }
+
+    public func window(id: WindowID, includeAccessibilityAttributes: Bool) -> WindowSnapshot? {
+        if !includeAccessibilityAttributes, let cached = Self.windowCache.get(id: id) {
+            return cached
+        }
+        let options: CGWindowListOption = [.optionIncludingWindow, .excludeDesktopElements]
+        guard let raw = CGWindowListCopyWindowInfo(options, CGWindowID(id.rawValue)) as? [[String: Any]] else {
+            return nil
+        }
+        let currentPID = ProcessInfo.processInfo.processIdentifier
+        var axWindowsByPID: [Int32: [AXWindowAttributes]] = [:]
+        let snapshot = raw.lazy.compactMap { info in
+            Self.windowSnapshot(
+                from: info,
+                currentPID: currentPID,
+                includeAccessibilityAttributes: includeAccessibilityAttributes,
+                axWindowsByPID: &axWindowsByPID
+            )
+        }
+        .first { $0.id == id }
+        if !includeAccessibilityAttributes, let snapshot {
+            Self.windowCache.set([snapshot])
+        }
+        return snapshot
     }
 
     public func focusedWindowID() -> WindowID? {
@@ -201,12 +217,13 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         else { return nil }
 
         let focusedElement = focused as! AXUIElement
-        if let id = windowID(of: focusedElement) {
+        let appWindows = windows(includeAccessibilityAttributes: false)
+            .filter { $0.pid == app.processIdentifier }
+        if let id = windowID(of: focusedElement),
+           appWindows.contains(where: { $0.id.rawValue == id }) {
             return WindowID(rawValue: id)
         }
 
-        let appWindows = windows(includeAccessibilityAttributes: false)
-            .filter { $0.pid == app.processIdentifier }
         let focusedFrame = AXWindowFrameWriter().frame(of: focusedElement)
         if let focusedFrame,
            let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame.cgRect) }) {
@@ -255,6 +272,55 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
               let title = rawTitle as? String
         else { return "" }
         return title
+    }
+
+    private static func windowSnapshot(
+        from info: [String: Any],
+        currentPID: pid_t,
+        includeAccessibilityAttributes: Bool,
+        axWindowsByPID: inout [Int32: [AXWindowAttributes]]
+    ) -> WindowSnapshot? {
+        guard let number = info[kCGWindowNumber as String] as? UInt32,
+              number > 0,
+              let pid = info[kCGWindowOwnerPID as String] as? Int32,
+              pid != currentPID,
+              let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
+              let rect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+        else { return nil }
+
+        let layer = info[kCGWindowLayer as String] as? Int ?? 0
+        let alpha = info[kCGWindowAlpha as String] as? Double ?? 1
+        let appName = info[kCGWindowOwnerName as String] as? String ?? ""
+        let title = info[kCGWindowName as String] as? String ?? ""
+        let app = NSRunningApplication(processIdentifier: pid)
+        let bundleID = app?.bundleIdentifier ?? ""
+        let attributes = includeAccessibilityAttributes
+            ? axAttributes(
+                forWindowID: number,
+                pid: pid,
+                fallbackTitle: title,
+                fallbackFrame: rect,
+                cache: &axWindowsByPID
+            )
+            : (role: nil, subrole: nil)
+        let tileCandidate = layer == 0
+            && alpha > 0
+            && rect.width >= 80
+            && rect.height >= 60
+            && !bundleID.hasPrefix("com.apple.WindowManager")
+
+        return WindowSnapshot(
+            id: WindowID(rawValue: number),
+            pid: pid,
+            appName: appName,
+            bundleID: bundleID,
+            title: title,
+            role: attributes.role,
+            subrole: attributes.subrole,
+            frame: Rect(rect),
+            isOnScreen: true,
+            isTileCandidate: tileCandidate
+        )
     }
 
     private func windowID(of element: AXUIElement) -> CGWindowID? {
@@ -353,7 +419,164 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
     }
 }
 
+private final class DisplayCache: @unchecked Sendable {
+    private struct Payload: Codable {
+        var cachedAt: Date
+        var displays: [DisplaySnapshot]
+    }
+
+    private let lock = NSLock()
+    private var cachedAt = Date.distantPast
+    private var cached: [DisplaySnapshot] = []
+    private let ttl: TimeInterval = 2
+    private let path = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".local/state/roadies/display-cache.json")
+
+    func get() -> [DisplaySnapshot]? {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date()
+        if !cached.isEmpty, now.timeIntervalSince(cachedAt) < ttl {
+            return cached
+        }
+        guard let data = try? Data(contentsOf: path),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              !payload.displays.isEmpty,
+              now.timeIntervalSince(payload.cachedAt) < ttl
+        else { return nil }
+        cached = payload.displays
+        cachedAt = payload.cachedAt
+        return payload.displays
+    }
+
+    func set(_ displays: [DisplaySnapshot]) {
+        lock.lock()
+        cached = displays
+        cachedAt = Date()
+        let payload = Payload(cachedAt: cachedAt, displays: displays)
+        if let data = try? JSONEncoder().encode(payload) {
+            try? FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: path, options: [.atomic])
+        }
+        lock.unlock()
+    }
+}
+
+private final class PermissionCache: @unchecked Sendable {
+    private struct Payload: Codable {
+        var cachedAt: Date
+        var snapshot: PermissionSnapshot
+    }
+
+    private let lock = NSLock()
+    private var cachedAt = Date.distantPast
+    private var cached: PermissionSnapshot?
+    private let ttl: TimeInterval = 5
+    private let path = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".local/state/roadies/permission-cache.json")
+
+    func get() -> PermissionSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        let now = Date()
+        if let cached, now.timeIntervalSince(cachedAt) < ttl {
+            return cached
+        }
+        guard let data = try? Data(contentsOf: path),
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              now.timeIntervalSince(payload.cachedAt) < ttl
+        else { return nil }
+        cached = payload.snapshot
+        cachedAt = payload.cachedAt
+        return payload.snapshot
+    }
+
+    func set(_ snapshot: PermissionSnapshot) {
+        lock.lock()
+        cached = snapshot
+        cachedAt = Date()
+        let payload = Payload(cachedAt: cachedAt, snapshot: snapshot)
+        if let data = try? JSONEncoder().encode(payload) {
+            try? FileManager.default.createDirectory(at: path.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? data.write(to: path, options: [.atomic])
+        }
+        lock.unlock()
+    }
+}
+
+private final class WindowSnapshotCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cachedAtByID: [WindowID: Date] = [:]
+    private var cachedByID: [WindowID: WindowSnapshot] = [:]
+    private let ttl: TimeInterval = 0.35
+
+    func get(id: WindowID) -> WindowSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let cached = cachedByID[id],
+              let cachedAt = cachedAtByID[id],
+              Date().timeIntervalSince(cachedAt) < ttl
+        else { return nil }
+        return cached
+    }
+
+    func set(_ windows: [WindowSnapshot]) {
+        lock.lock()
+        let now = Date()
+        for window in windows {
+            cachedByID[window.id] = window
+            cachedAtByID[window.id] = now
+        }
+        let staleIDs = cachedAtByID.compactMap { id, cachedAt in
+            now.timeIntervalSince(cachedAt) > ttl ? id : nil
+        }
+        for id in staleIDs {
+            cachedAtByID.removeValue(forKey: id)
+            cachedByID.removeValue(forKey: id)
+        }
+        lock.unlock()
+    }
+}
+
+private final class AXWindowElementCache: @unchecked Sendable {
+    private struct Entry {
+        var pid: Int32
+        var element: AXUIElement
+    }
+
+    private let lock = NSLock()
+    private var cachedByID: [WindowID: Entry] = [:]
+
+    func get(id: WindowID, pid: Int32) -> AXUIElement? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let cached = cachedByID[id], cached.pid == pid else { return nil }
+        var rawID = CGWindowID()
+        guard AXUIElementGetWindowID(cached.element, &rawID) == .success,
+              rawID == id.rawValue
+        else {
+            cachedByID.removeValue(forKey: id)
+            return nil
+        }
+        return cached.element
+    }
+
+    func set(_ element: AXUIElement, id: WindowID, pid: Int32) {
+        lock.lock()
+        cachedByID[id] = Entry(pid: pid, element: element)
+        lock.unlock()
+    }
+
+    func remove(id: WindowID) {
+        lock.lock()
+        cachedByID.removeValue(forKey: id)
+        lock.unlock()
+    }
+}
+
 public struct AXWindowFrameWriter: WindowFrameWriting {
+    private static let elementCache = AXWindowElementCache()
+
     public init() {}
 
     public func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
@@ -415,8 +638,19 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     public func focus(_ window: WindowSnapshot) -> Bool {
         guard let element = element(matching: window) else { return false }
-        NSRunningApplication(processIdentifier: window.pid)?.activate(options: [.activateIgnoringOtherApps])
-        let app = AXUIElementCreateApplication(window.pid)
+        return focus(element: element, pid: window.pid)
+    }
+
+    public func focus(windowID: WindowID, pid: Int32) -> Bool {
+        guard let element = exactElement(windowID: windowID, pid: pid) else { return false }
+        return focus(element: element, pid: pid)
+    }
+
+    private func focus(element: AXUIElement, pid: Int32) -> Bool {
+        if NSWorkspace.shared.frontmostApplication?.processIdentifier != pid {
+            NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
+        }
+        let app = AXUIElementCreateApplication(pid)
         AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
         AXUIElementPerformAction(element, kAXRaiseAction as CFString)
         return true
@@ -428,6 +662,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     private func element(matching window: WindowSnapshot) -> AXUIElement? {
+        if let cached = Self.elementCache.get(id: window.id, pid: window.pid) {
+            return cached
+        }
+        if let exact = exactElement(windowID: window.id, pid: window.pid) {
+            return exact
+        }
+
         let app = AXUIElementCreateApplication(window.pid)
         var rawWindows: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
@@ -436,12 +677,14 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
         for element in windows {
             if windowID(of: element) == window.id.rawValue {
+                Self.elementCache.set(element, id: window.id, pid: window.pid)
                 return element
             }
         }
 
         for element in windows {
             if matchesByFrame(element, expected: window) {
+                Self.elementCache.set(element, id: window.id, pid: window.pid)
                 return element
             }
         }
@@ -449,7 +692,37 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         let titleMatches = windows.filter { element in
             title(of: element) == window.title && !window.title.isEmpty
         }
-        return titleMatches.count == 1 ? titleMatches.first : nil
+        if titleMatches.count == 1, let element = titleMatches.first {
+            Self.elementCache.set(element, id: window.id, pid: window.pid)
+            return element
+        }
+        return nil
+    }
+
+    private func exactElement(windowID targetWindowID: WindowID, pid: Int32) -> AXUIElement? {
+        if let cached = Self.elementCache.get(id: targetWindowID, pid: pid) {
+            return cached
+        }
+        let app = AXUIElementCreateApplication(pid)
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              let windows = rawWindows as? [AXUIElement]
+        else { return nil }
+
+        var matched: AXUIElement?
+        for element in windows {
+            guard let rawID = windowID(of: element) else { continue }
+            let id = WindowID(rawValue: rawID)
+            Self.elementCache.set(element, id: id, pid: pid)
+            if id == targetWindowID {
+                matched = element
+            }
+        }
+        if let matched {
+            return matched
+        }
+        Self.elementCache.remove(id: targetWindowID)
+        return nil
     }
 
     private func windowID(of element: AXUIElement) -> CGWindowID? {

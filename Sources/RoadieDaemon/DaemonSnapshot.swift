@@ -83,13 +83,15 @@ public struct SnapshotService {
         promptForPermissions: Bool = false,
         includeAccessibilityAttributes: Bool = true,
         followExternalFocus: Bool = true,
-        persistState: Bool = true
+        persistState: Bool = true,
+        resolveFocusedWindow: Bool = true
     ) -> DaemonSnapshot {
         timedSnapshot(
             promptForPermissions: promptForPermissions,
             includeAccessibilityAttributes: includeAccessibilityAttributes,
             followExternalFocus: followExternalFocus,
-            persistState: persistState
+            persistState: persistState,
+            resolveFocusedWindow: resolveFocusedWindow
         ).snapshot
     }
 
@@ -97,7 +99,8 @@ public struct SnapshotService {
         promptForPermissions: Bool = false,
         includeAccessibilityAttributes: Bool = true,
         followExternalFocus: Bool = true,
-        persistState: Bool = true
+        persistState: Bool = true,
+        resolveFocusedWindow: Bool = true
     ) -> TimedDaemonSnapshot {
         var steps: [PerformanceStep] = []
         func timed<T>(_ name: PerformanceStepName, _ work: () -> T) -> T {
@@ -116,7 +119,9 @@ public struct SnapshotService {
         let windows = timed(.windows) {
             provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
         }
-        let providerFocusedID = timed(.focusedWindow) { provider.focusedWindowID() }
+        let providerFocusedID = resolveFocusedWindow
+            ? timed(.focusedWindow) { provider.focusedWindowID() }
+            : nil
         var persistedStages = timed(.stageState) { stageStore.state() }
         let originalPersistedStages = persistedStages
         let buildStartedAt = Date()
@@ -209,6 +214,9 @@ public struct SnapshotService {
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             try? state.assignWindow(window.id, to: scope)
+            if let focusedWindowID = persistedStage?.focusedWindowID {
+                try? state.setFocusedWindow(focusedWindowID, for: scope)
+            }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
@@ -216,12 +224,17 @@ public struct SnapshotService {
         if let providerFocusedID,
            let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
            let focusedScope = focusedEntry.scope {
-            var acceptsProviderFocus = followExternalFocus && state.activeScope(on: focusedScope.displayID) == focusedScope
             let focusLooksLikeRoadieHiddenWindow = isHidden(focusedEntry.window.frame.cgRect, in: displays)
             let persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
             let explicitSwitchGracePeriod = persistentScope.lastExplicitStageSwitchAt.map { Date().timeIntervalSince($0) < 1.5 } ?? false
             let explicitDesktopSwitchGracePeriod = persistedStages.lastExplicitDesktopSwitchAt(for: focusedScope.displayID).map { Date().timeIntervalSince($0) < 1.5 } ?? false
             let focusWouldSwitchDesktop = persistedStages.currentDesktopID(for: focusedScope.displayID) != focusedScope.desktopID
+            let focusWouldSwitchStage = persistentScope.activeStageID != focusedScope.stageID
+            var acceptsProviderFocus = followExternalFocus
+                && state.activeScope(on: focusedScope.displayID) == focusedScope
+                && !focusLooksLikeRoadieHiddenWindow
+                && !(explicitSwitchGracePeriod && focusWouldSwitchStage)
+                && !(explicitDesktopSwitchGracePeriod && focusWouldSwitchDesktop)
             let hiddenFocusCanSwitchStage = focusLooksLikeRoadieHiddenWindow
                 && !(explicitSwitchGracePeriod && persistentScope.activeStageID != focusedScope.stageID)
                 && !(explicitDesktopSwitchGracePeriod && focusWouldSwitchDesktop)
@@ -767,12 +780,44 @@ public extension SnapshotService {
         frameWriter.focus(window)
     }
 
+    func focus(windowID: WindowID, pid: Int32) -> Bool {
+        frameWriter.focus(windowID: windowID, pid: pid)
+    }
+
     func reset(_ window: WindowSnapshot) -> Bool {
         frameWriter.reset(window)
     }
 
     func focusedWindowID() -> WindowID? {
         provider.focusedWindowID()
+    }
+
+    func window(id: WindowID, includeAccessibilityAttributes: Bool = false) -> WindowSnapshot? {
+        provider.window(id: id, includeAccessibilityAttributes: includeAccessibilityAttributes)
+    }
+
+    func windows(includeAccessibilityAttributes: Bool = false) -> [WindowSnapshot] {
+        provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
+    }
+
+    func displays() -> [DisplaySnapshot] {
+        provider.displays()
+    }
+
+    func persistentStageState() -> PersistentStageState {
+        stageStore.state()
+    }
+
+    func persistFocusedWindow(_ windowID: WindowID, in scope: StageScope) {
+        var state = stageStore.state()
+        let original = state
+        var persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+        persistentScope.setFocusedWindow(windowID, in: scope.stageID)
+        state.update(persistentScope)
+        state.focusDisplay(scope.displayID)
+        if state != original {
+            stageStore.save(state)
+        }
     }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {

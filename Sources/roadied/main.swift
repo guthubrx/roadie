@@ -9,7 +9,6 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
-var focusStageActivationObserver: FocusStageActivationObserver?
 var displayChangeObserver: NSObjectProtocol?
 
 func printUsage() {
@@ -34,6 +33,11 @@ case "run":
     let shouldStartRail = !args.contains("--no-rail")
     let interval = max(100, intervalMs) / 1000
     let config = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
+    let cleanup = FileAdministrationService().run(dryRun: false)
+    if cleanup.candidateCount > 0 {
+        print("cleanup candidates=\(cleanup.candidateCount) reclaimedBytes=\(cleanup.reclaimedBytes)")
+        fflush(stdout)
+    }
     let restoreSafety = RestoreSafetyService(path: config.restoreSafety.snapshotPath)
     let maintainer = LayoutMaintainer(
         service: service,
@@ -51,8 +55,6 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
-    focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer, service: service)
-    focusStageActivationObserver?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,

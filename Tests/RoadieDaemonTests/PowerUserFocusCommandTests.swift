@@ -9,6 +9,7 @@ final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
     var focusedID: WindowID?
     let displaySnapshots: [DisplaySnapshot]
     var snapshots: [WindowSnapshot]
+    var windowLookupCount = 0
 
     init(displays: [DisplaySnapshot] = [powerDisplay()], windows: [WindowSnapshot]) {
         self.displaySnapshots = displays
@@ -19,12 +20,17 @@ final class PowerUserProvider: SystemSnapshotProviding, @unchecked Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
     func displays() -> [DisplaySnapshot] { displaySnapshots }
     func windows() -> [WindowSnapshot] { snapshots }
+    func window(id: WindowID, includeAccessibilityAttributes: Bool) -> WindowSnapshot? {
+        windowLookupCount += 1
+        return snapshots.first { $0.id == id }
+    }
     func focusedWindowID() -> WindowID? { focusedID }
 }
 
 final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     let provider: PowerUserProvider
     private(set) var focused: [WindowID] = []
+    private(set) var exactFocused: [WindowID] = []
     private(set) var frames: [WindowID: Rect] = [:]
 
     init(provider: PowerUserProvider) {
@@ -46,6 +52,14 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     func focus(_ window: WindowSnapshot) -> Bool {
         focused.append(window.id)
         provider.focusedID = window.id
+        return true
+    }
+
+    func focus(windowID: WindowID, pid: Int32) -> Bool {
+        guard provider.snapshots.contains(where: { $0.id == windowID && $0.pid == pid }) else { return false }
+        exactFocused.append(windowID)
+        focused.append(windowID)
+        provider.focusedID = windowID
         return true
     }
 
@@ -89,6 +103,49 @@ struct PowerUserFocusCommandTests {
 
         #expect(result.changed)
         #expect(writer.focused.map(\.rawValue) == [2])
+    }
+
+    @Test
+    func directionalFocusUsesCanonicalSnapshotByDefault() {
+        let provider = PowerUserProvider(windows: [
+            powerWindow(1, x: 0),
+            powerWindow(2, x: 500),
+        ])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-focus-fast-stages"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        _ = service.snapshot()
+        provider.windowLookupCount = 0
+
+        let result = WindowCommandService(service: service, stageStore: store).focus(.right)
+
+        #expect(result.changed)
+        #expect(writer.exactFocused.isEmpty)
+        #expect(writer.focused.map(\.rawValue) == [2])
+        #expect(provider.windowLookupCount == 0)
+    }
+
+    @Test
+    func rapidDirectionalFocusUsesLastCommandTargetWhenAXFocusLags() {
+        let provider = PowerUserProvider(windows: [
+            powerWindow(1, x: 0),
+            powerWindow(2, x: 500),
+            powerWindow(3, x: 900),
+        ])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-focus-rapid-stages"))
+        let signalStore = FocusCommandSignalStore(path: tempPath("power-focus-rapid-signal"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        _ = service.snapshot()
+
+        let commands = WindowCommandService(service: service, stageStore: store, focusSignals: signalStore)
+        let first = commands.focus(.right)
+        provider.focusedID = WindowID(rawValue: 1)
+        let second = commands.focus(.right)
+
+        #expect(first.changed)
+        #expect(second.changed)
+        #expect(writer.focused.map(\.rawValue) == [2, 3])
     }
 }
 

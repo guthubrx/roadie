@@ -20,6 +20,20 @@ public struct WindowCommandResult: Equatable, Sendable {
     }
 }
 
+private final class WindowCommandFocusEventSequence: @unchecked Sendable {
+    static let shared = WindowCommandFocusEventSequence()
+
+    private let lock = NSLock()
+    private var value: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+
+    func next() -> UInt64 {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+}
+
 public struct WindowCommandService {
     private let service: SnapshotService
     private let stageStore: StageStore
@@ -27,6 +41,7 @@ public struct WindowCommandService {
     private let mouseFollower: MouseFollower
     private let events: EventLog
     private let performance: PerformanceRecorder
+    private let focusSignals: FocusCommandSignalStore
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -34,7 +49,8 @@ public struct WindowCommandService {
         resizeStep: CGFloat = 80,
         mouseFollower: MouseFollower = MouseFollower(),
         events: EventLog = EventLog(),
-        performance: PerformanceRecorder = PerformanceRecorder()
+        performance: PerformanceRecorder = PerformanceRecorder(),
+        focusSignals: FocusCommandSignalStore = FocusCommandSignalStore()
     ) {
         self.service = service
         self.stageStore = stageStore
@@ -42,14 +58,27 @@ public struct WindowCommandService {
         self.mouseFollower = mouseFollower
         self.events = events
         self.performance = performance
+        self.focusSignals = focusSignals
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
         let started = Date()
-        let snapshot = interactiveSnapshot()
+        if isFocusDebugEnabled {
+            debugFocus("command direction=\(direction.rawValue) ax=\(service.focusedWindowID()?.rawValue.description ?? "nil")")
+        }
+        let timedSnapshot = service.timedSnapshot(
+            includeAccessibilityAttributes: false,
+            followExternalFocus: true,
+            persistState: true
+        )
+        let snapshot = timedSnapshot.snapshot
+        let snapshotAt = Date()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
             return focusAdjacentDisplayWindow(direction, from: snapshot)
         }
+        debugFocus(
+            "snapshot direction=\(direction.rawValue) active=\(pair.active.window.id.rawValue) target=\(pair.neighbor.window.id.rawValue) scope=\(pair.active.scope?.stageID.rawValue ?? "?")"
+        )
         let ok = focusWindow(pair.neighbor.window)
         let completedAt = Date()
         performance.complete(
@@ -67,13 +96,192 @@ public struct WindowCommandService {
             ),
             result: ok ? .success : .failed,
             steps: [
-                PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
-                PerformanceStep(name: .focus, startedAt: started, durationMs: completedAt.timeIntervalSince(started) * 1000)
+                PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000)
+            ] + timedSnapshot.steps + [
+                PerformanceStep(name: .focus, startedAt: snapshotAt, durationMs: completedAt.timeIntervalSince(snapshotAt) * 1000)
             ],
             completedAt: completedAt,
             durationMs: completedAt.timeIntervalSince(started) * 1000
         )
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
+    }
+
+    private func focusFromPersistentStage(_ direction: Direction, startedAt: Date) -> WindowCommandResult? {
+        var steps: [PerformanceStep] = []
+        let stateStartedAt = Date()
+        var persisted = stageStore.state()
+        synchronizeExternalFocus(in: &persisted)
+        guard let displayID = persisted.activeDisplayID ?? persisted.scopes.first?.displayID else { return nil }
+        let desktopID = persisted.currentDesktopID(for: displayID)
+        guard let scope = persisted.scopes.first(where: { $0.displayID == displayID && $0.desktopID == desktopID }),
+              let stage = scope.stages.first(where: { $0.id == scope.activeStageID })
+        else { return nil }
+        let activeID = stage.focusedWindowID ?? stage.members.last?.windowID
+        debugFocus("persistent display=\(displayID.rawValue) desktop=\(desktopID.rawValue) stage=\(scope.activeStageID.rawValue) active=\(activeID?.rawValue.description ?? "nil") members=\(stage.members.map { String($0.windowID.rawValue) }.joined(separator: ","))")
+        guard let activeID,
+              let active = stage.members.first(where: { $0.windowID == activeID }),
+              stage.members.count > 1
+        else { return nil }
+        steps.append(PerformanceStep(
+            name: .stageState,
+            startedAt: stateStartedAt,
+            durationMs: Date().timeIntervalSince(stateStartedAt) * 1000
+        ))
+
+        guard let neighbor = stage.members
+            .filter({ $0.windowID != activeID })
+            .min(by: {
+                neighborScore(from: active.frame.cgRect, to: $0.frame.cgRect, direction: direction)
+                    < neighborScore(from: active.frame.cgRect, to: $1.frame.cgRect, direction: direction)
+            }),
+            neighborScore(from: active.frame.cgRect, to: neighbor.frame.cgRect, direction: direction).isFinite
+        else { return nil }
+        debugFocus("target direction=\(direction.rawValue) from=\(activeID.rawValue) to=\(neighbor.windowID.rawValue)")
+
+        let windowStartedAt = Date()
+        let persistentTarget = windowSnapshot(from: neighbor)
+        guard let target = persistentTarget ?? service.window(id: neighbor.windowID, includeAccessibilityAttributes: false),
+              target.isTileCandidate
+        else { return nil }
+        steps.append(PerformanceStep(
+            name: .windows,
+            startedAt: windowStartedAt,
+            durationMs: Date().timeIntervalSince(windowStartedAt) * 1000,
+            count: persistentTarget == nil ? 1 : 0
+        ))
+
+        let focusStartedAt = Date()
+        var ok = focusWindow(target, exactWindowID: persistentTarget != nil)
+        if !ok,
+           persistentTarget != nil,
+           let liveTarget = service.window(id: neighbor.windowID, includeAccessibilityAttributes: false),
+           liveTarget.isTileCandidate {
+            ok = focusWindow(liveTarget)
+        }
+        let completedAt = Date()
+        steps.append(PerformanceStep(
+            name: .focus,
+            startedAt: focusStartedAt,
+            durationMs: completedAt.timeIntervalSince(focusStartedAt) * 1000
+        ))
+        performance.complete(
+            performance.start(
+                .directionalFocus,
+                targetContext: PerformanceTargetContext(
+                    displayID: displayID.rawValue,
+                    desktopID: desktopID.rawValue,
+                    stageID: scope.activeStageID.rawValue,
+                    windowID: neighbor.windowID.rawValue,
+                    sourceDisplayID: displayID.rawValue,
+                    sourceDesktopID: desktopID.rawValue,
+                    sourceStageID: scope.activeStageID.rawValue
+                )
+            ),
+            result: ok ? .success : .failed,
+            steps: [
+                PerformanceStep(
+                    name: .snapshot,
+                    startedAt: startedAt,
+                    durationMs: windowStartedAt.timeIntervalSince(startedAt) * 1000
+                )
+            ] + steps,
+            completedAt: completedAt,
+            durationMs: completedAt.timeIntervalSince(startedAt) * 1000
+        )
+        return WindowCommandResult(message: ok ? "focused \(target.id)" : "focus failed", changed: ok)
+    }
+
+    private func synchronizeExternalFocus(in persisted: inout PersistentStageState) {
+        guard let focusedID = service.focusedWindowID(),
+              let scope = persisted.stageScope(for: focusedID)
+        else { return }
+        if persisted.activeDisplayID == scope.displayID,
+           persisted.currentDesktopID(for: scope.displayID) == scope.desktopID,
+           let persistentScope = persisted.scopes.first(where: {
+               $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
+           }),
+           persistentScope.activeStageID == scope.stageID,
+           persistentScope.stages.first(where: { $0.id == scope.stageID })?.focusedWindowID == focusedID {
+            return
+        }
+        let displays = service.displays()
+        guard let window = service.window(id: focusedID, includeAccessibilityAttributes: false),
+              window.isTileCandidate,
+              !isHidden(window.frame.cgRect, in: displays)
+        else { return }
+
+        let original = persisted
+        var persistentScope = persisted.scope(displayID: scope.displayID, desktopID: scope.desktopID)
+        persistentScope.activeStageID = scope.stageID
+        persistentScope.setFocusedWindow(focusedID, in: scope.stageID)
+        persisted.switchDesktop(displayID: scope.displayID, to: scope.desktopID)
+        persisted.update(persistentScope)
+        persisted.focusDisplay(scope.displayID)
+        if persisted != original {
+            stageStore.save(persisted)
+            debugFocus("sync ax=\(focusedID.rawValue) display=\(scope.displayID.rawValue) desktop=\(scope.desktopID.rawValue) stage=\(scope.stageID.rawValue)")
+        }
+    }
+
+    private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        if frame.maxX < -1000 || frame.minX < -10000 {
+            return true
+        }
+        return displays.contains { display in
+            let visible = display.visibleFrame.cgRect
+            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
+            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
+            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
+            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        }
+    }
+
+    private func debugFocus(_ message: String) {
+        guard isFocusDebugEnabled else { return }
+        appendFocusDebug("focus.command \(message)")
+    }
+
+    private var isFocusDebugEnabled: Bool {
+        ProcessInfo.processInfo.environment["ROADIE_DEBUG_FOCUS"] == "1"
+            || FileManager.default.fileExists(atPath: NSString(string: "~/.roadies/debug-focus").expandingTildeInPath)
+    }
+
+    private func appendFocusDebug(_ line: String) {
+        let path = NSString(string: "~/.roadies/focus-debug.log").expandingTildeInPath
+        let url = URL(fileURLWithPath: path)
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let payload = "\(timestamp) \(line)\n"
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.seekToEnd()
+            if let data = payload.data(using: .utf8) {
+                try handle.write(contentsOf: data)
+            }
+            try handle.close()
+        } catch {
+            fputs("\(payload)", stdout)
+            fflush(stdout)
+        }
+    }
+
+    private func windowSnapshot(from member: PersistentStageMember) -> WindowSnapshot? {
+        guard let pid = member.identity?.pidHint else { return nil }
+        return WindowSnapshot(
+            id: member.windowID,
+            pid: pid,
+            appName: member.identity?.appName ?? member.bundleID,
+            bundleID: member.identity?.bundleID ?? member.bundleID,
+            title: member.title,
+            role: member.identity?.role,
+            subrole: member.identity?.subrole,
+            frame: member.frame,
+            isOnScreen: true,
+            isTileCandidate: true
+        )
     }
 
     public func focusBackAndForth() -> WindowCommandResult {
@@ -402,9 +610,13 @@ public struct WindowCommandService {
         return snapshot.displays.first { $0.frame.cgRect.contains(active.window.frame.center) }
     }
 
-    private func focusWindow(_ window: WindowSnapshot) -> Bool {
-        let ok = service.focus(window)
+    private func focusWindow(_ window: WindowSnapshot, exactWindowID: Bool = false) -> Bool {
+        let ok = exactWindowID
+            ? service.focus(windowID: window.id, pid: window.pid)
+            : service.focus(window)
         if ok {
+            let sequence = WindowCommandFocusEventSequence.shared.next()
+            focusSignals.save(FocusCommandSignal(sequence: sequence, windowID: window.id, timestamp: Date()))
             var state = stageStore.state()
             if let scope = state.stageScope(for: window.id) {
                 var persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
@@ -414,12 +626,29 @@ public struct WindowCommandService {
                 stageStore.save(state)
             }
             mouseFollower.follow(window)
+            events.append(RoadieEventEnvelope(
+                id: "window_focused_\(window.id.rawValue)_\(sequence)",
+                type: "window.focused",
+                scope: .window,
+                subject: AutomationSubject(kind: "window", id: window.id.description),
+                cause: .command,
+                payload: [
+                    "window_id": .int(Int(window.id.rawValue)),
+                    "pid": .int(Int(window.pid)),
+                    "app": .string(window.appName),
+                    "sequence": .int(Int(sequence))
+                ]
+            ))
         }
         return ok
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        if let focusedID = service.focusedWindowID(),
+        if let commandFocused = recentCommandFocusedWindow(in: snapshot) {
+            return commandFocused
+        }
+
+        if let focusedID = snapshot.focusedWindowID,
            let focused = snapshot.windows.first(where: { entry in
                guard let scope = entry.scope else { return false }
                return entry.window.id == focusedID
@@ -446,6 +675,18 @@ public struct WindowCommandService {
         return snapshot.windows.first { entry in
             guard let scope = entry.scope else { return false }
             return entry.window.isTileCandidate && snapshot.state.activeScope(on: scope.displayID) == scope
+        }
+    }
+
+    private func recentCommandFocusedWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
+        guard let signal = focusSignals.load(),
+              Date().timeIntervalSince(signal.timestamp) < 0.9
+        else { return nil }
+        return snapshot.windows.first { entry in
+            guard let scope = entry.scope else { return false }
+            return entry.window.id == signal.windowID
+                && entry.window.isTileCandidate
+                && snapshot.state.activeScope(on: scope.displayID) == scope
         }
     }
 

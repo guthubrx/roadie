@@ -14,6 +14,8 @@ public final class FocusStageActivationObserver {
     private var activationObserver: NSObjectProtocol?
     private var lastTick = Date.distantPast
     private let minimumTickInterval: TimeInterval = 0.05
+    private var delayedFocusWorkItem: DispatchWorkItem?
+    private var focusGeneration: UInt64 = 0
     private var lastIntent: (windowID: WindowID, at: Date)?
     private let coalescingInterval: TimeInterval = 0.12
 
@@ -41,11 +43,12 @@ public final class FocusStageActivationObserver {
             }
             Task { @MainActor in
                 self?.watchFocusedWindowChanges(for: app.processIdentifier)
-                self?.handleFocusChanged()
+                self?.handleFocusChanged(preferredPID: app.processIdentifier, isNewActivation: true)
             }
         }
         if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier {
             watchFocusedWindowChanges(for: pid)
+            handleFocusChanged(preferredPID: pid, isNewActivation: true)
         }
     }
 
@@ -54,6 +57,8 @@ public final class FocusStageActivationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
         }
         activationObserver = nil
+        delayedFocusWorkItem?.cancel()
+        delayedFocusWorkItem = nil
         removeObserver()
     }
 
@@ -106,27 +111,70 @@ public final class FocusStageActivationObserver {
         activePID = nil
     }
 
-    fileprivate func handleFocusChanged() {
+    fileprivate func handleFocusChanged(preferredPID: pid_t? = nil, isNewActivation: Bool = false, generation: UInt64? = nil) {
         guard configLoader().focus.stageFollowsFocus else { return }
+        let activeGeneration: UInt64
+        if isNewActivation {
+            focusGeneration += 1
+            activeGeneration = focusGeneration
+        } else if let generation {
+            guard generation == focusGeneration else { return }
+            activeGeneration = generation
+        } else {
+            activeGeneration = focusGeneration
+        }
         let now = Date()
-        guard now.timeIntervalSince(lastTick) >= minimumTickInterval else { return }
+        let elapsed = now.timeIntervalSince(lastTick)
+        guard elapsed >= minimumTickInterval else {
+            scheduleDelayedFocusChanged(
+                after: minimumTickInterval - elapsed,
+                preferredPID: preferredPID,
+                generation: activeGeneration
+            )
+            return
+        }
         lastTick = now
-        if directActivateFocusedContext(at: now) {
+        debugFocus("event preferredPID=\(preferredPID.map(String.init) ?? "nil") newActivation=\(isNewActivation) generation=\(activeGeneration)")
+        if directActivateFocusedContext(at: now, preferredPID: preferredPID) {
             return
         }
         _ = maintainer.tick()
     }
 
-    private func directActivateFocusedContext(at now: Date) -> Bool {
-        guard let focusedID = service.focusedWindowID() else { return false }
+    private func scheduleDelayedFocusChanged(after delay: TimeInterval, preferredPID: pid_t?, generation: UInt64) {
+        delayedFocusWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                guard let self, generation == self.focusGeneration else { return }
+                self.delayedFocusWorkItem = nil
+                self.handleFocusChanged(preferredPID: preferredPID, generation: generation)
+            }
+        }
+        delayedFocusWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.005, delay), execute: workItem)
+    }
+
+    private func directActivateFocusedContext(at now: Date, preferredPID: pid_t?) -> Bool {
+        let preferredWindow = preferredPID.flatMap { focusedVisibleWindow(for: $0) }
+        guard let focusedID = preferredWindow?.id ?? service.focusedWindowID() else { return false }
+        debugFocus("focused id=\(focusedID.rawValue) preferredWindow=\(preferredWindow?.id.rawValue.description ?? "nil")")
         if let lastIntent,
            lastIntent.windowID == focusedID,
            now.timeIntervalSince(lastIntent.at) < coalescingInterval {
+            debugFocus("coalesced id=\(focusedID.rawValue)")
             return true
         }
         lastIntent = (focusedID, now)
         let started = Date()
         let session = performanceSession(startedAt: started, focusedID: focusedID)
+        if fastNoOpForActiveVisibleFocus(
+            session: session,
+            startedAt: started,
+            focusedID: focusedID,
+            preferredWindow: preferredWindow
+        ) {
+            return true
+        }
         let timedSnapshot = service.timedSnapshot(followExternalFocus: true, persistState: true)
         let snapshot = timedSnapshot.snapshot
         let snapshotAt = Date()
@@ -136,7 +184,11 @@ public final class FocusStageActivationObserver {
         guard let focused = snapshot.windows.first(where: { $0.window.id == focusedID }),
               let scope = focused.scope,
               snapshot.state.activeScope(on: scope.displayID) == scope
-        else { return false }
+        else {
+            debugFocus("snapshot-miss id=\(focusedID.rawValue) snapshotFocus=\(snapshot.focusedWindowID?.rawValue.description ?? "nil")")
+            return false
+        }
+        debugFocus("scope display=\(scope.displayID.rawValue) desktop=\(scope.desktopID.rawValue) stage=\(scope.stageID.rawValue) visible=\(isVisible(focused.window, in: snapshot.displays))")
 
         if isVisible(focused.window, in: snapshot.displays) {
             let completed = Date()
@@ -214,6 +266,84 @@ public final class FocusStageActivationObserver {
         return true
     }
 
+    private func fastNoOpForActiveVisibleFocus(
+        session: PerformanceRecorder.Session,
+        startedAt: Date,
+        focusedID: WindowID,
+        preferredWindow: WindowSnapshot?
+    ) -> Bool {
+        var steps: [PerformanceStep] = []
+
+        let stateStartedAt = Date()
+        let persisted = service.persistentStageState()
+        guard let scope = persisted.stageScope(for: focusedID) else { return false }
+        guard let persistentScope = persisted.scopes.first(where: {
+            $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
+        }) else { return false }
+        let isActiveScope = persisted.currentDesktopID(for: scope.displayID) == scope.desktopID
+            && persistentScope.activeStageID == scope.stageID
+        steps.append(step(.stageState, startedAt: stateStartedAt))
+        guard isActiveScope else { return false }
+
+        let displaysStartedAt = Date()
+        let displays = service.displays()
+        steps.append(step(.displays, startedAt: displaysStartedAt))
+
+        let windowStartedAt = Date()
+        guard let focusedWindow = preferredWindow ?? service.window(id: focusedID, includeAccessibilityAttributes: false),
+              focusedWindow.isTileCandidate,
+              isVisible(focusedWindow, in: displays)
+        else {
+            steps.append(step(.windows, startedAt: windowStartedAt, status: .failed))
+            return false
+        }
+        steps.append(step(.windows, startedAt: windowStartedAt))
+
+        let persistStartedAt = Date()
+        service.persistFocusedWindow(focusedID, in: scope)
+        debugFocus("fast-noop persisted id=\(focusedID.rawValue) display=\(scope.displayID.rawValue) desktop=\(scope.desktopID.rawValue) stage=\(scope.stageID.rawValue)")
+        steps.append(step(.stateUpdate, startedAt: persistStartedAt))
+
+        let completed = Date()
+        performance.complete(
+            session.withContext(
+                PerformanceTargetContext(
+                    displayID: scope.displayID.rawValue,
+                    desktopID: scope.desktopID.rawValue,
+                    stageID: scope.stageID.rawValue,
+                    windowID: focusedID.rawValue
+                )
+            ),
+            result: .noOp,
+            steps: [
+                PerformanceStep(
+                    name: .snapshot,
+                    startedAt: startedAt,
+                    durationMs: completed.timeIntervalSince(startedAt) * 1000
+                )
+            ] + steps + [
+                PerformanceStep(name: .layoutApply, startedAt: completed, durationMs: 0, count: 0),
+                PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
+            ],
+            completedAt: completed,
+            durationMs: completed.timeIntervalSince(startedAt) * 1000
+        )
+        return true
+    }
+
+    private func step(
+        _ name: PerformanceStepName,
+        startedAt: Date,
+        status: PerformanceStepStatus = .success
+    ) -> PerformanceStep {
+        PerformanceStep(
+            name: name,
+            startedAt: startedAt,
+            durationMs: Date().timeIntervalSince(startedAt) * 1000,
+            status: status
+        )
+    }
+
     private func performanceSession(startedAt: Date, focusedID: WindowID) -> PerformanceRecorder.Session {
         PerformanceRecorder.Session(
             type: .altTabActivation,
@@ -227,6 +357,35 @@ public final class FocusStageActivationObserver {
         displays.contains { display in
             display.visibleFrame.cgRect.contains(window.frame.center)
         }
+    }
+
+    private func focusedVisibleWindow(for pid: pid_t) -> WindowSnapshot? {
+        let displays = service.displays()
+        if let focusedID = service.focusedWindowID(),
+           let window = service.window(id: focusedID, includeAccessibilityAttributes: false),
+           window.pid == pid,
+           window.isTileCandidate,
+           isVisible(window, in: displays) {
+            return window
+        }
+        return service.windows(includeAccessibilityAttributes: false).first {
+            $0.pid == pid
+                && $0.isTileCandidate
+                && isVisible($0, in: displays)
+        }
+    }
+
+    fileprivate func handleObservedFocusChanged() {
+        handleFocusChanged(preferredPID: activePID)
+    }
+
+    private func debugFocus(_ message: String) {
+        guard ProcessInfo.processInfo.environment["ROADIE_DEBUG_FOCUS"] == "1"
+            || FileManager.default.fileExists(atPath: NSString(string: "~/.roadies/debug-focus").expandingTildeInPath)
+        else { return }
+        let line = "focus.observer \(message)"
+        fputs("\(line)\n", stdout)
+        fflush(stdout)
     }
 }
 
@@ -248,6 +407,6 @@ private let focusObserverCallback: AXObserverCallback = { _, _, _, refcon in
         .fromOpaque(refcon)
         .takeUnretainedValue()
     Task { @MainActor in
-        observer.handleFocusChanged()
+        observer.handleObservedFocusChanged()
     }
 }

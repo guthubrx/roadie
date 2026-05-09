@@ -1313,6 +1313,7 @@ struct SnapshotServiceTests {
         let topRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
         let bottomRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
         let writer = RecordingWriter()
+        let stageStore = StageStore(path: tempPath("move-fallback-stage-store"))
         let service = SnapshotService(
             provider: FakeProvider(
                 displaySnapshots: [
@@ -1322,10 +1323,11 @@ struct SnapshotServiceTests {
                 focusedID: nil
             ),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            stageStore: stageStore
         )
 
-        let result = WindowCommandService(service: service).move(.up)
+        let result = WindowCommandService(service: service, stageStore: stageStore).move(.up)
 
         #expect(result.changed)
         #expect(writer.requestedFrames.keys.contains(bottomRight.id))

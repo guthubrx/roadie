@@ -1,42 +1,35 @@
 import AppKit
+import Darwin
 import RoadieAX
 import RoadieCore
 
 @MainActor
 public final class BorderController {
     private let snapshotService: SnapshotService
-    private let snapshotProvider: any SystemSnapshotProviding
-    private let stageStore: StageStore
-    private let performance: PerformanceRecorder
     private let configLoader: () -> RoadieConfig
+    private let focusSignals: FocusCommandSignalStore
     private let panel = BorderPanel()
     private var refreshTimer: Timer?
-    private var activationObserver: NSObjectProtocol?
-    private var focusObserver: AXObserver?
-    private var activePID: pid_t?
-    private var pendingRefresh = false
+    private var focusSignalWatcher: DispatchSourceFileSystemObject?
+    private var focusSignalWatchFileDescriptor: CInt = -1
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
-        snapshotProvider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
-        stageStore: StageStore = StageStore(),
-        performance: PerformanceRecorder = PerformanceRecorder(),
-        configLoader: @escaping () -> RoadieConfig = { (try? RoadieConfigLoader.load()) ?? RoadieConfig() }
+        configLoader: @escaping () -> RoadieConfig = { (try? RoadieConfigLoader.load()) ?? RoadieConfig() },
+        focusSignals: FocusCommandSignalStore = FocusCommandSignalStore()
     ) {
         self.snapshotService = snapshotService
-        self.snapshotProvider = snapshotProvider
-        self.stageStore = stageStore
-        self.performance = performance
         self.configLoader = configLoader
+        self.focusSignals = focusSignals
     }
 
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
         refresh()
-        startFocusObserver()
+        startFocusSignalWatcher()
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshIfChanged() }
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
         RunLoop.main.add(refreshTimer!, forMode: .common)
     }
@@ -44,196 +37,63 @@ public final class BorderController {
     public func stop() {
         refreshTimer?.invalidate()
         refreshTimer = nil
-        if let activationObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
-        }
-        activationObserver = nil
-        removeFocusObserver()
+        focusSignalWatcher?.cancel()
+        focusSignalWatcher = nil
+        focusSignalWatchFileDescriptor = -1
         panel.orderOut(nil)
     }
 
-    private func startFocusObserver() {
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification,
-            object: nil,
+    private func startFocusSignalWatcher() {
+        focusSignalWatcher?.cancel()
+        if focusSignalWatchFileDescriptor >= 0 {
+            close(focusSignalWatchFileDescriptor)
+            focusSignalWatchFileDescriptor = -1
+        }
+        focusSignals.ensureFile()
+        focusSignalWatchFileDescriptor = open(focusSignals.fileURL.path, O_EVTONLY)
+        guard focusSignalWatchFileDescriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: focusSignalWatchFileDescriptor,
+            eventMask: [.write, .rename, .delete],
             queue: .main
-        ) { [weak self] notification in
-            guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
-                return
-            }
-            Task { @MainActor in
-                self?.watchFocusedWindowChanges(for: app.processIdentifier)
-                self?.scheduleImmediateRefresh(source: .focusObserver)
-            }
-        }
-        if let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier {
-            watchFocusedWindowChanges(for: pid)
-        }
-    }
-
-    private func watchFocusedWindowChanges(for pid: pid_t) {
-        guard pid != activePID else { return }
-        removeFocusObserver()
-
-        var createdObserver: AXObserver?
-        let error = AXObserverCreate(pid, borderFocusObserverCallback, &createdObserver)
-        guard error == .success, let createdObserver else { return }
-
-        let appElement = AXUIElementCreateApplication(pid)
-        let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        let added = AXObserverAddNotification(
-            createdObserver,
-            appElement,
-            kAXFocusedWindowChangedNotification as CFString,
-            refcon
         )
-        guard added == .success || added == .notificationAlreadyRegistered else { return }
-
-        focusObserver = createdObserver
-        activePID = pid
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(createdObserver), .commonModes)
-    }
-
-    private func removeFocusObserver() {
-        if let focusObserver {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(focusObserver), .commonModes)
-        }
-        focusObserver = nil
-        activePID = nil
-    }
-
-    fileprivate func scheduleImmediateRefresh(source: PerformanceInteractionSource = .focusObserver, retriesRemaining: Int = 2) {
-        guard !pendingRefresh else { return }
-        pendingRefresh = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.pendingRefresh = false
-            if !self.refreshFocusedWindowFast(source: source) {
-                if retriesRemaining > 0 {
-                    self.scheduleRetry(source: source, retriesRemaining: retriesRemaining - 1)
-                } else {
-                    self.refresh(source: source)
+        source.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.refresh()
+                if source.data.contains(.rename) || source.data.contains(.delete) {
+                    self?.startFocusSignalWatcher()
                 }
             }
         }
-    }
-
-    private func scheduleRetry(source: PerformanceInteractionSource, retriesRemaining: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.scheduleImmediateRefresh(source: source, retriesRemaining: retriesRemaining)
+        source.setCancelHandler { [fd = focusSignalWatchFileDescriptor] in
+            if fd >= 0 { close(fd) }
         }
+        focusSignalWatcher = source
+        source.resume()
     }
 
-    private func refreshFocusedWindowFast(source: PerformanceInteractionSource = .system) -> Bool {
-        let startedAt = Date()
-        var steps: [PerformanceStep] = []
+    private func refresh() {
         let config = configLoader().fx.borders
         guard config.enabled else {
             panel.orderOut(nil)
-            recordBorderRefresh(
-                source: source,
-                startedAt: startedAt,
-                result: .noOp,
-                steps: steps,
-                targetWindowID: nil
-            )
-            return true
-        }
-        let snapshotStartedAt = Date()
-        let displays = snapshotProvider.displays()
-        let windows = snapshotProvider.windows(includeAccessibilityAttributes: false)
-        steps.append(step(.snapshot, startedAt: snapshotStartedAt))
-
-        let focusStartedAt = Date()
-        guard let window = frontmostWindow(in: windows),
-              !isHidden(window.frame.cgRect, in: displays)
-        else {
-            panel.orderOut(nil)
-            steps.append(step(.focus, startedAt: focusStartedAt, status: .failed))
-            recordBorderRefresh(
-                source: source,
-                startedAt: startedAt,
-                result: .failed,
-                steps: steps,
-                targetWindowID: nil
-            )
-            return false
-        }
-        steps.append(step(.focus, startedAt: focusStartedAt))
-
-        let stateStartedAt = Date()
-        let stageID = stageStore.state().stageScope(for: window.id)?.stageID
-        steps.append(step(.stateUpdate, startedAt: stateStartedAt))
-
-        let renderStartedAt = Date()
-        panel.render(
-            frame: Self.axToNS(window.frame.cgRect),
-            color: activeColor(for: stageID, config: config),
-            thickness: CGFloat(max(1, config.thickness)),
-            cornerRadius: CGFloat(max(0, config.cornerRadius)),
-            windowID: window.id
-        )
-        steps.append(step(.layoutApply, startedAt: renderStartedAt))
-        recordBorderRefresh(
-            source: source,
-            startedAt: startedAt,
-            result: .success,
-            steps: steps,
-            targetWindowID: window.id
-        )
-        return true
-    }
-
-    private func frontmostWindow(in windows: [WindowSnapshot]) -> WindowSnapshot? {
-        guard let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
-            return windows.first { $0.isTileCandidate }
-        }
-        return windows.first {
-            $0.pid == frontmostPID && $0.isTileCandidate
-        } ?? windows.first { $0.isTileCandidate }
-    }
-
-    private func refresh(source: PerformanceInteractionSource = .system) {
-        let startedAt = Date()
-        var steps: [PerformanceStep] = []
-        let config = configLoader().fx.borders
-        guard config.enabled else {
-            panel.orderOut(nil)
-            recordBorderRefresh(
-                source: source,
-                startedAt: startedAt,
-                result: .noOp,
-                steps: steps,
-                targetWindowID: nil
-            )
             return
         }
 
-        let snapshotStartedAt = Date()
-        let snapshot = snapshotService.snapshot(
-            includeAccessibilityAttributes: false,
-            followExternalFocus: true,
-            persistState: false
-        )
-        steps.append(step(.snapshot, startedAt: snapshotStartedAt))
+        if renderRecentCommandFocus(config: config) {
+            return
+        }
+
+        let snapshot = snapshotService.snapshot(includeAccessibilityAttributes: false)
         guard let focusedWindowID = snapshot.focusedWindowID,
-              let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
+              let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID && $0.window.isTileCandidate }),
               !isHidden(entry.window.frame.cgRect, in: snapshot.displays)
         else {
             panel.orderOut(nil)
-            recordBorderRefresh(
-                source: source,
-                startedAt: startedAt,
-                result: .failed,
-                steps: steps,
-                targetWindowID: snapshot.focusedWindowID
-            )
             return
         }
 
         let color = activeColor(for: entry.scope?.stageID, config: config)
         _ = groupIndicator(for: focusedWindowID, snapshot: snapshot)
-        let renderStartedAt = Date()
         panel.render(
             frame: Self.axToNS(entry.window.frame.cgRect),
             color: color,
@@ -241,52 +101,29 @@ public final class BorderController {
             cornerRadius: CGFloat(max(0, config.cornerRadius)),
             windowID: focusedWindowID
         )
-        steps.append(step(.layoutApply, startedAt: renderStartedAt))
-        recordBorderRefresh(
-            source: source,
-            startedAt: startedAt,
-            result: .success,
-            steps: steps,
-            targetWindowID: focusedWindowID
-        )
     }
 
-    private func refreshIfChanged() {
-        let currentID = frontmostWindow(in: snapshotProvider.windows(includeAccessibilityAttributes: false))?.id
-        guard currentID != panel.renderedWindowID else { return }
-        _ = refreshFocusedWindowFast(source: .system)
-    }
+    private func renderRecentCommandFocus(config: BorderConfig) -> Bool {
+        guard let signal = focusSignals.load(),
+              Date().timeIntervalSince(signal.timestamp) < 0.8
+        else { return false }
 
-    private func step(
-        _ name: PerformanceStepName,
-        startedAt: Date,
-        status: PerformanceStepStatus = .success
-    ) -> PerformanceStep {
-        PerformanceStep(
-            name: name,
-            startedAt: startedAt,
-            durationMs: Date().timeIntervalSince(startedAt) * 1000,
-            status: status
-        )
-    }
+        guard let window = snapshotService.window(id: signal.windowID, includeAccessibilityAttributes: false),
+              window.isTileCandidate
+        else { return false }
+        let displays = snapshotService.displays()
+        guard !isHidden(window.frame.cgRect, in: displays) else { return false }
 
-    private func recordBorderRefresh(
-        source: PerformanceInteractionSource,
-        startedAt: Date,
-        result: PerformanceInteractionResult,
-        steps: [PerformanceStep],
-        targetWindowID: WindowID?
-    ) {
-        performance.complete(
-            PerformanceRecorder.Session(
-                type: .borderRefresh,
-                source: source,
-                startedAt: startedAt,
-                targetContext: PerformanceTargetContext(windowID: targetWindowID?.rawValue)
-            ),
-            result: result,
-            steps: steps
+        let scope = snapshotService.persistentStageState().stageScope(for: signal.windowID)
+        let color = activeColor(for: scope?.stageID, config: config)
+        panel.render(
+            frame: Self.axToNS(window.frame.cgRect),
+            color: color,
+            thickness: CGFloat(max(1, config.thickness)),
+            cornerRadius: CGFloat(max(0, config.cornerRadius)),
+            windowID: signal.windowID
         )
+        return true
     }
 
     private func activeColor(for stageID: StageID?, config: BorderConfig) -> NSColor {
@@ -341,16 +178,6 @@ public final class BorderController {
 
 }
 
-private let borderFocusObserverCallback: AXObserverCallback = { _, _, _, refcon in
-    guard let refcon else { return }
-    let controller = Unmanaged<BorderController>
-        .fromOpaque(refcon)
-        .takeUnretainedValue()
-    Task { @MainActor in
-        controller.scheduleImmediateRefresh()
-    }
-}
-
 @MainActor
 private final class BorderPanel: NSPanel {
     private let borderView = BorderView()
@@ -367,7 +194,7 @@ private final class BorderPanel: NSPanel {
         isOpaque = false
         backgroundColor = .clear
         level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        collectionBehavior = [.canJoinAllSpaces, .ignoresCycle, .fullScreenAuxiliary]
         ignoresMouseEvents = true
         hasShadow = false
         contentView = borderView
@@ -387,7 +214,9 @@ private final class BorderPanel: NSPanel {
            lastRender.color == color,
            lastRender.thickness == thickness,
            lastRender.cornerRadius == cornerRadius {
+            setFrame(expanded, display: true)
             orderFrontRegardless()
+            displayIfNeeded()
             return
         }
         lastRender = (expanded, color, thickness, cornerRadius)
@@ -396,6 +225,8 @@ private final class BorderPanel: NSPanel {
         borderView.cornerRadius = cornerRadius
         setFrame(expanded, display: true)
         orderFrontRegardless()
+        displayIfNeeded()
+        borderView.displayIfNeeded()
     }
 }
 
