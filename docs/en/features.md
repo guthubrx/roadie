@@ -138,9 +138,9 @@ Use cases:
 - debug a rule or a group;
 - build a local dashboard.
 
-## Manual Safety And Administration
+## Restore Safety And Administration
 
-These commands are explicit: no restore watcher, no Control Center, and no automatic action is started by these features.
+Roadie writes a restore snapshot on daemon startup and clean exit. A separate watcher can restore frames only when the `roadied` process disappears without marking a clean exit. It does not run in the focus/border path and can be disabled with `roadied run --yes --no-restore-safety`.
 
 ```bash
 ./bin/roadie config reload --json
@@ -155,7 +155,7 @@ Use cases:
 
 - reload config only when validation succeeds;
 - take a manual frame snapshot before a risky operation;
-- explicitly restore frames by window ID when requested;
+- explicitly restore frames by window ID when requested, or after an unclean crash;
 - keep logs, backups, and legacy archives under control.
 
 ## Width Presets And Performance Diagnostics

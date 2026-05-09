@@ -82,7 +82,7 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Supporte des rules TOML avec validation, explain et événements runtime `rule.*`.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
 - Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
-- Fournit des outils manuels de sûreté : reload config atomique, snapshot restore explicite, cleanup des fichiers générés.
+- Fournit des outils de sûreté : reload config atomique, restore snapshot manuel, restore-on-exit/crash watcher limité, cleanup des fichiers générés.
 - Expose des diagnostics performance read-only, sans instrumentation du chemin focus/bordure.
 
 ## Documentation

@@ -27,4 +27,24 @@ struct RestoreSafetyServiceTests {
         #expect(result.applied == 1)
         #expect(writer.frames[provider.snapshots[0].id]?.x == 100)
     }
+
+    @Test
+    func cleanExitMarkerPreventsCrashRestore() throws {
+        let provider = PowerUserProvider(windows: [powerWindow(1, x: 100)])
+        let snapshotService = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider))
+        let restorePath = tempPath("restore-marker")
+        let markerPath = tempPath("restore-marker-run")
+        defer {
+            try? FileManager.default.removeItem(atPath: restorePath)
+            try? FileManager.default.removeItem(atPath: markerPath)
+        }
+        let service = RestoreSafetyService(path: restorePath, markerPath: markerPath, service: snapshotService)
+
+        _ = try service.markRunStarted(pid: 42)
+        #expect(service.shouldRestoreAfterProcessExit(pid: 42))
+
+        let marker = try service.markCleanExit(pid: 42)
+        #expect(marker.cleanExit)
+        #expect(!service.shouldRestoreAfterProcessExit(pid: 42))
+    }
 }

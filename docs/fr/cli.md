@@ -91,7 +91,8 @@ Cas d'usage :
 Notes :
 
 - `config reload` valide avant d'appliquer et conserve l'ancienne config si la nouvelle est invalide.
-- `restore snapshot` et `restore apply` sont manuels; il n'y a pas de watcher automatique dans ce build.
+- `restore snapshot` et `restore apply` restent disponibles manuellement; le daemon ecrit aussi un snapshot au demarrage/arret propre.
+- le crash watcher restaure uniquement si `roadied` disparait sans marker de sortie propre; `roadied run --yes --no-restore-safety` le desactive.
 - `cleanup --dry-run` affiche ce qui serait supprime ou rotate avant toute action.
 
 ## Ecrans, desktops et stages

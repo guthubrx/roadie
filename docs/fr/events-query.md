@@ -78,7 +78,7 @@ Commandes :
 - `command.applied`
 - `command.failed`
 
-Restore manuel :
+Restore safety :
 
 - `restore.snapshot_written`
 - `restore.apply_started`
@@ -140,7 +140,7 @@ Cas d'usage :
 - `query events` : debugger les derniers evenements sans suivre le flux live.
 - `query event_catalog` : lister les types d'evenements publics.
 - `query performance` : lire un resume read-only construit depuis `events.jsonl`.
-- `query restore` : inspecter le dernier snapshot restore manuel.
+- `query restore` : inspecter le dernier snapshot restore.
 
 ## Exemple SketchyBar ou script
 

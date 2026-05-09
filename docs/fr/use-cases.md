@@ -120,7 +120,7 @@ Utiliser cette sequence apres :
 
 ## 7. Avant une operation risquee
 
-Objectif : garder une porte de retour manuelle sans activer de watcher automatique.
+Objectif : garder une porte de retour explicite et verifier le snapshot utilise aussi par le watcher crash.
 
 ```bash
 ./bin/roadie config reload --json
@@ -134,7 +134,7 @@ Si les frames doivent etre restaurees explicitement :
 ./bin/roadie restore apply --yes
 ```
 
-Ce restore matche les fenetres par ID courant. Il est volontairement simple et manuel pour eviter de toucher au chemin focus/bordure.
+Ce restore matche les fenetres par ID courant. Le watcher crash utilise le meme mecanisme seulement si le daemon disparait sans sortie propre; il ne tourne pas dans le chemin focus/bordure.
 
 ## 8. Administration locale raisonnable
 

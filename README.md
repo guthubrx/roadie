@@ -82,7 +82,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Supports TOML window rules with validation, explain, and runtime `rule.*` events.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
 - Persists and exposes window groups for stack/tab-like workflows.
-- Provides manual safety tools: atomic config reload, explicit restore snapshots, generated-file cleanup.
+- Provides safety tools: atomic config reload, manual restore snapshots, limited restore-on-exit/crash watcher, generated-file cleanup.
 - Exposes read-only performance diagnostics without instrumenting focus/border hot paths.
 
 ## Documentation
