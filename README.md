@@ -329,6 +329,8 @@ Common commands:
 ./bin/roadie stage next
 ```
 
+`stage switch N` uses the visible position from `stage list`, not the internal stage id. For example, if the stages are `1`, `3`, and `4`, then `stage switch 2` activates stage id `3`. Use `stage switch-id ID` only when you explicitly need the internal id.
+
 Bring an inactive-stage window back into the active stage:
 
 ```bash

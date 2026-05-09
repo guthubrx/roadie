@@ -39,6 +39,8 @@ A stage is a named group of windows inside a Roadie desktop. Only the active sta
 ./bin/roadie stage move-to-display 2
 ```
 
+`stage switch N` targets the visible position in the stage list. With internal ids `1`, `3`, and `4`, an `Alt-2` shortcut can call `stage switch 2` and activate the second stage, whose internal id is `3`.
+
 Use cases:
 
 - keep separate `Focus`, `Comms`, and `Docs` stages;

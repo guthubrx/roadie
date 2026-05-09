@@ -197,6 +197,22 @@ public struct StageCommandService {
         return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
+    public func switchToPosition(_ position: Int) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage switch: no display", changed: false)
+        }
+        return switchToPosition(position, displayID: display.id, snapshot: snapshot)
+    }
+
+    public func switchToPosition(_ position: Int, displayID: DisplayID) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard snapshot.displays.contains(where: { $0.id == displayID }) else {
+            return StageCommandResult(message: "stage switch: unknown display", changed: false)
+        }
+        return switchToPosition(position, displayID: displayID, snapshot: snapshot)
+    }
+
     public func switchTo(_ rawStageID: String, displayID: DisplayID) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
@@ -429,6 +445,26 @@ public struct StageCommandService {
             message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
             changed: previousID != stageID || applied > 0 || layoutResult.attempted > 0
         )
+    }
+
+    private func switchToPosition(
+        _ position: Int,
+        displayID: DisplayID,
+        snapshot: DaemonSnapshot
+    ) -> StageCommandResult {
+        guard position > 0 else {
+            return StageCommandResult(message: "stage switch position \(position): position must be positive", changed: false)
+        }
+        guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
+            return StageCommandResult(message: "stage switch: unknown display", changed: false)
+        }
+        var state = store.state()
+        let scope = activeScope(displayID: displayID, in: &state)
+        guard scope.stages.indices.contains(position - 1) else {
+            return StageCommandResult(message: "stage switch position \(position): not found", changed: false)
+        }
+        let stageID = scope.stages[position - 1].id
+        return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
