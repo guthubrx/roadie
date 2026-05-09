@@ -612,16 +612,58 @@ public struct WindowCommandService {
         let dy = candidate.midY - active.midY
         switch direction {
         case .left where dx < -1:
-            return abs(dx) + abs(dy) * 0.35
+            return directionalScore(
+                primaryDistance: max(0, active.minX - candidate.maxX),
+                orthogonalDistance: abs(dy),
+                orthogonalGap: rangeGap(active.minY...active.maxY, candidate.minY...candidate.maxY),
+                overlapsOrthogonalAxis: rangesOverlap(active.minY...active.maxY, candidate.minY...candidate.maxY)
+            )
         case .right where dx > 1:
-            return abs(dx) + abs(dy) * 0.35
+            return directionalScore(
+                primaryDistance: max(0, candidate.minX - active.maxX),
+                orthogonalDistance: abs(dy),
+                orthogonalGap: rangeGap(active.minY...active.maxY, candidate.minY...candidate.maxY),
+                overlapsOrthogonalAxis: rangesOverlap(active.minY...active.maxY, candidate.minY...candidate.maxY)
+            )
         case .up where dy < -1:
-            return abs(dy) + abs(dx) * 0.35
+            return directionalScore(
+                primaryDistance: max(0, active.minY - candidate.maxY),
+                orthogonalDistance: abs(dx),
+                orthogonalGap: rangeGap(active.minX...active.maxX, candidate.minX...candidate.maxX),
+                overlapsOrthogonalAxis: rangesOverlap(active.minX...active.maxX, candidate.minX...candidate.maxX)
+            )
         case .down where dy > 1:
-            return abs(dy) + abs(dx) * 0.35
+            return directionalScore(
+                primaryDistance: max(0, candidate.minY - active.maxY),
+                orthogonalDistance: abs(dx),
+                orthogonalGap: rangeGap(active.minX...active.maxX, candidate.minX...candidate.maxX),
+                overlapsOrthogonalAxis: rangesOverlap(active.minX...active.maxX, candidate.minX...candidate.maxX)
+            )
         default:
             return .infinity
         }
+    }
+
+    private func directionalScore(
+        primaryDistance: CGFloat,
+        orthogonalDistance: CGFloat,
+        orthogonalGap: CGFloat,
+        overlapsOrthogonalAxis: Bool
+    ) -> CGFloat {
+        if overlapsOrthogonalAxis {
+            return primaryDistance + orthogonalDistance * 0.05
+        }
+        return 100_000 + orthogonalGap * 4 + primaryDistance + orthogonalDistance * 0.1
+    }
+
+    private func rangesOverlap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> Bool {
+        min(lhs.upperBound, rhs.upperBound) > max(lhs.lowerBound, rhs.lowerBound)
+    }
+
+    private func rangeGap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {
+        if rangesOverlap(lhs, rhs) { return 0 }
+        if lhs.upperBound <= rhs.lowerBound { return rhs.lowerBound - lhs.upperBound }
+        return lhs.lowerBound - rhs.upperBound
     }
 
     private func crossDisplayFocusScore(from active: CGRect, to candidate: CGRect, direction: Direction) -> CGFloat {

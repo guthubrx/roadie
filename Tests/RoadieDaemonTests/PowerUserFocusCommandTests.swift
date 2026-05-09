@@ -72,6 +72,26 @@ struct PowerUserFocusCommandTests {
         #expect(back.changed)
         #expect(writer.focused.map(\.rawValue) == [2, 1])
     }
+
+    @Test
+    func directionalFocusPrefersSameVisualBandBeforeDiagonalCandidate() {
+        let provider = PowerUserProvider(windows: [
+            powerWindow(1, x: 0, y: 400, width: 300, height: 300),
+            powerWindow(2, x: 310, y: 400, width: 140, height: 300),
+            powerWindow(3, x: 700, y: 400, width: 140, height: 300),
+            powerWindow(4, x: 360, y: 90, width: 300, height: 300)
+        ])
+        provider.focusedID = WindowID(rawValue: 2)
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-focus-band"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        _ = service.snapshot()
+
+        let result = WindowCommandService(service: service, stageStore: store).focus(.right)
+
+        #expect(result.changed)
+        #expect(writer.focused.map(\.rawValue) == [3])
+    }
 }
 
 func powerDisplay(_ id: String = "display-main", index: Int = 1, x: Double = 0) -> DisplaySnapshot {
@@ -85,14 +105,21 @@ func powerDisplay(_ id: String = "display-main", index: Int = 1, x: Double = 0) 
     )
 }
 
-func powerWindow(_ id: UInt32, x: Double, app: String = "App") -> WindowSnapshot {
+func powerWindow(
+    _ id: UInt32,
+    x: Double,
+    y: Double = 100,
+    width: Double = 300,
+    height: Double = 300,
+    app: String = "App"
+) -> WindowSnapshot {
     WindowSnapshot(
         id: WindowID(rawValue: id),
         pid: Int32(id),
         appName: app,
         bundleID: "app.\(id)",
         title: "Window \(id)",
-        frame: Rect(x: x, y: 100, width: 300, height: 300),
+        frame: Rect(x: x, y: y, width: width, height: height),
         isOnScreen: true,
         isTileCandidate: true
     )
