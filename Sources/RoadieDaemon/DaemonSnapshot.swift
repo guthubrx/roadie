@@ -169,14 +169,32 @@ public struct SnapshotService {
         }
         var focusedID: WindowID?
         if let providerFocusedID,
-           let focusedScope = scopedWindows.first(where: { $0.window.id == providerFocusedID })?.scope,
-           state.activeScope(on: focusedScope.displayID) == focusedScope {
-            var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
-            persistentScope.setFocusedWindow(providerFocusedID, in: focusedScope.stageID)
-            persistedStages.update(persistentScope)
-            persistedStages.focusDisplay(focusedScope.displayID)
-            try? state.setFocusedWindow(providerFocusedID, for: focusedScope)
-            focusedID = providerFocusedID
+           let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
+           let focusedScope = focusedEntry.scope {
+            var acceptsProviderFocus = state.activeScope(on: focusedScope.displayID) == focusedScope
+            let focusLooksLikeRoadieHiddenWindow = isHidden(focusedEntry.window.frame.cgRect, in: displays)
+            let currentDesktopID = persistedStages.currentDesktopID(for: focusedScope.displayID)
+            let focusIsOnCurrentDesktop = currentDesktopID == focusedScope.desktopID
+            if config.focus.stageFollowsFocus && focusIsOnCurrentDesktop && (acceptsProviderFocus || focusLooksLikeRoadieHiddenWindow) {
+                persistedStages.switchDesktop(displayID: focusedScope.displayID, to: focusedScope.desktopID)
+                var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+                persistentScope.activeStageID = focusedScope.stageID
+                persistedStages.update(persistentScope)
+                persistedStages.focusDisplay(focusedScope.displayID)
+                try? state.switchDesktop(focusedScope.desktopID, on: focusedScope.displayID)
+                try? state.switchStage(focusedScope.stageID, in: focusedScope.displayID, desktopID: focusedScope.desktopID)
+                acceptsProviderFocus = true
+            }
+            if acceptsProviderFocus {
+                var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+                persistentScope.setFocusedWindow(providerFocusedID, in: focusedScope.stageID)
+                persistedStages.update(persistentScope)
+                persistedStages.focusDisplay(focusedScope.displayID)
+                try? state.setFocusedWindow(providerFocusedID, for: focusedScope)
+                focusedID = providerFocusedID
+            } else {
+                focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
+            }
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
