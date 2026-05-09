@@ -457,10 +457,11 @@ make restart
 ## Control Center
 
 Roadie also exposes a macOS menu bar control surface for status and common actions.
+It is disabled by default while it is being hardened. Start it only when you explicitly want to test the menu bar UI.
 
 ```bash
 ./bin/roadie control status --json
-./bin/roadied control-center
+./scripts/start --control-center
 ```
 
 Use it to check daemon health, active config status, active desktop/stage, recent reload errors, and actions such as reload config, reapply layout, reveal config, reveal state, open logs, run doctor, and quit safely.

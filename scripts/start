@@ -12,12 +12,30 @@ pidfile="$log_dir/roadied.pid"
 control_center_pidfile="$log_dir/roadie-control-center.pid"
 tmux_session="roadied"
 control_center_tmux_session="roadie-control-center"
+start_control_center=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --control-center)
+      start_control_center=1
+      ;;
+    --no-control-center)
+      start_control_center=0
+      ;;
+    *)
+      echo "usage: $0 [--control-center|--no-control-center]" >&2
+      exit 64
+      ;;
+  esac
+done
 
 mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
 : > "$log_dir/roadied.stdout.log"
 : > "$log_dir/roadied.stderr.log"
-: > "$log_dir/roadie-control-center.stdout.log"
-: > "$log_dir/roadie-control-center.stderr.log"
+if [[ "$start_control_center" -eq 1 ]]; then
+  : > "$log_dir/roadie-control-center.stdout.log"
+  : > "$log_dir/roadie-control-center.stderr.log"
+fi
 
 "$script_dir/with-xcode" swift build --configuration debug --product roadied
 "$script_dir/with-xcode" swift build --configuration debug --product roadie
@@ -89,22 +107,35 @@ if [[ -f "$pidfile" ]]; then
   rm -f "$pidfile"
 fi
 
+if [[ -f "$control_center_pidfile" ]]; then
+  old_control_center_pid="$(cat "$control_center_pidfile")"
+  if ps -p "$old_control_center_pid" -o args= 2>/dev/null | grep -q "$roadied_bin control-center"; then
+    kill "$old_control_center_pid" >/dev/null 2>&1 || true
+    sleep 1
+  fi
+  rm -f "$control_center_pidfile"
+fi
+
 if command -v tmux >/dev/null 2>&1; then
   tmux kill-session -t "$tmux_session" >/dev/null 2>&1 || true
   tmux new-session -d -s "$tmux_session" "cd '$repo_root' && exec '$roadied_bin' run --yes >> '$log_dir/roadied.stdout.log' 2>> '$log_dir/roadied.stderr.log'"
   pid="$(tmux list-panes -t "$tmux_session" -F '#{pane_pid}')"
   echo "$pid" > "$pidfile"
   tmux kill-session -t "$control_center_tmux_session" >/dev/null 2>&1 || true
-  tmux new-session -d -s "$control_center_tmux_session" "cd '$repo_root' && exec '$roadied_bin' control-center >> '$log_dir/roadie-control-center.stdout.log' 2>> '$log_dir/roadie-control-center.stderr.log'"
-  control_center_pid="$(tmux list-panes -t "$control_center_tmux_session" -F '#{pane_pid}')"
-  echo "$control_center_pid" > "$control_center_pidfile"
+  if [[ "$start_control_center" -eq 1 ]]; then
+    tmux new-session -d -s "$control_center_tmux_session" "cd '$repo_root' && exec '$roadied_bin' control-center >> '$log_dir/roadie-control-center.stdout.log' 2>> '$log_dir/roadie-control-center.stderr.log'"
+    control_center_pid="$(tmux list-panes -t "$control_center_tmux_session" -F '#{pane_pid}')"
+    echo "$control_center_pid" > "$control_center_pidfile"
+  fi
 else
   (
     cd "$repo_root"
     nohup "$roadied_bin" run --yes >> "$log_dir/roadied.stdout.log" 2>> "$log_dir/roadied.stderr.log" < /dev/null &
     echo "$!" > "$pidfile"
-    nohup "$roadied_bin" control-center >> "$log_dir/roadie-control-center.stdout.log" 2>> "$log_dir/roadie-control-center.stderr.log" < /dev/null &
-    echo "$!" > "$control_center_pidfile"
+    if [[ "$start_control_center" -eq 1 ]]; then
+      nohup "$roadied_bin" control-center >> "$log_dir/roadie-control-center.stdout.log" 2>> "$log_dir/roadie-control-center.stderr.log" < /dev/null &
+      echo "$!" > "$control_center_pidfile"
+    fi
   )
 fi
 
@@ -121,7 +152,7 @@ if [[ -f "$control_center_pidfile" ]] && ps -p "$(cat "$control_center_pidfile")
   echo "control center started"
   echo "control center pid: $(cat "$control_center_pidfile")"
 else
-  echo "control center failed to start; logs: $log_dir/roadie-control-center.stderr.log" >&2
+  echo "control center disabled"
 fi
 echo "plist: $plist"
-echo "logs: $log_dir/roadied.stdout.log $log_dir/roadied.stderr.log $log_dir/roadie-control-center.stdout.log $log_dir/roadie-control-center.stderr.log"
+echo "logs: $log_dir/roadied.stdout.log $log_dir/roadied.stderr.log"
