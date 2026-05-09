@@ -418,6 +418,10 @@ public struct StageCommandService {
                 applied += 1
             }
         }
+        if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+           let focusedWindow = windowsByID[focusedID] {
+            _ = service.focus(focusedWindow)
+        }
 
         scope.activeStageID = stageID
         state.update(scope)
@@ -425,10 +429,6 @@ public struct StageCommandService {
 
         let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
         applied += layoutResult.applied + layoutResult.clamped
-        if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
-           let focusedWindow = windowsByID[focusedID] {
-            _ = service.focus(focusedWindow)
-        }
         events.append(RoadieEvent(
             type: "stage_switch",
             scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
