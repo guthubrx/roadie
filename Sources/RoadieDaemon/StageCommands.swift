@@ -486,27 +486,21 @@ public struct StageCommandService {
         state.update(scope)
         store.save(state)
 
-        for id in previousMembers.subtracting(targetMembers) {
-            guard let window = windowsByID[id] else { continue }
-            let result = setFrameIfNeeded(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
-            if result.skipped {
-                skipped += 1
-            } else if result.applied {
-                applied += 1
-            }
-        }
+        let hiddenResult = setFramesIfNeeded(previousMembers.subtracting(targetMembers).compactMap { id -> WindowFrameUpdate? in
+            guard let window = windowsByID[id] else { return nil }
+            return WindowFrameUpdate(window: window, frame: hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays))
+        })
+        applied += hiddenResult.applied
+        skipped += hiddenResult.skipped
         let hiddenAt = Date()
 
         if targetMode == .float {
-            for member in targetStage?.members ?? [] {
-                guard let window = windowsByID[member.windowID] else { continue }
-                let result = setFrameIfNeeded(member.frame.cgRect, of: window)
-                if result.skipped {
-                    skipped += 1
-                } else if result.applied {
-                    applied += 1
-                }
-            }
+            let restoreResult = setFramesIfNeeded((targetStage?.members ?? []).compactMap { member -> WindowFrameUpdate? in
+                guard let window = windowsByID[member.windowID] else { return nil }
+                return WindowFrameUpdate(window: window, frame: member.frame.cgRect)
+            })
+            applied += restoreResult.applied
+            skipped += restoreResult.skipped
         } else {
             skipped += targetMembers.filter { id in
                 guard let window = windowsByID[id] else { return false }
@@ -782,6 +776,20 @@ public struct StageCommandService {
             return (false, true)
         }
         return (service.setFrame(frame, of: window) != nil, false)
+    }
+
+    private func setFramesIfNeeded(_ updates: [WindowFrameUpdate]) -> (applied: Int, skipped: Int) {
+        let tolerance = CGFloat(performanceConfig.frameTolerancePoints)
+        let pending = updates.filter { update in
+            !update.window.frame.cgRect.isEquivalent(to: update.frame, tolerancePoints: tolerance)
+        }
+        let skipped = updates.count - pending.count
+        guard !pending.isEmpty else { return (0, skipped) }
+        let results = service.setFrames(pending)
+        let applied = pending.filter { update in
+            results[update.window.id] ?? nil != nil
+        }.count
+        return (applied, skipped)
     }
 }
 

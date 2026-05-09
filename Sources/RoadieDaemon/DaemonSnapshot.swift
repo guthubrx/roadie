@@ -734,6 +734,10 @@ public extension SnapshotService {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         frameWriter.setFrame(frame, of: window)
     }
+
+    func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        frameWriter.setFrames(updates)
+    }
 }
 
 private extension SnapshotService {

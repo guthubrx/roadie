@@ -361,15 +361,55 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     public func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
-        let resolved = updates.map { update in
-            (update: update, element: element(matching: update.window))
-        }
-        return Dictionary(uniqueKeysWithValues: resolved.map { item in
-            guard let element = item.element else {
-                return (item.update.window.id, nil)
+        var results: [WindowID: CGRect?] = [:]
+        var prepared: [(update: WindowFrameUpdate, element: AXUIElement, position: AXValue, size: AXValue)] = []
+
+        for update in updates {
+            guard let element = element(matching: update.window) else {
+                results[update.window.id] = nil
+                continue
             }
-            return (item.update.window.id, set(item.update.frame, on: element))
-        })
+            var point = CGPoint(x: update.frame.minX, y: update.frame.minY)
+            var size = CGSize(width: update.frame.width, height: update.frame.height)
+            guard let axPosition = AXValueCreate(.cgPoint, &point),
+                  let axSize = AXValueCreate(.cgSize, &size)
+            else {
+                results[update.window.id] = nil
+                continue
+            }
+            prepared.append((update, element, axPosition, axSize))
+        }
+
+        guard !prepared.isEmpty else { return results }
+
+        for item in prepared {
+            _ = AXUIElementSetAttributeValue(item.element, kAXPositionAttribute as CFString, item.position)
+        }
+        Thread.sleep(forTimeInterval: 0.01)
+
+        var retry: [(update: WindowFrameUpdate, element: AXUIElement, position: AXValue, size: AXValue)] = []
+        for item in prepared {
+            let sizeResult = AXUIElementSetAttributeValue(item.element, kAXSizeAttribute as CFString, item.size)
+            let posResult = AXUIElementSetAttributeValue(item.element, kAXPositionAttribute as CFString, item.position)
+            guard sizeResult == .success && posResult == .success else {
+                results[item.update.window.id] = nil
+                continue
+            }
+            if let actual = frame(of: item.element), framesAreClose(actual, item.update.frame) {
+                results[item.update.window.id] = actual
+            } else {
+                retry.append(item)
+            }
+        }
+
+        guard !retry.isEmpty else { return results }
+        Thread.sleep(forTimeInterval: 0.02)
+        for item in retry {
+            _ = AXUIElementSetAttributeValue(item.element, kAXSizeAttribute as CFString, item.size)
+            _ = AXUIElementSetAttributeValue(item.element, kAXPositionAttribute as CFString, item.position)
+            results[item.update.window.id] = frame(of: item.element)
+        }
+        return results
     }
 
     public func focus(_ window: WindowSnapshot) -> Bool {
