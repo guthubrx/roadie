@@ -10,28 +10,41 @@ public struct AutomationQueryService {
     private let service: SnapshotService
     private let configPath: String?
     private let eventLog: EventLog
+    private let performanceStore: PerformanceStore
 
-    public init(service: SnapshotService = SnapshotService(), configPath: String? = nil, eventLog: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        configPath: String? = nil,
+        eventLog: EventLog = EventLog(),
+        performanceStore: PerformanceStore = PerformanceStore()
+    ) {
         self.service = service
         self.configPath = configPath
         self.eventLog = eventLog
+        self.performanceStore = performanceStore
     }
 
     public func query(_ name: String) -> AutomationQueryResult {
-        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
-        let automation = snapshot.automationSnapshot()
         switch name {
+        case "performance":
+            return AutomationQueryResult(kind: name, data: performancePayload(performanceStore.snapshot()))
         case "state":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation)
         case "windows":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation.windows)
         case "displays":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation.displays)
         case "desktops":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation.desktops)
         case "stages":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation.stages)
         case "groups":
+            let automation = readOnlyAutomationSnapshot()
             return result(name, automation.groups)
         case "rules":
             let rules = (try? RoadieConfigLoader.load(from: configPath).rules) ?? []
@@ -57,6 +70,12 @@ public struct AutomationQueryService {
         }
     }
 
+    private func readOnlyAutomationSnapshot() -> RoadieStateSnapshot {
+        service
+            .snapshot(followExternalFocus: false, persistState: false)
+            .automationSnapshot()
+    }
+
     private func result<T: Encodable>(_ kind: String, _ value: T) -> AutomationQueryResult {
         AutomationQueryResult(kind: kind, data: payload(value))
     }
@@ -65,6 +84,18 @@ public struct AutomationQueryService {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         guard let data = try? encoder.encode(value),
+              let object = try? JSONDecoder().decode(AutomationPayload.self, from: data)
+        else {
+            return .null
+        }
+        return object
+    }
+
+    private func performancePayload(_ snapshot: PerformanceSnapshot) -> AutomationPayload {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        guard let data = try? encoder.encode(snapshot),
               let object = try? JSONDecoder().decode(AutomationPayload.self, from: data)
         else {
             return .null

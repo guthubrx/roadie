@@ -7,11 +7,21 @@ public struct DesktopCommandService {
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
+    private let performance: PerformanceRecorder
+    private let performanceConfig: PerformanceConfig
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        store: StageStore = StageStore(),
+        events: EventLog = EventLog(),
+        performance: PerformanceRecorder = PerformanceRecorder(),
+        performanceConfig: PerformanceConfig = (try? RoadieConfigLoader.load().performance) ?? PerformanceConfig()
+    ) {
         self.service = service
         self.store = store
         self.events = events
+        self.performance = performance
+        self.performanceConfig = performanceConfig
     }
 
     public func list() -> StageCommandResult {
@@ -159,6 +169,7 @@ public struct DesktopCommandService {
         to desktopID: DesktopID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
+        let started = Date()
         var state = store.state()
         let previousDesktopID = state.currentDesktopID(for: display.id)
         if previousDesktopID == desktopID {
@@ -168,29 +179,48 @@ public struct DesktopCommandService {
         var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
         var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
         targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
+        let session = performance.start(
+            .desktopSwitch,
+            targetContext: PerformanceTargetContext(
+                displayID: display.id.rawValue,
+                desktopID: desktopID.rawValue,
+                stageID: targetScope.activeStageID.rawValue,
+                sourceDesktopID: previousDesktopID.rawValue
+            )
+        )
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
             previousScope.updateFrame(window: window)
         }
+        let stateUpdatedAt = Date()
 
         var applied = 0
+        var skipped = 0
         let previousWindowIDs = Set(previousScope.stages.flatMap { $0.members.map(\.windowID) })
         let targetStage = targetScope.stages.first { $0.id == targetScope.activeStageID }
         let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
 
         for id in previousWindowIDs.subtracting(targetWindowIDs) {
             guard let window = windowsByID[id] else { continue }
-            if service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
+            let result = setFrameIfNeeded(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+            if result.skipped {
+                skipped += 1
+            } else if result.applied {
                 applied += 1
             }
         }
+        let hiddenAt = Date()
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
-            if service.setFrame(member.frame.cgRect, of: window) != nil {
+            let result = setFrameIfNeeded(member.frame.cgRect, of: window)
+            if result.skipped {
+                skipped += 1
+            } else if result.applied {
                 applied += 1
             }
         }
+        let restoredAt = Date()
 
         state.update(previousScope)
         state.update(targetScope)
@@ -198,12 +228,19 @@ public struct DesktopCommandService {
         state.markExplicitDesktopSwitch(displayID: display.id)
         store.save(state)
 
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let activeScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: targetScope.activeStageID)
+        let result = service.apply(service.applyPlan(
+            from: snapshot,
+            scope: activeScope,
+            orderedWindowIDs: targetScope.memberIDs(in: targetScope.activeStageID)
+        ))
         applied += result.applied + result.clamped
+        skipped += result.skipped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focused = windowsByID[focusedID] {
             _ = service.focus(focused)
         }
+        let completedAt = Date()
         events.append(RoadieEvent(
             type: "desktop_focus",
             scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: targetScope.activeStageID),
@@ -212,9 +249,17 @@ public struct DesktopCommandService {
                 "hidden": String(previousWindowIDs.subtracting(targetWindowIDs).count),
                 "shown": String(targetWindowIDs.count),
                 "applied": String(applied),
-                "layout": String(result.attempted)
+                "layout": String(result.attempted),
+                "skipped": String(skipped)
             ]
         ))
+        performance.complete(session, steps: [
+            PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: stateUpdatedAt.timeIntervalSince(started) * 1000),
+            PerformanceStep(name: .hidePrevious, startedAt: stateUpdatedAt, durationMs: hiddenAt.timeIntervalSince(stateUpdatedAt) * 1000, count: previousWindowIDs.subtracting(targetWindowIDs).count),
+            PerformanceStep(name: .restoreTarget, startedAt: hiddenAt, durationMs: restoredAt.timeIntervalSince(hiddenAt) * 1000, count: targetWindowIDs.count),
+            PerformanceStep(name: .layoutApply, startedAt: restoredAt, durationMs: completedAt.timeIntervalSince(restoredAt) * 1000, count: result.attempted),
+            PerformanceStep(name: .focus, startedAt: restoredAt, durationMs: completedAt.timeIntervalSince(restoredAt) * 1000)
+        ], skippedFrameMoves: skipped, completedAt: completedAt)
 
         return StageCommandResult(
             message: "desktop focus \(desktopID.rawValue): hidden=\(previousWindowIDs.subtracting(targetWindowIDs).count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(result.attempted)",
@@ -269,5 +314,12 @@ public struct DesktopCommandService {
 
     private func isHidden(_ frame: CGRect) -> Bool {
         frame.maxX < -1000 || frame.minX < -10000
+    }
+
+    private func setFrameIfNeeded(_ frame: CGRect, of window: WindowSnapshot) -> (applied: Bool, skipped: Bool) {
+        guard !window.frame.cgRect.isEquivalent(to: frame, tolerancePoints: CGFloat(performanceConfig.frameTolerancePoints)) else {
+            return (false, true)
+        }
+        return (service.setFrame(frame, of: window) != nil, false)
     }
 }

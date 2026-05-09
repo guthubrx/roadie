@@ -36,6 +36,7 @@ case "run":
     let config = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
     let restoreSafety = RestoreSafetyService(path: config.restoreSafety.snapshotPath)
     let maintainer = LayoutMaintainer(
+        service: service,
         intervalSeconds: interval,
         restoreSafety: config.restoreSafety.enabled ? restoreSafety : nil,
         config: config
@@ -50,7 +51,7 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
-    focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer)
+    focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer, service: service)
     focusStageActivationObserver?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,

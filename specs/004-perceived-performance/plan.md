@@ -11,12 +11,12 @@ Améliorer la fluidité perçue de Roadie en traitant d'abord le problème comme
 
 **Langage/Version**: Swift 6.0  
 **Dépendances principales**: AppKit, Foundation, ApplicationServices/Accessibility, Swift Testing, TOMLKit existant  
-**Stockage**: Fichiers locaux existants sous `~/.roadies/` et `~/.local/state/roadies/`; nouvel historique court de performance dans l'état Roadie local  
+**Stockage**: Fichiers locaux existants sous `~/.roadies/` et `~/.local/state/roadies/`; nouvel historique court de performance dans `~/.local/state/roadies/performance.json`, borné à 100 interactions avec rotation FIFO
 **Tests**: Swift Testing via `make test`; validation build via `make build`; validation runtime via `./bin/roadie daemon health` après relance  
 **Plateforme cible**: macOS 14+  
 **Type de projet**: Swift Package avec bibliothèques, daemon, CLI et surfaces AppKit auxiliaires  
 **Objectifs performance**: Stage direct p95 < 150 ms; desktop p95 < 200 ms; AltTab vers fenêtre gérée p90 < 250 ms; surcoût rail/diagnostic < 10% de médiane  
-**Contraintes**: Pas d'APIs privées macOS; pas d'animations système; pas de Control Center dans le chemin critique; ne pas réintroduire de lectures mutatrices; préserver restore safety et transient windows  
+**Contraintes**: Pas d'APIs privées macOS; pas d'animations système; pas de Control Center dans le chemin critique; ne pas réintroduire de lectures mutatrices; préserver restore safety et transient windows; tolérance initiale des frames équivalentes fixée à 2 points macOS
 **Échelle/Périmètre**: Optimisation monoposte sur un environnement macOS avec plusieurs écrans, desktops virtuels Roadie, stages, rail optionnel et dizaines de fenêtres gérées
 
 ## Vérification Constitution
@@ -67,6 +67,8 @@ Sources/
 │   ├── FocusStageActivationObserver.swift
 │   ├── LayoutMaintainer.swift
 │   ├── Metrics.swift
+│   ├── PerformanceRecorder.swift
+│   ├── PerformanceStore.swift
 │   ├── RailController.swift
 │   ├── StageCommands.swift
 │   ├── StageStore.swift
@@ -108,7 +110,7 @@ Voir [research.md](./research.md). Décisions principales :
 - Garder le rail et les métriques hors du chemin critique ; ils peuvent se rafraîchir après l'action.
 - Conserver le timer périodique comme filet de sécurité et déplacer progressivement les actions utilisateur vers des déclenchements événementiels.
 
-## Phase 1 : Design & Contrats
+## Phase 1 : Conception & Contrats
 
 Voir :
 
@@ -118,7 +120,7 @@ Voir :
 - [contracts/state.md](./contracts/state.md)
 - [quickstart.md](./quickstart.md)
 
-## Vérification Constitution (Post-Design)
+## Vérification Constitution (Après conception)
 
 - **Langue française**: PASS.
 - **Diagnostic avant modification**: PASS, les premières tâches devront produire métriques et baseline.

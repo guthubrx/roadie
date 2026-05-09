@@ -6,11 +6,18 @@ public struct DisplayCommandService {
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
+    private let performance: PerformanceRecorder
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        store: StageStore = StageStore(),
+        events: EventLog = EventLog(),
+        performance: PerformanceRecorder = PerformanceRecorder()
+    ) {
         self.service = service
         self.store = store
         self.events = events
+        self.performance = performance
     }
 
     public func focus(index: Int) -> StageCommandResult {
@@ -33,12 +40,14 @@ public struct DisplayCommandService {
     }
 
     private func focus(_ display: DisplaySnapshot, in snapshot: DaemonSnapshot, label: String) -> StageCommandResult {
+        let started = Date()
         var state = store.state()
         state.focusDisplay(display.id)
         let desktopID = state.currentDesktopID(for: display.id)
         let scope = state.scope(displayID: display.id, desktopID: desktopID)
         state.update(scope)
         store.save(state)
+        let stateUpdatedAt = Date()
 
         let activeScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: scope.activeStageID)
         let focusedID = scope.stages.first { $0.id == scope.activeStageID }?.focusedWindowID
@@ -47,12 +56,26 @@ public struct DisplayCommandService {
             snapshot.windows.first { $0.window.id == id && $0.scope == activeScope }?.window
         }
         let focusedResult = focused.map { service.focus($0) } ?? false
+        let completedAt = Date()
         events.append(RoadieEvent(type: "display_focus", details: [
             "displayIndex": String(display.index),
             "displayID": display.id.rawValue,
             "displayName": display.name,
             "focused": String(focusedResult)
         ]))
+        performance.complete(
+            performance.start(
+                .displayFocus,
+                targetContext: PerformanceTargetContext(displayID: display.id.rawValue, desktopID: desktopID.rawValue, stageID: scope.activeStageID.rawValue, windowID: focusedID?.rawValue)
+            ),
+            result: focusedResult ? .success : .partial,
+            steps: [
+                PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: stateUpdatedAt.timeIntervalSince(started) * 1000),
+                PerformanceStep(name: .focus, startedAt: stateUpdatedAt, durationMs: completedAt.timeIntervalSince(stateUpdatedAt) * 1000)
+            ],
+            completedAt: completedAt,
+            durationMs: completedAt.timeIntervalSince(started) * 1000
+        )
 
         return StageCommandResult(
             message: "display focus \(label): \(display.name) focused=\(focusedResult)",

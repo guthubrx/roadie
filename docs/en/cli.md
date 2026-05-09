@@ -11,6 +11,9 @@ All commands below can be called directly with `./bin/roadie` or through `./scri
 ./bin/roadie state audit
 ./bin/roadie state heal
 ./bin/roadie metrics --json
+./bin/roadie performance summary
+./bin/roadie performance recent --limit 20
+./bin/roadie performance thresholds
 ./bin/roadie doctor
 ./bin/roadie self-test
 ```
@@ -21,6 +24,9 @@ Typical use:
 - `state audit`: detect duplicates, stale references, or broken scopes.
 - `state heal`: repair conservative state inconsistencies.
 - `metrics --json`: feed a script or dashboard.
+- `performance summary`: inspect medians, p95, and slow actions by interaction type.
+- `performance recent`: inspect recent measured interactions with their dominant step.
+- `performance thresholds`: display active thresholds and equivalent-frame tolerance.
 
 ## Windows And Focus
 
@@ -158,6 +164,7 @@ Typical use:
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query performance
 ./bin/roadie query config_reload
 ./bin/roadie query restore
 ./bin/roadie query transient

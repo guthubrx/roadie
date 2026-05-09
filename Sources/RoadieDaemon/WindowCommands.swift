@@ -26,27 +26,53 @@ public struct WindowCommandService {
     private let resizeStep: CGFloat
     private let mouseFollower: MouseFollower
     private let events: EventLog
+    private let performance: PerformanceRecorder
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
         resizeStep: CGFloat = 80,
         mouseFollower: MouseFollower = MouseFollower(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        performance: PerformanceRecorder = PerformanceRecorder()
     ) {
         self.service = service
         self.stageStore = stageStore
         self.resizeStep = resizeStep
         self.mouseFollower = mouseFollower
         self.events = events
+        self.performance = performance
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
+        let started = Date()
         let snapshot = interactiveSnapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
             return focusAdjacentDisplayWindow(direction, from: snapshot)
         }
         let ok = focusWindow(pair.neighbor.window)
+        let completedAt = Date()
+        performance.complete(
+            performance.start(
+                .directionalFocus,
+                targetContext: PerformanceTargetContext(
+                    displayID: pair.neighbor.scope?.displayID.rawValue,
+                    desktopID: pair.neighbor.scope?.desktopID.rawValue,
+                    stageID: pair.neighbor.scope?.stageID.rawValue,
+                    windowID: pair.neighbor.window.id.rawValue,
+                    sourceDisplayID: pair.active.scope?.displayID.rawValue,
+                    sourceDesktopID: pair.active.scope?.desktopID.rawValue,
+                    sourceStageID: pair.active.scope?.stageID.rawValue
+                )
+            ),
+            result: ok ? .success : .failed,
+            steps: [
+                PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
+                PerformanceStep(name: .focus, startedAt: started, durationMs: completedAt.timeIntervalSince(started) * 1000)
+            ],
+            completedAt: completedAt,
+            durationMs: completedAt.timeIntervalSince(started) * 1000
+        )
         return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
     }
 

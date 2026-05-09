@@ -79,6 +79,8 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "layout.width_adjust_requested",
         "layout.width_adjust_applied",
         "layout.width_adjust_rejected",
+        "performance.interaction_completed",
+        "performance.threshold_breached",
         "state.snapshot"
     ]
 }

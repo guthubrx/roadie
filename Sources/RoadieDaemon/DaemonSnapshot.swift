@@ -302,13 +302,15 @@ public struct ApplyResult: Equatable, Codable, Sendable {
     public var applied: Int
     public var clamped: Int
     public var failed: Int
+    public var skipped: Int
     public var items: [ApplyResultItem]
 
-    public init(attempted: Int, applied: Int, clamped: Int, failed: Int, items: [ApplyResultItem]) {
+    public init(attempted: Int, applied: Int, clamped: Int, failed: Int, skipped: Int = 0, items: [ApplyResultItem]) {
         self.attempted = attempted
         self.applied = applied
         self.clamped = clamped
         self.failed = failed
+        self.skipped = skipped
         self.items = items
     }
 }
@@ -318,6 +320,7 @@ public struct ApplyResultItem: Equatable, Codable, Sendable {
         case applied
         case clamped
         case failed
+        case skipped
     }
 
     public var windowID: WindowID
@@ -661,12 +664,25 @@ public extension SnapshotService {
 
     func apply(_ plan: ApplyPlan) -> ApplyResult {
         var items: [ApplyResultItem] = []
-        let updates = plan.commands.map { command in
+        var skippedItems: [ApplyResultItem] = []
+        let commandsToApply = plan.commands.filter { command in
+            guard command.window.frame.isEquivalent(to: command.frame, tolerancePoints: 2) else {
+                return true
+            }
+            skippedItems.append(ApplyResultItem(
+                windowID: command.window.id,
+                status: .skipped,
+                requested: command.frame,
+                actual: command.window.frame
+            ))
+            return false
+        }
+        let updates = commandsToApply.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
         }
         let actualFrames = frameWriter.setFrames(updates)
 
-        for command in plan.commands {
+        for command in commandsToApply {
             guard let rawActual = actualFrames[command.window.id], let actual = rawActual else {
                 items.append(ApplyResultItem(
                     windowID: command.window.id,
@@ -687,12 +703,14 @@ public extension SnapshotService {
         let applied = items.filter { $0.status == .applied }.count
         let clamped = items.filter { $0.status == .clamped }.count
         let failed = items.filter { $0.status == .failed }.count
+        let skipped = skippedItems.count
         return ApplyResult(
             attempted: plan.commands.count,
             applied: applied,
             clamped: clamped,
             failed: failed,
-            items: items
+            skipped: skipped,
+            items: skippedItems + items
         )
     }
 
@@ -913,6 +931,15 @@ public enum SnapshotEncoding {
         let encoder = JSONEncoder()
         encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
         let data = try encoder.encode(metrics)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    public static func json(_ snapshot: PerformanceSnapshot, pretty: Bool = true) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
+        let data = try encoder.encode(snapshot)
         return String(decoding: data, as: UTF8.self)
     }
 

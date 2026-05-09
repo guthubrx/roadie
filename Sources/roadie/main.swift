@@ -27,13 +27,14 @@ func printUsage() {
       roadie transient status [--json]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
-      roadie query state|windows|displays|desktops|stages|groups|rules|health|events
+      roadie query state|windows|displays|desktops|stages|groups|rules|health|events|performance
       roadie control status [--json]
       roadie rail status|pin|unpin|toggle
       roadie doctor
       roadie self-test
       roadie events tail [N]
       roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
+      roadie performance summary|recent|thresholds [--json] [--limit N]
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
@@ -272,6 +273,8 @@ case "events":
     } else {
         runEventSubscription(Array(args.dropFirst(2)))
     }
+case "performance":
+    runPerformanceCommand(Array(args.dropFirst()))
 case "metrics":
     let metrics = MetricsService(service: service).collect()
     if args.contains("--json") {
@@ -479,6 +482,46 @@ func printCodableJSON<T: Encodable>(_ value: T) {
         fputs("roadie: failed to encode JSON: \(error)\n", stderr)
         exit(1)
     }
+}
+
+@MainActor
+func runPerformanceCommand(_ args: [String]) -> Never {
+    guard let verb = args.first,
+          ["summary", "recent", "thresholds"].contains(verb)
+    else {
+        printUsage()
+        exit(64)
+    }
+    let limit = parseLimit(args) ?? (verb == "recent" ? 20 : nil)
+    let snapshot = PerformanceStore().snapshot(limit: limit)
+    if args.contains("--json") {
+        do {
+            print(try SnapshotEncoding.json(snapshot))
+        } catch {
+            fputs("roadie: failed to encode performance snapshot: \(error)\n", stderr)
+            exit(1)
+        }
+        exit(0)
+    }
+    switch verb {
+    case "summary":
+        print(TextFormatter.performanceSummary(snapshot))
+    case "recent":
+        print(TextFormatter.performanceRecent(snapshot))
+    case "thresholds":
+        print(TextFormatter.performanceThresholds(snapshot))
+    default:
+        printUsage()
+        exit(64)
+    }
+    exit(0)
+}
+
+func parseLimit(_ args: [String]) -> Int? {
+    guard let index = args.firstIndex(of: "--limit"),
+          args.indices.contains(index + 1)
+    else { return nil }
+    return Int(args[index + 1]).map { max(1, $0) }
 }
 
 @MainActor

@@ -402,6 +402,8 @@ public final class LayoutMaintainer {
                 if let command = commandsByID[item.windowID] {
                     failedFrames[item.windowID.rawValue] = FailedFrame(requested: item.requested, observed: command.window.frame)
                 }
+            case .skipped:
+                break
             }
         }
     }
@@ -421,6 +423,8 @@ public final class LayoutMaintainer {
                     "requested": frameDescription(item.requested)
                 ]))
             case .applied:
+                break
+            case .skipped:
                 break
             }
         }

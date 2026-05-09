@@ -15,6 +15,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var transientWindows: TransientWindowsConfig
     public var layoutPersistence: LayoutPersistenceConfig
     public var widthAdjustment: WidthAdjustmentConfig
+    public var performance: PerformanceConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
@@ -29,7 +30,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         restoreSafety: RestoreSafetyConfig = RestoreSafetyConfig(),
         transientWindows: TransientWindowsConfig = TransientWindowsConfig(),
         layoutPersistence: LayoutPersistenceConfig = LayoutPersistenceConfig(),
-        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
+        performance: PerformanceConfig = PerformanceConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
@@ -44,6 +46,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.transientWindows = transientWindows
         self.layoutPersistence = layoutPersistence
         self.widthAdjustment = widthAdjustment
+        self.performance = performance
     }
 
     public init(
@@ -58,7 +61,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         restoreSafety: RestoreSafetyConfig = RestoreSafetyConfig(),
         transientWindows: TransientWindowsConfig = TransientWindowsConfig(),
         layoutPersistence: LayoutPersistenceConfig = LayoutPersistenceConfig(),
-        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
+        performance: PerformanceConfig = PerformanceConfig()
     ) {
         self.init(
             tiling: tiling,
@@ -73,7 +77,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             restoreSafety: restoreSafety,
             transientWindows: transientWindows,
             layoutPersistence: layoutPersistence,
-            widthAdjustment: widthAdjustment
+            widthAdjustment: widthAdjustment,
+            performance: performance
         )
     }
 
@@ -91,6 +96,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case transientWindows = "transient_windows"
         case layoutPersistence = "layout_persistence"
         case widthAdjustment = "width_adjustment"
+        case performance
     }
 
     public init(from decoder: Decoder) throws {
@@ -108,6 +114,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.transientWindows = try c.decodeIfPresent(TransientWindowsConfig.self, forKey: .transientWindows) ?? TransientWindowsConfig()
         self.layoutPersistence = try c.decodeIfPresent(LayoutPersistenceConfig.self, forKey: .layoutPersistence) ?? LayoutPersistenceConfig()
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
+        self.performance = try c.decodeIfPresent(PerformanceConfig.self, forKey: .performance) ?? PerformanceConfig()
     }
 }
 
@@ -540,6 +547,78 @@ public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
             nudgeStep: try c.decodeFlexibleDouble(forKey: .nudgeStep) ?? 0.05,
             minimumRatio: try c.decodeFlexibleDouble(forKey: .minimumRatio) ?? 0.25,
             maximumRatio: try c.decodeFlexibleDouble(forKey: .maximumRatio) ?? 1.5
+        )
+    }
+}
+
+public struct PerformanceConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var maxInteractions: Int
+    public var frameTolerancePoints: Double
+    public var stageSwitchMs: Double
+    public var desktopSwitchMs: Double
+    public var altTabActivationMs: Double
+    public var displayFocusMs: Double
+    public var directionalFocusMs: Double
+    public var railActionMs: Double
+
+    public init(
+        enabled: Bool = true,
+        maxInteractions: Int = 100,
+        frameTolerancePoints: Double = 2,
+        stageSwitchMs: Double = 150,
+        desktopSwitchMs: Double = 200,
+        altTabActivationMs: Double = 250,
+        displayFocusMs: Double = 150,
+        directionalFocusMs: Double = 120,
+        railActionMs: Double = 200
+    ) {
+        self.enabled = enabled
+        self.maxInteractions = max(1, maxInteractions)
+        self.frameTolerancePoints = max(0, frameTolerancePoints)
+        self.stageSwitchMs = max(1, stageSwitchMs)
+        self.desktopSwitchMs = max(1, desktopSwitchMs)
+        self.altTabActivationMs = max(1, altTabActivationMs)
+        self.displayFocusMs = max(1, displayFocusMs)
+        self.directionalFocusMs = max(1, directionalFocusMs)
+        self.railActionMs = max(1, railActionMs)
+    }
+
+    public var thresholds: [PerformanceThreshold] {
+        [
+            PerformanceThreshold(interactionType: .stageSwitch, limitMs: stageSwitchMs, percentileTarget: 95),
+            PerformanceThreshold(interactionType: .desktopSwitch, limitMs: desktopSwitchMs, percentileTarget: 95),
+            PerformanceThreshold(interactionType: .altTabActivation, limitMs: altTabActivationMs, percentileTarget: 90),
+            PerformanceThreshold(interactionType: .displayFocus, limitMs: displayFocusMs, percentileTarget: 95),
+            PerformanceThreshold(interactionType: .directionalFocus, limitMs: directionalFocusMs, percentileTarget: 95),
+            PerformanceThreshold(interactionType: .railAction, limitMs: railActionMs, percentileTarget: 95),
+        ]
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case maxInteractions = "max_interactions"
+        case frameTolerancePoints = "frame_tolerance_points"
+        case stageSwitchMs = "stage_switch_ms"
+        case desktopSwitchMs = "desktop_switch_ms"
+        case altTabActivationMs = "alt_tab_activation_ms"
+        case displayFocusMs = "display_focus_ms"
+        case directionalFocusMs = "directional_focus_ms"
+        case railActionMs = "rail_action_ms"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            maxInteractions: try c.decodeIfPresent(Int.self, forKey: .maxInteractions) ?? 100,
+            frameTolerancePoints: try c.decodeFlexibleDouble(forKey: .frameTolerancePoints) ?? 2,
+            stageSwitchMs: try c.decodeFlexibleDouble(forKey: .stageSwitchMs) ?? 150,
+            desktopSwitchMs: try c.decodeFlexibleDouble(forKey: .desktopSwitchMs) ?? 200,
+            altTabActivationMs: try c.decodeFlexibleDouble(forKey: .altTabActivationMs) ?? 250,
+            displayFocusMs: try c.decodeFlexibleDouble(forKey: .displayFocusMs) ?? 150,
+            directionalFocusMs: try c.decodeFlexibleDouble(forKey: .directionalFocusMs) ?? 120,
+            railActionMs: try c.decodeFlexibleDouble(forKey: .railActionMs) ?? 200
         )
     }
 }
