@@ -147,10 +147,10 @@ It is disabled by default while it is being hardened. Start it only when you exp
 
 ```bash
 ./bin/roadie control status --json
-./scripts/start --control-center
+./scripts/start --no-control-center
 ```
 
-It exposes daemon health, active config status, current desktop/stage, managed window count, recent errors, and common recovery actions. The menu consumes the same `ControlCenterState` that the CLI returns, so scripts and the UI share one status contract.
+The menu bar Control Center is currently disabled. The underlying `roadie control status --json` command remains available for scripts and diagnostics.
 
 ## Safety And Recovery
 

@@ -403,6 +403,10 @@ public struct StageCommandService {
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
         var applied = 0
+        scope.activeStageID = stageID
+        scope.lastExplicitStageSwitchAt = Date()
+        state.update(scope)
+        store.save(state)
 
         for id in previousMembers.subtracting(targetMembers) {
             guard let window = windowsByID[id] else { continue }
@@ -423,11 +427,13 @@ public struct StageCommandService {
             _ = service.focus(focusedWindow)
         }
 
-        scope.activeStageID = stageID
-        state.update(scope)
-        store.save(state)
-
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
+        let updatedSnapshot = service.snapshot()
+        let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
+        let layoutResult = service.apply(service.applyPlan(
+            from: updatedSnapshot,
+            scope: activeScope,
+            orderedWindowIDs: scope.memberIDs(in: stageID)
+        ))
         applied += layoutResult.applied + layoutResult.clamped
         events.append(RoadieEvent(
             type: "stage_switch",

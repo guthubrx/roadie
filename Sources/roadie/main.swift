@@ -373,7 +373,7 @@ case "rail":
     }
 case "focus":
     if args.dropFirst().first == "status" {
-        print(TextFormatter.focusStatus(service.snapshot()))
+        print(TextFormatter.focusStatus(interactiveSnapshot()))
         exit(0)
     } else if args.dropFirst().first == "back-and-forth" {
         let result = WindowCommandService(service: service).focusBackAndForth()
@@ -454,6 +454,11 @@ case "toggle":
 default:
     printUsage()
     exit(args.isEmpty ? 0 : 64)
+}
+
+@MainActor
+func interactiveSnapshot() -> DaemonSnapshot {
+    service.snapshot(includeAccessibilityAttributes: false)
 }
 
 func printCodableJSON<T: Encodable>(_ value: T) {

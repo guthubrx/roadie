@@ -49,7 +49,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "roadied",
-            dependencies: ["RoadieDaemon", "RoadieControlCenter"]
+            dependencies: ["RoadieDaemon"]
         ),
         .executableTarget(
             name: "roadie",

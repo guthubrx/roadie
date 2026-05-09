@@ -69,10 +69,13 @@ public struct SnapshotService {
         self.stageStore = stageStore
     }
 
-    public func snapshot(promptForPermissions: Bool = false) -> DaemonSnapshot {
+    public func snapshot(
+        promptForPermissions: Bool = false,
+        includeAccessibilityAttributes: Bool = true
+    ) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
-        let windows = provider.windows()
+        let windows = provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
         let liveDisplayIDs = Set(displays.map(\.id))
@@ -173,9 +176,14 @@ public struct SnapshotService {
            let focusedScope = focusedEntry.scope {
             var acceptsProviderFocus = state.activeScope(on: focusedScope.displayID) == focusedScope
             let focusLooksLikeRoadieHiddenWindow = isHidden(focusedEntry.window.frame.cgRect, in: displays)
-            let currentDesktopID = persistedStages.currentDesktopID(for: focusedScope.displayID)
-            let focusIsOnCurrentDesktop = currentDesktopID == focusedScope.desktopID
-            if config.focus.stageFollowsFocus && focusIsOnCurrentDesktop && (acceptsProviderFocus || focusLooksLikeRoadieHiddenWindow) {
+            let persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+            let explicitSwitchGracePeriod = persistentScope.lastExplicitStageSwitchAt.map { Date().timeIntervalSince($0) < 1.5 } ?? false
+            let explicitDesktopSwitchGracePeriod = persistedStages.lastExplicitDesktopSwitchAt(for: focusedScope.displayID).map { Date().timeIntervalSince($0) < 1.5 } ?? false
+            let focusWouldSwitchDesktop = persistedStages.currentDesktopID(for: focusedScope.displayID) != focusedScope.desktopID
+            let hiddenFocusCanSwitchStage = focusLooksLikeRoadieHiddenWindow
+                && !(explicitSwitchGracePeriod && persistentScope.activeStageID != focusedScope.stageID)
+                && !(explicitDesktopSwitchGracePeriod && focusWouldSwitchDesktop)
+            if config.focus.stageFollowsFocus && (acceptsProviderFocus || hiddenFocusCanSwitchStage) {
                 persistedStages.switchDesktop(displayID: focusedScope.displayID, to: focusedScope.desktopID)
                 var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
                 persistentScope.activeStageID = focusedScope.stageID

@@ -195,6 +195,7 @@ public struct DesktopCommandService {
         state.update(previousScope)
         state.update(targetScope)
         state.switchDesktop(displayID: display.id, to: desktopID)
+        state.markExplicitDesktopSwitch(displayID: display.id)
         store.save(state)
 
         let result = service.apply(service.applyPlan(from: service.snapshot()))
