@@ -47,6 +47,8 @@ public extension RoadieEventEnvelope {
 public struct EventLog: Sendable {
     private let url: URL
     private static let jsonNewline = Data("\n".utf8)
+    public static let defaultMaxBytes = 10 * 1024 * 1024
+    public static let defaultRetainedBackups = 2
 
     public init(path: String = Self.defaultPath()) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
@@ -88,9 +90,31 @@ public struct EventLog: Sendable {
     }
 
     public func tail(limit: Int = 20) -> [String] {
-        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return [] }
-        let lines = raw.split(separator: "\n").map(String.init)
-        return Array(lines.suffix(max(1, limit)))
+        let limit = max(1, limit)
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+        let fileSize = (try? handle.seekToEnd()) ?? 0
+        guard fileSize > 0 else { return [] }
+
+        var offset = fileSize
+        var data = Data()
+        let chunkSize: UInt64 = 64 * 1024
+        while offset > 0 {
+            let readSize = min(chunkSize, offset)
+            offset -= readSize
+            do {
+                try handle.seek(toOffset: offset)
+                let chunk = try handle.read(upToCount: Int(readSize)) ?? Data()
+                data.insert(contentsOf: chunk, at: 0)
+            } catch {
+                break
+            }
+            let lineCount = data.reduce(0) { $0 + ($1 == 10 ? 1 : 0) }
+            if lineCount > limit { break }
+        }
+
+        guard let raw = String(data: data, encoding: .utf8) else { return [] }
+        return Array(raw.split(separator: "\n").suffix(limit).map(String.init))
     }
 
     public func envelopes(limit: Int = 20) -> [RoadieEventEnvelope] {
@@ -106,5 +130,38 @@ public struct EventLog: Sendable {
             }
             return nil
         }
+    }
+
+    public func rotateIfNeeded(maxBytes: Int = Self.defaultMaxBytes, retainedBackups: Int = Self.defaultRetainedBackups) {
+        let manager = FileManager.default
+        guard maxBytes > 0,
+              let attributes = try? manager.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber,
+              size.intValue > maxBytes
+        else { return }
+
+        if retainedBackups > 0 {
+            for index in stride(from: retainedBackups, through: 1, by: -1) {
+                let source = backupURL(index)
+                let destination = backupURL(index + 1)
+                if manager.fileExists(atPath: destination.path) {
+                    try? manager.removeItem(at: destination)
+                }
+                if manager.fileExists(atPath: source.path), index < retainedBackups {
+                    try? manager.moveItem(at: source, to: destination)
+                }
+            }
+            let firstBackup = backupURL(1)
+            if manager.fileExists(atPath: firstBackup.path) {
+                try? manager.removeItem(at: firstBackup)
+            }
+            try? manager.moveItem(at: url, to: firstBackup)
+        } else {
+            try? manager.removeItem(at: url)
+        }
+    }
+
+    private func backupURL(_ index: Int) -> URL {
+        URL(fileURLWithPath: "\(url.path).\(index)")
     }
 }

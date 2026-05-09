@@ -176,6 +176,18 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func fileAdmin(_ report: FileAdminReport) -> String {
+        var lines = [
+            "dryRun=\(report.dryRun)",
+            "candidateCount=\(report.candidateCount)",
+            "reclaimableBytes=\(report.reclaimedBytes)"
+        ]
+        for action in report.actions {
+            lines.append("\(action.kind.rawValue)\t\(action.applied ? "applied" : "pending")\t\(action.sizeBytes)\t\(action.reason)\t\(action.path)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func rules(_ rules: [WindowRule]) -> String {
         guard !rules.isEmpty else { return "No rules configured." }
         var lines = ["ID\tENABLED\tPRIORITY\tMATCH\tACTION"]

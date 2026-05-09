@@ -19,6 +19,7 @@ func printUsage() {
       roadie layout split horizontal|vertical
       roadie layout join-with|insert left|right|up|down
       roadie layout flatten|zoom-parent
+      roadie layout width next|prev|nudge [DELTA]|ratio RATIO [--all]
       roadie config show|validate|reload [--json] [--config PATH]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
@@ -28,6 +29,7 @@ func printUsage() {
       roadie self-test
       roadie events tail [N]
       roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
+      roadie cleanup [--dry-run|--apply] [--json]
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
@@ -205,6 +207,10 @@ case "layout":
         let result = LayoutCommandService(service: service).zoomParent()
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "width":
+        let result = runWidthLayoutCommand(Array(args.dropFirst(2)))
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     default:
         printUsage()
         exit(64)
@@ -247,6 +253,14 @@ case "events":
         print(EventLog().tail(limit: limit).joined(separator: "\n"))
     } else {
         runEventSubscription(Array(args.dropFirst(2)))
+    }
+case "cleanup":
+    let dryRun = !args.contains("--apply")
+    let report = FileAdministrationService().run(dryRun: dryRun)
+    if args.contains("--json") {
+        printCodableJSON(report)
+    } else {
+        print(TextFormatter.fileAdmin(report))
     }
 case "metrics":
     let metrics = MetricsService(service: service).collect()
@@ -428,6 +442,36 @@ func value(after flag: String, in args: [String]) -> String? {
     let valueIndex = args.index(after: index)
     guard valueIndex < args.endIndex else { return nil }
     return args[valueIndex]
+}
+
+@MainActor
+func runWidthLayoutCommand(_ args: [String]) -> WindowCommandResult {
+    guard let verb = args.first else {
+        return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+    }
+    let scope: WidthAdjustmentScope = args.contains("--all") ? .allWindows : .activeWindow
+    let widthService = WidthAdjustmentService(service: service)
+    let result: WidthAdjustmentResult
+    switch verb {
+    case "next":
+        result = widthService.apply(WidthAdjustmentIntent(scope: scope, mode: .presetNext))
+    case "prev", "previous":
+        result = widthService.apply(WidthAdjustmentIntent(scope: scope, mode: .presetPrevious))
+    case "nudge":
+        result = widthService.apply(WidthAdjustmentIntent(
+            scope: scope,
+            mode: .nudge,
+            delta: args.dropFirst().first.flatMap(Double.init)
+        ))
+    case "ratio":
+        guard let raw = args.dropFirst().first, let ratio = Double(raw) else {
+            return WindowCommandResult(message: "layout width ratio: requires numeric ratio", changed: false)
+        }
+        result = widthService.apply(WidthAdjustmentIntent(scope: scope, mode: .explicitRatio, targetRatio: ratio))
+    default:
+        return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+    }
+    return WindowCommandResult(message: result.message, changed: result.changed)
 }
 
 @MainActor
