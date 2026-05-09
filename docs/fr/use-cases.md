@@ -118,3 +118,31 @@ Utiliser cette sequence apres :
 - fermeture brutale d'apps;
 - changement de branche ou rebuild.
 
+## 7. Avant une operation risquee
+
+Objectif : garder une porte de retour manuelle sans activer de watcher automatique.
+
+```bash
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status
+```
+
+Si les frames doivent etre restaurees explicitement :
+
+```bash
+./bin/roadie restore apply --yes
+```
+
+Ce restore matche les fenetres par ID courant. Il est volontairement simple et manuel pour eviter de toucher au chemin focus/bordure.
+
+## 8. Administration locale raisonnable
+
+Objectif : eviter l'accumulation de logs et backups.
+
+```bash
+./bin/roadie cleanup --dry-run
+./bin/roadie cleanup --apply
+```
+
+Commencer par `--dry-run` permet de voir les fichiers candidats avant suppression ou rotation.

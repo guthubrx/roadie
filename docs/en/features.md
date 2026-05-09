@@ -138,3 +138,43 @@ Use cases:
 - debug a rule or a group;
 - build a local dashboard.
 
+## Manual Safety And Administration
+
+These commands are explicit: no restore watcher, no Control Center, and no automatic action is started by these features.
+
+```bash
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --yes --json
+./bin/roadie cleanup --dry-run --json
+./bin/roadie cleanup --apply
+```
+
+Use cases:
+
+- reload config only when validation succeeds;
+- take a manual frame snapshot before a risky operation;
+- explicitly restore frames by window ID when requested;
+- keep logs, backups, and legacy archives under control.
+
+## Width Presets And Performance Diagnostics
+
+Width adjustments are manual commands. Performance diagnostics read the event log; they do not time the focus/border path in real time.
+
+```bash
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67
+
+./bin/roadie performance summary
+./bin/roadie performance recent --limit 20
+./bin/roadie performance thresholds --json
+```
+
+Use cases:
+
+- quickly widen the active window without changing the whole layout mode;
+- inspect recent interaction event types in `events.jsonl`;
+- keep target thresholds documented without touching the daemon.

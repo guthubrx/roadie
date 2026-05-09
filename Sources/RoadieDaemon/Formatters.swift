@@ -188,6 +188,74 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
+    public static func performanceSummary(_ report: PerformanceSummaryReport) -> String {
+        var lines = [
+            "source=\(report.source)",
+            "sampleCount=\(report.sampleCount)",
+            "thresholds=stageSwitchP95:\(report.thresholds.stageSwitchP95Ms)ms desktopSwitchP95:\(report.thresholds.desktopSwitchP95Ms)ms altTabP90:\(report.thresholds.altTabActivationP90Ms)ms"
+        ]
+        guard !report.rows.isEmpty else {
+            lines.append("No interaction events found.")
+            return lines.joined(separator: "\n")
+        }
+        lines.append("COUNT\tTYPE\tFIRST\tLAST")
+        let formatter = ISO8601DateFormatter()
+        for row in report.rows {
+            lines.append([
+                String(row.count),
+                row.eventType,
+                row.firstSeen.map { formatter.string(from: $0) } ?? "-",
+                row.lastSeen.map { formatter.string(from: $0) } ?? "-"
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func performanceRecent(_ events: [PerformanceRecentEvent]) -> String {
+        guard !events.isEmpty else { return "No interaction events found." }
+        let formatter = ISO8601DateFormatter()
+        var lines = ["TIME\tTYPE\tSCOPE\tSUBJECT"]
+        for event in events {
+            lines.append([
+                formatter.string(from: event.timestamp),
+                event.type,
+                event.scope ?? "-",
+                event.subject ?? "-"
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func performanceThresholds(_ thresholds: PerformanceThresholds) -> String {
+        [
+            "stageSwitchP95Ms=\(thresholds.stageSwitchP95Ms)",
+            "desktopSwitchP95Ms=\(thresholds.desktopSwitchP95Ms)",
+            "altTabActivationP90Ms=\(thresholds.altTabActivationP90Ms)",
+            "note=\(thresholds.note)"
+        ].joined(separator: "\n")
+    }
+
+    public static func restoreStatus(_ status: RestoreSafetyStatus) -> String {
+        let formatter = ISO8601DateFormatter()
+        return [
+            "path=\(status.path)",
+            "exists=\(status.exists)",
+            "generatedAt=\(status.generatedAt.map { formatter.string(from: $0) } ?? "-")",
+            "windowCount=\(status.windowCount)",
+            "sizeBytes=\(status.sizeBytes)"
+        ].joined(separator: "\n")
+    }
+
+    public static func restoreApply(_ result: RestoreSafetyApplyResult) -> String {
+        [
+            "path=\(result.path)",
+            "attempted=\(result.attempted)",
+            "applied=\(result.applied)",
+            "failed=\(result.failed)",
+            "missing=\(result.missing)"
+        ].joined(separator: "\n")
+    }
+
     public static func rules(_ rules: [WindowRule]) -> String {
         guard !rules.isEmpty else { return "No rules configured." }
         var lines = ["ID\tENABLED\tPRIORITY\tMATCH\tACTION"]

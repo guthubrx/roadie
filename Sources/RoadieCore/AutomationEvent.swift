@@ -17,6 +17,8 @@ public struct AutomationScope: RawRepresentable, Codable, Equatable, Hashable, S
     public static let layout = AutomationScope(rawValue: "layout")
     public static let rule = AutomationScope(rawValue: "rule")
     public static let command = AutomationScope(rawValue: "command")
+    public static let restore = AutomationScope(rawValue: "restore")
+    public static let performance = AutomationScope(rawValue: "performance")
 
     public var description: String { rawValue }
 }

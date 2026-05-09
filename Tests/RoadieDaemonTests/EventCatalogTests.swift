@@ -18,6 +18,10 @@ struct EventCatalogTests {
             "command.received",
             "command.applied",
             "command.failed",
+            "restore.snapshot_written",
+            "restore.apply_completed",
+            "performance.summary_requested",
+            "layout.width_adjust_applied",
             "state.snapshot"
         ]
 

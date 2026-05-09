@@ -13,6 +13,9 @@ All commands below can be called directly with `./bin/roadie` or through `./scri
 ./bin/roadie metrics --json
 ./bin/roadie doctor
 ./bin/roadie self-test
+./bin/roadie performance summary
+./bin/roadie performance recent --limit 20
+./bin/roadie performance thresholds --json
 ```
 
 Typical use:
@@ -21,6 +24,7 @@ Typical use:
 - `state audit`: detect duplicates, stale references, or broken scopes.
 - `state heal`: repair conservative state inconsistencies.
 - `metrics --json`: feed a script or dashboard.
+- `performance ...`: read recent interactions from the event log without active daemon instrumentation.
 
 ## Windows And Focus
 
@@ -58,6 +62,10 @@ Use cases:
 ./bin/roadie layout insert left|right|up|down
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67
 ./bin/roadie balance
 ```
 
@@ -65,7 +73,26 @@ Use cases:
 
 - inspect the plan before applying it with `layout plan`;
 - persist a manual layout intent with `insert` or `zoom-parent`;
+- manually adjust the active window width with `layout width`;
 - return to a linear layout with `flatten`.
+
+## Safety And Generated Files
+
+```bash
+./bin/roadie config validate --json
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --yes --json
+./bin/roadie cleanup --dry-run --json
+./bin/roadie cleanup --apply
+```
+
+Notes:
+
+- `config reload` validates before applying and keeps the previous config when the new one is invalid.
+- `restore snapshot` and `restore apply` are manual; this build has no automatic watcher.
+- `cleanup --dry-run` shows what would be deleted or rotated before doing anything.
 
 ## Displays, Desktops, And Stages
 
@@ -129,6 +156,9 @@ Use cases:
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query event_catalog
+./bin/roadie query performance
+./bin/roadie query restore
 ```
 
 Every `query` returns stable JSON:
@@ -139,4 +169,3 @@ Every `query` returns stable JSON:
   "data": []
 }
 ```
-

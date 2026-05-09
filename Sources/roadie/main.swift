@@ -23,12 +23,14 @@ func printUsage() {
       roadie config show|validate|reload [--json] [--config PATH]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
-      roadie query state|windows|displays|desktops|stages|groups|rules|health|events
+      roadie query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore
       roadie rail status|pin|unpin|toggle
       roadie doctor
       roadie self-test
       roadie events tail [N]
       roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
+      roadie performance summary|recent|thresholds [--json] [--limit N]
+      roadie restore snapshot|status|apply [--yes] [--json]
       roadie cleanup [--dry-run|--apply] [--json]
       roadie metrics [--json]
       roadie permissions [--prompt]
@@ -254,6 +256,10 @@ case "events":
     } else {
         runEventSubscription(Array(args.dropFirst(2)))
     }
+case "performance":
+    runPerformanceCommand(Array(args.dropFirst()))
+case "restore":
+    runRestoreCommand(Array(args.dropFirst()))
 case "cleanup":
     let dryRun = !args.contains("--apply")
     let report = FileAdministrationService().run(dryRun: dryRun)
@@ -430,6 +436,7 @@ func printCodableJSON<T: Encodable>(_ value: T) {
     do {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
         print(String(decoding: try encoder.encode(value), as: UTF8.self))
     } catch {
         fputs("roadie: failed to encode JSON: \(error)\n", stderr)
@@ -442,6 +449,72 @@ func value(after flag: String, in args: [String]) -> String? {
     let valueIndex = args.index(after: index)
     guard valueIndex < args.endIndex else { return nil }
     return args[valueIndex]
+}
+
+func intValue(after flag: String, in args: [String], default defaultValue: Int) -> Int {
+    value(after: flag, in: args).flatMap(Int.init) ?? defaultValue
+}
+
+func runPerformanceCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let performance = PerformanceLogService()
+    let json = args.contains("--json")
+    switch verb {
+    case "summary":
+        let report = performance.summary(limit: intValue(after: "--limit", in: args, default: 500))
+        json ? printCodableJSON(report) : print(TextFormatter.performanceSummary(report))
+        exit(0)
+    case "recent":
+        let events = performance.recent(limit: intValue(after: "--limit", in: args, default: 20))
+        json ? printCodableJSON(events) : print(TextFormatter.performanceRecent(events))
+        exit(0)
+    case "thresholds":
+        let thresholds = performance.thresholds()
+        json ? printCodableJSON(thresholds) : print(TextFormatter.performanceThresholds(thresholds))
+        exit(0)
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runRestoreCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let restore = RestoreSafetyService(service: service)
+    let json = args.contains("--json")
+    do {
+        switch verb {
+        case "snapshot":
+            let snapshot = try restore.writeSnapshot()
+            json ? printCodableJSON(snapshot) : print("restore snapshot written windows=\(snapshot.windows.count)")
+            exit(0)
+        case "status":
+            let status = restore.status()
+            json ? printCodableJSON(status) : print(TextFormatter.restoreStatus(status))
+            exit(status.exists ? 0 : 1)
+        case "apply":
+            guard args.contains("--yes") else {
+                fputs("roadie: restore apply requires --yes\n", stderr)
+                exit(2)
+            }
+            let result = try restore.apply()
+            json ? printCodableJSON(result) : print(TextFormatter.restoreApply(result))
+            exit(result.failed == 0 ? 0 : 1)
+        default:
+            printUsage()
+            exit(64)
+        }
+    } catch {
+        fputs("roadie: restore \(verb) failed: \(error)\n", stderr)
+        exit(1)
+    }
 }
 
 @MainActor
