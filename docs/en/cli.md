@@ -91,7 +91,8 @@ Use cases:
 Notes:
 
 - `config reload` validates before applying and keeps the previous config when the new one is invalid.
-- `restore snapshot` and `restore apply` are manual; this build has no automatic watcher.
+- `restore snapshot` and `restore apply` remain available manually; the daemon also writes a snapshot on startup/clean exit.
+- the crash watcher restores only when `roadied` disappears without a clean-exit marker; `roadied run --yes --no-restore-safety` disables it.
 - `cleanup --dry-run` shows what would be deleted or rotated before doing anything.
 
 ## Displays, Desktops, And Stages

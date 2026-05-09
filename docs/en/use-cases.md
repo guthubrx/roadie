@@ -120,7 +120,7 @@ Use this sequence after:
 
 ## 7. Before A Risky Operation
 
-Goal: keep a manual fallback without enabling an automatic watcher.
+Goal: keep an explicit fallback and inspect the same snapshot used by the crash watcher.
 
 ```bash
 ./bin/roadie config reload --json
@@ -134,7 +134,7 @@ If frames must be restored explicitly:
 ./bin/roadie restore apply --yes
 ```
 
-This restore matches windows by current window ID. It is intentionally simple and manual to avoid touching the focus/border path.
+This restore matches windows by current window ID. The crash watcher uses the same mechanism only when the daemon disappears without a clean exit; it does not run in the focus/border path.
 
 ## 8. Reasonable Local Administration
 

@@ -30,17 +30,29 @@ public struct RestoreSafetyApplyResult: Codable, Equatable, Sendable {
     public var missing: Int
 }
 
+public struct RestoreSafetyRunMarker: Codable, Equatable, Sendable {
+    public var pid: Int32
+    public var startedAt: Date
+    public var cleanExitAt: Date?
+    public var snapshotPath: String
+
+    public var cleanExit: Bool { cleanExitAt != nil }
+}
+
 public struct RestoreSafetyService {
     private let path: String
+    private let markerPath: String
     private let service: SnapshotService
     private let eventLog: EventLog
 
     public init(
         path: String = "~/.local/state/roadies/restore.json",
+        markerPath: String = "~/.local/state/roadies/restore-run.json",
         service: SnapshotService = SnapshotService(),
         eventLog: EventLog = EventLog()
     ) {
         self.path = NSString(string: path).expandingTildeInPath
+        self.markerPath = NSString(string: markerPath).expandingTildeInPath
         self.service = service
         self.eventLog = eventLog
     }
@@ -79,6 +91,48 @@ public struct RestoreSafetyService {
             ]
         ))
         return restore
+    }
+
+    public func markRunStarted(pid: Int32) throws -> RestoreSafetyRunMarker {
+        let marker = RestoreSafetyRunMarker(
+            pid: pid,
+            startedAt: Date(),
+            cleanExitAt: nil,
+            snapshotPath: path
+        )
+        try writeMarker(marker)
+        return marker
+    }
+
+    public func markCleanExit(pid: Int32) throws -> RestoreSafetyRunMarker {
+        var marker = loadMarker() ?? RestoreSafetyRunMarker(
+            pid: pid,
+            startedAt: Date(),
+            cleanExitAt: nil,
+            snapshotPath: path
+        )
+        marker.pid = pid
+        marker.cleanExitAt = Date()
+        marker.snapshotPath = path
+        try writeMarker(marker)
+        eventLog.append(RoadieEventEnvelope(
+            id: "restore_\(UUID().uuidString)",
+            type: "restore.exit_completed",
+            scope: .restore,
+            subject: AutomationSubject(kind: "process", id: String(pid)),
+            cause: .system,
+            payload: ["snapshot_path": .string(path)]
+        ))
+        return marker
+    }
+
+    public func runMarker() -> RestoreSafetyRunMarker? {
+        loadMarker()
+    }
+
+    public func shouldRestoreAfterProcessExit(pid: Int32) -> Bool {
+        guard let marker = loadMarker(), marker.pid == pid else { return false }
+        return !marker.cleanExit
     }
 
     public func status() -> RestoreSafetyStatus {
@@ -135,6 +189,22 @@ public struct RestoreSafetyService {
             ]
         ))
         return report
+    }
+
+    private func writeMarker(_ marker: RestoreSafetyRunMarker) throws {
+        let url = URL(fileURLWithPath: markerPath)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(marker).write(to: url, options: .atomic)
+    }
+
+    private func loadMarker() -> RestoreSafetyRunMarker? {
+        let url = URL(fileURLWithPath: markerPath)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(RestoreSafetyRunMarker.self, from: Data(contentsOf: url))
     }
 
     private func loadSnapshot() throws -> RestoreSafetySnapshot {
