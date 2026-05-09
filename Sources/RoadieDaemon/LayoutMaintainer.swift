@@ -137,6 +137,17 @@ public final class LayoutMaintainer {
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
             }
 
+            let commandProtectedScopes = recentCommandScopes(in: snapshot, since: cutoff, now: now, windowIDs: changedWindowIDs)
+            if !commandProtectedScopes.isEmpty {
+                lastCommandIntentAt = now
+                let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: commandProtectedScopes)
+                events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
+                    "scopes": commandProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                    "unprotectedCommands": String(tick.commands)
+                ]))
+                return tick
+            }
+
             priorityWindowIDs = changedWindowIDs
             manualResizeApplyAfter = now.addingTimeInterval(manualResizeDebounceSeconds)
             removeLayoutIntents(for: changedWindowIDs, in: snapshot)
@@ -505,7 +516,7 @@ public final class LayoutMaintainer {
                 placements[id] = frame
             }
             guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
-            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)
+            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements, source: .command)
         }
     }
 

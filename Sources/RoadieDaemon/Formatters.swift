@@ -135,6 +135,18 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func fileAdmin(_ report: FileAdminReport) -> String {
+        var lines = [
+            "dryRun=\(report.dryRun)",
+            "candidateCount=\(report.candidateCount)",
+            "reclaimableBytes=\(report.reclaimedBytes)"
+        ]
+        for action in report.actions {
+            lines.append("\(action.kind.rawValue)\t\(action.applied ? "applied" : "pending")\t\(action.sizeBytes)\t\(action.reason)\t\(action.path)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     public static func controlCenter(_ state: ControlCenterState) -> String {
         [
             "daemon=\(state.daemonStatus.rawValue)",
