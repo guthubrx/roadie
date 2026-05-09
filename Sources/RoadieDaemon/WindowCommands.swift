@@ -341,10 +341,15 @@ public struct WindowCommandService {
         let candidates = snapshot.windows.filter {
             $0.scope == targetScope && $0.window.isTileCandidate
         }
-        guard let target = candidates.min(by: { lhs, rhs in
-            crossDisplayFocusScore(from: active.window.frame.cgRect, to: lhs.window.frame.cgRect, direction: direction)
-                < crossDisplayFocusScore(from: active.window.frame.cgRect, to: rhs.window.frame.cgRect, direction: direction)
-        }) else {
+        let rankedCandidates = candidates.compactMap { candidate -> (window: ScopedWindowSnapshot, score: CGFloat)? in
+            let score = crossDisplayFocusScore(
+                from: active.window.frame.cgRect,
+                to: candidate.window.frame.cgRect,
+                direction: direction
+            )
+            return score.isFinite ? (candidate, score) : nil
+        }
+        guard let target = rankedCandidates.min(by: { $0.score < $1.score })?.window else {
             let result = DisplayCommandService(service: service, store: stageStore, events: events).focus(direction)
             return WindowCommandResult(message: result.message, changed: result.changed)
         }
@@ -667,16 +672,44 @@ public struct WindowCommandService {
     }
 
     private func crossDisplayFocusScore(from active: CGRect, to candidate: CGRect, direction: Direction) -> CGFloat {
+        guard isOnTargetSide(candidate, from: active, direction: direction) else { return .infinity }
+
+        let primaryDistance: CGFloat
+        let orthogonalDistance: CGFloat
+        let orthogonalGap: CGFloat
+        let orthogonalOverlap: CGFloat
+
         switch direction {
         case .left:
-            return abs(active.midY - candidate.midY) * 2 + abs(active.minX - candidate.maxX) * 0.2
+            primaryDistance = max(0, active.minX - candidate.maxX)
+            orthogonalDistance = abs(active.midY - candidate.midY)
+            orthogonalGap = rangeGap(active.minY...active.maxY, candidate.minY...candidate.maxY)
+            orthogonalOverlap = rangeOverlap(active.minY...active.maxY, candidate.minY...candidate.maxY)
         case .right:
-            return abs(active.midY - candidate.midY) * 2 + abs(candidate.minX - active.maxX) * 0.2
+            primaryDistance = max(0, candidate.minX - active.maxX)
+            orthogonalDistance = abs(active.midY - candidate.midY)
+            orthogonalGap = rangeGap(active.minY...active.maxY, candidate.minY...candidate.maxY)
+            orthogonalOverlap = rangeOverlap(active.minY...active.maxY, candidate.minY...candidate.maxY)
         case .up:
-            return abs(active.midX - candidate.midX) * 2 + abs(active.minY - candidate.maxY) * 0.2
+            primaryDistance = max(0, active.minY - candidate.maxY)
+            orthogonalDistance = abs(active.midX - candidate.midX)
+            orthogonalGap = rangeGap(active.minX...active.maxX, candidate.minX...candidate.maxX)
+            orthogonalOverlap = rangeOverlap(active.minX...active.maxX, candidate.minX...candidate.maxX)
         case .down:
-            return abs(active.midX - candidate.midX) * 2 + abs(candidate.minY - active.maxY) * 0.2
+            primaryDistance = max(0, candidate.minY - active.maxY)
+            orthogonalDistance = abs(active.midX - candidate.midX)
+            orthogonalGap = rangeGap(active.minX...active.maxX, candidate.minX...candidate.maxX)
+            orthogonalOverlap = rangeOverlap(active.minX...active.maxX, candidate.minX...candidate.maxX)
         }
+
+        if orthogonalOverlap > 0 {
+            return primaryDistance * 0.25 + orthogonalDistance * 0.05 - orthogonalOverlap * 0.1
+        }
+        return 100_000 + orthogonalGap * 4 + primaryDistance * 0.25 + orthogonalDistance * 0.1
+    }
+
+    private func rangeOverlap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {
+        max(0, min(lhs.upperBound, rhs.upperBound) - max(lhs.lowerBound, rhs.lowerBound))
     }
 
     private func resizedFrame(_ frame: CGRect, direction: Direction) -> CGRect {
