@@ -27,6 +27,52 @@ struct RestoreSafetyTests {
     }
 
     @Test
+    func saveSuppressesUnchangedSnapshotEvents() {
+        let eventLog = EventLog(path: tempPath("restore-unchanged-events"))
+        let restore = RestoreSafetyService(
+            path: tempPath("restore-unchanged"),
+            eventLog: eventLog
+        )
+        let window = RestoreWindowState(
+            windowID: 1,
+            identity: WindowIdentityV2(bundleID: "com.apple.Terminal", appName: "Terminal", title: "shell"),
+            frame: Rect(x: 10, y: 20, width: 500, height: 400),
+            visibleFrame: powerDisplay().visibleFrame
+        )
+        let first = RestoreSafetySnapshot(
+            createdAt: Date(timeIntervalSince1970: 1),
+            daemonPID: 1234,
+            windows: [window],
+            activeDisplayID: "display-1",
+            activeDesktop: "1",
+            activeStage: "1"
+        )
+        let sameStateLater = RestoreSafetySnapshot(
+            createdAt: Date(timeIntervalSince1970: 2),
+            daemonPID: 1234,
+            windows: [window],
+            activeDisplayID: "display-1",
+            activeDesktop: "1",
+            activeStage: "1"
+        )
+        let changed = RestoreSafetySnapshot(
+            createdAt: Date(timeIntervalSince1970: 3),
+            daemonPID: 1234,
+            windows: [window],
+            activeDisplayID: "display-1",
+            activeDesktop: "1",
+            activeStage: "2"
+        )
+
+        #expect(restore.save(first))
+        #expect(restore.save(sameStateLater))
+        #expect(eventLog.envelopes(limit: 10).filter { $0.type == "restore.snapshot_written" }.count == 1)
+
+        #expect(restore.save(changed))
+        #expect(eventLog.envelopes(limit: 10).filter { $0.type == "restore.snapshot_written" }.count == 2)
+    }
+
+    @Test
     func restoreUsesStableIdentityWhenWindowIDChanged() {
         let live = WindowSnapshot(
             id: WindowID(rawValue: 99),

@@ -85,6 +85,9 @@ public struct RestoreSafetyService {
         do {
             let url = URL(fileURLWithPath: path)
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            if let existing = load(), semanticFingerprint(existing) == semanticFingerprint(snapshot) {
+                return true
+            }
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .iso8601
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -161,6 +164,12 @@ public struct RestoreSafetyService {
             return saved.frame
         }
         return liveDisplays.first?.visibleFrame ?? saved.visibleFrame
+    }
+
+    private func semanticFingerprint(_ snapshot: RestoreSafetySnapshot) -> RestoreSafetySnapshot {
+        var stable = snapshot
+        stable.createdAt = Date(timeIntervalSince1970: 0)
+        return stable
     }
 
     private func envelope(_ type: String, payload: [String: AutomationPayload]) -> RoadieEventEnvelope {
