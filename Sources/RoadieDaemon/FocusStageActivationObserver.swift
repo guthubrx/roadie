@@ -127,8 +127,12 @@ public final class FocusStageActivationObserver {
         lastIntent = (focusedID, now)
         let started = Date()
         let session = performanceSession(startedAt: started, focusedID: focusedID)
-        let snapshot = service.snapshot(followExternalFocus: true, persistState: true)
+        let timedSnapshot = service.timedSnapshot(followExternalFocus: true, persistState: true)
+        let snapshot = timedSnapshot.snapshot
         let snapshotAt = Date()
+        let snapshotSteps = [
+            PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000)
+        ] + timedSnapshot.steps
         guard let focused = snapshot.windows.first(where: { $0.window.id == focusedID }),
               let scope = focused.scope,
               snapshot.state.activeScope(on: scope.displayID) == scope
@@ -146,8 +150,7 @@ public final class FocusStageActivationObserver {
                     )
                 ),
                 result: .noOp,
-                steps: [
-                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+                steps: snapshotSteps + [
                     PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
                     PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: 0, count: 0),
                     PerformanceStep(name: .focus, startedAt: snapshotAt, durationMs: completed.timeIntervalSince(snapshotAt) * 1000)
@@ -177,8 +180,7 @@ public final class FocusStageActivationObserver {
                     )
                 ),
                 result: .noOp,
-                steps: [
-                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+                steps: snapshotSteps + [
                     PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
                     PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: planAt.timeIntervalSince(snapshotAt) * 1000, count: 0),
                     PerformanceStep(name: .focus, startedAt: planAt, durationMs: completed.timeIntervalSince(planAt) * 1000)
@@ -201,8 +203,7 @@ public final class FocusStageActivationObserver {
                 )
             ),
             result: result.failed == 0 ? .success : .partial,
-            steps: [
-                PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+            steps: snapshotSteps + [
                 PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
                 PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: completed.timeIntervalSince(snapshotAt) * 1000, count: result.attempted),
                 PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
