@@ -351,6 +351,15 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
     public init(borders: BorderConfig = BorderConfig()) {
         self.borders = borders
     }
+
+    enum CodingKeys: String, CodingKey {
+        case borders
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
+    }
 }
 
 public struct BorderConfig: Equatable, Codable, Sendable {
@@ -703,6 +712,16 @@ private enum ConfigValidationRules {
         "fx",
         "fx.borders",
         "fx.borders.stage_overrides",
+        "fx.rail",
+        "fx.rail.header",
+        "fx.rail.header.display",
+        "fx.rail.header.desktop",
+        "fx.rail.layout",
+        "fx.rail.parallax",
+        "fx.rail.preview",
+        "fx.rail.preview.stage_overrides",
+        "fx.rail.stacked",
+        "fx.rail.stages",
         "focus",
         "control_center",
         "config_reload",
@@ -724,12 +743,7 @@ private enum ConfigValidationRules {
         "signals.hooks",
         "fx.animations",
         "fx.opacity",
-        "fx.opacity.stage_hide",
-        "fx.rail",
-        "fx.rail.stacked",
-        "fx.rail.preview",
-        "fx.rail.preview.stage_overrides",
-        "fx.rail.parallax"
+        "fx.opacity.stage_hide"
     ]
 
     static func validate(rawToml: String) -> [ConfigValidationItem] {
