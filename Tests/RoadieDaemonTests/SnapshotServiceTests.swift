@@ -1512,6 +1512,102 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func directionalWindowFocusAcrossOffsetDisplaysFollowsVisualOverlap() {
+        let builtInDisplay = DisplayID(rawValue: "built-in")
+        let externalDisplay = DisplayID(rawValue: "external")
+        let builtIn = DisplaySnapshot(
+            id: builtInDisplay,
+            index: 1,
+            name: "Built-in",
+            frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            isMain: true
+        )
+        let external = DisplaySnapshot(
+            id: externalDisplay,
+            index: 2,
+            name: "External",
+            frame: Rect(x: 2048, y: -964, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 2048, y: -964, width: 3840, height: 2160),
+            isMain: false
+        )
+        let source = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 1,
+            appName: "BlueJay",
+            bundleID: "bluejay",
+            title: "Grayjay",
+            frame: Rect(x: 2198, y: 110, width: 1836, height: 1026),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let topRight = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 2,
+            appName: "iTerm2",
+            bundleID: "iterm",
+            title: "Nettoyer et liberer",
+            frame: Rect(x: 1100, y: 38, width: 940, height: 586),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let bottomRight = WindowSnapshot(
+            id: WindowID(rawValue: 3),
+            pid: 3,
+            appName: "iTerm2",
+            bundleID: "iterm",
+            title: "SIP",
+            frame: Rect(x: 1100, y: 634, width: 940, height: 586),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let topLeft = WindowSnapshot(
+            id: WindowID(rawValue: 4),
+            pid: 4,
+            appName: "iTerm2",
+            bundleID: "iterm",
+            title: "Shell",
+            frame: Rect(x: 150, y: 38, width: 940, height: 586),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let externalScope = StageScope(displayID: externalDisplay, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        let builtInScope = StageScope(displayID: builtInDisplay, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "4"))
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-window-focus-offset-display-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: externalDisplay, desktopID: externalScope.desktopID, activeStageID: externalScope.stageID, stages: [
+                PersistentStage(id: externalScope.stageID, focusedWindowID: source.id, members: [
+                    PersistentStageMember(windowID: source.id, bundleID: source.bundleID, title: source.title, frame: source.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: builtInDisplay, desktopID: builtInScope.desktopID, activeStageID: builtInScope.stageID, stages: [
+                PersistentStage(id: builtInScope.stageID, focusedWindowID: topRight.id, members: [
+                    PersistentStageMember(windowID: topRight.id, bundleID: topRight.bundleID, title: topRight.title, frame: topRight.frame),
+                    PersistentStageMember(windowID: bottomRight.id, bundleID: bottomRight.bundleID, title: bottomRight.title, frame: bottomRight.frame),
+                    PersistentStageMember(windowID: topLeft.id, bundleID: topLeft.bundleID, title: topLeft.title, frame: topLeft.frame),
+                ]),
+            ]),
+        ], activeDisplayID: externalDisplay))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [builtIn, external], windowSnapshots: [source, topRight, bottomRight, topLeft], focusedID: source.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = WindowCommandService(service: service, stageStore: stageStore).focus(.left)
+
+        #expect(result.changed)
+        #expect(writer.focusedWindowIDs == [topRight.id])
+        #expect(stageStore.state().activeDisplayID == builtInDisplay)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func focusFollowsMousePickerTargetsActiveStageWindowAtPoint() {
         let display = DisplayID(rawValue: "display-a")
         let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
