@@ -169,6 +169,18 @@ public struct RestoreSafetyService {
     private func semanticFingerprint(_ snapshot: RestoreSafetySnapshot) -> RestoreSafetySnapshot {
         var stable = snapshot
         stable.createdAt = Date(timeIntervalSince1970: 0)
+        stable.windows = stable.windows
+            .map { window in
+                var stableWindow = window
+                stableWindow.identity.title = ""
+                stableWindow.identity.createdAt = nil
+                return stableWindow
+            }
+            .sorted { lhs, rhs in
+                let lhsKey = "\(lhs.stageScope ?? "")/\(lhs.windowID ?? 0)/\(lhs.identity.bundleID ?? lhs.identity.appName)"
+                let rhsKey = "\(rhs.stageScope ?? "")/\(rhs.windowID ?? 0)/\(rhs.identity.bundleID ?? rhs.identity.appName)"
+                return lhsKey < rhsKey
+            }
         return stable
     }
 
