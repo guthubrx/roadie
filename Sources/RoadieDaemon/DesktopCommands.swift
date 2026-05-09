@@ -211,9 +211,11 @@ public struct DesktopCommandService {
             }
         }
         let hiddenAt = Date()
+        var restoredFrames: [WindowID: CGRect] = [:]
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
             let result = setFrameIfNeeded(member.frame.cgRect, of: window)
+            restoredFrames[member.windowID] = member.frame.cgRect
             if result.skipped {
                 skipped += 1
             } else if result.applied {
@@ -229,8 +231,9 @@ public struct DesktopCommandService {
         store.save(state)
 
         let activeScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: targetScope.activeStageID)
+        let layoutSnapshot = snapshot.replacingWindowFrames(restoredFrames)
         let result = service.apply(service.applyPlan(
-            from: snapshot,
+            from: layoutSnapshot,
             scope: activeScope,
             orderedWindowIDs: targetScope.memberIDs(in: targetScope.activeStageID)
         ))
