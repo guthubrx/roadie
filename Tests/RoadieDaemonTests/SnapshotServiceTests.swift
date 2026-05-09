@@ -1062,6 +1062,43 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func warpRespectsEffectiveTiledContainerGaps() {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 100, y: 20, width: 428, height: 440), isOnScreen: true, isTileCandidate: true)
+        let topRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "top-right", frame: Rect(x: 538, y: 20, width: 432, height: 215), isOnScreen: true, isTileCandidate: true)
+        let bottomRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "bottom-right", frame: Rect(x: 538, y: 245, width: 432, height: 215), isOnScreen: true, isTileCandidate: true)
+        let provider = FakeProvider(
+            displaySnapshots: [
+                DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+            ],
+            windowSnapshots: [left, topRight, bottomRight],
+            focusedID: topRight.id
+        )
+        let config = RoadieConfig(tiling: TilingConfig(
+            gapsOuter: 0,
+            gapsOuterTop: 20,
+            gapsOuterRight: 30,
+            gapsOuterBottom: 40,
+            gapsOuterLeft: 100,
+            gapsInner: 10
+        ))
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-test-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+
+        let writer = RecordingWriter()
+        let commandService = WindowCommandService(service: SnapshotService(provider: provider, frameWriter: writer, config: config, intentStore: intentStore))
+        let result = commandService.warp(Direction.left)
+
+        #expect(result.changed)
+        #expect(writer.requestedFrames[topRight.id] == Rect(x: 100, y: 20, width: 573, height: 215))
+        #expect(writer.requestedFrames[left.id] == Rect(x: 100, y: 245, width: 573, height: 215))
+        #expect(writer.requestedFrames[bottomRight.id] == Rect(x: 683, y: 20, width: 287, height: 440))
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
     func swapIntentPreventsMaintainerFromRevertingToSpatialBSPOrder() {
         let display = DisplayID(rawValue: "display-a")
         let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)

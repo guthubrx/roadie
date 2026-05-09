@@ -191,10 +191,11 @@ struct DropPreviewEngine {
         case .append, .swap:
             return nil
         }
-        guard let sourceFrame = activeEntries.first(where: { $0.window.id == sourceID })?.window.frame.cgRect,
-              let container = union(activeEntries.map { $0.window.frame.cgRect })
-        else { return nil }
+        guard let sourceFrame = activeEntries.first(where: { $0.window.id == sourceID })?.window.frame.cgRect else {
+            return nil
+        }
 
+        let container = service.tiledContainer(for: display, windowCount: activeEntries.count)
         let gap = CGFloat(service.innerGap())
         let targetSideIDs = Set(activeEntries.compactMap { entry -> WindowID? in
             guard entry.window.id != sourceID,
