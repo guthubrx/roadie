@@ -12,6 +12,10 @@ var focusFollowsMouseController: FocusFollowsMouseController?
 var focusStageActivationObserver: FocusStageActivationObserver?
 var displayChangeObserver: NSObjectProtocol?
 
+func shouldStartFocusStageActivationObserver() -> Bool {
+    ProcessInfo.processInfo.environment["ROADIE_ENABLE_FOCUS_STAGE_OBSERVER"] == "1"
+}
+
 func printUsage() {
     print("""
     usage:
@@ -51,8 +55,10 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
-    focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer, service: service)
-    focusStageActivationObserver?.start()
+    if shouldStartFocusStageActivationObserver() {
+        focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer, service: service)
+        focusStageActivationObserver?.start()
+    }
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,
