@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import RoadieAX
 import RoadieCore
 
 @MainActor
@@ -125,25 +126,19 @@ public final class FocusStageActivationObserver {
         }
         lastIntent = (focusedID, now)
         let started = Date()
+        let session = performanceSession(startedAt: started, focusedID: focusedID)
         let snapshot = service.snapshot(followExternalFocus: true, persistState: true)
+        let snapshotAt = Date()
         guard let focused = snapshot.windows.first(where: { $0.window.id == focusedID }),
               let scope = focused.scope,
               snapshot.state.activeScope(on: scope.displayID) == scope
         else { return false }
 
-        let plan = service.applyPlan(
-            from: snapshot,
-            scope: scope,
-            orderedWindowIDs: service.orderedWindowIDs(in: scope, from: snapshot),
-            priorityWindowIDs: [focusedID]
-        )
-        if plan.commands.isEmpty {
+        if isVisible(focused.window, in: snapshot.displays) {
             let completed = Date()
             performance.complete(
-                performance.start(
-                    .altTabActivation,
-                    source: .focusObserver,
-                    targetContext: PerformanceTargetContext(
+                session.withContext(
+                    PerformanceTargetContext(
                         displayID: scope.displayID.rawValue,
                         desktopID: scope.desktopID.rawValue,
                         stageID: scope.stageID.rawValue,
@@ -152,10 +147,41 @@ public final class FocusStageActivationObserver {
                 ),
                 result: .noOp,
                 steps: [
-                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
-                    PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: 0),
-                    PerformanceStep(name: .layoutApply, startedAt: started, durationMs: completed.timeIntervalSince(started) * 1000, count: 0),
-                    PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
+                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+                    PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
+                    PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: 0, count: 0),
+                    PerformanceStep(name: .focus, startedAt: snapshotAt, durationMs: completed.timeIntervalSince(snapshotAt) * 1000)
+                ],
+                completedAt: completed,
+                durationMs: completed.timeIntervalSince(started) * 1000
+            )
+            return true
+        }
+
+        let plan = service.applyPlan(
+            from: snapshot,
+            scope: scope,
+            orderedWindowIDs: service.orderedWindowIDs(in: scope, from: snapshot),
+            priorityWindowIDs: [focusedID]
+        )
+        let planAt = Date()
+        if plan.commands.isEmpty {
+            let completed = Date()
+            performance.complete(
+                session.withContext(
+                    PerformanceTargetContext(
+                        displayID: scope.displayID.rawValue,
+                        desktopID: scope.desktopID.rawValue,
+                        stageID: scope.stageID.rawValue,
+                        windowID: focusedID.rawValue
+                    )
+                ),
+                result: .noOp,
+                steps: [
+                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+                    PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
+                    PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: planAt.timeIntervalSince(snapshotAt) * 1000, count: 0),
+                    PerformanceStep(name: .focus, startedAt: planAt, durationMs: completed.timeIntervalSince(planAt) * 1000)
                 ],
                 completedAt: completed,
                 durationMs: completed.timeIntervalSince(started) * 1000
@@ -166,10 +192,8 @@ public final class FocusStageActivationObserver {
         _ = service.focus(focused.window)
         let completed = Date()
         performance.complete(
-            performance.start(
-                .altTabActivation,
-                source: .focusObserver,
-                targetContext: PerformanceTargetContext(
+            session.withContext(
+                PerformanceTargetContext(
                     displayID: scope.displayID.rawValue,
                     desktopID: scope.desktopID.rawValue,
                     stageID: scope.stageID.rawValue,
@@ -178,15 +202,42 @@ public final class FocusStageActivationObserver {
             ),
             result: result.failed == 0 ? .success : .partial,
             steps: [
-                PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
-                PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: 0),
-                PerformanceStep(name: .layoutApply, startedAt: started, durationMs: completed.timeIntervalSince(started) * 1000, count: result.attempted),
+                PerformanceStep(name: .snapshot, startedAt: started, durationMs: snapshotAt.timeIntervalSince(started) * 1000),
+                PerformanceStep(name: .stateUpdate, startedAt: snapshotAt, durationMs: 0),
+                PerformanceStep(name: .layoutApply, startedAt: snapshotAt, durationMs: completed.timeIntervalSince(snapshotAt) * 1000, count: result.attempted),
                 PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
             ],
             completedAt: completed,
             durationMs: completed.timeIntervalSince(started) * 1000
         )
         return true
+    }
+
+    private func performanceSession(startedAt: Date, focusedID: WindowID) -> PerformanceRecorder.Session {
+        PerformanceRecorder.Session(
+            type: .altTabActivation,
+            source: .focusObserver,
+            startedAt: startedAt,
+            targetContext: PerformanceTargetContext(windowID: focusedID.rawValue)
+        )
+    }
+
+    private func isVisible(_ window: WindowSnapshot, in displays: [DisplaySnapshot]) -> Bool {
+        displays.contains { display in
+            display.visibleFrame.cgRect.contains(window.frame.center)
+        }
+    }
+}
+
+private extension PerformanceRecorder.Session {
+    func withContext(_ targetContext: PerformanceTargetContext) -> PerformanceRecorder.Session {
+        PerformanceRecorder.Session(
+            id: id,
+            type: type,
+            source: source,
+            startedAt: startedAt,
+            targetContext: targetContext
+        )
     }
 }
 
