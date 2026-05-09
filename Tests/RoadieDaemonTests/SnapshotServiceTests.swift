@@ -1915,6 +1915,37 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stageCommandsRejectOptionLikeStageIDs() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-stage-invalid-id-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [window], focusedID: window.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+        let commands = StageCommandService(service: service, store: stageStore)
+
+        let create = commands.create("--help")
+        let assign = commands.assign("--help")
+        let switchTo = commands.switchTo("--help")
+        let state = stageStore.state()
+
+        #expect(!create.changed)
+        #expect(!assign.changed)
+        #expect(!switchTo.changed)
+        #expect(state.scopes.allSatisfy { scope in
+            !scope.stages.contains { $0.id.rawValue == "--help" }
+        })
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func stageSwitchPositionUsesVisibleOrderInsteadOfStageID() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
