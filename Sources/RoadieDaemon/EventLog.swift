@@ -46,10 +46,19 @@ public extension RoadieEventEnvelope {
 
 public struct EventLog: Sendable {
     private let url: URL
+    private let hookDispatcher: SignalHookDispatcher
     private static let jsonNewline = Data("\n".utf8)
 
-    public init(path: String = Self.defaultPath()) {
+    public init(path: String = Self.defaultPath(), hookDispatcher: SignalHookDispatcher = Self.defaultHookDispatcher()) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+        self.hookDispatcher = hookDispatcher
+    }
+
+    public static func defaultHookDispatcher() -> SignalHookDispatcher {
+        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+            return .disabled
+        }
+        return .shared
     }
 
     public static func defaultPath() -> String {
@@ -61,10 +70,12 @@ public struct EventLog: Sendable {
 
     public func append(_ event: RoadieEvent) {
         write(event)
+        hookDispatcher.dispatch(event)
     }
 
     public func append(_ event: RoadieEventEnvelope) {
         write(event)
+        hookDispatcher.dispatch(event)
     }
 
     private func write<T: Encodable>(_ value: T) {

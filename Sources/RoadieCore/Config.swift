@@ -8,6 +8,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var exclusions: ExclusionsConfig
     public var fx: EffectsConfig
     public var focus: FocusConfig
+    public var signals: SignalsConfig
     public var rules: [WindowRule]
     public var controlCenter: ControlCenterConfig
     public var configReload: ConfigReloadConfig
@@ -24,6 +25,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
+        signals: SignalsConfig = SignalsConfig(),
         rules: [WindowRule] = [],
         controlCenter: ControlCenterConfig = ControlCenterConfig(),
         configReload: ConfigReloadConfig = ConfigReloadConfig(),
@@ -39,6 +41,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.exclusions = exclusions
         self.fx = fx
         self.focus = focus
+        self.signals = signals
         self.rules = rules
         self.controlCenter = controlCenter
         self.configReload = configReload
@@ -56,6 +59,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
+        signals: SignalsConfig = SignalsConfig(),
         controlCenter: ControlCenterConfig = ControlCenterConfig(),
         configReload: ConfigReloadConfig = ConfigReloadConfig(),
         restoreSafety: RestoreSafetyConfig = RestoreSafetyConfig(),
@@ -71,6 +75,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             exclusions: exclusions,
             fx: fx,
             focus: focus,
+            signals: signals,
             rules: [],
             controlCenter: controlCenter,
             configReload: configReload,
@@ -89,6 +94,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case exclusions
         case fx
         case focus
+        case signals
         case rules
         case controlCenter = "control_center"
         case configReload = "config_reload"
@@ -107,6 +113,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? ExclusionsConfig()
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
+        self.signals = try c.decodeIfPresent(SignalsConfig.self, forKey: .signals) ?? SignalsConfig()
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.controlCenter = try c.decodeIfPresent(ControlCenterConfig.self, forKey: .controlCenter) ?? ControlCenterConfig()
         self.configReload = try c.decodeIfPresent(ConfigReloadConfig.self, forKey: .configReload) ?? ConfigReloadConfig()
@@ -359,6 +366,26 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
+    }
+}
+
+public struct SignalsConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var hooks: [SignalHookConfig]
+
+    public init(enabled: Bool = false, hooks: [SignalHookConfig] = []) {
+        self.enabled = enabled
+        self.hooks = hooks
+    }
+}
+
+public struct SignalHookConfig: Equatable, Codable, Sendable {
+    public var event: String
+    public var cmd: String
+
+    public init(event: String, cmd: String) {
+        self.event = event
+        self.cmd = cmd
     }
 }
 
@@ -723,6 +750,8 @@ private enum ConfigValidationRules {
         "fx.rail.stacked",
         "fx.rail.stages",
         "focus",
+        "signals",
+        "signals.hooks",
         "control_center",
         "config_reload",
         "restore_safety",
@@ -739,8 +768,6 @@ private enum ConfigValidationRules {
         "mouse",
         "scratchpads",
         "sticky",
-        "signals",
-        "signals.hooks",
         "fx.animations",
         "fx.opacity",
         "fx.opacity.stage_hide"

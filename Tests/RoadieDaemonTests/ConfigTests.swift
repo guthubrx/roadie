@@ -96,6 +96,26 @@ struct ConfigTests {
     }
 
     @Test
+    func signalsConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-signals-config-\(UUID().uuidString).toml")
+        try """
+        [signals]
+        enabled = true
+
+        [[signals.hooks]]
+        event = "stage_changed"
+        cmd = "printf ok"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.signals.enabled)
+        #expect(config.signals.hooks == [SignalHookConfig(event: "stage_changed", cmd: "printf ok")])
+    }
+
+    @Test
     func displayTilingOverridesDecodeFromToml() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-display-gap-config-\(UUID().uuidString).toml")
@@ -337,6 +357,26 @@ struct ConfigTests {
     }
 
     @Test
+    func configValidationTreatsSignalsTablesAsSupportedRuntimeConfig() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-signals-supported-\(UUID().uuidString).toml")
+        try """
+        [signals]
+        enabled = true
+
+        [[signals.hooks]]
+        event = "stage_changed"
+        cmd = "printf ok"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(!report.hasErrors)
+        #expect(!report.items.contains { ($0.path == "signals" || $0.path == "signals.hooks") && $0.level == .warning })
+    }
+
+    @Test
     func configValidationReportsDecodeErrors() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-invalid-config-\(UUID().uuidString).toml")
@@ -371,5 +411,49 @@ struct ConfigTests {
 
         MouseFollower(isEnabled: { true }, move: { recorder.append($0) }).follow(window)
         #expect(recorder.points == [CGPoint(x: 60, y: 50)])
+    }
+
+    @Test
+    func signalHooksRunForLegacyStageSwitchEvents() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-signal-hooks-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let configURL = base.appendingPathComponent("roadies.toml")
+        let outputURL = base.appendingPathComponent("hooks.log")
+        try """
+        [signals]
+        enabled = true
+
+        [[signals.hooks]]
+        event = "stage_changed"
+        cmd = "printf '%s|%s|%s' \\\"$ROADIE_TO\\\" \\\"$ROADIE_DESKTOP_ID\\\" \\\"$ROADIE_FROM\\\" >> \(outputURL.path)"
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let dispatcher = SignalHookDispatcher(configPathProvider: { configURL.path })
+        let log = EventLog(path: base.appendingPathComponent("events.jsonl").path, hookDispatcher: dispatcher)
+
+        log.append(RoadieEvent(
+            type: "stage_switch",
+            scope: StageScope(
+                displayID: DisplayID(rawValue: "display-a"),
+                desktopID: DesktopID(rawValue: 2),
+                stageID: StageID(rawValue: "3")
+            ),
+            details: ["previousStageID": "1"]
+        ))
+
+        let deadline = Date().addingTimeInterval(1)
+        var content = ""
+        while Date() < deadline {
+            if let raw = try? String(contentsOf: outputURL, encoding: .utf8), !raw.isEmpty {
+                content = raw
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        #expect(content == "3|2|1")
     }
 }
