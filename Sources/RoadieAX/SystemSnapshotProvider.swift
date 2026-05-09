@@ -205,7 +205,8 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
             return WindowID(rawValue: id)
         }
 
-        let appWindows = windows().filter { $0.pid == app.processIdentifier }
+        let appWindows = windows(includeAccessibilityAttributes: false)
+            .filter { $0.pid == app.processIdentifier }
         let focusedFrame = AXWindowFrameWriter().frame(of: focusedElement)
         if let focusedFrame,
            let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame.cgRect) }) {
