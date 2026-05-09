@@ -9,6 +9,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var fx: EffectsConfig
     public var focus: FocusConfig
     public var rules: [WindowRule]
+    public var widthAdjustment: WidthAdjustmentConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
@@ -17,7 +18,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
-        rules: [WindowRule]
+        rules: [WindowRule],
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
@@ -26,6 +28,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.fx = fx
         self.focus = focus
         self.rules = rules
+        self.widthAdjustment = widthAdjustment
     }
 
     public init(
@@ -34,7 +37,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         stageManager: StageManagerConfig = StageManagerConfig(),
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
-        focus: FocusConfig = FocusConfig()
+        focus: FocusConfig = FocusConfig(),
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
     ) {
         self.init(
             tiling: tiling,
@@ -43,7 +47,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             exclusions: exclusions,
             fx: fx,
             focus: focus,
-            rules: []
+            rules: [],
+            widthAdjustment: widthAdjustment
         )
     }
 
@@ -55,6 +60,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case fx
         case focus
         case rules
+        case widthAdjustment = "width_adjustment"
     }
 
     public init(from decoder: Decoder) throws {
@@ -66,6 +72,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
+        self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
     }
 }
 
@@ -368,6 +375,42 @@ public struct BorderStageOverride: Equatable, Codable, Sendable {
     }
 }
 
+public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
+    public var presets: [Double]
+    public var nudgeStep: Double
+    public var minimumRatio: Double
+    public var maximumRatio: Double
+
+    public init(
+        presets: [Double] = [0.5, 0.67, 0.8, 1.0],
+        nudgeStep: Double = 0.05,
+        minimumRatio: Double = 0.25,
+        maximumRatio: Double = 1.5
+    ) {
+        self.presets = Array(Set(presets)).sorted()
+        self.nudgeStep = nudgeStep
+        self.minimumRatio = minimumRatio
+        self.maximumRatio = maximumRatio
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case presets
+        case nudgeStep = "nudge_step"
+        case minimumRatio = "minimum_ratio"
+        case maximumRatio = "maximum_ratio"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            presets: try c.decodeIfPresent([Double].self, forKey: .presets) ?? [0.5, 0.67, 0.8, 1.0],
+            nudgeStep: try c.decodeFlexibleDouble(forKey: .nudgeStep) ?? 0.05,
+            minimumRatio: try c.decodeFlexibleDouble(forKey: .minimumRatio) ?? 0.25,
+            maximumRatio: try c.decodeFlexibleDouble(forKey: .maximumRatio) ?? 1.5
+        )
+    }
+}
+
 public enum RoadieConfigLoader {
     public static func defaultConfigPath() -> String {
         (NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath as String)
@@ -448,6 +491,7 @@ private enum ConfigValidationRules {
         "fx.borders",
         "fx.borders.stage_overrides",
         "focus",
+        "width_adjustment",
         "rules",
         "rules.match",
         "rules.action"
@@ -492,6 +536,14 @@ private enum ConfigValidationRules {
             }
         }
         items.append(contentsOf: scalarTypeChecks(rawToml: rawToml))
+        if let config = try? TOMLDecoder().decode(RoadieConfig.self, from: rawToml) {
+            if config.widthAdjustment.presets.isEmpty {
+                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.presets", message: "must contain at least one ratio"))
+            }
+            if config.widthAdjustment.minimumRatio > config.widthAdjustment.maximumRatio {
+                items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
+            }
+        }
         return items
     }
 
@@ -520,7 +572,10 @@ private enum ConfigValidationRules {
             "master_ratio",
             "count",
             "thickness",
-            "corner_radius"
+            "corner_radius",
+            "nudge_step",
+            "minimum_ratio",
+            "maximum_ratio"
         ]
         var items: [ConfigValidationItem] = []
         var currentTable = ""

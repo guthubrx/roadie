@@ -77,3 +77,37 @@ public struct LayoutCommandSource: RawRepresentable, Codable, Equatable, Hashabl
 
     public var description: String { rawValue }
 }
+
+public enum WidthAdjustmentScope: String, Codable, Sendable, Equatable {
+    case activeWindow
+    case allWindows
+}
+
+public enum WidthAdjustmentMode: String, Codable, Sendable, Equatable {
+    case presetNext
+    case presetPrevious
+    case nudge
+    case explicitRatio
+}
+
+public struct WidthAdjustmentIntent: Codable, Equatable, Sendable {
+    public var scope: WidthAdjustmentScope
+    public var mode: WidthAdjustmentMode
+    public var delta: Double?
+    public var targetRatio: Double?
+    public var createdAt: Date
+
+    public init(
+        scope: WidthAdjustmentScope,
+        mode: WidthAdjustmentMode,
+        delta: Double? = nil,
+        targetRatio: Double? = nil,
+        createdAt: Date = Date()
+    ) {
+        self.scope = scope
+        self.mode = mode
+        self.delta = delta
+        self.targetRatio = targetRatio
+        self.createdAt = createdAt
+    }
+}
