@@ -6,6 +6,7 @@ public enum PerformanceInteractionType: String, Codable, CaseIterable, Sendable 
     case displayFocus = "display_focus"
     case directionalFocus = "directional_focus"
     case altTabActivation = "alt_tab_activation"
+    case borderRefresh = "border_refresh"
     case railAction = "rail_action"
     case layoutTick = "layout_tick"
 }
