@@ -387,6 +387,10 @@ public extension SnapshotService {
         config.tiling.gapsInner
     }
 
+    func tiledContainer(for display: DisplaySnapshot, windowCount: Int) -> CGRect {
+        display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: windowCount, display: display))
+    }
+
     func saveLayoutIntent(scope: StageScope, windowIDs: [WindowID], placements: [WindowID: Rect]) {
         saveLayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: .auto)
     }

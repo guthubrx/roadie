@@ -492,7 +492,7 @@ public struct WindowCommandService {
         }
         guard !targetGroup.isEmpty, !sourceGroup.isEmpty else { return nil }
 
-        let container = display.visibleFrame.cgRect
+        let container = service.tiledContainer(for: display, windowCount: scopedWindows.count)
         let gap = CGFloat(service.innerGap())
         let targetFirst: Bool
         switch direction {
