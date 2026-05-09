@@ -36,6 +36,9 @@ public struct StageCommandService {
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage assign: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
@@ -43,7 +46,6 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage assign: no active window", changed: false)
         }
 
-        let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: displayID, in: &state)
         scope.assign(window: active.window, to: stageID)
@@ -65,12 +67,14 @@ public struct StageCommandService {
     }
 
     public func assign(windowID: WindowID, to rawStageID: String, displayID: DisplayID) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage assign: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
         }
 
-        let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: displayID, in: &state)
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
@@ -131,11 +135,13 @@ public struct StageCommandService {
     }
 
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage create: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage create: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         guard scope.createStage(stageID, name: name) else {
@@ -147,11 +153,13 @@ public struct StageCommandService {
     }
 
     public func rename(_ rawStageID: String, to name: String) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage rename: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage rename: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         guard scope.renameStage(stageID, to: name) else {
@@ -171,7 +179,9 @@ public struct StageCommandService {
     }
 
     public func reorder(_ rawStageID: String, to position: Int, displayID: DisplayID) -> StageCommandResult {
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage reorder: invalid stage id \(rawStageID)", changed: false)
+        }
         var state = store.state()
         var scope = activeScope(displayID: displayID, in: &state)
         guard scope.reorderStage(stageID, to: position) else {
@@ -183,11 +193,13 @@ public struct StageCommandService {
     }
 
     public func delete(_ rawStageID: String) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage delete: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage delete: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         guard scope.deleteEmptyInactiveStage(stageID) else {
@@ -199,11 +211,13 @@ public struct StageCommandService {
     }
 
     public func switchTo(_ rawStageID: String) -> StageCommandResult {
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage switch: invalid stage id \(rawStageID)", changed: false)
+        }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage switch: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
         return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
@@ -228,7 +242,10 @@ public struct StageCommandService {
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage switch: unknown display", changed: false)
         }
-        return switchDisplay(display, to: StageID(rawValue: rawStageID), snapshot: snapshot)
+        guard let stageID = makeStageID(rawStageID) else {
+            return StageCommandResult(message: "stage switch: invalid stage id \(rawStageID)", changed: false)
+        }
+        return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
     public func summon(windowID: WindowID, displayID: DisplayID) -> StageCommandResult {
@@ -511,6 +528,12 @@ public struct StageCommandService {
         }
         let stageID = scope.stages[position - 1].id
         return switchDisplay(display, to: stageID, snapshot: snapshot)
+    }
+
+    private func makeStageID(_ rawStageID: String) -> StageID? {
+        let trimmed = rawStageID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else { return nil }
+        return StageID(rawValue: trimmed)
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
