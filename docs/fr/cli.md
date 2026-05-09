@@ -121,6 +121,8 @@ Utilisation typique :
 ./bin/roadie stage next
 ```
 
+`stage switch N` utilise la position visible dans `stage list`, pas l'id interne. Si les stages sont `1`, `3`, `4`, alors `stage switch 2` active la stage d'id `3`. Utilise `stage switch-id ID` seulement quand tu veux cibler l'id interne.
+
 ## Rules
 
 ```bash

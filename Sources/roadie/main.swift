@@ -51,7 +51,8 @@ func printUsage() {
       roadie stage create|delete N
       roadie stage rename N NAME
       roadie stage reorder N POSITION
-      roadie stage switch|assign N
+      roadie stage switch POSITION
+      roadie stage switch-id|assign N
       roadie stage summon WINDOW_ID
       roadie stage move-to-display N
       roadie stage mode bsp|masterStack|float
@@ -704,8 +705,19 @@ func runStageCommand(_ args: [String]) {
     case "mode":
         runModeCommand(args.dropFirst().first)
     case "switch":
+        guard let rawPosition = args.dropFirst().first,
+              let position = Int(rawPosition),
+              position > 0
+        else {
+            fputs("roadie: stage switch requires a positive position\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).switchToPosition(position)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "switch-id":
         guard let stageID = args.dropFirst().first else {
-            fputs("roadie: stage switch requires a stage id\n", stderr)
+            fputs("roadie: stage switch-id requires a stage id\n", stderr)
             exit(64)
         }
         let result = StageCommandService(service: service).switchTo(stageID)
@@ -752,7 +764,11 @@ func runStageCommand(_ args: [String]) {
         print(result.message)
         exit(result.changed ? 0 : 1)
     case .some(let rawStageID):
-        let result = StageCommandService(service: service).switchTo(rawStageID)
+        guard let position = Int(rawStageID), position > 0 else {
+            fputs("roadie: stage shortcut requires a positive position\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).switchToPosition(position)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case nil:

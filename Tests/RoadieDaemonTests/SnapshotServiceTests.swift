@@ -1632,6 +1632,47 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stageSwitchPositionUsesVisibleOrderInsteadOfStageID() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let one = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let three = WindowSnapshot(id: WindowID(rawValue: 3), pid: 11, appName: "B", bundleID: "b", title: "three", frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let four = WindowSnapshot(id: WindowID(rawValue: 4), pid: 12, appName: "C", bundleID: "c", title: "four", frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-stage-position-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: one.id, members: [
+                    PersistentStageMember(windowID: one.id, bundleID: one.bundleID, title: one.title, frame: one.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "3"), focusedWindowID: three.id, members: [
+                    PersistentStageMember(windowID: three.id, bundleID: three.bundleID, title: three.title, frame: Rect(x: 505, y: 0, width: 495, height: 500)),
+                ]),
+                PersistentStage(id: StageID(rawValue: "4"), focusedWindowID: four.id, members: [
+                    PersistentStageMember(windowID: four.id, bundleID: four.bundleID, title: four.title, frame: Rect(x: 505, y: 0, width: 495, height: 500)),
+                ]),
+            ]),
+        ]))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [one, three, four], focusedID: one.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = StageCommandService(service: service, store: stageStore).switchToPosition(2)
+        let scope = stageStore.state().scopes.first { $0.displayID == display }
+
+        #expect(result.changed)
+        #expect(scope?.activeStageID == StageID(rawValue: "3"))
+        #expect(writer.focusedWindowIDs == [three.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func snapshotPrunesClosedWindowsFromPersistentStages() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(

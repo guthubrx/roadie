@@ -39,6 +39,8 @@ Une stage est un groupe nomme de fenetres dans un desktop Roadie. Seule la stage
 ./bin/roadie stage move-to-display 2
 ```
 
+`stage switch N` cible la position visible dans la liste des stages. Avec des ids `1`, `3`, `4`, le raccourci `Alt-2` peut donc appeler `stage switch 2` et activer la deuxieme stage, celle dont l'id interne est `3`.
+
 Cas d'usage :
 
 - isoler une stage `Focus`, une stage `Comms`, une stage `Docs`;
