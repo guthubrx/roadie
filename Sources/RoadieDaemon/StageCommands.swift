@@ -20,19 +20,22 @@ public struct StageCommandService {
     private let events: EventLog
     private let performance: PerformanceRecorder
     private let performanceConfig: PerformanceConfig
+    private let config: RoadieConfig
 
     public init(
         service: SnapshotService = SnapshotService(),
         store: StageStore = StageStore(),
         events: EventLog = EventLog(),
         performance: PerformanceRecorder = PerformanceRecorder(),
-        performanceConfig: PerformanceConfig = (try? RoadieConfigLoader.load().performance) ?? PerformanceConfig()
+        performanceConfig: PerformanceConfig = (try? RoadieConfigLoader.load().performance) ?? PerformanceConfig(),
+        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
     ) {
         self.service = service
         self.store = store
         self.events = events
         self.performance = performance
         self.performanceConfig = performanceConfig
+        self.config = config
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -57,6 +60,7 @@ public struct StageCommandService {
                 return StageCommandResult(message: "stage assign: unknown display", changed: false)
             }
             _ = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window)
+            focusSourceStageAfterAssignIfNeeded(scope: scope, snapshot: snapshot, movedWindowID: active.window.id)
         }
         events.append(RoadieEvent(
             type: "stage_assign",
@@ -94,6 +98,7 @@ public struct StageCommandService {
 
         if scope.activeStageID != stageID {
             _ = service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+            focusSourceStageAfterAssignIfNeeded(scope: scope, snapshot: snapshot, movedWindowID: window.id)
         }
 
         let activeScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
@@ -534,6 +539,24 @@ public struct StageCommandService {
         let trimmed = rawStageID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !trimmed.hasPrefix("-") else { return nil }
         return StageID(rawValue: trimmed)
+    }
+
+    private func focusSourceStageAfterAssignIfNeeded(
+        scope: PersistentStageScope,
+        snapshot: DaemonSnapshot,
+        movedWindowID: WindowID
+    ) {
+        guard !config.focus.assignFollowsFocus,
+              let sourceStage = scope.stages.first(where: { $0.id == scope.activeStageID })
+        else { return }
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let fallbackID = sourceStage.focusedWindowID
+            ?? sourceStage.members.last { $0.windowID != movedWindowID }?.windowID
+        guard let fallbackID,
+              fallbackID != movedWindowID,
+              let fallback = windowsByID[fallbackID]
+        else { return }
+        _ = service.focus(fallback)
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
