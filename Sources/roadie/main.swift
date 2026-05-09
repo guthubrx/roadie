@@ -19,7 +19,7 @@ func printUsage() {
       roadie layout split horizontal|vertical
       roadie layout join-with|insert left|right|up|down
       roadie layout flatten|zoom-parent
-      roadie config show|validate
+      roadie config show|validate|reload [--json] [--config PATH]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
       roadie query state|windows|displays|desktops|stages|groups|rules|health|events
@@ -262,17 +262,33 @@ case "metrics":
     }
 case "config":
     let verb = args.dropFirst().first
-    guard verb == "show" || verb == "validate" else {
+    guard verb == "show" || verb == "validate" || verb == "reload" else {
         printUsage()
         exit(64)
     }
+    let configPath = value(after: "--config", in: Array(args.dropFirst(2)))
     if verb == "validate" {
-        let report = RoadieConfigLoader.validate()
-        print(TextFormatter.configValidation(report))
+        let report = RoadieConfigLoader.validate(path: configPath)
+        if args.contains("--json") {
+            printCodableJSON(report)
+        } else {
+            print(TextFormatter.configValidation(report))
+        }
         exit(report.hasErrors ? 1 : 0)
+    } else if verb == "reload" {
+        let result = ConfigReloadService().reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())
+        if args.contains("--json") {
+            printCodableJSON(result)
+        } else {
+            print("status=\(result.status.rawValue)")
+            if let error = result.error {
+                print("error=\(error)")
+            }
+        }
+        exit(result.status == .applied ? 0 : 1)
     }
     do {
-        let config = try RoadieConfigLoader.load()
+        let config = try RoadieConfigLoader.load(from: configPath)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         print(String(decoding: try encoder.encode(config), as: UTF8.self))
@@ -405,6 +421,13 @@ func printCodableJSON<T: Encodable>(_ value: T) {
         fputs("roadie: failed to encode JSON: \(error)\n", stderr)
         exit(1)
     }
+}
+
+func value(after flag: String, in args: [String]) -> String? {
+    guard let index = args.firstIndex(of: flag) else { return nil }
+    let valueIndex = args.index(after: index)
+    guard valueIndex < args.endIndex else { return nil }
+    return args[valueIndex]
 }
 
 @MainActor
