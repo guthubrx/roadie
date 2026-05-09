@@ -18,7 +18,7 @@
 - [X] T003 [P] Créer les fixtures de règles valides et invalides dans `Tests/RoadieDaemonTests/Fixtures/Spec002Rules.toml`
 - [X] T004 Créer la matrice de couverture yabai/AeroSpace/Hyprland dans `specs/002-roadie-ecosystem-upgrade/automation-coverage.md`
 - [X] T005 Initialiser le journal d'implémentation par tâche dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
-- [X] T006 Ajouter une section de suivi Spec 002 dans `docs/decisions/001-roadie-automation-contract.md`
+- [X] T006 Ajouter le suivi fonctionnel de la livraison dans `specs/002-roadie-ecosystem-upgrade/implementation.md`
 - [X] T007 Vérifier que `Package.swift` expose les targets de test nécessaires pour les nouveaux fichiers `Tests/RoadieDaemonTests/`
 
 ---
@@ -194,7 +194,7 @@
 **Purpose**: Durcir l'ensemble, vérifier la non-régression et finaliser la documentation.
 
 - [X] T083 [P] Mettre à jour le quickstart final avec les commandes réelles dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`
-- [X] T084 [P] Mettre à jour l'ADR avec les écarts décidés pendant l'implémentation dans `docs/decisions/001-roadie-automation-contract.md`
+- [X] T084 [P] Mettre à jour la documentation fonctionnelle avec les écarts décidés pendant l'implémentation
 - [X] T085 Ajouter les tests de non-régression existants Spec 002 dans `Tests/RoadieDaemonTests/Spec002RegressionTests.swift`
 - [X] T086 Lancer `swift build` puis `swift test` et corriger les régressions dans `Sources/` et `Tests/`
 - [X] T087 Exécuter manuellement le scénario quickstart via `swift run roadie events subscribe --from-now --initial-state` et noter le résultat dans `specs/002-roadie-ecosystem-upgrade/quickstart.md`

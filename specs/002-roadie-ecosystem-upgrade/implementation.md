@@ -86,18 +86,17 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
   - [ ] `swift build` : non applicable, documentation seule
 - **Notes** : Le journal contient la règle d'exécution et l'historique des premières tâches.
 
-### T006 : Suivi Spec 002 dans l'ADR
+### T006 : Suivi fonctionnel Spec 002
 
 - **Statut** : Complété
-- **Commit** : `d486852` - docs(002): Add ADR implementation tracking
+- **Commit** : `d486852` - docs(002): Add implementation tracking
 - **Fichiers modifiés** :
-  - `docs/decisions/001-roadie-automation-contract.md` (section suivi Spec 002)
   - `specs/002-roadie-ecosystem-upgrade/tasks.md` (T006 cochée)
   - `specs/002-roadie-ecosystem-upgrade/implementation.md` (journal)
 - **Tests exécutés** :
-  - [x] Relecture de cohérence ADR/plan/tasks
+  - [x] Relecture de cohérence plan/tasks/journal
   - [ ] `swift build` : non applicable, documentation seule
-- **Notes** : L'ADR rappelle le worktree, les gates Swift, le commit atomique et les points de décision à surveiller.
+- **Notes** : Le journal rappelle le worktree, les gates Swift, le commit atomique et les points de livraison à surveiller.
 
 ### T007 : Déclaration des fixtures dans Package.swift
 
@@ -554,7 +553,6 @@ Chaque tâche de `tasks.md` doit suivre le cycle constitutionnel :
 - **Commit** : Ce commit - chore(002): Finalize ecosystem upgrade
 - **Fichiers modifiés** :
   - `specs/002-roadie-ecosystem-upgrade/quickstart.md`
-  - `docs/decisions/001-roadie-automation-contract.md`
   - `Tests/RoadieDaemonTests/Spec002RegressionTests.swift`
   - `.specify/memory/sessions/index.md`
   - `specs/002-roadie-ecosystem-upgrade/tasks.md`
