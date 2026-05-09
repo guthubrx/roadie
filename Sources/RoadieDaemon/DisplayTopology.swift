@@ -51,8 +51,25 @@ public enum DisplayTopology {
             centerDelta = abs(candidate.midX - active.midX)
         }
 
+        guard overlap >= minimumRequiredOverlap(for: active, candidate: candidate, direction: direction) else {
+            return .infinity
+        }
         let overlapPenalty: CGFloat = overlap > 0 ? 0 : 10_000
         return distance + perpendicularGap * 4 + centerDelta * 0.35 + overlapPenalty
+    }
+
+    private static func minimumRequiredOverlap(for active: CGRect, candidate: CGRect, direction: Direction) -> CGFloat {
+        let activeSpan: CGFloat
+        let candidateSpan: CGFloat
+        switch direction {
+        case .left, .right:
+            activeSpan = active.height
+            candidateSpan = candidate.height
+        case .up, .down:
+            activeSpan = active.width
+            candidateSpan = candidate.width
+        }
+        return max(80, min(activeSpan, candidateSpan) * 0.20)
     }
 
     private static func intervalOverlap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {

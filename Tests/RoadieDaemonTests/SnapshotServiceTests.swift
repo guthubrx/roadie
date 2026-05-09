@@ -1359,6 +1359,29 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func displayTopologyRejectsMostlyDiagonalNeighbors() {
+        let builtIn = DisplaySnapshot(
+            id: DisplayID(rawValue: "built-in"),
+            index: 1,
+            name: "Built-in",
+            frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 0, y: 30, width: 2048, height: 1250),
+            isMain: true
+        )
+        let diagonalUpperRight = DisplaySnapshot(
+            id: DisplayID(rawValue: "lg"),
+            index: 2,
+            name: "LG",
+            frame: Rect(x: 2048, y: -964, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 2048, y: -934, width: 3840, height: 2130),
+            isMain: false
+        )
+
+        #expect(DisplayTopology.neighbor(from: builtIn, direction: .up, in: [builtIn, diagonalUpperRight]) == nil)
+        #expect(DisplayTopology.neighbor(from: builtIn, direction: .right, in: [builtIn, diagonalUpperRight])?.id == diagonalUpperRight.id)
+    }
+
+    @Test
     func directionalDisplayFocusUsesAdjacentDisplay() {
         let leftDisplay = DisplayID(rawValue: "display-a")
         let rightDisplay = DisplayID(rawValue: "display-b")
