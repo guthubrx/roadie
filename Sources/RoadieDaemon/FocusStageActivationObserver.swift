@@ -137,6 +137,31 @@ public final class FocusStageActivationObserver {
             orderedWindowIDs: service.orderedWindowIDs(in: scope, from: snapshot),
             priorityWindowIDs: [focusedID]
         )
+        if plan.commands.isEmpty {
+            let completed = Date()
+            performance.complete(
+                performance.start(
+                    .altTabActivation,
+                    source: .focusObserver,
+                    targetContext: PerformanceTargetContext(
+                        displayID: scope.displayID.rawValue,
+                        desktopID: scope.desktopID.rawValue,
+                        stageID: scope.stageID.rawValue,
+                        windowID: focusedID.rawValue
+                    )
+                ),
+                result: .noOp,
+                steps: [
+                    PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
+                    PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: 0),
+                    PerformanceStep(name: .layoutApply, startedAt: started, durationMs: completed.timeIntervalSince(started) * 1000, count: 0),
+                    PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
+                ],
+                completedAt: completed,
+                durationMs: completed.timeIntervalSince(started) * 1000
+            )
+            return true
+        }
         let result = service.apply(plan)
         _ = service.focus(focused.window)
         let completed = Date()

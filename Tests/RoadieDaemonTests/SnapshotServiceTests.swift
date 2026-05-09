@@ -161,8 +161,49 @@ private final class PartialFailureWriter: WindowFrameWriting, @unchecked Sendabl
     func focus(_ window: WindowSnapshot) -> Bool { true }
 }
 
+private func modificationDate(path: String) throws -> Date {
+    let attributes = try FileManager.default.attributesOfItem(atPath: path)
+    return try #require(attributes[.modificationDate] as? Date)
+}
+
 @Suite
 struct SnapshotServiceTests {
+    @Test
+    func unchangedSnapshotDoesNotRewriteStageStore() throws {
+        let path = tempPath("snapshot-no-rewrite-stages")
+        let store = StageStore(path: path)
+        let displayID = DisplayID(rawValue: "display-a")
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 101),
+            pid: 123,
+            appName: "App",
+            bundleID: "com.example.app",
+            title: "Document",
+            frame: Rect(x: 100, y: 100, width: 400, height: 300),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: displayID, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),
+                ],
+                windowSnapshots: [window],
+                focusedID: window.id
+            ),
+            stageStore: store
+        )
+
+        _ = service.snapshot()
+        let firstModified = try modificationDate(path: path)
+        Thread.sleep(forTimeInterval: 0.02)
+        _ = service.snapshot()
+        let secondModified = try modificationDate(path: path)
+
+        #expect(secondModified == firstModified)
+        try? FileManager.default.removeItem(atPath: path)
+    }
+
     @Test
     func tileCandidatesAreAssignedToDefaultStageOnContainingDisplay() {
         let displayA = DisplayID(rawValue: "display-a")
