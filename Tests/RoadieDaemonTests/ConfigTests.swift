@@ -294,6 +294,49 @@ struct ConfigTests {
     }
 
     @Test
+    func configValidationTreatsRailTablesAsSupportedRuntimeConfig() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rail-config-\(UUID().uuidString).toml")
+        try """
+        [fx.rail]
+        renderer = "parallax-45"
+        width = 150
+        layout_mode = "resize"
+
+        [fx.rail.layout]
+        header_position = "top"
+        stages_position = "center"
+
+        [fx.rail.header.display]
+        enabled = true
+        template = "{display}"
+
+        [fx.rail.header.desktop]
+        enabled = true
+        template = "Desktop {desktop}"
+
+        [fx.rail.stages]
+        position = "center"
+
+        [fx.rail.preview]
+        width = 160
+
+        [fx.rail.parallax]
+        rotation = 35
+
+        [[fx.rail.preview.stage_overrides]]
+        stage_id = "1"
+        active_color = "#9ECE6A"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(!report.hasErrors)
+        #expect(!report.items.contains { $0.path.hasPrefix("fx.rail") && $0.level == .warning })
+    }
+
+    @Test
     func configValidationReportsDecodeErrors() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-invalid-config-\(UUID().uuidString).toml")
