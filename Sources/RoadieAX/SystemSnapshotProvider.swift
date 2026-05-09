@@ -9,10 +9,12 @@ public protocol SystemSnapshotProviding: Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot
     func displays() -> [DisplaySnapshot]
     func windows() -> [WindowSnapshot]
+    func windows(includeAccessibilityAttributes: Bool) -> [WindowSnapshot]
     func focusedWindowID() -> WindowID?
 }
 
 public extension SystemSnapshotProviding {
+    func windows(includeAccessibilityAttributes: Bool) -> [WindowSnapshot] { windows() }
     func focusedWindowID() -> WindowID? { nil }
 }
 
@@ -102,6 +104,14 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
 }
 
 public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
+    private struct AXWindowAttributes {
+        var id: CGWindowID?
+        var title: String
+        var frame: CGRect?
+        var role: String?
+        var subrole: String?
+    }
+
     public init() {}
 
     public func permissions(prompt: Bool) -> PermissionSnapshot {
@@ -126,12 +136,17 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
     }
 
     public func windows() -> [WindowSnapshot] {
+        windows(includeAccessibilityAttributes: true)
+    }
+
+    public func windows(includeAccessibilityAttributes: Bool) -> [WindowSnapshot] {
         let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
         guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
             return []
         }
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
+        var axWindowsByPID: [Int32: [AXWindowAttributes]] = [:]
         return raw.compactMap { info -> WindowSnapshot? in
             guard let number = info[kCGWindowNumber as String] as? UInt32,
                   number > 0,
@@ -147,7 +162,15 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
             let title = info[kCGWindowName as String] as? String ?? ""
             let app = NSRunningApplication(processIdentifier: pid)
             let bundleID = app?.bundleIdentifier ?? ""
-            let attributes = Self.axAttributes(forWindowID: number, pid: pid, fallbackTitle: title, fallbackFrame: rect)
+            let attributes = includeAccessibilityAttributes
+                ? Self.axAttributes(
+                    forWindowID: number,
+                    pid: pid,
+                    fallbackTitle: title,
+                    fallbackFrame: rect,
+                    cache: &axWindowsByPID
+                )
+                : (role: nil, subrole: nil)
             let tileCandidate = layer == 0
                 && alpha > 0
                 && rect.width >= 80
@@ -178,12 +201,11 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         else { return nil }
 
         let focusedElement = focused as! AXUIElement
-        let appWindows = windows().filter { $0.pid == app.processIdentifier }
-        if let id = windowID(of: focusedElement),
-           appWindows.contains(where: { $0.id.rawValue == id }) {
+        if let id = windowID(of: focusedElement) {
             return WindowID(rawValue: id)
         }
 
+        let appWindows = windows().filter { $0.pid == app.processIdentifier }
         let focusedFrame = AXWindowFrameWriter().frame(of: focusedElement)
         if let focusedFrame,
            let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame.cgRect) }) {
@@ -239,29 +261,60 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         return AXUIElementGetWindowID(element, &id) == .success && id > 0 ? id : nil
     }
 
-    private static func axAttributes(forWindowID id: CGWindowID, pid: Int32, fallbackTitle: String, fallbackFrame: CGRect) -> (role: String?, subrole: String?) {
-        let app = AXUIElementCreateApplication(pid)
-        var rawWindows: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
-              let windows = rawWindows as? [AXUIElement]
-        else { return (nil, nil) }
-
-        let match = windows.first { element in
-            var rawID = CGWindowID()
-            if AXUIElementGetWindowID(element, &rawID) == .success, rawID == id {
-                return true
-            }
-            if !fallbackTitle.isEmpty, axString(kAXTitleAttribute, of: element) == fallbackTitle {
-                return true
-            }
-            guard let frame = axFrame(of: element) else { return false }
+    private static func axAttributes(
+        forWindowID id: CGWindowID,
+        pid: Int32,
+        fallbackTitle: String,
+        fallbackFrame: CGRect,
+        cache: inout [Int32: [AXWindowAttributes]]
+    ) -> (role: String?, subrole: String?) {
+        let windows = axWindows(pid: pid, cache: &cache)
+        if let match = windows.first(where: { $0.id == id }) {
+            return (match.role, match.subrole)
+        }
+        if !fallbackTitle.isEmpty,
+           let match = windows.first(where: { $0.title == fallbackTitle }) {
+            return (match.role, match.subrole)
+        }
+        let match = windows.first { candidate in
+            guard let frame = candidate.frame else { return false }
             return abs(frame.minX - fallbackFrame.minX) < 48
                 && abs(frame.minY - fallbackFrame.minY) < 48
                 && abs(frame.width - fallbackFrame.width) < 48
                 && abs(frame.height - fallbackFrame.height) < 48
         }
-        guard let match else { return (nil, nil) }
-        return (axString(kAXRoleAttribute, of: match), axString(kAXSubroleAttribute, of: match))
+        return (match?.role, match?.subrole)
+    }
+
+    private static func axWindows(
+        pid: Int32,
+        cache: inout [Int32: [AXWindowAttributes]]
+    ) -> [AXWindowAttributes] {
+        if let cached = cache[pid] {
+            return cached
+        }
+        let app = AXUIElementCreateApplication(pid)
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              let windows = rawWindows as? [AXUIElement]
+        else {
+            cache[pid] = []
+            return []
+        }
+
+        let attributes = windows.map { element in
+            var rawID = CGWindowID()
+            let id = AXUIElementGetWindowID(element, &rawID) == .success && rawID > 0 ? rawID : nil
+            return AXWindowAttributes(
+                id: id,
+                title: axString(kAXTitleAttribute, of: element) ?? "",
+                frame: axFrame(of: element),
+                role: axString(kAXRoleAttribute, of: element),
+                subrole: axString(kAXSubroleAttribute, of: element)
+            )
+        }
+        cache[pid] = attributes
+        return attributes
     }
 
     private static func axString(_ attribute: String, of element: AXUIElement) -> String? {

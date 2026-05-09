@@ -147,10 +147,10 @@ Il est desactive par defaut tant qu'on le durcit. Lance-le seulement quand tu ve
 
 ```bash
 ./bin/roadie control status --json
-./scripts/start --control-center
+./scripts/start --no-control-center
 ```
 
-Il expose la sante du daemon, l'etat de la config active, le desktop/stage courant, le nombre de fenetres gerees, les erreurs recentes et les actions courantes de recuperation. Le menu consomme le meme `ControlCenterState` que la CLI, donc les scripts et l'UI partagent le meme contrat de statut.
+Le Control Center en barre de menu est actuellement desactive. La commande sous-jacente `roadie control status --json` reste disponible pour les scripts et le diagnostic.
 
 ## Securite et recuperation
 

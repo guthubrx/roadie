@@ -130,6 +130,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopSelections.first { $0.displayID == displayID }?.lastDesktopID
     }
 
+    public func lastExplicitDesktopSwitchAt(for displayID: DisplayID) -> Date? {
+        desktopSelections.first { $0.displayID == displayID }?.lastExplicitDesktopSwitchAt
+    }
+
     public mutating func focusDisplay(_ displayID: DisplayID) {
         activeDisplayID = displayID
     }
@@ -160,6 +164,17 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
             ))
         }
     }
+
+    public mutating func markExplicitDesktopSwitch(displayID: DisplayID, at date: Date = Date()) {
+        if let index = desktopSelections.firstIndex(where: { $0.displayID == displayID }) {
+            desktopSelections[index].lastExplicitDesktopSwitchAt = date
+        } else {
+            desktopSelections.append(PersistentDesktopSelection(
+                displayID: displayID,
+                lastExplicitDesktopSwitchAt: date
+            ))
+        }
+    }
 }
 
 public struct PersistentDesktopLabel: Equatable, Codable, Sendable {
@@ -178,11 +193,18 @@ public struct PersistentDesktopSelection: Equatable, Codable, Sendable {
     public var displayID: DisplayID
     public var currentDesktopID: DesktopID
     public var lastDesktopID: DesktopID?
+    public var lastExplicitDesktopSwitchAt: Date?
 
-    public init(displayID: DisplayID, currentDesktopID: DesktopID = DesktopID(rawValue: 1), lastDesktopID: DesktopID? = nil) {
+    public init(
+        displayID: DisplayID,
+        currentDesktopID: DesktopID = DesktopID(rawValue: 1),
+        lastDesktopID: DesktopID? = nil,
+        lastExplicitDesktopSwitchAt: Date? = nil
+    ) {
         self.displayID = displayID
         self.currentDesktopID = currentDesktopID
         self.lastDesktopID = lastDesktopID
+        self.lastExplicitDesktopSwitchAt = lastExplicitDesktopSwitchAt
     }
 }
 
@@ -190,17 +212,20 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     public var displayID: DisplayID
     public var desktopID: DesktopID
     public var activeStageID: StageID
+    public var lastExplicitStageSwitchAt: Date?
     public var stages: [PersistentStage]
 
     public init(
         displayID: DisplayID,
         desktopID: DesktopID = DesktopID(rawValue: 1),
         activeStageID: StageID = StageID(rawValue: "1"),
+        lastExplicitStageSwitchAt: Date? = nil,
         stages: [PersistentStage] = [PersistentStage(id: StageID(rawValue: "1"))]
     ) {
         self.displayID = displayID
         self.desktopID = desktopID
         self.activeStageID = activeStageID
+        self.lastExplicitStageSwitchAt = lastExplicitStageSwitchAt
         self.stages = stages
     }
 

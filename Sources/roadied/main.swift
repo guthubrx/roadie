@@ -1,7 +1,6 @@
 import Foundation
 import AppKit
 import Darwin
-import RoadieControlCenter
 import RoadieDaemon
 import RoadieCore
 
@@ -10,6 +9,7 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
+var focusStageActivationObserver: FocusStageActivationObserver?
 var displayChangeObserver: NSObjectProtocol?
 
 func printUsage() {
@@ -50,6 +50,8 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
+    focusStageActivationObserver = FocusStageActivationObserver(maintainer: maintainer)
+    focusStageActivationObserver?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,
@@ -102,9 +104,8 @@ case "snapshot":
         print(TextFormatter.windows(snapshot.windows))
     }
 case "control-center":
-    let controller = ControlCenterAppController()
-    controller.start()
-    NSApplication.shared.run()
+    fputs("roadied: control center is disabled in this build\n", stderr)
+    exit(64)
 case "crash-watcher":
     guard let rawPID = value(after: "--pid"), let pid = Int32(rawPID) else {
         fputs("roadied: crash-watcher requires --pid PID\n", stderr)

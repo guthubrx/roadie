@@ -463,7 +463,7 @@ It is disabled by default while it is being hardened. Start it only when you exp
 
 ```bash
 ./bin/roadie control status --json
-./scripts/start --control-center
+./scripts/start --no-control-center
 ```
 
 Use it to check daemon health, active config status, active desktop/stage, recent reload errors, and actions such as reload config, reapply layout, reveal config, reveal state, open logs, run doctor, and quit safely.

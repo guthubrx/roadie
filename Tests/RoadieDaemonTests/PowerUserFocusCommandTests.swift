@@ -72,6 +72,24 @@ struct PowerUserFocusCommandTests {
         #expect(back.changed)
         #expect(writer.focused.map(\.rawValue) == [2, 1])
     }
+
+    @Test
+    func focusRightPrefersSameRowOverCloserUpperWindow() {
+        let focused = powerWindow(1, frame: Rect(x: 150, y: 634, width: 465, height: 586))
+        let sameRowRight = powerWindow(2, frame: Rect(x: 625, y: 634, width: 465, height: 586))
+        let upperRight = powerWindow(3, frame: Rect(x: 150, y: 38, width: 940, height: 586))
+        let farRight = powerWindow(4, frame: Rect(x: 1100, y: 634, width: 465, height: 586))
+        let provider = PowerUserProvider(windows: [focused, sameRowRight, upperRight, farRight])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-focus-row-stages"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        _ = service.snapshot()
+
+        let result = WindowCommandService(service: service, stageStore: store).focus(.right)
+
+        #expect(result.changed)
+        #expect(writer.focused.map(\.rawValue) == [2])
+    }
 }
 
 func powerDisplay(_ id: String = "display-main", index: Int = 1, x: Double = 0) -> DisplaySnapshot {
@@ -86,13 +104,17 @@ func powerDisplay(_ id: String = "display-main", index: Int = 1, x: Double = 0) 
 }
 
 func powerWindow(_ id: UInt32, x: Double, app: String = "App") -> WindowSnapshot {
+    powerWindow(id, frame: Rect(x: x, y: 100, width: 300, height: 300), app: app)
+}
+
+func powerWindow(_ id: UInt32, frame: Rect, app: String = "App") -> WindowSnapshot {
     WindowSnapshot(
         id: WindowID(rawValue: id),
         pid: Int32(id),
         appName: app,
         bundleID: "app.\(id)",
         title: "Window \(id)",
-        frame: Rect(x: x, y: 100, width: 300, height: 300),
+        frame: frame,
         isOnScreen: true,
         isTileCandidate: true
     )

@@ -127,6 +127,15 @@ private final class ClampingWriter: WindowFrameWriting, @unchecked Sendable {
     }
 }
 
+private final class FailingWriter: WindowFrameWriting, @unchecked Sendable {
+    private(set) var requestedFrames: [Rect] = []
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        requestedFrames.append(Rect(frame))
+        return nil
+    }
+}
+
 private func makeIntentStore() -> (path: String, store: LayoutIntentStore) {
     let path = FileManager.default.temporaryDirectory
         .appendingPathComponent("roadie-maintainer-intent-\(UUID().uuidString).json")
@@ -205,6 +214,44 @@ struct LayoutMaintainerTests {
         #expect(events.contains("\"type\":\"layout_apply\""))
         try? FileManager.default.removeItem(atPath: intentPath)
         try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func failedLayoutFrameIsNotRetriedWhileWindowStaysAtRejectedFrame() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let provider = SequenceProvider(display: display, windowFrames: [
+            [
+                Rect(x: 0, y: 0, width: 100, height: 500),
+                Rect(x: 120, y: 0, width: 100, height: 500),
+            ],
+            [
+                Rect(x: 0, y: 0, width: 100, height: 500),
+                Rect(x: 120, y: 0, width: 100, height: 500),
+            ],
+        ])
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let first = maintainer.tick()
+        let second = maintainer.tick()
+
+        #expect(first.commands == 2)
+        #expect(first.failed == 2)
+        #expect(second.commands == 0)
+        #expect(second.failed == 0)
+        #expect(writer.requestedFrames.count == 2)
     }
 
     @Test
@@ -483,6 +530,56 @@ struct LayoutMaintainerTests {
 
         #expect(tick.commands == 1)
         #expect(writer.requestedFrames[window.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intent.path)
+    }
+
+    @Test
+    func inactiveStageHideAndActiveStageRestoreHappenInOneTick() {
+        let intent = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let visibleOld = Rect(x: 0, y: 0, width: 495, height: 500)
+        let hiddenNew = Rect(x: 999, y: 499, width: 495, height: 500)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-maintainer-stage-restore-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display.id,
+                activeStageID: StageID(rawValue: "2"),
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window1", frame: visibleOld),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), members: [
+                        PersistentStageMember(windowID: WindowID(rawValue: 2), bundleID: "app.2", title: "Window2", frame: Rect(x: 0, y: 0, width: 1000, height: 500)),
+                    ]),
+                ]
+            ),
+        ]))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[visibleOld, hiddenNew]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10, smartGapsSolo: false)),
+            intentStore: intent.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 2)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 0, y: 0, width: 1000, height: 500))
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: intent.path)
     }

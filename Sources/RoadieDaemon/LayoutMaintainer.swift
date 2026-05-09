@@ -39,6 +39,7 @@ public final class LayoutMaintainer {
     private let transientDetector: TransientWindowDetector?
     private let config: RoadieConfig
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
+    private var failedFrames: [UInt32: FailedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
@@ -90,7 +91,34 @@ public final class LayoutMaintainer {
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
         if hiddenInactive > 0 {
             events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive)]))
-            return MaintenanceTick(commands: hiddenInactive, applied: hiddenInactive, clamped: 0, failed: 0)
+            let updatedSnapshot = service.snapshot()
+            let observedFrames = scopedFrames(in: updatedSnapshot)
+            let plan = suppressKnownFrameOutcomes(
+                in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: priorityWindowIDs),
+                snapshot: updatedSnapshot
+            )
+            guard !plan.commands.isEmpty else {
+                lastObservedFrames = observedFrames
+                return MaintenanceTick(commands: hiddenInactive, applied: hiddenInactive, clamped: 0, failed: 0)
+            }
+            var result = service.apply(plan)
+            result = stabilizeClampedPositions(result, from: plan)
+            record(result, from: plan)
+            events.append(RoadieEvent(type: "layout_apply", details: [
+                "commands": String(plan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed),
+                "cause": "stage_hide_inactive"
+            ]))
+            appendItemEvents(result)
+            lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
+            return MaintenanceTick(
+                commands: hiddenInactive + plan.commands.count,
+                applied: hiddenInactive + result.applied,
+                clamped: result.clamped,
+                failed: result.failed
+            )
         }
 
         let observedFrames = scopedFrames(in: snapshot)
@@ -149,7 +177,10 @@ public final class LayoutMaintainer {
         }
 
         lastObservedFrames = observedFrames
-        let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
+        let plan = suppressKnownFrameOutcomes(
+            in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs),
+            snapshot: snapshot
+        )
         guard !plan.commands.isEmpty else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
@@ -158,7 +189,7 @@ public final class LayoutMaintainer {
         if !priorityWindowIDs.isEmpty {
             persistLayoutIntent(in: snapshot, result: result)
         }
-        record(result)
+        record(result, from: plan)
         events.append(RoadieEvent(type: "layout_apply", details: [
             "commands": String(plan.commands.count),
             "applied": String(result.applied),
@@ -186,7 +217,10 @@ public final class LayoutMaintainer {
     ) -> MaintenanceTick {
         lastObservedFrames = observedFrames
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-        let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
+        let plan = suppressKnownFrameOutcomes(
+            in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs),
+            snapshot: snapshot
+        )
         let filtered = ApplyPlan(commands: plan.commands.filter { command in
             guard let scope = windowsByID[command.window.id]?.scope else { return true }
             return !protectedScopes.contains(scope)
@@ -196,7 +230,7 @@ public final class LayoutMaintainer {
         }
         var result = service.apply(filtered)
         result = stabilizeClampedPositions(result, from: filtered)
-        record(result)
+        record(result, from: filtered)
         appendItemEvents(result)
         lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
         return MaintenanceTick(
@@ -325,14 +359,36 @@ public final class LayoutMaintainer {
         return payload
     }
 
-    private func suppressKnownClamps(in plan: ApplyPlan) -> ApplyPlan {
-        ApplyPlan(commands: plan.commands.filter { command in
-            guard let known = clampedFrames[command.window.id.rawValue] else { return true }
-            return !known.matches(command: command)
+    private func suppressKnownFrameOutcomes(in plan: ApplyPlan, snapshot: DaemonSnapshot) -> ApplyPlan {
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let protectedScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
+            let id = entry.window.id.rawValue
+            if let known = clampedFrames[id], known.matchesObserved(window: entry.window) {
+                return entry.scope
+            }
+            if let known = failedFrames[id], known.matchesObserved(window: entry.window) {
+                return entry.scope
+            }
+            return nil
+        })
+        return ApplyPlan(commands: plan.commands.filter { command in
+            if let scope = windowsByID[command.window.id]?.scope,
+               protectedScopes.contains(scope) {
+                return false
+            }
+            let id = command.window.id.rawValue
+            if let known = clampedFrames[id], known.matches(command: command) {
+                return false
+            }
+            if let known = failedFrames[id], known.matches(command: command) {
+                return false
+            }
+            return true
         })
     }
 
-    private func record(_ result: ApplyResult) {
+    private func record(_ result: ApplyResult, from plan: ApplyPlan) {
+        let commandsByID = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0) })
         for item in result.items {
             switch item.status {
             case .clamped:
@@ -341,8 +397,11 @@ public final class LayoutMaintainer {
                 }
             case .applied:
                 clampedFrames.removeValue(forKey: item.windowID.rawValue)
+                failedFrames.removeValue(forKey: item.windowID.rawValue)
             case .failed:
-                break
+                if let command = commandsByID[item.windowID] {
+                    failedFrames[item.windowID.rawValue] = FailedFrame(requested: item.requested, observed: command.window.frame)
+                }
             }
         }
     }
@@ -597,6 +656,24 @@ private struct ClampedFrame {
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame)
             && command.window.frame.isClose(to: actual)
+    }
+
+    func matchesObserved(window: WindowSnapshot) -> Bool {
+        window.frame.isClose(to: actual)
+    }
+}
+
+private struct FailedFrame {
+    var requested: Rect
+    var observed: Rect
+
+    func matches(command: ApplyCommand) -> Bool {
+        requested.isClose(to: command.frame)
+            && command.window.frame.isClose(to: observed)
+    }
+
+    func matchesObserved(window: WindowSnapshot) -> Bool {
+        window.frame.isClose(to: observed)
     }
 }
 

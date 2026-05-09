@@ -42,7 +42,7 @@ public struct WindowCommandService {
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = interactiveSnapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
             return focusAdjacentDisplayWindow(direction, from: snapshot)
         }
@@ -51,7 +51,7 @@ public struct WindowCommandService {
     }
 
     public func focusBackAndForth() -> WindowCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = interactiveSnapshot()
         guard let active = activeWindow(in: snapshot), let scope = active.scope else {
             return WindowCommandResult(message: "focus back-and-forth: no active window", changed: false)
         }
@@ -73,7 +73,7 @@ public struct WindowCommandService {
     }
 
     public func move(_ direction: Direction) -> WindowCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = interactiveSnapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
@@ -109,7 +109,7 @@ public struct WindowCommandService {
     }
 
     public func warp(_ direction: Direction) -> WindowCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = interactiveSnapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
@@ -144,7 +144,7 @@ public struct WindowCommandService {
     }
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = interactiveSnapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
@@ -217,6 +217,10 @@ public struct WindowCommandService {
             message: "window reset: zoom=\(zoomed) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed == 0
         )
+    }
+
+    private func interactiveSnapshot() -> DaemonSnapshot {
+        service.snapshot(includeAccessibilityAttributes: false)
     }
 
     public func sendToDisplay(_ displayIndex: Int) -> WindowCommandResult {
@@ -608,17 +612,26 @@ public struct WindowCommandService {
     }
 
     private func neighborScore(from active: CGRect, to candidate: CGRect, direction: Direction) -> CGFloat {
+        let horizontalOverlap = max(0, min(active.maxX, candidate.maxX) - max(active.minX, candidate.minX))
+        let verticalOverlap = max(0, min(active.maxY, candidate.maxY) - max(active.minY, candidate.minY))
+        let horizontalGap = candidate.minX > active.maxX ? candidate.minX - active.maxX : active.minX - candidate.maxX
+        let verticalGap = candidate.minY > active.maxY ? candidate.minY - active.maxY : active.minY - candidate.maxY
         let dx = candidate.midX - active.midX
         let dy = candidate.midY - active.midY
+
         switch direction {
         case .left where dx < -1:
-            return abs(dx) + abs(dy) * 0.35
+            let offAxisPenalty = verticalOverlap > 0 ? abs(dy) * 0.05 : max(0, verticalGap) * 8 + abs(dy)
+            return max(0, horizontalGap) + offAxisPenalty
         case .right where dx > 1:
-            return abs(dx) + abs(dy) * 0.35
+            let offAxisPenalty = verticalOverlap > 0 ? abs(dy) * 0.05 : max(0, verticalGap) * 8 + abs(dy)
+            return max(0, horizontalGap) + offAxisPenalty
         case .up where dy < -1:
-            return abs(dy) + abs(dx) * 0.35
+            let offAxisPenalty = horizontalOverlap > 0 ? abs(dx) * 0.05 : max(0, horizontalGap) * 8 + abs(dx)
+            return max(0, verticalGap) + offAxisPenalty
         case .down where dy > 1:
-            return abs(dy) + abs(dx) * 0.35
+            let offAxisPenalty = horizontalOverlap > 0 ? abs(dx) * 0.05 : max(0, horizontalGap) * 8 + abs(dx)
+            return max(0, verticalGap) + offAxisPenalty
         default:
             return .infinity
         }
