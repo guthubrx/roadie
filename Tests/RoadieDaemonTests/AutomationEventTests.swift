@@ -77,6 +77,27 @@ struct AutomationEventTests {
     }
 
     @Test
+    func eventLogTailDoesNotRequireReadingWholeFileAndRotates() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-events-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        defer { try? FileManager.default.removeItem(atPath: "\(url.path).1") }
+        let log = EventLog(path: url.path)
+
+        for index in 0..<200 {
+            log.append(RoadieEvent(type: "event.\(index)"))
+        }
+
+        let tail = log.tail(limit: 3)
+        #expect(tail.count == 3)
+        #expect(tail.last?.contains("event.199") == true)
+
+        log.rotateIfNeeded(maxBytes: 1, retainedBackups: 2)
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+        #expect(FileManager.default.fileExists(atPath: "\(url.path).1"))
+    }
+
+    @Test
     func spec003ConfigReloadPublishesFailureAndPreserveEvents() throws {
         let valid = try #require(Bundle.module.url(forResource: "control-safety-valid", withExtension: "toml"))
         let invalid = try #require(Bundle.module.url(forResource: "control-safety-invalid", withExtension: "toml"))

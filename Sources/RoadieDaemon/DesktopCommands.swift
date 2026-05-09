@@ -152,7 +152,8 @@ public struct DesktopCommandService {
         }
 
         let hidden = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let layoutSnapshot = service.snapshot(followExternalFocus: false, persistState: false)
+        let result = service.apply(service.applyPlan(from: layoutSnapshot))
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID),

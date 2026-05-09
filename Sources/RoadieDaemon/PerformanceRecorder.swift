@@ -181,6 +181,27 @@ public struct PerformanceRecorder: Sendable {
                 "message": .string(breach.message)
             ])
         }
+        payload["target"] = .object(targetPayload(for: interaction.targetContext))
+        payload["steps"] = .array(interaction.steps.map { step in
+            .object([
+                "name": .string(step.name.rawValue),
+                "duration_ms": .double(step.durationMs),
+                "status": .string(step.status.rawValue),
+                "count": step.count.map { .int($0) } ?? .null
+            ])
+        })
         return payload
+    }
+
+    private func targetPayload(for context: PerformanceTargetContext) -> [String: AutomationPayload] {
+        [
+            "display_id": context.displayID.map { .string($0) } ?? .null,
+            "desktop_id": context.desktopID.map { .int($0) } ?? .null,
+            "stage_id": context.stageID.map { .string($0) } ?? .null,
+            "window_id": context.windowID.map { .int(Int($0)) } ?? .null,
+            "source_display_id": context.sourceDisplayID.map { .string($0) } ?? .null,
+            "source_desktop_id": context.sourceDesktopID.map { .int($0) } ?? .null,
+            "source_stage_id": context.sourceStageID.map { .string($0) } ?? .null
+        ]
     }
 }

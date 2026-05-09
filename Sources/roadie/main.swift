@@ -35,6 +35,7 @@ func printUsage() {
       roadie events tail [N]
       roadie events subscribe [--from-now] [--initial-state] [--type TYPE] [--scope SCOPE]
       roadie performance summary|recent|thresholds [--json] [--limit N]
+      roadie cleanup [--dry-run|--apply] [--json]
       roadie metrics [--json]
       roadie permissions [--prompt]
       roadie focus status
@@ -275,6 +276,14 @@ case "events":
     }
 case "performance":
     runPerformanceCommand(Array(args.dropFirst()))
+case "cleanup":
+    let dryRun = !args.contains("--apply")
+    let report = FileAdministrationService().run(dryRun: dryRun)
+    if args.contains("--json") {
+        printCodableJSON(report)
+    } else {
+        print(TextFormatter.fileAdmin(report))
+    }
 case "metrics":
     let metrics = MetricsService(service: service).collect()
     if args.contains("--json") {

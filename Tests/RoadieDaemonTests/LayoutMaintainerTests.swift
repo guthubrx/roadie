@@ -200,6 +200,7 @@ struct LayoutMaintainerTests {
         let debounced = maintainer.tick()
         currentTime = currentTime.addingTimeInterval(2)
         let settled = maintainer.tick()
+        let stable = maintainer.tick()
 
         #expect(initial.commands == 0)
         #expect(resizing.manualResizeDetected)
@@ -207,8 +208,11 @@ struct LayoutMaintainerTests {
         #expect(debounced.manualResizeDetected)
         #expect(debounced.commands == 0)
         #expect(settled.commands == 1)
+        #expect(stable.commands == 0)
+        #expect(!stable.manualResizeDetected)
         #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
         #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
+        #expect(intentStore.intent(for: scope)?.source == .command)
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
         #expect(events.contains("\"type\":\"manual_resize_detected\""))
         #expect(events.contains("\"type\":\"layout_apply\""))
