@@ -594,6 +594,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
     public var stageSwitchMs: Double
     public var desktopSwitchMs: Double
     public var altTabActivationMs: Double
+    public var borderRefreshMs: Double
     public var displayFocusMs: Double
     public var directionalFocusMs: Double
     public var railActionMs: Double
@@ -605,6 +606,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
         stageSwitchMs: Double = 150,
         desktopSwitchMs: Double = 200,
         altTabActivationMs: Double = 250,
+        borderRefreshMs: Double = 80,
         displayFocusMs: Double = 150,
         directionalFocusMs: Double = 120,
         railActionMs: Double = 200
@@ -615,6 +617,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
         self.stageSwitchMs = max(1, stageSwitchMs)
         self.desktopSwitchMs = max(1, desktopSwitchMs)
         self.altTabActivationMs = max(1, altTabActivationMs)
+        self.borderRefreshMs = max(1, borderRefreshMs)
         self.displayFocusMs = max(1, displayFocusMs)
         self.directionalFocusMs = max(1, directionalFocusMs)
         self.railActionMs = max(1, railActionMs)
@@ -625,6 +628,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
             PerformanceThreshold(interactionType: .stageSwitch, limitMs: stageSwitchMs, percentileTarget: 95),
             PerformanceThreshold(interactionType: .desktopSwitch, limitMs: desktopSwitchMs, percentileTarget: 95),
             PerformanceThreshold(interactionType: .altTabActivation, limitMs: altTabActivationMs, percentileTarget: 90),
+            PerformanceThreshold(interactionType: .borderRefresh, limitMs: borderRefreshMs, percentileTarget: 95),
             PerformanceThreshold(interactionType: .displayFocus, limitMs: displayFocusMs, percentileTarget: 95),
             PerformanceThreshold(interactionType: .directionalFocus, limitMs: directionalFocusMs, percentileTarget: 95),
             PerformanceThreshold(interactionType: .railAction, limitMs: railActionMs, percentileTarget: 95),
@@ -638,6 +642,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
         case stageSwitchMs = "stage_switch_ms"
         case desktopSwitchMs = "desktop_switch_ms"
         case altTabActivationMs = "alt_tab_activation_ms"
+        case borderRefreshMs = "border_refresh_ms"
         case displayFocusMs = "display_focus_ms"
         case directionalFocusMs = "directional_focus_ms"
         case railActionMs = "rail_action_ms"
@@ -652,6 +657,7 @@ public struct PerformanceConfig: Equatable, Codable, Sendable {
             stageSwitchMs: try c.decodeFlexibleDouble(forKey: .stageSwitchMs) ?? 150,
             desktopSwitchMs: try c.decodeFlexibleDouble(forKey: .desktopSwitchMs) ?? 200,
             altTabActivationMs: try c.decodeFlexibleDouble(forKey: .altTabActivationMs) ?? 250,
+            borderRefreshMs: try c.decodeFlexibleDouble(forKey: .borderRefreshMs) ?? 80,
             displayFocusMs: try c.decodeFlexibleDouble(forKey: .displayFocusMs) ?? 150,
             directionalFocusMs: try c.decodeFlexibleDouble(forKey: .directionalFocusMs) ?? 120,
             railActionMs: try c.decodeFlexibleDouble(forKey: .railActionMs) ?? 200
