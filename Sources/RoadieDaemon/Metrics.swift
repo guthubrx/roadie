@@ -45,7 +45,7 @@ public struct MetricsService {
     }
 
     public func collect() -> RoadieMetrics {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let state = stageStore.state()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
         let liveTileableWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })

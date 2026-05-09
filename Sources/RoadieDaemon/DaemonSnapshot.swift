@@ -71,7 +71,9 @@ public struct SnapshotService {
 
     public func snapshot(
         promptForPermissions: Bool = false,
-        includeAccessibilityAttributes: Bool = true
+        includeAccessibilityAttributes: Bool = true,
+        followExternalFocus: Bool = true,
+        persistState: Bool = true
     ) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
@@ -174,7 +176,7 @@ public struct SnapshotService {
         if let providerFocusedID,
            let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
            let focusedScope = focusedEntry.scope {
-            var acceptsProviderFocus = state.activeScope(on: focusedScope.displayID) == focusedScope
+            var acceptsProviderFocus = followExternalFocus && state.activeScope(on: focusedScope.displayID) == focusedScope
             let focusLooksLikeRoadieHiddenWindow = isHidden(focusedEntry.window.frame.cgRect, in: displays)
             let persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
             let explicitSwitchGracePeriod = persistentScope.lastExplicitStageSwitchAt.map { Date().timeIntervalSince($0) < 1.5 } ?? false
@@ -183,7 +185,7 @@ public struct SnapshotService {
             let hiddenFocusCanSwitchStage = focusLooksLikeRoadieHiddenWindow
                 && !(explicitSwitchGracePeriod && persistentScope.activeStageID != focusedScope.stageID)
                 && !(explicitDesktopSwitchGracePeriod && focusWouldSwitchDesktop)
-            if config.focus.stageFollowsFocus && (acceptsProviderFocus || hiddenFocusCanSwitchStage) {
+            if followExternalFocus && config.focus.stageFollowsFocus && (acceptsProviderFocus || hiddenFocusCanSwitchStage) {
                 persistedStages.switchDesktop(displayID: focusedScope.displayID, to: focusedScope.desktopID)
                 var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
                 persistentScope.activeStageID = focusedScope.stageID
@@ -206,7 +208,9 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
-        stageStore.save(persistedStages)
+        if persistState {
+            stageStore.save(persistedStages)
+        }
 
         return DaemonSnapshot(
             permissions: permissions,

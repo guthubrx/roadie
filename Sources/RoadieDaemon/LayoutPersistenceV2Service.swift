@@ -40,7 +40,7 @@ public struct LayoutPersistenceV2Service {
         guard let snapshot = restore.load() else {
             return LayoutPersistenceV2Report(matches: [], applied: false)
         }
-        let live = service.snapshot().windows.map(\.window)
+        let live = service.snapshot(followExternalFocus: false, persistState: false).windows.map(\.window)
         return LayoutPersistenceV2Report(
             matches: identity.match(saved: snapshot.windows, live: live, threshold: config.layoutPersistence.minimumMatchScore),
             applied: false

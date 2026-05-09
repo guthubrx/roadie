@@ -51,7 +51,7 @@ public struct StateAuditService {
     }
 
     public func run() -> StateAuditReport {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let state = stageStore.state()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
         let liveTileableWindowIDs = Set(snapshot.windows.compactMap { entry in
