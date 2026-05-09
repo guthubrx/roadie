@@ -1323,6 +1323,7 @@ struct SnapshotServiceTests {
 
         #expect(assignResult.changed)
         #expect(assignWriter.requestedFrames[right.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(assignWriter.focusedWindowIDs == [left.id])
 
         let hiddenRight = WindowSnapshot(id: right.id, pid: right.pid, appName: right.appName, bundleID: right.bundleID, title: right.title, frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let switchWriter = RecordingWriter()
