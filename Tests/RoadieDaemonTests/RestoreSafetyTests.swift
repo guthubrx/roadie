@@ -73,6 +73,30 @@ struct RestoreSafetyTests {
     }
 
     @Test
+    func saveSuppressesVolatileWindowTitleEvents() {
+        let eventLog = EventLog(path: tempPath("restore-title-events"))
+        let restore = RestoreSafetyService(
+            path: tempPath("restore-title"),
+            eventLog: eventLog
+        )
+        let firstWindow = RestoreWindowState(
+            windowID: 1,
+            identity: WindowIdentityV2(bundleID: "com.googlecode.iterm2", appName: "iTerm2", title: "spinner a"),
+            frame: Rect(x: 10, y: 20, width: 500, height: 400),
+            visibleFrame: powerDisplay().visibleFrame,
+            stageScope: "display/1/1"
+        )
+        var renamedWindow = firstWindow
+        renamedWindow.identity.title = "spinner b"
+        renamedWindow.identity.createdAt = Date(timeIntervalSince1970: 10)
+
+        #expect(restore.save(RestoreSafetySnapshot(windows: [firstWindow])))
+        #expect(restore.save(RestoreSafetySnapshot(windows: [renamedWindow])))
+
+        #expect(eventLog.envelopes(limit: 10).filter { $0.type == "restore.snapshot_written" }.count == 1)
+    }
+
+    @Test
     func restoreUsesStableIdentityWhenWindowIDChanged() {
         let live = WindowSnapshot(
             id: WindowID(rawValue: 99),
