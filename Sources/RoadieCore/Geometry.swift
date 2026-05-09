@@ -56,4 +56,17 @@ public extension CGRect {
             height: max(0, height - insets.top - insets.bottom)
         )
     }
+
+    func isEquivalent(to other: CGRect, tolerancePoints: CGFloat = 2) -> Bool {
+        abs(minX - other.minX) <= tolerancePoints
+            && abs(minY - other.minY) <= tolerancePoints
+            && abs(width - other.width) <= tolerancePoints
+            && abs(height - other.height) <= tolerancePoints
+    }
+}
+
+public extension Rect {
+    func isEquivalent(to other: Rect, tolerancePoints: Double = 2) -> Bool {
+        cgRect.isEquivalent(to: other.cgRect, tolerancePoints: CGFloat(tolerancePoints))
+    }
 }

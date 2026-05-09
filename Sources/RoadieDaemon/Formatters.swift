@@ -161,6 +161,58 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func performanceSummary(_ snapshot: PerformanceSnapshot) -> String {
+        guard !snapshot.summaryByType.isEmpty else {
+            return "No performance interactions recorded."
+        }
+        var lines = ["TYPE\tCOUNT\tMEDIAN_MS\tP95_MS\tSLOW"]
+        for summary in snapshot.summaryByType {
+            lines.append([
+                summary.type.rawValue,
+                String(summary.count),
+                String(format: "%.1f", summary.medianMs),
+                String(format: "%.1f", summary.p95Ms),
+                String(summary.slowCount)
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func performanceRecent(_ snapshot: PerformanceSnapshot) -> String {
+        guard !snapshot.recentInteractions.isEmpty else {
+            return "No performance interactions recorded."
+        }
+        var lines = ["TYPE\tRESULT\tDURATION_MS\tDOMINANT_STEP\tSOURCE"]
+        for interaction in snapshot.recentInteractions.reversed() {
+            let dominantStep = interaction.thresholdBreach?.dominantStep?.rawValue
+                ?? interaction.steps.filter { $0.name != .total }.max { $0.durationMs < $1.durationMs }?.name.rawValue
+                ?? "-"
+            lines.append([
+                interaction.type.rawValue,
+                interaction.result.rawValue,
+                String(format: "%.1f", interaction.durationMs),
+                dominantStep,
+                interaction.source.rawValue
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func performanceThresholds(_ snapshot: PerformanceSnapshot) -> String {
+        var lines = ["TYPE\tLIMIT_MS\tPERCENTILE\tENABLED"]
+        for threshold in snapshot.thresholds {
+            lines.append([
+                threshold.interactionType.rawValue,
+                String(format: "%.1f", threshold.limitMs),
+                String(threshold.percentileTarget),
+                String(threshold.enabled)
+            ].joined(separator: "\t"))
+        }
+        lines.append("frame_tolerance_points=\(String(format: "%.1f", snapshot.frameEquivalence.defaultTolerancePoints))")
+        lines.append("retention_max_interactions=\(snapshot.retention.maxInteractions)")
+        return lines.joined(separator: "\n")
+    }
+
     public static func treeDump(_ dump: TreeDump) -> String {
         guard !dump.displays.isEmpty else { return "No displays found." }
         var lines: [String] = []
@@ -223,7 +275,7 @@ public enum TextFormatter {
     }
 
     public static func applyResult(_ result: ApplyResult) -> String {
-        var lines = ["attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)"]
+        var lines = ["attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed) skipped=\(result.skipped)"]
         for item in result.items where item.status != .applied {
             let actual = item.actual.map { "\(Int($0.x)),\(Int($0.y)) \(Int($0.width))x\(Int($0.height))" } ?? "-"
             let requested = "\(Int(item.requested.x)),\(Int(item.requested.y)) \(Int(item.requested.width))x\(Int(item.requested.height))"

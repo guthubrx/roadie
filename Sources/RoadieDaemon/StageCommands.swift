@@ -18,11 +18,21 @@ public struct StageCommandService {
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
+    private let performance: PerformanceRecorder
+    private let performanceConfig: PerformanceConfig
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        store: StageStore = StageStore(),
+        events: EventLog = EventLog(),
+        performance: PerformanceRecorder = PerformanceRecorder(),
+        performanceConfig: PerformanceConfig = (try? RoadieConfigLoader.load().performance) ?? PerformanceConfig()
+    ) {
         self.service = service
         self.store = store
         self.events = events
+        self.performance = performance
+        self.performanceConfig = performanceConfig
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -389,20 +399,32 @@ public struct StageCommandService {
         to stageID: StageID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
+        let started = Date()
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
         scope.ensureStage(stageID)
         state.focusDisplay(display.id)
+        let session = performance.start(
+            .stageSwitch,
+            targetContext: PerformanceTargetContext(
+                displayID: display.id.rawValue,
+                desktopID: scope.desktopID.rawValue,
+                stageID: stageID.rawValue,
+                sourceStageID: previousID.rawValue
+            )
+        )
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
             scope.updateFrame(window: window)
         }
+        let stateUpdatedAt = Date()
 
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
         var applied = 0
+        var skipped = 0
         scope.activeStageID = stageID
         scope.lastExplicitStageSwitchAt = Date()
         state.update(scope)
@@ -410,31 +432,41 @@ public struct StageCommandService {
 
         for id in previousMembers.subtracting(targetMembers) {
             guard let window = windowsByID[id] else { continue }
-            if service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
+            let result = setFrameIfNeeded(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+            if result.skipped {
+                skipped += 1
+            } else if result.applied {
                 applied += 1
             }
         }
+        let hiddenAt = Date()
 
         let targetStage = scope.stages.first(where: { $0.id == stageID })
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
-            if service.setFrame(member.frame.cgRect, of: window) != nil {
+            let result = setFrameIfNeeded(member.frame.cgRect, of: window)
+            if result.skipped {
+                skipped += 1
+            } else if result.applied {
                 applied += 1
             }
         }
+        let restoredAt = Date()
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focusedWindow = windowsByID[focusedID] {
             _ = service.focus(focusedWindow)
         }
+        let focusedAt = Date()
 
-        let updatedSnapshot = service.snapshot()
         let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
         let layoutResult = service.apply(service.applyPlan(
-            from: updatedSnapshot,
+            from: snapshot,
             scope: activeScope,
             orderedWindowIDs: scope.memberIDs(in: stageID)
         ))
         applied += layoutResult.applied + layoutResult.clamped
+        skipped += layoutResult.skipped
+        let layoutAt = Date()
         events.append(RoadieEvent(
             type: "stage_switch",
             scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
@@ -443,9 +475,17 @@ public struct StageCommandService {
                 "hidden": String(previousMembers.subtracting(targetMembers).count),
                 "shown": String(targetMembers.count),
                 "applied": String(applied),
-                "layout": String(layoutResult.attempted)
+                "layout": String(layoutResult.attempted),
+                "skipped": String(skipped)
             ]
         ))
+        performance.complete(session, result: previousID == stageID && applied == 0 && layoutResult.attempted == 0 ? .noOp : .success, steps: [
+            PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: stateUpdatedAt.timeIntervalSince(started) * 1000),
+            PerformanceStep(name: .hidePrevious, startedAt: stateUpdatedAt, durationMs: hiddenAt.timeIntervalSince(stateUpdatedAt) * 1000, count: previousMembers.subtracting(targetMembers).count),
+            PerformanceStep(name: .restoreTarget, startedAt: hiddenAt, durationMs: restoredAt.timeIntervalSince(hiddenAt) * 1000, count: targetMembers.count),
+            PerformanceStep(name: .focus, startedAt: restoredAt, durationMs: focusedAt.timeIntervalSince(restoredAt) * 1000),
+            PerformanceStep(name: .layoutApply, startedAt: focusedAt, durationMs: layoutAt.timeIntervalSince(focusedAt) * 1000, count: layoutResult.attempted)
+        ], skippedFrameMoves: skipped, completedAt: layoutAt)
 
         return StageCommandResult(
             message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
@@ -640,6 +680,13 @@ public struct StageCommandService {
 
     private func isHidden(_ frame: CGRect) -> Bool {
         frame.maxX < -1000 || frame.minX < -10000
+    }
+
+    private func setFrameIfNeeded(_ frame: CGRect, of window: WindowSnapshot) -> (applied: Bool, skipped: Bool) {
+        guard !window.frame.cgRect.isEquivalent(to: frame, tolerancePoints: CGFloat(performanceConfig.frameTolerancePoints)) else {
+            return (false, true)
+        }
+        return (service.setFrame(frame, of: window) != nil, false)
     }
 }
 

@@ -1956,6 +1956,27 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func applySkipsEquivalentFramesWithinTolerance() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let window = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [window], focusedID: window.id),
+            frameWriter: writer,
+            config: RoadieConfig()
+        )
+
+        let result = service.apply(ApplyPlan(commands: [
+            ApplyCommand(window: window, frame: Rect(x: 11, y: 10, width: 300, height: 201)),
+        ]))
+
+        #expect(result.attempted == 1)
+        #expect(result.skipped == 1)
+        #expect(writer.requestedFrames.isEmpty)
+    }
+
+    @Test
     func snapshotPrunesClosedWindowsFromPersistentStages() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(

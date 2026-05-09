@@ -1,4 +1,4 @@
-# Contrat Query/State : Performance ressentie
+# Contrat Query/État : Performance ressentie
 
 ## `roadie query performance`
 
@@ -9,6 +9,11 @@ Retourne l'état de performance récent sous forme structurée.
   "kind": "performance",
   "data": {
     "generated_at": "2026-05-09T06:00:00Z",
+    "retention": {
+      "storage_path": "~/.local/state/roadies/performance.json",
+      "max_interactions": 100,
+      "rotation": "fifo"
+    },
     "recent_interactions": [
       {
         "id": "perf_123",
@@ -47,6 +52,12 @@ Retourne l'état de performance récent sous forme structurée.
         "limit_ms": 150,
         "percentile_target": 95,
         "enabled": true
+      }
+    ],
+    "frame_equivalence": [
+      {
+        "default_tolerance_points": 2,
+        "unit": "macos_point"
       }
     ]
   }

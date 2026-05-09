@@ -78,6 +78,7 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Fournit des commandes CLI faciles à brancher dans BetterTouchTool, Karabiner, des scripts shell ou un launcher.
 - Persiste les stages et l’état du layout entre les redémarrages du daemon.
 - Expose des commandes d’état, santé, métriques, événements et audit pour diagnostiquer.
+- Mesure la performance ressentie des interactions critiques avec historique local, seuils et diagnostics.
 - Publie des événements automation JSONL et des projections JSON stables via `roadie query ...`.
 - Supporte des rules TOML avec validation, explain et événements runtime `rule.*`.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.

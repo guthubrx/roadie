@@ -1,35 +1,35 @@
-# Specification Quality Checklist: Performance ressentie Roadie
+# Checklist qualité de spécification : Performance ressentie Roadie
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-09
-**Feature**: [spec.md](../spec.md)
+**But**: Valider la complétude et la qualité de la spécification avant la planification
+**Créé le**: 2026-05-09
+**Fonctionnalité**: [spec.md](../spec.md)
 
-## Content Quality
+## Qualité du contenu
 
-- [x] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [x] Aucun détail d'implémentation (langages, frameworks, APIs)
+- [x] Centré sur la valeur utilisateur et les besoins métier
+- [x] Rédigé pour des parties prenantes non techniques
+- [x] Toutes les sections obligatoires sont complétées
 
-## Requirement Completeness
+## Complétude des exigences
 
-- [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic (no implementation details)
-- [x] All acceptance scenarios are defined
-- [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
+- [x] Aucun marqueur [BESOIN DE CLARIFICATION] ne reste
+- [x] Les exigences sont testables et sans ambiguïté
+- [x] Les critères de succès sont mesurables
+- [x] Les critères de succès sont agnostiques technologiquement (aucun détail d'implémentation)
+- [x] Tous les scénarios d'acceptation sont définis
+- [x] Les cas limites sont identifiés
+- [x] Le périmètre est clairement borné
+- [x] Les dépendances et hypothèses sont identifiées
 
-## Feature Readiness
+## Prêt pour planification
 
-- [x] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
-- [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] Toutes les exigences fonctionnelles ont des critères d'acceptation clairs
+- [x] Les scénarios utilisateur couvrent les flux principaux
+- [x] La fonctionnalité satisfait les résultats mesurables définis dans les critères de succès
+- [x] Aucun détail d'implémentation ne fuit dans la spécification
 
 ## Notes
 
-- Validation complete. No clarification marker remains.
-- The specification intentionally defines performance outcomes and user-visible behavior, while leaving implementation choices for planning.
+- Validation complète. Aucun marqueur de clarification ne reste.
+- La spécification définit volontairement les résultats de performance et le comportement visible utilisateur, en laissant les choix d'implémentation à la planification.

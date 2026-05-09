@@ -66,4 +66,13 @@ struct EventCatalogTests {
             #expect(catalog.contains(eventType))
         }
     }
+
+    @Test
+    func spec004CatalogContainsPerformanceEvents() {
+        let catalog = AutomationEventCatalog()
+
+        #expect(catalog.contains("performance.interaction_completed"))
+        #expect(catalog.contains("performance.threshold_breached"))
+        #expect(catalog.eventTypes(in: .performance).count == 2)
+    }
 }

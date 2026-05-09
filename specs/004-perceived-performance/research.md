@@ -4,7 +4,7 @@
 
 **Décision**: Ajouter une mesure structurée pour les interactions critiques avant toute optimisation lourde.
 
-**Rationale**: Les lenteurs ressenties peuvent venir de sources différentes : lecture de l'état, masquage/restauration de fenêtres, layout, focus, rail ou tâche de fond. Mesurer chaque étape évite de corriger au hasard et permet de prouver un gain.
+**Justification**: Les lenteurs ressenties peuvent venir de sources différentes : lecture de l'état, masquage/restauration de fenêtres, layout, focus, rail ou tâche de fond. Mesurer chaque étape évite de corriger au hasard et permet de prouver un gain.
 
 **Alternatives considérées**:
 
@@ -16,7 +16,7 @@
 
 **Décision**: Standardiser les étapes de mesure : `snapshot`, `state_update`, `hide_previous`, `restore_target`, `layout_apply`, `focus`, `secondary_work`, `total`.
 
-**Rationale**: Un vocabulaire stable permet de comparer stage, desktop, display, AltTab et rail avec les mêmes outils. Il rend aussi les diagnostics compréhensibles sans lire le code.
+**Justification**: Un vocabulaire stable permet de comparer stage, desktop, display, AltTab et rail avec les mêmes outils. Il rend aussi les diagnostics compréhensibles sans lire le code.
 
 **Alternatives considérées**:
 
@@ -27,7 +27,7 @@
 
 **Décision**: Les chemins de lecture, diagnostic, query, metrics, tree dump et control status doivent rester read-only et ne doivent pas suivre le focus externe ni persister d'état.
 
-**Rationale**: Des bugs récents venaient de lectures qui modifiaient l'état Roadie. La performance ne doit pas réintroduire ce couplage, surtout si les diagnostics deviennent plus fréquents.
+**Justification**: Des bugs récents venaient de lectures qui modifiaient l'état Roadie. La performance ne doit pas réintroduire ce couplage, surtout si les diagnostics deviennent plus fréquents.
 
 **Alternatives considérées**:
 
@@ -38,7 +38,7 @@
 
 **Décision**: Les commandes stage/desktop doivent réutiliser le contexte déjà connu et limiter le recalcul à la cible, puis seulement recourir à la boucle globale si nécessaire.
 
-**Rationale**: Ce sont les interactions quotidiennes les plus fréquentes. Le gain perçu est maximal si la cible devient visible et focalisable sans attendre le prochain tick ni un recalcul global.
+**Justification**: Ce sont les interactions quotidiennes les plus fréquentes. Le gain perçu est maximal si la cible devient visible et focalisable sans attendre le prochain tick ni un recalcul global.
 
 **Alternatives considérées**:
 
@@ -49,7 +49,7 @@
 
 **Décision**: Les événements de focus externe correspondant à une fenêtre gérée doivent activer directement le stage/desktop propriétaire avec anti-oscillation.
 
-**Rationale**: AltTab est un chemin utilisateur réel, pas un bruit système. Le traiter via la boucle générale rend l'expérience plus lente que les raccourcis Roadie.
+**Justification**: AltTab est un chemin utilisateur réel, pas un bruit système. Le traiter via la boucle générale rend l'expérience plus lente que les raccourcis Roadie.
 
 **Alternatives considérées**:
 
@@ -58,31 +58,43 @@
 
 ## Décision 6 : éviter les déplacements redondants avec une tolérance explicite
 
-**Décision**: Une fenêtre déjà équivalente à sa cible ne doit pas être déplacée. La tolérance doit être documentée et testée.
+**Décision**: Une fenêtre déjà équivalente à sa cible ne doit pas être déplacée. La tolérance initiale est de 2 points macOS et doit être documentée et testée.
 
-**Rationale**: Les appels de déplacement redondants coûtent du temps et provoquent une sensation de tremblement ou de correction multiple.
+**Justification**: Les appels de déplacement redondants coûtent du temps et provoquent une sensation de tremblement ou de correction multiple.
 
 **Alternatives considérées**:
 
 - Toujours appliquer toutes les frames pour simplifier : rejeté car coûteux et visuellement bruyant.
 - Tolérance implicite non documentée : rejeté car difficile à tester et à ajuster.
 
-## Décision 7 : isoler le rail et les surfaces secondaires du chemin critique
+## Décision 7 : conserver un historique borné et local des mesures
+
+**Décision**: Stocker l'historique performance dans `~/.local/state/roadies/performance.json`, avec les 100 dernières interactions et une rotation FIFO.
+
+**Justification**: L'utilisateur a besoin d'un historique court pour comparer les ressentis avant/après, mais Roadie ne doit pas créer un journal infini ni gonfler l'état local. Un fichier dédié garde la responsabilité séparée du state métier et rend la suppression manuelle simple.
+
+**Alternatives considérées**:
+
+- Réutiliser `~/.roadies/events.jsonl` : rejeté car ce journal décrit des événements d'écosystème, pas un état agrégé de performance.
+- Conserver toutes les mesures : rejeté car inutile pour le diagnostic rapide et risqué en taille.
+- Ne garder que les agrégats : rejeté car les interactions récentes détaillées sont nécessaires pour comprendre une lenteur concrète.
+
+## Décision 8 : isoler le rail et les surfaces secondaires du chemin critique
 
 **Décision**: Le rail, les bordures, les métriques et diagnostics peuvent observer ou se rafraîchir après la bascule principale, mais ne doivent pas bloquer la visibilité/focus de la cible.
 
-**Rationale**: Ces surfaces améliorent l'expérience, mais deviennent contre-productives si elles ralentissent l'action principale. Le chemin critique doit rester minimal.
+**Justification**: Ces surfaces améliorent l'expérience, mais deviennent contre-productives si elles ralentissent l'action principale. Le chemin critique doit rester minimal.
 
 **Alternatives considérées**:
 
 - Désactiver le rail pour gagner en vitesse : rejeté car le rail reste utile et doit cohabiter proprement.
 - Forcer le rail à être parfaitement à jour avant chaque focus : rejeté car l'utilisateur priorise la fenêtre cible.
 
-## Décision 8 : garder le timer comme filet de sécurité
+## Décision 9 : garder le timer comme filet de sécurité
 
 **Décision**: La boucle périodique reste active pour rattraper les états manqués, mais les interactions utilisateur critiques doivent être traitées par un chemin événementiel/direct.
 
-**Rationale**: Sur macOS, certains événements peuvent être manqués ou arriver en ordre non idéal. Un filet périodique reste nécessaire, mais ne doit pas définir la latence perçue.
+**Justification**: Sur macOS, certains événements peuvent être manqués ou arriver en ordre non idéal. Un filet périodique reste nécessaire, mais ne doit pas définir la latence perçue.
 
 **Alternatives considérées**:
 

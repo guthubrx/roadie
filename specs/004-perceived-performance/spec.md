@@ -7,7 +7,7 @@
 
 ## Scénarios Utilisateur & Tests *(obligatoire)*
 
-### User Story 1 - Comprendre où Roadie perd du temps (Priorité : P1)
+### Récit utilisateur 1 - Comprendre où Roadie perd du temps (Priorité : P1)
 
 Un utilisateur qui ressent une lenteur lors d'un changement de stage, desktop, écran ou fenêtre doit pouvoir obtenir un diagnostic simple qui indique quelle étape consomme du temps et si la latence vient de Roadie ou de l'environnement macOS.
 
@@ -23,7 +23,7 @@ Un utilisateur qui ressent une lenteur lors d'un changement de stage, desktop, �
 
 ---
 
-### User Story 2 - Changer de stage ou desktop sans attente visible (Priorité : P1)
+### Récit utilisateur 2 - Changer de stage ou desktop sans attente visible (Priorité : P1)
 
 Un utilisateur qui utilise les raccourcis Roadie pour changer de stage ou de desktop doit voir la cible s'activer rapidement, sans clignotement, sans exploration visuelle de stages intermédiaires et sans attendre un cycle de maintenance général.
 
@@ -39,7 +39,7 @@ Un utilisateur qui utilise les raccourcis Roadie pour changer de stage ou de des
 
 ---
 
-### User Story 3 - Basculer via AltTab avec la même fluidité qu'un raccourci Roadie (Priorité : P1)
+### Récit utilisateur 3 - Basculer via AltTab avec la même fluidité qu'un raccourci Roadie (Priorité : P1)
 
 Un utilisateur qui choisit une fenêtre via AltTab doit voir Roadie activer immédiatement le stage et le desktop qui contiennent cette fenêtre, sans délai perceptible ni attente d'une boucle périodique.
 
@@ -55,7 +55,7 @@ Un utilisateur qui choisit une fenêtre via AltTab doit voir Roadie activer imm�
 
 ---
 
-### User Story 4 - Éviter les mouvements inutiles de fenêtres (Priorité : P2)
+### Récit utilisateur 4 - Éviter les mouvements inutiles de fenêtres (Priorité : P2)
 
 Un utilisateur ne doit pas voir ses fenêtres trembler, se repositionner inutilement ou se déplacer deux fois lorsque Roadie connaît déjà leur position cible.
 
@@ -71,7 +71,7 @@ Un utilisateur ne doit pas voir ses fenêtres trembler, se repositionner inutile
 
 ---
 
-### User Story 5 - Garder le rail et les tâches de fond hors du chemin critique (Priorité : P2)
+### Récit utilisateur 5 - Garder le rail et les tâches de fond hors du chemin critique (Priorité : P2)
 
 Un utilisateur qui change de stage, desktop ou fenêtre ne doit pas subir de latence parce que le rail, les bordures, les métriques ou les tâches de maintenance font du travail non essentiel au même moment.
 
@@ -102,13 +102,13 @@ Un utilisateur qui change de stage, desktop ou fenêtre ne doit pas subir de lat
 
 - **FR-001**: Roadie DOIT mesurer les interactions utilisateur critiques, au minimum les changements de stage, desktop, écran, focus directionnel, focus via AltTab et actions de rail.
 - **FR-002**: Roadie DOIT exposer pour chaque interaction mesurée une durée totale et une répartition lisible des étapes principales, sans exiger l'inspection des logs bruts.
-- **FR-003**: Roadie DOIT conserver un historique court des mesures récentes permettant de comparer les temps typiques et les actions lentes.
+- **FR-003**: Roadie DOIT conserver un historique court des mesures récentes permettant de comparer les temps typiques et les actions lentes, borné par défaut aux 100 dernières interactions avec rotation FIFO.
 - **FR-004**: Roadie DOIT signaler les interactions qui dépassent les seuils de confort définis pour l'usage quotidien.
 - **FR-005**: Les commandes explicites de stage et desktop DOIVENT activer directement la cible demandée sans parcourir visuellement les cibles intermédiaires.
 - **FR-006**: Les commandes explicites de stage et desktop DOIVENT rendre les fenêtres cible visibles et focalisables dans le même enchaînement utilisateur.
 - **FR-007**: Roadie DOIT traiter une bascule AltTab vers une fenêtre gérée comme une intention utilisateur prioritaire capable d'activer le stage et le desktop propriétaires de cette fenêtre.
 - **FR-008**: Roadie DOIT regrouper les signaux de focus rapprochés qui représentent la même intention utilisateur afin d'éviter les oscillations.
-- **FR-009**: Roadie DOIT éviter de déplacer une fenêtre lorsque sa position actuelle est déjà équivalente à la position cible selon une tolérance documentée.
+- **FR-009**: Roadie DOIT éviter de déplacer une fenêtre lorsque sa position actuelle est déjà équivalente à la position cible selon une tolérance documentée de 2 points macOS par défaut.
 - **FR-010**: Roadie DOIT éviter de recalculer ou relire l'état global lorsque l'action utilisateur ne concerne qu'un contexte limité et que les informations nécessaires sont déjà disponibles.
 - **FR-011**: Roadie DOIT conserver une correction périodique de sécurité pour les états manqués, mais cette correction NE DOIT PAS être le chemin principal des interactions utilisateur critiques.
 - **FR-012**: Les surfaces secondaires telles que rail, bordures, diagnostics et métriques NE DOIVENT PAS bloquer la visibilité ou le focus de la fenêtre cible lors d'une interaction critique.
@@ -148,3 +148,5 @@ Un utilisateur qui change de stage, desktop ou fenêtre ne doit pas subir de lat
 - La boucle périodique reste nécessaire comme filet de sécurité, même si les interactions principales deviennent événementielles.
 - Les animations de fenêtres, les APIs privées macOS et le contrôle natif des Spaces restent hors périmètre.
 - Les mesures doivent rester légères et ne pas devenir une nouvelle source de lenteur.
+- L'historique performance initial conserve les 100 dernières interactions dans l'état local Roadie et remplace les plus anciennes par rotation FIFO.
+- La tolérance initiale de frame équivalente est fixée à 2 points macOS ; elle pourra être ajustée après mesure si elle se révèle trop stricte ou trop permissive.

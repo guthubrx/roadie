@@ -5,18 +5,26 @@ import RoadieCore
 @MainActor
 public final class FocusStageActivationObserver {
     private let maintainer: LayoutMaintainer
+    private let service: SnapshotService
+    private let performance: PerformanceRecorder
     private let configLoader: () -> RoadieConfig
     private var observer: AXObserver?
     private var activePID: pid_t?
     private var activationObserver: NSObjectProtocol?
     private var lastTick = Date.distantPast
     private let minimumTickInterval: TimeInterval = 0.05
+    private var lastIntent: (windowID: WindowID, at: Date)?
+    private let coalescingInterval: TimeInterval = 0.12
 
     public init(
         maintainer: LayoutMaintainer,
+        service: SnapshotService = SnapshotService(),
+        performance: PerformanceRecorder = PerformanceRecorder(),
         configLoader: @escaping () -> RoadieConfig = { (try? RoadieConfigLoader.load()) ?? RoadieConfig() }
     ) {
         self.maintainer = maintainer
+        self.service = service
+        self.performance = performance
         self.configLoader = configLoader
     }
 
@@ -102,7 +110,58 @@ public final class FocusStageActivationObserver {
         let now = Date()
         guard now.timeIntervalSince(lastTick) >= minimumTickInterval else { return }
         lastTick = now
+        if directActivateFocusedContext(at: now) {
+            return
+        }
         _ = maintainer.tick()
+    }
+
+    private func directActivateFocusedContext(at now: Date) -> Bool {
+        guard let focusedID = service.focusedWindowID() else { return false }
+        if let lastIntent,
+           lastIntent.windowID == focusedID,
+           now.timeIntervalSince(lastIntent.at) < coalescingInterval {
+            return true
+        }
+        lastIntent = (focusedID, now)
+        let started = Date()
+        let snapshot = service.snapshot(followExternalFocus: true, persistState: true)
+        guard let focused = snapshot.windows.first(where: { $0.window.id == focusedID }),
+              let scope = focused.scope,
+              snapshot.state.activeScope(on: scope.displayID) == scope
+        else { return false }
+
+        let plan = service.applyPlan(
+            from: snapshot,
+            scope: scope,
+            orderedWindowIDs: service.orderedWindowIDs(in: scope, from: snapshot),
+            priorityWindowIDs: [focusedID]
+        )
+        let result = service.apply(plan)
+        _ = service.focus(focused.window)
+        let completed = Date()
+        performance.complete(
+            performance.start(
+                .altTabActivation,
+                source: .focusObserver,
+                targetContext: PerformanceTargetContext(
+                    displayID: scope.displayID.rawValue,
+                    desktopID: scope.desktopID.rawValue,
+                    stageID: scope.stageID.rawValue,
+                    windowID: focusedID.rawValue
+                )
+            ),
+            result: result.failed == 0 ? .success : .partial,
+            steps: [
+                PerformanceStep(name: .snapshot, startedAt: started, durationMs: 0),
+                PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: 0),
+                PerformanceStep(name: .layoutApply, startedAt: started, durationMs: completed.timeIntervalSince(started) * 1000, count: result.attempted),
+                PerformanceStep(name: .focus, startedAt: completed, durationMs: 0)
+            ],
+            completedAt: completed,
+            durationMs: completed.timeIntervalSince(started) * 1000
+        )
+        return true
     }
 }
 

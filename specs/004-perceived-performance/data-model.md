@@ -65,8 +65,14 @@ Résumé court des interactions récentes, exposé à l'utilisateur.
 
 **Règles de validation**:
 
-- L'historique doit rester borné pour ne pas grossir indéfiniment.
+- L'historique doit rester borné à 100 interactions par défaut pour ne pas grossir indéfiniment.
+- La rotation est FIFO : l'interaction la plus ancienne est supprimée quand une nouvelle interaction dépasse la limite.
 - Les agrégats doivent ignorer les interactions incomplètes ou clairement corrompues.
+
+**Stockage**:
+
+- Le snapshot persistant vit dans `~/.local/state/roadies/performance.json`.
+- Le fichier est dédié aux mesures de performance ; il ne remplace ni l'état métier Roadie ni le journal d'événements `~/.roadies/events.jsonl`.
 
 ## PerformanceThreshold
 
@@ -126,7 +132,21 @@ Décrit le contexte utilisateur attendu à la fin d'une interaction.
 - Une interaction desktop doit inclure au moins `displayID` et `desktopID`.
 - Une interaction AltTab doit inclure `windowID` quand la fenêtre est connue.
 
-## State Transitions
+## FrameEquivalencePolicy
+
+Décrit la règle qui permet d'éviter les déplacements visuellement inutiles.
+
+**Champs**:
+
+- `tolerancePoints`: écart maximal toléré entre frame courante et frame cible.
+- `defaultTolerancePoints`: valeur initiale documentée, fixée à 2 points macOS.
+
+**Règles de validation**:
+
+- La tolérance doit être positive ou nulle.
+- Une fenêtre est considérée équivalente seulement si origine et taille restent dans la tolérance.
+
+## Transitions d'état
 
 ```text
 InteractionCritique créée

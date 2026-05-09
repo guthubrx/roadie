@@ -140,6 +140,26 @@ Use cases:
 - debug a rule or a group;
 - build a local dashboard.
 
+## Perceived Performance
+
+Roadie measures critical interactions so slow paths can be explained without reading raw logs.
+
+```bash
+./bin/roadie performance summary
+./bin/roadie performance recent --limit 20
+./bin/roadie performance thresholds
+./bin/roadie query performance
+```
+
+Tracked interactions include stage switches, desktop switches, display focus, directional focus, AltTab to a managed window, and rail actions. Roadie keeps a bounded local history of the latest 100 interactions in `~/.local/state/roadies/performance.json`.
+
+Use cases:
+
+- compare a before/after optimization baseline;
+- see whether latency comes from hiding, restoring, layout, focus, or secondary work;
+- verify that rail and diagnostics stay out of the critical path;
+- detect interactions that exceed comfort thresholds.
+
 ## Control Center
 
 The Control Center is the macOS menu bar surface for Roadie.

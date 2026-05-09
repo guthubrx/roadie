@@ -8,6 +8,7 @@ public final class RailController {
     private let store: StageStore
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
+    private let performance: PerformanceRecorder
     private let events = EventLog()
     private let railRuntimeStateStore = RailRuntimeStateStore()
     private let thumbnails = WindowThumbnailStore()
@@ -28,11 +29,13 @@ public final class RailController {
     public init(
         store: StageStore = StageStore(),
         snapshotService: SnapshotService = SnapshotService(),
-        commandService: StageCommandService = StageCommandService()
+        commandService: StageCommandService = StageCommandService(),
+        performance: PerformanceRecorder = PerformanceRecorder()
     ) {
         self.store = store
         self.snapshotService = snapshotService
         self.commandService = commandService
+        self.performance = performance
     }
 
     public func start() {
@@ -226,17 +229,20 @@ public final class RailController {
     }
 
     private func perform(_ action: RailAction, displayID: DisplayID) {
+        let started = Date()
+        let session = performance.start(.railAction, source: .rail, targetContext: PerformanceTargetContext(displayID: displayID.rawValue))
+        let result: StageCommandResult
         switch action {
         case .switchStage(let stageID):
             print("rail switch stage \(stageID.rawValue)")
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
-            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+            result = commandService.switchTo(stageID.rawValue, displayID: displayID)
         case .summonWindow(let windowID):
             print("rail summon window \(windowID.rawValue)")
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
-            _ = commandService.summon(windowID: windowID, displayID: displayID)
+            result = commandService.summon(windowID: windowID, displayID: displayID)
         case .moveWindow(let windowID, let stageID):
             print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)")
             fflush(stdout)
@@ -244,7 +250,7 @@ public final class RailController {
                 type: "rail_window_move",
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
             ))
-            _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
+            result = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
         case .placeWindow(let windowID, let orderedWindowIDs, let placements):
             print("rail place window \(windowID.rawValue)")
             fflush(stdout)
@@ -252,7 +258,7 @@ public final class RailController {
                 type: "rail_window_place",
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
             ))
-            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
+            result = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -260,12 +266,23 @@ public final class RailController {
                 type: "rail_stage_reorder",
                 details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue, "position": String(position)]
             ))
-            _ = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
+            result = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
         }
+        let completed = Date()
+        performance.complete(
+            session,
+            result: result.changed ? .success : .noOp,
+            steps: [
+                PerformanceStep(name: .stateUpdate, startedAt: started, durationMs: completed.timeIntervalSince(started) * 1000),
+                PerformanceStep(name: .secondaryWork, startedAt: completed, durationMs: 0)
+            ],
+            completedAt: completed,
+            durationMs: completed.timeIntervalSince(started) * 1000
+        )
     }
 
     private func rebuildPanels() {
-        let snapshot = snapshotService.snapshot()
+        let snapshot = snapshotService.snapshot(followExternalFocus: false, persistState: false)
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
         let config = RailVisualConfig.load()

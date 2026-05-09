@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import RoadieCore
 import RoadieDaemon
@@ -51,5 +52,56 @@ struct QueryCommandTests {
         } else {
             Issue.record("config_reload query did not return an object")
         }
+    }
+
+    @Test
+    func queryPerformanceIsReadOnlyAndExposesRecentInteractions() {
+        let provider = PowerUserProvider(windows: [powerWindow(1, x: 100)])
+        let store = StageStore(path: tempPath("query-performance-stages"))
+        let performancePath = tempPath("query-performance")
+        let performanceStore = PerformanceStore(path: performancePath, maxInteractions: 10)
+        performanceStore.append(PerformanceInteraction(type: .stageSwitch, durationMs: 42))
+        let service = AutomationQueryService(
+            service: SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store),
+            performanceStore: performanceStore
+        )
+
+        let result = service.query("performance")
+
+        #expect(result.kind == "performance")
+        #expect(store.state().scopes.isEmpty)
+        if case .object(let object) = result.data {
+            #expect(object["recent_interactions"] != nil)
+        } else {
+            Issue.record("performance query did not return an object")
+        }
+        try? FileManager.default.removeItem(atPath: performancePath)
+    }
+
+    @Test
+    func performanceTextFormattersExposeSummaryRecentAndThresholds() {
+        let snapshot = PerformanceSnapshot(
+            retention: PerformanceRetention(storagePath: "/tmp/performance.json", maxInteractions: 100),
+            recentInteractions: [
+                PerformanceInteraction(
+                    type: .stageSwitch,
+                    durationMs: 42,
+                    steps: [PerformanceStep(name: .layoutApply, durationMs: 12)],
+                    skippedFrameMoves: 2
+                )
+            ],
+            summaryByType: [PerformanceSummary(type: .stageSwitch, count: 1, medianMs: 42, p95Ms: 42, slowCount: 0)],
+            thresholds: [PerformanceThreshold(interactionType: .stageSwitch, limitMs: 150, percentileTarget: 95)]
+        )
+
+        let summary = TextFormatter.performanceSummary(snapshot)
+        let recent = TextFormatter.performanceRecent(snapshot)
+        let thresholds = TextFormatter.performanceThresholds(snapshot)
+
+        #expect(summary.contains("stage_switch"))
+        #expect(summary.contains("MEDIAN_MS"))
+        #expect(recent.contains("layout_apply"))
+        #expect(thresholds.contains("frame_tolerance_points=2.0"))
+        #expect(thresholds.contains("retention_max_interactions=100"))
     }
 }

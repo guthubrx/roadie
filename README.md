@@ -78,6 +78,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Provides keyboard-friendly CLI commands for BetterTouchTool, Karabiner, shell scripts, or any launcher.
 - Persists stage membership and layout state across daemon restarts.
 - Exposes state, health, metrics, events, and audit commands for debugging.
+- Measures perceived performance for critical interactions with local history, thresholds, and diagnostics.
 - Publishes JSONL automation events and stable `roadie query ...` JSON projections.
 - Supports TOML window rules with validation, explain, and runtime `rule.*` events.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.

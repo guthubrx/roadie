@@ -21,6 +21,7 @@ public struct AutomationScope: RawRepresentable, Codable, Equatable, Hashable, S
     public static let controlCenter = AutomationScope(rawValue: "control_center")
     public static let restore = AutomationScope(rawValue: "restore")
     public static let transient = AutomationScope(rawValue: "transient")
+    public static let performance = AutomationScope(rawValue: "performance")
 
     public var description: String { rawValue }
 }
