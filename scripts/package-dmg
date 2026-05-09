@@ -7,8 +7,14 @@ dist_dir="$repo_root/dist"
 app_name="Roadie"
 app_bundle="$dist_dir/$app_name.app"
 dmg_path="$dist_dir/$app_name.dmg"
-iconset="$dist_dir/Roadie.iconset"
 icon_path="$repo_root/docs/assets/roadie-logo.png"
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/roadie-dmg.XXXXXX")"
+iconset="$tmp_dir/Roadie.iconset"
+
+cleanup() {
+  rm -rf "$tmp_dir"
+}
+trap cleanup EXIT
 
 cd "$repo_root"
 rm -rf "$dist_dir"
