@@ -442,11 +442,9 @@ public struct StageCommandService {
         let hiddenAt = Date()
 
         let targetStage = scope.stages.first(where: { $0.id == stageID })
-        var restoredFrames: [WindowID: CGRect] = [:]
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
             let result = setFrameIfNeeded(member.frame.cgRect, of: window)
-            restoredFrames[member.windowID] = member.frame.cgRect
             if result.skipped {
                 skipped += 1
             } else if result.applied {
@@ -461,9 +459,8 @@ public struct StageCommandService {
         let focusedAt = Date()
 
         let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
-        let layoutSnapshot = snapshot.replacingWindowFrames(restoredFrames)
         let layoutResult = service.apply(service.applyPlan(
-            from: layoutSnapshot,
+            from: snapshot,
             scope: activeScope,
             orderedWindowIDs: scope.memberIDs(in: stageID)
         ))
