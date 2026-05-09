@@ -1,15 +1,15 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `003-roadie-control-safety`.
+Current SpecKit feature: `004-perceived-performance`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/003-roadie-control-safety/spec.md`
-- `specs/003-roadie-control-safety/plan.md`
-- `specs/003-roadie-control-safety/research.md`
-- `specs/003-roadie-control-safety/data-model.md`
-- `specs/003-roadie-control-safety/contracts/`
-- `specs/003-roadie-control-safety/quickstart.md`
+- `specs/004-perceived-performance/spec.md`
+- `specs/004-perceived-performance/plan.md`
+- `specs/004-perceived-performance/research.md`
+- `specs/004-perceived-performance/data-model.md`
+- `specs/004-perceived-performance/contracts/`
+- `specs/004-perceived-performance/quickstart.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
