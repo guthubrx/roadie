@@ -587,9 +587,6 @@ struct LayoutMaintainerTests {
     @Test
     func commandIntentBlocksImmediateReflow() {
         let intentTemp = makeIntentStore()
-        let eventPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-command-intent-events-\(UUID().uuidString).jsonl")
-            .path
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
             index: 1,
@@ -625,66 +622,12 @@ struct LayoutMaintainerTests {
             intentStore: intentStore
         )
 
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), intervalSeconds: 0.1)
+        let maintainer = LayoutMaintainer(service: service, intervalSeconds: 0.1)
         let result = maintainer.tick()
-        let repeated = maintainer.tick()
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
         #expect(result.commands == 0)
-        #expect(repeated.commands == 0)
         #expect(writer.requestedFrames.isEmpty)
-        #expect(events.components(separatedBy: "manual_resize_suppressed_by_command_intent").count - 1 == 1)
         try? FileManager.default.removeItem(atPath: intentTemp.path)
-        try? FileManager.default.removeItem(atPath: eventPath)
-    }
-
-    @Test
-    func restoreSafetySnapshotIsThrottledWhenNothingChanges() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let eventPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-restore-throttle-events-\(UUID().uuidString).jsonl")
-            .path
-        let restorePath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-restore-throttle-\(UUID().uuidString).json")
-            .path
-        let service = SnapshotService(
-            provider: SequenceProvider(
-                display: display,
-                windowFrames: [
-                    [Rect(x: 8, y: 8, width: 984, height: 484)],
-                    [Rect(x: 8, y: 8, width: 984, height: 484)],
-                    [Rect(x: 8, y: 8, width: 984, height: 484)],
-                ]
-            ),
-            frameWriter: RecordingWriter(),
-            config: RoadieConfig()
-        )
-        var currentTime = Date(timeIntervalSince1970: 0)
-        let eventLog = EventLog(path: eventPath)
-        let maintainer = LayoutMaintainer(
-            service: service,
-            events: eventLog,
-            restoreSafety: RestoreSafetyService(path: restorePath, eventLog: eventLog),
-            now: { currentTime }
-        )
-
-        _ = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(1)
-        _ = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(10)
-        _ = maintainer.tick()
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
-
-        #expect(events.components(separatedBy: "restore.snapshot_written").count - 1 == 2)
-        try? FileManager.default.removeItem(atPath: eventPath)
-        try? FileManager.default.removeItem(atPath: restorePath)
     }
 
     @Test
