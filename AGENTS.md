@@ -9,7 +9,6 @@ shell commands, contracts, and architectural decisions, read:
 - `specs/002-roadie-ecosystem-upgrade/research.md`
 - `specs/002-roadie-ecosystem-upgrade/data-model.md`
 - `specs/002-roadie-ecosystem-upgrade/contracts/`
-- `docs/decisions/001-roadie-automation-contract.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

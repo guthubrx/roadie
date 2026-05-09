@@ -32,7 +32,6 @@ La livraison doit être découpée en tranches compatibles avec le daily driver 
 
 - **SpecKit obligatoire** : spec 002 créée et branche `002-roadie-ecosystem-upgrade` active.
 - **Worktree obligatoire** : implémentation à effectuer dans `.worktrees/002-roadie-ecosystem-upgrade/`, pas dans le checkout principal.
-- **Décisions structurantes documentées** : ADR requis pour le contrat automation/event/rules, fourni dans `docs/decisions/001-roadie-automation-contract.md`.
 - **Tests avant implémentation complète** : chaque tranche doit définir ses cas Swift Testing et au moins un scénario d'acceptation observable par CLI.
 - **Gates Swift projet** : pour Roadie, les gates constitutionnelles TypeScript sont adaptées au stack Swift par `swift build` et `swift test`, complétés par validation manuelle CLI quand la tâche le demande.
 - **Simplicité** : pas de serveur IPC séparé tant qu'un flux append-only + CLI follow répond au besoin ; extension socket possible plus tard si la latence ou le multiplexage l'exigent.
@@ -96,7 +95,6 @@ Voir :
 - [contracts/cli.md](./contracts/cli.md)
 - [contracts/config-rules.toml.md](./contracts/config-rules.toml.md)
 - [quickstart.md](./quickstart.md)
-- [ADR automation contract](../../docs/decisions/001-roadie-automation-contract.md)
 
 ## Phase 2: Task Planning Approach
 
@@ -113,7 +111,6 @@ La génération de tâches doit séparer strictement les lots suivants :
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|--------------------------------------|
 | Contrats JSON versionnés | Les intégrations externes ont besoin d'une surface stable | Le JSON ad hoc actuel casse dès qu'une clé change |
-| ADR dédié | Le choix event/rules fixe l'écosystème Roadie | Une note dans le plan serait trop facile à perdre |
 | Règles compilées avant exécution | Éviter les effets partiels et erreurs silencieuses | Matcher directement à chaque fenêtre rend les diagnostics faibles |
 | Adaptation des gates de test | Le projet est Swift, pas TypeScript/Next.js | Appliquer `pnpm` serait inopérant et masquerait la vraie validation |
 

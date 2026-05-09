@@ -32,4 +32,4 @@ Objectif SC-002 : couvrir au moins 90 % des cas d'automatisation utiles issus de
 - Cas utiles couverts hors refus documentés : 14 / 16 = 87,5 % si les reports temporaires sont comptés comme manques.
 - Cas couverts hors fonctionnalités explicitement rejetées par la spec : 14 / 15 = 93,3 %.
 
-Le seuil SC-002 est donc atteignable si les tâches `events`, `query`, `rules`, `commands` et `groups` sont livrées, et si les refus restent documentés dans l'ADR.
+Le seuil SC-002 est donc atteignable si les tâches `events`, `query`, `rules`, `commands` et `groups` sont livrées, et si les refus restent documentés dans les notes fonctionnelles.
