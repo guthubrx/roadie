@@ -21,7 +21,7 @@ public struct TransientWindowDetector {
     }
 
     public func status() -> TransientWindowState {
-        status(in: service.snapshot())
+        status(in: service.snapshot(followExternalFocus: false, persistState: false))
     }
 
     public func status(in snapshot: DaemonSnapshot) -> TransientWindowState {

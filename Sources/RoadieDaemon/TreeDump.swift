@@ -75,7 +75,7 @@ public struct TreeDumpService {
     }
 
     public func dump() -> TreeDump {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let state = stageStore.state()
         let liveWindowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
 

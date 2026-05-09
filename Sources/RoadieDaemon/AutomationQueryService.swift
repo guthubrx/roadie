@@ -18,7 +18,7 @@ public struct AutomationQueryService {
     }
 
     public func query(_ name: String) -> AutomationQueryResult {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let automation = snapshot.automationSnapshot()
         switch name {
         case "state":

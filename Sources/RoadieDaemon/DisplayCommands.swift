@@ -14,7 +14,7 @@ public struct DisplayCommandService {
     }
 
     public func focus(index: Int) -> StageCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = commandSnapshot()
         guard let display = snapshot.displays.first(where: { $0.index == index }) else {
             return StageCommandResult(message: "display focus \(index): unknown display", changed: false)
         }
@@ -22,7 +22,7 @@ public struct DisplayCommandService {
     }
 
     public func focus(_ direction: Direction) -> StageCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = commandSnapshot()
         guard let activeDisplay = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "display focus \(direction.rawValue): no active display", changed: false)
         }
@@ -60,16 +60,20 @@ public struct DisplayCommandService {
         )
     }
 
+    private func commandSnapshot() -> DaemonSnapshot {
+        service.snapshot(followExternalFocus: false)
+    }
+
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
+        let state = store.state()
+        if let activeDisplayID = state.activeDisplayID,
+           let display = snapshot.displays.first(where: { $0.id == activeDisplayID }) {
+            return display
+        }
         if let focusedID = service.focusedWindowID(),
            let focused = snapshot.windows.first(where: { $0.window.id == focusedID }),
            let displayID = focused.scope?.displayID,
            let display = snapshot.displays.first(where: { $0.id == displayID }) {
-            return display
-        }
-        let state = store.state()
-        if let activeDisplayID = state.activeDisplayID,
-           let display = snapshot.displays.first(where: { $0.id == activeDisplayID }) {
             return display
         }
         return snapshot.displays.first(where: \.isMain) ?? snapshot.displays.first

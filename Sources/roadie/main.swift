@@ -78,7 +78,7 @@ case "windows":
         printUsage()
         exit(64)
     }
-    let snapshot = service.snapshot()
+    let snapshot = readOnlySnapshot()
     if args.contains("--json") {
         printJSON(snapshot)
     } else {
@@ -108,7 +108,7 @@ case "display":
         print(result.message)
         exit(result.changed ? 0 : 1)
     }
-    let snapshot = service.snapshot()
+    let snapshot = readOnlySnapshot()
     if args.contains("--json") {
         printJSON(snapshot)
     } else if verb == "current" {
@@ -123,7 +123,7 @@ case "state":
         exit(64)
     }
     if verb == "dump" {
-        printJSON(service.snapshot())
+        printJSON(readOnlySnapshot())
     } else if verb == "audit" {
         let report = StateAuditService(service: service).run()
         if args.contains("--json") {
@@ -166,7 +166,7 @@ case "state":
     }
 case "layout":
     let verb = args.dropFirst().first
-    let snapshot = service.snapshot()
+    let snapshot = verb == "apply" ? service.snapshot() : readOnlySnapshot()
     let plan = service.applyPlan(from: snapshot)
     switch verb {
     case "plan":
@@ -253,7 +253,7 @@ case "permissions":
     let snapshot = service.snapshot(promptForPermissions: args.contains("--prompt"))
     print(TextFormatter.permissions(snapshot.permissions))
 case "doctor":
-    let snapshot = service.snapshot()
+    let snapshot = readOnlySnapshot()
     let plan = service.applyPlan(from: snapshot)
     print(TextFormatter.doctor(snapshot: snapshot, plan: plan, persistentState: StageStore().state()))
 case "self-test":
@@ -458,7 +458,16 @@ default:
 
 @MainActor
 func interactiveSnapshot() -> DaemonSnapshot {
-    service.snapshot(includeAccessibilityAttributes: false)
+    readOnlySnapshot(includeAccessibilityAttributes: false)
+}
+
+@MainActor
+func readOnlySnapshot(includeAccessibilityAttributes: Bool = true) -> DaemonSnapshot {
+    service.snapshot(
+        includeAccessibilityAttributes: includeAccessibilityAttributes,
+        followExternalFocus: false,
+        persistState: false
+    )
 }
 
 func printCodableJSON<T: Encodable>(_ value: T) {
@@ -741,7 +750,7 @@ func runStageCommand(_ args: [String]) {
             fputs("roadie: stage summon requires a window id\n", stderr)
             exit(64)
         }
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false)
         let state = StageStore().state()
         guard let activeDisplayID = state.activeDisplayID ?? snapshot.focusedWindowID.flatMap({ focusedID in
             snapshot.windows.first { $0.window.id == focusedID }?.scope?.displayID
@@ -794,7 +803,7 @@ func runEventSubscription(_ args: [String]) -> Never {
         command: "events.subscribe",
         result: "received"
     )
-    for event in subscription.initialEvents(snapshot: service.snapshot().automationSnapshot(), options: options) {
+    for event in subscription.initialEvents(snapshot: readOnlySnapshot().automationSnapshot(), options: options) {
         if let data = try? encoder.encode(event),
            let line = String(data: data, encoding: .utf8) {
             print(line)

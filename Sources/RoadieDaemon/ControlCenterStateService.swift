@@ -20,7 +20,7 @@ public struct ControlCenterStateService {
     }
 
     public func state() -> ControlCenterState {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let health = healthService.run()
         let configReport = RoadieConfigLoader.validate(path: configPath)
         let focusedScope = snapshot.focusedWindowID.flatMap { focusedID in

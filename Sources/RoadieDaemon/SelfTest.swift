@@ -41,7 +41,7 @@ public struct SelfTestService {
     }
 
     public func run() -> SelfTestReport {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: false)
         let state = stageStore.state()
         let plan = service.applyPlan(from: snapshot)
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
