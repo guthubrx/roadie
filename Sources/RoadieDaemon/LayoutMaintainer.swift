@@ -44,6 +44,10 @@ public final class LayoutMaintainer {
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
     private var manualResizeApplyAfter: Date?
+    private var lastRestoreSnapshotAt: Date?
+    private var lastRestoreSnapshotSignature: String?
+    private var lastSuppressedCommandIntentScopes: Set<StageScope> = []
+    private let restoreSnapshotIntervalSeconds: TimeInterval = 10
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -73,7 +77,7 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         if config.restoreSafety.enabled {
-            _ = restoreSafety?.save(restoreSafety?.capture(from: snapshot) ?? RestoreSafetySnapshot())
+            saveRestoreSnapshotIfNeeded(from: snapshot)
         }
         if config.transientWindows.enabled,
            let transientDetector {
@@ -160,12 +164,16 @@ public final class LayoutMaintainer {
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
             let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: commandProtectedScopes)
-            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
-                "scopes": commandProtectedScopes.map(\.description).sorted().joined(separator: ","),
-                "unprotectedCommands": String(tick.commands)
-            ]))
+            if commandProtectedScopes != lastSuppressedCommandIntentScopes || tick.commands > 0 {
+                events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
+                    "scopes": commandProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                    "unprotectedCommands": String(tick.commands)
+                ]))
+                lastSuppressedCommandIntentScopes = commandProtectedScopes
+            }
             return tick
         }
+        lastSuppressedCommandIntentScopes = []
 
         if let lastCommandIntentAt,
            priorityWindowIDs.isEmpty,
@@ -208,6 +216,44 @@ public final class LayoutMaintainer {
             clamped: result.clamped,
             failed: result.failed
         )
+    }
+
+    private func saveRestoreSnapshotIfNeeded(from snapshot: DaemonSnapshot) {
+        guard let restoreSafety else { return }
+        let restoreSnapshot = restoreSafety.capture(from: snapshot)
+        let signature = restoreSnapshotSignature(restoreSnapshot)
+        let currentTime = now()
+        let shouldSave = lastRestoreSnapshotSignature != signature
+            || lastRestoreSnapshotAt.map { currentTime.timeIntervalSince($0) >= restoreSnapshotIntervalSeconds } ?? true
+        guard shouldSave else { return }
+        if restoreSafety.save(restoreSnapshot) {
+            lastRestoreSnapshotSignature = signature
+            lastRestoreSnapshotAt = currentTime
+        }
+    }
+
+    private func restoreSnapshotSignature(_ snapshot: RestoreSafetySnapshot) -> String {
+        let windows = snapshot.windows
+            .map { window -> String in
+                [
+                    window.windowID.map(String.init) ?? "-",
+                    "\(Int(window.frame.x))",
+                    "\(Int(window.frame.y))",
+                    "\(Int(window.frame.width))",
+                    "\(Int(window.frame.height))",
+                    String(window.wasManaged),
+                    String(window.wasHiddenByRoadie),
+                    window.stageScope ?? ""
+                ].joined(separator: "|")
+            }
+            .sorted()
+            .joined(separator: ";")
+        return [
+            snapshot.activeDisplayID ?? "",
+            snapshot.activeDesktop ?? "",
+            snapshot.activeStage ?? "",
+            windows
+        ].joined(separator: "#")
     }
 
     private func applyPlan(
