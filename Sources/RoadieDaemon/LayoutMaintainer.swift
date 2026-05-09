@@ -68,7 +68,7 @@ public final class LayoutMaintainer {
     }
 
     public func tick() -> MaintenanceTick {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followExternalFocus: false, persistState: true)
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
@@ -91,7 +91,7 @@ public final class LayoutMaintainer {
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
         if hiddenInactive > 0 {
             events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive)]))
-            let updatedSnapshot = service.snapshot()
+            let updatedSnapshot = service.snapshot(followExternalFocus: false, persistState: true)
             let observedFrames = scopedFrames(in: updatedSnapshot)
             let plan = suppressKnownFrameOutcomes(
                 in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: priorityWindowIDs),

@@ -585,6 +585,75 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func maintainerDoesNotReactivateInactiveStageFromStaleHiddenFocus() {
+        let intent = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let focusedHiddenWindow = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "inactive",
+            frame: Rect(x: 999, y: 499, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-maintainer-stale-focus-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display.id,
+                activeStageID: StageID(rawValue: "1"),
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1")),
+                    PersistentStage(id: StageID(rawValue: "2"), members: [
+                        PersistentStageMember(
+                            windowID: focusedHiddenWindow.id,
+                            bundleID: focusedHiddenWindow.bundleID,
+                            title: focusedHiddenWindow.title,
+                            frame: Rect(x: 0, y: 0, width: 495, height: 500)
+                        ),
+                    ]),
+                ]
+            ),
+        ]))
+        let writer = RecordingWriter()
+        let provider = FocusedSystemSnapshotProvider(
+            base: SequenceProvider(display: display, windowFrames: [[focusedHiddenWindow.frame]]),
+            focusedWindowID: focusedHiddenWindow.id
+        )
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(
+                tiling: TilingConfig(gapsOuter: 0, gapsInner: 10),
+                focus: FocusConfig(stageFollowsFocus: true)
+            ),
+            intentStore: intent.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+        var state = stageStore.state()
+
+        #expect(tick.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+        #expect(state.scope(displayID: display.id).activeStageID == StageID(rawValue: "1"))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intent.path)
+    }
+
+    @Test
     func commandIntentBlocksImmediateReflow() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(
