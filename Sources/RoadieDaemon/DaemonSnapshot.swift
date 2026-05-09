@@ -80,6 +80,7 @@ public struct SnapshotService {
         let windows = provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
+        let originalPersistedStages = persistedStages
         let liveDisplayIDs = Set(displays.map(\.id))
         intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
         if let activeDisplayID = persistedStages.activeDisplayID,
@@ -208,7 +209,7 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
-        if persistState {
+        if persistState, persistedStages != originalPersistedStages {
             stageStore.save(persistedStages)
         }
 
