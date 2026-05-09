@@ -18,6 +18,19 @@ public struct AutomationQueryService {
     }
 
     public func query(_ name: String) -> AutomationQueryResult {
+        switch name {
+        case "events":
+            return result(name, eventLog.envelopes(limit: 50))
+        case "event_catalog":
+            return result(name, AutomationEventCatalog().eventTypes)
+        case "performance":
+            return result(name, PerformanceLogService(eventLog: eventLog).summary())
+        case "restore":
+            return result(name, RestoreSafetyService(eventLog: eventLog).status())
+        default:
+            break
+        }
+
         let snapshot = service.snapshot()
         let automation = snapshot.automationSnapshot()
         switch name {
@@ -40,8 +53,6 @@ public struct AutomationQueryService {
             })
         case "health":
             return result(name, DaemonHealthService(service: service).run())
-        case "events":
-            return result(name, eventLog.envelopes(limit: 50))
         default:
             return AutomationQueryResult(kind: name, data: .object([
                 "error": .string("unknown query")

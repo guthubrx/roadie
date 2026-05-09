@@ -56,6 +56,24 @@ Use cases:
 - give stages stable names;
 - align BetterTouchTool shortcuts with human-readable names.
 
+## Manual Width Adjustment
+
+```toml
+[width_adjustment]
+presets = [0.5, 0.67, 0.8, 1.0]
+nudge_step = 0.05
+minimum_ratio = 0.25
+maximum_ratio = 1.5
+```
+
+These values are used only by manual `roadie layout width ...` commands.
+
+Use cases:
+
+- quickly move from half width to two thirds of the screen;
+- nudge a window by small steps;
+- bound ratios to avoid absurd frames.
+
 ## Rules
 
 Rules automate window assignment or labeling.
@@ -131,4 +149,3 @@ Detected errors:
 ```
 
 Use `explain` before adding a rule to your local production setup. It is a dry run: Roadie shows which rule would match and which actions would be applied.
-

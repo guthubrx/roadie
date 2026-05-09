@@ -53,6 +53,18 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "command.applied",
         "command.failed",
         "config.reloaded",
+        "config.reload_failed",
+        "restore.snapshot_written",
+        "restore.apply_started",
+        "restore.apply_completed",
+        "restore.apply_failed",
+        "performance.summary_requested",
+        "performance.recent_requested",
+        "performance.thresholds_requested",
+        "layout.width_adjust_requested",
+        "layout.width_adjust_applied",
+        "layout.width_adjust_rejected",
+        "cleanup.completed",
         "state.snapshot"
     ]
 }

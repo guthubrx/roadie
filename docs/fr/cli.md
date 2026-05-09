@@ -13,6 +13,9 @@ Toutes les commandes ci-dessous peuvent etre appelees directement avec `./bin/ro
 ./bin/roadie metrics --json
 ./bin/roadie doctor
 ./bin/roadie self-test
+./bin/roadie performance summary
+./bin/roadie performance recent --limit 20
+./bin/roadie performance thresholds --json
 ```
 
 Utilisation typique :
@@ -21,6 +24,7 @@ Utilisation typique :
 - `state audit` : detecter doublons, references obsoletes ou scopes casses.
 - `state heal` : reparer les incoherences conservatrices.
 - `metrics --json` : alimenter un script ou un dashboard.
+- `performance ...` : lire les interactions recentes depuis le journal, sans instrumentation active du daemon.
 
 ## Fenetres et focus
 
@@ -58,6 +62,10 @@ Cas d'usage :
 ./bin/roadie layout insert left|right|up|down
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
+./bin/roadie layout width next
+./bin/roadie layout width prev
+./bin/roadie layout width nudge 0.05
+./bin/roadie layout width ratio 0.67
 ./bin/roadie balance
 ```
 
@@ -65,7 +73,26 @@ Cas d'usage :
 
 - inspecter le plan avant application avec `layout plan`;
 - persister une intention manuelle avec `insert` ou `zoom-parent`;
+- ajuster manuellement la largeur de la fenetre active avec `layout width`;
 - revenir a un layout lineaire avec `flatten`.
+
+## Securite et fichiers generes
+
+```bash
+./bin/roadie config validate --json
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status --json
+./bin/roadie restore apply --yes --json
+./bin/roadie cleanup --dry-run --json
+./bin/roadie cleanup --apply
+```
+
+Notes :
+
+- `config reload` valide avant d'appliquer et conserve l'ancienne config si la nouvelle est invalide.
+- `restore snapshot` et `restore apply` sont manuels; il n'y a pas de watcher automatique dans ce build.
+- `cleanup --dry-run` affiche ce qui serait supprime ou rotate avant toute action.
 
 ## Ecrans, desktops et stages
 
@@ -129,6 +156,9 @@ Cas d'usage :
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query event_catalog
+./bin/roadie query performance
+./bin/roadie query restore
 ```
 
 Chaque `query` retourne un JSON stable :
@@ -139,4 +169,3 @@ Chaque `query` retourne un JSON stable :
   "data": []
 }
 ```
-

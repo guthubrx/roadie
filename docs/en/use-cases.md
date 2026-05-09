@@ -118,3 +118,31 @@ Use this sequence after:
 - abrupt app shutdown;
 - branch switch or rebuild.
 
+## 7. Before A Risky Operation
+
+Goal: keep a manual fallback without enabling an automatic watcher.
+
+```bash
+./bin/roadie config reload --json
+./bin/roadie restore snapshot --json
+./bin/roadie restore status
+```
+
+If frames must be restored explicitly:
+
+```bash
+./bin/roadie restore apply --yes
+```
+
+This restore matches windows by current window ID. It is intentionally simple and manual to avoid touching the focus/border path.
+
+## 8. Reasonable Local Administration
+
+Goal: avoid accumulating logs and backups.
+
+```bash
+./bin/roadie cleanup --dry-run
+./bin/roadie cleanup --apply
+```
+
+Start with `--dry-run` to inspect candidate files before deletion or rotation.

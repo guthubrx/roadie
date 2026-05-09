@@ -78,6 +78,33 @@ Commandes :
 - `command.applied`
 - `command.failed`
 
+Restore manuel :
+
+- `restore.snapshot_written`
+- `restore.apply_started`
+- `restore.apply_completed`
+- `restore.apply_failed`
+
+Performance read-only :
+
+- `performance.summary_requested`
+- `performance.recent_requested`
+- `performance.thresholds_requested`
+
+Administration :
+
+- `config.reloaded`
+- `config.reload_failed`
+- `layout.width_adjust_requested`
+- `layout.width_adjust_applied`
+- `layout.width_adjust_rejected`
+
+Le catalogue public est aussi exposable par CLI :
+
+```bash
+./bin/roadie query event_catalog
+```
+
 ## Query API
 
 ```bash
@@ -90,6 +117,9 @@ Commandes :
 ./bin/roadie query rules
 ./bin/roadie query health
 ./bin/roadie query events
+./bin/roadie query event_catalog
+./bin/roadie query performance
+./bin/roadie query restore
 ```
 
 Format stable :
@@ -108,6 +138,9 @@ Cas d'usage :
 - `query rules` : verifier ce qui est charge depuis TOML.
 - `query health` : integrer Roadie dans un check local.
 - `query events` : debugger les derniers evenements sans suivre le flux live.
+- `query event_catalog` : lister les types d'evenements publics.
+- `query performance` : lire un resume read-only construit depuis `events.jsonl`.
+- `query restore` : inspecter le dernier snapshot restore manuel.
 
 ## Exemple SketchyBar ou script
 
@@ -118,4 +151,3 @@ while read -r line; do
   echo "Focused app: $app"
 done
 ```
-

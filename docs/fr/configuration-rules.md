@@ -56,6 +56,24 @@ Cas d'usage :
 - donner des noms stables aux stages;
 - synchroniser des raccourcis BTT avec des noms humains.
 
+## Ajustement manuel de largeur
+
+```toml
+[width_adjustment]
+presets = [0.5, 0.67, 0.8, 1.0]
+nudge_step = 0.05
+minimum_ratio = 0.25
+maximum_ratio = 1.5
+```
+
+Ces valeurs sont utilisees uniquement par les commandes manuelles `roadie layout width ...`.
+
+Cas d'usage :
+
+- passer rapidement d'une demi-largeur a deux tiers d'ecran;
+- nudger une fenetre par petits pas;
+- borner les ratios pour eviter des frames absurdes.
+
 ## Rules
 
 Les rules automatisent l'assignation ou l'etiquetage des fenetres.
@@ -131,4 +149,3 @@ Erreurs detectees :
 ```
 
 Utilise `explain` avant d'ajouter une rule en production locale. C'est l'equivalent d'un dry-run : Roadie montre quelle rule matcherait et quelles actions seraient appliquees.
-
