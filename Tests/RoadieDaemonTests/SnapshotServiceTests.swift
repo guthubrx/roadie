@@ -64,6 +64,48 @@ private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     }
 }
 
+private final class FocusTrackingSequenceProvider: SystemSnapshotProviding, @unchecked Sendable {
+    var permissionSnapshot = PermissionSnapshot(accessibilityTrusted: true)
+    let displaySnapshots: [DisplaySnapshot]
+    let windowSnapshots: [[WindowSnapshot]]
+    var focusedID: WindowID?
+    private var index = 0
+
+    init(displaySnapshots: [DisplaySnapshot], windowSnapshots: [[WindowSnapshot]], focusedID: WindowID? = nil) {
+        self.displaySnapshots = displaySnapshots
+        self.windowSnapshots = windowSnapshots
+        self.focusedID = focusedID
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { permissionSnapshot }
+    func displays() -> [DisplaySnapshot] { displaySnapshots }
+    func windows() -> [WindowSnapshot] {
+        let windows = windowSnapshots[Swift.min(index, windowSnapshots.count - 1)]
+        index += 1
+        return windows
+    }
+    func focusedWindowID() -> WindowID? { focusedID }
+}
+
+private final class FocusUpdatingWriter: WindowFrameWriting, @unchecked Sendable {
+    private let provider: FocusTrackingSequenceProvider
+    private(set) var focusedWindowIDs: [WindowID] = []
+
+    init(provider: FocusTrackingSequenceProvider) {
+        self.provider = provider
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        frame
+    }
+
+    func focus(_ window: WindowSnapshot) -> Bool {
+        focusedWindowIDs.append(window.id)
+        provider.focusedID = window.id
+        return true
+    }
+}
+
 private final class DeterministicWriter: WindowFrameWriting, @unchecked Sendable {
     private let actualFrames: [WindowID: Rect]
     private(set) var requestedFrames: [WindowID: Rect] = [:]
@@ -1185,6 +1227,50 @@ struct SnapshotServiceTests {
         #expect(switchWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
         #expect(switchWriter.focusedWindowIDs == [right.id])
         #expect(state.activeDisplayID == display)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func stageSwitchMovesFocusBeforeTakingFollowupSnapshot() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let hiddenLeft = WindowSnapshot(id: left.id, pid: left.pid, appName: left.appName, bundleID: left.bundleID, title: left.title, frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let hiddenRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let shownRight = WindowSnapshot(id: hiddenRight.id, pid: hiddenRight.pid, appName: hiddenRight.appName, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: Rect(x: 8, y: 8, width: 984, height: 484), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-switch-focus-order-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: left.id, members: [
+                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hiddenRight.id, members: [
+                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: shownRight.frame),
+                ]),
+            ]),
+        ]))
+        let provider = FocusTrackingSequenceProvider(
+            displaySnapshots: [displaySnapshot],
+            windowSnapshots: [[left, hiddenRight], [hiddenLeft, shownRight]],
+            focusedID: left.id
+        )
+        let writer = FocusUpdatingWriter(provider: provider)
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = StageCommandService(service: service, store: stageStore).switchTo("2")
+        let scope = stageStore.state().scopes.first { $0.displayID == display }
+
+        #expect(result.changed)
+        #expect(writer.focusedWindowIDs == [hiddenRight.id])
+        #expect(scope?.activeStageID == StageID(rawValue: "2"))
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
