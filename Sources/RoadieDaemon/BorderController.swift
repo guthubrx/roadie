@@ -99,15 +99,25 @@ public final class BorderController {
         activePID = nil
     }
 
-    fileprivate func scheduleImmediateRefresh() {
+    fileprivate func scheduleImmediateRefresh(retriesRemaining: Int = 2) {
         guard !pendingRefresh else { return }
         pendingRefresh = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pendingRefresh = false
             if !self.refreshFocusedWindowFast() {
-                self.refresh()
+                if retriesRemaining > 0 {
+                    self.scheduleRetry(retriesRemaining: retriesRemaining - 1)
+                } else {
+                    self.refresh()
+                }
             }
+        }
+    }
+
+    private func scheduleRetry(retriesRemaining: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.scheduleImmediateRefresh(retriesRemaining: retriesRemaining)
         }
     }
 
@@ -118,8 +128,8 @@ public final class BorderController {
             return true
         }
         let displays = snapshotProvider.displays()
-        guard let focusedWindowID = snapshotProvider.focusedWindowID(),
-              let window = snapshotProvider.windows(includeAccessibilityAttributes: false).first(where: { $0.id == focusedWindowID }),
+        let windows = snapshotProvider.windows(includeAccessibilityAttributes: false)
+        guard let window = frontmostWindow(in: windows),
               !isHidden(window.frame.cgRect, in: displays)
         else {
             panel.orderOut(nil)
@@ -127,12 +137,21 @@ public final class BorderController {
         }
         panel.render(
             frame: Self.axToNS(window.frame.cgRect),
-            color: activeColor(for: stageStore.state().stageScope(for: focusedWindowID)?.stageID, config: config),
+            color: activeColor(for: stageStore.state().stageScope(for: window.id)?.stageID, config: config),
             thickness: CGFloat(max(1, config.thickness)),
             cornerRadius: CGFloat(max(0, config.cornerRadius)),
-            windowID: focusedWindowID
+            windowID: window.id
         )
         return true
+    }
+
+    private func frontmostWindow(in windows: [WindowSnapshot]) -> WindowSnapshot? {
+        guard let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+            return windows.first { $0.isTileCandidate }
+        }
+        return windows.first {
+            $0.pid == frontmostPID && $0.isTileCandidate
+        } ?? windows.first { $0.isTileCandidate }
     }
 
     private func refresh() {
@@ -167,9 +186,9 @@ public final class BorderController {
     }
 
     private func refreshIfChanged() {
-        let focusedID = snapshotService.focusedWindowID()
-        guard focusedID != panel.renderedWindowID else { return }
-        refresh()
+        let currentID = frontmostWindow(in: snapshotProvider.windows(includeAccessibilityAttributes: false))?.id
+        guard currentID != panel.renderedWindowID else { return }
+        _ = refreshFocusedWindowFast()
     }
 
     private func activeColor(for stageID: StageID?, config: BorderConfig) -> NSColor {
