@@ -42,6 +42,16 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     }
 }
 
+public struct TimedDaemonSnapshot: Sendable {
+    public var snapshot: DaemonSnapshot
+    public var steps: [PerformanceStep]
+
+    public init(snapshot: DaemonSnapshot, steps: [PerformanceStep]) {
+        self.snapshot = snapshot
+        self.steps = steps
+    }
+}
+
 public struct SnapshotService {
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
@@ -75,12 +85,41 @@ public struct SnapshotService {
         followExternalFocus: Bool = true,
         persistState: Bool = true
     ) -> DaemonSnapshot {
-        let permissions = provider.permissions(prompt: promptForPermissions)
-        let displays = provider.displays()
-        let windows = provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
-        let providerFocusedID = provider.focusedWindowID()
-        var persistedStages = stageStore.state()
+        timedSnapshot(
+            promptForPermissions: promptForPermissions,
+            includeAccessibilityAttributes: includeAccessibilityAttributes,
+            followExternalFocus: followExternalFocus,
+            persistState: persistState
+        ).snapshot
+    }
+
+    public func timedSnapshot(
+        promptForPermissions: Bool = false,
+        includeAccessibilityAttributes: Bool = true,
+        followExternalFocus: Bool = true,
+        persistState: Bool = true
+    ) -> TimedDaemonSnapshot {
+        var steps: [PerformanceStep] = []
+        func timed<T>(_ name: PerformanceStepName, _ work: () -> T) -> T {
+            let startedAt = Date()
+            let value = work()
+            steps.append(PerformanceStep(
+                name: name,
+                startedAt: startedAt,
+                durationMs: Date().timeIntervalSince(startedAt) * 1000
+            ))
+            return value
+        }
+
+        let permissions = timed(.permissions) { provider.permissions(prompt: promptForPermissions) }
+        let displays = timed(.displays) { provider.displays() }
+        let windows = timed(.windows) {
+            provider.windows(includeAccessibilityAttributes: includeAccessibilityAttributes)
+        }
+        let providerFocusedID = timed(.focusedWindow) { provider.focusedWindowID() }
+        var persistedStages = timed(.stageState) { stageStore.state() }
         let originalPersistedStages = persistedStages
+        let buildStartedAt = Date()
         let liveDisplayIDs = Set(displays.map(\.id))
         intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
         if let activeDisplayID = persistedStages.activeDisplayID,
@@ -213,13 +252,18 @@ public struct SnapshotService {
             stageStore.save(persistedStages)
         }
 
-        return DaemonSnapshot(
+        steps.append(PerformanceStep(
+            name: .secondaryWork,
+            startedAt: buildStartedAt,
+            durationMs: Date().timeIntervalSince(buildStartedAt) * 1000
+        ))
+        return TimedDaemonSnapshot(snapshot: DaemonSnapshot(
             permissions: permissions,
             displays: displays,
             windows: scopedWindows,
             state: state,
             focusedWindowID: focusedID
-        )
+        ), steps: steps)
     }
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {

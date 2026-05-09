@@ -28,6 +28,11 @@ public enum PerformanceInteractionSource: String, Codable, Sendable {
 }
 
 public enum PerformanceStepName: String, Codable, CaseIterable, Sendable {
+    case permissions
+    case displays
+    case windows
+    case focusedWindow = "focused_window"
+    case stageState = "stage_state"
     case snapshot
     case stateUpdate = "state_update"
     case hidePrevious = "hide_previous"
