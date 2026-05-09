@@ -30,18 +30,6 @@ public extension DaemonSnapshot {
     func automationSnapshot(generatedAt: Date = Date(), service: AutomationSnapshotService = AutomationSnapshotService()) -> RoadieStateSnapshot {
         service.snapshot(from: self, generatedAt: generatedAt)
     }
-
-    func replacingWindowFrames(_ frames: [WindowID: CGRect]) -> DaemonSnapshot {
-        guard !frames.isEmpty else { return self }
-        var copy = self
-        copy.windows = windows.map { entry in
-            guard let frame = frames[entry.window.id] else { return entry }
-            var window = entry.window
-            window.frame = Rect(frame)
-            return ScopedWindowSnapshot(window: window, scope: entry.scope)
-        }
-        return copy
-    }
 }
 
 public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {

@@ -51,13 +51,10 @@ private struct FakeWriter: WindowFrameWriting {
 
 private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var requestedFrames: [WindowID: Rect] = [:]
-    private(set) var requestedFrameHistory: [WindowID: [Rect]] = [:]
     private(set) var focusedWindowIDs: [WindowID] = []
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-        let rect = Rect(frame)
-        requestedFrames[window.id] = rect
-        requestedFrameHistory[window.id, default: []].append(rect)
+        requestedFrames[window.id] = Rect(frame)
         return frame
     }
 
@@ -1387,42 +1384,6 @@ struct SnapshotServiceTests {
         #expect(result.changed)
         #expect(writer.activeStageAtFocus == StageID(rawValue: "2"))
         #expect(scope?.activeStageID == StageID(rawValue: "2"))
-        try? FileManager.default.removeItem(atPath: stagePath)
-    }
-
-    @Test
-    func stageSwitchDoesNotReapplyLayoutForRestoredTargetFrames() {
-        let display = DisplayID(rawValue: "display-a")
-        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
-        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
-        let hiddenRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 999, y: 499, width: 984, height: 484), isOnScreen: true, isTileCandidate: true)
-        let restoredRightFrame = Rect(x: 8, y: 8, width: 984, height: 484)
-        let stagePath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-stage-switch-no-reapply-\(UUID().uuidString).json")
-            .path
-        let stageStore = StageStore(path: stagePath)
-        stageStore.save(PersistentStageState(scopes: [
-            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
-                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: left.id, members: [
-                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
-                ]),
-                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hiddenRight.id, members: [
-                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: restoredRightFrame),
-                ]),
-            ]),
-        ]))
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, hiddenRight], focusedID: left.id),
-            frameWriter: writer,
-            config: RoadieConfig(),
-            stageStore: stageStore
-        )
-
-        let result = StageCommandService(service: service, store: stageStore).switchTo("2")
-
-        #expect(result.changed)
-        #expect(writer.requestedFrameHistory[hiddenRight.id] == [restoredRightFrame])
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
