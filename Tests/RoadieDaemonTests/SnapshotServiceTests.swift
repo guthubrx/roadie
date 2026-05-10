@@ -103,6 +103,7 @@ struct SnapshotServiceTests {
     func tileCandidatesAreAssignedToDefaultStageOnContainingDisplay() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
+        let stageStore = StageStore(path: tempPath("snapshot-default-stage-containing-display"))
         let window = WindowSnapshot(
             id: WindowID(rawValue: 100),
             pid: 123,
@@ -121,7 +122,8 @@ struct SnapshotServiceTests {
                 ],
                 windowSnapshots: [window]
             ),
-            config: RoadieConfig()
+            config: RoadieConfig(),
+            stageStore: stageStore
         )
 
         let snapshot = service.snapshot()
@@ -136,6 +138,7 @@ struct SnapshotServiceTests {
     func newTileCandidatesCanFollowMouseDisplay() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
+        let stageStore = StageStore(path: tempPath("snapshot-new-window-mouse-display"))
         let window = WindowSnapshot(
             id: WindowID(rawValue: 101),
             pid: 123,
@@ -155,7 +158,8 @@ struct SnapshotServiceTests {
                 windowSnapshots: [window],
                 mousePoint: CGPoint(x: 200, y: 200)
             ),
-            config: RoadieConfig(windowPlacement: WindowPlacementConfig(newAppsTarget: "mouse"))
+            config: RoadieConfig(windowPlacement: WindowPlacementConfig(newAppsTarget: "mouse")),
+            stageStore: stageStore
         )
 
         let snapshot = service.snapshot()
