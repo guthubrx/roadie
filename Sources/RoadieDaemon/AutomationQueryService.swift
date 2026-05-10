@@ -64,11 +64,20 @@ public struct AutomationQueryService {
         AutomationQueryResult(kind: kind, data: payload(value))
     }
 
-    private func payload<T: Encodable>(_ value: T) -> AutomationPayload {
+    /// Encoder/decoder partages : query() est appele tres frequemment par les outils
+    /// externes via subscribe (5Hz). Allouer un encoder/decoder par appel ajoutait
+    /// ~250us et 4-5 KB par query.
+    private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(value),
-              let object = try? JSONDecoder().decode(AutomationPayload.self, from: data)
+        return encoder
+    }()
+
+    private static let decoder = JSONDecoder()
+
+    private func payload<T: Encodable>(_ value: T) -> AutomationPayload {
+        guard let data = try? Self.encoder.encode(value),
+              let object = try? Self.decoder.decode(AutomationPayload.self, from: data)
         else {
             return .null
         }

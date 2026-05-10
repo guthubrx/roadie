@@ -73,9 +73,11 @@ public struct SnapshotService {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let rawWindows = provider.windows()
-        // Applique la policy de tiling : whitelist subrole + regles user (action.manage / exclude / floating).
+        // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
+        // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
+        let policyContext = TilingPolicyContext(config: config)
         let windows = rawWindows.map { window in
-            Self.applyTilingPolicy(to: window, config: config)
+            Self.applyTilingPolicy(to: window, config: config, context: policyContext)
         }
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
@@ -215,6 +217,29 @@ public struct SnapshotService {
         )
     }
 
+    /// Contexte pre-calcule pour `applyTilingPolicy`. Construit une seule fois par snapshot
+    /// pour eviter le cout O(n_windows) de Set(allowedSubroles) et du tri des regles a chaque
+    /// appel. Sans ce contexte, applyTilingPolicy etait O(n_windows * (n_subroles + n_rules log n_rules)).
+    /// Avec, c'est O(n_windows * n_rules) (matching lineaire dans les regles deja triees).
+    struct TilingPolicyContext {
+        let allowedSubroles: Set<String>
+        let floatingBundles: Set<String>
+        let sortedRules: [WindowRule]
+
+        init(config: RoadieConfig) {
+            self.allowedSubroles = Set(config.tiling.allowedSubroles)
+            self.floatingBundles = Set(config.exclusions.floatingBundles)
+            self.sortedRules = config.rules
+                .filter(\.enabled)
+                .sorted { lhs, rhs in
+                    if lhs.priority == rhs.priority {
+                        return lhs.id < rhs.id
+                    }
+                    return lhs.priority > rhs.priority
+                }
+        }
+    }
+
     /// Applique la policy de tiling sur une fenetre brute.
     /// Ordre de decision :
     ///   1. baseCandidate (criteres CG bruts) doit etre vrai sinon -> non tile-able
@@ -228,9 +253,17 @@ public struct SnapshotService {
     ///        action.exclude = true  -> force non tile-able
     ///        action.floating = true -> force non tile-able
     public static func applyTilingPolicy(to window: WindowSnapshot, config: RoadieConfig) -> WindowSnapshot {
+        applyTilingPolicy(to: window, config: config, context: TilingPolicyContext(config: config))
+    }
+
+    static func applyTilingPolicy(
+        to window: WindowSnapshot,
+        config: RoadieConfig,
+        context: TilingPolicyContext
+    ) -> WindowSnapshot {
         var tile = window.isTileCandidate
 
-        if tile && config.exclusions.floatingBundles.contains(window.bundleID) {
+        if tile && context.floatingBundles.contains(window.bundleID) {
             tile = false
         }
 
@@ -277,18 +310,17 @@ public struct SnapshotService {
         }
 
         if tile {
-            let allowed = Set(config.tiling.allowedSubroles)
             switch window.subrole {
             case .some(let value):
-                if !allowed.contains(value) { tile = false }
+                if !context.allowedSubroles.contains(value) { tile = false }
             case .none:
                 break // AX absent -> on laisse passer (non-regression apps non-AX)
             }
         }
 
-        // Override par les regles user. Premiere regle matchant gagne.
-        let context = WindowRuleMatchContext(role: window.role, subrole: window.subrole)
-        if let rule = WindowRuleMatcher.firstMatch(rules: config.rules, window: window, context: context) {
+        // Override par les regles user. Premiere regle matchant gagne (regles deja triees).
+        let matchContext = WindowRuleMatchContext(role: window.role, subrole: window.subrole)
+        if let rule = WindowRuleMatcher.firstMatch(sortedRules: context.sortedRules, window: window, context: matchContext) {
             if rule.action.manage == true {
                 tile = window.isTileCandidate // force tile mais respect criteres CG (taille mini, layer)
             }

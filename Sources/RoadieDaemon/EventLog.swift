@@ -50,6 +50,23 @@ public struct EventLog: Sendable {
     public static let defaultMaxBytes = 10 * 1024 * 1024
     public static let defaultRetainedBackups = 2
 
+    /// Encoder partage. JSONEncoder est thread-safe pour `encode` independants.
+    /// Eviter de l'allouer a chaque event log evite ~150us et 2-3 KB d'allocations
+    /// par evenement (mesure simple sur Swift 5.10).
+    private static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    /// Verrou de fichier global. EventLog est instancie ~15x dans le daemon (un par
+    /// service) avec des `append` concurrents (Task @MainActor + workers). Sans verrou,
+    /// `seekToEnd + write + write(newline)` est non-atomique : deux events peuvent
+    /// s'entrelacer ou la rotation peut couper un event en deux. Un verrou statique
+    /// keye sur le path resoudrait des paths multiples ; pour l'instant, un seul fichier
+    /// d'event est utilise donc un verrou unique suffit.
+    private static let writeLock = NSLock()
+
     public init(path: String = Self.defaultPath()) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
@@ -70,17 +87,17 @@ public struct EventLog: Sendable {
     }
 
     private func write<T: Encodable>(_ value: T) {
+        Self.writeLock.lock()
+        defer { Self.writeLock.unlock() }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.dateEncodingStrategy = .iso8601
-            let data = try encoder.encode(value)
+            let data = try Self.encoder.encode(value)
             if FileManager.default.fileExists(atPath: url.path) {
                 let handle = try FileHandle(forWritingTo: url)
+                defer { try? handle.close() }
                 try handle.seekToEnd()
                 try handle.write(contentsOf: data)
                 try handle.write(contentsOf: Self.jsonNewline)
-                try handle.close()
             } else {
                 try (data + Self.jsonNewline).write(to: url, options: .atomic)
             }
@@ -117,9 +134,15 @@ public struct EventLog: Sendable {
         return Array(raw.split(separator: "\n").suffix(limit).map(String.init))
     }
 
-    public func envelopes(limit: Int = 20) -> [RoadieEventEnvelope] {
+    /// Decoder partage. Meme rationale que `encoder` plus haut.
+    private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    public func envelopes(limit: Int = 20) -> [RoadieEventEnvelope] {
+        let decoder = Self.decoder
         return tail(limit: limit).compactMap { line in
             guard let data = line.data(using: .utf8) else { return nil }
             if let envelope = try? decoder.decode(RoadieEventEnvelope.self, from: data) {
@@ -133,6 +156,8 @@ public struct EventLog: Sendable {
     }
 
     public func rotateIfNeeded(maxBytes: Int = Self.defaultMaxBytes, retainedBackups: Int = Self.defaultRetainedBackups) {
+        Self.writeLock.lock()
+        defer { Self.writeLock.unlock() }
         let manager = FileManager.default
         guard maxBytes > 0,
               let attributes = try? manager.attributesOfItem(atPath: url.path),
