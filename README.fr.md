@@ -68,12 +68,13 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 
 ## Ce Que Fait Roadie Aujourd’hui
 
-- Tile les fenêtres visibles avec les modes `bsp`, `masterStack` ou `float`.
+- Tile les fenêtres visibles avec les modes `bsp`, `mutableBsp`, `masterStack` ou `float`.
 - Gère des groupes de fenêtres par stage, écran et desktop Roadie.
 - Fournit des desktops virtuels Roadie sans contrôler les Spaces macOS natifs.
 - Supporte plusieurs écrans indépendamment.
 - Affiche un nav rail natif avec les thumbnails des stages.
 - Permet de déplacer des thumbnails entre stages ou vers la scène active.
+- Permet optionnellement de faire un clic droit sur la barre de titre d'une fenêtre gérée pour l'envoyer vers une autre stage, un autre desktop ou un autre écran.
 - Affiche une bordure autour de la fenêtre active.
 - Fournit des commandes CLI faciles à brancher dans BetterTouchTool, Karabiner, des scripts shell ou un launcher.
 - Persiste les stages et l’état du layout entre les redémarrages du daemon.

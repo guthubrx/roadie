@@ -53,6 +53,7 @@ struct ConfigTests {
         [focus]
         stage_follows_focus = false
         assign_follows_focus = true
+        stage_move_follows_focus = false
         focus_follows_mouse = true
         mouse_follows_focus = true
         """.write(to: url, atomically: true, encoding: .utf8)
@@ -62,8 +63,24 @@ struct ConfigTests {
 
         #expect(config.focus.stageFollowsFocus == false)
         #expect(config.focus.assignFollowsFocus)
+        #expect(config.focus.stageMoveFollowsFocus == false)
         #expect(config.focus.focusFollowsMouse)
         #expect(config.focus.mouseFollowsFocus)
+    }
+
+    @Test
+    func focusStageMoveFollowDefaultsToTrue() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-focus-stage-move-default-\(UUID().uuidString).toml")
+        try """
+        [focus]
+        stage_follows_focus = false
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.focus.stageMoveFollowsFocus)
     }
 
     @Test
@@ -278,6 +295,94 @@ struct ConfigTests {
 
         #expect(report.hasErrors)
         #expect(report.items.first?.level == .error)
+    }
+
+    @Test
+    func titlebarContextMenuDefaultsAreSafe() {
+        let config = RoadieConfig()
+
+        #expect(config.experimental.titlebarContextMenu.enabled == false)
+        #expect(config.experimental.titlebarContextMenu.height == 36)
+        #expect(config.experimental.titlebarContextMenu.leadingExclusion == 84)
+        #expect(config.experimental.titlebarContextMenu.trailingExclusion == 16)
+        #expect(config.experimental.titlebarContextMenu.managedWindowsOnly)
+        #expect(config.experimental.titlebarContextMenu.tileCandidatesOnly)
+        #expect(config.experimental.titlebarContextMenu.includeStageDestinations)
+        #expect(config.experimental.titlebarContextMenu.includeDesktopDestinations)
+        #expect(config.experimental.titlebarContextMenu.includeDisplayDestinations)
+    }
+
+    @Test
+    func titlebarContextMenuConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-titlebar-config-\(UUID().uuidString).toml")
+        try """
+        [experimental.titlebar_context_menu]
+        enabled = true
+        height = 44
+        leading_exclusion = 90
+        trailing_exclusion = 22
+        managed_windows_only = false
+        tile_candidates_only = false
+        include_stage_destinations = true
+        include_desktop_destinations = false
+        include_display_destinations = true
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+        let titlebar = config.experimental.titlebarContextMenu
+
+        #expect(titlebar.enabled)
+        #expect(titlebar.height == 44)
+        #expect(titlebar.leadingExclusion == 90)
+        #expect(titlebar.trailingExclusion == 22)
+        #expect(titlebar.managedWindowsOnly == false)
+        #expect(titlebar.tileCandidatesOnly == false)
+        #expect(titlebar.includeStageDestinations)
+        #expect(titlebar.includeDesktopDestinations == false)
+        #expect(titlebar.includeDisplayDestinations)
+    }
+
+    @Test
+    func titlebarContextMenuValidationReportsUnsafeValues() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-titlebar-invalid-\(UUID().uuidString).toml")
+        try """
+        [experimental.titlebar_context_menu]
+        enabled = true
+        height = 8
+        leading_exclusion = 300
+        trailing_exclusion = -1
+        include_stage_destinations = false
+        include_desktop_destinations = false
+        include_display_destinations = false
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(report.hasErrors)
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .error,
+            path: "experimental.titlebar_context_menu.height",
+            message: "must be between 12 and 96"
+        )))
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .error,
+            path: "experimental.titlebar_context_menu.leading_exclusion",
+            message: "must be between 0 and 240"
+        )))
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .error,
+            path: "experimental.titlebar_context_menu.trailing_exclusion",
+            message: "must be between 0 and 240"
+        )))
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .warning,
+            path: "experimental.titlebar_context_menu",
+            message: "all destination families are disabled; menu will not be shown"
+        )))
     }
 
     @Test

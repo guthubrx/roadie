@@ -51,8 +51,9 @@ func printUsage() {
       roadie stage rename N NAME
       roadie stage reorder N POSITION
       roadie stage switch|assign N
+      roadie stage switch-position|assign-position N
       roadie stage summon WINDOW_ID
-      roadie stage move-to-display N
+      roadie stage move-to-display N|left|right|up|down [--follow|--no-follow]
       roadie stage mode bsp|mutableBsp|masterStack|float
       roadie stage prev|next
       roadie balance
@@ -733,12 +734,28 @@ func runStageCommand(_ args: [String]) {
         let result = StageCommandService(service: service).switchTo(stageID)
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "switch-position", "switch-pos":
+        guard let rawPosition = args.dropFirst().first, let position = Int(rawPosition), position > 0 else {
+            fputs("roadie: stage switch-position requires a positive position\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).switchToPosition(position)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "assign":
         guard let stageID = args.dropFirst().first else {
             fputs("roadie: stage assign requires a stage id\n", stderr)
             exit(64)
         }
         let result = StageCommandService(service: service).assign(stageID)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "assign-position", "assign-pos":
+        guard let rawPosition = args.dropFirst().first, let position = Int(rawPosition), position > 0 else {
+            fputs("roadie: stage assign-position requires a positive position\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).assignPosition(position)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "summon":
@@ -758,11 +775,31 @@ func runStageCommand(_ args: [String]) {
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "move-to-display":
-        guard let rawIndex = args.dropFirst().first, let index = Int(rawIndex), index > 0 else {
-            fputs("roadie: stage move-to-display requires a positive display index\n", stderr)
+        guard let rawTarget = args.dropFirst().first else {
+            fputs("roadie: stage move-to-display requires a display index or direction\n", stderr)
             exit(64)
         }
-        let result = StageCommandService(service: service).moveActiveStageToDisplay(index: index)
+        let flags = Array(args.dropFirst(2))
+        let allowedFlags: Set<String> = ["--follow", "--no-follow"]
+        if let unknown = flags.first(where: { !allowedFlags.contains($0) }) {
+            fputs("roadie: unknown stage move-to-display option \(unknown)\n", stderr)
+            exit(64)
+        }
+        if flags.contains("--follow"), flags.contains("--no-follow") {
+            fputs("roadie: stage move-to-display accepts only one of --follow or --no-follow\n", stderr)
+            exit(64)
+        }
+        let followFocus: Bool? = flags.contains("--follow") ? true : (flags.contains("--no-follow") ? false : nil)
+        let commandService = StageCommandService(service: service)
+        let result: StageCommandResult
+        if let index = Int(rawTarget), index > 0 {
+            result = commandService.moveActiveStageToDisplay(index: index, followFocus: followFocus)
+        } else if let direction = Direction(rawValue: rawTarget) {
+            result = commandService.moveActiveStageToDisplay(direction: direction, followFocus: followFocus)
+        } else {
+            fputs("roadie: stage move-to-display requires a display index or left|right|up|down\n", stderr)
+            exit(64)
+        }
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "prev":

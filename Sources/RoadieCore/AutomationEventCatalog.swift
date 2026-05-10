@@ -68,6 +68,10 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "layout.width_adjust_applied",
         "layout.width_adjust_rejected",
         "cleanup.completed",
+        "titlebar_context_menu.shown",
+        "titlebar_context_menu.ignored",
+        "titlebar_context_menu.action",
+        "titlebar_context_menu.failed",
         "state.snapshot"
     ]
 }

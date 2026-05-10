@@ -70,17 +70,26 @@ public enum WindowRuleMatcher {
 
     /// Cache des NSRegularExpression compilees, partage entre tous les matchers.
     /// La compilation est lente (microsecs) et la regex peut etre evaluee 10x par tick
-    /// par fenetre par regle. Cache lock-free via concurrent dispatch queue.
+    /// par fenetre par regle. Un verrou explicite evite les deadlocks observes avec
+    /// DispatchQueue.sync + barrier async sous Swift Testing parallele.
     nonisolated(unsafe) private static var regexCache: [String: NSRegularExpression] = [:]
-    private static let regexCacheQueue = DispatchQueue(label: "roadie.regex.cache", attributes: .concurrent)
+    private static let regexCacheLock = NSLock()
 
     private static func compiledRegex(_ pattern: String) -> NSRegularExpression? {
-        var cached: NSRegularExpression?
-        regexCacheQueue.sync { cached = regexCache[pattern] }
-        if let cached { return cached }
+        regexCacheLock.lock()
+        if let cached = regexCache[pattern] {
+            regexCacheLock.unlock()
+            return cached
+        }
+        regexCacheLock.unlock()
+
         guard let compiled = try? NSRegularExpression(pattern: pattern) else { return nil }
-        regexCacheQueue.async(flags: .barrier) { regexCache[pattern] = compiled }
-        return compiled
+
+        regexCacheLock.lock()
+        let result = regexCache[pattern] ?? compiled
+        regexCache[pattern] = result
+        regexCacheLock.unlock()
+        return result
     }
 
     private static func regex(_ pattern: String?, candidates: [String]) -> Bool {

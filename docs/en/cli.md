@@ -134,11 +134,31 @@ Notes:
 ./bin/roadie stage rename 4 Comms
 ./bin/roadie stage switch 2
 ./bin/roadie stage assign 2
+./bin/roadie stage switch-position 2
+./bin/roadie stage assign-position 2
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
+./bin/roadie stage move-to-display right
+./bin/roadie stage move-to-display right --no-follow
 ./bin/roadie stage prev
 ./bin/roadie stage next
 ```
+
+`stage switch` and `stage assign` target stable IDs. `stage switch-position`
+and `stage assign-position` target the visible nav rail order: position 1 is the
+first visible stage, even when its internal ID is different.
+
+`stage move-to-display` accepts a display index or a direction
+`left|right|up|down`. Without a flag, Roadie uses this TOML preference:
+
+```toml
+[focus]
+stage_move_follows_focus = false
+```
+
+`--follow` and `--no-follow` override the preference for one command. The nav
+rail exposes the same action from a stage card context menu and lists the other
+available displays.
 
 ## Rules
 

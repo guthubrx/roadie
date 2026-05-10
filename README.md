@@ -74,6 +74,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Supports multiple displays independently.
 - Shows a native side rail with stage thumbnails.
 - Lets you drag thumbnails between stages or into the active workspace.
+- Lets you optionally right-click a managed window title bar to send that window to another stage, desktop, or display.
 - Shows a focus border around the active window.
 - Provides keyboard-friendly CLI commands for BetterTouchTool, Karabiner, shell scripts, or any launcher.
 - Persists stage membership and layout state across daemon restarts.
@@ -325,18 +326,35 @@ Common commands:
 ./bin/roadie stage rename 4 Comms
 ./bin/roadie stage switch 2
 ./bin/roadie stage assign 2
+./bin/roadie stage switch-position 2
+./bin/roadie stage assign-position 2
 ./bin/roadie stage reorder 2 1
 ./bin/roadie stage delete 4
 ./bin/roadie stage prev
 ./bin/roadie stage next
 ```
 
+`stage switch` and `stage assign` target stable stage IDs. `stage switch-position`
+and `stage assign-position` target the visible order in the nav rail, so position
+1 is the first visible stage even if its internal ID is different.
+
 Bring an inactive-stage window back into the active stage:
 
 ```bash
 ./bin/roadie stage summon WINDOW_ID
-./bin/roadie stage move-to-display 2
 ```
+
+Move the active stage to another display:
+
+```bash
+./bin/roadie stage move-to-display 2
+./bin/roadie stage move-to-display right
+./bin/roadie stage move-to-display right --no-follow
+```
+
+Without a flag, Roadie uses `[focus].stage_move_follows_focus`. `--follow` and
+`--no-follow` override that preference for one command. The nav rail also exposes
+the same operation from a stage card context menu.
 
 ## Roadie Desktops
 

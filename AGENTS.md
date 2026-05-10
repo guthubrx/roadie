@@ -1,14 +1,14 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `002-roadie-ecosystem-upgrade`.
+Current SpecKit feature: `004-titlebar-context-menu`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/002-roadie-ecosystem-upgrade/spec.md`
-- `specs/002-roadie-ecosystem-upgrade/plan.md`
-- `specs/002-roadie-ecosystem-upgrade/research.md`
-- `specs/002-roadie-ecosystem-upgrade/data-model.md`
-- `specs/002-roadie-ecosystem-upgrade/contracts/`
+- `specs/004-titlebar-context-menu/spec.md`
+- `specs/004-titlebar-context-menu/plan.md`
+- `specs/004-titlebar-context-menu/research.md`
+- `specs/004-titlebar-context-menu/data-model.md`
+- `specs/004-titlebar-context-menu/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

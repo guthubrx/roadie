@@ -134,11 +134,31 @@ Notes :
 ./bin/roadie stage rename 4 Comms
 ./bin/roadie stage switch 2
 ./bin/roadie stage assign 2
+./bin/roadie stage switch-position 2
+./bin/roadie stage assign-position 2
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
+./bin/roadie stage move-to-display right
+./bin/roadie stage move-to-display right --no-follow
 ./bin/roadie stage prev
 ./bin/roadie stage next
 ```
+
+`stage switch` et `stage assign` ciblent les IDs stables. `stage switch-position`
+et `stage assign-position` ciblent l'ordre visible du navrail : la position 1 est
+la premiere stage visible, meme si son ID interne est different.
+
+`stage move-to-display` accepte un index d'ecran ou une direction
+`left|right|up|down`. Sans flag, Roadie utilise la preference TOML :
+
+```toml
+[focus]
+stage_move_follows_focus = false
+```
+
+`--follow` et `--no-follow` forcent ponctuellement le comportement. Le navrail
+propose aussi cette action par clic droit sur une carte de stage, en listant les
+autres ecrans disponibles.
 
 ## Rules
 

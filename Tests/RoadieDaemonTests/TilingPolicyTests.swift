@@ -72,11 +72,49 @@ struct TilingPolicyTests {
             to: window(
                 title: "Finder Settings",
                 frame: Rect(x: 0, y: 0, width: 420, height: 360),
-                furniture: WindowFurniture(hasCloseButton: true, hasMinimizeButton: true)
+                furniture: WindowFurniture(hasCloseButton: true, hasMinimizeButton: true, isResizable: false)
             ),
             config: config()
         )
         #expect(result.isTileCandidate == false)
+    }
+
+    @Test
+    func smallNonResizableStandardProgressWindowIsExcluded() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                bundleID: "dev.orbstack.OrbStack",
+                appName: "OrbStack",
+                title: "Updating OrbStack",
+                frame: Rect(x: 0, y: 0, width: 400, height: 140),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasMinimizeButton: true,
+                    isMain: true,
+                    isResizable: false
+                )
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
+    func smallResizableStandardWindowStillTiles() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                title: "Small Utility",
+                frame: Rect(x: 0, y: 0, width: 420, height: 360),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasMinimizeButton: true,
+                    isMain: true,
+                    isResizable: true
+                )
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == true)
     }
 
     @Test
