@@ -98,10 +98,17 @@ public struct EventSubscriptionService: Sendable {
         readAvailable(from: EventSubscriptionCursor(offset: 0), options: options).events
     }
 
-    private func decodeEnvelope(_ line: String) -> RoadieEventEnvelope? {
-        guard let data = line.data(using: .utf8) else { return nil }
+    /// Decoder partage : evite ~30us d'allocation par event (5Hz polling, peut traiter
+    /// des dizaines d'events par tick si bursty).
+    private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    private func decodeEnvelope(_ line: String) -> RoadieEventEnvelope? {
+        guard let data = line.data(using: .utf8) else { return nil }
+        let decoder = Self.decoder
         if let envelope = try? decoder.decode(RoadieEventEnvelope.self, from: data) {
             return envelope
         }

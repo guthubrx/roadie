@@ -52,7 +52,7 @@ public enum WindowRuleMatcher {
         window: WindowSnapshot,
         context: WindowRuleMatchContext = WindowRuleMatchContext()
     ) -> WindowRule? {
-        rules
+        let sorted = rules
             .filter(\.enabled)
             .sorted { lhs, rhs in
                 if lhs.priority == rhs.priority {
@@ -60,7 +60,19 @@ public enum WindowRuleMatcher {
                 }
                 return lhs.priority > rhs.priority
             }
-            .first { matches(rule: $0, window: window, context: context) }
+        return firstMatch(sortedRules: sorted, window: window, context: context)
+    }
+
+    /// Variante hot-path : prend des regles deja filtrees+triees une seule fois en amont
+    /// pour eviter O(n_windows * n_rules log n_rules) quand on classe une vague de fenetres.
+    /// L'appelant garantit que `sortedRules` ne contient que les regles enabled, triees par
+    /// (priority desc, id asc).
+    public static func firstMatch(
+        sortedRules: [WindowRule],
+        window: WindowSnapshot,
+        context: WindowRuleMatchContext = WindowRuleMatchContext()
+    ) -> WindowRule? {
+        sortedRules.first { matches(rule: $0, window: window, context: context) }
     }
 
     private static func exact(_ expected: String?, _ actual: String?) -> Bool {
