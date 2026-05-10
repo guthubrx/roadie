@@ -10,10 +10,12 @@ public protocol SystemSnapshotProviding: Sendable {
     func displays() -> [DisplaySnapshot]
     func windows() -> [WindowSnapshot]
     func focusedWindowID() -> WindowID?
+    func mouseLocation() -> CGPoint?
 }
 
 public extension SystemSnapshotProviding {
     func focusedWindowID() -> WindowID? { nil }
+    func mouseLocation() -> CGPoint? { nil }
 }
 
 public protocol WindowFrameWriting: Sendable {
@@ -441,6 +443,10 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
         let focusedTitle = title(of: focusedElement)
         let titleMatches = appWindows.filter { !focusedTitle.isEmpty && $0.title == focusedTitle }
         return titleMatches.count == 1 ? titleMatches.first?.id : nil
+    }
+
+    public func mouseLocation() -> CGPoint? {
+        NSEvent.mouseLocation
     }
 
     /// Liste CG-only (pas d'AX) des fenetres d'un PID, pour les voies de fallback de focusedWindowID.

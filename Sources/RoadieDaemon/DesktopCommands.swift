@@ -89,7 +89,7 @@ public struct DesktopCommandService {
     }
 
     public func last() -> StageCommandResult {
-        let snapshot = service.snapshot()
+        let snapshot = service.snapshot(followFocus: false)
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "desktop last: no display", changed: false)
         }
@@ -142,7 +142,7 @@ public struct DesktopCommandService {
         }
 
         let hidden = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID),
@@ -192,7 +192,7 @@ public struct DesktopCommandService {
         }
 
         let hidden = service.setFrame(hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays), of: entry.window) != nil
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
@@ -247,7 +247,7 @@ public struct DesktopCommandService {
         state.switchDesktop(displayID: display.id, to: desktopID)
         store.save(state)
 
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         applied += result.applied + result.clamped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focused = windowsByID[focusedID] {

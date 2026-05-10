@@ -20,6 +20,7 @@ public struct RailSettings: Equatable, Sendable {
     public var layout: Layout
     public var displayLabel: Label
     public var desktopLabel: Label
+    public var stageLabel: StageLabel
     public var stages: Stages
     public var stageAccents: [String: String]
 
@@ -73,6 +74,22 @@ public struct RailSettings: Equatable, Sendable {
         public var offsetY: Double
     }
 
+    public struct StageLabel: Equatable, Sendable {
+        public var enabled: Bool
+        public var color: String
+        public var fontSize: Double
+        public var fontFamily: String
+        public var weight: String
+        public var alignment: String
+        public var opacity: Double
+        public var offsetX: Double
+        public var offsetY: Double
+        public var placement: String
+        public var zOrder: String
+        public var visibilitySeconds: Double
+        public var fadeSeconds: Double
+    }
+
     public struct Stages: Equatable, Sendable {
         public var position: String
         public var alignment: String
@@ -116,6 +133,7 @@ public struct RailSettings: Equatable, Sendable {
         let legacyHeader = legacyHeader(from: sections["fx.rail.header"] ?? [:])
         let displayLabel = sections["fx.rail.header.display"] ?? [:]
         let desktopLabel = sections["fx.rail.header.desktop"] ?? [:]
+        let stageLabel = sections["fx.rail.stage_labels"] ?? [:]
         let stages = sections["fx.rail.stages"] ?? [:]
         return RailSettings(
             renderer: rail["renderer"] ?? renderer(from: raw),
@@ -188,6 +206,21 @@ public struct RailSettings: Equatable, Sendable {
                 offsetX: number(desktopLabel["offset_x"], default: 0, min: -120, max: 120),
                 offsetY: number(desktopLabel["offset_y"], default: 0, min: -120, max: 120)
             ),
+            stageLabel: StageLabel(
+                enabled: bool(stageLabel["enabled"], default: true),
+                color: stageLabel["color"] ?? "stage",
+                fontSize: number(stageLabel["font_size"], default: 11, min: 6, max: 28),
+                fontFamily: stageLabel["font_family"] ?? "system",
+                weight: normalizedChoice(stageLabel["weight"], allowed: ["regular", "medium", "semibold", "bold"], default: "semibold"),
+                alignment: normalizedChoice(stageLabel["alignment"], allowed: ["left", "center", "right"], default: "center"),
+                opacity: number(stageLabel["opacity"], default: 0.72, min: 0, max: 1),
+                offsetX: number(stageLabel["offset_x"], default: 0, min: -120, max: 120),
+                offsetY: number(stageLabel["offset_y"], default: 0, min: -120, max: 120),
+                placement: normalizedChoice(stageLabel["placement"], allowed: ["above", "below"], default: "below"),
+                zOrder: normalizedChoice(stageLabel["z_order"], allowed: ["below", "above"], default: "below"),
+                visibilitySeconds: number(stageLabel["visibility_seconds"], default: 0, min: 0, max: 3600),
+                fadeSeconds: number(stageLabel["fade_seconds"], default: 0.35, min: 0, max: 10)
+            ),
             stages: Stages(
                 position: normalizedChoice(stages["position"], allowed: ["top", "center", "bottom"], default: normalizedChoice(layout["stages_position"], allowed: ["top", "center", "bottom"], default: "center")),
                 alignment: normalizedChoice(stages["alignment"], allowed: ["left", "center", "right"], default: "center"),
@@ -257,6 +290,19 @@ public struct RailSettings: Equatable, Sendable {
             "header.desktop.opacity=\(desktopLabel.opacity)",
             "header.desktop.offset_x=\(desktopLabel.offsetX)",
             "header.desktop.offset_y=\(desktopLabel.offsetY)",
+            "stage_labels.enabled=\(stageLabel.enabled)",
+            "stage_labels.color=\(stageLabel.color)",
+            "stage_labels.font_size=\(stageLabel.fontSize)",
+            "stage_labels.font_family=\(stageLabel.fontFamily)",
+            "stage_labels.weight=\(stageLabel.weight)",
+            "stage_labels.alignment=\(stageLabel.alignment)",
+            "stage_labels.opacity=\(stageLabel.opacity)",
+            "stage_labels.offset_x=\(stageLabel.offsetX)",
+            "stage_labels.offset_y=\(stageLabel.offsetY)",
+            "stage_labels.placement=\(stageLabel.placement)",
+            "stage_labels.z_order=\(stageLabel.zOrder)",
+            "stage_labels.visibility_seconds=\(stageLabel.visibilitySeconds)",
+            "stage_labels.fade_seconds=\(stageLabel.fadeSeconds)",
             "stages.position=\(stages.position)",
             "stages.alignment=\(stages.alignment)",
             "stages.gap=\(stages.gap)",
@@ -295,6 +341,7 @@ public struct RailSettings: Equatable, Sendable {
         layout: Layout(headerPosition: "top", stagesPosition: "center", spacing: 13, topPadding: 50, bottomPadding: 16),
         displayLabel: Label(enabled: true, template: "{display}", color: "#FFFFFFDB", fontSize: 13, fontFamily: "system", weight: "bold", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
         desktopLabel: Label(enabled: true, template: "Desktop {desktop}", color: "#FFFFFF6B", fontSize: 10, fontFamily: "system", weight: "medium", alignment: "center", opacity: 1, offsetX: 0, offsetY: 0),
+        stageLabel: StageLabel(enabled: true, color: "stage", fontSize: 11, fontFamily: "system", weight: "semibold", alignment: "center", opacity: 0.72, offsetX: 0, offsetY: 0, placement: "below", zOrder: "below", visibilitySeconds: 0, fadeSeconds: 0.35),
         stages: Stages(position: "center", alignment: "center", gap: 13),
         stageAccents: [:]
     )

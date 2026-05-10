@@ -123,4 +123,31 @@ struct PowerUserDesktopCommandTests {
         #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
         #expect(scope.memberIDs(in: StageID(rawValue: "7")).contains(left.id))
     }
+
+    @Test
+    func stageAssignPositionCanTargetHiddenEmptyStageSlots() {
+        let display = DisplayID(rawValue: "display-main")
+        let window = powerWindow(1, x: 100)
+        let provider = PowerUserProvider(windows: [window])
+        provider.focusedID = window.id
+        let store = StageStore(path: tempPath("power-stage-assign-hidden-empty-position"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2")),
+                PersistentStage(id: StageID(rawValue: "3")),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+
+        let result = StageCommandService(service: service, store: store).assignPosition(2)
+        var state = store.state()
+        let scope = state.scope(displayID: display)
+
+        #expect(result.changed)
+        #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(scope.memberIDs(in: StageID(rawValue: "2")).contains(window.id))
+    }
 }

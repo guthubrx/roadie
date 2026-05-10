@@ -88,7 +88,7 @@ public struct StageCommandService {
 
         var state = store.state()
         let scope = activeScope(displayID: displayID, in: &state)
-        guard let stageID = stageID(atVisiblePosition: position, in: scope) else {
+        guard let stageID = stageID(atAssignablePosition: position, in: scope) else {
             return StageCommandResult(message: "stage assign-position \(position): not found", changed: false)
         }
         return assign(stageID.rawValue)
@@ -128,7 +128,7 @@ public struct StageCommandService {
         }
 
         let activeScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
+        let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         if focusAssignedWindow, scope.activeStageID == stageID {
             _ = service.focus(window)
         }
@@ -186,9 +186,13 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage rename: no display", changed: false)
         }
+        return rename(rawStageID, to: name, displayID: display.id)
+    }
+
+    public func rename(_ rawStageID: String, to name: String, displayID: DisplayID) -> StageCommandResult {
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
-        var scope = activeScope(displayID: display.id, in: &state)
+        var scope = activeScope(displayID: displayID, in: &state)
         guard scope.renameStage(stageID, to: name) else {
             return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
         }
@@ -409,7 +413,7 @@ public struct StageCommandService {
         }
         service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: sourceScope.desktopID, stageID: requestedStageID))
         service.removeLayoutIntent(scope: targetScopeID)
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         failed += result.failed
         events.append(RoadieEvent(
             type: "stage_move_display",
@@ -465,7 +469,7 @@ public struct StageCommandService {
 
         let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
         service.removeLayoutIntent(scope: scope)
-        let updated = service.snapshot()
+        let updated = service.snapshot(followFocus: false)
         let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
         let layout = layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
         let applyPlan = applyPlan(from: updated, scope: scope, ordered: ordered, layout: layout)
@@ -527,7 +531,7 @@ public struct StageCommandService {
 
         let activeScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
         service.removeLayoutIntent(scope: activeScope)
-        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "stage_mode",
             scope: activeScope,
@@ -578,7 +582,7 @@ public struct StageCommandService {
         state.update(scope)
         store.save(state)
 
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
+        let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         applied += layoutResult.applied + layoutResult.clamped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focusedWindow = windowsByID[focusedID] {
@@ -763,6 +767,15 @@ public struct StageCommandService {
     private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope) -> StageID? {
         let visible = scope.stages.filter { !$0.members.isEmpty }.map(\.id)
         let ordered = visible.isEmpty ? scope.stages.map(\.id) : visible
+        let index = position - 1
+        guard ordered.indices.contains(index) else { return nil }
+        return ordered[index]
+    }
+
+    private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {
+        let visible = scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+        let remaining = scope.stages.map(\.id).filter { !visible.contains($0) }
+        let ordered = visible + remaining
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
         return ordered[index]

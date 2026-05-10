@@ -61,6 +61,7 @@ Cas d'usage :
 ## Navrail
 
 Le navrail est le panneau lateral par ecran qui represente les stages non vides.
+Une stage vide n'y est pas affichee, meme si elle a ete renommee.
 
 Interactions principales :
 
@@ -72,6 +73,35 @@ Interactions principales :
 - tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide.
 
 Les zones reservees par macOS, comme la barre de menu, sont ignorees par les actions de clic vide du navrail.
+
+Les noms de stages du navrail sont configurables. Par defaut, ils sont dessines
+sous les vignettes, dans la couleur d'accent de la stage, avec une position qui
+laisse voir environ les deux tiers du libelle.
+
+```toml
+[fx.rail.stage_labels]
+enabled = true
+color = "stage"      # ou une couleur hex, ex. "#6BE675"
+font_size = 11
+font_family = "system"
+weight = "semibold"
+alignment = "center" # left | center | right
+opacity = 0.72
+offset_x = 0
+offset_y = 0
+placement = "below" # above | below
+z_order = "below"   # below | above
+visibility_seconds = 0 # 0 = toujours visible, sinon duree apres reveal
+fade_seconds = 0.35
+```
+
+Quand `visibility_seconds` est superieur a `0`, les noms de stages sont caches
+par defaut. La commande `roadie rail labels show` les affiche pendant cette duree,
+puis ils disparaissent en fondu pendant `fade_seconds`.
+
+Si `enabled = false`, le menu de barre de titre n'affiche plus les stages vides
+anonymes une par une. Il garde les stages qui contiennent des fenetres et ajoute
+une seule destination `Prochaine stage vide`.
 
 ## Menu contextuel de barre de titre
 
@@ -91,6 +121,21 @@ include_stage_destinations = true
 include_desktop_destinations = true
 include_display_destinations = true
 ```
+
+## Placement des nouvelles applications
+
+Roadie peut choisir l'ecran d'accueil d'une nouvelle vraie fenetre d'application
+au moment ou elle est decouverte. Les popups, dialogues et fenetres non tileables
+ne sont pas concernes.
+
+```toml
+[window_placement]
+new_apps_target = "mouse" # mouse | focused_display | macos
+```
+
+- `mouse` : assigne la nouvelle fenetre a la stage active de l'ecran sous la souris.
+- `focused_display` : assigne la nouvelle fenetre a la stage active de l'ecran focus par Roadie.
+- `macos` : garde l'ecran choisi initialement par macOS.
 
 Actions disponibles :
 

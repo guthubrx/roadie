@@ -26,6 +26,7 @@ func printUsage() {
       roadie group create|add|remove|focus|dissolve|list ...
       roadie query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore
       roadie rail status|pin|unpin|toggle
+      roadie rail labels show|hide|status
       roadie doctor
       roadie self-test
       roadie events tail [N]
@@ -336,7 +337,7 @@ case "query":
     runQueryCommand(Array(args.dropFirst()))
 case "rail":
     guard let verb = args.dropFirst().first,
-          ["status", "pin", "unpin", "toggle"].contains(verb)
+          ["status", "pin", "unpin", "toggle", "labels"].contains(verb)
     else {
         printUsage()
         exit(64)
@@ -355,6 +356,28 @@ case "rail":
     case "toggle":
         let state = runtimeStore.togglePinned()
         print("rail pinned=\(state.isPinned)")
+    case "labels":
+        let subcommand = args.dropFirst(2).first ?? "show"
+        let settings = RailSettings.load().stageLabel
+        switch subcommand {
+        case "show":
+            let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds)
+            if settings.visibilitySeconds <= 0 {
+                print("rail labels visible=always")
+            } else {
+                print("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
+            }
+        case "hide":
+            let state = runtimeStore.hideStageLabels()
+            print("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
+        case "status":
+            let state = runtimeStore.load()
+            let until = state.stageLabelsVisibleUntil.map { String($0) } ?? "-"
+            print("rail labels visibility_seconds=\(settings.visibilitySeconds) fade_seconds=\(settings.fadeSeconds) visible_until=\(until)")
+        default:
+            printUsage()
+            exit(64)
+        }
     default:
         printUsage()
         exit(64)

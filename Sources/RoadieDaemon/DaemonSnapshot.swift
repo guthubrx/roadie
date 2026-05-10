@@ -69,7 +69,7 @@ public struct SnapshotService {
         self.stageStore = stageStore
     }
 
-    public func snapshot(promptForPermissions: Bool = false) -> DaemonSnapshot {
+    public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let rawWindows = provider.windows()
@@ -101,6 +101,7 @@ public struct SnapshotService {
         let liveWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
         })
+        let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { !config.exclusions.floatingBundles.contains($0.bundleID) })
         persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
         var state = RoadieState()
@@ -133,7 +134,13 @@ public struct SnapshotService {
                 continue
             }
             let knownScope = stageIndex[window.id]
-            guard let displayID = knownScope?.displayID ?? displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID else {
+            guard let displayID = knownScope?.displayID ?? newWindowDisplayID(
+                for: window,
+                displays: displays,
+                persistedStages: persistedStages,
+                mouseLocation: mouseLocation,
+                fallbackDisplayID: fallbackDisplayID
+            ) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
@@ -180,13 +187,18 @@ public struct SnapshotService {
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
         var focusedID: WindowID?
-        if let providerFocusedID,
+        if followFocus,
+           let providerFocusedID,
            let focusedScope = scopedWindows.first(where: { $0.window.id == providerFocusedID })?.scope,
-           state.activeScope(on: focusedScope.displayID) == focusedScope {
+           config.focus.stageFollowsFocus || state.activeScope(on: focusedScope.displayID) == focusedScope {
             var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+            persistentScope.activeStageID = focusedScope.stageID
             persistentScope.setFocusedWindow(providerFocusedID, in: focusedScope.stageID)
             persistedStages.update(persistentScope)
+            persistedStages.switchDesktop(displayID: focusedScope.displayID, to: focusedScope.desktopID)
             persistedStages.focusDisplay(focusedScope.displayID)
+            try? state.switchDesktop(focusedScope.desktopID, on: focusedScope.displayID)
+            try? state.switchStage(focusedScope.stageID, in: focusedScope.displayID, desktopID: focusedScope.desktopID)
             try? state.setFocusedWindow(providerFocusedID, for: focusedScope)
             focusedID = providerFocusedID
         } else {
@@ -338,6 +350,34 @@ public struct SnapshotService {
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
         displays.first { $0.frame.cgRect.contains(point) }?.id
+    }
+
+    private func newWindowDisplayID(
+        for window: WindowSnapshot,
+        displays: [DisplaySnapshot],
+        persistedStages: PersistentStageState,
+        mouseLocation: CGPoint?,
+        fallbackDisplayID: DisplayID?
+    ) -> DisplayID? {
+        switch config.windowPlacement.newAppsTarget {
+        case "mouse":
+            if let mouseLocation,
+               let displayID = displayID(containing: mouseLocation, in: displays) {
+                return displayID
+            }
+            return displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID
+        case "focused_display":
+            let liveDisplayIDs = Set(displays.map(\.id))
+            if let activeDisplayID = persistedStages.activeDisplayID,
+               liveDisplayIDs.contains(activeDisplayID) {
+                return activeDisplayID
+            }
+            return fallbackDisplayID ?? displayID(containing: window.frame.center, in: displays)
+        case "macos":
+            fallthrough
+        default:
+            return displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID
+        }
     }
 
     private func fallbackDisplayID(

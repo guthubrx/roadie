@@ -9,6 +9,7 @@ public final class RailController {
     private let store: StageStore
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
+    private let desktopCommandService: DesktopCommandService
     private let events = EventLog()
     private let railRuntimeStateStore = RailRuntimeStateStore()
     private let thumbnails = WindowThumbnailStore()
@@ -16,6 +17,7 @@ public final class RailController {
     private var screenFrames: [DisplayID: CGRect] = [:]
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
+    private var stageLabelTimer: Timer?
     private var configWatcher: DispatchSourceFileSystemObject?
     private var configWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
@@ -23,7 +25,7 @@ public final class RailController {
     private var pendingStageReorder: PendingStageReorder?
     private var dragGhost: RailDragGhostWindow?
     private let dropPreview = DropPreviewController()
-    private var stageMoveMenuTargets: [RailStageMoveMenuTarget] = []
+    private var stageMenuTargets: [NSObject] = []
     private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
     private var focusedWindowID: WindowID?
     private var protectedBlurredWindows: [WindowID: Date] = [:]
@@ -31,11 +33,13 @@ public final class RailController {
     public init(
         store: StageStore = StageStore(),
         snapshotService: SnapshotService = SnapshotService(),
-        commandService: StageCommandService = StageCommandService()
+        commandService: StageCommandService = StageCommandService(),
+        desktopCommandService: DesktopCommandService = DesktopCommandService()
     ) {
         self.store = store
         self.snapshotService = snapshotService
         self.commandService = commandService
+        self.desktopCommandService = desktopCommandService
     }
 
     public func start() {
@@ -43,6 +47,7 @@ public final class RailController {
         rebuildPanels()
         startClickMonitors()
         startHoverTimer()
+        startStageLabelTimer()
         startConfigWatcher()
         refreshTimer?.invalidate()
         let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -124,12 +129,30 @@ public final class RailController {
         RunLoop.main.add(newHoverTimer, forMode: .common)
     }
 
+    private func startStageLabelTimer() {
+        stageLabelTimer?.invalidate()
+        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshStageLabelFade()
+            }
+        }
+        stageLabelTimer = newTimer
+        RunLoop.main.add(newTimer, forMode: .common)
+    }
+
     private func updateRailHover() {
         let point = NSEvent.mouseLocation
         let canHide = pendingDrag == nil && pendingStageReorder == nil && !windowDragController.hasActiveDrag
         panels.values.forEach { panel in
             guard panel.isVisible else { return }
             panel.updateAutoHide(mouse: point, canHide: canHide)
+        }
+    }
+
+    private func refreshStageLabelFade() {
+        panels.values.forEach { panel in
+            guard panel.isVisible else { return }
+            panel.refreshStageLabels()
         }
     }
 
@@ -201,6 +224,7 @@ public final class RailController {
                     stageID: payload.stageID,
                     image: payload.image,
                     grabUnit: payload.grabUnit,
+                    windowID: payload.windowID,
                     startPoint: screenPoint,
                     didDrag: false
                 )
@@ -236,7 +260,7 @@ public final class RailController {
                 }
                 return true
             }
-            showStageMoveMenu(stageID: reorder.stageID, displayID: reorder.displayID, panel: panel, at: screenPoint)
+            showStageMenu(stageID: reorder.stageID, displayID: reorder.displayID, windowID: reorder.windowID, panel: panel, at: screenPoint)
             return true
 
         default:
@@ -244,31 +268,279 @@ public final class RailController {
         }
     }
 
-    private func showStageMoveMenu(stageID: StageID, displayID: DisplayID, panel: RailPanel, at screenPoint: CGPoint) {
-        stageMoveMenuTargets.removeAll(keepingCapacity: true)
+    private func showStageMenu(stageID: StageID, displayID: DisplayID, windowID: WindowID?, panel: RailPanel, at screenPoint: CGPoint) {
+        stageMenuTargets.removeAll(keepingCapacity: true)
         guard panel.isVisible, panel.frame.contains(screenPoint) else { return }
         guard panel.stageID(at: screenPoint) == stageID else { return }
 
         let snapshot = snapshotService.snapshot()
         let targets = Self.stageDisplayMoveTargets(sourceDisplayID: displayID, in: snapshot)
-        guard !targets.isEmpty else { return }
+        let currentName = stageName(stageID: stageID, displayID: displayID)
 
-        let menu = NSMenu(title: "Envoyer vers un ecran")
-        for targetDisplay in targets {
-            let title = "Ecran \(targetDisplay.index) - \(targetDisplay.name)"
-            let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
-            item.representedObject = targetDisplay.id.rawValue
-            let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
-                guard let self else { return }
-                self.perform(.moveStageToDisplay(stageID, selectedDisplayID), displayID: displayID)
-                self.rebuildPanels()
-            }
-            item.target = target
-            stageMoveMenuTargets.append(target)
-            menu.addItem(item)
+        let menu = NSMenu(title: currentName)
+        if let windowID {
+            addWindowSection(to: menu, windowID: windowID, stageID: stageID, displayID: displayID, snapshot: snapshot)
+            menu.addItem(.separator())
         }
 
+        let stageHeader = NSMenuItem(title: "Stage", action: nil, keyEquivalent: "")
+        stageHeader.isEnabled = false
+        menu.addItem(stageHeader)
+
+        let renameTarget = RailStageRenameMenuTarget { [weak self] in
+            self?.promptRenameStage(stageID: stageID, displayID: displayID, currentName: currentName)
+        }
+        let renameItem = NSMenuItem(title: "Renommer \"\(currentName)\"...", action: #selector(RailStageRenameMenuTarget.choose(_:)), keyEquivalent: "")
+        renameItem.target = renameTarget
+        stageMenuTargets.append(renameTarget)
+        menu.addItem(renameItem)
+
+        let moveMenu = NSMenu(title: "Envoyer la stage vers ecran")
+        if targets.isEmpty {
+            let item = NSMenuItem(title: "Aucun autre ecran", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            moveMenu.addItem(item)
+        } else {
+            for targetDisplay in targets {
+                let title = "Ecran \(targetDisplay.index) - \(targetDisplay.name)"
+                let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
+                item.representedObject = targetDisplay.id.rawValue
+                let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
+                    guard let self else { return }
+                    self.perform(.moveStageToDisplay(stageID, selectedDisplayID), displayID: displayID)
+                    self.rebuildPanels()
+                }
+                item.target = target
+                stageMenuTargets.append(target)
+                moveMenu.addItem(item)
+            }
+        }
+        let moveItem = NSMenuItem(title: "Envoyer la stage vers ecran", action: nil, keyEquivalent: "")
+        moveItem.submenu = moveMenu
+        menu.addItem(moveItem)
+
         menu.popUp(positioning: nil, at: panel.convertPoint(fromScreen: screenPoint), in: panel.contentView)
+    }
+
+    private func addWindowSection(
+        to menu: NSMenu,
+        windowID: WindowID,
+        stageID: StageID,
+        displayID: DisplayID,
+        snapshot: DaemonSnapshot
+    ) {
+        let header = NSMenuItem(title: "Fenetre", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        menu.addItem(header)
+
+        let stageMenu = NSMenu(title: "Envoyer la fenetre vers stage")
+        for target in windowStageTargets(displayID: displayID, excluding: stageID) {
+            let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+            let action = RailMenuActionTarget { [weak self] in
+                guard let self else { return }
+                self.perform(.moveWindow(windowID, target.stageID), displayID: displayID)
+                self.rebuildPanels()
+            }
+            item.target = action
+            stageMenuTargets.append(action)
+            stageMenu.addItem(item)
+        }
+        let stageItem = NSMenuItem(title: "Envoyer la fenetre vers stage", action: nil, keyEquivalent: "")
+        stageItem.submenu = stageMenu
+        menu.addItem(stageItem)
+
+        let desktopMenu = NSMenu(title: "Envoyer la fenetre vers desktop")
+        for target in windowDesktopTargets(displayID: displayID) {
+            let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+            let action = RailMenuActionTarget { [weak self] in
+                guard let self else { return }
+                self.perform(.moveWindowToDesktop(windowID, target.desktopID), displayID: displayID)
+                self.rebuildPanels()
+            }
+            item.target = action
+            stageMenuTargets.append(action)
+            desktopMenu.addItem(item)
+        }
+        let desktopItem = NSMenuItem(title: "Envoyer la fenetre vers desktop", action: nil, keyEquivalent: "")
+        desktopItem.submenu = desktopMenu
+        menu.addItem(desktopItem)
+
+        let displayMenu = NSMenu(title: "Envoyer la fenetre vers ecran")
+        let displayTargets = Self.stageDisplayMoveTargets(sourceDisplayID: displayID, in: snapshot)
+        if displayTargets.isEmpty {
+            let item = NSMenuItem(title: "Aucun autre ecran", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            displayMenu.addItem(item)
+        } else {
+            for targetDisplay in displayTargets {
+                let item = NSMenuItem(title: "Ecran \(targetDisplay.index) - \(targetDisplay.name)", action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
+                let action = RailMenuActionTarget { [weak self] in
+                    guard let self else { return }
+                    self.perform(.moveWindowToDisplay(windowID, targetDisplay.id), displayID: displayID)
+                    self.rebuildPanels()
+                }
+                item.target = action
+                stageMenuTargets.append(action)
+                displayMenu.addItem(item)
+            }
+        }
+        let displayItem = NSMenuItem(title: "Envoyer la fenetre vers ecran", action: nil, keyEquivalent: "")
+        displayItem.submenu = displayMenu
+        menu.addItem(displayItem)
+    }
+
+    private func windowStageTargets(displayID: DisplayID, excluding sourceStageID: StageID) -> [(title: String, stageID: StageID)] {
+        var state = store.state()
+        let desktopID = state.currentDesktopID(for: displayID)
+        let scope = state.scope(displayID: displayID, desktopID: desktopID)
+        var targets: [(String, StageID)] = []
+        for (index, stage) in scope.stages.enumerated() where stage.id != sourceStageID {
+            guard !stage.members.isEmpty || isCustomStageName(stage.name, id: stage.id) else { continue }
+            targets.append((stageDisplayName(stage, position: index + 1), stage.id))
+        }
+        let emptyID = scope.stages.first { $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }?.id
+            ?? nextGeneratedStageID(in: scope)
+        if emptyID != sourceStageID {
+            targets.append(("Prochaine stage vide", emptyID))
+        }
+        return targets
+    }
+
+    private func windowDesktopTargets(displayID: DisplayID) -> [(title: String, desktopID: DesktopID)] {
+        let state = store.state()
+        let current = state.currentDesktopID(for: displayID)
+        return (1...6).compactMap { raw in
+            let desktopID = DesktopID(rawValue: raw)
+            guard desktopID != current else { return nil }
+            let label = state.label(displayID: displayID, desktopID: desktopID)
+            let title = label.map { "Desktop \(raw) - \($0)" } ?? "Desktop \(raw)"
+            return (title, desktopID)
+        }
+    }
+
+    private func promptRenameStage(stageID: StageID, displayID: DisplayID, currentName: String) {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        input.stringValue = currentName
+        input.selectText(nil)
+
+        let alert = NSAlert()
+        alert.messageText = "Renommer la stage"
+        alert.informativeText = "Nouveau nom pour \(currentName)"
+        alert.accessoryView = input
+        alert.addButton(withTitle: "Renommer")
+        alert.addButton(withTitle: "Annuler")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != currentName else { return }
+        perform(.renameStage(stageID, trimmed), displayID: displayID)
+        rebuildPanels()
+    }
+
+    private func stageName(stageID: StageID, displayID: DisplayID) -> String {
+        var state = store.state()
+        let desktopID = state.currentDesktopID(for: displayID)
+        let scope = state.scope(displayID: displayID, desktopID: desktopID)
+        return scope.stages.first { $0.id == stageID }?.name ?? "Stage \(stageID.rawValue)"
+    }
+
+    private func stageDisplayName(_ stage: PersistentStage, position: Int) -> String {
+        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isCustomStageName(trimmed, id: stage.id) ? trimmed : "Stage \(position)"
+    }
+
+    private func isCustomStageName(_ name: String, id: StageID) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
+    }
+
+    private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {
+        let used = Set(scope.stages.map(\.id.rawValue))
+        for index in 1...99 where !used.contains(String(index)) {
+            return StageID(rawValue: String(index))
+        }
+        return StageID(rawValue: UUID().uuidString)
+    }
+
+    private func perform(_ action: RailAction, displayID: DisplayID) {
+        switch action {
+        case .switchStage(let stageID):
+            print("rail switch stage \(stageID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
+            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+        case .summonWindow(let windowID):
+            print("rail summon window \(windowID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
+            _ = commandService.summon(windowID: windowID, displayID: displayID)
+        case .moveWindow(let windowID, let stageID):
+            print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_move",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
+            ))
+            _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
+        case .moveWindowToDesktop(let windowID, let desktopID):
+            print("rail move window \(windowID.rawValue) -> desktop \(desktopID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_desktop",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "desktopID": String(desktopID.rawValue)]
+            ))
+            _ = desktopCommandService.assign(windowID: windowID, to: desktopID, displayID: displayID, follow: false)
+        case .moveWindowToDisplay(let windowID, let targetDisplayID):
+            print("rail move window \(windowID.rawValue) -> display \(targetDisplayID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_display",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "targetDisplayID": targetDisplayID.rawValue]
+            ))
+            _ = commandService.summon(windowID: windowID, displayID: targetDisplayID)
+        case .placeWindow(let windowID, let orderedWindowIDs, let placements):
+            print("rail place window \(windowID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_window_place",
+                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
+            ))
+            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
+        case .moveStage(let stageID, let position):
+            print("rail reorder stage \(stageID.rawValue) -> \(position)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_stage_reorder",
+                details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue, "position": String(position)]
+            ))
+            _ = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
+        case .renameStage(let stageID, let name):
+            print("rail rename stage \(stageID.rawValue) -> \(name)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_stage_rename",
+                details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]
+            ))
+            _ = commandService.rename(stageID.rawValue, to: name, displayID: displayID)
+        case .moveStageToDisplay(let stageID, let targetDisplayID):
+            print("rail move stage \(stageID.rawValue) -> display \(targetDisplayID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_stage_move_display",
+                details: [
+                    "displayID": displayID.rawValue,
+                    "stageID": stageID.rawValue,
+                    "targetDisplayID": targetDisplayID.rawValue
+                ]
+            ))
+            _ = commandService.moveStageToDisplay(
+                stageID: stageID,
+                sourceDisplayID: displayID,
+                targetDisplayID: targetDisplayID,
+                source: "rail"
+            )
+        }
     }
 
     private func handleMouseDragged(to screenPoint: CGPoint) {
@@ -353,67 +625,12 @@ public final class RailController {
         return false
     }
 
-    private func perform(_ action: RailAction, displayID: DisplayID) {
-        switch action {
-        case .switchStage(let stageID):
-            print("rail switch stage \(stageID.rawValue)")
-            fflush(stdout)
-            events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
-            _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
-        case .summonWindow(let windowID):
-            print("rail summon window \(windowID.rawValue)")
-            fflush(stdout)
-            events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
-            _ = commandService.summon(windowID: windowID, displayID: displayID)
-        case .moveWindow(let windowID, let stageID):
-            print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)")
-            fflush(stdout)
-            events.append(RoadieEvent(
-                type: "rail_window_move",
-                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
-            ))
-            _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
-        case .placeWindow(let windowID, let orderedWindowIDs, let placements):
-            print("rail place window \(windowID.rawValue)")
-            fflush(stdout)
-            events.append(RoadieEvent(
-                type: "rail_window_place",
-                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
-            ))
-            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
-        case .moveStage(let stageID, let position):
-            print("rail reorder stage \(stageID.rawValue) -> \(position)")
-            fflush(stdout)
-            events.append(RoadieEvent(
-                type: "rail_stage_reorder",
-                details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue, "position": String(position)]
-            ))
-            _ = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
-        case .moveStageToDisplay(let stageID, let targetDisplayID):
-            print("rail move stage \(stageID.rawValue) -> display \(targetDisplayID.rawValue)")
-            fflush(stdout)
-            events.append(RoadieEvent(
-                type: "rail_stage_move_display",
-                details: [
-                    "displayID": displayID.rawValue,
-                    "stageID": stageID.rawValue,
-                    "targetDisplayID": targetDisplayID.rawValue
-                ]
-            ))
-            _ = commandService.moveStageToDisplay(
-                stageID: stageID,
-                sourceDisplayID: displayID,
-                targetDisplayID: targetDisplayID,
-                source: "rail"
-            )
-        }
-    }
-
     private func rebuildPanels() {
         let snapshot = snapshotService.snapshot()
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
-        let config = RailVisualConfig.load()
+        var config = RailVisualConfig.load()
+        config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
         let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
         thumbnails.prune(keeping: Set(state.scopes.flatMap { scope in
             scope.stages.flatMap { stage in stage.members.map(\.windowID) }
@@ -541,11 +758,11 @@ public final class RailController {
                 return display.id
             }
 
-            guard focusedID == nil,
-                  let activeScope = snapshot.state.activeScope(on: display.id),
+            guard let activeScope = snapshot.state.activeScope(on: display.id),
                   snapshot.windows.contains(where: {
                       $0.scope == activeScope
                           && $0.window.isTileCandidate
+                          && $0.window.isOnScreen
                           && isFullscreenLike($0.window.frame.cgRect, on: display)
                   })
             else { return nil }
@@ -587,9 +804,38 @@ private enum RailAction {
     case switchStage(StageID)
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID)
+    case moveWindowToDesktop(WindowID, DesktopID)
+    case moveWindowToDisplay(WindowID, DisplayID)
     case placeWindow(WindowID, [WindowID], [WindowID: Rect])
     case moveStage(StageID, Int)
+    case renameStage(StageID, String)
     case moveStageToDisplay(StageID, DisplayID)
+}
+
+@MainActor
+private final class RailMenuActionTarget: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func choose(_ sender: NSMenuItem) {
+        handler()
+    }
+}
+
+@MainActor
+private final class RailStageRenameMenuTarget: NSObject {
+    private let handler: () -> Void
+
+    init(handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    @objc func choose(_ sender: NSMenuItem) {
+        handler()
+    }
 }
 
 @MainActor
@@ -616,6 +862,7 @@ private struct RailStageDragPayload {
     var stageID: StageID
     var image: NSImage?
     var grabUnit: CGPoint
+    var windowID: WindowID?
 }
 
 private struct PendingRailDrag {
@@ -632,6 +879,7 @@ private struct PendingStageReorder {
     var stageID: StageID
     var image: NSImage?
     var grabUnit: CGPoint
+    var windowID: WindowID?
     var startPoint: CGPoint
     var didDrag: Bool
 }
@@ -845,6 +1093,12 @@ private final class RailPanel: NSPanel {
         return true
     }
 
+    func refreshStageLabels() {
+        for view in stack.arrangedSubviews {
+            (view as? StageCardView)?.needsDisplay = true
+        }
+    }
+
     private func setCollapsed(_ collapsed: Bool, animated: Bool) {
         guard autoHide else { return }
         guard isCollapsed != collapsed else { return }
@@ -917,10 +1171,11 @@ private final class RailPanel: NSPanel {
         if let spacer = stageLeadingSpacer(count: ids.count, config: config) {
             stack.addArrangedSubview(spacer)
         }
-        for id in ids {
+        for (index, id) in ids.enumerated() {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
             let card = StageCardView(
                 stage: stage,
+                displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
                 isActive: id == scope.activeStageID,
                 accent: config.accent(for: id),
                 config: config,
@@ -1093,7 +1348,8 @@ private final class RailPanel: NSPanel {
                     grabUnit: CGPoint(
                         x: min(max(local.x / width, 0), 1),
                         y: min(max(local.y / height, 0), 1)
-                    )
+                    ),
+                    windowID: card.windowID(at: local)
                 )
             }
             view = current.superview
@@ -1114,11 +1370,17 @@ private final class RailPanel: NSPanel {
     }
 
     private func stageIDs(from scope: PersistentStageScope) -> [StageID] {
-        var ids = scope.stages.map(\.id)
-        ids = ids.filter { id in
-            scope.stages.first { $0.id == id }?.members.isEmpty == false
-        }
-        return ids
+        scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+    }
+
+    private static func isCustomStageName(_ name: String, id: StageID) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
+    }
+
+    private static func stageDisplayLabel(_ stage: PersistentStage, position: Int) -> String {
+        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return isCustomStageName(trimmed, id: stage.id) ? trimmed : "Stage \(position)"
     }
 }
 
@@ -1307,6 +1569,7 @@ private struct RailVisualConfig {
     var headerWidth: CGFloat = 0
     var displayLabel: RailLabelConfig = .displayDefault
     var desktopLabel: RailLabelConfig = .desktopDefault
+    var stageLabel: RailStageLabelConfig = .default
 
     var headerVisible: Bool {
         headerPosition != .hidden && (displayLabel.enabled || desktopLabel.enabled)
@@ -1327,6 +1590,7 @@ private struct RailVisualConfig {
         let parallax = settings.parallax
         let displayLabel = settings.displayLabel
         let desktopLabel = settings.desktopLabel
+        let stageLabel = settings.stageLabel
         let useParallaxGeometry = mode == .parallax
         return RailVisualConfig(
             mode: mode,
@@ -1364,7 +1628,8 @@ private struct RailVisualConfig {
             headerHeight: max(CGFloat(displayLabel.fontSize + desktopLabel.fontSize + 12), 1),
             headerWidth: 0,
             displayLabel: RailLabelConfig(settings: displayLabel, fallbackColor: .white.withAlphaComponent(0.86)),
-            desktopLabel: RailLabelConfig(settings: desktopLabel, fallbackColor: .white.withAlphaComponent(0.42))
+            desktopLabel: RailLabelConfig(settings: desktopLabel, fallbackColor: .white.withAlphaComponent(0.42)),
+            stageLabel: RailStageLabelConfig(settings: stageLabel)
         )
     }
 }
@@ -1388,6 +1653,29 @@ private enum RailTextAlignment: String {
     case left
     case center
     case right
+
+    var nsTextAlignment: NSTextAlignment {
+        switch self {
+        case .left:
+            return .left
+        case .center:
+            return .center
+        case .right:
+            return .right
+        }
+    }
+}
+
+@MainActor
+private enum RailStageLabelPlacement: String {
+    case above
+    case below
+}
+
+@MainActor
+private enum RailStageLabelZOrder: String {
+    case below
+    case above
 }
 
 @MainActor
@@ -1460,6 +1748,115 @@ private struct RailLabelConfig {
             offsetX: CGFloat(settings.offsetX),
             offsetY: CGFloat(settings.offsetY)
         )
+    }
+}
+
+@MainActor
+private struct RailStageLabelConfig {
+    var enabled: Bool
+    var color: NSColor?
+    var useStageAccent: Bool
+    var fontSize: CGFloat
+    var fontFamily: String
+    var weight: NSFont.Weight
+    var alignment: RailTextAlignment
+    var opacity: CGFloat
+    var offsetX: CGFloat
+    var offsetY: CGFloat
+    var placement: RailStageLabelPlacement
+    var zOrder: RailStageLabelZOrder
+    var visibilitySeconds: TimeInterval
+    var fadeSeconds: TimeInterval
+    var visibleUntil: TimeInterval?
+
+    static let `default` = RailStageLabelConfig(
+        enabled: true,
+        color: nil,
+        useStageAccent: true,
+        fontSize: 11,
+        fontFamily: "system",
+        weight: .semibold,
+        alignment: .center,
+        opacity: 0.72,
+        offsetX: 0,
+        offsetY: 0,
+        placement: .below,
+        zOrder: .below,
+        visibilitySeconds: 0,
+        fadeSeconds: 0.35,
+        visibleUntil: nil
+    )
+
+    init(
+        enabled: Bool,
+        color: NSColor?,
+        useStageAccent: Bool,
+        fontSize: CGFloat,
+        fontFamily: String,
+        weight: NSFont.Weight,
+        alignment: RailTextAlignment,
+        opacity: CGFloat,
+        offsetX: CGFloat,
+        offsetY: CGFloat,
+        placement: RailStageLabelPlacement,
+        zOrder: RailStageLabelZOrder,
+        visibilitySeconds: TimeInterval,
+        fadeSeconds: TimeInterval,
+        visibleUntil: TimeInterval? = nil
+    ) {
+        self.enabled = enabled
+        self.color = color
+        self.useStageAccent = useStageAccent
+        self.fontSize = fontSize
+        self.fontFamily = fontFamily
+        self.weight = weight
+        self.alignment = alignment
+        self.opacity = opacity
+        self.offsetX = offsetX
+        self.offsetY = offsetY
+        self.placement = placement
+        self.zOrder = zOrder
+        self.visibilitySeconds = visibilitySeconds
+        self.fadeSeconds = fadeSeconds
+        self.visibleUntil = visibleUntil
+    }
+
+    init(settings: RailSettings.StageLabel) {
+        let trimmedColor = settings.color.trimmingCharacters(in: .whitespacesAndNewlines)
+        let useStageAccent = trimmedColor.isEmpty || trimmedColor.lowercased() == "stage"
+        self.init(
+            enabled: settings.enabled,
+            color: useStageAccent ? nil : NSColor(hex: trimmedColor),
+            useStageAccent: useStageAccent,
+            fontSize: CGFloat(settings.fontSize),
+            fontFamily: settings.fontFamily,
+            weight: NSFont.Weight.toml(settings.weight),
+            alignment: RailTextAlignment(rawValue: settings.alignment) ?? .center,
+            opacity: CGFloat(settings.opacity),
+            offsetX: CGFloat(settings.offsetX),
+            offsetY: CGFloat(settings.offsetY),
+            placement: RailStageLabelPlacement(rawValue: settings.placement) ?? .below,
+            zOrder: RailStageLabelZOrder(rawValue: settings.zOrder) ?? .below,
+            visibilitySeconds: settings.visibilitySeconds,
+            fadeSeconds: settings.fadeSeconds
+        )
+    }
+
+    func opacityMultiplier(now: Date = Date()) -> CGFloat {
+        guard visibilitySeconds > 0 else { return 1 }
+        guard let visibleUntil else { return 0 }
+        let current = now.timeIntervalSince1970
+        guard current >= 0 else { return 0 }
+        if current <= visibleUntil {
+            return 1
+        }
+        guard fadeSeconds > 0 else { return 0 }
+        let fadeProgress = (current - visibleUntil) / fadeSeconds
+        return CGFloat(max(0, min(1, 1 - fadeProgress)))
+    }
+
+    func resolvedColor(stageAccent: NSColor, now: Date = Date()) -> NSColor {
+        (useStageAccent ? stageAccent : (color ?? stageAccent)).withAlphaComponent(opacity * opacityMultiplier(now: now))
     }
 }
 
@@ -1566,6 +1963,7 @@ private final class StageCardView: NSControl {
 
     let stageID: StageID
     private let stage: PersistentStage
+    private let displayLabel: String
     private let isActive: Bool
     private let accent: NSColor
     private let config: RailVisualConfig
@@ -1579,6 +1977,7 @@ private final class StageCardView: NSControl {
 
     init(
         stage: PersistentStage,
+        displayLabel: String,
         isActive: Bool,
         accent: NSColor,
         config: RailVisualConfig,
@@ -1586,6 +1985,7 @@ private final class StageCardView: NSControl {
     ) {
         self.stage = stage
         self.stageID = stage.id
+        self.displayLabel = displayLabel
         self.isActive = isActive
         self.accent = accent
         self.config = config
@@ -1651,16 +2051,84 @@ private final class StageCardView: NSControl {
 
     private func drawCard() {
         let rect = bounds.insetBy(dx: contentInset, dy: 12)
+        let preview = previewArea(in: rect, visibleCount: visiblePreviewCount)
+        let previewBounds = visualPreviewBounds(in: rect, preview: preview)
+        if config.stageLabel.enabled, config.stageLabel.zOrder == .below {
+            drawStageLabel(in: rect, previewBounds: previewBounds)
+        }
+        drawStagePreview(in: rect, preview: preview)
+        if config.stageLabel.enabled, config.stageLabel.zOrder == .above {
+            drawStageLabel(in: rect, previewBounds: previewBounds)
+        }
+    }
+
+    private func drawStagePreview(in rect: CGRect, preview: CGRect) {
         switch config.mode {
         case .stacked:
-            drawStacked(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
+            drawStacked(in: preview)
         case .mosaic:
-            drawMosaic(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
+            drawMosaic(in: preview)
         case .parallax:
-            drawParallax(in: previewArea(in: rect, visibleCount: visiblePreviewCount))
+            drawParallax(in: preview)
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
+    }
+
+    private func drawStageLabel(in rect: CGRect, previewBounds: CGRect) {
+        guard !displayLabel.isEmpty else { return }
+        let labelConfig = config.stageLabel
+        let now = Date()
+        guard labelConfig.opacityMultiplier(now: now) > 0 else { return }
+        let lineHeight = max(labelConfig.fontSize + 5, 1)
+        let baseY: CGFloat
+        switch labelConfig.placement {
+        case .above:
+            baseY = previewBounds.maxY - lineHeight
+        case .below:
+            baseY = previewBounds.minY - lineHeight * 0.66
+        }
+        let left = previewBounds.minX + labelConfig.offsetX
+        let maxWidth = max(64, rect.maxX - left - 8)
+        let labelRect = CGRect(
+            x: left,
+            y: baseY + labelConfig.offsetY,
+            width: maxWidth,
+            height: lineHeight
+        )
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.alignment = labelConfig.alignment.nsTextAlignment
+        let label = displayLabel as NSString
+        label.draw(in: labelRect, withAttributes: [
+            .foregroundColor: labelConfig.resolvedColor(stageAccent: accent, now: now),
+            .font: stageLabelFont(),
+            .paragraphStyle: paragraph,
+        ])
+    }
+
+    private func visualPreviewBounds(in rect: CGRect, preview: CGRect) -> CGRect {
+        let frames: [CGRect]
+        switch config.mode {
+        case .stacked, .parallax:
+            frames = previewItems(in: preview, maxCount: 5).map(\.rect)
+        case .mosaic:
+            frames = mosaicPreviewFrames(in: preview)
+        case .icons:
+            frames = iconPreviewFrames(in: rect.insetBy(dx: 8, dy: 18))
+        }
+        guard let first = frames.first else { return preview }
+        return frames.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    private func stageLabelFont() -> NSFont {
+        let label = config.stageLabel
+        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !family.isEmpty, family.lowercased() != "system",
+           let font = NSFont(name: family, size: label.fontSize) {
+            return font
+        }
+        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
     }
 
     private func drawStacked(in rect: CGRect) {
@@ -1680,22 +2148,8 @@ private final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        let count = min(visualMembers.count, 6)
-        let cols = count <= 2 ? count : 2
-        let rows = Int(ceil(Double(count) / Double(cols)))
-        let gap: CGFloat = 6
-        let cellW = (rect.width - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        let cellH = (rect.height - 34 - CGFloat(rows - 1) * gap) / CGFloat(rows)
-        for index in 0..<count {
-            let col = index % cols
-            let row = index / cols
-            let r = CGRect(
-                x: rect.minX + CGFloat(col) * (cellW + gap),
-                y: rect.minY + CGFloat(row) * (cellH + gap),
-                width: cellW,
-                height: cellH
-            )
-            drawPreview(r, index: index)
+        for (index, frame) in mosaicPreviewFrames(in: rect).enumerated() {
+            drawPreview(frame, index: index)
         }
     }
 
@@ -1718,8 +2172,7 @@ private final class StageCardView: NSControl {
         }
         let members = Array(visualMembers.prefix(6))
         for (index, member) in members.enumerated() {
-            let x = rect.minX + CGFloat(index) * 32
-            let r = CGRect(x: x, y: rect.midY - 12, width: 24, height: 24)
+            let r = iconFrame(in: rect, index: index)
             rounded(r, radius: 7, color: color(for: member, index: index))
             iconLetter(for: member).draw(in: r.insetBy(dx: 0, dy: 4), withAttributes: [
                 .foregroundColor: NSColor.white,
@@ -1741,6 +2194,34 @@ private final class StageCardView: NSControl {
 
     private var visiblePreviewCount: Int {
         min(visualMembers.count, 5)
+    }
+
+    private func mosaicPreviewFrames(in rect: CGRect) -> [CGRect] {
+        let count = min(visualMembers.count, 6)
+        guard count > 0 else { return [] }
+        let cols = count <= 2 ? count : 2
+        let rows = Int(ceil(Double(count) / Double(cols)))
+        let gap: CGFloat = 6
+        let cellW = (rect.width - CGFloat(cols - 1) * gap) / CGFloat(cols)
+        let cellH = (rect.height - 34 - CGFloat(rows - 1) * gap) / CGFloat(rows)
+        return (0..<count).map { index in
+            let col = index % cols
+            let row = index / cols
+            return CGRect(
+                x: rect.minX + CGFloat(col) * (cellW + gap),
+                y: rect.minY + CGFloat(row) * (cellH + gap),
+                width: cellW,
+                height: cellH
+            )
+        }
+    }
+
+    private func iconPreviewFrames(in rect: CGRect) -> [CGRect] {
+        (0..<min(visualMembers.count, 6)).map { iconFrame(in: rect, index: $0) }
+    }
+
+    private func iconFrame(in rect: CGRect, index: Int) -> CGRect {
+        CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24)
     }
 
     private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
@@ -1937,18 +2418,27 @@ private final class StageCardView: NSControl {
     }
 
     func dragPayload(at point: CGPoint) -> RailDragPayload? {
+        guard let hit = hitPreview(at: point) else { return nil }
+        return RailDragPayload(
+            windowID: hit.member.windowID,
+            sourceStageID: stageID,
+            grabUnit: CGPoint(
+                x: min(1, max(0, (point.x - hit.rect.minX) / max(1, hit.rect.width))),
+                y: min(1, max(0, (point.y - hit.rect.minY) / max(1, hit.rect.height)))
+            )
+        )
+    }
+
+    func windowID(at point: CGPoint) -> WindowID? {
+        hitPreview(at: point)?.member.windowID
+    }
+
+    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {
         for item in hitPreviewItemsFrontToBack() {
             guard item.rect.contains(point),
                   let member = visualMembers[safe: item.index]
             else { continue }
-            return RailDragPayload(
-                windowID: member.windowID,
-                sourceStageID: stageID,
-                grabUnit: CGPoint(
-                    x: min(1, max(0, (point.x - item.rect.minX) / max(1, item.rect.width))),
-                    y: min(1, max(0, (point.y - item.rect.minY) / max(1, item.rect.height)))
-                )
-            )
+            return (member, item.rect)
         }
         return nil
     }
