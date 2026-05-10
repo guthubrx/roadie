@@ -1,0 +1,7 @@
+{
+  "findings": [
+    {"id":"FIX-P5","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":96,"description":"FIXED: ajout stageScopeIndex() pour lookups batch O(total_members) une fois puis O(1) par lookup. stageScope() conserve avec annotation."},
+    {"id":"FIX-P5b","severity":"info","category":"performance","file":"Sources/RoadieDaemon/DaemonSnapshot.swift","line":124,"description":"FIXED: hot loop windows utilise stageIndex local (build une fois O(total_members)) au lieu d'O(w * scopes * stages * members). Maintenu incrementalement sur assign."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":2,"total":2}
+}

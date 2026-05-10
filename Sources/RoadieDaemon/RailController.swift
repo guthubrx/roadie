@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import Foundation
+import RoadieAX
 import RoadieCore
 
 @MainActor
@@ -42,10 +43,11 @@ public final class RailController {
         startHoverTimer()
         startConfigWatcher()
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels() }
         }
-        RunLoop.main.add(refreshTimer!, forMode: .common)
+        refreshTimer = newRefreshTimer
+        RunLoop.main.add(newRefreshTimer, forMode: .common)
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -103,18 +105,22 @@ public final class RailController {
 
     private func startHoverTimer() {
         hoverTimer?.invalidate()
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+        let newHoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.updateRailHover()
             }
         }
-        RunLoop.main.add(hoverTimer!, forMode: .common)
+        hoverTimer = newHoverTimer
+        RunLoop.main.add(newHoverTimer, forMode: .common)
     }
 
     private func updateRailHover() {
         let point = NSEvent.mouseLocation
-        let canHide = pendingDrag == nil
-        panels.values.forEach { $0.updateAutoHide(mouse: point, canHide: canHide) }
+        let canHide = pendingDrag == nil && !windowDragController.hasActiveDrag
+        panels.values.forEach { panel in
+            guard panel.isVisible else { return }
+            panel.updateAutoHide(mouse: point, canHide: canHide)
+        }
     }
 
     private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) {
@@ -134,7 +140,7 @@ public final class RailController {
         dragGhost?.hide()
         dropPreview.hide()
         for (displayID, panel) in panels {
-            guard panel.frame.contains(screenPoint) else { continue }
+            guard panel.isVisible, panel.frame.contains(screenPoint) else { continue }
             if panel.revealIfCollapsed() {
                 return
             }
@@ -152,6 +158,9 @@ public final class RailController {
             if let action = panel.action(at: screenPoint) {
                 perform(action, displayID: displayID)
             } else if let stageID = panel.emptyStageID(at: screenPoint) {
+                guard !emptyRailClickHitsManagedWindow(at: screenPoint, displayID: displayID) else {
+                    return
+                }
                 print("rail empty switch stage \(stageID.rawValue)")
                 fflush(stdout)
                 perform(.switchStage(stageID), displayID: displayID)
@@ -191,6 +200,9 @@ public final class RailController {
 
     private func handleMouseUp(at screenPoint: CGPoint) {
         guard let drag = pendingDrag else {
+            if handleWindowDropOnRail(at: screenPoint) {
+                return
+            }
             windowDragController.handleMouseUp(at: screenPoint)
             return
         }
@@ -223,6 +235,24 @@ public final class RailController {
         fflush(stdout)
         perform(.moveWindow(drag.windowID, targetStageID), displayID: targetDisplayID)
         rebuildPanels()
+    }
+
+    private func handleWindowDropOnRail(at screenPoint: CGPoint) -> Bool {
+        guard let windowID = windowDragController.activeDraggedWindowIDForDrop() else {
+            return false
+        }
+        for (displayID, panel) in panels {
+            guard panel.isVisible,
+                  let stageID = panel.windowDropStageID(at: screenPoint)
+            else { continue }
+            windowDragController.cancelPendingDrag()
+            print("rail external drag window \(windowID.rawValue) -> stage \(stageID.rawValue)")
+            fflush(stdout)
+            perform(.moveWindow(windowID, stageID), displayID: displayID)
+            rebuildPanels()
+            return true
+        }
+        return false
     }
 
     private func perform(_ action: RailAction, displayID: DisplayID) {
@@ -269,6 +299,7 @@ public final class RailController {
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
         let config = RailVisualConfig.load()
+        let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
         thumbnails.prune(keeping: Set(state.scopes.flatMap { scope in
             scope.stages.flatMap { stage in stage.members.map(\.windowID) }
         }))
@@ -278,6 +309,10 @@ public final class RailController {
 
         for (displayID, screen) in screensByDisplayID {
             screenFrames[displayID] = screen.frame
+            if fullscreenDisplayIDs.contains(displayID) {
+                panels[displayID]?.orderOut(nil)
+                continue
+            }
             let desktopID = state.currentDesktopID(for: displayID)
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
@@ -297,6 +332,8 @@ public final class RailController {
                 panels[displayID] = panel
                 panel.makeKey()
                 panel.orderFrontRegardless()
+            } else if !panel.isVisible {
+                panel.orderFrontRegardless()
             }
         }
 
@@ -307,10 +344,16 @@ public final class RailController {
         }
     }
 
+    // Complexite : O(c + w) au lieu de O(c * w) en construisant un index windowID -> displayID.
     private func relayoutAfterRailWidthChange(on displayID: DisplayID) {
         let snapshot = snapshotService.snapshot()
+        let displayByWindow: [WindowID: DisplayID] = Dictionary(uniqueKeysWithValues:
+            snapshot.windows.compactMap { entry in
+                entry.scope.map { (entry.window.id, $0.displayID) }
+            }
+        )
         let commands = snapshotService.applyPlan(from: snapshot).commands.filter { command in
-            snapshot.windows.first { $0.window.id == command.window.id }?.scope?.displayID == displayID
+            displayByWindow[command.window.id] == displayID
         }
         guard !commands.isEmpty else { return }
         let result = snapshotService.apply(ApplyPlan(commands: commands))
@@ -336,6 +379,29 @@ public final class RailController {
         screenFrames.first { _, frame in frame.contains(screenPoint) }?.key
     }
 
+    private func emptyRailClickHitsManagedWindow(at screenPoint: CGPoint, displayID: DisplayID) -> Bool {
+        let snapshot = snapshotService.snapshot()
+        guard let activeScope = snapshot.state.activeScope(on: displayID) else {
+            return false
+        }
+
+        let axPoint = Self.nsToAX(screenPoint)
+        return snapshot.windows.contains { entry in
+            guard entry.scope == activeScope,
+                  entry.window.isTileCandidate
+            else { return false }
+            return entry.window.frame.cgRect.insetBy(dx: -2, dy: -2).contains(axPoint)
+        }
+    }
+
+    private static func nsToAX(_ point: CGPoint) -> CGPoint {
+        let primary = NSScreen.screens.first(where: { $0.frame.origin == .zero })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+        guard let primary else { return point }
+        return CGPoint(x: point.x, y: primary.frame.height - point.y)
+    }
+
     private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
         [
             "com.apple.Safari",
@@ -345,6 +411,43 @@ public final class RailController {
             "com.operasoftware.Opera",
             "org.mozilla.firefox",
         ].contains(bundleID)
+    }
+
+    nonisolated public static func fullscreenDisplayIDs(in snapshot: DaemonSnapshot) -> Set<DisplayID> {
+        let focusedID = snapshot.focusedWindowID
+        return Set(snapshot.displays.compactMap { display in
+            if let focusedID,
+               let focused = snapshot.windows.first(where: {
+                   $0.window.id == focusedID
+                       && $0.scope?.displayID == display.id
+                       && $0.window.isTileCandidate
+               }),
+               isFullscreenLike(focused.window.frame.cgRect, on: display) {
+                return display.id
+            }
+
+            guard focusedID == nil,
+                  let activeScope = snapshot.state.activeScope(on: display.id),
+                  snapshot.windows.contains(where: {
+                      $0.scope == activeScope
+                          && $0.window.isTileCandidate
+                          && isFullscreenLike($0.window.frame.cgRect, on: display)
+                  })
+            else { return nil }
+            return display.id
+        })
+    }
+
+    nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
+        framesAreClose(frame, display.visibleFrame.cgRect, tolerance: 48)
+            || framesAreClose(frame, display.frame.cgRect, tolerance: 48)
+    }
+
+    nonisolated private static func framesAreClose(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat) -> Bool {
+        abs(lhs.minX - rhs.minX) <= tolerance
+            && abs(lhs.minY - rhs.minY) <= tolerance
+            && abs(lhs.width - rhs.width) <= tolerance
+            && abs(lhs.height - rhs.height) <= tolerance
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -489,6 +592,7 @@ private final class RailPanel: NSPanel {
     var onVisibleWidthChanged: ((DisplayID) -> Void)?
     private var expandedFrame = CGRect.zero
     private var collapsedFrame = CGRect.zero
+    private var interactionFrame = CGRect.zero
     private var isCollapsed = false
     private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
@@ -530,6 +634,10 @@ private final class RailPanel: NSPanel {
         hideDelay = config.hideDelay
         expandedFrame = CGRect(x: frame.minX, y: frame.minY, width: config.railWidth, height: frame.height)
         collapsedFrame = CGRect(x: frame.minX, y: frame.minY, width: edgeHitWidth, height: frame.height)
+        interactionFrame = expandedFrame.intersection(screen.visibleFrame)
+        if interactionFrame.isNull || interactionFrame.isEmpty {
+            interactionFrame = expandedFrame
+        }
         if !autoHide {
             isCollapsed = false
         } else if !wasAutoHide {
@@ -707,7 +815,7 @@ private final class RailPanel: NSPanel {
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
-        guard let contentView else { return nil }
+        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let contentPoint = contentView.convert(windowPoint, from: nil)
         var view = contentView.hitTest(contentPoint)
@@ -722,7 +830,7 @@ private final class RailPanel: NSPanel {
     }
 
     func stageID(at screenPoint: CGPoint) -> StageID? {
-        guard let contentView, frame.contains(screenPoint) else { return nil }
+        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let contentPoint = contentView.convert(windowPoint, from: nil)
         var view = contentView.hitTest(contentPoint)
@@ -739,8 +847,16 @@ private final class RailPanel: NSPanel {
         if let id = stageID(at: screenPoint) {
             return id
         }
-        guard frame.contains(screenPoint) else { return nil }
+        guard acceptsRailInteraction(at: screenPoint) else { return nil }
         return emptyStageID(at: screenPoint)
+    }
+
+    func windowDropStageID(at screenPoint: CGPoint) -> StageID? {
+        if let id = stageID(at: screenPoint) {
+            return id
+        }
+        guard acceptsRailInteraction(at: screenPoint), isSafeEmptyClick(at: screenPoint) else { return nil }
+        return emptyStageIDs.first ?? nextGeneratedStageID()
     }
 
     func emptyStageID(at screenPoint: CGPoint) -> StageID? {
@@ -749,6 +865,7 @@ private final class RailPanel: NSPanel {
     }
 
     private func isSafeEmptyClick(at screenPoint: CGPoint) -> Bool {
+        guard acceptsRailInteraction(at: screenPoint) else { return false }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let localX = windowPoint.x
         return localX >= emptyClickSafetyMargin
@@ -756,7 +873,7 @@ private final class RailPanel: NSPanel {
     }
 
     func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
-        guard let contentView, frame.contains(screenPoint) else { return nil }
+        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let contentPoint = contentView.convert(windowPoint, from: nil)
         var view = contentView.hitTest(contentPoint)
@@ -768,6 +885,10 @@ private final class RailPanel: NSPanel {
             view = current.superview
         }
         return nil
+    }
+
+    private func acceptsRailInteraction(at screenPoint: CGPoint) -> Bool {
+        frame.contains(screenPoint) && interactionFrame.contains(screenPoint)
     }
 
     private func nextGeneratedStageID() -> StageID {

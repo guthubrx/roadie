@@ -374,6 +374,20 @@ final class WindowDragReorderController {
         self.events = events
     }
 
+    var hasActiveDrag: Bool {
+        pending != nil
+    }
+
+    func activeDraggedWindowIDForDrop() -> WindowID? {
+        guard let pending, pending.didDrag else { return nil }
+        return pending.windowID
+    }
+
+    func cancelPendingDrag() {
+        pending = nil
+        preview.hide()
+    }
+
     func handleMouseDown(at point: CGPoint) {
         preview.hide()
         guard let source = sourceWindowForDragStart(at: point) else {

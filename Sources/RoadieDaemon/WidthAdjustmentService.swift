@@ -37,7 +37,7 @@ public struct WidthAdjustmentService {
         guard let display = snapshot.displays.first,
               let scope = snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope),
-              stage.mode == .bsp || stage.mode == .masterStack
+              stage.mode == .bsp || stage.mode == .mutableBsp || stage.mode == .masterStack
         else {
             return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
         }

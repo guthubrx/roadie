@@ -1,0 +1,6 @@
+{
+  "findings": [
+    {"id":"FIX-Q7","severity":"info","category":"quality","file":"Sources/RoadieDaemon/JSONPersistence.swift","line":1,"description":"FIXED: helper JSONPersistence cree (load/write atomique avec mkdir). Applique a StageStore + LayoutIntentStore. Reste 7 sites a migrer (DaemonSnapshot ecritures, RestoreSafetyService, AutomationQueryService) - effort cycle ulterieur."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":1,"total":1}
+}

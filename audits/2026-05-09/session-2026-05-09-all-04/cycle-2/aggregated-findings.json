@@ -1,0 +1,8 @@
+{
+  "findings": [
+    {"id":"FIX-P8","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":335,"description":"FIXED: updateFrame ajoute return apres match (early-exit). O(stages * members) -> O(stages) en moyenne (1 stage typiquement). Annotation complexite ajoutee."},
+    {"id":"DOC-P6","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":266,"description":"DOCUMENTED: assign annotee O(stages * members) avec justification (balayage necessaire pour deplacer fenetre + nettoyer groupes). n borne ~100."},
+    {"id":"DOC-P7","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":296,"description":"DOCUMENTED: remove annotee idem assign."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":3,"total":3}
+}

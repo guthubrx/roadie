@@ -36,6 +36,8 @@ public final class LayoutMaintainer {
     private let now: () -> Date
     private let ruleEngine: WindowRuleEngine?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
+    private var failedFrames: [UInt32: FailedFrame] = [:]
+    private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
@@ -126,7 +128,7 @@ public final class LayoutMaintainer {
         }
 
         lastObservedFrames = observedFrames
-        let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
+        let plan = suppressKnownUnmovableFrames(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
         guard !plan.commands.isEmpty else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
@@ -135,7 +137,7 @@ public final class LayoutMaintainer {
         if !priorityWindowIDs.isEmpty {
             persistLayoutIntent(in: snapshot, result: result)
         }
-        record(result)
+        record(result, from: plan)
         events.append(RoadieEvent(type: "layout_apply", details: [
             "commands": String(plan.commands.count),
             "applied": String(result.applied),
@@ -163,7 +165,7 @@ public final class LayoutMaintainer {
     ) -> MaintenanceTick {
         lastObservedFrames = observedFrames
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-        let plan = suppressKnownClamps(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
+        let plan = suppressKnownUnmovableFrames(in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs))
         let filtered = ApplyPlan(commands: plan.commands.filter { command in
             guard let scope = windowsByID[command.window.id]?.scope else { return true }
             return !protectedScopes.contains(scope)
@@ -173,7 +175,7 @@ public final class LayoutMaintainer {
         }
         var result = service.apply(filtered)
         result = stabilizeClampedPositions(result, from: filtered)
-        record(result)
+        record(result, from: filtered)
         appendItemEvents(result)
         lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
         return MaintenanceTick(
@@ -186,7 +188,7 @@ public final class LayoutMaintainer {
 
     public func run(maxTicks: Int? = nil, onTick: (MaintenanceTick) -> Void = { _ in }) {
         var ticks = 0
-        while maxTicks == nil || ticks < maxTicks! {
+        while maxTicks.map({ ticks < $0 }) ?? true {
             let result = tick()
             onTick(result)
             ticks += 1
@@ -302,24 +304,52 @@ public final class LayoutMaintainer {
         return payload
     }
 
-    private func suppressKnownClamps(in plan: ApplyPlan) -> ApplyPlan {
-        ApplyPlan(commands: plan.commands.filter { command in
-            guard let known = clampedFrames[command.window.id.rawValue] else { return true }
-            return !known.matches(command: command)
+    private func suppressKnownUnmovableFrames(in plan: ApplyPlan) -> ApplyPlan {
+        let cutoff = now().addingTimeInterval(-max(3, intervalSeconds * 8))
+        return ApplyPlan(commands: plan.commands.filter { command in
+            if let known = clampedFrames[command.window.id.rawValue],
+               known.matches(command: command) {
+                return false
+            }
+            if let known = failedFrames[command.window.id.rawValue],
+               known.failedAt >= cutoff,
+               known.matches(command: command) {
+                return false
+            }
+            if let known = revertedAppliedFrames[command.window.id.rawValue],
+               known.appliedAt >= cutoff,
+               known.matches(command: command) {
+                return false
+            }
+            return true
         })
     }
 
-    private func record(_ result: ApplyResult) {
+    private func record(_ result: ApplyResult, from plan: ApplyPlan) {
+        let commandsByID = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0) })
         for item in result.items {
             switch item.status {
             case .clamped:
                 if let actual = item.actual {
                     clampedFrames[item.windowID.rawValue] = ClampedFrame(requested: item.requested, actual: actual)
                 }
+                revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
             case .applied:
                 clampedFrames.removeValue(forKey: item.windowID.rawValue)
+                failedFrames.removeValue(forKey: item.windowID.rawValue)
+                if let command = commandsByID[item.windowID],
+                   !command.window.frame.isClose(to: item.requested, positionTolerance: 1, sizeTolerance: 1) {
+                    revertedAppliedFrames[item.windowID.rawValue] = RevertedAppliedFrame(
+                        requested: item.requested,
+                        observedBeforeApply: command.window.frame,
+                        appliedAt: now()
+                    )
+                } else {
+                    revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
+                }
             case .failed:
-                break
+                failedFrames[item.windowID.rawValue] = FailedFrame(requested: item.requested, failedAt: now())
+                revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
             }
         }
     }
@@ -392,6 +422,7 @@ public final class LayoutMaintainer {
     private func framesAfterApplying(_ result: ApplyResult, fallback: [UInt32: Rect]) -> [UInt32: Rect] {
         var frames = fallback
         for item in result.items {
+            guard item.status != .failed else { continue }
             frames[item.windowID.rawValue] = item.actual ?? item.requested
         }
         return frames
@@ -574,6 +605,26 @@ private struct ClampedFrame {
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame)
             && command.window.frame.isClose(to: actual)
+    }
+}
+
+private struct FailedFrame {
+    var requested: Rect
+    var failedAt: Date
+
+    func matches(command: ApplyCommand) -> Bool {
+        requested.isClose(to: command.frame)
+    }
+}
+
+private struct RevertedAppliedFrame {
+    var requested: Rect
+    var observedBeforeApply: Rect
+    var appliedAt: Date
+
+    func matches(command: ApplyCommand) -> Bool {
+        requested.isClose(to: command.frame)
+            && command.window.frame.isClose(to: observedBeforeApply, positionTolerance: 4, sizeTolerance: 4)
     }
 }
 

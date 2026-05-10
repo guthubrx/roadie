@@ -26,19 +26,11 @@ public struct StageStore: Sendable {
     }
 
     private func load() -> PersistentStageState {
-        guard let data = try? Data(contentsOf: url) else { return PersistentStageState() }
-        return (try? JSONDecoder().decode(PersistentStageState.self, from: data)) ?? PersistentStageState()
+        JSONPersistence.load(PersistentStageState.self, from: url, default: PersistentStageState())
     }
 
     private func write(_ state: PersistentStageState) {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(state).write(to: url, options: .atomic)
-        } catch {
-            fputs("roadie: failed to persist stages: \(error)\n", stderr)
-        }
+        JSONPersistence.write(state, to: url, label: "stages")
     }
 }
 
@@ -89,13 +81,95 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         scopes.append(scope)
     }
 
+    // Complexite : O(scopes * stages * members) au pire en lookup unique.
+    // Si plusieurs lookups consecutifs sont prevus, utiliser stageScopeIndex() pour
+    // construire un index inverse une seule fois (O(total_members)) puis lookups O(1).
     public func stageScope(for windowID: WindowID) -> StageScope? {
         for scope in scopes {
-            if let stage = scope.stages.first(where: { $0.members.contains(where: { $0.windowID == windowID }) }) {
+            for stage in scope.stages where stage.members.contains(where: { $0.windowID == windowID }) {
                 return StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
             }
         }
         return nil
+    }
+
+    // Complexite : O(total_members). Index inverse pour batch lookups.
+    public func stageScopeIndex() -> [WindowID: StageScope] {
+        var index: [WindowID: StageScope] = [:]
+        for scope in scopes {
+            for stage in scope.stages {
+                let stageScope = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
+                for member in stage.members {
+                    index[member.windowID] = stageScope
+                }
+            }
+        }
+        return index
+    }
+
+    public mutating func reconcileWindowIDs(with liveWindows: [WindowSnapshot]) {
+        let tileableWindows = liveWindows.filter(\.isTileCandidate)
+        let liveWindowIDs = Set(tileableWindows.map(\.id))
+        var claimedWindowIDs = Set<WindowID>()
+        for scope in scopes {
+            for stage in scope.stages {
+                for member in stage.members where liveWindowIDs.contains(member.windowID) {
+                    claimedWindowIDs.insert(member.windowID)
+                }
+            }
+        }
+
+        var windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]
+        for window in tileableWindows {
+            windowsBySignature[StableWindowSignature(window: window), default: []].append(window)
+        }
+
+        var remapped: [WindowID: WindowID] = [:]
+        for scopeIndex in scopes.indices {
+            for stageIndex in scopes[scopeIndex].stages.indices {
+                for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {
+                    let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]
+                    guard !liveWindowIDs.contains(member.windowID),
+                          let replacement = bestReplacement(
+                              for: member,
+                              in: windowsBySignature[StableWindowSignature(member: member)] ?? [],
+                              claimed: claimedWindowIDs
+                          )
+                    else { continue }
+
+                    remapped[member.windowID] = replacement.id
+                    claimedWindowIDs.insert(replacement.id)
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].windowID = replacement.id
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].bundleID = replacement.bundleID
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].title = replacement.title
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].frame = replacement.frame
+                }
+            }
+        }
+
+        guard !remapped.isEmpty else { return }
+        for scopeIndex in scopes.indices {
+            for stageIndex in scopes[scopeIndex].stages.indices {
+                var stage = scopes[scopeIndex].stages[stageIndex]
+                if let focused = stage.focusedWindowID, let replacement = remapped[focused] {
+                    stage.focusedWindowID = replacement
+                }
+                if let previous = stage.previousFocusedWindowID, let replacement = remapped[previous] {
+                    stage.previousFocusedWindowID = replacement
+                }
+                stage.groups = stage.groups.compactMap { group in
+                    var updated = group
+                    updated.windowIDs = updated.windowIDs.map { remapped[$0] ?? $0 }
+                    var seen: Set<WindowID> = []
+                    updated.windowIDs = updated.windowIDs.filter { seen.insert($0).inserted }
+                    if let active = updated.activeWindowID, let replacement = remapped[active] {
+                        updated.activeWindowID = replacement
+                    }
+                    return updated.windowIDs.count >= 2 ? updated : nil
+                }
+                scopes[scopeIndex].stages[stageIndex] = stage
+            }
+        }
     }
 
     public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
@@ -254,6 +328,9 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         return true
     }
 
+    // Complexite : O(stages * members). Pre-conditions : le total members est borne (~60-100).
+    // Le balayage de toutes les stages est necessaire pour deplacer la fenetre depuis un stage
+    // d'origine inconnu et nettoyer les groupes orphelins.
     public mutating func assign(window: WindowSnapshot, to stageID: StageID) {
         ensureStage(stageID)
         for index in stages.indices {
@@ -284,6 +361,8 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages[index].mode = mode
     }
 
+    // Complexite : O(stages * members). Idem `assign` : balayage complet pour nettoyer
+    // members + groups + focused.
     public mutating func remove(windowID: WindowID) {
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == windowID }
@@ -323,6 +402,8 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         stages[index].members = ordered
     }
 
+    // Complexite : O(stages * members) au pire, O(stages) en moyenne avec exit precoce.
+    // Une fenetre n'apparait que dans un stage en etat valide -> on sort des qu'elle est trouvee.
     public mutating func updateFrame(window: WindowSnapshot) {
         for stageIndex in stages.indices {
             guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {
@@ -331,6 +412,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             stages[stageIndex].members[memberIndex].frame = window.frame
             stages[stageIndex].members[memberIndex].bundleID = window.bundleID
             stages[stageIndex].members[memberIndex].title = window.title
+            return
         }
     }
 
@@ -438,4 +520,58 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         self.title = title
         self.frame = frame
     }
+}
+
+private struct StableWindowSignature: Hashable {
+    var bundleID: String
+    var title: String
+
+    init(window: WindowSnapshot) {
+        self.bundleID = Self.normalized(window.bundleID)
+        self.title = Self.normalized(window.title)
+    }
+
+    init(member: PersistentStageMember) {
+        self.bundleID = Self.normalized(member.bundleID)
+        self.title = Self.normalized(member.title)
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .lowercased()
+    }
+}
+
+private func bestReplacement(
+    for member: PersistentStageMember,
+    in candidates: [WindowSnapshot],
+    claimed: Set<WindowID>
+) -> WindowSnapshot? {
+    let available = candidates.filter { !claimed.contains($0.id) }
+    guard !available.isEmpty else { return nil }
+
+    if available.count == 1,
+       !member.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return available[0]
+    }
+
+    let scored = available
+        .map { window in (window: window, score: frameDistance(member.frame, window.frame)) }
+        .sorted { lhs, rhs in lhs.score < rhs.score }
+    guard let best = scored.first else { return nil }
+    let second = scored.dropFirst().first?.score ?? .greatestFiniteMagnitude
+    guard best.score <= 360,
+          second - best.score >= 120
+    else { return nil }
+    return best.window
+}
+
+private func frameDistance(_ lhs: Rect, _ rhs: Rect) -> Double {
+    let lhsRect = lhs.cgRect
+    let rhsRect = rhs.cgRect
+    return abs(lhsRect.midX - rhsRect.midX)
+        + abs(lhsRect.midY - rhsRect.midY)
+        + abs(lhs.width - rhs.width) / 2
+        + abs(lhs.height - rhs.height) / 2
 }

@@ -1,0 +1,8 @@
+{
+  "findings": [
+    {"id":"FIX-T6","severity":"info","category":"tests","file":"Tests/RoadieDaemonTests/DisplayTopologyTests.swift","line":1,"description":"FIXED: 6 tests directs DisplayTopology (neighbor right/left/up, diagonal rejection, self exclusion, none case)."},
+    {"id":"FIX-T5","severity":"info","category":"tests","file":"Tests/RoadieDaemonTests/FormattersTests.swift","line":1,"description":"FIXED: 6 tests directs Formatters (windows empty/scoped/header, displays empty/active marker, permissions)."},
+    {"id":"FIX-T-NEW","severity":"info","category":"tests","file":"Tests/RoadieDaemonTests/PersistentStageStateTests.swift","line":1,"description":"FIXED: 5 tests directs sur stageScope + stageScopeIndex (equivalence, empty state, multi-scope lookup)."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":3,"total":3}
+}

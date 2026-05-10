@@ -21,6 +21,8 @@ public protocol WindowFrameWriting: Sendable {
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
     func focus(_ window: WindowSnapshot) -> Bool
     func reset(_ window: WindowSnapshot) -> Bool
+    func toggleZoom(_ window: WindowSnapshot) -> Bool
+    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool
 }
 
 public extension WindowFrameWriting {
@@ -34,6 +36,8 @@ public extension WindowFrameWriting {
 
     func focus(_ window: WindowSnapshot) -> Bool { false }
     func reset(_ window: WindowSnapshot) -> Bool { false }
+    func toggleZoom(_ window: WindowSnapshot) -> Bool { reset(window) }
+    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { false }
 }
 
 public struct WindowFrameUpdate: Sendable {
@@ -73,6 +77,13 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
     public var frame: Rect
     public var isOnScreen: Bool
     public var isTileCandidate: Bool
+    /// Sous-role AX (ex: "AXStandardWindow", "AXDialog", "AXFloatingWindow").
+    /// nil si AX n'a pas pu repondre (app sandboxee, autorisations manquantes).
+    public var subrole: String?
+    /// Role AX (ex: "AXWindow"). Optionnel, surtout utile pour les regles user.
+    public var role: String?
+    /// Mobilier AX (boutons + flags d'etat). nil si AX absent.
+    public var furniture: WindowFurniture?
 
     public init(
         id: WindowID,
@@ -82,7 +93,10 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
         title: String,
         frame: Rect,
         isOnScreen: Bool,
-        isTileCandidate: Bool
+        isTileCandidate: Bool,
+        subrole: String? = nil,
+        role: String? = nil,
+        furniture: WindowFurniture? = nil
     ) {
         self.id = id
         self.pid = pid
@@ -92,11 +106,124 @@ public struct WindowSnapshot: Equatable, Codable, Sendable {
         self.frame = frame
         self.isOnScreen = isOnScreen
         self.isTileCandidate = isTileCandidate
+        self.subrole = subrole
+        self.role = role
+        self.furniture = furniture
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, pid, appName, bundleID, title, frame, isOnScreen, isTileCandidate, subrole, role, furniture
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(WindowID.self, forKey: .id)
+        self.pid = try c.decode(Int32.self, forKey: .pid)
+        self.appName = try c.decode(String.self, forKey: .appName)
+        self.bundleID = try c.decode(String.self, forKey: .bundleID)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.frame = try c.decode(Rect.self, forKey: .frame)
+        self.isOnScreen = try c.decode(Bool.self, forKey: .isOnScreen)
+        self.isTileCandidate = try c.decode(Bool.self, forKey: .isTileCandidate)
+        self.subrole = try c.decodeIfPresent(String.self, forKey: .subrole)
+        self.role = try c.decodeIfPresent(String.self, forKey: .role)
+        self.furniture = try c.decodeIfPresent(WindowFurniture.self, forKey: .furniture)
     }
 }
 
-public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
-    public init() {}
+/// Mobilier AX d'une fenetre : presence de boutons + flags d'etat.
+/// Inspiree de aerospace/AxUiElementWindowType.swift pour distinguer fenetres reelles
+/// vs popups/menus/tooltips qui n'ont aucun bouton.
+public struct WindowFurniture: Equatable, Codable, Sendable {
+    public var hasCloseButton: Bool
+    public var hasFullscreenButton: Bool
+    /// Vrai si le bouton fullscreen existe ET est activable. Aerospace utilise ce signal
+    /// pour distinguer une vraie fenetre (button enabled) d'un dialog (button present mais
+    /// disabled : Settings, About this Mac, IntelliJ Rebase dialog, Finder copy file dialog).
+    public var fullscreenButtonEnabled: Bool
+    public var hasMinimizeButton: Bool
+    public var hasZoomButton: Bool
+    public var isFocused: Bool
+    public var isMain: Bool
+    /// Vrai pour les dialogs/sheets modaux qui bloquent une app. Ces fenetres ne doivent
+    /// pas participer au tiling automatique, meme si elles ont temporairement le focus.
+    public var isModal: Bool
+
+    public init(
+        hasCloseButton: Bool = false,
+        hasFullscreenButton: Bool = false,
+        fullscreenButtonEnabled: Bool = false,
+        hasMinimizeButton: Bool = false,
+        hasZoomButton: Bool = false,
+        isFocused: Bool = false,
+        isMain: Bool = false,
+        isModal: Bool = false
+    ) {
+        self.hasCloseButton = hasCloseButton
+        self.hasFullscreenButton = hasFullscreenButton
+        self.fullscreenButtonEnabled = fullscreenButtonEnabled
+        self.hasMinimizeButton = hasMinimizeButton
+        self.hasZoomButton = hasZoomButton
+        self.isFocused = isFocused
+        self.isMain = isMain
+        self.isModal = isModal
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case hasCloseButton, hasFullscreenButton, fullscreenButtonEnabled
+        case hasMinimizeButton, hasZoomButton, isFocused, isMain, isModal
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.hasCloseButton = try c.decodeIfPresent(Bool.self, forKey: .hasCloseButton) ?? false
+        self.hasFullscreenButton = try c.decodeIfPresent(Bool.self, forKey: .hasFullscreenButton) ?? false
+        self.fullscreenButtonEnabled = try c.decodeIfPresent(Bool.self, forKey: .fullscreenButtonEnabled) ?? false
+        self.hasMinimizeButton = try c.decodeIfPresent(Bool.self, forKey: .hasMinimizeButton) ?? false
+        self.hasZoomButton = try c.decodeIfPresent(Bool.self, forKey: .hasZoomButton) ?? false
+        self.isFocused = try c.decodeIfPresent(Bool.self, forKey: .isFocused) ?? false
+        self.isMain = try c.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
+        self.isModal = try c.decodeIfPresent(Bool.self, forKey: .isModal) ?? false
+    }
+
+    /// Vrai si au moins un bouton ou flag d'etat indique une "vraie" fenetre.
+    /// Logique d'aerospace : sans aucun de ces signaux, c'est un popup/menu/tooltip.
+    public var isLikelyRealWindow: Bool {
+        hasCloseButton || hasFullscreenButton || hasMinimizeButton || hasZoomButton || isFocused || isMain
+    }
+
+    /// Heuristique aerospace fine : si le bouton fullscreen existe mais est desactive,
+    /// la fenetre est probablement un dialog (Settings, About, IntelliJ Rebase...).
+    public var fullscreenButtonDisabled: Bool {
+        hasFullscreenButton && !fullscreenButtonEnabled
+    }
+}
+
+public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
+    /// Cache long-vivant des attributs AX par CGWindowID. Le subrole/role/mobilier d'une
+    /// fenetre est essentiellement immuable apres creation -- on evite de re-queryer AX
+    /// 8 fois par fenetre par tick (~30% CPU sinon avec ~30 fenetres a 2 ticks/sec).
+    /// Invalide via AXWindowEventObserver (kAXUIElementDestroyedNotification).
+    private struct CacheEntry {
+        let attrs: AXWindowAttributes
+        let fetchedAt: Date
+    }
+    private let cacheLock = NSLock()
+    private var attributeCache: [CGWindowID: CacheEntry] = [:]
+    /// TTL d'une entree de cache. Au-dela on re-queryera AX (filet de securite contre
+    /// les desync de cache si un AX event a manque).
+    private let cacheTTL: TimeInterval
+
+    public init(cacheTTL: TimeInterval = 600) {
+        self.cacheTTL = cacheTTL
+    }
+
+    /// Vide le cache. Appele par le daemon en reponse aux notifications AX (kAXUIElementDestroyedNotification).
+    public func invalidateCache() {
+        cacheLock.lock()
+        attributeCache.removeAll(keepingCapacity: true)
+        cacheLock.unlock()
+    }
 
     public func permissions(prompt: Bool) -> PermissionSnapshot {
         AXPermissions.snapshot(prompt: prompt)
@@ -126,7 +253,16 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         }
 
         let currentPID = ProcessInfo.processInfo.processIdentifier
-        return raw.compactMap { info -> WindowSnapshot? in
+        // Cache pid->[windowID->attrs] pour cette enumeration (1 query AX par app par snapshot
+        // pour les fenetres pas encore en cache long-vivant).
+        var perSnapshotCache: [pid_t: [CGWindowID: AXWindowAttributes]] = [:]
+        let now = Date()
+        // Snapshot atomique du cache long-vivant pour eviter de tenir le lock pendant tout le scan.
+        cacheLock.lock()
+        let liveCache = attributeCache
+        cacheLock.unlock()
+
+        let result = raw.compactMap { info -> WindowSnapshot? in
             guard let number = info[kCGWindowNumber as String] as? UInt32,
                   number > 0,
                   let pid = info[kCGWindowOwnerPID as String] as? Int32,
@@ -141,11 +277,24 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
             let title = info[kCGWindowName as String] as? String ?? ""
             let app = NSRunningApplication(processIdentifier: pid)
             let bundleID = app?.bundleIdentifier ?? ""
+
+            // isTileCandidate ne reflete plus que les criteres CG bruts. La policy
+            // (AX subrole, regles user, exclusions bundle) est appliquee cote daemon.
             let tileCandidate = layer == 0
                 && alpha > 0
                 && rect.width >= 80
                 && rect.height >= 60
                 && !bundleID.hasPrefix("com.apple.WindowManager")
+
+            // Lookup cache long-vivant puis fallback sur enumeration AX.
+            var attrs: AXWindowAttributes?
+            if tileCandidate {
+                if let cached = liveCache[number], now.timeIntervalSince(cached.fetchedAt) < cacheTTL {
+                    attrs = cached.attrs
+                } else {
+                    attrs = Self.attributes(forCGWindowID: number, pid: pid, cache: &perSnapshotCache)
+                }
+            }
 
             return WindowSnapshot(
                 id: WindowID(rawValue: number),
@@ -155,9 +304,97 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
                 title: title,
                 frame: Rect(rect),
                 isOnScreen: true,
-                isTileCandidate: tileCandidate
+                isTileCandidate: tileCandidate,
+                subrole: attrs?.subrole,
+                role: attrs?.role,
+                furniture: attrs?.furniture
             )
         }
+
+        // Met a jour le cache long-vivant avec les nouvelles entrees decouvertes ce snapshot.
+        if !perSnapshotCache.isEmpty {
+            cacheLock.lock()
+            for (_, byWindow) in perSnapshotCache {
+                for (windowID, attrs) in byWindow {
+                    attributeCache[windowID] = CacheEntry(attrs: attrs, fetchedAt: now)
+                }
+            }
+            // GC : enleve les entrees plus presentes dans le snapshot courant.
+            let liveIDs = Set(result.map { $0.id.rawValue })
+            attributeCache = attributeCache.filter { liveIDs.contains($0.key) }
+            cacheLock.unlock()
+        }
+
+        return result
+    }
+
+    /// Resout les attributs AX (role, subrole, mobilier) d'une fenetre identifiee par son CGWindowID.
+    /// Memoise par pid pour limiter les appels AX (1 enumeration par app, pas par fenetre).
+    /// Retourne nil si AX n'a pas pu repondre (app sandboxee, autorisations manquantes).
+    private static func attributes(
+        forCGWindowID windowID: CGWindowID,
+        pid: pid_t,
+        cache: inout [pid_t: [CGWindowID: AXWindowAttributes]]
+    ) -> AXWindowAttributes? {
+        if let entries = cache[pid] {
+            return entries[windowID]
+        }
+        var entries: [CGWindowID: AXWindowAttributes] = [:]
+        let axApp = AXUIElementCreateApplication(pid)
+        var rawWindows: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+           let axWindows = rawWindows as? [AXUIElement] {
+            for axWindow in axWindows {
+                var cgID = CGWindowID()
+                guard AXUIElementGetWindowID(axWindow, &cgID) == .success, cgID > 0 else { continue }
+                var rawSubrole: CFTypeRef?
+                var rawRole: CFTypeRef?
+                let subrole = AXUIElementCopyAttributeValue(axWindow, kAXSubroleAttribute as CFString, &rawSubrole) == .success
+                    ? rawSubrole as? String
+                    : nil
+                let role = AXUIElementCopyAttributeValue(axWindow, kAXRoleAttribute as CFString, &rawRole) == .success
+                    ? rawRole as? String
+                    : nil
+                let fullscreenBtn = elementAttribute(axWindow, kAXFullScreenButtonAttribute)
+                let furniture = WindowFurniture(
+                    hasCloseButton: hasAttribute(axWindow, kAXCloseButtonAttribute),
+                    hasFullscreenButton: fullscreenBtn != nil,
+                    fullscreenButtonEnabled: fullscreenBtn.map { boolAttribute($0, kAXEnabledAttribute) } ?? false,
+                    hasMinimizeButton: hasAttribute(axWindow, kAXMinimizeButtonAttribute),
+                    hasZoomButton: hasAttribute(axWindow, kAXZoomButtonAttribute),
+                    isFocused: boolAttribute(axWindow, kAXFocusedAttribute),
+                    isMain: boolAttribute(axWindow, kAXMainAttribute),
+                    isModal: boolAttribute(axWindow, kAXModalAttribute)
+                )
+                entries[cgID] = AXWindowAttributes(role: role, subrole: subrole, furniture: furniture)
+            }
+        }
+        cache[pid] = entries
+        return entries[windowID]
+    }
+
+    /// Vrai si l'attribut existe (sa valeur n'est pas nil). Utile pour les boutons de fenetre.
+    private static func hasAttribute(_ element: AXUIElement, _ attribute: String) -> Bool {
+        var raw: CFTypeRef?
+        return AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success && raw != nil
+    }
+
+    /// Lit un attribut element (typiquement un bouton). Retourne nil si absent.
+    private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let raw, CFGetTypeID(raw) == AXUIElementGetTypeID()
+        else { return nil }
+        return (raw as! AXUIElement) // Safe : CFTypeID verifie
+    }
+
+    /// Lit un attribut booleen, defaut false en cas d'echec.
+    private static func boolAttribute(_ element: AXUIElement, _ attribute: String) -> Bool {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let value = raw as? Bool
+        else { return false }
+        return value
     }
 
     public func focusedWindowID() -> WindowID? {
@@ -165,25 +402,51 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var rawFocused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(axApp, kAXFocusedWindowAttribute as CFString, &rawFocused) == .success,
-              let focused = rawFocused
+              let focused = rawFocused,
+              CFGetTypeID(focused) == AXUIElementGetTypeID()
         else { return nil }
 
-        let focusedElement = focused as! AXUIElement
-        let appWindows = windows().filter { $0.pid == app.processIdentifier }
-        if let id = windowID(of: focusedElement),
-           appWindows.contains(where: { $0.id.rawValue == id }) {
+        let focusedElement = focused as! AXUIElement // Safe: CFTypeID verified above
+        // Voie rapide : si AX donne directement le windowID, on retourne sans appel a windows().
+        if let id = windowID(of: focusedElement) {
             return WindowID(rawValue: id)
         }
 
+        // Voie lente : on enumere uniquement les fenetres de l'app courante (CG seul, pas AX).
+        // Eviter l'appel a self.windows() qui re-querie le subrole de toutes les fenetres.
+        let appWindows = lightweightWindows(forPID: app.processIdentifier)
         let focusedFrame = AXWindowFrameWriter().frame(of: focusedElement)
         if let focusedFrame,
-           let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame.cgRect) }) {
+           let match = appWindows.first(where: { framesAreClose(focusedFrame, $0.frame) }) {
             return match.id
         }
 
         let focusedTitle = title(of: focusedElement)
         let titleMatches = appWindows.filter { !focusedTitle.isEmpty && $0.title == focusedTitle }
         return titleMatches.count == 1 ? titleMatches.first?.id : nil
+    }
+
+    /// Liste CG-only (pas d'AX) des fenetres d'un PID, pour les voies de fallback de focusedWindowID.
+    private struct CGWindowLite {
+        let id: WindowID
+        let frame: CGRect
+        let title: String
+    }
+    private func lightweightWindows(forPID pid: pid_t) -> [CGWindowLite] {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return []
+        }
+        return raw.compactMap { info in
+            guard let number = info[kCGWindowNumber as String] as? UInt32,
+                  let ownerPID = info[kCGWindowOwnerPID as String] as? Int32,
+                  ownerPID == pid,
+                  let boundsDict = info[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: boundsDict as CFDictionary)
+            else { return nil }
+            let title = info[kCGWindowName as String] as? String ?? ""
+            return CGWindowLite(id: WindowID(rawValue: number), frame: rect, title: title)
+        }
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -238,6 +501,12 @@ public struct LiveSystemSnapshotProvider: SystemSnapshotProviding {
     }
 }
 
+private struct AXWindowAttributes {
+    let role: String?
+    let subrole: String?
+    let furniture: WindowFurniture
+}
+
 public struct AXWindowFrameWriter: WindowFrameWriting {
     public init() {}
 
@@ -268,10 +537,33 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     public func reset(_ window: WindowSnapshot) -> Bool {
-        guard let element = element(matching: window) else { return false }
-        return AXUIElementPerformAction(element, "AXZoomWindow" as CFString) == .success
+        toggleZoom(window)
     }
 
+    public func toggleZoom(_ window: WindowSnapshot) -> Bool {
+        guard let element = element(matching: window),
+              let zoomButton = elementAttribute(element, kAXZoomButtonAttribute)
+        else { return false }
+        return AXUIElementPerformAction(zoomButton, kAXPressAction as CFString) == .success
+    }
+
+    public func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {
+        guard let element = element(matching: window),
+              let fullscreenButton = elementAttribute(element, kAXFullScreenButtonAttribute)
+        else { return false }
+        return AXUIElementPerformAction(fullscreenButton, kAXPressAction as CFString) == .success
+    }
+
+    private func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success,
+              let raw, CFGetTypeID(raw) == AXUIElementGetTypeID()
+        else { return nil }
+        return (raw as! AXUIElement)
+    }
+
+    // Complexite : O(n) en simple passe (n = fenetres de l'application).
+    // Priorite : ID exact > frame proche > titre unique.
     private func element(matching window: WindowSnapshot) -> AXUIElement? {
         let app = AXUIElementCreateApplication(window.pid)
         var rawWindows: CFTypeRef?
@@ -279,21 +571,21 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
               let windows = rawWindows as? [AXUIElement]
         else { return nil }
 
+        var frameMatch: AXUIElement?
+        var titleMatches: [AXUIElement] = []
+        let lookupTitle = !window.title.isEmpty
         for element in windows {
             if windowID(of: element) == window.id.rawValue {
-                return element
+                return element // priorite la plus haute, sortie immediate
+            }
+            if frameMatch == nil, matchesByFrame(element, expected: window) {
+                frameMatch = element
+            }
+            if lookupTitle, title(of: element) == window.title {
+                titleMatches.append(element)
             }
         }
-
-        for element in windows {
-            if matchesByFrame(element, expected: window) {
-                return element
-            }
-        }
-
-        let titleMatches = windows.filter { element in
-            title(of: element) == window.title && !window.title.isEmpty
-        }
+        if let frameMatch { return frameMatch }
         return titleMatches.count == 1 ? titleMatches.first : nil
     }
 
@@ -363,8 +655,11 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
         var position = CGPoint.zero
         var size = CGSize.zero
-        guard AXValueGetValue(axPosition as! AXValue, .cgPoint, &position),
-              AXValueGetValue(axSize as! AXValue, .cgSize, &size)
+        // Safe: CFTypeID == AXValueGetTypeID() verified in the guard above.
+        let posValue = axPosition as! AXValue
+        let sizeValue = axSize as! AXValue
+        guard AXValueGetValue(posValue, .cgPoint, &position),
+              AXValueGetValue(sizeValue, .cgSize, &size)
         else { return nil }
         return CGRect(origin: position, size: size)
     }

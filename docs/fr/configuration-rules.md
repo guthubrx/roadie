@@ -29,6 +29,8 @@ master_ratio = 0.6
 smart_gaps_solo = true
 ```
 
+`default_strategy` accepte `bsp`, `mutableBsp`, `masterStack` ou `float`.
+
 Cas d'usage :
 
 - reduire les gaps sur un petit ecran;

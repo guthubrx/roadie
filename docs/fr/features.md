@@ -7,6 +7,7 @@ Roadie tile les fenetres visibles d'une stage active.
 Modes disponibles :
 
 - `bsp` : repartition en arbre binaire, adaptee aux workflows terminal/code/navigateur.
+- `mutableBsp` : repartition en arbre binaire qui conserve les ratios observes quand les fenetres sont deplacees ou redimensionnees.
 - `masterStack` : une fenetre principale et une pile secondaire.
 - `float` : Roadie garde les fenetres dans l'etat de stage mais ne les retile pas.
 
@@ -14,6 +15,7 @@ Exemples :
 
 ```bash
 ./bin/roadie mode bsp
+./bin/roadie mode mutableBsp
 ./bin/roadie mode masterStack
 ./bin/roadie mode float
 ./bin/roadie balance
@@ -22,6 +24,7 @@ Exemples :
 Cas d'usage :
 
 - developpement avec editeur en master et terminaux en stack;
+- experimentations BSP proches de yabai ou les mouvements manuels doivent influencer le prochain tiling;
 - operations multi-ecran avec chaque ecran dans un mode different;
 - pause temporaire du tiling sur une stage en `float`.
 

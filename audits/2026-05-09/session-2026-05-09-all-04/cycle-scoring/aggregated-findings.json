@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {"id":"S9","severity":"high","category":"security","file":"Sources/roadied/main.swift","line":147,"description":"@unchecked Sendable RestoreSafetyRuntimeController : refactor actor-based dedie (session SpecKit)."},
+    {"id":"S10","severity":"high","category":"security","file":"Sources/RoadieDaemon/ConfigReloadService.swift","line":70,"description":"@unchecked Sendable ConfigReloadService : idem."},
+    {"id":"S11","severity":"high","category":"security","file":"Sources/RoadieDaemon/FileAdministration.swift","line":59,"description":"@unchecked Sendable FileAdministrationService : idem."},
+    {"id":"P4","severity":"high","category":"performance","file":"Sources/RoadieDaemon/StateAudit.swift","line":223,"description":"repairScopes triple boucle in-place : refactor risque sans suite tests dediee."},
+    {"id":"Q1","severity":"high","category":"quality","file":"Sources/RoadieDaemon/RailController.swift","line":1,"description":"God-class 1912 lignes : decoupage en 3 modules (session SpecKit dediee)."},
+    {"id":"Q2","severity":"high","category":"quality","file":"Sources/roadie/main.swift","line":1,"description":"1109 lignes : decoupage en CommandHandlers."},
+    {"id":"T4","severity":"high","category":"tests","file":"Sources/RoadieDaemon/RailController.swift","line":0,"description":"Aucun unit test (UI controller, mocks AppKit complexes)."},
+    {"id":"P6","severity":"medium","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":266,"description":"PersistentStageScope.assign documentee, optim hors scope (n borne <100)."},
+    {"id":"P7","severity":"medium","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":296,"description":"remove documentee, optim hors scope."},
+    {"id":"P9","severity":"medium","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":366,"description":"mergeDisconnectedScope triple loop : optim hors scope."},
+    {"id":"Q3","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/DaemonSnapshot.swift","line":1,"description":"863 lignes."},
+    {"id":"Q4","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/WindowCommands.swift","line":1,"description":"739 lignes."},
+    {"id":"Q5","severity":"medium","category":"quality","file":"Sources/RoadieCore/Config.swift","line":1,"description":"631 lignes."},
+    {"id":"Q6","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/StageCommands.swift","line":1,"description":"612 lignes."},
+    {"id":"T2","severity":"medium","category":"tests","file":"Sources/RoadieDaemon/AutomationSnapshotService.swift","line":0,"description":"Sans test direct."},
+    {"id":"T3","severity":"medium","category":"tests","file":"Sources/RoadieDaemon/LayoutCommandService.swift","line":0,"description":"Indirect uniquement."},
+    {"id":"Q9","severity":"low","category":"quality","file":"Sources/RoadieDaemon/RailController.swift","line":886,"description":"CGWindowListCreateImage deprecated macOS 14."},
+    {"id":"Q-JSON","severity":"low","category":"quality","file":"Sources/RoadieDaemon/DaemonSnapshot.swift","line":817,"description":"9 sites JSONEncoder dans DaemonSnapshot non migres vers JSONPersistence (typage variant, refactor specifique)."},
+    {"id":"FIXED-CYCLES-04","severity":"info","category":"performance","file":"audits/2026-05-09/session-2026-05-09-all-04","line":0,"description":"Session-04 : 17 tests directs ajoutes (DisplayTopology 6 + Formatters 6 + PersistentStageState 5), updateFrame early-exit, JSONPersistence enrichi + RestoreSafetyService migre. 174 tests OK."}
+  ],
+  "summary": {"critical":0,"high":7,"medium":9,"low":2,"info":1,"total":19}
+}

@@ -219,6 +219,57 @@ public struct WindowCommandService {
         )
     }
 
+    public func toggleFullscreen() -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot),
+              let scope = active.scope,
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else {
+            return WindowCommandResult(message: "toggle fullscreen: no active window", changed: false)
+        }
+
+        let visible = display.visibleFrame.cgRect.integral
+        let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
+        service.removeLayoutIntent(scope: scope)
+        if framesAreClose(active.window.frame.cgRect, visible) {
+            let plan = service.applyPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered)
+            let result = service.apply(plan)
+            _ = focusWindow(active.window)
+            return WindowCommandResult(
+                message: "toggle fullscreen off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+                changed: result.failed < result.attempted || plan.commands.isEmpty
+            )
+        }
+
+        let changed = service.setFrame(visible, of: active.window) != nil
+        if changed {
+            var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+                return (entry.window.id, entry.window.frame)
+            })
+            placements[active.window.id] = Rect(visible)
+            service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
+        }
+        _ = focusWindow(active.window)
+        return WindowCommandResult(
+            message: "toggle fullscreen on: changed=\(changed)",
+            changed: changed
+        )
+    }
+
+    public func toggleNativeFullscreen() -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot) else {
+            return WindowCommandResult(message: "toggle native-fullscreen: no active window", changed: false)
+        }
+        let changed = service.toggleNativeFullscreen(active.window)
+        _ = focusWindow(active.window)
+        return WindowCommandResult(
+            message: "toggle native-fullscreen: changed=\(changed)",
+            changed: changed
+        )
+    }
+
     public func sendToDisplay(_ displayIndex: Int) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot) else {
@@ -295,16 +346,16 @@ public struct WindowCommandService {
         direction: Direction
     ) -> (active: ScopedWindowSnapshot, neighbor: ScopedWindowSnapshot)? {
         guard let active = activeWindow(in: snapshot), let scope = active.scope else { return nil }
-        let candidates = snapshot.windows.filter {
-            $0.scope == scope && $0.window.id != active.window.id && $0.window.isTileCandidate
+        let activeFrame = active.window.frame.cgRect
+        // Pre-compute score once per candidate to avoid O(2n) score calls in min(by:).
+        let scored = snapshot.windows.compactMap { candidate -> (ScopedWindowSnapshot, CGFloat)? in
+            guard candidate.scope == scope,
+                  candidate.window.id != active.window.id,
+                  candidate.window.isTileCandidate else { return nil }
+            return (candidate, neighborScore(from: activeFrame, to: candidate.window.frame.cgRect, direction: direction))
         }
-        guard let neighbor = candidates.min(by: { lhs, rhs in
-            neighborScore(from: active.window.frame.cgRect, to: lhs.window.frame.cgRect, direction: direction)
-                < neighborScore(from: active.window.frame.cgRect, to: rhs.window.frame.cgRect, direction: direction)
-        }),
-        neighborScore(from: active.window.frame.cgRect, to: neighbor.window.frame.cgRect, direction: direction).isFinite
-        else { return nil }
-        return (active, neighbor)
+        guard let best = scored.min(by: { $0.1 < $1.1 }), best.1.isFinite else { return nil }
+        return (active, best.0)
     }
 
     private func sendActiveToAdjacentDisplay(
@@ -447,6 +498,15 @@ public struct WindowCommandService {
                 )
             )
         }
+        if snapshot.state.stage(scope: scope)?.mode == .mutableBsp,
+           let plan = mutableBspNeighborWarpPlan(
+            active: active,
+            neighbor: neighbor,
+            direction: direction,
+            scopedWindows: scopedWindows
+           ) {
+            return plan
+        }
 
         let horizontal = direction == .left || direction == .right
         var targetGroup = scopedWindows
@@ -481,6 +541,54 @@ public struct WindowCommandService {
         var placements: [WindowID: CGRect] = [:]
         placements.merge(planGroup(firstGroup, in: rects.first, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
         placements.merge(planGroup(secondGroup, in: rects.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
+
+        let windowsByID = Dictionary(uniqueKeysWithValues: scopedWindows.map { ($0.id, $0) })
+        let commands = placements.keys.sorted().compactMap { id -> ApplyCommand? in
+            guard let window = windowsByID[id], let frame = placements[id], !framesAreClose(window.frame.cgRect, frame) else { return nil }
+            return ApplyCommand(window: window, frame: Rect(frame.integral))
+        }
+        return commands.isEmpty ? nil : ApplyPlan(commands: commands)
+    }
+
+    private func mutableBspNeighborWarpPlan(
+        active: WindowSnapshot,
+        neighbor: WindowSnapshot,
+        direction: Direction,
+        scopedWindows: [WindowSnapshot]
+    ) -> ApplyPlan? {
+        let gap = CGFloat(service.innerGap())
+        let activeFrame = active.frame.cgRect
+        let neighborFrame = neighbor.frame.cgRect
+        let horizontal = direction == .left || direction == .right
+
+        let sourceSiblings: [WindowSnapshot]
+        let sourceRect: CGRect?
+        if horizontal {
+            sourceSiblings = scopedWindows.filter { window in
+                window.id != active.id
+                    && window.id != neighbor.id
+                    && rangesOverlap(window.frame.cgRect.minX...window.frame.cgRect.maxX, activeFrame.minX...activeFrame.maxX)
+            }.sorted { lhs, rhs in lhs.frame.cgRect.midY < rhs.frame.cgRect.midY }
+            sourceRect = union([activeFrame] + sourceSiblings.map { $0.frame.cgRect })
+        } else {
+            sourceSiblings = scopedWindows.filter { window in
+                window.id != active.id
+                    && window.id != neighbor.id
+                    && rangesOverlap(window.frame.cgRect.minY...window.frame.cgRect.maxY, activeFrame.minY...activeFrame.maxY)
+            }.sorted { lhs, rhs in lhs.frame.cgRect.midX < rhs.frame.cgRect.midX }
+            sourceRect = union([activeFrame] + sourceSiblings.map { $0.frame.cgRect })
+        }
+        guard !sourceSiblings.isEmpty, let sourceRect else { return nil }
+
+        let pairRects = split(neighborFrame, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
+        let activeFirst = direction == .left || direction == .up
+        var placements: [WindowID: CGRect] = [
+            active.id: (activeFirst ? pairRects.first : pairRects.second).integral,
+            neighbor.id: (activeFirst ? pairRects.second : pairRects.first).integral
+        ]
+
+        let sourceIDs = sourceSiblings.map(\.id)
+        placements.merge(planGroup(sourceIDs, in: sourceRect, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: scopedWindows.map { ($0.id, $0) })
         let commands = placements.keys.sorted().compactMap { id -> ApplyCommand? in
@@ -603,6 +711,14 @@ public struct WindowCommandService {
         var placements = [first: parts.first.integral]
         placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
         return placements
+    }
+
+    private func union(_ frames: [CGRect]) -> CGRect? {
+        guard var result = frames.first else { return nil }
+        for frame in frames.dropFirst() {
+            result = result.union(frame)
+        }
+        return result
     }
 
     private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {

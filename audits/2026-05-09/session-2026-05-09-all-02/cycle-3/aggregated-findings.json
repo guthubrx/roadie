@@ -1,0 +1,7 @@
+{
+  "findings": [
+    {"id":"DOC-P5","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":92,"description":"DOCUMENTED: stageScope annotee avec complexite O(scopes*stages*members) bornee + recommandation index inverse pour hot path."},
+    {"id":"DOC-P10","severity":"info","category":"performance","file":"Sources/RoadieDaemon/DaemonSnapshot.swift","line":578,"description":"DOCUMENTED: framesContainSignificantOverlap annotee O(n^2) avec borne explicite (<20 fenetres tilees, <=190 comparaisons)."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":2,"total":2}
+}

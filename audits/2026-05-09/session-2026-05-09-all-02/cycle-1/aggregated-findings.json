@@ -1,0 +1,11 @@
+{
+  "findings": [
+    {"id":"FIX-S5","severity":"info","category":"security","file":"Sources/RoadieDaemon/FocusFollowsMouseController.swift","line":26,"description":"FIXED: timer! remplace par capture locale newTimer puis assignation a self.timer."},
+    {"id":"FIX-S6","severity":"info","category":"security","file":"Sources/RoadieDaemon/BorderController.swift","line":27,"description":"FIXED: refreshTimer! remplace par capture locale newTimer."},
+    {"id":"FIX-S7","severity":"info","category":"security","file":"Sources/RoadieDaemon/RailController.swift","line":48,"description":"FIXED: refreshTimer! remplace par capture locale newRefreshTimer."},
+    {"id":"FIX-S8","severity":"info","category":"security","file":"Sources/RoadieDaemon/RailController.swift","line":111,"description":"FIXED: hoverTimer! remplace par capture locale newHoverTimer."},
+    {"id":"FIX-S2-S3","severity":"info","category":"security","file":"Sources/RoadieAX/SystemSnapshotProvider.swift","line":366,"description":"FIXED: as! AXValue extrait dans variables locales avec commentaire explicite (CFTypeID deja verifie)."},
+    {"id":"FIX-P12","severity":"info","category":"performance","file":"Sources/RoadieDaemon/WindowCommands.swift","line":301,"description":"FIXED: activeAndNeighbor pre-calcule scores via compactMap puis min(by:) sur la valeur. neighborScore appele O(n) au lieu de O(2n)."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":6,"total":6}
+}

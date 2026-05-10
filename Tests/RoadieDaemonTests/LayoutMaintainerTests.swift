@@ -75,6 +75,15 @@ private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     }
 }
 
+private final class FailingWriter: WindowFrameWriting, @unchecked Sendable {
+    private(set) var attempts = 0
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        attempts += 1
+        return nil
+    }
+}
+
 private final class SequenceWriter: WindowFrameWriting, @unchecked Sendable {
     private let actualFrames: [WindowID: Rect]
 
@@ -136,6 +145,63 @@ private func makeIntentStore() -> (path: String, store: LayoutIntentStore) {
 
 @Suite
 struct LayoutMaintainerTests {
+    @Test
+    func failedFrameDoesNotTriggerRepeatedApplyLoop() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let provider = SequenceProvider(display: display, windowFrames: [[initial], [initial]])
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let first = maintainer.tick()
+        let second = maintainer.tick()
+
+        #expect(first.commands == 1)
+        #expect(first.failed == 1)
+        #expect(second.commands == 0)
+        #expect(writer.attempts == 1)
+    }
+
+    @Test
+    func revertedAppliedFrameDoesNotTriggerRepeatedApplyLoop() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let provider = SequenceProvider(display: display, windowFrames: [[initial], [initial]])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let first = maintainer.tick()
+        let second = maintainer.tick()
+
+        #expect(first.commands == 1)
+        #expect(first.applied == 1)
+        #expect(second.commands == 0)
+    }
+
     @Test
     func manualResizeIsDebouncedThenUsedAsLayoutConstraint() {
         let display = DisplaySnapshot(

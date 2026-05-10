@@ -89,6 +89,14 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public var masterRatio: Double
     public var smartGapsSolo: Bool
     public var smartGapsSoloSides: [GapSide]
+    /// Sous-roles AX consideres tile-able. Defaut : ["AXStandardWindow"] (yabai-like).
+    /// Les fenetres AXDialog / AXSheet / AXFloatingWindow / AXSystemDialog / AXUnknown
+    /// sont exclues du tiling sauf override par regle (action.manage = true).
+    public var allowedSubroles: [String]
+    /// Quand true (defaut), exclut du tiling les "popups" (fenetres AX sans aucun bouton
+    /// close/fullscreen/min/zoom et non focused/main). Inspire d'aerospace isWindowHeuristic.
+    /// Cible : tooltips, context menus, "Sonoma keyboard layout switch", IntelliJ context menus.
+    public var popupFilter: Bool
 
     public init(
         defaultStrategy: WindowManagementMode = .bsp,
@@ -102,7 +110,9 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         gapsInner: Double = 4,
         masterRatio: Double = 0.6,
         smartGapsSolo: Bool = false,
-        smartGapsSoloSides: [GapSide] = GapSide.allCases
+        smartGapsSoloSides: [GapSide] = GapSide.allCases,
+        allowedSubroles: [String] = ["AXStandardWindow"],
+        popupFilter: Bool = true
     ) {
         self.defaultStrategy = defaultStrategy
         self.splitPolicy = splitPolicy
@@ -116,6 +126,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.masterRatio = masterRatio
         self.smartGapsSolo = smartGapsSolo
         self.smartGapsSoloSides = smartGapsSoloSides
+        self.allowedSubroles = allowedSubroles
+        self.popupFilter = popupFilter
     }
 
     enum CodingKeys: String, CodingKey {
@@ -131,6 +143,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         case masterRatio = "master_ratio"
         case smartGapsSolo = "smart_gaps_solo"
         case smartGapsSoloSides = "smart_gaps_solo_sides"
+        case allowedSubroles = "allowed_subroles"
+        case popupFilter = "popup_filter"
     }
 
     public init(from decoder: Decoder) throws {
@@ -149,6 +163,8 @@ public struct TilingConfig: Equatable, Codable, Sendable {
         self.smartGapsSolo = try c.decodeIfPresent(Bool.self, forKey: .smartGapsSolo) ?? false
         let sides = try c.decodeIfPresent([String].self, forKey: .smartGapsSoloSides) ?? GapSide.allCases.map(\.rawValue)
         self.smartGapsSoloSides = sides.compactMap(GapSide.init(rawValue:))
+        self.allowedSubroles = try c.decodeIfPresent([String].self, forKey: .allowedSubroles) ?? ["AXStandardWindow"]
+        self.popupFilter = try c.decodeIfPresent(Bool.self, forKey: .popupFilter) ?? true
     }
 }
 

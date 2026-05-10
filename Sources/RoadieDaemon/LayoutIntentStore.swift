@@ -88,18 +88,10 @@ public struct LayoutIntentStore: Sendable {
     }
 
     private func load() -> [String: LayoutIntent] {
-        guard let data = try? Data(contentsOf: url) else { return [:] }
-        return (try? JSONDecoder().decode([String: LayoutIntent].self, from: data)) ?? [:]
+        JSONPersistence.load([String: LayoutIntent].self, from: url, default: [:])
     }
 
     private func write(_ intents: [String: LayoutIntent]) {
-        do {
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(intents).write(to: url, options: .atomic)
-        } catch {
-            fputs("roadie: failed to persist layout intent: \(error)\n", stderr)
-        }
+        JSONPersistence.write(intents, to: url, label: "layout intent")
     }
 }
