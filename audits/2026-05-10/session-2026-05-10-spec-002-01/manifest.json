@@ -1,0 +1,46 @@
+{
+  "audit_session": "session-2026-05-10-spec-002-01",
+  "scope": "SPEC-002 (002-roadie-ecosystem-upgrade)",
+  "mode": "fix",
+  "max_cycles": 5,
+  "languages": ["swift"],
+  "frameworks": ["SwiftPM", "AppKit/Accessibility (RoadieAX)"],
+  "db": "JSON file persistence (~/.roadies/*.json)",
+  "ci": "swift build / swift test (manual)",
+  "has_ui": true,
+  "has_llm": false,
+  "container": "macOS daemon (roadied) + CLI (roadie)",
+  "files_count_total": 62,
+  "files_count_spec002": 31,
+  "loc_spec002_critical": 4134,
+  "slos_defined": {
+    "SC-001_event_latency_seconds": 1,
+    "SC-002_automation_coverage_pct": 93.3
+  },
+  "hot_paths": [
+    "Sources/RoadieDaemon/DaemonSnapshot.swift::snapshot() (called every tick)",
+    "Sources/RoadieDaemon/DaemonSnapshot.swift::applyTilingPolicy() (per window per tick)",
+    "Sources/RoadieDaemon/WindowRuleMatcher.swift::firstMatch() (per window per tick)",
+    "Sources/RoadieDaemon/WindowRuleEngine.swift::evaluate() (per window when rules engine active)",
+    "Sources/RoadieDaemon/EventLog.swift::append() (per event, IO)",
+    "Sources/RoadieDaemon/EventSubscriptionService.swift::readAvailable() (5Hz polling)"
+  ],
+  "threat_model": {
+    "assets": [
+      "Roadie config (~/.roadies/*) - rules, layout intents, stages",
+      "Event log (events.jsonl) - sensitive metadata about user windows",
+      "AX permissions to control any app window"
+    ],
+    "attackers": [
+      "Local malicious app reading event log",
+      "Malicious config injected via TOML (regex DoS, path traversal)",
+      "Subscriber overflow (slow consumer of subscribe stream)"
+    ],
+    "surface": [
+      "TOML config parsing (rules with user regex)",
+      "JSONL event log on local FS",
+      "CLI subprocess interface (no network)",
+      "FileHandle ops on event log + state files"
+    ]
+  }
+}

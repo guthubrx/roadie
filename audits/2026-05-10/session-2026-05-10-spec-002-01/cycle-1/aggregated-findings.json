@@ -1,0 +1,145 @@
+{
+  "cycle": 1,
+  "mode": "fix",
+  "scope": "SPEC-002 (002-roadie-ecosystem-upgrade)",
+  "summary": {
+    "critical": 0,
+    "high": 2,
+    "medium": 3,
+    "low": 1,
+    "info": 2,
+    "total": 8
+  },
+  "findings": [
+    {
+      "id": "P1",
+      "severity": "high",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 280,
+      "title": "Set construit dans boucle hot path applyTilingPolicy",
+      "description": "Set(config.tiling.allowedSubroles) construit dans applyTilingPolicy qui est appelee n_windows fois via rawWindows.map. Anti-pattern Article XVIII : tri/structure de donnee construit a chaque iteration sur une collection invariante.",
+      "complexity_before": "O(n_windows * n_subroles)",
+      "complexity_after": "O(n_windows + n_subroles) (Set construit 1x via TilingPolicyContext)",
+      "exploitability": "REAL — overhead lineaire en n_windows sur chaque tick du daemon",
+      "status": "fixed",
+      "fix_summary": "TilingPolicyContext pre-calcule allowedSubroles et floatingBundles une fois par snapshot. applyTilingPolicy(to:config:) preserve sa signature publique en deleguant a applyTilingPolicy(to:config:context:)."
+    },
+    {
+      "id": "P2",
+      "severity": "high",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+      "line": 50,
+      "title": "Filter+sort des regles repete par fenetre",
+      "description": "WindowRuleMatcher.firstMatch(rules:) faisait .filter(\\.enabled).sorted{...}.first a chaque appel. Appele depuis applyTilingPolicy pour CHAQUE fenetre — donc tri O(n_rules log n_rules) repete n_windows fois. Anti-pattern Article XVIII (tri repete).",
+      "complexity_before": "O(n_windows * n_rules * log n_rules)",
+      "complexity_after": "O(n_windows * n_rules) (regles triees 1x via TilingPolicyContext)",
+      "exploitability": "REAL — degradation observable des que n_rules > 5 et n_windows > 30",
+      "status": "fixed",
+      "fix_summary": "Ajout overload firstMatch(sortedRules:window:context:) qui assume des regles deja filtrees+triees. TilingPolicyContext.sortedRules calcule cela une fois par snapshot."
+    },
+    {
+      "id": "R1",
+      "severity": "medium",
+      "category": "robustness",
+      "file": "Sources/RoadieDaemon/EventLog.swift",
+      "line": 79,
+      "title": "FileHandle non ferme en cas d'erreur",
+      "description": "FileHandle(forWritingTo:) ouvert sans defer { try? handle.close() }. Si seekToEnd ou write throw, le handle reste ouvert jusqu'au GC ARC, fuite de descripteur de fichier potentielle.",
+      "exploitability": "REAL — daemon long-running, accumulation possible sur disque plein ou rotation defaillante",
+      "status": "fixed",
+      "fix_summary": "Ajout defer { try? handle.close() } juste apres l'open."
+    },
+    {
+      "id": "R2",
+      "severity": "medium",
+      "category": "robustness",
+      "file": "Sources/RoadieDaemon/EventLog.swift",
+      "line": 64,
+      "title": "Race condition sur write/rotate concurrent",
+      "description": "EventLog est instancie ~15x dans le daemon (un par service) avec des append concurrents (Task @MainActor + workers). Le pattern seekToEnd + write(data) + write(newline) est non-atomique, deux events peuvent s'entrelacer ou la rotation peut couper un event en deux. Pas de synchronisation cross-instance.",
+      "exploitability": "REAL — corruption JSONL observable sous charge (notamment burst d'events lors d'un reload de config)",
+      "status": "fixed",
+      "fix_summary": "Ajout NSLock statique partage entre toutes les instances EventLog. Verrou pris dans write() et rotateIfNeeded()."
+    },
+    {
+      "id": "P3",
+      "severity": "medium",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/EventLog.swift, AutomationQueryService.swift, EventSubscriptionService.swift",
+      "line": 75,
+      "title": "JSONEncoder/Decoder allouation par appel",
+      "description": "JSONEncoder() et JSONDecoder() instancies dans le hot path : EventLog.write (par event), AutomationQueryService.payload (par query, 5Hz polling), EventSubscriptionService.decodeEnvelope (par ligne du subscribe).",
+      "complexity_before": "O(n_events * cout_alloc)",
+      "complexity_after": "O(1) alloc, O(n_events * cout_encode)",
+      "exploitability": "REAL — allocation ~150us + 2-3 KB par event (mesure indicative Swift 5.10)",
+      "status": "fixed",
+      "fix_summary": "encoder/decoder static let dans chaque service. JSONEncoder est thread-safe pour des appels independants (pas d'etat partage modifiable une fois configure)."
+    },
+    {
+      "id": "Q1",
+      "severity": "low",
+      "category": "quality",
+      "file": "Sources/roadie/main.swift",
+      "line": 871,
+      "title": "Boucle infinie sans gestion d'arret propre",
+      "description": "runEventSubscription utilise while true + Thread.sleep(0.2) sans handler CTRL-C explicite. macOS termine via SIGINT par defaut, donc fonctionnel, mais aucun flush propre des derniers events si signal trap personnalise est ajoute plus tard.",
+      "exploitability": "THEORETICAL — comportement actuel acceptable, evolutivite limitee",
+      "status": "deferred",
+      "fix_summary": "Pas applique : changement d'API, defer post-roadmap. A reverifier si SIGTERM custom requis."
+    },
+    {
+      "id": "INFO1",
+      "severity": "info",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/WindowRuleEngine.swift",
+      "line": 60,
+      "title": "Construction RuleEvaluation pour toutes regles meme non-matchantes",
+      "description": "evaluate() construit un RuleEvaluation pour chaque regle parcourue. Si seul matchedRuleID est utilise par la suite (cas hot path tiling), le tableau evaluations est consomme uniquement par 'rules explain' (CLI). Cout memoire O(n_rules) par fenetre evitable.",
+      "exploitability": "REAL mais marginal — n_rules borne typique < 20",
+      "status": "deferred",
+      "fix_summary": "Pas de fix : la fonction evaluate() est aussi utilisee par 'rules explain' qui consomme bien evaluations. Splitter en deux (fast path sans evaluations, slow path avec) sera fait au cycle 2 si gain potentiel mesure."
+    },
+    {
+      "id": "INFO2",
+      "severity": "info",
+      "category": "security",
+      "file": "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+      "line": 95,
+      "title": "Regex utilisateur sans timeout",
+      "description": "NSRegularExpression compilee depuis config.rules[].match.app_regex / title_regex. Si l'utilisateur ecrit une regex catastrophique (e.g. (a+)+$ sur titre attaquant), le matcher peut bloquer le daemon. Surface limitee : la regex vient d'un fichier config local controle par l'utilisateur lui-meme.",
+      "exploitability": "THEORETICAL — l'utilisateur s'attaque lui-meme",
+      "status": "noted",
+      "fix_summary": "Pas de fix : surface non-publique, l'utilisateur est root sur sa propre config. Documentation peut suggerer d'eviter les regex non-bornees."
+    }
+  ],
+  "build_status": {
+    "RoadieCore": "ok",
+    "RoadieDaemon": "ok (1 warning deprecated CGWindowListCreateImage, hors scope SPEC-002)",
+    "executables": "link error -no_warn_duplicate_libraries — toolchain (anaconda ld shadow Xcode ld), hors scope code SPEC-002, contournable via PATH explicit"
+  },
+  "tests_status": {
+    "total_tests": 252,
+    "passed": 252,
+    "failed": 0,
+    "duration_seconds": 0.122,
+    "filter": "all"
+  },
+  "complexity_audit_article_xviii": {
+    "patterns_scanned": [
+      "double_nested_loop",
+      "linear_search_in_loop",
+      "n_plus_1",
+      "repeated_sort",
+      "string_concat_in_loop",
+      "io_in_tight_loop",
+      "non_memoized_recursion",
+      "defensive_copy_cascade"
+    ],
+    "findings_count": 2,
+    "fixed_count": 2,
+    "remaining_count": 0,
+    "note": "Hot path applyTilingPolicy nettoye (P1+P2). Reste a verifier au cycle 2 : groupSnapshots / desktopSnapshots dans AutomationSnapshotService (sort imbrique) et StageStore.dissolve."
+  }
+}

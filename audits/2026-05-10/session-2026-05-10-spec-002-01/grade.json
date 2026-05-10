@@ -1,0 +1,24 @@
+{
+  "grade": "A",
+  "date": "2026-05-10",
+  "spec": "002",
+  "scope": "SPEC-002 (002-roadie-ecosystem-upgrade)",
+  "domains": {
+    "security": "A",
+    "complexity_article_xviii": "A",
+    "quality": "A-",
+    "tests": "A",
+    "performance": "A",
+    "robustness": "A",
+    "duplication": "A"
+  },
+  "summary": {
+    "total_findings_cycle1": 8,
+    "fixed_cycle1": 5,
+    "deferred_cycle1": 3,
+    "total_findings_cycle_scoring": 4,
+    "criticals_remaining": 0,
+    "highs_remaining": 0,
+    "mediums_remaining": 0
+  }
+}
