@@ -84,6 +84,28 @@ struct ConfigTests {
     }
 
     @Test
+    func windowPlacementConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-window-placement-\(UUID().uuidString).toml")
+        try """
+        [window_placement]
+        new_apps_target = "mouse"
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.windowPlacement.newAppsTarget == "mouse")
+    }
+
+    @Test
+    func windowPlacementDefaultsToMacOS() {
+        let config = RoadieConfig()
+
+        #expect(config.windowPlacement.newAppsTarget == "macos")
+    }
+
+    @Test
     func displayTilingOverridesDecodeFromToml() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-display-gap-config-\(UUID().uuidString).toml")
@@ -163,6 +185,21 @@ struct ConfigTests {
         offset_x = -2
         offset_y = -3
 
+        [fx.rail.stage_labels]
+        enabled = true
+        color = "stage"
+        font_size = 12
+        font_family = "Avenir Next"
+        weight = "bold"
+        alignment = "left"
+        opacity = 0.66
+        offset_x = 4
+        offset_y = -5
+        placement = "above"
+        z_order = "below"
+        visibility_seconds = 5
+        fade_seconds = 0.4
+
         [fx.rail.stages]
         position = "bottom"
         alignment = "center"
@@ -229,6 +266,19 @@ struct ConfigTests {
         #expect(settings.desktopLabel.opacity == 0.6)
         #expect(settings.desktopLabel.offsetX == -2)
         #expect(settings.desktopLabel.offsetY == -3)
+        #expect(settings.stageLabel.enabled == true)
+        #expect(settings.stageLabel.color == "stage")
+        #expect(settings.stageLabel.fontSize == 12)
+        #expect(settings.stageLabel.fontFamily == "Avenir Next")
+        #expect(settings.stageLabel.weight == "bold")
+        #expect(settings.stageLabel.alignment == "left")
+        #expect(settings.stageLabel.opacity == 0.66)
+        #expect(settings.stageLabel.offsetX == 4)
+        #expect(settings.stageLabel.offsetY == -5)
+        #expect(settings.stageLabel.placement == "above")
+        #expect(settings.stageLabel.zOrder == "below")
+        #expect(settings.stageLabel.visibilitySeconds == 5)
+        #expect(settings.stageLabel.fadeSeconds == 0.4)
         #expect(settings.stages.position == "bottom")
         #expect(settings.stages.alignment == "center")
         #expect(settings.stages.gap == 19)
@@ -256,6 +306,7 @@ struct ConfigTests {
 
         #expect(state.visibleWidths["display-a"] == 8)
         #expect(state.isPinned == false)
+        #expect(state.stageLabelsVisibleUntil == nil)
     }
 
     @Test

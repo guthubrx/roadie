@@ -154,12 +154,21 @@ struct TitlebarContextMenuTests {
         let main = powerDisplay("display-main", index: 1, x: 0)
         let side = powerDisplay("display-side", index: 2, x: 1000)
         let window = titlebarWindow(1, x: 100)
-        let provider = PowerUserProvider(displays: [main, side], windows: [window])
+        let stageWindow = titlebarWindow(2, x: 500)
+        let provider = PowerUserProvider(displays: [main, side], windows: [window, stageWindow])
         let store = titlebarStageStore("titlebar-destinations", scopes: [
             titlebarScope(main.id, active: "1", stages: [
                 titlebarStage("1", window),
-                titlebarStage("2")
+                titlebarStage("2", stageWindow)
             ]),
+            PersistentStageScope(
+                displayID: main.id,
+                desktopID: DesktopID(rawValue: 2),
+                activeStageID: StageID(rawValue: "1"),
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Later")
+                ]
+            ),
             titlebarScope(side.id, active: "1", stages: [
                 titlebarStage("1")
             ])
@@ -167,7 +176,7 @@ struct TitlebarContextMenuTests {
         let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
         let snapshot = service.snapshot()
 
-        let destinations = WindowContextActions(snapshotService: service, stageStore: store)
+        let destinations = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true })
             .destinations(for: window.id, in: snapshot, settings: TitlebarContextMenuSettings(enabled: true))
 
         #expect(destinations.contains { $0.kind == .stage && $0.id == "1" && $0.isCurrent })
@@ -191,6 +200,63 @@ struct TitlebarContextMenuTests {
     }
 
     @Test
+    func generatedStageLabelsUseVisibleOrderInsteadOfTechnicalIDs() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let secondWindow = titlebarWindow(2, x: 500)
+        let thirdWindow = titlebarWindow(3, x: 900)
+        let provider = PowerUserProvider(displays: [main], windows: [window, secondWindow, thirdWindow])
+        let store = titlebarStageStore("titlebar-stage-visible-labels", scopes: [
+            titlebarScope(main.id, active: "9", stages: [
+                PersistentStage(id: StageID(rawValue: "9"), name: "Work", members: [titlebarMember(window)]),
+                titlebarStage("4", secondWindow),
+                titlebarStage("7", thirdWindow)
+            ])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let snapshot = service.snapshot()
+
+        let destinations = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true })
+            .destinations(for: window.id, in: snapshot, settings: TitlebarContextMenuSettings(enabled: true))
+
+        #expect(destinations.contains(WindowDestination(kind: .stage, id: "9", label: "Work", isCurrent: true)))
+        #expect(destinations.contains(WindowDestination(kind: .stage, id: "4", label: "Stage 2", isCurrent: false)))
+        #expect(destinations.contains(WindowDestination(kind: .stage, id: "7", label: "Stage 3", isCurrent: false)))
+        #expect(destinations.contains {
+            $0.kind == .desktopStage
+                && $0.id == "1:4"
+                && $0.label == "Stage 2"
+        })
+    }
+
+    @Test
+    func hiddenRailStageLabelsExposeNonEmptyStagesAndOneNextEmptyDestination() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let secondWindow = titlebarWindow(2, x: 500)
+        let provider = PowerUserProvider(displays: [main], windows: [window, secondWindow])
+        let store = titlebarStageStore("titlebar-hidden-stage-labels", scopes: [
+            titlebarScope(main.id, active: "1", stages: [
+                titlebarStage("1", window),
+                PersistentStage(id: StageID(rawValue: "2"), name: "Work"),
+                titlebarStage("3", secondWindow),
+                titlebarStage("4")
+            ])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let snapshot = service.snapshot()
+
+        let destinations = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { false })
+            .destinations(for: window.id, in: snapshot, settings: TitlebarContextMenuSettings(enabled: true))
+
+        #expect(destinations.contains { $0.kind == .stage && $0.id == "1" && $0.isCurrent })
+        #expect(destinations.contains { $0.kind == .stage && $0.id == "3" && !$0.isCurrent })
+        #expect(destinations.contains(WindowDestination(kind: .stage, id: "4", label: "Prochaine stage vide", isCurrent: false)))
+        #expect(!destinations.contains { $0.kind == .stage && $0.id == "2" })
+        #expect(!destinations.contains { $0.kind == .stage && $0.id == "4" && $0.label != "Prochaine stage vide" })
+    }
+
+    @Test
     func desktopStageActionMovesWindowToExactTargetWithoutFollowingFocus() {
         let main = powerDisplay("display-main", index: 1, x: 0)
         let window = titlebarWindow(1, x: 100)
@@ -206,14 +272,14 @@ struct TitlebarContextMenuTests {
                 activeStageID: StageID(rawValue: "1"),
                 stages: [
                     titlebarStage("1"),
-                    titlebarStage("2")
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Later")
                 ]
             )
         ], activeDisplayID: main.id)
         let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
         _ = service.snapshot()
 
-        let result = WindowContextActions(snapshotService: service, stageStore: store).execute(WindowContextAction(
+        let result = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true }).execute(WindowContextAction(
             windowID: window.id,
             kind: .desktopStage,
             targetID: "2:2",
@@ -242,7 +308,7 @@ struct TitlebarContextMenuTests {
         _ = service.snapshot()
         let before = store.state()
 
-        let result = WindowContextActions(snapshotService: service, stageStore: store).execute(WindowContextAction(
+        let result = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true }).execute(WindowContextAction(
             windowID: WindowID(rawValue: 999),
             kind: .stage,
             targetID: "2",

@@ -4,21 +4,29 @@ import RoadieCore
 public struct RailRuntimeState: Equatable, Codable, Sendable {
     public var visibleWidths: [String: Double]
     public var isPinned: Bool
+    public var stageLabelsVisibleUntil: Double?
 
-    public init(visibleWidths: [String: Double] = [:], isPinned: Bool = false) {
+    public init(
+        visibleWidths: [String: Double] = [:],
+        isPinned: Bool = false,
+        stageLabelsVisibleUntil: Double? = nil
+    ) {
         self.visibleWidths = visibleWidths
         self.isPinned = isPinned
+        self.stageLabelsVisibleUntil = stageLabelsVisibleUntil
     }
 
     enum CodingKeys: String, CodingKey {
         case visibleWidths
         case isPinned
+        case stageLabelsVisibleUntil
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         visibleWidths = try container.decodeIfPresent([String: Double].self, forKey: .visibleWidths) ?? [:]
         isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        stageLabelsVisibleUntil = try container.decodeIfPresent(Double.self, forKey: .stageLabelsVisibleUntil)
     }
 }
 
@@ -66,6 +74,22 @@ public struct RailRuntimeStateStore: Sendable {
     public func togglePinned() -> RailRuntimeState {
         var state = load()
         state.isPinned.toggle()
+        save(state)
+        return state
+    }
+
+    @discardableResult
+    public func showStageLabels(for seconds: Double, now: Date = Date()) -> RailRuntimeState {
+        var state = load()
+        state.stageLabelsVisibleUntil = seconds > 0 ? now.addingTimeInterval(seconds).timeIntervalSince1970 : nil
+        save(state)
+        return state
+    }
+
+    @discardableResult
+    public func hideStageLabels() -> RailRuntimeState {
+        var state = load()
+        state.stageLabelsVisibleUntil = 0
         save(state)
         return state
     }

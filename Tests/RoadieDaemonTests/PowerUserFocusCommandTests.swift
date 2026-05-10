@@ -141,6 +141,21 @@ struct PowerUserFocusCommandTests {
     }
 
     @Test
+    func railKeepsHidingFullscreenDisplayWhenFocusMovesToAnotherDisplay() {
+        let first = powerDisplay("display-main", index: 1, x: 0)
+        let second = powerDisplay("display-side", index: 2, x: 1000)
+        let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let focusedOnOtherDisplay = powerWindow(2, x: 1040, y: 40, width: 420, height: 320)
+        let provider = PowerUserProvider(displays: [first, second], windows: [fullscreen, focusedOnOtherDisplay])
+        provider.focusedID = focusedOnOtherDisplay.id
+        let store = StageStore(path: tempPath("rail-fullscreen-other-display-focus"))
+        let service = SnapshotService(provider: provider, stageStore: store)
+        let snapshot = service.snapshot()
+
+        #expect(RailController.fullscreenDisplayIDs(in: snapshot) == [first.id])
+    }
+
+    @Test
     func railStaysVisibleWhenFocusedWindowIsNotFullscreen() {
         let display = powerDisplay()
         let regular = powerWindow(1, x: 40, y: 40, width: 420, height: 320)

@@ -61,6 +61,7 @@ Use cases:
 ## Nav Rail
 
 The nav rail is the per-display side panel that represents non-empty stages.
+An empty stage is not shown there, even when it has been renamed.
 
 Main interactions:
 
@@ -72,6 +73,35 @@ Main interactions:
 - drag an application window by its title bar onto empty rail space to create or use an empty stage.
 
 macOS-reserved areas such as the menu bar are ignored by empty rail click handling.
+
+Stage labels in the nav rail are configurable. By default, they are drawn below
+the thumbnails, in the stage accent color, positioned so roughly two thirds of
+the label remains visible.
+
+```toml
+[fx.rail.stage_labels]
+enabled = true
+color = "stage"      # or a hex color, e.g. "#6BE675"
+font_size = 11
+font_family = "system"
+weight = "semibold"
+alignment = "center" # left | center | right
+opacity = 0.72
+offset_x = 0
+offset_y = 0
+placement = "below" # above | below
+z_order = "below"   # below | above
+visibility_seconds = 0 # 0 = always visible, otherwise duration after reveal
+fade_seconds = 0.35
+```
+
+When `visibility_seconds` is greater than `0`, stage names are hidden by default.
+The `roadie rail labels show` command shows them for that duration, then fades
+them out over `fade_seconds`.
+
+If `enabled = false`, the title bar context menu no longer lists anonymous empty
+stages one by one. It keeps stages that contain windows and adds one `Next empty
+stage` destination.
 
 ## Title Bar Context Menu
 
@@ -91,6 +121,20 @@ include_stage_destinations = true
 include_desktop_destinations = true
 include_display_destinations = true
 ```
+
+## New App Placement
+
+Roadie can choose the landing display for a new real application window when it
+is discovered. Popups, dialogs, and non-tileable windows are not affected.
+
+```toml
+[window_placement]
+new_apps_target = "mouse" # mouse | focused_display | macos
+```
+
+- `mouse`: assigns the new window to the active stage on the display under the pointer.
+- `focused_display`: assigns the new window to the active stage on Roadie's focused display.
+- `macos`: keeps the display initially chosen by macOS.
 
 Available actions:
 

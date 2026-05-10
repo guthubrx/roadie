@@ -2,4 +2,10 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-exec "$script_dir/with-xcode" swift test "$@"
+tmp_home="$(mktemp -d "${TMPDIR:-/tmp}/roadie-test-home.XXXXXX")"
+cleanup() {
+  rm -rf "$tmp_home"
+}
+trap cleanup EXIT
+
+HOME="$tmp_home" exec "$script_dir/with-xcode" swift test "$@"

@@ -8,6 +8,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var exclusions: ExclusionsConfig
     public var fx: EffectsConfig
     public var focus: FocusConfig
+    public var windowPlacement: WindowPlacementConfig
     public var rules: [WindowRule]
     public var widthAdjustment: WidthAdjustmentConfig
     public var experimental: ExperimentalConfig
@@ -19,6 +20,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
+        windowPlacement: WindowPlacementConfig = WindowPlacementConfig(),
         rules: [WindowRule],
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig()
@@ -29,6 +31,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.exclusions = exclusions
         self.fx = fx
         self.focus = focus
+        self.windowPlacement = windowPlacement
         self.rules = rules
         self.widthAdjustment = widthAdjustment
         self.experimental = experimental
@@ -41,6 +44,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
+        windowPlacement: WindowPlacementConfig = WindowPlacementConfig(),
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig()
     ) {
@@ -51,6 +55,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             exclusions: exclusions,
             fx: fx,
             focus: focus,
+            windowPlacement: windowPlacement,
             rules: [],
             widthAdjustment: widthAdjustment,
             experimental: experimental
@@ -64,6 +69,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case exclusions
         case fx
         case focus
+        case windowPlacement = "window_placement"
         case rules
         case widthAdjustment = "width_adjustment"
         case experimental
@@ -77,6 +83,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.exclusions = try c.decodeIfPresent(ExclusionsConfig.self, forKey: .exclusions) ?? ExclusionsConfig()
         self.fx = try c.decodeIfPresent(EffectsConfig.self, forKey: .fx) ?? EffectsConfig()
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
+        self.windowPlacement = try c.decodeIfPresent(WindowPlacementConfig.self, forKey: .windowPlacement) ?? WindowPlacementConfig()
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
         self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
@@ -336,6 +343,24 @@ public struct FocusConfig: Equatable, Codable, Sendable {
         self.stageMoveFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .stageMoveFollowsFocus) ?? true
         self.focusFollowsMouse = try c.decodeIfPresent(Bool.self, forKey: .focusFollowsMouse) ?? false
         self.mouseFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .mouseFollowsFocus) ?? false
+    }
+}
+
+public struct WindowPlacementConfig: Equatable, Codable, Sendable {
+    public var newAppsTarget: String
+
+    public init(newAppsTarget: String = "macos") {
+        self.newAppsTarget = newAppsTarget
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case newAppsTarget = "new_apps_target"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let value = try c.decodeIfPresent(String.self, forKey: .newAppsTarget) ?? "macos"
+        self.newAppsTarget = ["mouse", "focused_display", "macos"].contains(value) ? value : "macos"
     }
 }
 
@@ -600,6 +625,7 @@ private enum ConfigValidationRules {
         "fx.borders",
         "fx.borders.stage_overrides",
         "focus",
+        "window_placement",
         "width_adjustment",
         "experimental",
         "experimental.titlebar_context_menu",
@@ -619,6 +645,7 @@ private enum ConfigValidationRules {
         "fx.opacity",
         "fx.opacity.stage_hide",
         "fx.rail",
+        "fx.rail.stage_labels",
         "fx.rail.stacked",
         "fx.rail.preview",
         "fx.rail.preview.stage_overrides",
