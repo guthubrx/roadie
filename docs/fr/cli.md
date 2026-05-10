@@ -61,6 +61,7 @@ Cas d'usage :
 ./bin/roadie layout split vertical
 ./bin/roadie layout join-with left|right|up|down
 ./bin/roadie layout insert left|right|up|down
+./bin/roadie layout toggle-split [left|right|up|down]
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
 ./bin/roadie layout width next
@@ -74,8 +75,24 @@ Cas d'usage :
 
 - inspecter le plan avant application avec `layout plan`;
 - persister une intention manuelle avec `insert` ou `zoom-parent`;
+- inverser l'orientation locale de deux voisines en `mutableBsp` avec `toggle-split`;
 - ajuster manuellement la largeur de la fenetre active avec `layout width`;
 - revenir a un layout lineaire avec `flatten`.
+
+## Navrail
+
+```bash
+./bin/roadie rail status
+./bin/roadie rail pin
+./bin/roadie rail unpin
+./bin/roadie rail toggle
+```
+
+Le navrail accepte aussi les interactions souris :
+
+- drag d'une miniature vers une stage;
+- drag d'une miniature vers l'espace actif;
+- drag d'une fenetre d'application par sa barre de titre vers une stage ou une zone vide.
 
 ## Securite et fichiers generes
 

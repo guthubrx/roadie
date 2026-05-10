@@ -48,6 +48,21 @@ Cas d'usage :
 - masquer rapidement un contexte sans fermer les apps;
 - ramener une fenetre precise dans la stage active avec `stage summon`.
 
+## Navrail
+
+Le navrail est le panneau lateral par ecran qui represente les stages non vides.
+
+Interactions principales :
+
+- cliquer une stage pour l'activer;
+- cliquer une zone vide pour basculer vers une stage vide, si `empty_click_hide_active` est active;
+- tirer une miniature vers une autre stage pour y deplacer la fenetre;
+- tirer une miniature vers l'espace de travail actif pour y rappeler la fenetre;
+- tirer une fenetre d'application par sa barre de titre vers une stage pour l'y deplacer;
+- tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide.
+
+Les zones reservees par macOS, comme la barre de menu, sont ignorees par les actions de clic vide du navrail.
+
 ## Desktops Roadie
 
 Les desktops Roadie sont virtuels. Ils ne creent pas et ne pilotent pas les Spaces macOS natifs.
@@ -78,6 +93,7 @@ Roadie expose des primitives de layout inspirees des window managers power-user.
 ./bin/roadie layout insert right
 ./bin/roadie layout join-with left
 ./bin/roadie layout zoom-parent
+./bin/roadie layout toggle-split
 ```
 
 Cas d'usage :
@@ -85,6 +101,7 @@ Cas d'usage :
 - revenir au dernier focus;
 - forcer une restructuration locale du layout;
 - placer la prochaine fenetre du cote voulu;
+- inverser localement deux fenetres voisines en `mutableBsp` avec `toggle-split`;
 - agrandir temporairement une fenetre sans perdre le contexte.
 
 ## Rules

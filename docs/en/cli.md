@@ -61,6 +61,7 @@ Use cases:
 ./bin/roadie layout split vertical
 ./bin/roadie layout join-with left|right|up|down
 ./bin/roadie layout insert left|right|up|down
+./bin/roadie layout toggle-split [left|right|up|down]
 ./bin/roadie layout flatten
 ./bin/roadie layout zoom-parent
 ./bin/roadie layout width next
@@ -74,8 +75,24 @@ Use cases:
 
 - inspect the plan before applying it with `layout plan`;
 - persist a manual layout intent with `insert` or `zoom-parent`;
+- flip the local orientation of two neighboring windows in `mutableBsp` with `toggle-split`;
 - manually adjust the active window width with `layout width`;
 - return to a linear layout with `flatten`.
+
+## Nav Rail
+
+```bash
+./bin/roadie rail status
+./bin/roadie rail pin
+./bin/roadie rail unpin
+./bin/roadie rail toggle
+```
+
+The nav rail also supports mouse interactions:
+
+- drag a thumbnail to a stage;
+- drag a thumbnail into the active workspace;
+- drag an application window by its title bar onto a stage or empty rail space.
 
 ## Safety And Generated Files
 
