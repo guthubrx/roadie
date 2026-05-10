@@ -26,6 +26,8 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     let provider: PowerUserProvider
     private(set) var focused: [WindowID] = []
     private(set) var frames: [WindowID: Rect] = [:]
+    private(set) var zoomed: [WindowID] = []
+    private(set) var nativeFullscreen: [WindowID] = []
 
     init(provider: PowerUserProvider) {
         self.provider = provider
@@ -50,6 +52,14 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     }
 
     func reset(_ window: WindowSnapshot) -> Bool { true }
+    func toggleZoom(_ window: WindowSnapshot) -> Bool {
+        zoomed.append(window.id)
+        return true
+    }
+    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {
+        nativeFullscreen.append(window.id)
+        return true
+    }
 }
 
 @Suite
@@ -91,6 +101,93 @@ struct PowerUserFocusCommandTests {
 
         #expect(result.changed)
         #expect(writer.focused.map(\.rawValue) == [3])
+    }
+
+    @Test
+    func fullscreenTogglesCallUnderlyingWindowActions() {
+        let left = powerWindow(1, x: 0, y: 0, width: 495, height: 800)
+        let right = powerWindow(2, x: 505, y: 0, width: 495, height: 800)
+        let provider = PowerUserProvider(windows: [left, right])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-fullscreen"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        _ = service.snapshot()
+        let commands = WindowCommandService(service: service, stageStore: store)
+
+        let fullscreenOn = commands.toggleFullscreen()
+        let fullscreenOff = commands.toggleFullscreen()
+        let native = commands.toggleNativeFullscreen()
+
+        #expect(fullscreenOn.changed)
+        #expect(fullscreenOff.changed)
+        #expect(native.changed)
+        #expect(writer.frames[left.id] != nil)
+        #expect(writer.frames[left.id] != Rect(x: 0, y: 0, width: 1000, height: 800))
+        #expect(writer.nativeFullscreen.map(\.rawValue) == [1])
+    }
+
+    @Test
+    func railHidesOnFocusedFullscreenWindowDisplay() {
+        let display = powerDisplay()
+        let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let regular = powerWindow(2, x: 40, y: 40, width: 420, height: 320)
+        let provider = PowerUserProvider(displays: [display], windows: [fullscreen, regular])
+        provider.focusedID = fullscreen.id
+        let store = StageStore(path: tempPath("rail-fullscreen-stages"))
+        let service = SnapshotService(provider: provider, stageStore: store)
+        let snapshot = service.snapshot()
+
+        #expect(RailController.fullscreenDisplayIDs(in: snapshot) == [display.id])
+    }
+
+    @Test
+    func railStaysVisibleWhenFocusedWindowIsNotFullscreen() {
+        let display = powerDisplay()
+        let regular = powerWindow(1, x: 40, y: 40, width: 420, height: 320)
+        let provider = PowerUserProvider(displays: [display], windows: [regular])
+        provider.focusedID = regular.id
+        let store = StageStore(path: tempPath("rail-regular-window-stages"))
+        let service = SnapshotService(provider: provider, stageStore: store)
+        let snapshot = service.snapshot()
+
+        #expect(RailController.fullscreenDisplayIDs(in: snapshot).isEmpty)
+    }
+
+    @Test
+    func focusedBorderIsHiddenWhenAnotherWindowOccludesFocusedWindow() {
+        let display = powerDisplay()
+        let occluder = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 1,
+            appName: "Settings",
+            bundleID: "settings",
+            title: "Settings",
+            frame: Rect(x: 120, y: 120, width: 360, height: 260),
+            isOnScreen: true,
+            isTileCandidate: false
+        )
+        let focused = powerWindow(2, x: 0, y: 0, width: 800, height: 600)
+        let provider = PowerUserProvider(displays: [display], windows: [occluder, focused])
+        provider.focusedID = focused.id
+        let service = SnapshotService(provider: provider, stageStore: StageStore(path: tempPath("border-occlusion-stages")))
+        let snapshot = service.snapshot()
+        let target = snapshot.windows.first { $0.window.id == focused.id }!
+
+        #expect(BorderController.isWindowVisiblyOccluded(target, in: snapshot))
+    }
+
+    @Test
+    func focusedBorderIsShownWhenNoWindowOccludesFocusedWindow() {
+        let display = powerDisplay()
+        let focused = powerWindow(1, x: 0, y: 0, width: 800, height: 600)
+        let aside = powerWindow(2, x: 820, y: 0, width: 160, height: 200)
+        let provider = PowerUserProvider(displays: [display], windows: [focused, aside])
+        provider.focusedID = focused.id
+        let service = SnapshotService(provider: provider, stageStore: StageStore(path: tempPath("border-clear-stages")))
+        let snapshot = service.snapshot()
+        let target = snapshot.windows.first { $0.window.id == focused.id }!
+
+        #expect(!BorderController.isWindowVisiblyOccluded(target, in: snapshot))
     }
 }
 

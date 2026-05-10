@@ -1,0 +1,7 @@
+{
+  "findings": [
+    {"id":"FIX-P16","severity":"info","category":"performance","file":"Sources/RoadieDaemon/RailController.swift","line":312,"description":"FIXED: relayoutAfterRailWidthChange construit displayByWindow Dictionary une fois -> O(c+w) au lieu de O(c*w)."},
+    {"id":"NOFIX-P14","severity":"info","category":"performance","file":"Sources/RoadieDaemon/WindowCommands.swift","line":560,"description":"REVIEWED: insert(sortedByY/X) appele 1 seule fois par command (pas en boucle). False positive, conserve."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":2,"total":2}
+}

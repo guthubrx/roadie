@@ -1,0 +1,6 @@
+{
+  "grade": "B",
+  "date": "2026-05-09",
+  "spec": "all",
+  "scope": "Ensemble de la codebase Roadie (Swift 6, daemon macOS gestionnaire de fenetres) - 57 sources + 33 tests, 13841 LOC"
+}

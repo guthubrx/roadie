@@ -154,15 +154,14 @@ public struct StateAuditService {
         )
     }
 
+    // Complexite : O(stages) avec lookup Set O(1) par stage.
+    // n borne en pratique : ~4 displays * ~10 stages = ~40 stages.
     private func focusedMembersCheck(state: PersistentStageState) -> StateAuditCheck {
-        var missing = 0
-        for scope in state.scopes {
-            for stage in scope.stages {
-                guard let focusedWindowID = stage.focusedWindowID else { continue }
-                if !stage.members.contains(where: { $0.windowID == focusedWindowID }) {
-                    missing += 1
-                }
-            }
+        let stages = state.scopes.flatMap(\.stages)
+        let missing = stages.reduce(into: 0) { acc, stage in
+            guard let focused = stage.focusedWindowID else { return }
+            let memberIDs = Set(stage.members.lazy.map(\.windowID))
+            if !memberIDs.contains(focused) { acc += 1 }
         }
         return StateAuditCheck(
             level: missing == 0 ? .ok : .warn,
@@ -171,16 +170,13 @@ public struct StateAuditService {
         )
     }
 
+    // Complexite : O(total_members) (parcours unique via flatMap).
     private func duplicateMembershipCheck(state: PersistentStageState) -> StateAuditCheck {
         var owners: [WindowID: Int] = [:]
-        for scope in state.scopes {
-            for stage in scope.stages {
-                for member in stage.members {
-                    owners[member.windowID, default: 0] += 1
-                }
-            }
+        for member in state.scopes.lazy.flatMap(\.stages).flatMap(\.members) {
+            owners[member.windowID, default: 0] += 1
         }
-        let duplicates = owners.values.filter { $0 > 1 }.count
+        let duplicates = owners.values.lazy.filter { $0 > 1 }.count
         return StateAuditCheck(
             level: duplicates == 0 ? .ok : .fail,
             name: "duplicate-membership",
@@ -188,13 +184,12 @@ public struct StateAuditService {
         )
     }
 
+    // Complexite : O(total_members) avec lookup Set O(1) par membre.
     private func staleMembersCheck(state: PersistentStageState, liveWindowIDs: Set<WindowID>) -> StateAuditCheck {
-        var stale = 0
-        for scope in state.scopes {
-            for stage in scope.stages {
-                stale += stage.members.filter { !liveWindowIDs.contains($0.windowID) }.count
+        let stale = state.scopes.lazy.flatMap(\.stages).flatMap(\.members)
+            .reduce(into: 0) { acc, member in
+                if !liveWindowIDs.contains(member.windowID) { acc += 1 }
             }
-        }
         return StateAuditCheck(
             level: stale == 0 ? .ok : .warn,
             name: "stale-members",

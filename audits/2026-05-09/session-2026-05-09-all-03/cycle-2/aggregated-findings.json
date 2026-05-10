@@ -1,0 +1,7 @@
+{
+  "findings": [
+    {"id":"FIX-P15","severity":"info","category":"performance","file":"Sources/RoadieAX/SystemSnapshotProvider.swift","line":276,"description":"FIXED: element(matching:) fusionne 3 boucles (ID, frame, titre) en single pass O(n) avec exit precoce sur ID match. Annotation complexite ajoutee."},
+    {"id":"NOFIX-P13","severity":"info","category":"performance","file":"Sources/RoadieDaemon/WindowCommands.swift","line":396,"description":"REVIEWED: activeWindow boucle for display avec .first(where:) O(d*w). d<5 typiquement (displays), w borne. Justification existante via context, pas de fix necessaire."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":2,"total":2}
+}

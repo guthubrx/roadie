@@ -865,6 +865,57 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func mutableBspWarpInsertsIntoImmediateNeighborSlot() {
+        let display = DisplayID(rawValue: "display-a")
+        let topLeft = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "top-left", frame: Rect(x: 0, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
+        let topRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
+        let bottomLeft = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: "C", bundleID: "c", title: "bottom-left", frame: Rect(x: 0, y: 255, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
+        let bottomRight = WindowSnapshot(id: WindowID(rawValue: 4), pid: 13, appName: "D", bundleID: "d", title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
+        let provider = FakeProvider(
+            displaySnapshots: [
+                DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+            ],
+            windowSnapshots: [topLeft, topRight, bottomLeft, bottomRight],
+            focusedID: bottomRight.id
+        )
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
+        let stageStore = StageStore(path: FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-mutable-warp-\(UUID().uuidString).json")
+            .path)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(
+                    displayID: display,
+                    stages: [
+                        PersistentStage(
+                            id: StageID(rawValue: "1"),
+                            mode: .mutableBsp,
+                            focusedWindowID: bottomRight.id,
+                            members: [topLeft, topRight, bottomLeft, bottomRight].map {
+                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
+                            }
+                        ),
+                    ]
+                ),
+            ],
+            activeDisplayID: display
+        ))
+        let writer = RecordingWriter()
+        let service = WindowCommandService(
+            service: SnapshotService(provider: provider, frameWriter: writer, config: config, stageStore: stageStore),
+            stageStore: stageStore
+        )
+
+        let result = service.warp(Direction.left)
+
+        #expect(result.changed)
+        #expect(writer.requestedFrames[bottomRight.id] == Rect(x: 0, y: 255, width: 242, height: 245))
+        #expect(writer.requestedFrames[bottomLeft.id] == Rect(x: 252, y: 255, width: 243, height: 245))
+        #expect(writer.requestedFrames[topRight.id] == Rect(x: 505, y: 0, width: 495, height: 500))
+        #expect(writer.requestedFrames[topLeft.id] == nil)
+    }
+
+    @Test
     func swapIntentPreventsMaintainerFromRevertingToSpatialBSPOrder() {
         let display = DisplayID(rawValue: "display-a")
         let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)

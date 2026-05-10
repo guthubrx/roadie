@@ -194,6 +194,50 @@ struct LayoutPlannerTests {
     }
 
     @Test
+    func mutableBspPreservesObservedRatioWithoutPriorityWindow() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 800, height: 500),
+                b: CGRect(x: 810, y: 0, width: 190, height: 500),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 800, height: 500))
+        #expect(plan.placements[b] == CGRect(x: 810, y: 0, width: 190, height: 500))
+    }
+
+    @Test
+    func mutableBspFallsBackToBalancedPlanWithoutObservedFrames() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 495, height: 500))
+        #expect(plan.placements[b] == CGRect(x: 505, y: 0, width: 495, height: 500))
+    }
+
+    @Test
+    func mutableBspModeParsesUserFacingAliases() {
+        #expect(WindowManagementMode(roadieValue: "mutableBsp") == .mutableBsp)
+        #expect(WindowManagementMode(roadieValue: "mutable_bsp") == .mutableBsp)
+        #expect(WindowManagementMode(roadieValue: "mutable-bsp") == .mutableBsp)
+    }
+
+    @Test
     func bspPreservesManualVerticalResizeAsSplitRatio() {
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)

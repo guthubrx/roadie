@@ -74,11 +74,9 @@ public struct RestoreSafetyService {
                 }
         )
         let url = URL(fileURLWithPath: path)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(restore).write(to: url, options: .atomic)
+        try JSONPersistence.writeThrowing(restore, to: url) { encoder in
+            encoder.dateEncodingStrategy = .iso8601
+        }
         eventLog.append(RoadieEventEnvelope(
             id: "restore_\(UUID().uuidString)",
             type: "restore.snapshot_written",
@@ -193,24 +191,26 @@ public struct RestoreSafetyService {
 
     private func writeMarker(_ marker: RestoreSafetyRunMarker) throws {
         let url = URL(fileURLWithPath: markerPath)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        try encoder.encode(marker).write(to: url, options: .atomic)
+        try JSONPersistence.writeThrowing(marker, to: url) { encoder in
+            encoder.dateEncodingStrategy = .iso8601
+        }
     }
 
     private func loadMarker() -> RestoreSafetyRunMarker? {
-        let url = URL(fileURLWithPath: markerPath)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try? decoder.decode(RestoreSafetyRunMarker.self, from: Data(contentsOf: url))
+        try? JSONPersistence.loadThrowing(
+            RestoreSafetyRunMarker.self,
+            from: URL(fileURLWithPath: markerPath)
+        ) { decoder in
+            decoder.dateDecodingStrategy = .iso8601
+        }
     }
 
     private func loadSnapshot() throws -> RestoreSafetySnapshot {
-        let url = URL(fileURLWithPath: path)
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return try decoder.decode(RestoreSafetySnapshot.self, from: Data(contentsOf: url))
+        try JSONPersistence.loadThrowing(
+            RestoreSafetySnapshot.self,
+            from: URL(fileURLWithPath: path)
+        ) { decoder in
+            decoder.dateDecodingStrategy = .iso8601
+        }
     }
 }

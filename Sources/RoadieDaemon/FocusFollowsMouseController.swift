@@ -20,10 +20,11 @@ public final class FocusFollowsMouseController {
 
     public func start() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        RunLoop.main.add(timer!, forMode: .common)
+        timer = newTimer
+        RunLoop.main.add(newTimer, forMode: .common)
     }
 
     private func tick() {

@@ -21,10 +21,11 @@ public final class BorderController {
         NSApplication.shared.setActivationPolicy(.accessory)
         refresh()
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
+        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
-        RunLoop.main.add(refreshTimer!, forMode: .common)
+        refreshTimer = newTimer
+        RunLoop.main.add(newTimer, forMode: .common)
     }
 
     private func refresh() {
@@ -37,7 +38,10 @@ public final class BorderController {
         let snapshot = snapshotService.snapshot()
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
-              !isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+              entry.window.isTileCandidate,
+              entry.scope != nil,
+              !isHidden(entry.window.frame.cgRect, in: snapshot.displays),
+              !Self.isWindowVisiblyOccluded(entry, in: snapshot)
         else {
             panel.orderOut(nil)
             return
@@ -77,7 +81,34 @@ public final class BorderController {
         return nil
     }
 
+    nonisolated public static func isWindowVisiblyOccluded(
+        _ target: ScopedWindowSnapshot,
+        in snapshot: DaemonSnapshot
+    ) -> Bool {
+        let targetFrame = target.window.frame.cgRect
+        for entry in snapshot.windows {
+            if entry.window.id == target.window.id {
+                return false
+            }
+            guard entry.window.isOnScreen else { continue }
+            let frame = entry.window.frame.cgRect
+            guard !isObviouslyHidden(frame, in: snapshot.displays) else { continue }
+            let intersection = frame.intersection(targetFrame)
+            guard !intersection.isNull,
+                  intersection.width >= 24,
+                  intersection.height >= 24,
+                  intersection.width * intersection.height >= 2_500
+            else { continue }
+            return true
+        }
+        return false
+    }
+
     private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        Self.isObviouslyHidden(frame, in: displays)
+    }
+
+    nonisolated private static func isObviouslyHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
         if frame.maxX < -1000 || frame.minX < -10000 {
             return true
         }

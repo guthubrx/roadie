@@ -52,6 +52,7 @@ Cas d'usage :
 
 ```bash
 ./bin/roadie mode bsp
+./bin/roadie mode mutableBsp
 ./bin/roadie mode masterStack
 ./bin/roadie mode float
 ./bin/roadie layout plan --json

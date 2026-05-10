@@ -1,0 +1,8 @@
+{
+  "findings": [
+    {"id":"FIX-P1","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StateAudit.swift","line":157,"description":"FIXED: focusedMembersCheck reecrit avec flatMap + Set lookup O(1) par stage. Annotation complexite ajoutee."},
+    {"id":"FIX-P2","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StateAudit.swift","line":174,"description":"FIXED: duplicateMembershipCheck aplati avec lazy.flatMap (parcours unique). Annotation complexite ajoutee."},
+    {"id":"FIX-P3","severity":"info","category":"performance","file":"Sources/RoadieDaemon/StateAudit.swift","line":191,"description":"FIXED: staleMembersCheck reecrit en single-pass avec lazy.flatMap + reduce. Annotation complexite ajoutee."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":3,"total":3}
+}

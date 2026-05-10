@@ -68,9 +68,24 @@ public enum WindowRuleMatcher {
         return actual == expected
     }
 
+    /// Cache des NSRegularExpression compilees, partage entre tous les matchers.
+    /// La compilation est lente (microsecs) et la regex peut etre evaluee 10x par tick
+    /// par fenetre par regle. Cache lock-free via concurrent dispatch queue.
+    nonisolated(unsafe) private static var regexCache: [String: NSRegularExpression] = [:]
+    private static let regexCacheQueue = DispatchQueue(label: "roadie.regex.cache", attributes: .concurrent)
+
+    private static func compiledRegex(_ pattern: String) -> NSRegularExpression? {
+        var cached: NSRegularExpression?
+        regexCacheQueue.sync { cached = regexCache[pattern] }
+        if let cached { return cached }
+        guard let compiled = try? NSRegularExpression(pattern: pattern) else { return nil }
+        regexCacheQueue.async(flags: .barrier) { regexCache[pattern] = compiled }
+        return compiled
+    }
+
     private static func regex(_ pattern: String?, candidates: [String]) -> Bool {
         guard let pattern else { return true }
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return false }
+        guard let expression = compiledRegex(pattern) else { return false }
         return candidates.contains { candidate in
             let range = NSRange(candidate.startIndex..<candidate.endIndex, in: candidate)
             return expression.firstMatch(in: candidate, range: range) != nil

@@ -72,7 +72,11 @@ public struct SnapshotService {
     public func snapshot(promptForPermissions: Bool = false) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
-        let windows = provider.windows()
+        let rawWindows = provider.windows()
+        // Applique la policy de tiling : whitelist subrole + regles user (action.manage / exclude / floating).
+        let windows = rawWindows.map { window in
+            Self.applyTilingPolicy(to: window, config: config)
+        }
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
         let liveDisplayIDs = Set(displays.map(\.id))
@@ -97,6 +101,7 @@ public struct SnapshotService {
         let liveWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
         })
+        persistedStages.reconcileWindowIDs(with: windows.filter { !config.exclusions.floatingBundles.contains($0.bundleID) })
         persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
@@ -120,12 +125,14 @@ public struct SnapshotService {
         }
 
         let fallbackDisplayID = displays.first?.id
+        // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.
+        var stageIndex = persistedStages.stageScopeIndex()
         for window in windows {
             guard window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
-            let knownScope = persistedStages.stageScope(for: window.id)
+            let knownScope = stageIndex[window.id]
             guard let displayID = knownScope?.displayID ?? displayID(containing: window.frame.center, in: displays) ?? fallbackDisplayID else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
@@ -137,6 +144,11 @@ public struct SnapshotService {
                 )
                 persistentScope.assign(window: window, to: persistentScope.activeStageID)
                 persistedStages.update(persistentScope)
+                stageIndex[window.id] = StageScope(
+                    displayID: persistentScope.displayID,
+                    desktopID: persistentScope.desktopID,
+                    stageID: persistentScope.activeStageID
+                )
             } else if !isHidden(window.frame.cgRect, in: displays) {
                 var persistentScope = persistedStages.scope(
                     displayID: displayID,
@@ -189,6 +201,122 @@ public struct SnapshotService {
             state: state,
             focusedWindowID: focusedID
         )
+    }
+
+    /// Applique la policy de tiling sur une fenetre brute.
+    /// Ordre de decision :
+    ///   1. baseCandidate (criteres CG bruts) doit etre vrai sinon -> non tile-able
+    ///   2. floating_bundles -> non tile-able
+    ///   3. popup gate (heuristique aerospace) : si AX present et aucun bouton/flag d'etat,
+    ///      c'est un popup/menu/tooltip -> non tile-able
+    ///   4. AX subrole doit etre dans config.tiling.allowed_subroles (defaut ["AXStandardWindow"])
+    ///      Si subrole inconnu (AX absent) -> on laisse passer (non-regression)
+    ///   5. Premiere regle matchant peut overrider :
+    ///        action.manage = true   -> force tile-able
+    ///        action.exclude = true  -> force non tile-able
+    ///        action.floating = true -> force non tile-able
+    public static func applyTilingPolicy(to window: WindowSnapshot, config: RoadieConfig) -> WindowSnapshot {
+        var tile = window.isTileCandidate
+
+        if tile && config.exclusions.floatingBundles.contains(window.bundleID) {
+            tile = false
+        }
+
+        // Popup gate (aerospace-like) : si AX nous a donne le mobilier mais qu'aucun signal
+        // de "vraie fenetre" n'est present (boutons + isFocused + isMain), c'est un popup.
+        if tile && config.tiling.popupFilter,
+           let furniture = window.furniture,
+           furniture.isModal {
+            tile = false
+        }
+
+        if tile && config.tiling.popupFilter,
+           isLikelyTransientSettingsWindow(window) {
+            tile = false
+        }
+
+        if tile && config.tiling.popupFilter,
+           isUnidentifiedTransientWindow(window) {
+            tile = false
+        }
+
+        if tile && config.tiling.popupFilter,
+           let furniture = window.furniture,
+           !furniture.isLikelyRealWindow,
+           window.subrole != "AXStandardWindow" {
+            tile = false
+        }
+
+        // Heuristique aerospace fine : fullscreenButton present mais desactive ->
+        // probablement un dialog (Settings, About, IntelliJ Rebase, Calculator...).
+        // Ne s'applique pas aux apps qui cachent legitimement le bouton fullscreen
+        // (terminals, IDEs) : pour celles-la, l'utilisateur peut whitelister leur subrole
+        // ou ajouter une regle action.manage.
+        if tile && config.tiling.popupFilter,
+           let furniture = window.furniture,
+           furniture.fullscreenButtonDisabled,
+           window.subrole != "AXStandardWindow" {
+            tile = false
+        }
+
+        if tile {
+            let allowed = Set(config.tiling.allowedSubroles)
+            switch window.subrole {
+            case .some(let value):
+                if !allowed.contains(value) { tile = false }
+            case .none:
+                break // AX absent -> on laisse passer (non-regression apps non-AX)
+            }
+        }
+
+        // Override par les regles user. Premiere regle matchant gagne.
+        let context = WindowRuleMatchContext(role: window.role, subrole: window.subrole)
+        if let rule = WindowRuleMatcher.firstMatch(rules: config.rules, window: window, context: context) {
+            if rule.action.manage == true {
+                tile = window.isTileCandidate // force tile mais respect criteres CG (taille mini, layer)
+            }
+            if rule.action.exclude == true || rule.action.floating == true {
+                tile = false
+            }
+        }
+
+        var result = window
+        result.isTileCandidate = tile
+        return result
+    }
+
+    private static func isLikelyTransientSettingsWindow(_ window: WindowSnapshot) -> Bool {
+        let frame = window.frame.cgRect
+        let isSmall = frame.width <= 760 && frame.height <= 760
+        let title = window.title.lowercased()
+        let titleLooksLikeSettings = [
+            "settings",
+            "preferences",
+            "préférences",
+            "reglages",
+            "réglages"
+        ].contains { title.contains($0) }
+        let isNonResizable = window.furniture.map { !$0.hasFullscreenButton } ?? false
+        return isSmall && isNonResizable && titleLooksLikeSettings
+    }
+
+    private static func isUnidentifiedTransientWindow(_ window: WindowSnapshot) -> Bool {
+        let frame = window.frame.cgRect
+        guard window.subrole == nil,
+              window.role == nil,
+              window.furniture == nil,
+              frame.width <= 760,
+              frame.height <= 760
+        else { return false }
+
+        let normalizedTitle = window.title
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let genericTitle = normalizedTitle.isEmpty
+            || normalizedTitle == "untitled"
+            || normalizedTitle == "sans titre"
+
+        return genericTitle
     }
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
@@ -315,7 +443,7 @@ public extension SnapshotService {
 
             guard let stage = snapshot.state.stage(scope: scope) else { continue }
             let effectiveMode = mode ?? stage.mode
-            if effectiveMode != .float, let intent = validIntent(for: scope, from: snapshot) {
+            if effectiveMode.isTiled, let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
@@ -345,7 +473,7 @@ public extension SnapshotService {
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
         let effectiveMode = mode ?? stage.mode
-        guard effectiveMode == .bsp else { return stage.windowIDs }
+        guard effectiveMode.usesSpatialBSPOrdering else { return stage.windowIDs }
 
         return spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
     }
@@ -575,6 +703,9 @@ public extension SnapshotService {
         return plan.placements.values.reduce(CGFloat(0)) { $0 + $1.area }
     }
 
+    // Complexite : O(n^2) avec sortie precoce.
+    // n borne par le nombre de fenetres tilees par display (typiquement <20),
+    // donc <=190 comparaisons au pire cas observable. Acceptable pour ce hot path.
     private func framesContainSignificantOverlap(_ frames: [CGRect]) -> Bool {
         guard frames.count > 1 else { return false }
         for index in frames.indices {
@@ -639,9 +770,14 @@ public extension SnapshotService {
                 actual: actualRect
             ))
         }
-        let applied = items.filter { $0.status == .applied }.count
-        let clamped = items.filter { $0.status == .clamped }.count
-        let failed = items.filter { $0.status == .failed }.count
+        var applied = 0, clamped = 0, failed = 0
+        for item in items {
+            switch item.status {
+            case .applied: applied += 1
+            case .clamped: clamped += 1
+            case .failed: failed += 1
+            }
+        }
         return ApplyResult(
             attempted: plan.commands.count,
             applied: applied,
@@ -657,6 +793,14 @@ public extension SnapshotService {
 
     func reset(_ window: WindowSnapshot) -> Bool {
         frameWriter.reset(window)
+    }
+
+    func toggleZoom(_ window: WindowSnapshot) -> Bool {
+        frameWriter.toggleZoom(window)
+    }
+
+    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {
+        frameWriter.toggleNativeFullscreen(window)
     }
 
     func focusedWindowID() -> WindowID? {

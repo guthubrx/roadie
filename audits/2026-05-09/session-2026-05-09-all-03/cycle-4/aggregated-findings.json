@@ -1,0 +1,7 @@
+{
+  "findings": [
+    {"id":"FIX-S12","severity":"info","category":"security","file":"Sources/roadied/main.swift","line":189,"description":"FIXED: commentaire explicite ajoute (Bundle.main.executableURL = self, args hard-codes, pid kernel-provided). Pas d'injection possible. Documente."},
+    {"id":"FIX-S13","severity":"info","category":"security","file":"Sources/roadie/main.swift","line":1096,"description":"FIXED: runShell guard chemin absolu (refus si pas / prefix). Defense en profondeur."}
+  ],
+  "summary": {"critical":0,"high":0,"medium":0,"low":0,"info":2,"total":2}
+}

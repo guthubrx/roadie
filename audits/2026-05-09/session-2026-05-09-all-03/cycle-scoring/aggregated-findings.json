@@ -1,0 +1,27 @@
+{
+  "findings": [
+    {"id":"S9","severity":"high","category":"security","file":"Sources/roadied/main.swift","line":147,"description":"@unchecked Sendable RestoreSafetyRuntimeController : refactor concurrence dedie necessaire (session SpecKit prochaine)."},
+    {"id":"S10","severity":"high","category":"security","file":"Sources/RoadieDaemon/ConfigReloadService.swift","line":70,"description":"@unchecked Sendable ConfigReloadService : idem."},
+    {"id":"S11","severity":"high","category":"security","file":"Sources/RoadieDaemon/FileAdministration.swift","line":59,"description":"@unchecked Sendable FileAdministrationService : idem."},
+    {"id":"P4","severity":"high","category":"performance","file":"Sources/RoadieDaemon/StateAudit.swift","line":223,"description":"repairScopes triple boucle in-place avec mutation par indices. Refactor risque sans suite tests dediee, hors scope cycle court."},
+    {"id":"P6","severity":"high","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":257,"description":"PersistentStageScope.assign double loop. Hors scope (PersistentStageScope est struct, mutation par indices)."},
+    {"id":"P7","severity":"high","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":287,"description":"PersistentStageScope.remove idem."},
+    {"id":"P9","severity":"high","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":358,"description":"PersistentStageScope.mergeDisconnectedScope idem."},
+    {"id":"P8","severity":"medium","category":"performance","file":"Sources/RoadieDaemon/StageStore.swift","line":326,"description":"updateFrame firstIndex non cache."},
+    {"id":"Q1","severity":"high","category":"quality","file":"Sources/RoadieDaemon/RailController.swift","line":1,"description":"God-class 1912 lignes inchangee (session SpecKit dediee : RailPanelManager + RailDragHandler + RailConfigWatcher)."},
+    {"id":"Q2","severity":"high","category":"quality","file":"Sources/roadie/main.swift","line":1,"description":"1109 lignes : decoupage en CommandHandlers."},
+    {"id":"Q3","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/DaemonSnapshot.swift","line":1,"description":"863 lignes."},
+    {"id":"Q4","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/WindowCommands.swift","line":1,"description":"739 lignes."},
+    {"id":"Q5","severity":"medium","category":"quality","file":"Sources/RoadieCore/Config.swift","line":1,"description":"631 lignes."},
+    {"id":"Q6","severity":"medium","category":"quality","file":"Sources/RoadieDaemon/StageCommands.swift","line":1,"description":"612 lignes."},
+    {"id":"Q9","severity":"low","category":"quality","file":"Sources/RoadieDaemon/RailController.swift","line":886,"description":"CGWindowListCreateImage deprecated macOS 14 -> migrer ScreenCaptureKit."},
+    {"id":"T1","severity":"high","category":"tests","file":"Sources/RoadieDaemon","line":0,"description":"6 modules majeurs sans test direct (RailController, BorderController, FocusFollowsMouseController, DaemonSnapshot, Formatters, DisplayTopology)."},
+    {"id":"T4","severity":"high","category":"tests","file":"Sources/RoadieDaemon/RailController.swift","line":0,"description":"Aucun unit test."},
+    {"id":"T2","severity":"medium","category":"tests","file":"Sources/RoadieDaemon/AutomationSnapshotService.swift","line":0,"description":"Sans test direct."},
+    {"id":"T3","severity":"medium","category":"tests","file":"Sources/RoadieDaemon/LayoutCommandService.swift","line":0,"description":"Indirect uniquement."},
+    {"id":"T5","severity":"low","category":"tests","file":"Sources/RoadieDaemon/Formatters.swift","line":0,"description":"Non teste."},
+    {"id":"T6","severity":"low","category":"tests","file":"Sources/RoadieDaemon/DisplayTopology.swift","line":0,"description":"Non teste."},
+    {"id":"FIXED-CYCLES","severity":"info","category":"performance","file":"audits/2026-05-09/session-2026-05-09-all-03","line":0,"description":"9 fixes appliques sur 5 cycles : index inverse StageStore (P5), hot loop snapshot, 3 boucles AX fusionnees (P15), RailController map (P16), Process() args securises (S12/S13), helper JSONPersistence (Q7). 157 tests OK."}
+  ],
+  "summary": {"critical":0,"high":11,"medium":7,"low":3,"info":1,"total":22}
+}

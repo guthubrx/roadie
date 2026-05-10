@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Darwin
+import RoadieAX
 import RoadieCore
 import RoadieDaemon
 
@@ -76,6 +77,28 @@ case "run":
     }
     let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
     RunLoop.main.add(timer, forMode: .common)
+
+    // Live re-evaluation : declenche un tick() supplementaire des qu'AX nous notifie d'un
+    // changement de fenetre, sans attendre le prochain polling tick. Coalesce les rafales
+    // (250ms) et evite de doubler avec le polling regulier (skip si tick recent).
+    var pendingLiveTick: DispatchWorkItem?
+    var lastTickAt: Date = .distantPast
+    let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 250
+    let liveObserver = AXWindowEventObserver {
+        // Si on a tick il y a moins de 200ms (polling), on ne refait pas.
+        if Date().timeIntervalSince(lastTickAt) < 0.2 { return }
+        pendingLiveTick?.cancel()
+        let item = DispatchWorkItem {
+            pendingLiveTick = nil
+            lastTickAt = Date()
+            target.tick(timer)
+        }
+        pendingLiveTick = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(liveCoalesceMs)), execute: item)
+    }
+    if !args.contains("--no-live-events") {
+        liveObserver.start()
+    }
     NSApplication.shared.run()
 case "restore-watch":
     guard let rawPID = value(after: "--pid"), let pid = Int32(rawPID) else {
@@ -187,6 +210,9 @@ private final class RestoreSafetyRuntimeController: @unchecked Sendable {
     }
 
     private func startWatcher() {
+        // Securite : on relance notre propre binaire (Bundle.main.executableURL) avec
+        // des arguments hard-codes et le pid courant (provenance noyau, non user-controlled).
+        // Aucune injection possible.
         guard let executable = Bundle.main.executableURL else { return }
         let process = Process()
         process.executableURL = executable

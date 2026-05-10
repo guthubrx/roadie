@@ -58,6 +58,8 @@ public enum LayoutPlanner {
         switch request.mode {
         case .bsp:
             return BSPLayoutStrategy().plan(request)
+        case .mutableBsp:
+            return MutableBSPLayoutStrategy().plan(request)
         case .masterStack:
             return MasterStackLayoutStrategy().plan(request)
         case .float:

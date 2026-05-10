@@ -17,6 +17,7 @@ func printUsage() {
       roadie layout plan [--json]
       roadie layout apply [--yes] [--json]
       roadie layout split horizontal|vertical
+      roadie layout toggle-split [left|right|up|down]
       roadie layout join-with|insert left|right|up|down
       roadie layout flatten|zoom-parent
       roadie layout width next|prev|nudge [DELTA]|ratio RATIO [--all]
@@ -37,7 +38,7 @@ func printUsage() {
       roadie focus status
       roadie focus back-and-forth|left|right|up|down
       roadie move|warp|wrap|resize left|right|up|down
-      roadie mode bsp|masterStack|float
+      roadie mode bsp|mutableBsp|masterStack|float
       roadie window display N
       roadie window desktop N [--follow]
       roadie window reset
@@ -52,7 +53,7 @@ func printUsage() {
       roadie stage switch|assign N
       roadie stage summon WINDOW_ID
       roadie stage move-to-display N
-      roadie stage mode bsp|masterStack|float
+      roadie stage mode bsp|mutableBsp|masterStack|float
       roadie stage prev|next
       roadie balance
       roadie daemon health|heal [--json]
@@ -187,6 +188,16 @@ case "layout":
         exit(result.changed ? 0 : 1)
     case "split":
         let result = LayoutCommandService(service: service).split(args.dropFirst(2).first ?? "")
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "toggle-split":
+        let rawDirection = args.dropFirst(2).first
+        let direction = rawDirection.flatMap(Direction.init(rawValue:))
+        if rawDirection != nil && direction == nil {
+            fputs("roadie: layout toggle-split expects optional left|right|up|down\n", stderr)
+            exit(64)
+        }
+        let result = LayoutCommandService(service: service).toggleSplit(direction)
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "insert":
@@ -420,13 +431,22 @@ case "daemon":
     }
 case "toggle":
     let subject = args.dropFirst().first ?? ""
+    let windowCommands = WindowCommandService(service: service)
+    let result: WindowCommandResult
     switch subject {
-    case "floating", "fullscreen", "native-fullscreen":
+    case "fullscreen":
+        result = windowCommands.toggleFullscreen()
+    case "native-fullscreen":
+        result = windowCommands.toggleNativeFullscreen()
+    case "floating":
         print("roadie: \(args.joined(separator: " ")) is not implemented in this build")
+        exit(1)
     default:
         printUsage()
         exit(64)
     }
+    print(result.message)
+    exit(result.changed ? 0 : 1)
 default:
     printUsage()
     exit(args.isEmpty ? 0 : 64)
@@ -1079,7 +1099,7 @@ func requiredRulesOption(_ args: [String], index: Int, name: String) -> String {
 @MainActor
 func runModeCommand(_ rawMode: String?) {
     guard let rawMode, let mode = WindowManagementMode(roadieValue: rawMode) else {
-        fputs("roadie: mode requires bsp|masterStack|float\n", stderr)
+        fputs("roadie: mode requires bsp|mutableBsp|masterStack|float\n", stderr)
         exit(64)
     }
     let result = StageCommandService(service: service).setMode(mode)
@@ -1094,6 +1114,12 @@ func runCompatibilityCommand(_ group: String, _ args: [String]) {
 
 @MainActor
 func runShell(_ executable: String, _ arguments: [String]) {
+    // Securite : on n'accepte que des chemins absolus pour l'executable, evitant le PATH lookup
+    // et toute resolution implicite. Les seuls callers internes utilisent des paths hard-codes.
+    guard executable.hasPrefix("/") else {
+        fputs("roadie: refusing relative executable path: \(executable)\n", stderr)
+        exit(1)
+    }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = arguments
