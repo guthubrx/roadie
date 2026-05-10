@@ -418,11 +418,14 @@ It shows non-empty stages, live thumbnails when available, fallback app icons wh
 Supported interactions:
 
 - Click a stage thumbnail stack to switch stage.
-- Click empty rail space to hide the active stage and switch to an empty stage.
+- Click empty rail space to hide the active stage and switch to an empty stage. This can be disabled with `empty_click_hide_active = false`.
 - Drag a thumbnail to another stage to move that window there.
 - Drag a thumbnail into the active workspace to summon it.
 - Drag a thumbnail to an empty rail area to place it in an empty or newly created stage.
+- Drag an application window by its title bar onto a stage to move it there.
+- Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.
 - Use the chevrons above and below a stage to reorder stages.
+- Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.
 

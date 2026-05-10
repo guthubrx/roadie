@@ -48,6 +48,21 @@ Use cases:
 - hide a context without closing apps;
 - bring a specific window back to the active stage with `stage summon`.
 
+## Nav Rail
+
+The nav rail is the per-display side panel that represents non-empty stages.
+
+Main interactions:
+
+- click a stage to activate it;
+- click empty rail space to switch to an empty stage when `empty_click_hide_active` is enabled;
+- drag a thumbnail to another stage to move that window there;
+- drag a thumbnail into the active workspace to summon it;
+- drag an application window by its title bar onto a stage to move it there;
+- drag an application window by its title bar onto empty rail space to create or use an empty stage.
+
+macOS-reserved areas such as the menu bar are ignored by empty rail click handling.
+
 ## Roadie Desktops
 
 Roadie desktops are virtual. They do not create or control native macOS Spaces.
@@ -78,6 +93,7 @@ Roadie exposes layout primitives inspired by power-user window managers.
 ./bin/roadie layout insert right
 ./bin/roadie layout join-with left
 ./bin/roadie layout zoom-parent
+./bin/roadie layout toggle-split
 ```
 
 Use cases:
@@ -85,6 +101,7 @@ Use cases:
 - return to the previous focus;
 - force a local layout restructuring;
 - place the next window on a chosen side;
+- locally flip two neighboring windows in `mutableBsp` with `toggle-split`;
 - temporarily enlarge a window without losing context.
 
 ## Rules
