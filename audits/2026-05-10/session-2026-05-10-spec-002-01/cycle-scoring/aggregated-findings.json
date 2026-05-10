@@ -1,0 +1,82 @@
+{
+  "cycle": "scoring",
+  "mode": "readonly",
+  "scope": "SPEC-002 (002-roadie-ecosystem-upgrade)",
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 1,
+    "info": 3,
+    "total": 4
+  },
+  "findings": [
+    {
+      "id": "Q1",
+      "severity": "low",
+      "category": "quality",
+      "file": "Sources/roadie/main.swift",
+      "line": 871,
+      "title": "runEventSubscription : while true sans handler SIGTERM custom",
+      "description": "Polling 5Hz acceptable, terminaison via SIGINT par defaut OK pour CLI. Pas de flush propre des derniers events lors d'un kill. Defere : changement d'API, pas critique.",
+      "status": "deferred"
+    },
+    {
+      "id": "INFO1",
+      "severity": "info",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/WindowRuleEngine.swift",
+      "line": 60,
+      "title": "WindowRuleEngine.evaluate construit RuleEvaluation pour chaque regle",
+      "description": "Le tableau evaluations est consomme par 'rules explain' (CLI) et tickPublishesRuleSkipped (tests). Splitter en fast-path/slow-path possible mais cout actuel marginal (n_rules borne).",
+      "status": "deferred"
+    },
+    {
+      "id": "INFO2",
+      "severity": "info",
+      "category": "security",
+      "file": "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+      "line": 95,
+      "title": "Regex utilisateur sans timeout (ReDoS theorique)",
+      "description": "Surface non publique (config locale). L'utilisateur s'attaque lui-meme. Documentation peut suggerer d'eviter les regex non-bornees.",
+      "status": "noted"
+    },
+    {
+      "id": "INFO3",
+      "severity": "info",
+      "category": "performance",
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "line": 84,
+      "title": "Triple loop scopes×stages×members documentee",
+      "description": "Conforme Article XVIII §3 (justification ecrite presente, n borne < 100).",
+      "status": "compliant"
+    }
+  ],
+  "complexity_audit_article_xviii": {
+    "patterns_scanned": [
+      "double_nested_loop",
+      "linear_search_in_loop",
+      "n_plus_1",
+      "repeated_sort",
+      "string_concat_in_loop",
+      "io_in_tight_loop",
+      "non_memoized_recursion",
+      "defensive_copy_cascade",
+      "set_construction_in_loop"
+    ],
+    "findings_count": 1,
+    "fixed_count": 0,
+    "compliant_count": 1,
+    "remaining_count": 0,
+    "note": "Aucun anti-pattern Article XVIII non-fixe et non-justifie restant sur le perimetre SPEC-002."
+  },
+  "build_status": {
+    "RoadieCore": "ok",
+    "RoadieDaemon": "ok",
+    "executables": "link toolchain issue (anaconda ld), hors scope SPEC-002"
+  },
+  "tests_status": {
+    "spec002_targeted": {"total": 61, "passed": 61, "failed": 0},
+    "full_suite_cycle1": {"total": 252, "passed": 252, "failed": 0}
+  }
+}
