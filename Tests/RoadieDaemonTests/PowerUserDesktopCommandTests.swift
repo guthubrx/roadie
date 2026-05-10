@@ -1,4 +1,6 @@
+import CoreGraphics
 import Testing
+import RoadieAX
 import RoadieCore
 import RoadieDaemon
 
@@ -95,6 +97,35 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
+    func stageSwitchPersistsTargetStageBeforeRestoringWindows() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        var hidden = powerWindow(2, x: 999)
+        hidden.frame = Rect(x: 999, y: 499, width: 400, height: 300)
+        let provider = PowerUserProvider(windows: [visible, hidden])
+        provider.focusedID = visible.id
+        let store = StageStore(path: tempPath("power-stage-switch-order"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hidden.id, members: [
+                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: Rect(x: 250, y: 50, width: 500, height: 350)),
+                ]),
+            ]),
+        ]))
+        let writer = StageSwitchOrderWriter(provider: provider, store: store, observedWindowID: hidden.id)
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(service: service, store: store).switchToPosition(2)
+
+        #expect(result.changed)
+        #expect(!writer.activeStagesObservedForTargetFrame.isEmpty)
+        #expect(writer.activeStagesObservedForTargetFrame.allSatisfy { $0 == StageID(rawValue: "2") })
+    }
+
+    @Test
     func stageAssignPositionUsesVisibleRailOrder() {
         let display = DisplayID(rawValue: "display-main")
         let left = powerWindow(1, x: 100)
@@ -150,4 +181,45 @@ struct PowerUserDesktopCommandTests {
         #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
         #expect(scope.memberIDs(in: StageID(rawValue: "2")).contains(window.id))
     }
+}
+
+private final class StageSwitchOrderWriter: WindowFrameWriting, @unchecked Sendable {
+    let provider: PowerUserProvider
+    let store: StageStore
+    let observedWindowID: WindowID
+    private(set) var activeStagesObservedForTargetFrame: [StageID] = []
+
+    init(provider: PowerUserProvider, store: StageStore, observedWindowID: WindowID) {
+        self.provider = provider
+        self.store = store
+        self.observedWindowID = observedWindowID
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        if window.id == observedWindowID {
+            let activeStageID = store.state().scopes
+                .first { $0.displayID == DisplayID(rawValue: "display-main") }?
+                .activeStageID
+            if let activeStageID {
+                activeStagesObservedForTargetFrame.append(activeStageID)
+            }
+        }
+        let rect = Rect(frame)
+        provider.snapshots = provider.snapshots.map {
+            guard $0.id == window.id else { return $0 }
+            var updated = $0
+            updated.frame = rect
+            return updated
+        }
+        return frame
+    }
+
+    func focus(_ window: WindowSnapshot) -> Bool {
+        provider.focusedID = window.id
+        return true
+    }
+
+    func reset(_ window: WindowSnapshot) -> Bool { true }
+    func toggleZoom(_ window: WindowSnapshot) -> Bool { true }
+    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { true }
 }

@@ -561,6 +561,12 @@ public struct StageCommandService {
 
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
+        let targetStage = scope.stages.first(where: { $0.id == stageID })
+
+        scope.activeStageID = stageID
+        state.update(scope)
+        store.save(state)
+
         var applied = 0
 
         for id in previousMembers.subtracting(targetMembers) {
@@ -570,17 +576,12 @@ public struct StageCommandService {
             }
         }
 
-        let targetStage = scope.stages.first(where: { $0.id == stageID })
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
             if service.setFrame(member.frame.cgRect, of: window) != nil {
                 applied += 1
             }
         }
-
-        scope.activeStageID = stageID
-        state.update(scope)
-        store.save(state)
 
         let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         applied += layoutResult.applied + layoutResult.clamped
