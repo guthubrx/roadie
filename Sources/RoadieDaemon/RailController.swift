@@ -20,8 +20,10 @@ public final class RailController {
     private var configWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
+    private var pendingStageReorder: PendingStageReorder?
     private var dragGhost: RailDragGhostWindow?
     private let dropPreview = DropPreviewController()
+    private var stageMoveMenuTargets: [RailStageMoveMenuTarget] = []
     private lazy var windowDragController = WindowDragReorderController(preview: dropPreview)
     private var focusedWindowID: WindowID?
     private var protectedBlurredWindows: [WindowID: Date] = [:]
@@ -88,15 +90,23 @@ public final class RailController {
 
     private func startClickMonitors() {
         guard clickMonitors.isEmpty else { return }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+        if let local = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
+            if Self.isRightMouseEvent(event.type),
+               self?.handleRightMouse(event.type, at: NSEvent.mouseLocation) == true {
+                return nil
+            }
             self?.handleMouse(event.type, at: NSEvent.mouseLocation)
             return event
         }) {
             clickMonitors.append(local)
         }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp], handler: { [weak self] event in
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
             DispatchQueue.main.async {
-                self?.handleMouse(event.type, at: NSEvent.mouseLocation)
+                if Self.isRightMouseEvent(event.type) {
+                    _ = self?.handleRightMouse(event.type, at: NSEvent.mouseLocation)
+                } else {
+                    self?.handleMouse(event.type, at: NSEvent.mouseLocation)
+                }
             }
         }) {
             clickMonitors.append(global)
@@ -116,11 +126,15 @@ public final class RailController {
 
     private func updateRailHover() {
         let point = NSEvent.mouseLocation
-        let canHide = pendingDrag == nil && !windowDragController.hasActiveDrag
+        let canHide = pendingDrag == nil && pendingStageReorder == nil && !windowDragController.hasActiveDrag
         panels.values.forEach { panel in
             guard panel.isVisible else { return }
             panel.updateAutoHide(mouse: point, canHide: canHide)
         }
+    }
+
+    private static func isRightMouseEvent(_ type: NSEvent.EventType) -> Bool {
+        type == .rightMouseDown || type == .rightMouseDragged || type == .rightMouseUp
     }
 
     private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) {
@@ -171,6 +185,90 @@ public final class RailController {
             return
         }
         windowDragController.handleMouseDown(at: screenPoint)
+    }
+
+    private func handleRightMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) -> Bool {
+        switch type {
+        case .rightMouseDown:
+            dragGhost?.hide()
+            for (displayID, panel) in panels {
+                guard panel.isVisible,
+                      panel.frame.contains(screenPoint),
+                      let payload = panel.stageDragPayload(at: screenPoint)
+                else { continue }
+                pendingStageReorder = PendingStageReorder(
+                    displayID: displayID,
+                    stageID: payload.stageID,
+                    image: payload.image,
+                    grabUnit: payload.grabUnit,
+                    startPoint: screenPoint,
+                    didDrag: false
+                )
+                return true
+            }
+            return false
+
+        case .rightMouseDragged:
+            guard var reorder = pendingStageReorder else { return false }
+            if hypot(screenPoint.x - reorder.startPoint.x, screenPoint.y - reorder.startPoint.y) > 6 {
+                if !reorder.didDrag {
+                    if dragGhost == nil {
+                        dragGhost = RailDragGhostWindow()
+                    }
+                    dragGhost?.show(image: reorder.image, at: screenPoint, grabUnit: reorder.grabUnit, usesBackdrop: false)
+                } else {
+                    dragGhost?.move(to: screenPoint, grabUnit: reorder.grabUnit)
+                }
+                reorder.didDrag = true
+                pendingStageReorder = reorder
+            }
+            return true
+
+        case .rightMouseUp:
+            guard let reorder = pendingStageReorder else { return false }
+            pendingStageReorder = nil
+            dragGhost?.hide()
+            guard let panel = panels[reorder.displayID] else { return true }
+            if reorder.didDrag {
+                if let position = panel.stageReorderPosition(at: screenPoint, sourceStageID: reorder.stageID) {
+                    perform(.moveStage(reorder.stageID, position), displayID: reorder.displayID)
+                    rebuildPanels()
+                }
+                return true
+            }
+            showStageMoveMenu(stageID: reorder.stageID, displayID: reorder.displayID, panel: panel, at: screenPoint)
+            return true
+
+        default:
+            return false
+        }
+    }
+
+    private func showStageMoveMenu(stageID: StageID, displayID: DisplayID, panel: RailPanel, at screenPoint: CGPoint) {
+        stageMoveMenuTargets.removeAll(keepingCapacity: true)
+        guard panel.isVisible, panel.frame.contains(screenPoint) else { return }
+        guard panel.stageID(at: screenPoint) == stageID else { return }
+
+        let snapshot = snapshotService.snapshot()
+        let targets = Self.stageDisplayMoveTargets(sourceDisplayID: displayID, in: snapshot)
+        guard !targets.isEmpty else { return }
+
+        let menu = NSMenu(title: "Envoyer vers un ecran")
+        for targetDisplay in targets {
+            let title = "Ecran \(targetDisplay.index) - \(targetDisplay.name)"
+            let item = NSMenuItem(title: title, action: #selector(RailStageMoveMenuTarget.choose(_:)), keyEquivalent: "")
+            item.representedObject = targetDisplay.id.rawValue
+            let target = RailStageMoveMenuTarget { [weak self] selectedDisplayID in
+                guard let self else { return }
+                self.perform(.moveStageToDisplay(stageID, selectedDisplayID), displayID: displayID)
+                self.rebuildPanels()
+            }
+            item.target = target
+            stageMoveMenuTargets.append(target)
+            menu.addItem(item)
+        }
+
+        menu.popUp(positioning: nil, at: panel.convertPoint(fromScreen: screenPoint), in: panel.contentView)
     }
 
     private func handleMouseDragged(to screenPoint: CGPoint) {
@@ -291,6 +389,23 @@ public final class RailController {
                 details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue, "position": String(position)]
             ))
             _ = commandService.reorder(stageID.rawValue, to: position, displayID: displayID)
+        case .moveStageToDisplay(let stageID, let targetDisplayID):
+            print("rail move stage \(stageID.rawValue) -> display \(targetDisplayID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(
+                type: "rail_stage_move_display",
+                details: [
+                    "displayID": displayID.rawValue,
+                    "stageID": stageID.rawValue,
+                    "targetDisplayID": targetDisplayID.rawValue
+                ]
+            ))
+            _ = commandService.moveStageToDisplay(
+                stageID: stageID,
+                sourceDisplayID: displayID,
+                targetDisplayID: targetDisplayID,
+                source: "rail"
+            )
         }
     }
 
@@ -438,6 +553,15 @@ public final class RailController {
         })
     }
 
+    nonisolated public static func stageDisplayMoveTargets(
+        sourceDisplayID: DisplayID,
+        in snapshot: DaemonSnapshot
+    ) -> [DisplaySnapshot] {
+        snapshot.displays
+            .filter { $0.id != sourceDisplayID }
+            .sorted { $0.index < $1.index }
+    }
+
     nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
         framesAreClose(frame, display.visibleFrame.cgRect, tolerance: 48)
             || framesAreClose(frame, display.frame.cgRect, tolerance: 48)
@@ -465,6 +589,21 @@ private enum RailAction {
     case moveWindow(WindowID, StageID)
     case placeWindow(WindowID, [WindowID], [WindowID: Rect])
     case moveStage(StageID, Int)
+    case moveStageToDisplay(StageID, DisplayID)
+}
+
+@MainActor
+private final class RailStageMoveMenuTarget: NSObject {
+    private let handler: (DisplayID) -> Void
+
+    init(handler: @escaping (DisplayID) -> Void) {
+        self.handler = handler
+    }
+
+    @objc func choose(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String else { return }
+        handler(DisplayID(rawValue: raw))
+    }
 }
 
 private struct RailDragPayload {
@@ -473,10 +612,25 @@ private struct RailDragPayload {
     var grabUnit: CGPoint
 }
 
+private struct RailStageDragPayload {
+    var stageID: StageID
+    var image: NSImage?
+    var grabUnit: CGPoint
+}
+
 private struct PendingRailDrag {
     var displayID: DisplayID
     var windowID: WindowID
     var sourceStageID: StageID
+    var grabUnit: CGPoint
+    var startPoint: CGPoint
+    var didDrag: Bool
+}
+
+private struct PendingStageReorder {
+    var displayID: DisplayID
+    var stageID: StageID
+    var image: NSImage?
     var grabUnit: CGPoint
     var startPoint: CGPoint
     var didDrag: Bool
@@ -503,16 +657,17 @@ private final class RailDragGhostWindow: NSPanel {
         contentView = ghostView
     }
 
-    func show(image: NSImage?, at point: CGPoint, grabUnit: CGPoint) {
+    func show(image: NSImage?, at point: CGPoint, grabUnit: CGPoint, usesBackdrop: Bool = true) {
         ghostView.image = image
-        setContentSize(ghostView.preferredSize(for: image))
+        ghostView.usesBackdrop = usesBackdrop
+        setContentSize(ghostView.preferredSize(for: image, usesBackdrop: usesBackdrop))
         move(to: point, grabUnit: grabUnit)
         orderFrontRegardless()
         ghostView.needsDisplay = true
     }
 
     func move(to point: CGPoint, grabUnit: CGPoint) {
-        let contentInset: CGFloat = 5
+        let contentInset = ghostView.contentInset
         let contentWidth = max(1, frame.width - contentInset * 2)
         let contentHeight = max(1, frame.height - contentInset * 2)
         setFrameOrigin(CGPoint(
@@ -529,34 +684,44 @@ private final class RailDragGhostWindow: NSPanel {
 @MainActor
 private final class RailDragGhostView: NSView {
     var image: NSImage?
+    var usesBackdrop = true
 
-    func preferredSize(for image: NSImage?) -> CGSize {
+    var contentInset: CGFloat {
+        usesBackdrop ? 5 : 0
+    }
+
+    func preferredSize(for image: NSImage?, usesBackdrop: Bool) -> CGSize {
         guard let image, image.size.width > 0, image.size.height > 0 else {
             return CGSize(width: 148, height: 92)
         }
-        let maxSize = CGSize(width: 170, height: 110)
+        let maxSize = CGSize(width: 226, height: 170)
         let scale = min(maxSize.width / image.size.width, maxSize.height / image.size.height, 1)
-        return CGSize(width: image.size.width * scale + 10, height: image.size.height * scale + 10)
+        let inset = usesBackdrop ? 10.0 : 0.0
+        return CGSize(width: image.size.width * scale + inset, height: image.size.height * scale + inset)
     }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        let rect = bounds.insetBy(dx: 5, dy: 5)
+        let rect = bounds.insetBy(dx: contentInset, dy: contentInset)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
 
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 16
-        shadow.shadowOffset = .zero
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
-        shadow.set()
-        NSColor.black.withAlphaComponent(0.30).setFill()
-        path.fill()
-        NSGraphicsContext.restoreGraphicsState()
+        if usesBackdrop {
+            NSGraphicsContext.saveGraphicsState()
+            let shadow = NSShadow()
+            shadow.shadowBlurRadius = 16
+            shadow.shadowOffset = .zero
+            shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+            shadow.set()
+            NSColor.black.withAlphaComponent(0.30).setFill()
+            path.fill()
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         if let image {
             NSGraphicsContext.saveGraphicsState()
-            path.addClip()
+            if usesBackdrop {
+                path.addClip()
+            }
             image.draw(in: rect, from: aspectFitSourceRect(image.size, for: rect), operation: .sourceOver, fraction: 0.92)
             NSGraphicsContext.restoreGraphicsState()
         } else {
@@ -564,9 +729,11 @@ private final class RailDragGhostView: NSView {
             path.fill()
         }
 
-        NSColor.white.withAlphaComponent(0.42).setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        if usesBackdrop {
+            NSColor.white.withAlphaComponent(0.42).setStroke()
+            path.lineWidth = 1
+            path.stroke()
+        }
     }
 
     private func aspectFitSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
@@ -750,16 +917,14 @@ private final class RailPanel: NSPanel {
         if let spacer = stageLeadingSpacer(count: ids.count, config: config) {
             stack.addArrangedSubview(spacer)
         }
-        for (index, id) in ids.enumerated() {
+        for id in ids {
             let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
             let card = StageCardView(
                 stage: stage,
                 isActive: id == scope.activeStageID,
                 accent: config.accent(for: id),
                 config: config,
-                thumbnails: thumbnails.images(for: stage.members, protectedWindowIDs: protectedWindowIDs),
-                position: index + 1,
-                stageCount: ids.count
+                thumbnails: thumbnails.images(for: stage.members, protectedWindowIDs: protectedWindowIDs)
             )
             stack.addArrangedSubview(card)
         }
@@ -843,6 +1008,31 @@ private final class RailPanel: NSPanel {
         return nil
     }
 
+    func stageReorderPosition(at screenPoint: CGPoint, sourceStageID: StageID) -> Int? {
+        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
+        let windowPoint = convertPoint(fromScreen: screenPoint)
+        let contentPoint = contentView.convert(windowPoint, from: nil)
+        var cardsByID: [StageID: StageCardView] = [:]
+        for view in stack.arrangedSubviews {
+            guard let card = view as? StageCardView else { continue }
+            cardsByID[card.stageID] = card
+        }
+        let targetCards = visibleStageIDs
+            .filter { $0 != sourceStageID }
+            .compactMap { cardsByID[$0] }
+        guard !targetCards.isEmpty else { return nil }
+
+        var insertionPosition = 1
+        for card in targetCards {
+            let cardFrame = contentView.convert(card.frame, from: stack)
+            if contentPoint.y >= cardFrame.midY {
+                return insertionPosition
+            }
+            insertionPosition += 1
+        }
+        return insertionPosition
+    }
+
     func dropStageID(at screenPoint: CGPoint) -> StageID? {
         if let id = stageID(at: screenPoint) {
             return id
@@ -881,6 +1071,30 @@ private final class RailPanel: NSPanel {
             if let card = current as? StageCardView {
                 let local = card.convert(contentPoint, from: contentView)
                 return card.dragPayload(at: local)
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    func stageDragPayload(at screenPoint: CGPoint) -> RailStageDragPayload? {
+        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
+        let windowPoint = convertPoint(fromScreen: screenPoint)
+        let contentPoint = contentView.convert(windowPoint, from: nil)
+        var view = contentView.hitTest(contentPoint)
+        while let current = view {
+            if let card = current as? StageCardView {
+                let local = card.convert(contentPoint, from: contentView)
+                let width = max(1, card.bounds.width)
+                let height = max(1, card.bounds.height)
+                return RailStageDragPayload(
+                    stageID: card.stageID,
+                    image: card.snapshotImage(),
+                    grabUnit: CGPoint(
+                        x: min(max(local.x / width, 0), 1),
+                        y: min(max(local.y / height, 0), 1)
+                    )
+                )
             }
             view = current.superview
         }
@@ -1357,8 +1571,6 @@ private final class StageCardView: NSControl {
     private let config: RailVisualConfig
     private let thumbnails: [WindowID: NSImage]
     private let visualMembers: [PersistentStageMember]
-    private let position: Int
-    private let stageCount: Int
     private let contentInset: CGFloat = 4
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -1370,9 +1582,7 @@ private final class StageCardView: NSControl {
         isActive: Bool,
         accent: NSColor,
         config: RailVisualConfig,
-        thumbnails: [WindowID: NSImage],
-        position: Int,
-        stageCount: Int
+        thumbnails: [WindowID: NSImage]
     ) {
         self.stage = stage
         self.stageID = stage.id
@@ -1381,8 +1591,6 @@ private final class StageCardView: NSControl {
         self.config = config
         self.thumbnails = thumbnails
         self.visualMembers = Self.focusFirstMembers(stage)
-        self.position = position
-        self.stageCount = stageCount
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
@@ -1423,13 +1631,17 @@ private final class StageCardView: NSControl {
         if dragPayload(at: point) != nil {
             return nil
         }
-        if upHitRect.contains(point), position > 1 {
-            return .moveStage(stageID, position - 1)
-        }
-        if downHitRect.contains(point), position < stageCount {
-            return .moveStage(stageID, position + 1)
-        }
         return .switchStage(stageID)
+    }
+
+    func snapshotImage() -> NSImage? {
+        guard bounds.width > 0, bounds.height > 0,
+              let representation = bitmapImageRepForCachingDisplay(in: bounds)
+        else { return nil }
+        cacheDisplay(in: bounds, to: representation)
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1449,39 +1661,6 @@ private final class StageCardView: NSControl {
         case .icons:
             drawIcons(in: rect.insetBy(dx: 8, dy: 18))
         }
-        drawControls()
-    }
-
-    private var upRect: CGRect {
-        let preview = previewArea(in: bounds.insetBy(dx: contentInset, dy: 12), visibleCount: visiblePreviewCount)
-        return CGRect(x: preview.midX - 16, y: preview.maxY + 6, width: 32, height: 24)
-    }
-
-    private var downRect: CGRect {
-        let preview = previewArea(in: bounds.insetBy(dx: contentInset, dy: 12), visibleCount: visiblePreviewCount)
-        return CGRect(x: preview.midX - 16, y: preview.minY - 30, width: 32, height: 24)
-    }
-
-    private var upHitRect: CGRect {
-        upRect.insetBy(dx: -12, dy: -10)
-    }
-
-    private var downHitRect: CGRect {
-        downRect.insetBy(dx: -12, dy: -10)
-    }
-
-    private func drawControls() {
-        drawControl("⌃", in: upRect, enabled: position > 1)
-        drawControl("⌄", in: downRect, enabled: position < stageCount)
-    }
-
-    private func drawControl(_ label: String, in rect: CGRect, enabled: Bool) {
-        guard enabled else { return }
-        let fontSize = rect.height > 24 ? 14.0 : 12.0
-        label.draw(in: rect.insetBy(dx: 0, dy: rect.height > 24 ? 6 : 3), withAttributes: [
-            .foregroundColor: NSColor.white.withAlphaComponent(0.70),
-            .font: NSFont.systemFont(ofSize: fontSize, weight: .semibold),
-        ])
     }
 
     private func drawStacked(in rect: CGRect) {

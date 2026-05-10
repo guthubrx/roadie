@@ -278,6 +278,29 @@ public struct WindowCommandService {
         guard let display = snapshot.displays.first(where: { $0.index == displayIndex }) else {
             return WindowCommandResult(message: "unknown display \(displayIndex)", changed: false)
         }
+        return send(active, to: display, focusMovedWindow: true)
+    }
+
+    public func send(
+        windowID: WindowID,
+        toDisplayID targetDisplayID: DisplayID,
+        focusMovedWindow: Bool = true
+    ) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
+            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): window unavailable", changed: false)
+        }
+        guard let display = snapshot.displays.first(where: { $0.id == targetDisplayID }) else {
+            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): display unavailable", changed: false)
+        }
+        return send(entry, to: display, focusMovedWindow: focusMovedWindow)
+    }
+
+    private func send(
+        _ active: ScopedWindowSnapshot,
+        to display: DisplaySnapshot,
+        focusMovedWindow: Bool
+    ) -> WindowCommandResult {
         let sourceScope = active.scope
         var initialStageState = stageStore.state()
         let targetDesktopID = initialStageState.currentDesktopID(for: display.id)
@@ -288,12 +311,12 @@ public struct WindowCommandService {
             stageID: targetActiveStageID
         )
         if sourceScope == targetScopeID {
-            return WindowCommandResult(message: "display \(displayIndex): already on target display", changed: false)
+            return WindowCommandResult(message: "display \(display.index): already on target display", changed: false)
         }
 
         let transferFrame = centeredFrame(active.window.frame.cgRect, in: display.visibleFrame.cgRect)
         guard service.setFrame(transferFrame, of: active.window) != nil else {
-            return WindowCommandResult(message: "display \(displayIndex): initial move failed", changed: false)
+            return WindowCommandResult(message: "display \(display.index): initial move failed", changed: false)
         }
 
         var state = stageStore.state()
@@ -309,7 +332,10 @@ public struct WindowCommandService {
             title: active.window.title,
             frame: Rect(transferFrame),
             isOnScreen: active.window.isOnScreen,
-            isTileCandidate: active.window.isTileCandidate
+            isTileCandidate: active.window.isTileCandidate,
+            subrole: active.window.subrole,
+            role: active.window.role,
+            furniture: active.window.furniture
         )
         targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
         state.update(targetScope)
@@ -322,13 +348,16 @@ public struct WindowCommandService {
 
         let updatedSnapshot = service.snapshot()
         let result = service.apply(service.applyPlan(from: updatedSnapshot))
-        _ = focusWindow(active.window)
+        if focusMovedWindow {
+            _ = focusWindow(active.window)
+        }
         events.append(RoadieEvent(
             type: "window_display",
             scope: targetScopeID,
             details: [
                 "windowID": String(active.window.id.rawValue),
-                "displayIndex": String(displayIndex),
+                "displayIndex": String(display.index),
+                "focus": String(focusMovedWindow),
                 "attempted": String(result.attempted),
                 "applied": String(result.applied),
                 "clamped": String(result.clamped),
@@ -336,7 +365,7 @@ public struct WindowCommandService {
             ]
         ))
         return WindowCommandResult(
-            message: "display \(displayIndex): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            message: "display \(display.index): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
     }

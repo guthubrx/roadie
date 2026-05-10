@@ -148,6 +148,10 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
     /// Vrai pour les dialogs/sheets modaux qui bloquent une app. Ces fenetres ne doivent
     /// pas participer au tiling automatique, meme si elles ont temporairement le focus.
     public var isModal: Bool
+    /// Vrai si AX accepte de modifier la taille de la fenetre. Les petites fenetres non
+    /// redimensionnables sont souvent des dialogs/progress panels meme si elles se
+    /// declarent AXStandardWindow.
+    public var isResizable: Bool
 
     public init(
         hasCloseButton: Bool = false,
@@ -157,7 +161,8 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         hasZoomButton: Bool = false,
         isFocused: Bool = false,
         isMain: Bool = false,
-        isModal: Bool = false
+        isModal: Bool = false,
+        isResizable: Bool = true
     ) {
         self.hasCloseButton = hasCloseButton
         self.hasFullscreenButton = hasFullscreenButton
@@ -167,11 +172,12 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         self.isFocused = isFocused
         self.isMain = isMain
         self.isModal = isModal
+        self.isResizable = isResizable
     }
 
     enum CodingKeys: String, CodingKey {
         case hasCloseButton, hasFullscreenButton, fullscreenButtonEnabled
-        case hasMinimizeButton, hasZoomButton, isFocused, isMain, isModal
+        case hasMinimizeButton, hasZoomButton, isFocused, isMain, isModal, isResizable
     }
 
     public init(from decoder: Decoder) throws {
@@ -184,6 +190,7 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         self.isFocused = try c.decodeIfPresent(Bool.self, forKey: .isFocused) ?? false
         self.isMain = try c.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
         self.isModal = try c.decodeIfPresent(Bool.self, forKey: .isModal) ?? false
+        self.isResizable = try c.decodeIfPresent(Bool.self, forKey: .isResizable) ?? true
     }
 
     /// Vrai si au moins un bouton ou flag d'etat indique une "vraie" fenetre.
@@ -364,7 +371,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
                     hasZoomButton: hasAttribute(axWindow, kAXZoomButtonAttribute),
                     isFocused: boolAttribute(axWindow, kAXFocusedAttribute),
                     isMain: boolAttribute(axWindow, kAXMainAttribute),
-                    isModal: boolAttribute(axWindow, kAXModalAttribute)
+                    isModal: boolAttribute(axWindow, kAXModalAttribute),
+                    isResizable: isAttributeSettable(axWindow, kAXSizeAttribute)
                 )
                 entries[cgID] = AXWindowAttributes(role: role, subrole: subrole, furniture: furniture)
             }
@@ -395,6 +403,15 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
               let value = raw as? Bool
         else { return false }
         return value
+    }
+
+    /// Vrai si AX indique que l'attribut peut etre modifie.
+    private static func isAttributeSettable(_ element: AXUIElement, _ attribute: String) -> Bool {
+        var settable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(element, attribute as CFString, &settable) == .success else {
+            return false
+        }
+        return settable.boolValue
     }
 
     public func focusedWindowID() -> WindowID? {

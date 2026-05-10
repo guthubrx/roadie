@@ -236,6 +236,11 @@ public struct SnapshotService {
         }
 
         if tile && config.tiling.popupFilter,
+           isLikelyDialogLikeStandardWindow(window) {
+            tile = false
+        }
+
+        if tile && config.tiling.popupFilter,
            isUnidentifiedTransientWindow(window) {
             tile = false
         }
@@ -298,6 +303,18 @@ public struct SnapshotService {
         ].contains { title.contains($0) }
         let isNonResizable = window.furniture.map { !$0.hasFullscreenButton } ?? false
         return isSmall && isNonResizable && titleLooksLikeSettings
+    }
+
+    private static func isLikelyDialogLikeStandardWindow(_ window: WindowSnapshot) -> Bool {
+        guard window.subrole == "AXStandardWindow",
+              let furniture = window.furniture
+        else { return false }
+
+        let frame = window.frame.cgRect
+        let isSmallPanel = frame.width <= 760 && frame.height <= 520
+        let cannotResize = !furniture.isResizable
+        let cannotEnterFullscreen = !furniture.fullscreenButtonEnabled
+        return isSmallPanel && cannotResize && cannotEnterFullscreen
     }
 
     private static func isUnidentifiedTransientWindow(_ window: WindowSnapshot) -> Bool {

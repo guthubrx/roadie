@@ -154,6 +154,56 @@ public struct DesktopCommandService {
         )
     }
 
+    public func assign(
+        windowID: WindowID,
+        to desktopID: DesktopID,
+        displayID: DisplayID,
+        follow: Bool = false
+    ) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
+              let display = snapshot.displays.first(where: { $0.id == displayID })
+        else {
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): window or display unavailable", changed: false)
+        }
+        guard entry.scope?.desktopID != desktopID || entry.scope?.displayID != displayID else {
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false)
+        }
+
+        var state = store.state()
+        let sourceScope = entry.scope
+        var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: entry.window.id)
+        }
+        targetScope.assign(window: entry.window, to: targetScope.activeStageID)
+        state.update(targetScope)
+        store.save(state)
+
+        if let sourceScope {
+            service.removeLayoutIntent(scope: sourceScope)
+        }
+        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+        service.removeLayoutIntent(scope: targetStageScope)
+
+        if follow {
+            return switchDisplay(display, to: desktopID, snapshot: snapshot)
+        }
+
+        let hidden = service.setFrame(hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays), of: entry.window) != nil
+        let result = service.apply(service.applyPlan(from: service.snapshot()))
+        events.append(RoadieEvent(
+            type: "window_desktop",
+            scope: targetStageScope,
+            details: ["windowID": String(entry.window.id.rawValue), "follow": String(follow), "layout": String(result.attempted)]
+        ))
+        return StageCommandResult(
+            message: "window desktop \(desktopID.rawValue): window=\(windowID.rawValue) hidden=\(hidden) layout=\(result.attempted)",
+            changed: hidden || result.attempted > 0
+        )
+    }
+
     private func switchDisplay(
         _ display: DisplaySnapshot,
         to desktopID: DesktopID,

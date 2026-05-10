@@ -10,6 +10,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var focus: FocusConfig
     public var rules: [WindowRule]
     public var widthAdjustment: WidthAdjustmentConfig
+    public var experimental: ExperimentalConfig
 
     public init(
         tiling: TilingConfig = TilingConfig(),
@@ -19,7 +20,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
         rules: [WindowRule],
-        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
+        experimental: ExperimentalConfig = ExperimentalConfig()
     ) {
         self.tiling = tiling
         self.desktops = desktops
@@ -29,6 +31,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.focus = focus
         self.rules = rules
         self.widthAdjustment = widthAdjustment
+        self.experimental = experimental
     }
 
     public init(
@@ -38,7 +41,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         exclusions: ExclusionsConfig = ExclusionsConfig(),
         fx: EffectsConfig = EffectsConfig(),
         focus: FocusConfig = FocusConfig(),
-        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig()
+        widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
+        experimental: ExperimentalConfig = ExperimentalConfig()
     ) {
         self.init(
             tiling: tiling,
@@ -48,7 +52,8 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
             fx: fx,
             focus: focus,
             rules: [],
-            widthAdjustment: widthAdjustment
+            widthAdjustment: widthAdjustment,
+            experimental: experimental
         )
     }
 
@@ -61,6 +66,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         case focus
         case rules
         case widthAdjustment = "width_adjustment"
+        case experimental
     }
 
     public init(from decoder: Decoder) throws {
@@ -73,6 +79,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.focus = try c.decodeIfPresent(FocusConfig.self, forKey: .focus) ?? FocusConfig()
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
+        self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
     }
 }
 
@@ -296,17 +303,20 @@ public struct ExclusionsConfig: Equatable, Codable, Sendable {
 public struct FocusConfig: Equatable, Codable, Sendable {
     public var stageFollowsFocus: Bool
     public var assignFollowsFocus: Bool
+    public var stageMoveFollowsFocus: Bool
     public var focusFollowsMouse: Bool
     public var mouseFollowsFocus: Bool
 
     public init(
         stageFollowsFocus: Bool = true,
         assignFollowsFocus: Bool = false,
+        stageMoveFollowsFocus: Bool = true,
         focusFollowsMouse: Bool = false,
         mouseFollowsFocus: Bool = false
     ) {
         self.stageFollowsFocus = stageFollowsFocus
         self.assignFollowsFocus = assignFollowsFocus
+        self.stageMoveFollowsFocus = stageMoveFollowsFocus
         self.focusFollowsMouse = focusFollowsMouse
         self.mouseFollowsFocus = mouseFollowsFocus
     }
@@ -314,8 +324,18 @@ public struct FocusConfig: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case stageFollowsFocus = "stage_follows_focus"
         case assignFollowsFocus = "assign_follows_focus"
+        case stageMoveFollowsFocus = "stage_move_follows_focus"
         case focusFollowsMouse = "focus_follows_mouse"
         case mouseFollowsFocus = "mouse_follows_focus"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.stageFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .stageFollowsFocus) ?? true
+        self.assignFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .assignFollowsFocus) ?? false
+        self.stageMoveFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .stageMoveFollowsFocus) ?? true
+        self.focusFollowsMouse = try c.decodeIfPresent(Bool.self, forKey: .focusFollowsMouse) ?? false
+        self.mouseFollowsFocus = try c.decodeIfPresent(Bool.self, forKey: .mouseFollowsFocus) ?? false
     }
 }
 
@@ -427,6 +447,79 @@ public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
     }
 }
 
+public struct ExperimentalConfig: Equatable, Codable, Sendable {
+    public var titlebarContextMenu: TitlebarContextMenuConfig
+
+    public init(titlebarContextMenu: TitlebarContextMenuConfig = TitlebarContextMenuConfig()) {
+        self.titlebarContextMenu = titlebarContextMenu
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case titlebarContextMenu = "titlebar_context_menu"
+    }
+}
+
+public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var height: Double
+    public var leadingExclusion: Double
+    public var trailingExclusion: Double
+    public var managedWindowsOnly: Bool
+    public var tileCandidatesOnly: Bool
+    public var includeStageDestinations: Bool
+    public var includeDesktopDestinations: Bool
+    public var includeDisplayDestinations: Bool
+
+    public init(
+        enabled: Bool = false,
+        height: Double = 36,
+        leadingExclusion: Double = 84,
+        trailingExclusion: Double = 16,
+        managedWindowsOnly: Bool = true,
+        tileCandidatesOnly: Bool = true,
+        includeStageDestinations: Bool = true,
+        includeDesktopDestinations: Bool = true,
+        includeDisplayDestinations: Bool = true
+    ) {
+        self.enabled = enabled
+        self.height = height
+        self.leadingExclusion = leadingExclusion
+        self.trailingExclusion = trailingExclusion
+        self.managedWindowsOnly = managedWindowsOnly
+        self.tileCandidatesOnly = tileCandidatesOnly
+        self.includeStageDestinations = includeStageDestinations
+        self.includeDesktopDestinations = includeDesktopDestinations
+        self.includeDisplayDestinations = includeDisplayDestinations
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case height
+        case leadingExclusion = "leading_exclusion"
+        case trailingExclusion = "trailing_exclusion"
+        case managedWindowsOnly = "managed_windows_only"
+        case tileCandidatesOnly = "tile_candidates_only"
+        case includeStageDestinations = "include_stage_destinations"
+        case includeDesktopDestinations = "include_desktop_destinations"
+        case includeDisplayDestinations = "include_display_destinations"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false,
+            height: try c.decodeFlexibleDouble(forKey: .height) ?? 36,
+            leadingExclusion: try c.decodeFlexibleDouble(forKey: .leadingExclusion) ?? 84,
+            trailingExclusion: try c.decodeFlexibleDouble(forKey: .trailingExclusion) ?? 16,
+            managedWindowsOnly: try c.decodeIfPresent(Bool.self, forKey: .managedWindowsOnly) ?? true,
+            tileCandidatesOnly: try c.decodeIfPresent(Bool.self, forKey: .tileCandidatesOnly) ?? true,
+            includeStageDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeStageDestinations) ?? true,
+            includeDesktopDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDesktopDestinations) ?? true,
+            includeDisplayDestinations: try c.decodeIfPresent(Bool.self, forKey: .includeDisplayDestinations) ?? true
+        )
+    }
+}
+
 public enum RoadieConfigLoader {
     public static func defaultConfigPath() -> String {
         (NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath as String)
@@ -508,6 +601,8 @@ private enum ConfigValidationRules {
         "fx.borders.stage_overrides",
         "focus",
         "width_adjustment",
+        "experimental",
+        "experimental.titlebar_context_menu",
         "rules",
         "rules.match",
         "rules.action"
@@ -559,6 +654,7 @@ private enum ConfigValidationRules {
             if config.widthAdjustment.minimumRatio > config.widthAdjustment.maximumRatio {
                 items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
             }
+            items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
         }
         return items
     }
@@ -591,7 +687,10 @@ private enum ConfigValidationRules {
             "corner_radius",
             "nudge_step",
             "minimum_ratio",
-            "maximum_ratio"
+            "maximum_ratio",
+            "height",
+            "leading_exclusion",
+            "trailing_exclusion"
         ]
         var items: [ConfigValidationItem] = []
         var currentTable = ""
@@ -619,6 +718,42 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: [currentTable, key].filter { !$0.isEmpty }.joined(separator: "."),
                 message: "expected numeric value, got string"
+            ))
+        }
+        return items
+    }
+
+    private static func validateTitlebarContextMenu(_ config: TitlebarContextMenuConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.height < 12 || config.height > 96 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.titlebar_context_menu.height",
+                message: "must be between 12 and 96"
+            ))
+        }
+        if config.leadingExclusion < 0 || config.leadingExclusion > 240 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.titlebar_context_menu.leading_exclusion",
+                message: "must be between 0 and 240"
+            ))
+        }
+        if config.trailingExclusion < 0 || config.trailingExclusion > 240 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.titlebar_context_menu.trailing_exclusion",
+                message: "must be between 0 and 240"
+            ))
+        }
+        if config.enabled &&
+            !config.includeStageDestinations &&
+            !config.includeDesktopDestinations &&
+            !config.includeDisplayDestinations {
+            items.append(ConfigValidationItem(
+                level: .warning,
+                path: "experimental.titlebar_context_menu",
+                message: "all destination families are disabled; menu will not be shown"
             ))
         }
         return items

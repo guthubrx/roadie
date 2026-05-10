@@ -38,9 +38,19 @@ Une stage est un groupe nomme de fenetres dans un desktop Roadie. Seule la stage
 ./bin/roadie stage rename 4 Comms
 ./bin/roadie stage switch 2
 ./bin/roadie stage assign 2
+./bin/roadie stage switch-position 2
+./bin/roadie stage assign-position 2
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
+./bin/roadie stage move-to-display right --no-follow
 ```
+
+Les variantes `*-position` suivent l'ordre visible du navrail ; elles sont faites
+pour les raccourcis utilisateur de type Alt-1, Alt-2, Alt-3.
+
+Une stage peut aussi etre envoyee vers un autre ecran depuis le menu contextuel
+du navrail. Le comportement de focus est controle par `[focus].stage_move_follows_focus`
+et peut etre force ponctuellement avec `--follow` ou `--no-follow`.
 
 Cas d'usage :
 
@@ -62,6 +72,37 @@ Interactions principales :
 - tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide.
 
 Les zones reservees par macOS, comme la barre de menu, sont ignorees par les actions de clic vide du navrail.
+
+## Menu contextuel de barre de titre
+
+Roadie peut afficher un menu experimental lors d'un clic droit dans la zone haute d'une fenetre geree. Le clic droit dans le contenu de l'application reste laisse a l'application.
+
+Activation TOML :
+
+```toml
+[experimental.titlebar_context_menu]
+enabled = true
+height = 36
+leading_exclusion = 84
+trailing_exclusion = 16
+managed_windows_only = true
+tile_candidates_only = true
+include_stage_destinations = true
+include_desktop_destinations = true
+include_display_destinations = true
+```
+
+Actions disponibles :
+
+- envoyer la fenetre vers une autre stage;
+- envoyer la fenetre vers un autre desktop Roadie;
+- envoyer la fenetre vers un autre ecran.
+
+Cas d'usage :
+
+- deplacer une fenetre sans memoriser son ID;
+- garder le focus courant tout en rangeant une fenetre ailleurs;
+- eviter les popups/dialogues en limitant l'action aux fenetres gerees et tileables.
 
 ## Desktops Roadie
 

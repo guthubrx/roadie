@@ -10,6 +10,7 @@ let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
+var titlebarContextMenuController: TitlebarContextMenuController?
 var displayChangeObserver: NSObjectProtocol?
 
 func printUsage() {
@@ -50,6 +51,8 @@ case "run":
     borderController?.start()
     focusFollowsMouseController = FocusFollowsMouseController()
     focusFollowsMouseController?.start()
+    titlebarContextMenuController = TitlebarContextMenuController()
+    titlebarContextMenuController?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,

@@ -38,9 +38,19 @@ A stage is a named group of windows inside a Roadie desktop. Only the active sta
 ./bin/roadie stage rename 4 Comms
 ./bin/roadie stage switch 2
 ./bin/roadie stage assign 2
+./bin/roadie stage switch-position 2
+./bin/roadie stage assign-position 2
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
+./bin/roadie stage move-to-display right --no-follow
 ```
+
+The `*-position` variants follow the visible nav rail order. They are intended
+for user shortcuts such as Alt-1, Alt-2, Alt-3.
+
+A stage can also be sent to another display from the nav rail context menu. The
+focus behavior is controlled by `[focus].stage_move_follows_focus` and can be
+overridden per command with `--follow` or `--no-follow`.
 
 Use cases:
 
@@ -62,6 +72,37 @@ Main interactions:
 - drag an application window by its title bar onto empty rail space to create or use an empty stage.
 
 macOS-reserved areas such as the menu bar are ignored by empty rail click handling.
+
+## Title Bar Context Menu
+
+Roadie can show an experimental menu when you right-click the top band of a managed window. Right-clicks inside application content are left to the application.
+
+TOML activation:
+
+```toml
+[experimental.titlebar_context_menu]
+enabled = true
+height = 36
+leading_exclusion = 84
+trailing_exclusion = 16
+managed_windows_only = true
+tile_candidates_only = true
+include_stage_destinations = true
+include_desktop_destinations = true
+include_display_destinations = true
+```
+
+Available actions:
+
+- send the window to another stage;
+- send the window to another Roadie desktop;
+- send the window to another display.
+
+Use cases:
+
+- move a window without looking up its ID;
+- keep current focus while filing a window elsewhere;
+- avoid popups and dialogs by limiting the menu to managed tileable windows.
 
 ## Roadie Desktops
 

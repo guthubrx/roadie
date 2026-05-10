@@ -14,15 +14,36 @@ public struct StageCommandResult: Equatable, Sendable {
     }
 }
 
+public enum StageDisplayMoveTarget: Equatable, Sendable {
+    case index(Int)
+    case direction(Direction)
+    case displayID(DisplayID)
+}
+
+public enum StageDisplayMoveStatus: String, Equatable, Sendable {
+    case moved
+    case noopCurrentDisplay
+    case invalidTarget
+    case noActiveStage
+    case partialFailure
+}
+
 public struct StageCommandService {
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
+    private let config: RoadieConfig
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        store: StageStore = StageStore(),
+        events: EventLog = EventLog(),
+        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
+    ) {
         self.service = service
         self.store = store
         self.events = events
+        self.config = config
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -54,7 +75,31 @@ public struct StageCommandService {
         return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
     }
 
-    public func assign(windowID: WindowID, to rawStageID: String, displayID: DisplayID) -> StageCommandResult {
+    public func assignPosition(_ position: Int) -> StageCommandResult {
+        guard position > 0 else {
+            return StageCommandResult(message: "stage assign-position: requires a positive position", changed: false)
+        }
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot),
+              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
+        else {
+            return StageCommandResult(message: "stage assign-position: no active window", changed: false)
+        }
+
+        var state = store.state()
+        let scope = activeScope(displayID: displayID, in: &state)
+        guard let stageID = stageID(atVisiblePosition: position, in: scope) else {
+            return StageCommandResult(message: "stage assign-position \(position): not found", changed: false)
+        }
+        return assign(stageID.rawValue)
+    }
+
+    public func assign(
+        windowID: WindowID,
+        to rawStageID: String,
+        displayID: DisplayID,
+        focusAssignedWindow: Bool = true
+    ) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
@@ -84,7 +129,7 @@ public struct StageCommandService {
 
         let activeScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
         let layoutResult = service.apply(service.applyPlan(from: service.snapshot()))
-        if scope.activeStageID == stageID {
+        if focusAssignedWindow, scope.activeStageID == stageID {
             _ = service.focus(window)
         }
         events.append(RoadieEvent(
@@ -205,68 +250,194 @@ public struct StageCommandService {
         return switchDisplay(display, to: StageID(rawValue: rawStageID), snapshot: snapshot)
     }
 
+    public func switchToPosition(_ position: Int) -> StageCommandResult {
+        guard position > 0 else {
+            return StageCommandResult(message: "stage switch-position: requires a positive position", changed: false)
+        }
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage switch-position: no display", changed: false)
+        }
+        var state = store.state()
+        let scope = activeScope(displayID: display.id, in: &state)
+        guard let stageID = stageID(atVisiblePosition: position, in: scope) else {
+            return StageCommandResult(message: "stage switch-position \(position): not found", changed: false)
+        }
+        return switchDisplay(display, to: stageID, snapshot: snapshot)
+    }
+
     public func summon(windowID: WindowID, displayID: DisplayID) -> StageCommandResult {
         var state = store.state()
         let scope = activeScope(displayID: displayID, in: &state)
         return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
     }
 
-    public func moveActiveStageToDisplay(index displayIndex: Int) -> StageCommandResult {
+    public func moveActiveStageToDisplay(index displayIndex: Int, followFocus: Bool? = nil) -> StageCommandResult {
+        moveActiveStageToDisplay(.index(displayIndex), followFocus: followFocus)
+    }
+
+    public func moveActiveStageToDisplay(direction: Direction, followFocus: Bool? = nil) -> StageCommandResult {
+        moveActiveStageToDisplay(.direction(direction), followFocus: followFocus)
+    }
+
+    public func moveActiveStageToDisplay(_ target: StageDisplayMoveTarget, followFocus: Bool? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
-        guard let sourceDisplay = activeDisplay(in: snapshot),
-              let targetDisplay = snapshot.displays.first(where: { $0.index == displayIndex })
+        guard let sourceDisplay = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage move-to-display: no active display", changed: false)
+        }
+        var state = store.state()
+        let sourceScope = activeScope(displayID: sourceDisplay.id, in: &state)
+        return moveStageToDisplay(
+            stageID: sourceScope.activeStageID,
+            sourceDisplayID: sourceDisplay.id,
+            target: target,
+            followFocus: followFocus,
+            source: "cli"
+        )
+    }
+
+    public func moveStageToDisplay(
+        stageID: StageID,
+        sourceDisplayID: DisplayID,
+        targetDisplayID: DisplayID,
+        followFocus: Bool? = nil,
+        source: String = "rail"
+    ) -> StageCommandResult {
+        moveStageToDisplay(
+            stageID: stageID,
+            sourceDisplayID: sourceDisplayID,
+            target: .displayID(targetDisplayID),
+            followFocus: followFocus,
+            source: source
+        )
+    }
+
+    public func moveStageToDisplay(
+        stageID: StageID,
+        sourceDisplayID: DisplayID,
+        target: StageDisplayMoveTarget,
+        followFocus: Bool? = nil,
+        source: String = "cli"
+    ) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let sourceDisplay = snapshot.displays.first(where: { $0.id == sourceDisplayID }),
+              let targetDisplay = resolveStageMoveTarget(target, from: sourceDisplay, in: snapshot.displays)
         else {
-            return StageCommandResult(message: "stage move-to-display: unknown display", changed: false)
+            return stageMoveResult(
+                status: .invalidTarget,
+                stageID: stageID,
+                sourceDisplayID: sourceDisplayID,
+                targetDisplay: nil,
+                followFocus: followFocus ?? config.focus.stageMoveFollowsFocus,
+                movedWindowCount: 0,
+                failedWindowCount: 0,
+                source: source
+            )
         }
         guard sourceDisplay.id != targetDisplay.id else {
-            return StageCommandResult(message: "stage move-to-display: already on display \(displayIndex)", changed: false)
+            return stageMoveResult(
+                status: .noopCurrentDisplay,
+                stageID: stageID,
+                sourceDisplayID: sourceDisplay.id,
+                targetDisplay: targetDisplay,
+                followFocus: followFocus ?? config.focus.stageMoveFollowsFocus,
+                movedWindowCount: 0,
+                failedWindowCount: 0,
+                source: source
+            )
         }
 
         var state = store.state()
-        var sourceScope = activeScope(displayID: sourceDisplay.id, in: &state)
+        var sourceScope = activeScope(displayID: sourceDisplayID, in: &state)
         var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
-        guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == sourceScope.activeStageID }) else {
-            return StageCommandResult(message: "stage move-to-display: no active stage", changed: false)
+        guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else {
+            return stageMoveResult(
+                status: .noActiveStage,
+                stageID: stageID,
+                sourceDisplayID: sourceDisplayID,
+                targetDisplay: targetDisplay,
+                followFocus: followFocus ?? config.focus.stageMoveFollowsFocus,
+                movedWindowCount: 0,
+                failedWindowCount: 0,
+                source: source
+            )
         }
-        let movingStage = sourceScope.stages.remove(at: movingStageIndex)
-        targetScope.stages.removeAll { $0.id == movingStage.id }
+        var movingStage = sourceScope.stages.remove(at: movingStageIndex)
+        let requestedStageID = movingStage.id
+        let sourceWasActive = sourceScope.activeStageID == requestedStageID
+        let targetConflict = targetScope.stages.first { $0.id == movingStage.id }
+        if let targetConflict,
+           !targetConflict.members.isEmpty || !targetConflict.groups.isEmpty {
+            movingStage.id = nextAvailableStageID(preferred: movingStage.id, in: targetScope)
+        } else if targetConflict != nil {
+            targetScope.stages.removeAll { $0.id == movingStage.id }
+        }
+        let effectiveFollow = followFocus ?? config.focus.stageMoveFollowsFocus
         targetScope.stages.append(movingStage)
-        targetScope.activeStageID = movingStage.id
+        if effectiveFollow {
+            targetScope.activeStageID = movingStage.id
+        } else if targetScope.activeStageID == movingStage.id {
+            targetScope.activeStageID = targetScope.stages.first { $0.id != movingStage.id }?.id
+                ?? nextAvailableStageID(preferred: StageID(rawValue: "1"), in: targetScope)
+            targetScope.ensureStage(targetScope.activeStageID)
+        }
         if sourceScope.stages.isEmpty {
             sourceScope.ensureStage(StageID(rawValue: "1"))
         }
-        if sourceScope.activeStageID == movingStage.id {
+        if sourceWasActive {
             sourceScope.activeStageID = sourceScope.stages.first?.id ?? StageID(rawValue: "1")
         }
         state.update(sourceScope)
         state.update(targetScope)
-        state.focusDisplay(targetDisplay.id)
+        state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
         store.save(state)
 
         let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
         var applied = 0
+        var failed = 0
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         for member in movingStage.members {
-            guard let window = windowsByID[member.windowID] else { continue }
+            guard let window = windowsByID[member.windowID] else {
+                failed += 1
+                continue
+            }
             if service.setFrame(centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect), of: window) != nil {
                 applied += 1
+            } else {
+                failed += 1
             }
         }
-        service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: sourceScope.desktopID, stageID: movingStage.id))
+        service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: sourceScope.desktopID, stageID: requestedStageID))
         service.removeLayoutIntent(scope: targetScopeID)
         let result = service.apply(service.applyPlan(from: service.snapshot()))
+        failed += result.failed
         events.append(RoadieEvent(
             type: "stage_move_display",
             scope: targetScopeID,
             details: [
-                "displayIndex": String(displayIndex),
-                "windows": String(movingStage.members.count),
+                "status": failed == 0 ? StageDisplayMoveStatus.moved.rawValue : StageDisplayMoveStatus.partialFailure.rawValue,
+                "source": source,
+                "stageID": movingStage.id.rawValue,
+                "requestedStageID": requestedStageID.rawValue,
+                "sourceDisplayID": sourceDisplay.id.rawValue,
+                "targetDisplayID": targetDisplay.id.rawValue,
+                "targetDisplayIndex": String(targetDisplay.index),
+                "followFocus": String(effectiveFollow),
+                "movedWindowCount": String(movingStage.members.count),
+                "failedWindowCount": String(failed),
                 "applied": String(applied + result.applied + result.clamped)
             ]
         ))
-        return StageCommandResult(
-            message: "stage move-to-display \(displayIndex): windows=\(movingStage.members.count) applied=\(applied + result.applied + result.clamped)",
-            changed: true
+        return stageMoveResult(
+            status: failed == 0 ? .moved : .partialFailure,
+            stageID: movingStage.id,
+            sourceDisplayID: sourceDisplay.id,
+            targetDisplay: targetDisplay,
+            followFocus: effectiveFollow,
+            movedWindowCount: movingStage.members.count,
+            failedWindowCount: failed,
+            source: source,
+            requestedStageID: requestedStageID
         )
     }
 
@@ -431,6 +602,74 @@ public struct StageCommandService {
         )
     }
 
+    private func resolveStageMoveTarget(
+        _ target: StageDisplayMoveTarget,
+        from sourceDisplay: DisplaySnapshot,
+        in displays: [DisplaySnapshot]
+    ) -> DisplaySnapshot? {
+        switch target {
+        case .index(let index):
+            guard index > 0 else { return nil }
+            return displays.first { $0.index == index }
+        case .direction(let direction):
+            return DisplayTopology.neighbor(from: sourceDisplay, direction: direction, in: displays)
+        case .displayID(let displayID):
+            return displays.first { $0.id == displayID }
+        }
+    }
+
+    private func nextAvailableStageID(preferred: StageID, in scope: PersistentStageScope) -> StageID {
+        let used = Set(scope.stages.map(\.id.rawValue))
+        if !used.contains(preferred.rawValue) {
+            return preferred
+        }
+        for value in 1...99 where !used.contains(String(value)) {
+            return StageID(rawValue: String(value))
+        }
+        return StageID(rawValue: "\(preferred.rawValue)-\(UUID().uuidString.prefix(8))")
+    }
+
+    private func stageMoveResult(
+        status: StageDisplayMoveStatus,
+        stageID: StageID,
+        sourceDisplayID: DisplayID,
+        targetDisplay: DisplaySnapshot?,
+        followFocus: Bool,
+        movedWindowCount: Int,
+        failedWindowCount: Int,
+        source: String,
+        requestedStageID: StageID? = nil
+    ) -> StageCommandResult {
+        let target = targetDisplay.map { "\($0.index)" } ?? "unknown"
+        let requested = requestedStageID.map { $0 == stageID ? "" : " requested=\($0.rawValue)" } ?? ""
+        let message: String
+        switch status {
+        case .moved:
+            message = "stage move-to-display: moved stage=\(stageID.rawValue)\(requested) target=\(target) follow=\(followFocus) windows=\(movedWindowCount) failed=\(failedWindowCount)"
+        case .partialFailure:
+            message = "stage move-to-display: partial stage=\(stageID.rawValue)\(requested) target=\(target) follow=\(followFocus) windows=\(movedWindowCount) failed=\(failedWindowCount)"
+        case .noopCurrentDisplay:
+            message = "stage move-to-display: target is current display"
+        case .invalidTarget:
+            message = "stage move-to-display: invalid target=\(target)"
+        case .noActiveStage:
+            message = "stage move-to-display: no stage \(stageID.rawValue)"
+        }
+        if status != .moved && status != .partialFailure {
+            events.append(RoadieEvent(type: "stage_move_display", details: [
+                "status": status.rawValue,
+                "source": source,
+                "stageID": stageID.rawValue,
+                "sourceDisplayID": sourceDisplayID.rawValue,
+                "targetDisplayID": targetDisplay?.id.rawValue ?? "",
+                "followFocus": String(followFocus),
+                "movedWindowCount": String(movedWindowCount),
+                "failedWindowCount": String(failedWindowCount)
+            ]))
+        }
+        return StageCommandResult(message: message, changed: status == .moved || status == .partialFailure)
+    }
+
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
         if let focusedID = snapshot.focusedWindowID,
            let focused = snapshot.windows.first(where: { entry in
@@ -519,6 +758,14 @@ public struct StageCommandService {
 
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {
         state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
+    }
+
+    private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope) -> StageID? {
+        let visible = scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+        let ordered = visible.isEmpty ? scope.stages.map(\.id) : visible
+        let index = position - 1
+        guard ordered.indices.contains(index) else { return nil }
+        return ordered[index]
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
