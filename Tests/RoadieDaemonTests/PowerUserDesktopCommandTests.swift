@@ -181,6 +181,36 @@ struct PowerUserDesktopCommandTests {
         #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
         #expect(scope.memberIDs(in: StageID(rawValue: "2")).contains(window.id))
     }
+
+    @Test
+    func desktopAssignUpdatesPinnedWindowHomeScope() {
+        let display = DisplayID(rawValue: "display-main")
+        let window = powerWindow(1, x: 100)
+        let provider = PowerUserProvider(windows: [window])
+        let store = StageStore(path: tempPath("power-desktop-pinned-assign"))
+        let home = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame)])
+                ]),
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"))
+                ])
+            ],
+            windowPins: [
+                PersistentWindowPin(windowID: window.id, homeScope: home, pinScope: .allDesktops, bundleID: window.bundleID, title: window.title, lastFrame: window.frame)
+            ],
+            activeDisplayID: display
+        ))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+
+        let result = DesktopCommandService(service: service, store: store).assign(windowID: window.id, to: DesktopID(rawValue: 2), displayID: display)
+
+        #expect(result.changed)
+        #expect(store.state().pin(for: window.id)?.homeScope.desktopID == DesktopID(rawValue: 2))
+        #expect(store.state().stageScope(for: window.id)?.desktopID == DesktopID(rawValue: 2))
+    }
 }
 
 private final class StageSwitchOrderWriter: WindowFrameWriting, @unchecked Sendable {

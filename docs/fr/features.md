@@ -139,15 +139,25 @@ new_apps_target = "mouse" # mouse | focused_display | macos
 
 Actions disponibles :
 
+- pinner la fenetre sur toutes les stages du desktop courant;
+- pinner la fenetre sur tous les desktops Roadie du meme ecran;
+- retirer un pin de fenetre;
 - envoyer la fenetre vers une autre stage;
 - envoyer la fenetre vers un autre desktop Roadie;
 - envoyer la fenetre vers un autre ecran.
 
 Cas d'usage :
 
+- garder une video, une doc ou un terminal de reference visible pendant qu'on change de stage;
+- garder une fenetre visible sur tous les desktops d'un meme ecran sans la dupliquer ni la retiler;
 - deplacer une fenetre sans memoriser son ID;
 - garder le focus courant tout en rangeant une fenetre ailleurs;
 - eviter les popups/dialogues en limitant l'action aux fenetres gerees et tileables.
+
+Les pins de fenetres ne creent pas de copie dans les stages. La fenetre garde
+un contexte d'origine unique, mais Roadie ne la cache pas tant que le desktop ou
+l'ecran cible du pin est actif. Une fenetre pinnee est sortie du layout
+automatique pour eviter les deplacements parasites des autres fenetres.
 
 ## Desktops Roadie
 

@@ -66,6 +66,12 @@ public final class LayoutMaintainer {
         }
         evaluateRules(in: snapshot)
 
+        let restoredPins = restoreVisiblePinnedWindows(in: snapshot)
+        if restoredPins > 0 {
+            events.append(RoadieEvent(type: "window.pin_restored", details: ["applied": String(restoredPins)]))
+            return MaintenanceTick(commands: restoredPins, applied: restoredPins, clamped: 0, failed: 0)
+        }
+
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
         if hiddenInactive > 0 {
             events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive)]))
@@ -529,9 +535,28 @@ public final class LayoutMaintainer {
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
                   !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
             else { continue }
+            if entry.pin?.visibility(in: activeScope).shouldBeVisible == true {
+                continue
+            }
 
             let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
             if service.setFrame(frame, of: entry.window) != nil {
+                applied += 1
+            }
+        }
+        return applied
+    }
+
+    private func restoreVisiblePinnedWindows(in snapshot: DaemonSnapshot) -> Int {
+        var applied = 0
+        for entry in snapshot.windows {
+            guard let pin = entry.pin,
+                  let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
+                  pin.visibility(in: activeScope).shouldBeVisible,
+                  isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+            else { continue }
+
+            if service.setFrame(pin.lastFrame.cgRect, of: entry.window) != nil {
                 applied += 1
             }
         }

@@ -339,6 +339,7 @@ public struct WindowCommandService {
         )
         targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
         state.update(targetScope)
+        state.updatePinHomeScope(windowID: active.window.id, to: targetScopeID)
         stageStore.save(state)
 
         if let sourceScope {

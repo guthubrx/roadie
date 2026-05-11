@@ -20,6 +20,117 @@ private struct FakeProvider: SystemSnapshotProviding {
     func mouseLocation() -> CGPoint? { mousePoint }
 }
 
+@Suite
+struct WindowPinSnapshotTests {
+    @Test
+    func desktopPinKeepsHomeScopeButLeavesActiveLayout() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let pinned = powerWindow(10, x: 100)
+        let active = powerWindow(20, x: 500)
+        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let store = StageStore(path: tempPath("window-pin-desktop-snapshot"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "2"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: pinned.id, bundleID: pinned.bundleID, title: pinned.title, frame: pinned.frame)
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), members: [
+                        PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame)
+                    ])
+                ])
+            ],
+            windowPins: [
+                PersistentWindowPin(
+                    windowID: pinned.id,
+                    homeScope: home,
+                    pinScope: .desktop,
+                    bundleID: pinned.bundleID,
+                    title: pinned.title,
+                    lastFrame: pinned.frame
+                )
+            ],
+            activeDisplayID: display.id
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [pinned, active]),
+            frameWriter: RecordingWriter(),
+            stageStore: store
+        )
+
+        let snapshot = service.snapshot(followFocus: false)
+
+        #expect(snapshot.windows.first { $0.window.id == pinned.id }?.scope == home)
+        #expect(snapshot.windows.first { $0.window.id == pinned.id }?.pin?.pinScope == .desktop)
+        #expect(snapshot.state.stage(scope: home)?.windowIDs.isEmpty == true)
+        #expect(snapshot.state.stage(scope: StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2")))?.windowIDs == [active.id])
+        #expect(service.applyPlan(from: snapshot).commands.map(\.window.id) == [active.id])
+    }
+
+    @Test
+    func pinVisibilityIsLimitedByScope() {
+        let home = StageScope(displayID: DisplayID(rawValue: "main"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let sameDesktop = StageScope(displayID: home.displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        let otherDesktop = StageScope(displayID: home.displayID, desktopID: DesktopID(rawValue: 2), stageID: StageID(rawValue: "1"))
+        let otherDisplay = StageScope(displayID: DisplayID(rawValue: "side"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let desktopPin = PersistentWindowPin(
+            windowID: WindowID(rawValue: 10),
+            homeScope: home,
+            pinScope: .desktop,
+            bundleID: "app",
+            title: "Doc",
+            lastFrame: Rect(x: 0, y: 0, width: 100, height: 100)
+        )
+        let allDesktopsPin = PersistentWindowPin(
+            windowID: WindowID(rawValue: 10),
+            homeScope: home,
+            pinScope: .allDesktops,
+            bundleID: "app",
+            title: "Doc",
+            lastFrame: Rect(x: 0, y: 0, width: 100, height: 100)
+        )
+
+        #expect(desktopPin.visibility(in: sameDesktop).shouldBeVisible)
+        #expect(desktopPin.visibility(in: otherDesktop).shouldBeVisible == false)
+        #expect(allDesktopsPin.visibility(in: otherDesktop).shouldBeVisible)
+        #expect(allDesktopsPin.visibility(in: otherDisplay).shouldBeVisible == false)
+    }
+
+    @Test
+    func snapshotPrunesMissingWindowPinsAndLogsEvent() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let store = StageStore(path: tempPath("window-pin-prune-snapshot"))
+        let eventPath = tempPath("window-pin-prune-events")
+        store.save(PersistentStageState(
+            scopes: [PersistentStageScope(displayID: display.id)],
+            windowPins: [
+                PersistentWindowPin(
+                    windowID: WindowID(rawValue: 999),
+                    homeScope: home,
+                    pinScope: .desktop,
+                    bundleID: "app.missing",
+                    title: "Missing",
+                    lastFrame: Rect(x: 0, y: 0, width: 100, height: 100)
+                )
+            ],
+            activeDisplayID: display.id
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: []),
+            frameWriter: RecordingWriter(),
+            stageStore: store,
+            events: EventLog(path: eventPath)
+        )
+
+        _ = service.snapshot(followFocus: false)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(store.state().windowPins.isEmpty)
+        #expect(events.contains("window.pin_pruned"))
+    }
+}
+
 private final class SequenceSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
     var permissionSnapshot = PermissionSnapshot(accessibilityTrusted: true)
     let displaySnapshots: [DisplaySnapshot]

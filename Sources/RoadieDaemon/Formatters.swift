@@ -6,12 +6,13 @@ public enum TextFormatter {
     public static func windows(_ windows: [ScopedWindowSnapshot]) -> String {
         let scopedWindows = windows.filter { $0.scope != nil }
         guard !scopedWindows.isEmpty else { return "No tileable windows found." }
-        var lines = ["WID\tPID\tAPP\tTITLE\tSCOPE\tFRAME"]
+        var lines = ["WID\tPID\tAPP\tTITLE\tSCOPE\tPIN\tFRAME"]
         for entry in scopedWindows {
             let window = entry.window
             let scope = entry.scope?.description ?? "-"
+            let pin = entry.pin?.pinScope.rawValue ?? "-"
             let frame = "\(Int(window.frame.x)),\(Int(window.frame.y)) \(Int(window.frame.width))x\(Int(window.frame.height))"
-            lines.append("\(window.id.rawValue)\t\(window.pid)\t\(window.appName)\t\(window.title)\t\(scope)\t\(frame)")
+            lines.append("\(window.id.rawValue)\t\(window.pid)\t\(window.appName)\t\(window.title)\t\(scope)\t\(pin)\t\(frame)")
         }
         return lines.joined(separator: "\n")
     }

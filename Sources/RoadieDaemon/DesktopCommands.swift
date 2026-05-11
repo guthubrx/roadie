@@ -130,12 +130,14 @@ public struct DesktopCommandService {
         }
         targetScope.assign(window: active.window, to: targetScope.activeStageID)
         state.update(targetScope)
+        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+        state.updatePinHomeScope(windowID: active.window.id, to: targetStageScope)
         store.save(state)
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
         }
-        service.removeLayoutIntent(scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID))
+        service.removeLayoutIntent(scope: targetStageScope)
 
         if follow {
             return switchDisplay(display, to: desktopID, snapshot: snapshot)
@@ -145,7 +147,7 @@ public struct DesktopCommandService {
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "window_desktop",
-            scope: StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID),
+            scope: targetStageScope,
             details: ["windowID": String(active.window.id.rawValue), "follow": String(follow), "layout": String(result.attempted)]
         ))
         return StageCommandResult(
@@ -179,12 +181,13 @@ public struct DesktopCommandService {
         }
         targetScope.assign(window: entry.window, to: targetScope.activeStageID)
         state.update(targetScope)
+        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+        state.updatePinHomeScope(windowID: entry.window.id, to: targetStageScope)
         store.save(state)
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
         }
-        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
         service.removeLayoutIntent(scope: targetStageScope)
 
         if follow {

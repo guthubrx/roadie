@@ -35,10 +35,25 @@ public extension DaemonSnapshot {
 public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var scope: StageScope?
+    public var pin: PersistentWindowPin?
 
-    public init(window: WindowSnapshot, scope: StageScope?) {
+    public init(window: WindowSnapshot, scope: StageScope?, pin: PersistentWindowPin? = nil) {
         self.window = window
         self.scope = scope
+        self.pin = pin
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case window
+        case scope
+        case pin
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.window = try c.decode(WindowSnapshot.self, forKey: .window)
+        self.scope = try c.decodeIfPresent(StageScope.self, forKey: .scope)
+        self.pin = try c.decodeIfPresent(PersistentWindowPin.self, forKey: .pin)
     }
 }
 
@@ -50,6 +65,7 @@ public struct SnapshotService {
     private let railRuntimeStateStore: RailRuntimeStateStore
     private let intentStore: LayoutIntentStore
     private let stageStore: StageStore
+    private let events: EventLog
 
     public init(
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
@@ -58,7 +74,8 @@ public struct SnapshotService {
         railSettings: RailSettings? = nil,
         railRuntimeStateStore: RailRuntimeStateStore = RailRuntimeStateStore(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
-        stageStore: StageStore = StageStore()
+        stageStore: StageStore = StageStore(),
+        events: EventLog = EventLog()
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
@@ -67,6 +84,7 @@ public struct SnapshotService {
         self.railRuntimeStateStore = railRuntimeStateStore
         self.intentStore = intentStore
         self.stageStore = stageStore
+        self.events = events
     }
 
     public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
@@ -109,6 +127,14 @@ public struct SnapshotService {
         let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
         persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
+        let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs)
+        for pin in prunedPins {
+            events.append(RoadieEvent(
+                type: "window.pin_pruned",
+                scope: pin.homeScope,
+                details: pinEventDetails(pin)
+            ))
+        }
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
 
@@ -138,7 +164,8 @@ public struct SnapshotService {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
-            let knownScope = stageIndex[window.id]
+            let pin = persistedStages.pin(for: window.id)
+            let knownScope = stageIndex[window.id] ?? pin?.homeScope
             guard let displayID = knownScope?.displayID ?? newWindowDisplayID(
                 for: window,
                 displays: displays,
@@ -168,6 +195,7 @@ public struct SnapshotService {
                 )
                 persistentScope.updateFrame(window: window)
                 persistedStages.update(persistentScope)
+                persistedStages.updatePinFrame(window: window, now: now)
             }
             let scope = StageScope(
                 displayID: displayID,
@@ -187,11 +215,11 @@ public struct SnapshotService {
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
-            if window.isTileCandidate {
+            if window.isTileCandidate, pin == nil {
                 try? state.assignWindow(window.id, to: scope)
             }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
-            scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
+            scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope, pin: pin))
         }
         var focusedID: WindowID?
         if followFocus,
@@ -493,6 +521,18 @@ public struct SnapshotService {
             }
         }
         return nil
+    }
+
+    private func pinEventDetails(_ pin: PersistentWindowPin) -> [String: String] {
+        [
+            "windowID": String(pin.windowID.rawValue),
+            "bundleID": pin.bundleID,
+            "title": pin.title,
+            "pinScope": pin.pinScope.rawValue,
+            "displayID": pin.homeScope.displayID.rawValue,
+            "desktopID": String(pin.homeScope.desktopID.rawValue),
+            "stageID": pin.homeScope.stageID.rawValue
+        ]
     }
 }
 

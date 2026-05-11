@@ -75,4 +75,14 @@ struct AutomationEventTests {
         #expect(envelopes[1].subject == AutomationSubject(kind: "stage", id: scope.description))
         #expect(envelopes[1].payload["key"] == .string("value"))
     }
+
+    @Test
+    func catalogContainsWindowPinEvents() {
+        let catalog = AutomationEventCatalog()
+
+        #expect(catalog.contains("window.pin_added"))
+        #expect(catalog.contains("window.pin_scope_changed"))
+        #expect(catalog.contains("window.pin_removed"))
+        #expect(catalog.contains("window.pin_pruned"))
+    }
 }

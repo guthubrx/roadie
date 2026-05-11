@@ -138,4 +138,71 @@ struct PersistentStageStateTests {
         #expect(index[WindowID(rawValue: 110)] == nil)
         #expect(index[WindowID(rawValue: 120)] == nil)
     }
+
+    @Test
+    func missingWindowPinsDecodeAsEmptyList() throws {
+        let data = #"{"scopes":[]}"#.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(PersistentStageState.self, from: data)
+
+        #expect(decoded.windowPins.isEmpty)
+    }
+
+    @Test
+    func setPinKeepsSinglePinPerWindowAndCanChangeScope() {
+        let home = StageScope(
+            displayID: DisplayID(rawValue: "main"),
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "1")
+        )
+        var state = PersistentStageState()
+
+        let first = state.setPin(window: window(10, title: "Doc"), homeScope: home, pinScope: .desktop)
+        let second = state.setPin(window: window(10, title: "Doc"), homeScope: home, pinScope: .allDesktops)
+
+        #expect(first.created)
+        #expect(second.created == false)
+        #expect(second.scopeChanged)
+        #expect(state.windowPins.count == 1)
+        #expect(state.pin(for: WindowID(rawValue: 10))?.pinScope == .allDesktops)
+    }
+
+    @Test
+    func removeAndPrunePinsCleanPersistentState() {
+        let home = StageScope(
+            displayID: DisplayID(rawValue: "main"),
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "1")
+        )
+        var state = PersistentStageState()
+        state.setPin(window: window(10), homeScope: home, pinScope: .desktop)
+        state.setPin(window: window(20), homeScope: home, pinScope: .allDesktops)
+
+        let removed = state.removePin(windowID: WindowID(rawValue: 10))
+        let pruned = state.pruneMissingPins(keeping: [WindowID(rawValue: 99)])
+
+        #expect(removed?.windowID == WindowID(rawValue: 10))
+        #expect(pruned.map(\.windowID) == [WindowID(rawValue: 20)])
+        #expect(state.windowPins.isEmpty)
+    }
+
+    @Test
+    func pinningDoesNotDuplicateStageMembership() {
+        let home = StageScope(
+            displayID: DisplayID(rawValue: "main"),
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "1")
+        )
+        let scope = PersistentStageScope(displayID: home.displayID, stages: [
+            PersistentStage(id: home.stageID, members: [member(10)]),
+            PersistentStage(id: StageID(rawValue: "2"), members: [])
+        ])
+        var state = PersistentStageState(scopes: [scope])
+
+        state.setPin(window: window(10), homeScope: home, pinScope: .desktop)
+
+        let memberships = state.scopes.flatMap(\.stages).flatMap(\.members).filter { $0.windowID == WindowID(rawValue: 10) }
+        #expect(memberships.count == 1)
+        #expect(state.windowPins.count == 1)
+    }
 }

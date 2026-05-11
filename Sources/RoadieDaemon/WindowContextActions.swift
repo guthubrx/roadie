@@ -72,6 +72,12 @@ public struct WindowContextActions {
         }
 
         switch action.kind {
+        case .pinDesktop:
+            return setPin(window: entry.window, sourceScope: scope, pinScope: .desktop, snapshot: snapshot)
+        case .pinAllDesktops:
+            return setPin(window: entry.window, sourceScope: scope, pinScope: .allDesktops, snapshot: snapshot)
+        case .unpin:
+            return removePin(window: entry.window, sourceScope: scope, snapshot: snapshot)
         case .stage:
             guard let destination = stageDestinations(in: snapshot, scope: scope).first(where: { $0.id == action.targetID }),
                   destination.isAvailable,
@@ -128,6 +134,69 @@ public struct WindowContextActions {
             ).send(windowID: action.windowID, toDisplayID: DisplayID(rawValue: action.targetID), focusMovedWindow: false)
             return WindowContextActionResult(message: result.message, changed: result.changed)
         }
+    }
+
+    private func setPin(
+        window: WindowSnapshot,
+        sourceScope: StageScope,
+        pinScope: WindowPinScope,
+        snapshot: DaemonSnapshot
+    ) -> WindowContextActionResult {
+        var state = stageStore.state()
+        let homeScope = snapshot.state.activeScope(on: sourceScope.displayID) ?? sourceScope
+        let mutation = state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+        stageStore.save(state)
+
+        let eventType = mutation.created ? "window.pin_added" : (mutation.scopeChanged ? "window.pin_scope_changed" : "window.pin_added")
+        eventLog.append(RoadieEvent(
+            type: eventType,
+            scope: mutation.pin.homeScope,
+            details: pinEventDetails(mutation.pin)
+        ))
+
+        let scopeLabel = pinScope == .desktop ? "ce desktop" : "tous les desktops"
+        return WindowContextActionResult(message: "pin \(scopeLabel): window=\(window.id.rawValue)", changed: true)
+    }
+
+    private func removePin(
+        window: WindowSnapshot,
+        sourceScope: StageScope,
+        snapshot: DaemonSnapshot
+    ) -> WindowContextActionResult {
+        var state = stageStore.state()
+        guard let removed = state.removePin(windowID: window.id) else {
+            return WindowContextActionResult(message: "window is not pinned", changed: false)
+        }
+
+        let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
+        let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: window.id)
+        }
+        var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
+        persistentScope.ensureStage(target.stageID)
+        persistentScope.assign(window: window, to: target.stageID)
+        state.update(persistentScope)
+        stageStore.save(state)
+
+        eventLog.append(RoadieEvent(
+            type: "window.pin_removed",
+            scope: target,
+            details: pinEventDetails(removed)
+        ))
+        return WindowContextActionResult(message: "pin removed: window=\(window.id.rawValue)", changed: true)
+    }
+
+    private func pinEventDetails(_ pin: PersistentWindowPin) -> [String: String] {
+        [
+            "windowID": String(pin.windowID.rawValue),
+            "bundleID": pin.bundleID,
+            "title": pin.title,
+            "pinScope": pin.pinScope.rawValue,
+            "displayID": pin.homeScope.displayID.rawValue,
+            "desktopID": String(pin.homeScope.desktopID.rawValue),
+            "stageID": pin.homeScope.stageID.rawValue
+        ]
     }
 
     private func stageDestinations(in snapshot: DaemonSnapshot, scope: StageScope) -> [WindowDestination] {
@@ -268,9 +337,10 @@ public struct WindowContextActions {
         targetScope.ensureStage(stageID)
         targetScope.assign(window: window, to: stageID)
         state.update(targetScope)
+        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
+        state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
         stageStore.save(state)
 
-        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
         snapshotService.removeLayoutIntent(scope: targetStageScope)
         _ = snapshotService.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
         let result = snapshotService.apply(snapshotService.applyPlan(from: snapshotService.snapshot()))
