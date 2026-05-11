@@ -54,8 +54,8 @@ public struct StateAuditService {
         let snapshot = service.snapshot()
         let state = stageStore.state()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
-        let liveTileableWindowIDs = Set(snapshot.windows.compactMap { entry in
-            entry.window.isTileCandidate ? entry.window.id : nil
+        let liveManagedWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope == nil ? nil : entry.window.id
         })
         var checks: [StateAuditCheck] = []
 
@@ -66,7 +66,7 @@ public struct StateAuditService {
         checks.append(activeStagesCheck(state: state))
         checks.append(focusedMembersCheck(state: state))
         checks.append(duplicateMembershipCheck(state: state))
-        checks.append(staleMembersCheck(state: state, liveWindowIDs: liveTileableWindowIDs))
+        checks.append(staleMembersCheck(state: state, liveWindowIDs: liveManagedWindowIDs))
 
         return StateAuditReport(checks: checks)
     }
@@ -75,8 +75,8 @@ public struct StateAuditService {
         let snapshot = service.snapshot()
         var state = stageStore.state()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
-        let liveTileableWindowIDs = Set(snapshot.windows.compactMap { entry in
-            entry.window.isTileCandidate ? entry.window.id : nil
+        let liveManagedWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope == nil ? nil : entry.window.id
         })
         var repaired = 0
 
@@ -99,7 +99,7 @@ public struct StateAuditService {
             repaired += state.activeDisplayID == nil ? 0 : 1
         }
 
-        repaired += repairScopes(&state, liveWindowIDs: liveTileableWindowIDs)
+        repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs)
         stageStore.save(state)
         return StateHealReport(repaired: repaired, audit: run())
     }

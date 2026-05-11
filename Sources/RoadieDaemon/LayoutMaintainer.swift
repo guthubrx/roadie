@@ -524,7 +524,6 @@ public final class LayoutMaintainer {
         var applied = 0
         for entry in snapshot.windows {
             guard let scope = entry.scope,
-                  entry.window.isTileCandidate,
                   let activeScope = snapshot.state.activeScope(on: scope.displayID),
                   scope != activeScope,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
