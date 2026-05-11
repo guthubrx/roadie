@@ -73,6 +73,9 @@ public struct SnapshotService {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let rawWindows = provider.windows()
+        let stageManagedWindowIDs = Set(rawWindows.compactMap { window in
+            window.isTileCandidate ? window.id : nil
+        })
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
@@ -81,6 +84,8 @@ public struct SnapshotService {
         }
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
+        let now = Date()
+        persistedStages.pruneExpiredCommandFocusProtection(now: now)
         let liveDisplayIDs = Set(displays.map(\.id))
         intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
         if let activeDisplayID = persistedStages.activeDisplayID,
@@ -100,11 +105,9 @@ public struct SnapshotService {
         ) {
             persistedStages.migrateDisconnectedDisplays(keeping: liveDisplayIDs, fallbackDisplayID: fallbackDisplayID)
         }
-        let liveWindowIDs = Set(windows.compactMap { window in
-            window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) ? window.id : nil
-        })
+        let liveWindowIDs = stageManagedWindowIDs
         let mouseLocation = provider.mouseLocation()
-        persistedStages.reconcileWindowIDs(with: windows.filter { !config.exclusions.floatingBundles.contains($0.bundleID) })
+        persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
         persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
@@ -131,7 +134,7 @@ public struct SnapshotService {
         // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.
         var stageIndex = persistedStages.stageScopeIndex()
         for window in windows {
-            guard window.isTileCandidate && !config.exclusions.floatingBundles.contains(window.bundleID) else {
+            guard stageManagedWindowIDs.contains(window.id) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
             }
@@ -184,14 +187,19 @@ public struct SnapshotService {
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
-            try? state.assignWindow(window.id, to: scope)
+            if window.isTileCandidate {
+                try? state.assignWindow(window.id, to: scope)
+            }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope))
         }
         var focusedID: WindowID?
         if followFocus,
            let providerFocusedID,
-           let focusedScope = scopedWindows.first(where: { $0.window.id == providerFocusedID })?.scope,
+           let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
+           let focusedScope = focusedEntry.scope,
+           shouldFollowFocus(entry: focusedEntry, scope: focusedScope, persistedStages: persistedStages, displays: displays),
+           !persistedStages.commandFocusProtectionBlocks(focusedScope: focusedScope, focusedWindowID: providerFocusedID, now: now),
            config.focus.stageFollowsFocus || state.activeScope(on: focusedScope.displayID) == focusedScope {
             var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
             persistentScope.activeStageID = focusedScope.stageID
@@ -281,7 +289,7 @@ public struct SnapshotService {
         }
 
         if tile && config.tiling.popupFilter,
-           isLikelyDialogLikeStandardWindow(window) {
+           isNonResizableStandardWindow(window) {
             tile = false
         }
 
@@ -349,35 +357,40 @@ public struct SnapshotService {
         return isSmall && isNonResizable && titleLooksLikeSettings
     }
 
-    private static func isLikelyDialogLikeStandardWindow(_ window: WindowSnapshot) -> Bool {
+    private static func isNonResizableStandardWindow(_ window: WindowSnapshot) -> Bool {
         guard window.subrole == "AXStandardWindow",
               let furniture = window.furniture
         else { return false }
 
-        let frame = window.frame.cgRect
-        let isSmallPanel = frame.width <= 760 && frame.height <= 520
-        let cannotResize = !furniture.isResizable
-        let cannotEnterFullscreen = !furniture.fullscreenButtonEnabled
-        return isSmallPanel && cannotResize && cannotEnterFullscreen
+        return !furniture.isResizable
     }
 
     private static func isUnidentifiedTransientWindow(_ window: WindowSnapshot) -> Bool {
         let frame = window.frame.cgRect
         guard window.subrole == nil,
               window.role == nil,
-              window.furniture == nil,
-              frame.width <= 760,
-              frame.height <= 760
+              window.furniture == nil
         else { return false }
 
         let normalizedTitle = window.title
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+        let isSmall = frame.width <= 760 && frame.height <= 760
         let genericTitle = normalizedTitle.isEmpty
             || normalizedTitle == "untitled"
             || normalizedTitle == "sans titre"
+        let systemPanelTitle = [
+            "save",
+            "open",
+            "print",
+            "export",
+            "enregistrer",
+            "ouvrir",
+            "imprimer",
+            "exporter"
+        ].contains(normalizedTitle)
 
-        return genericTitle
+        return (isSmall && genericTitle) || systemPanelTitle
     }
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
@@ -442,6 +455,23 @@ public struct SnapshotService {
             let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
             return nearBottomEdge && (nearLeftEdge || nearRightEdge)
         }
+    }
+
+    private func shouldFollowFocus(
+        entry: ScopedWindowSnapshot,
+        scope: StageScope,
+        persistedStages: PersistentStageState,
+        displays: [DisplaySnapshot]
+    ) -> Bool {
+        if !isHidden(entry.window.frame.cgRect, in: displays) {
+            return true
+        }
+
+        // Une fenetre cachee dans le meme desktop peut etre une stage inactive que macOS vient
+        // de focaliser via AltTab/clic externe : Roadie doit alors activer cette stage.
+        // Une fenetre cachee dans un autre desktop est en revanche souvent un ancien focus AX
+        // stale apres une commande desktop ; le suivre ramene l'utilisateur en arriere.
+        return scope.desktopID == persistedStages.currentDesktopID(for: scope.displayID)
     }
 
     private func activeFocusedWindowID(

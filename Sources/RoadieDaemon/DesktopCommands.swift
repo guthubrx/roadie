@@ -245,6 +245,12 @@ public struct DesktopCommandService {
         state.update(previousScope)
         state.update(targetScope)
         state.switchDesktop(displayID: display.id, to: desktopID)
+        state.protectCommandFocus(
+            displayID: display.id,
+            desktopID: desktopID,
+            stageID: targetScope.activeStageID,
+            windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID
+        )
         store.save(state)
 
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))

@@ -100,6 +100,47 @@ struct TilingPolicyTests {
     }
 
     @Test
+    func nonResizableStandardUtilityWindowIsExcluded() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                title: "Utility Panel",
+                frame: Rect(x: 0, y: 0, width: 688, height: 596),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasMinimizeButton: true,
+                    hasZoomButton: true,
+                    isFocused: true,
+                    isMain: true,
+                    isResizable: false
+                )
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
+    func nonResizableStandardWindowIsExcludedEvenWithFullscreenButton() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                title: "Fixed Surface",
+                frame: Rect(x: 0, y: 0, width: 640, height: 416),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasFullscreenButton: true,
+                    fullscreenButtonEnabled: true,
+                    hasMinimizeButton: true,
+                    hasZoomButton: true,
+                    isMain: true,
+                    isResizable: false
+                )
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
     func smallResizableStandardWindowStillTiles() {
         let result = SnapshotService.applyTilingPolicy(
             to: window(
@@ -113,6 +154,30 @@ struct TilingPolicyTests {
                 )
             ),
             config: config()
+        )
+        #expect(result.isTileCandidate == true)
+    }
+
+    @Test
+    func manageRuleCanForceNonResizableStandardWindow() {
+        let rule = WindowRule(
+            id: "force-fixed-window",
+            match: RuleMatch(title: "Fixed"),
+            action: RuleAction(manage: true)
+        )
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                title: "Fixed",
+                frame: Rect(x: 0, y: 0, width: 688, height: 596),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasMinimizeButton: true,
+                    hasZoomButton: true,
+                    isMain: true,
+                    isResizable: false
+                )
+            ),
+            config: config(rules: [rule])
         )
         #expect(result.isTileCandidate == true)
     }
@@ -140,6 +205,23 @@ struct TilingPolicyTests {
                 appName: "Little Snitch",
                 title: "Untitled",
                 frame: Rect(x: 1361, y: 248, width: 550, height: 166),
+                subrole: nil,
+                role: nil,
+                furniture: nil
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
+    func unidentifiedSystemSavePanelIsExcludedEvenWhenLarge() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                bundleID: "com.example.editor",
+                appName: "Editor",
+                title: "Save",
+                frame: Rect(x: 0, y: 0, width: 1059, height: 1098),
                 subrole: nil,
                 role: nil,
                 furniture: nil

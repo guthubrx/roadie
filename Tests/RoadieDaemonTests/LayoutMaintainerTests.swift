@@ -554,6 +554,64 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func inactiveFloatingStageWindowsAreHidden() {
+        let intent = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "Settings",
+            bundleID: "settings",
+            title: "Settings",
+            frame: Rect(x: 0, y: 0, width: 640, height: 420),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow",
+            furniture: WindowFurniture(hasCloseButton: true, hasMinimizeButton: true, isMain: true, isResizable: false)
+        )
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-maintainer-floating-stages-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display.id,
+                activeStageID: StageID(rawValue: "2"),
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2")),
+                ]
+            ),
+        ]))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[window]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intent.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[window.id] == Rect(x: 999, y: 499, width: 640, height: 420))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intent.path)
+    }
+
+    @Test
     func commandIntentBlocksImmediateReflow() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(

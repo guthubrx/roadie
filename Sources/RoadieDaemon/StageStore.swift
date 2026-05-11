@@ -39,17 +39,20 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var desktopSelections: [PersistentDesktopSelection]
     public var desktopLabels: [PersistentDesktopLabel]
     public var activeDisplayID: DisplayID?
+    public var commandFocusProtection: CommandFocusProtection?
 
     public init(
         scopes: [PersistentStageScope] = [],
         desktopSelections: [PersistentDesktopSelection] = [],
         desktopLabels: [PersistentDesktopLabel] = [],
-        activeDisplayID: DisplayID? = nil
+        activeDisplayID: DisplayID? = nil,
+        commandFocusProtection: CommandFocusProtection? = nil
     ) {
         self.scopes = scopes
         self.desktopSelections = desktopSelections
         self.desktopLabels = desktopLabels
         self.activeDisplayID = activeDisplayID
+        self.commandFocusProtection = commandFocusProtection
     }
 
     enum CodingKeys: String, CodingKey {
@@ -57,6 +60,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         case desktopSelections
         case desktopLabels
         case activeDisplayID
+        case commandFocusProtection
     }
 
     public init(from decoder: Decoder) throws {
@@ -65,6 +69,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
         self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
+        self.commandFocusProtection = try c.decodeIfPresent(CommandFocusProtection.self, forKey: .commandFocusProtection)
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -233,6 +238,74 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                 lastDesktopID: desktopID == DesktopID(rawValue: 1) ? nil : DesktopID(rawValue: 1)
             ))
         }
+    }
+
+    public mutating func protectCommandFocus(
+        displayID: DisplayID,
+        desktopID: DesktopID,
+        stageID: StageID,
+        windowID: WindowID?,
+        now: Date = Date(),
+        duration: TimeInterval = 2.0
+    ) {
+        commandFocusProtection = CommandFocusProtection(
+            displayID: displayID,
+            desktopID: desktopID,
+            stageID: stageID,
+            windowID: windowID,
+            expiresAt: now.addingTimeInterval(duration)
+        )
+    }
+
+    public mutating func pruneExpiredCommandFocusProtection(now: Date = Date()) {
+        if commandFocusProtection.map({ $0.expiresAt <= now }) == true {
+            commandFocusProtection = nil
+        }
+    }
+
+    public func commandFocusProtectionBlocks(
+        focusedScope: StageScope,
+        focusedWindowID: WindowID?,
+        now: Date = Date()
+    ) -> Bool {
+        guard let protection = commandFocusProtection,
+              protection.expiresAt > now,
+              protection.displayID == focusedScope.displayID
+        else { return false }
+
+        let protectedScope = StageScope(
+            displayID: protection.displayID,
+            desktopID: protection.desktopID,
+            stageID: protection.stageID
+        )
+        if focusedScope == protectedScope { return false }
+        if let protectedWindowID = protection.windowID,
+           focusedWindowID == protectedWindowID {
+            return false
+        }
+        return true
+    }
+}
+
+public struct CommandFocusProtection: Equatable, Codable, Sendable {
+    public var displayID: DisplayID
+    public var desktopID: DesktopID
+    public var stageID: StageID
+    public var windowID: WindowID?
+    public var expiresAt: Date
+
+    public init(
+        displayID: DisplayID,
+        desktopID: DesktopID,
+        stageID: StageID,
+        windowID: WindowID?,
+        expiresAt: Date
+    ) {
+        self.displayID = displayID
+        self.desktopID = desktopID
+        self.stageID = stageID
+        self.windowID = windowID
+        self.expiresAt = expiresAt
     }
 }
 

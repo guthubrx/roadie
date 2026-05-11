@@ -236,6 +236,51 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func policyExcludedWindowsAreScopedButNotTiled() {
+        let display = DisplayID(rawValue: "display-a")
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 201),
+            pid: 123,
+            appName: "Settings",
+            bundleID: "com.example.settings",
+            title: "Full Disk Access",
+            frame: Rect(x: 10, y: 10, width: 720, height: 620),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow",
+            furniture: WindowFurniture(
+                hasCloseButton: true,
+                hasMinimizeButton: true,
+                hasZoomButton: true,
+                isMain: true,
+                isResizable: false
+            )
+        )
+        let stageStore = StageStore(path: tempPath("snapshot-floating-stage-scoped"))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),
+                ],
+                windowSnapshots: [window]
+            ),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let scope = snapshot.windows.first?.scope
+        var persisted = stageStore.state()
+
+        #expect(snapshot.windows.first?.window.isTileCandidate == false)
+        #expect(scope == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        #expect(persisted.scope(displayID: display).memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == [])
+        #expect(service.applyPlan(from: snapshot).commands.isEmpty)
+    }
+
+    @Test
     func applyPlanUsesVisibleFrameOfEachDisplay() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(
@@ -888,7 +933,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func configExclusionsKeepMatchingBundlesUnscoped() {
+    func configExclusionsKeepMatchingBundlesScopedButUntiled() {
         let display = DisplayID(rawValue: "display-a")
         let window = WindowSnapshot(
             id: WindowID(rawValue: 300),
@@ -910,7 +955,12 @@ struct SnapshotServiceTests {
             config: RoadieConfig(exclusions: ExclusionsConfig(floatingBundles: ["com.apple.systempreferences"]))
         )
 
-        #expect(service.snapshot().windows.first?.scope == nil)
+        let snapshot = service.snapshot()
+
+        #expect(snapshot.windows.first?.scope == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        #expect(snapshot.windows.first?.window.isTileCandidate == false)
+        #expect(snapshot.windows.first?.scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == [])
+        #expect(service.applyPlan(from: snapshot).commands.isEmpty)
     }
 
     @Test
@@ -1397,6 +1447,47 @@ struct SnapshotServiceTests {
         #expect(writer.focusedWindowIDs == [right.id])
         #expect(state.currentDesktopID(for: display) == DesktopID(rawValue: 2))
         #expect(state.lastDesktopID(for: display) == DesktopID(rawValue: 1))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotDoesNotFollowFocusBackToHiddenDesktopWindow() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let hiddenOldDesktop = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "hidden", frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let visibleCurrentDesktop = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "visible", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-hidden-focus-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: hiddenOldDesktop.id, members: [
+                        PersistentStageMember(windowID: hiddenOldDesktop.id, bundleID: hiddenOldDesktop.bundleID, title: hiddenOldDesktop.title, frame: hiddenOldDesktop.frame),
+                    ]),
+                ]),
+                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: visibleCurrentDesktop.id, members: [
+                        PersistentStageMember(windowID: visibleCurrentDesktop.id, bundleID: visibleCurrentDesktop.bundleID, title: visibleCurrentDesktop.title, frame: visibleCurrentDesktop.frame),
+                    ]),
+                ]),
+            ],
+            desktopSelections: [PersistentDesktopSelection(displayID: display, currentDesktopID: DesktopID(rawValue: 2))]
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [hiddenOldDesktop, visibleCurrentDesktop], focusedID: hiddenOldDesktop.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let state = stageStore.state()
+
+        #expect(snapshot.state.display(display)?.currentDesktopID == DesktopID(rawValue: 2))
+        #expect(state.currentDesktopID(for: display) == DesktopID(rawValue: 2))
+        #expect(snapshot.focusedWindowID == visibleCurrentDesktop.id)
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
