@@ -59,6 +59,10 @@ public struct StageCommandService {
         var scope = activeScope(displayID: displayID, in: &state)
         scope.assign(window: active.window, to: stageID)
         state.update(scope)
+        state.updatePinHomeScope(
+            windowID: active.window.id,
+            to: StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
+        )
         store.save(state)
 
         if scope.activeStageID != stageID {
@@ -121,6 +125,8 @@ public struct StageCommandService {
         scope = activeScope(displayID: displayID, in: &state)
         scope.assign(window: window, to: stageID)
         state.update(scope)
+        let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
+        state.updatePinHomeScope(windowID: windowID, to: targetScope)
         store.save(state)
 
         if scope.activeStageID != stageID {
@@ -393,10 +399,13 @@ public struct StageCommandService {
         }
         state.update(sourceScope)
         state.update(targetScope)
+        let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
+        for member in movingStage.members {
+            state.updatePinHomeScope(windowID: member.windowID, to: targetScopeID)
+        }
         state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
         store.save(state)
 
-        let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
         var applied = 0
         var failed = 0
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })

@@ -1,14 +1,14 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `004-titlebar-context-menu`.
+Current SpecKit feature: `005-window-pins`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/004-titlebar-context-menu/spec.md`
-- `specs/004-titlebar-context-menu/plan.md`
-- `specs/004-titlebar-context-menu/research.md`
-- `specs/004-titlebar-context-menu/data-model.md`
-- `specs/004-titlebar-context-menu/contracts/`
+- `specs/005-window-pins/spec.md`
+- `specs/005-window-pins/plan.md`
+- `specs/005-window-pins/research.md`
+- `specs/005-window-pins/data-model.md`
+- `specs/005-window-pins/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

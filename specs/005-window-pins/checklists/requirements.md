@@ -1,35 +1,35 @@
-# Specification Quality Checklist: Window Pins
+# Checklist Qualité de Spécification : Pins de Fenêtres
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-05-11
-**Feature**: [spec.md](../spec.md)
+**Objectif** : valider la complétude et la qualité de la spécification avant la planification  
+**Créée le** : 2026-05-11  
+**Fonctionnalité** : [spec.md](../spec.md)
 
-## Content Quality
+## Qualité du Contenu
 
-- [x] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [x] Aucun détail d'implémentation
+- [x] Centré sur la valeur utilisateur et les besoins métier
+- [x] Rédigé pour des parties prenantes non techniques
+- [x] Toutes les sections obligatoires sont complétées
 
-## Requirement Completeness
+## Complétude des Exigences
 
-- [x] No [NEEDS CLARIFICATION] markers remain
-- [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic (no implementation details)
-- [x] All acceptance scenarios are defined
-- [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
+- [x] Aucun marqueur `[NEEDS CLARIFICATION]` restant
+- [x] Les exigences sont testables et non ambiguës
+- [x] Les critères de succès sont mesurables
+- [x] Les critères de succès sont indépendants de la technologie
+- [x] Tous les scénarios d'acceptation sont définis
+- [x] Les cas limites sont identifiés
+- [x] Le périmètre est clairement borné
+- [x] Les dépendances et hypothèses sont identifiées
 
-## Feature Readiness
+## Préparation de la Fonctionnalité
 
-- [x] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
-- [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] Toutes les exigences fonctionnelles ont des critères d'acceptation clairs
+- [x] Les scénarios utilisateur couvrent les flux principaux
+- [x] La fonctionnalité satisfait les résultats mesurables définis dans les critères de succès
+- [x] Aucun détail d'implémentation ne fuit dans la spécification
 
 ## Notes
 
-- Validation passed after initial review.
-- Scope decision recorded: "all desktops" applies to Roadie desktops on the same display.
+- Validation passée après revue initiale.
+- Décision de périmètre enregistrée : "tous les desktops" s'applique aux desktops Roadie du même écran.

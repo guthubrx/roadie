@@ -38,6 +38,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var scopes: [PersistentStageScope]
     public var desktopSelections: [PersistentDesktopSelection]
     public var desktopLabels: [PersistentDesktopLabel]
+    public var windowPins: [PersistentWindowPin]
     public var activeDisplayID: DisplayID?
     public var commandFocusProtection: CommandFocusProtection?
 
@@ -45,12 +46,14 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         scopes: [PersistentStageScope] = [],
         desktopSelections: [PersistentDesktopSelection] = [],
         desktopLabels: [PersistentDesktopLabel] = [],
+        windowPins: [PersistentWindowPin] = [],
         activeDisplayID: DisplayID? = nil,
         commandFocusProtection: CommandFocusProtection? = nil
     ) {
         self.scopes = scopes
         self.desktopSelections = desktopSelections
         self.desktopLabels = desktopLabels
+        self.windowPins = Self.uniquePins(windowPins)
         self.activeDisplayID = activeDisplayID
         self.commandFocusProtection = commandFocusProtection
     }
@@ -59,6 +62,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         case scopes
         case desktopSelections
         case desktopLabels
+        case windowPins
         case activeDisplayID
         case commandFocusProtection
     }
@@ -68,8 +72,17 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.scopes = try c.decodeIfPresent([PersistentStageScope].self, forKey: .scopes) ?? []
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
+        self.windowPins = Self.uniquePins(try c.decodeIfPresent([PersistentWindowPin].self, forKey: .windowPins) ?? [])
         self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
         self.commandFocusProtection = try c.decodeIfPresent(CommandFocusProtection.self, forKey: .commandFocusProtection)
+    }
+
+    private static func uniquePins(_ pins: [PersistentWindowPin]) -> [PersistentWindowPin] {
+        var byWindow: [WindowID: PersistentWindowPin] = [:]
+        for pin in pins {
+            byWindow[pin.windowID] = pin
+        }
+        return byWindow.values.sorted { $0.windowID.rawValue < $1.windowID.rawValue }
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -110,6 +123,83 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
             }
         }
         return index
+    }
+
+    public func pin(for windowID: WindowID) -> PersistentWindowPin? {
+        windowPins.first { $0.windowID == windowID }
+    }
+
+    public func isPinned(_ windowID: WindowID) -> Bool {
+        pin(for: windowID) != nil
+    }
+
+    @discardableResult
+    public mutating func setPin(
+        window: WindowSnapshot,
+        homeScope: StageScope,
+        pinScope: WindowPinScope,
+        now: Date = Date()
+    ) -> PinMutation {
+        if let index = windowPins.firstIndex(where: { $0.windowID == window.id }) {
+            let previous = windowPins[index]
+            windowPins[index].homeScope = homeScope
+            windowPins[index].pinScope = pinScope
+            windowPins[index].bundleID = window.bundleID
+            windowPins[index].title = window.title
+            windowPins[index].lastFrame = window.frame
+            windowPins[index].updatedAt = now
+            return PinMutation(
+                pin: windowPins[index],
+                previous: previous,
+                created: false,
+                scopeChanged: previous.pinScope != pinScope
+            )
+        }
+
+        let pin = PersistentWindowPin(
+            windowID: window.id,
+            homeScope: homeScope,
+            pinScope: pinScope,
+            bundleID: window.bundleID,
+            title: window.title,
+            lastFrame: window.frame,
+            createdAt: now,
+            updatedAt: now
+        )
+        windowPins.append(pin)
+        return PinMutation(pin: pin, previous: nil, created: true, scopeChanged: false)
+    }
+
+    @discardableResult
+    public mutating func removePin(windowID: WindowID) -> PersistentWindowPin? {
+        guard let index = windowPins.firstIndex(where: { $0.windowID == windowID }) else { return nil }
+        return windowPins.remove(at: index)
+    }
+
+    @discardableResult
+    public mutating func pruneMissingPins(keeping liveWindowIDs: Set<WindowID>) -> [PersistentWindowPin] {
+        let pruned = windowPins.filter { !liveWindowIDs.contains($0.windowID) }
+        guard !pruned.isEmpty else { return [] }
+        windowPins.removeAll { !liveWindowIDs.contains($0.windowID) }
+        return pruned
+    }
+
+    public mutating func updatePinFrame(window: WindowSnapshot, now: Date = Date()) {
+        guard let index = windowPins.firstIndex(where: { $0.windowID == window.id }) else { return }
+        windowPins[index].bundleID = window.bundleID
+        windowPins[index].title = window.title
+        windowPins[index].lastFrame = window.frame
+        windowPins[index].updatedAt = now
+    }
+
+    @discardableResult
+    public mutating func updatePinHomeScope(windowID: WindowID, to scope: StageScope?, now: Date = Date()) -> PersistentWindowPin? {
+        guard let scope,
+              let index = windowPins.firstIndex(where: { $0.windowID == windowID })
+        else { return nil }
+        windowPins[index].homeScope = scope
+        windowPins[index].updatedAt = now
+        return windowPins[index]
     }
 
     public mutating func reconcileWindowIDs(with liveWindows: [WindowSnapshot]) {
@@ -153,6 +243,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
 
         guard !remapped.isEmpty else { return }
+        for index in windowPins.indices {
+            guard let replacementID = remapped[windowPins[index].windowID] else { continue }
+            windowPins[index].windowID = replacementID
+        }
         for scopeIndex in scopes.indices {
             for stageIndex in scopes[scopeIndex].stages.indices {
                 var stage = scopes[scopeIndex].stages[stageIndex]
@@ -307,6 +401,108 @@ public struct CommandFocusProtection: Equatable, Codable, Sendable {
         self.windowID = windowID
         self.expiresAt = expiresAt
     }
+}
+
+public enum WindowPinScope: String, Codable, Sendable {
+    case desktop
+    case allDesktops = "all_desktops"
+}
+
+public struct PersistentWindowPin: Equatable, Codable, Sendable {
+    public var windowID: WindowID
+    public var homeScope: StageScope
+    public var pinScope: WindowPinScope
+    public var bundleID: String
+    public var title: String
+    public var lastFrame: Rect
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        windowID: WindowID,
+        homeScope: StageScope,
+        pinScope: WindowPinScope,
+        bundleID: String,
+        title: String,
+        lastFrame: Rect,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.windowID = windowID
+        self.homeScope = homeScope
+        self.pinScope = pinScope
+        self.bundleID = bundleID
+        self.title = title
+        self.lastFrame = lastFrame
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+
+    public func visibility(in activeScope: StageScope?) -> PinVisibilityDecision {
+        guard let activeScope,
+              activeScope.displayID == homeScope.displayID
+        else {
+            return PinVisibilityDecision(
+                windowID: windowID,
+                shouldBeVisible: false,
+                effectiveScope: nil,
+                homeScope: homeScope,
+                reason: .outOfScope
+            )
+        }
+
+        if activeScope == homeScope {
+            return PinVisibilityDecision(
+                windowID: windowID,
+                shouldBeVisible: true,
+                effectiveScope: activeScope,
+                homeScope: homeScope,
+                reason: .home
+            )
+        }
+
+        switch pinScope {
+        case .desktop:
+            return PinVisibilityDecision(
+                windowID: windowID,
+                shouldBeVisible: activeScope.desktopID == homeScope.desktopID,
+                effectiveScope: activeScope.desktopID == homeScope.desktopID ? activeScope : nil,
+                homeScope: homeScope,
+                reason: activeScope.desktopID == homeScope.desktopID ? .desktopPin : .outOfScope
+            )
+        case .allDesktops:
+            return PinVisibilityDecision(
+                windowID: windowID,
+                shouldBeVisible: true,
+                effectiveScope: activeScope,
+                homeScope: homeScope,
+                reason: .allDesktopsPin
+            )
+        }
+    }
+}
+
+public struct PinMutation: Equatable, Sendable {
+    public var pin: PersistentWindowPin
+    public var previous: PersistentWindowPin?
+    public var created: Bool
+    public var scopeChanged: Bool
+}
+
+public enum PinVisibilityReason: String, Codable, Sendable {
+    case home
+    case desktopPin = "desktop_pin"
+    case allDesktopsPin = "all_desktops_pin"
+    case outOfScope = "out_of_scope"
+    case stale
+}
+
+public struct PinVisibilityDecision: Equatable, Codable, Sendable {
+    public var windowID: WindowID
+    public var shouldBeVisible: Bool
+    public var effectiveScope: StageScope?
+    public var homeScope: StageScope
+    public var reason: PinVisibilityReason
 }
 
 public struct PersistentDesktopLabel: Equatable, Codable, Sendable {

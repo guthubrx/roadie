@@ -138,15 +138,25 @@ new_apps_target = "mouse" # mouse | focused_display | macos
 
 Available actions:
 
+- pin the window across all stages on the current desktop;
+- pin the window across all Roadie desktops on the same display;
+- remove a window pin;
 - send the window to another stage;
 - send the window to another Roadie desktop;
 - send the window to another display.
 
 Use cases:
 
+- keep a video, reference document, or terminal visible while switching stages;
+- keep a window visible across all desktops on one display without duplicating or retiling it;
 - move a window without looking up its ID;
 - keep current focus while filing a window elsewhere;
 - avoid popups and dialogs by limiting the menu to managed tileable windows.
+
+Window pins do not copy a window into multiple stages. The window keeps one
+home context, but Roadie does not hide it while the pinned desktop or display is
+active. A pinned window is excluded from automatic layout to avoid moving other
+windows unexpectedly.
 
 ## Roadie Desktops
 

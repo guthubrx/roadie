@@ -55,7 +55,7 @@ struct FormattersTests {
         )
         let entry = ScopedWindowSnapshot(window: sampleWindow(), scope: scope)
         let output = TextFormatter.windows([entry])
-        #expect(output.contains("WID\tPID\tAPP\tTITLE\tSCOPE\tFRAME"))
+        #expect(output.contains("WID\tPID\tAPP\tTITLE\tSCOPE\tPIN\tFRAME"))
         #expect(output.contains("42"))
         #expect(output.contains("TestApp"))
         #expect(output.contains("Hello"))

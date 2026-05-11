@@ -237,6 +237,30 @@ struct StageDisplayMoveTests {
 
         #expect(targets.isEmpty)
     }
+
+    @Test
+    func stageDisplayMoveUpdatesPinnedWindowHomeDisplay() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let side = powerDisplay("display-side", index: 2, x: 1000)
+        let moved = powerWindow(1, x: 100)
+        let home = StageScope(displayID: main.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let provider = PowerUserProvider(displays: [main, side], windows: [moved])
+        let store = stageStore("stage-display-pinned-move", scopes: [
+            scope(main.id, active: "1", stages: [stage("1", moved)]),
+            scope(side.id, active: "1", stages: [stage("1")])
+        ], activeDisplayID: main.id)
+        var state = store.state()
+        state.setPin(window: moved, homeScope: home, pinScope: .allDesktops)
+        store.save(state)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig(), stageStore: store)
+
+        let result = StageCommandService(service: service, store: store, config: RoadieConfig())
+            .moveActiveStageToDisplay(index: 2)
+
+        #expect(result.changed)
+        #expect(store.state().pin(for: moved.id)?.homeScope.displayID == side.id)
+        #expect(store.state().stageScope(for: moved.id)?.displayID == side.id)
+    }
 }
 
 private func stageStore(

@@ -318,6 +318,76 @@ struct TitlebarContextMenuTests {
         #expect(result.changed == false)
         #expect(store.state() == before)
     }
+
+    @Test
+    func pinDesktopActionPersistsPinAndDoesNotMoveWindow() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let provider = PowerUserProvider(displays: [main], windows: [window])
+        let eventPath = tempPath("titlebar-pin-events")
+        let store = titlebarStageStore("titlebar-pin-desktop", scopes: [
+            titlebarScope(main.id, active: "1", stages: [titlebarStage("1", window)])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        _ = service.snapshot()
+
+        let result = WindowContextActions(snapshotService: service, stageStore: store, eventLog: EventLog(path: eventPath)).execute(WindowContextAction(
+            windowID: window.id,
+            kind: .pinDesktop,
+            targetID: WindowContextActionKind.pinDesktop.rawValue,
+            sourceScope: nil
+        ))
+
+        let pin = store.state().pin(for: window.id)
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(pin?.pinScope == .desktop)
+        #expect(store.state().stageScope(for: window.id)?.stageID == StageID(rawValue: "1"))
+        #expect(events.contains("window.pin_added"))
+    }
+
+    @Test
+    func pinnedActionCanChangeScopeAndUnpin() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let provider = PowerUserProvider(displays: [main], windows: [window])
+        let store = titlebarStageStore("titlebar-pin-change-unpin", scopes: [
+            titlebarScope(main.id, active: "1", stages: [titlebarStage("1", window)])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let actions = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true })
+
+        _ = actions.execute(WindowContextAction(windowID: window.id, kind: .pinDesktop, targetID: "pin", sourceScope: nil))
+        let changed = actions.execute(WindowContextAction(windowID: window.id, kind: .pinAllDesktops, targetID: "pin", sourceScope: nil))
+        let removed = actions.execute(WindowContextAction(windowID: window.id, kind: .unpin, targetID: "unpin", sourceScope: nil))
+
+        #expect(changed.changed)
+        #expect(removed.changed)
+        #expect(store.state().pin(for: window.id) == nil)
+        #expect(store.state().stageScope(for: window.id)?.stageID == StageID(rawValue: "1"))
+    }
+
+    @Test
+    func movingPinnedWindowToAnotherStageUpdatesPinHomeScope() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let provider = PowerUserProvider(displays: [main], windows: [window])
+        let store = titlebarStageStore("titlebar-pin-stage-move", scopes: [
+            titlebarScope(main.id, active: "1", stages: [
+                titlebarStage("1", window),
+                titlebarStage("2")
+            ])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let actions = WindowContextActions(snapshotService: service, stageStore: store, stageLabelsVisible: { true })
+
+        _ = actions.execute(WindowContextAction(windowID: window.id, kind: .pinDesktop, targetID: "pin", sourceScope: nil))
+        let moved = actions.execute(WindowContextAction(windowID: window.id, kind: .stage, targetID: "2", sourceScope: nil))
+
+        #expect(moved.changed)
+        #expect(store.state().pin(for: window.id)?.homeScope.stageID == StageID(rawValue: "2"))
+        #expect(store.state().stageScope(for: window.id)?.stageID == StageID(rawValue: "2"))
+    }
 }
 
 private func titlebarSnapshot() -> DaemonSnapshot {

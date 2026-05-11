@@ -97,6 +97,9 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case desktop
     case desktopStage = "desktop_stage"
     case display
+    case pinDesktop = "pin_desktop"
+    case pinAllDesktops = "pin_all_desktops"
+    case unpin
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -211,7 +214,9 @@ public final class TitlebarContextMenuController {
         }
 
         let destinations = actions.destinations(for: windowID, in: snapshot, settings: settings)
-        guard destinations.contains(where: { !$0.isCurrent && $0.isAvailable }) else {
+        let pin = snapshot.windows.first(where: { $0.window.id == windowID })?.pin
+        let menu = buildMenu(windowID: windowID, sourceScope: hit.scope, destinations: destinations, pin: pin)
+        guard menu.items.contains(where: { $0.submenu != nil }) else {
             var noDestination = hit
             noDestination.isEligible = false
             noDestination.reason = .noDestination
@@ -219,8 +224,6 @@ public final class TitlebarContextMenuController {
             return false
         }
 
-        let menu = buildMenu(windowID: windowID, sourceScope: hit.scope, destinations: destinations)
-        guard menu.items.contains(where: { $0.submenu != nil }) else { return false }
         events.append(RoadieEvent(
             type: "titlebar_context_menu.shown",
             scope: hit.scope,
@@ -243,7 +246,7 @@ public final class TitlebarContextMenuController {
         snapshot: DaemonSnapshot,
         settings: TitlebarContextMenuSettings
     ) -> TitlebarHitTest {
-        guard settings.enabled, settings.hasAnyDestinationFamily else {
+        guard settings.enabled else {
             return TitlebarHitTest(screenPoint: point, windowID: nil, isEligible: false, reason: .disabled)
         }
         guard let entry = window(at: point, in: snapshot) else {
@@ -318,15 +321,80 @@ public final class TitlebarContextMenuController {
     private func buildMenu(
         windowID: WindowID,
         sourceScope: StageScope?,
-        destinations: [WindowDestination]
+        destinations: [WindowDestination],
+        pin: PersistentWindowPin?
     ) -> NSMenu {
         menuTargets.removeAll(keepingCapacity: true)
         let menu = NSMenu(title: "Roadie")
-        addSubmenu(title: "Envoyer vers stage", kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addWindowSubmenu(windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
+        addSubmenu(title: "Envoyer la fenêtre vers stage", kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addDesktopStageSubmenu(windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
-        addSubmenu(title: "Envoyer vers desktop", kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
-        addSubmenu(title: "Envoyer vers ecran", kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addSubmenu(title: "Envoyer la fenêtre vers desktop", kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
+        addSubmenu(title: "Envoyer la fenêtre vers écran", kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         return menu
+    }
+
+    private func addWindowSubmenu(
+        windowID: WindowID,
+        sourceScope: StageScope?,
+        pin: PersistentWindowPin?,
+        to menu: NSMenu
+    ) {
+        let parent = NSMenuItem(title: "Fenêtre", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: "Fenêtre")
+        if let pin {
+            let stateItem = NSMenuItem(
+                title: pin.pinScope == .desktop ? "Pin actuel : ce desktop" : "Pin actuel : tous les desktops",
+                action: nil,
+                keyEquivalent: ""
+            )
+            stateItem.isEnabled = false
+            submenu.addItem(stateItem)
+            submenu.addItem(.separator())
+            addActionItem(
+                title: pin.pinScope == .desktop ? "Pin sur tous les desktops" : "Pin sur ce desktop",
+                kind: pin.pinScope == .desktop ? .pinAllDesktops : .pinDesktop,
+                windowID: windowID,
+                sourceScope: sourceScope,
+                to: submenu
+            )
+            addActionItem(title: "Retirer le pin", kind: .unpin, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        } else {
+            addActionItem(title: "Pin sur ce desktop", kind: .pinDesktop, windowID: windowID, sourceScope: sourceScope, to: submenu)
+            addActionItem(title: "Pin sur tous les desktops", kind: .pinAllDesktops, windowID: windowID, sourceScope: sourceScope, to: submenu)
+        }
+        parent.submenu = submenu
+        menu.addItem(parent)
+    }
+
+    private func addActionItem(
+        title: String,
+        kind: WindowContextActionKind,
+        windowID: WindowID,
+        sourceScope: StageScope?,
+        to menu: NSMenu
+    ) {
+        let item = NSMenuItem(title: title, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
+        item.representedObject = kind.rawValue
+        let target = TitlebarMenuActionTarget { [weak self] targetID in
+            guard let self else { return }
+            let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)
+            let result = self.actions.execute(action)
+            self.events.append(RoadieEvent(
+                type: result.changed ? "titlebar_context_menu.action" : "titlebar_context_menu.failed",
+                scope: sourceScope,
+                details: [
+                    "windowID": String(windowID.rawValue),
+                    "kind": kind.rawValue,
+                    "targetID": targetID,
+                    "result": result.changed ? "changed" : "failed",
+                    "message": result.message
+                ]
+            ))
+        }
+        item.target = target
+        menuTargets.append(target)
+        menu.addItem(item)
     }
 
     private func addSubmenu(
@@ -376,7 +444,7 @@ public final class TitlebarContextMenuController {
     ) {
         let filtered = destinations.filter { $0.kind == .desktopStage && !$0.isCurrent && $0.isAvailable }
         guard !filtered.isEmpty else { return }
-        let parent = NSMenuItem(title: "Envoyer vers desktop/stage", action: nil, keyEquivalent: "")
+        let parent = NSMenuItem(title: "Envoyer la fenêtre vers desktop/stage", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: parent.title)
         let grouped = Dictionary(grouping: filtered) { destination in
             destination.parentID ?? ""
