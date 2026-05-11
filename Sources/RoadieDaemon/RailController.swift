@@ -143,8 +143,10 @@ public final class RailController {
     private func updateRailHover() {
         let point = NSEvent.mouseLocation
         let canHide = pendingDrag == nil && pendingStageReorder == nil && !windowDragController.hasActiveDrag
-        panels.values.forEach { panel in
-            guard panel.isVisible else { return }
+        for (displayID, panel) in panels {
+            guard panel.isVisible else { continue }
+            let overManagedWindow = railClickWouldHitManagedWindow(at: point, displayID: displayID, panel: panel)
+            panel.updateMousePassthrough(at: point, allowEmptyRail: !overManagedWindow)
             panel.updateAutoHide(mouse: point, canHide: canHide)
         }
     }
@@ -180,6 +182,10 @@ public final class RailController {
             guard panel.isVisible, panel.frame.contains(screenPoint) else { continue }
             if panel.revealIfCollapsed() {
                 return
+            }
+            let overManagedWindow = railClickWouldHitManagedWindow(at: screenPoint, displayID: displayID, panel: panel)
+            guard panel.shouldCaptureMouse(at: screenPoint, allowEmptyRail: !overManagedWindow) else {
+                continue
             }
             if let payload = panel.dragPayload(at: screenPoint) {
                 pendingDrag = PendingRailDrag(
@@ -724,6 +730,17 @@ public final class RailController {
             else { return false }
             return entry.window.frame.cgRect.insetBy(dx: -2, dy: -2).contains(axPoint)
         }
+    }
+
+    private func railClickWouldHitManagedWindow(at screenPoint: CGPoint, displayID: DisplayID, panel: RailPanel) -> Bool {
+        guard panel.isVisible,
+              panel.frame.contains(screenPoint),
+              !panel.hasDirectRailInteraction(at: screenPoint)
+        else { return false }
+        if panel.isInSafetyMargin(at: screenPoint) {
+            return true
+        }
+        return emptyRailClickHitsManagedWindow(at: screenPoint, displayID: displayID)
     }
 
     private static func nsToAX(_ point: CGPoint) -> CGPoint {
@@ -1355,6 +1372,31 @@ private final class RailPanel: NSPanel {
             view = current.superview
         }
         return nil
+    }
+
+    func hasDirectRailInteraction(at screenPoint: CGPoint) -> Bool {
+        stageID(at: screenPoint) != nil
+    }
+
+    func shouldCaptureMouse(at screenPoint: CGPoint, allowEmptyRail: Bool) -> Bool {
+        guard acceptsRailInteraction(at: screenPoint) else { return false }
+        if hasDirectRailInteraction(at: screenPoint) {
+            return true
+        }
+        return allowEmptyRail && emptyStageID(at: screenPoint) != nil
+    }
+
+    func updateMousePassthrough(at screenPoint: CGPoint, allowEmptyRail: Bool) {
+        let shouldCapture = shouldCaptureMouse(at: screenPoint, allowEmptyRail: allowEmptyRail)
+        let shouldIgnore = !shouldCapture
+        if ignoresMouseEvents != shouldIgnore {
+            ignoresMouseEvents = shouldIgnore
+        }
+    }
+
+    func isInSafetyMargin(at screenPoint: CGPoint) -> Bool {
+        guard acceptsRailInteraction(at: screenPoint) else { return false }
+        return !isSafeEmptyClick(at: screenPoint)
     }
 
     private func acceptsRailInteraction(at screenPoint: CGPoint) -> Bool {
