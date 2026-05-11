@@ -1,14 +1,14 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `005-window-pins`.
+Current SpecKit feature: `006-pin-popover-collapse`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/005-window-pins/spec.md`
-- `specs/005-window-pins/plan.md`
-- `specs/005-window-pins/research.md`
-- `specs/005-window-pins/data-model.md`
-- `specs/005-window-pins/contracts/`
+- `specs/006-pin-popover-collapse/spec.md`
+- `specs/006-pin-popover-collapse/plan.md`
+- `specs/006-pin-popover-collapse/research.md`
+- `specs/006-pin-popover-collapse/data-model.md`
+- `specs/006-pin-popover-collapse/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

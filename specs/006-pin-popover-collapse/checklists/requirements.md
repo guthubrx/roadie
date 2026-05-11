@@ -1,35 +1,35 @@
-# Specification Quality Checklist: Pin Popover Collapse
+# Checklist Qualité de Spécification : Menu Pin et Repliage
 
-**Purpose**: Validate specification completeness and quality before proceeding to planning  
-**Created**: 2026-05-11  
-**Feature**: [spec.md](../spec.md)
+**Objectif** : valider la complétude et la qualité de la spécification avant la planification  
+**Créée le** : 2026-05-11  
+**Feature** : [spec.md](../spec.md)
 
-## Content Quality
+## Qualité du Contenu
 
-- [X] No implementation details (languages, frameworks, APIs)
-- [X] Focused on user value and business needs
-- [X] Written for non-technical stakeholders
-- [X] All mandatory sections completed
+- [X] Aucun détail d'implémentation
+- [X] Centré sur la valeur utilisateur et les besoins métier
+- [X] Rédigé pour des parties prenantes non techniques
+- [X] Toutes les sections obligatoires sont complètes
 
-## Requirement Completeness
+## Complétude des Exigences
 
-- [X] No [NEEDS CLARIFICATION] markers remain
-- [X] Requirements are testable and unambiguous
-- [X] Success criteria are measurable
-- [X] Success criteria are technology-agnostic (no implementation details)
-- [X] All acceptance scenarios are defined
-- [X] Edge cases are identified
-- [X] Scope is clearly bounded
-- [X] Dependencies and assumptions identified
+- [X] Aucun marqueur [NEEDS CLARIFICATION] restant
+- [X] Les exigences sont testables et non ambiguës
+- [X] Les critères de succès sont mesurables
+- [X] Les critères de succès sont indépendants de la technologie
+- [X] Tous les scénarios d'acceptation sont définis
+- [X] Les cas limites sont identifiés
+- [X] Le périmètre est clairement borné
+- [X] Les dépendances et hypothèses sont identifiées
 
-## Feature Readiness
+## Préparation de la Feature
 
-- [X] All functional requirements have clear acceptance criteria
-- [X] User scenarios cover primary flows
-- [X] Feature meets measurable outcomes defined in Success Criteria
-- [X] No implementation details leak into specification
+- [X] Toutes les exigences fonctionnelles ont des critères d'acceptation clairs
+- [X] Les scénarios utilisateur couvrent les flux principaux
+- [X] La feature satisfait les résultats mesurables des critères de succès
+- [X] Aucun détail d'implémentation ne fuit dans la spécification
 
 ## Notes
 
-- Validation passed.
-- Branch creation hook was not executed because the current worktree contains uncommitted implementation work from `005-window-pins`; the spec directory was created directly to avoid carrying those changes onto a new branch.
+- Validation passée.
+- La branche n'a pas été créée automatiquement lors de la spécification initiale parce que le worktree contenait l'implémentation non commitée de `005-window-pins`. Cet état a ensuite été committé avant la planification.
