@@ -149,6 +149,39 @@ struct PersistentStageStateTests {
     }
 
     @Test
+    func legacyStageStateDecodesWithoutParkingFields() throws {
+        let data = """
+        {
+          "scopes": [
+            {
+              "displayID": "main",
+              "desktopID": 1,
+              "activeStageID": "1",
+              "stages": [
+                {
+                  "id": "1",
+                  "name": "Work",
+                  "mode": "bsp",
+                  "members": []
+                }
+              ]
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(PersistentStageState.self, from: data)
+
+        #expect(decoded.scopes.count == 1)
+        #expect(decoded.scopes[0].logicalDisplayID == nil)
+        #expect(decoded.scopes[0].lastKnownDisplayFingerprint == nil)
+        #expect(decoded.scopes[0].stages[0].parkingState == .native)
+        #expect(decoded.scopes[0].stages[0].origin == nil)
+        #expect(decoded.scopes[0].stages[0].hostDisplayID == nil)
+        #expect(decoded.scopes[0].stages[0].restoredAt == nil)
+    }
+
+    @Test
     func setPinKeepsSinglePinPerWindowAndCanChangeScope() {
         let home = StageScope(
             displayID: DisplayID(rawValue: "main"),

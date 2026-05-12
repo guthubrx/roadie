@@ -86,4 +86,24 @@ struct FormattersTests {
         let untrusted = PermissionSnapshot(accessibilityTrusted: false)
         #expect(TextFormatter.permissions(untrusted) == "accessibilityTrusted=false")
     }
+
+    @Test
+    func displayParkingFormatsDiagnosticFields() {
+        let report = DisplayParkingReport(
+            kind: .ambiguous,
+            reason: .ambiguousMatch,
+            originDisplayID: DisplayID(rawValue: "old"),
+            originLogicalDisplayID: LogicalDisplayID(rawValue: "display:old"),
+            candidateDisplayIDs: [DisplayID(rawValue: "a"), DisplayID(rawValue: "b")],
+            confidence: 0.9
+        )
+
+        let output = TextFormatter.displayParking(report)
+
+        #expect(output.contains("kind=ambiguous"))
+        #expect(output.contains("reason=ambiguous_match"))
+        #expect(output.contains("originDisplay=old"))
+        #expect(output.contains("candidateDisplays=a,b"))
+        #expect(output.contains("confidence=0.900"))
+    }
 }

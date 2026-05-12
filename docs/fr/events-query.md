@@ -91,6 +91,13 @@ Performance read-only :
 - `performance.recent_requested`
 - `performance.thresholds_requested`
 
+Parking d'ecran :
+
+- `display.parking_started`
+- `display.parking_restored`
+- `display.parking_ambiguous`
+- `display.parking_noop`
+
 Administration :
 
 - `config.reloaded`

@@ -58,6 +58,30 @@ Use cases:
 - hide a context without closing apps;
 - bring a specific window back to the active stage with `stage summon`.
 
+## Display Parking
+
+Roadie treats a disconnected display as a temporary topology change, not as a
+reason to destroy or merge stage state.
+
+When a display disappears:
+
+- non-empty stages from that display are parked as distinct stages on a remaining display;
+- their names, mode, members, groups, focus metadata, and relative order are kept;
+- empty stages stay as hidden restoration metadata;
+- the active stage on the host display is not replaced by the parked stages.
+
+When the display comes back, Roadie restores the current parked stages to that
+display if it can recognize the display safely. Recognition first uses the
+previous display ID, then a conservative fingerprint based on name, size,
+visible size, position, and main-display hint. If several displays match equally,
+Roadie refuses the automatic restore and leaves the parked stages visible.
+
+Use cases:
+
+- unplug a laptop from a monitor without losing the monitor's stages;
+- keep working on the parked stages while the monitor is absent;
+- replug the monitor and have those stages return without collapsing into one stage.
+
 ## Nav Rail
 
 The nav rail is the per-display side panel that represents non-empty stages.

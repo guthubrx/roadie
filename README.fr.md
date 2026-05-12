@@ -30,6 +30,7 @@ Roadie se concentre donc sur cette combinaison précise :
 - Stages Roadie : groupes de fenêtres nommés, masquables, restaurables, réordonnables et représentés visuellement.
 - Desktops virtuels Roadie sans contrôle des Spaces macOS natifs.
 - Support multi-écran où chaque écran garde son desktop courant, sa stage active et son layout.
+- Parking d’écran : quand un écran disparaît, Roadie rapatrie ses stages non vides sur un écran restant au lieu de les fusionner dans la stage active.
 
 Roadie n’essaie pas de remplacer yabai. yabai est plus large, plus ancien et beaucoup plus mature. Roadie est volontairement plus petit, et très orienté autour de mon workflow.
 
@@ -72,6 +73,7 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Gère des groupes de fenêtres par stage, écran et desktop Roadie.
 - Fournit des desktops virtuels Roadie sans contrôler les Spaces macOS natifs.
 - Supporte plusieurs écrans indépendamment.
+- Rapatrie les stages d’un écran débranché sur un écran restant, puis les restaure quand le même écran revient et peut être reconnu sans ambiguïté.
 - Affiche un nav rail natif avec les thumbnails des stages.
 - Permet de déplacer des thumbnails entre stages ou vers la scène active.
 - Permet optionnellement de faire un clic droit sur la barre de titre d'une fenêtre gérée pour l'envoyer vers une autre stage, un autre desktop ou un autre écran.

@@ -12,6 +12,8 @@ var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var displayChangeObserver: NSObjectProtocol?
+var pendingDisplayHeal: Task<Void, Never>?
+var displaySettlingUntil: Date = .distantPast
 
 func printUsage() {
     print("""
@@ -31,6 +33,7 @@ case "run":
     }
     let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
     let ticks = value(after: "--ticks").flatMap(Int.init)
+    let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
     let shouldStartRail = !args.contains("--no-rail")
     let shouldStartRestoreSafety = !args.contains("--no-restore-safety")
     let interval = max(100, intervalMs) / 1000
@@ -58,12 +61,27 @@ case "run":
         object: nil,
         queue: .main
     ) { _ in
-        let report = DaemonHealthService().heal()
-        print("display-change-heal state=\(report.state.repaired) layout=\(report.layout.attempted) failed=\(report.failed)")
-        fflush(stdout)
+        Task { @MainActor in
+            displaySettlingUntil = Date().addingTimeInterval(displaySettleSeconds)
+            pendingDisplayHeal?.cancel()
+            pendingDisplayHeal = Task { @MainActor in
+                let nanoseconds = UInt64(displaySettleSeconds * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+                guard !Task.isCancelled else { return }
+                pendingDisplayHeal = nil
+                displaySettlingUntil = .distantPast
+                let report = DaemonHealthService().heal()
+                print("display-change-heal parking=\(report.parking.kind.rawValue)/\(report.parking.reason.rawValue) state=\(report.state.repaired) layout=\(report.layout.attempted) failed=\(report.failed)")
+                fflush(stdout)
+            }
+        }
     }
 
-    let target = MaintenanceTimerTarget(maintainer: maintainer, maxTicks: ticks) { tick in
+    let target = MaintenanceTimerTarget(
+        maintainer: maintainer,
+        maxTicks: ticks,
+        shouldTick: { Date() >= displaySettlingUntil }
+    ) { tick in
         if tick.accessibilityDenied {
             if !reportedAccessibilityDenied {
                 fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
@@ -151,17 +169,26 @@ func resolvedArguments() -> [String] {
 private final class MaintenanceTimerTarget: NSObject {
     private let maintainer: LayoutMaintainer
     private let maxTicks: Int?
+    private let shouldTick: () -> Bool
     private let onTick: (MaintenanceTick) -> Void
     private var tickCount = 0
 
-    init(maintainer: LayoutMaintainer, maxTicks: Int?, onTick: @escaping (MaintenanceTick) -> Void) {
+    init(
+        maintainer: LayoutMaintainer,
+        maxTicks: Int?,
+        shouldTick: @escaping () -> Bool = { true },
+        onTick: @escaping (MaintenanceTick) -> Void
+    ) {
         self.maintainer = maintainer
         self.maxTicks = maxTicks
+        self.shouldTick = shouldTick
         self.onTick = onTick
     }
 
     @MainActor @objc func tick(_ timer: Timer) {
-        onTick(maintainer.tick())
+        if shouldTick() {
+            onTick(maintainer.tick())
+        }
         tickCount += 1
         if let maxTicks, tickCount >= maxTicks {
             timer.invalidate()

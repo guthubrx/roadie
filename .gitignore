@@ -14,3 +14,4 @@ DerivedData/
 .vscode/
 .idea/
 .netrc
+.worktrees/

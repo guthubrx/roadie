@@ -58,6 +58,31 @@ Cas d'usage :
 - masquer rapidement un contexte sans fermer les apps;
 - ramener une fenetre precise dans la stage active avec `stage summon`.
 
+## Parking d'ecran
+
+Roadie traite un ecran debranche comme un changement temporaire de topologie,
+pas comme une raison de detruire ou de fusionner l'etat des stages.
+
+Quand un ecran disparait :
+
+- les stages non vides de cet ecran sont rapatriees comme stages distinctes sur un ecran restant;
+- leurs noms, modes, membres, groupes, focus et ordre relatif sont conserves;
+- les stages vides restent en metadata cachee pour restauration;
+- la stage active de l'ecran hote n'est pas remplacee par les stages rapatriees.
+
+Quand l'ecran revient, Roadie restaure les stages parkées courantes vers cet
+ecran s'il peut le reconnaitre sans ambiguite. La reconnaissance utilise d'abord
+l'ancien identifiant d'ecran, puis une empreinte conservative basee sur le nom,
+la taille, la taille visible, la position et l'indice d'ecran principal. Si
+plusieurs ecrans matchent aussi bien, Roadie refuse la restauration automatique
+et laisse les stages parkées visibles.
+
+Cas d'usage :
+
+- debrancher un portable d'un moniteur sans perdre les stages du moniteur;
+- continuer a travailler sur les stages rapatriees pendant l'absence du moniteur;
+- rebrancher le moniteur et retrouver ces stages sans les avoir fusionnees.
+
 ## Navrail
 
 Le navrail est le panneau lateral par ecran qui represente les stages non vides.

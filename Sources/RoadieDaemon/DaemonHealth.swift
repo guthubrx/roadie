@@ -32,11 +32,18 @@ public struct DaemonHealthReport: Equatable, Codable, Sendable {
 }
 
 public struct DaemonHealReport: Equatable, Codable, Sendable {
+    public var parking: DisplayParkingReport
     public var state: StateHealReport
     public var layout: ApplyResult
     public var health: DaemonHealthReport
 
-    public init(state: StateHealReport, layout: ApplyResult, health: DaemonHealthReport) {
+    public init(
+        parking: DisplayParkingReport = DisplayParkingReport(kind: .noop, reason: .alreadyStable),
+        state: StateHealReport,
+        layout: ApplyResult,
+        health: DaemonHealthReport
+    ) {
+        self.parking = parking
         self.state = state
         self.layout = layout
         self.health = health
@@ -50,15 +57,18 @@ public struct DaemonHealReport: Equatable, Codable, Sendable {
 public struct DaemonHealthService {
     private let service: SnapshotService
     private let stageStore: StageStore
+    private let events: EventLog
     private let pidFilePath: String
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
+        events: EventLog = EventLog(),
         pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid"
     ) {
         self.service = service
         self.stageStore = stageStore
+        self.events = events
         self.pidFilePath = pidFilePath
     }
 
@@ -80,11 +90,62 @@ public struct DaemonHealthService {
     }
 
     public func heal() -> DaemonHealReport {
+        let preflightSnapshot = service.snapshot()
+        var parkingState = stageStore.state()
+        let parkingReport = DisplayParkingService().transition(
+            state: &parkingState,
+            liveDisplays: preflightSnapshot.displays,
+            windows: preflightSnapshot.windows.map(\.window)
+        )
+        if parkingReport.kind != .noop {
+            stageStore.save(parkingState)
+        }
+        appendParkingEvent(parkingReport)
+
         let stateReport = StateAuditService(service: service, stageStore: stageStore).heal()
         let snapshot = service.snapshot()
         let layoutResult = service.apply(service.applyPlan(from: snapshot))
         let healthReport = run()
-        return DaemonHealReport(state: stateReport, layout: layoutResult, health: healthReport)
+        return DaemonHealReport(parking: parkingReport, state: stateReport, layout: layoutResult, health: healthReport)
+    }
+
+    private func appendParkingEvent(_ report: DisplayParkingReport) {
+        let eventType: String
+        switch report.kind {
+        case .park:
+            eventType = "display.parking_started"
+        case .restore:
+            eventType = "display.parking_restored"
+        case .ambiguous:
+            eventType = "display.parking_ambiguous"
+        case .noop:
+            eventType = "display.parking_noop"
+        }
+        var details: [String: String] = [
+            "reason": report.reason.rawValue,
+            "parkedStageCount": String(report.parkedStageCount),
+            "restoredStageCount": String(report.restoredStageCount),
+            "skippedStageCount": String(report.skippedStageCount)
+        ]
+        if let originDisplayID = report.originDisplayID {
+            details["originDisplayID"] = originDisplayID.rawValue
+        }
+        if let originLogicalDisplayID = report.originLogicalDisplayID {
+            details["originLogicalDisplayID"] = originLogicalDisplayID.rawValue
+        }
+        if let hostDisplayID = report.hostDisplayID {
+            details["hostDisplayID"] = hostDisplayID.rawValue
+        }
+        if let restoredDisplayID = report.restoredDisplayID {
+            details["restoredDisplayID"] = restoredDisplayID.rawValue
+        }
+        if !report.candidateDisplayIDs.isEmpty {
+            details["candidateDisplayIDs"] = report.candidateDisplayIDs.map(\.rawValue).joined(separator: ",")
+        }
+        if let confidence = report.confidence {
+            details["confidence"] = String(format: "%.3f", confidence)
+        }
+        events.append(RoadieEvent(type: eventType, details: details))
     }
 
     private func pidCheck() -> DaemonHealthCheck {

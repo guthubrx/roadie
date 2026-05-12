@@ -115,14 +115,6 @@ public struct SnapshotService {
                 windows: windows
             )
         }
-        if let fallbackDisplayID = fallbackDisplayID(
-            in: displays,
-            persistedStages: persistedStages,
-            focusedWindowID: providerFocusedID,
-            windows: windows
-        ) {
-            persistedStages.migrateDisconnectedDisplays(keeping: liveDisplayIDs, fallbackDisplayID: fallbackDisplayID)
-        }
         let liveWindowIDs = stageManagedWindowIDs
         let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
@@ -165,7 +157,10 @@ public struct SnapshotService {
                 continue
             }
             let pin = persistedStages.pin(for: window.id)
-            let knownScope = stageIndex[window.id] ?? pin?.homeScope
+            let indexedScope = stageIndex[window.id]
+            let liveIndexedScope = indexedScope.flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
+            let livePinnedScope = (pin?.homeScope).flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
+            let knownScope = liveIndexedScope ?? livePinnedScope
             guard let displayID = knownScope?.displayID ?? newWindowDisplayID(
                 for: window,
                 displays: displays,
@@ -177,6 +172,10 @@ public struct SnapshotService {
                 continue
             }
             if knownScope == nil {
+                if indexedScope != nil {
+                    persistedStages.remove(windowID: window.id)
+                    stageIndex.removeValue(forKey: window.id)
+                }
                 var persistentScope = persistedStages.scope(
                     displayID: displayID,
                     desktopID: persistedStages.currentDesktopID(for: displayID)
@@ -197,15 +196,18 @@ public struct SnapshotService {
                 persistedStages.update(persistentScope)
                 persistedStages.updatePinFrame(window: window, now: now)
             }
+            let desktopID = knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID)
+            let stageID = knownScope?.stageID
+                ?? persistedStages.scope(displayID: displayID, desktopID: desktopID).activeStageID
             let scope = StageScope(
                 displayID: displayID,
-                desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
-                stageID: knownScope?.stageID ?? persistedStages.scope(displayID: displayID, desktopID: persistedStages.currentDesktopID(for: displayID)).activeStageID
+                desktopID: desktopID,
+                stageID: stageID
             )
-            let persistedStage = persistedStages.scopes
-                .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
-                .stages
-                .first { $0.id == scope.stageID }
+            let persistedScope = persistedStages.scopes.first {
+                $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
+            }
+            let persistedStage = persistedScope?.stages.first { $0.id == scope.stageID }
             try? state.createStage(
                 id: scope.stageID,
                 name: "Stage \(scope.stageID.rawValue)",

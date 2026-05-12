@@ -30,6 +30,7 @@ So Roadie focuses on that specific combination:
 - Roadie stages: named groups of windows that can be hidden, restored, reordered, and represented visually.
 - Roadie virtual desktops managed without controlling native macOS Spaces.
 - Multi-display support where each display keeps its own current desktop, active stage, and layout.
+- Display parking: when a monitor disappears, Roadie parks its non-empty stages on a remaining display instead of merging them into the active stage.
 
 Roadie is not trying to replace yabai. yabai is broader, older, and much more mature. Roadie is intentionally smaller and opinionated around my workflow.
 
@@ -72,6 +73,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Keeps stage groups per display and Roadie desktop.
 - Provides Roadie virtual desktops without controlling native macOS Spaces.
 - Supports multiple displays independently.
+- Parks stages from a disconnected display on a remaining display, then restores them when the same display comes back and can be recognized safely.
 - Shows a native side rail with stage thumbnails.
 - Lets you drag thumbnails between stages or into the active workspace.
 - Lets you optionally right-click a managed window title bar to send that window to another stage, desktop, or display.
