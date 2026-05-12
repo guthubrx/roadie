@@ -34,6 +34,19 @@ struct DisplayParkingServiceTests {
         )
     }
 
+    private func window(_ raw: UInt32, title: String = "w") -> WindowSnapshot {
+        WindowSnapshot(
+            id: WindowID(rawValue: raw),
+            pid: Int32(raw),
+            appName: "Test",
+            bundleID: "com.test",
+            title: title,
+            frame: Rect(x: 0, y: 0, width: 100, height: 100),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+    }
+
     @Test
     func serviceCanReturnStableNoopReport() {
         var state = PersistentStageState()
@@ -103,6 +116,35 @@ struct DisplayParkingServiceTests {
         let host = state.scopes.first { $0.displayID == hostID }
         #expect(host?.stages.first { $0.id == StageID(rawValue: "1") }?.members.map(\.windowID) == [WindowID(rawValue: 1)])
         #expect(host?.stages.filter { $0.parkingState == .parked }.count == 1)
+    }
+
+    @Test
+    func defersParkingWhenDisconnectedStageWindowsAreNotVisible() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "fullscreen-space")
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Host", members: [member(1)]),
+                ]),
+                PersistentStageScope(displayID: goneID, activeStageID: StageID(rawValue: "2"), stages: [
+                    PersistentStage(id: StageID(rawValue: "2"), name: "Preserve", members: [member(20)]),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        let report = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: [window(1)],
+            now: Date(timeIntervalSince1970: 100)
+        )
+
+        #expect(report.kind == .noop)
+        #expect(report.reason == .deferredUntilStable)
+        #expect(state.scopes.first { $0.displayID == goneID }?.memberIDs(in: StageID(rawValue: "2")) == [WindowID(rawValue: 20)])
+        #expect(state.scopes.first { $0.displayID == hostID }?.stages.filter { $0.parkingState == .parked }.isEmpty == true)
     }
 
     @Test

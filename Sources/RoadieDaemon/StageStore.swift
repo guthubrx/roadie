@@ -414,6 +414,15 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
     }
 
+    public mutating func pruneMissingWindows(
+        keeping liveWindowIDs: Set<WindowID>,
+        liveDisplayIDs: Set<DisplayID>
+    ) {
+        for scopeIndex in scopes.indices where liveDisplayIDs.contains(scopes[scopeIndex].displayID) {
+            scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs)
+        }
+    }
+
     public mutating func remove(windowID: WindowID) {
         for scopeIndex in scopes.indices {
             scopes[scopeIndex].remove(windowID: windowID)

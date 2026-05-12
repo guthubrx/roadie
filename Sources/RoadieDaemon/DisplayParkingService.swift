@@ -102,8 +102,10 @@ public struct DisplayParkingService: Sendable {
 
         var parkedCount = 0
         var skippedCount = 0
+        var deferredCount = 0
         var firstOriginDisplayID: DisplayID?
         var firstLogicalDisplayID: LogicalDisplayID?
+        let liveWindowIDs = Set(windows.map(\.id))
 
         for scopeIndex in staleScopeIndexes {
             var staleScope = state.scopes[scopeIndex]
@@ -121,6 +123,12 @@ public struct DisplayParkingService: Sendable {
                 guard sourceStage.parkingState != .parked else {
                     skippedCount += 1
                     continue
+                }
+                if !windows.isEmpty {
+                    guard sourceStage.members.contains(where: { liveWindowIDs.contains($0.windowID) }) else {
+                        deferredCount += 1
+                        continue
+                    }
                 }
 
                 let parkedID = uniqueParkedStageID(
@@ -164,6 +172,16 @@ public struct DisplayParkingService: Sendable {
 
         guard parkedCount > 0 else {
             skippedCount += pruneEmptyParkedResidues(state: &state)
+            if deferredCount > 0 {
+                return DisplayParkingReport(
+                    kind: .noop,
+                    reason: .deferredUntilStable,
+                    originDisplayID: firstOriginDisplayID,
+                    originLogicalDisplayID: firstLogicalDisplayID,
+                    hostDisplayID: hostDisplay.id,
+                    skippedStageCount: skippedCount + deferredCount
+                )
+            }
             return DisplayParkingReport(
                 kind: .noop,
                 reason: .noParkedStages,
