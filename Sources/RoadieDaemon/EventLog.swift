@@ -46,6 +46,8 @@ public extension RoadieEventEnvelope {
 
 public struct EventLog: Sendable {
     private let url: URL
+    private let maxBytes: Int
+    private let retainedBackups: Int
     private static let jsonNewline = Data("\n".utf8)
     public static let defaultMaxBytes = 10 * 1024 * 1024
     public static let defaultRetainedBackups = 2
@@ -67,8 +69,14 @@ public struct EventLog: Sendable {
     /// d'event est utilise donc un verrou unique suffit.
     private static let writeLock = NSLock()
 
-    public init(path: String = Self.defaultPath()) {
+    public init(
+        path: String = Self.defaultPath(),
+        maxBytes: Int = Self.defaultMaxBytes,
+        retainedBackups: Int = Self.defaultRetainedBackups
+    ) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+        self.maxBytes = max(1, maxBytes)
+        self.retainedBackups = max(0, retainedBackups)
     }
 
     public static func defaultPath() -> String {
@@ -92,6 +100,7 @@ public struct EventLog: Sendable {
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try Self.encoder.encode(value)
+            rotateIfNeededLocked(incomingBytes: data.count + Self.jsonNewline.count)
             if FileManager.default.fileExists(atPath: url.path) {
                 let handle = try FileHandle(forWritingTo: url)
                 defer { try? handle.close() }
@@ -158,11 +167,26 @@ public struct EventLog: Sendable {
     public func rotateIfNeeded(maxBytes: Int = Self.defaultMaxBytes, retainedBackups: Int = Self.defaultRetainedBackups) {
         Self.writeLock.lock()
         defer { Self.writeLock.unlock() }
+        rotateLocked(maxBytes: maxBytes, retainedBackups: retainedBackups, force: false)
+    }
+
+    private func rotateIfNeededLocked(incomingBytes: Int) {
         let manager = FileManager.default
         guard maxBytes > 0,
               let attributes = try? manager.attributesOfItem(atPath: url.path),
               let size = attributes[.size] as? NSNumber,
-              size.intValue > maxBytes
+              size.intValue + incomingBytes > maxBytes
+        else { return }
+        rotateLocked(maxBytes: maxBytes, retainedBackups: retainedBackups, force: true)
+    }
+
+    private func rotateLocked(maxBytes: Int, retainedBackups: Int, force: Bool) {
+        let manager = FileManager.default
+        guard maxBytes > 0,
+              let attributes = try? manager.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber,
+              size.intValue > 0,
+              force || size.intValue > maxBytes
         else { return }
 
         if retainedBackups > 0 {

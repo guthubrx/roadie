@@ -77,6 +77,26 @@ struct AutomationEventTests {
     }
 
     @Test
+    func eventLogRotatesBeforeAppendingPastLimit() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-events-rotate-\(UUID().uuidString).jsonl")
+        let backupURL = URL(fileURLWithPath: "\(url.path).1")
+        defer {
+            try? FileManager.default.removeItem(at: url)
+            try? FileManager.default.removeItem(at: backupURL)
+        }
+        try Data(repeating: 65, count: 180).write(to: url)
+        let log = EventLog(path: url.path, maxBytes: 220, retainedBackups: 1)
+
+        log.append(RoadieEvent(type: "rotation.test", details: ["kind": "event-log"]))
+
+        let backup = try Data(contentsOf: backupURL)
+        let current = try String(contentsOf: url, encoding: .utf8)
+        #expect(backup.count == 180)
+        #expect(current.contains("rotation.test"))
+    }
+
+    @Test
     func catalogContainsWindowPinEvents() {
         let catalog = AutomationEventCatalog()
 

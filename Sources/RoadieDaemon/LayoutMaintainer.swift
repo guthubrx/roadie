@@ -42,6 +42,9 @@ public final class LayoutMaintainer {
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
     private var manualResizeApplyAfter: Date?
+    private var lastDisplaySignature: String?
+    private var displayTopologySettlesUntil: Date?
+    private var emittedRuleSkippedKeys: Set<String> = []
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -64,6 +67,24 @@ public final class LayoutMaintainer {
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
+        let currentDisplaySignature = displaySignature(snapshot.displays)
+        let tickNow = now()
+        if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
+            self.lastDisplaySignature = currentDisplaySignature
+            displayTopologySettlesUntil = tickNow.addingTimeInterval(max(1.5, intervalSeconds * 4))
+            lastObservedFrames = scopedFrames(in: snapshot)
+            events.append(RoadieEvent(type: "display.topology_settling", details: [
+                "from": lastDisplaySignature,
+                "to": currentDisplaySignature
+            ]))
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+        lastDisplaySignature = currentDisplaySignature
+        if let displayTopologySettlesUntil, tickNow < displayTopologySettlesUntil {
+            lastObservedFrames = scopedFrames(in: snapshot)
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+        displayTopologySettlesUntil = nil
         evaluateRules(in: snapshot)
 
         let restoredPins = restoreVisiblePinnedWindows(in: snapshot)
@@ -209,6 +230,27 @@ public final class LayoutMaintainer {
         return WindowRuleEngine(rules: config.rules)
     }
 
+    private func displaySignature(_ displays: [DisplaySnapshot]) -> String {
+        displays
+            .map { display in
+                let frame = display.frame
+                let visible = display.visibleFrame
+                return [
+                    display.id.rawValue,
+                    String(Int(frame.x.rounded())),
+                    String(Int(frame.y.rounded())),
+                    String(Int(frame.width.rounded())),
+                    String(Int(frame.height.rounded())),
+                    String(Int(visible.x.rounded())),
+                    String(Int(visible.y.rounded())),
+                    String(Int(visible.width.rounded())),
+                    String(Int(visible.height.rounded()))
+                ].joined(separator: ":")
+            }
+            .sorted()
+            .joined(separator: "|")
+    }
+
     private func evaluateRules(in snapshot: DaemonSnapshot) {
         guard let ruleEngine else { return }
         guard ruleEngine.validationErrors.isEmpty else {
@@ -252,6 +294,9 @@ public final class LayoutMaintainer {
         ]
 
         guard let matchedRuleID = application.matchedRuleID else {
+            let skippedKey = ruleEventKey(window: window, suffix: "skipped")
+            guard !emittedRuleSkippedKeys.contains(skippedKey) else { return }
+            emittedRuleSkippedKeys.insert(skippedKey)
             events.append(RoadieEventEnvelope(
                 id: "rule_\(UUID().uuidString)",
                 type: "rule.skipped",
@@ -264,6 +309,7 @@ public final class LayoutMaintainer {
             ))
             return
         }
+        emittedRuleSkippedKeys.remove(ruleEventKey(window: window, suffix: "skipped"))
 
         let matchedPayload = basePayload.merging([
             "ruleID": .string(matchedRuleID)
@@ -284,6 +330,10 @@ public final class LayoutMaintainer {
             cause: .system,
             payload: matchedPayload.merging(ruleActionPayload(application)) { _, new in new }
         ))
+    }
+
+    private func ruleEventKey(window: WindowSnapshot, suffix: String) -> String {
+        "\(suffix)|\(window.id.rawValue)|\(window.appName)|\(window.title)"
     }
 
     private func ruleActionPayload(_ application: WindowRuleApplication) -> [String: AutomationPayload] {

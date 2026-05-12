@@ -319,7 +319,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func staleDisplayMembershipIsReassignedWithoutMigratingDisconnectedScope() {
+    func staleDisplayMembershipIsPreservedUntilParkingHeal() {
         let staleDisplay = DisplayID(rawValue: "display-old")
         let liveDisplay = DisplayID(rawValue: "display-new")
         let window = WindowSnapshot(
@@ -355,12 +355,13 @@ struct SnapshotServiceTests {
         let snapshot = service.snapshot()
         let persisted = stageStore.state()
 
-        #expect(snapshot.windows.first?.scope?.displayID == liveDisplay)
+        #expect(snapshot.windows.first?.scope == nil)
         #expect(persisted.scopes.contains { $0.displayID == staleDisplay })
         let staleScope = persisted.scopes.first { $0.displayID == staleDisplay }
         let liveScope = persisted.scopes.first { $0.displayID == liveDisplay }
-        #expect(staleScope?.memberIDs(in: StageID(rawValue: "4")).isEmpty == true)
-        #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(persisted.activeDisplayID == liveDisplay)
+        #expect(staleScope?.memberIDs(in: StageID(rawValue: "4")) == [window.id])
+        #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")).isEmpty == true)
     }
 
     @Test
@@ -2307,7 +2308,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func snapshotKeepsDisconnectedDisplayScopesAndReassignsLiveWindowsToFallbackDisplay() {
+    func snapshotKeepsDisconnectedDisplayScopesWithoutFallbackReassign() {
         let liveDisplay = DisplayID(rawValue: "display-live")
         let staleDisplay = DisplayID(rawValue: "display-stale")
         let desktop = DesktopID(rawValue: 1)
@@ -2371,14 +2372,14 @@ struct SnapshotServiceTests {
         #expect(updated.desktopSelections.contains { $0.displayID == staleDisplay })
         #expect(updated.desktopLabels.contains { $0.displayID == staleDisplay && $0.label == "External" })
         #expect(updated.activeDisplayID == liveDisplay)
-        #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")) == [liveWindow.id, movedWindow.id, hiddenWindow.id])
-        #expect(staleScope?.memberIDs(in: StageID(rawValue: "2")).isEmpty ?? true)
-        #expect(staleScope?.memberIDs(in: StageID(rawValue: "4")).isEmpty ?? true)
+        #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")) == [liveWindow.id])
+        #expect(staleScope?.memberIDs(in: StageID(rawValue: "2")) == [movedWindow.id])
+        #expect(staleScope?.memberIDs(in: StageID(rawValue: "4")) == [hiddenWindow.id])
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
     @Test
-    func snapshotKeepsDisconnectedDisplayScopesAndReassignsLiveWindowsToContainingDisplay() {
+    func snapshotKeepsDisconnectedDisplayScopesWithoutContainingDisplayReassign() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
         let staleDisplay = DisplayID(rawValue: "display-stale")
@@ -2418,8 +2419,8 @@ struct SnapshotServiceTests {
         #expect(updated.scopes.contains { $0.displayID == staleDisplay })
         #expect(updated.activeDisplayID == displayB)
         #expect(scopeA?.memberIDs(in: StageID(rawValue: "3")).isEmpty ?? true)
-        #expect(scopeB?.memberIDs(in: StageID(rawValue: "1")) == [window.id])
-        #expect(staleScope?.memberIDs(in: StageID(rawValue: "3")).isEmpty ?? true)
+        #expect(scopeB?.memberIDs(in: StageID(rawValue: "1")).isEmpty == true)
+        #expect(staleScope?.memberIDs(in: StageID(rawValue: "3")) == [window.id])
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
@@ -2879,6 +2880,48 @@ struct SnapshotServiceTests {
         #expect(metrics.activeStages == 1)
         #expect(metrics.duplicateWindows == 1)
         #expect(metrics.staleMembers == 0)
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotPreservesDisconnectedDisplayMembershipUntilParkingHeal() {
+        let hostDisplay = DisplayID(rawValue: "built-in")
+        let goneDisplay = DisplayID(rawValue: "external")
+        let liveDisplay = DisplaySnapshot(id: hostDisplay, index: 1, name: "Built-in", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let movedBySystem = WindowSnapshot(id: WindowID(rawValue: 10), pid: 10, appName: "A", bundleID: "a", title: "external-window", frame: Rect(x: 0, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-disconnect-preserve-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: hostDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), name: "Host"),
+            ]),
+            PersistentStageScope(displayID: goneDisplay, activeStageID: StageID(rawValue: "2"), stages: [
+                PersistentStage(id: StageID(rawValue: "2"), name: "External", members: [
+                    PersistentStageMember(windowID: movedBySystem.id, bundleID: movedBySystem.bundleID, title: movedBySystem.title, frame: Rect(x: 1000, y: 0, width: 500, height: 500)),
+                ]),
+            ]),
+        ], activeDisplayID: hostDisplay))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [liveDisplay], windowSnapshots: [movedBySystem], focusedID: nil),
+            frameWriter: RecordingWriter(),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot(followFocus: false)
+        var stateAfterSnapshot = stageStore.state()
+
+        #expect(snapshot.windows.first { $0.window.id == movedBySystem.id }?.scope == nil)
+        #expect(stateAfterSnapshot.scopes.first { $0.displayID == goneDisplay }?.memberIDs(in: StageID(rawValue: "2")) == [movedBySystem.id])
+        #expect(stateAfterSnapshot.scopes.first { $0.displayID == hostDisplay }?.memberIDs(in: StageID(rawValue: "1")).isEmpty == true)
+
+        let report = DisplayParkingService().transition(state: &stateAfterSnapshot, liveDisplays: [liveDisplay], windows: [movedBySystem])
+        #expect(report.kind == .park)
+        #expect(report.parkedStageCount == 1)
+        #expect(stateAfterSnapshot.scopes.first { $0.displayID == hostDisplay }?.stages.contains {
+            $0.parkingState == .parked && $0.members.map(\.windowID) == [movedBySystem.id]
+        } == true)
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
