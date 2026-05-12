@@ -79,6 +79,7 @@ public struct DisplayParkingService: Sendable {
 
         if let restoreReport = restoreParkedStages(state: &state, liveDisplays: liveDisplays, now: now) {
             stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
+            _ = pruneEmptyParkedResidues(state: &state)
             return restoreReport
         }
 
@@ -88,6 +89,14 @@ public struct DisplayParkingService: Sendable {
         }
         guard !staleScopeIndexes.isEmpty else {
             stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
+            let prunedCount = pruneEmptyParkedResidues(state: &state)
+            guard prunedCount == 0 else {
+                return DisplayParkingReport(
+                    kind: .noop,
+                    reason: .alreadyStable,
+                    skippedStageCount: prunedCount
+                )
+            }
             return DisplayParkingReport(kind: .noop, reason: .alreadyStable)
         }
 
@@ -154,6 +163,7 @@ public struct DisplayParkingService: Sendable {
         stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
 
         guard parkedCount > 0 else {
+            skippedCount += pruneEmptyParkedResidues(state: &state)
             return DisplayParkingReport(
                 kind: .noop,
                 reason: .noParkedStages,
@@ -316,6 +326,30 @@ public struct DisplayParkingService: Sendable {
                 state.scopes[scopeIndex].activeStageID = firstStage.id
             }
         }
+    }
+
+    @discardableResult
+    private func pruneEmptyParkedResidues(state: inout PersistentStageState) -> Int {
+        var prunedCount = 0
+        for scopeIndex in state.scopes.indices {
+            let beforeCount = state.scopes[scopeIndex].stages.count
+            state.scopes[scopeIndex].stages.removeAll { stage in
+                stage.parkingState == .parked
+                    && stage.origin != nil
+                    && stage.members.isEmpty
+            }
+            let removedCount = beforeCount - state.scopes[scopeIndex].stages.count
+            guard removedCount > 0 else { continue }
+
+            prunedCount += removedCount
+            if state.scopes[scopeIndex].stages.isEmpty {
+                state.scopes[scopeIndex].stages = [PersistentStage(id: state.scopes[scopeIndex].activeStageID)]
+            } else if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }),
+                      let firstStage = state.scopes[scopeIndex].stages.first {
+                state.scopes[scopeIndex].activeStageID = firstStage.id
+            }
+        }
+        return prunedCount
     }
 
     private func fingerprintForRestore(

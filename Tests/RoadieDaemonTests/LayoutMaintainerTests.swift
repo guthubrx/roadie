@@ -167,6 +167,31 @@ private final class MultiDisplaySequenceProvider: SystemSnapshotProviding, @unch
     }
 }
 
+private final class DynamicDisplaySequenceProvider: SystemSnapshotProviding, @unchecked Sendable {
+    private let displaySnapshots: [[DisplaySnapshot]]
+    private let windowSnapshots: [[WindowSnapshot]]
+    private var index = 0
+
+    init(displaySnapshots: [[DisplaySnapshot]], windowSnapshots: [[WindowSnapshot]]) {
+        self.displaySnapshots = displaySnapshots
+        self.windowSnapshots = windowSnapshots
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot {
+        PermissionSnapshot(accessibilityTrusted: true)
+    }
+
+    func displays() -> [DisplaySnapshot] {
+        displaySnapshots[Swift.min(index, displaySnapshots.count - 1)]
+    }
+
+    func windows() -> [WindowSnapshot] {
+        let windows = windowSnapshots[Swift.min(index, windowSnapshots.count - 1)]
+        index += 1
+        return windows
+    }
+}
+
 private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var requestedFrames: [WindowID: Rect] = [:]
 
@@ -565,6 +590,57 @@ struct LayoutMaintainerTests {
         #expect(!restartedService.applyPlan(from: restartedService.snapshot()).commands.isEmpty)
         try? FileManager.default.removeItem(atPath: intentPath)
         try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func displayTopologyChangeSuppressesRelayoutUntilSettled() {
+        let displayA = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let displayB = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-b"),
+            index: 2,
+            name: "B",
+            frame: Rect(x: 1000, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500),
+            isMain: false
+        )
+        let firstTarget = Rect(x: 0, y: 0, width: 495, height: 500)
+        let secondTarget = Rect(x: 505, y: 0, width: 495, height: 500)
+        let firstSmall = Rect(x: 0, y: 0, width: 100, height: 500)
+        let secondSmall = Rect(x: 120, y: 0, width: 100, height: 500)
+        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "first", frame: firstTarget, isOnScreen: true, isTileCandidate: true)
+        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "second", frame: secondTarget, isOnScreen: true, isTileCandidate: true)
+        let firstNeedsLayout = WindowSnapshot(id: first.id, pid: first.pid, appName: first.appName, bundleID: first.bundleID, title: first.title, frame: firstSmall, isOnScreen: true, isTileCandidate: true)
+        let secondNeedsLayout = WindowSnapshot(id: second.id, pid: second.pid, appName: second.appName, bundleID: second.bundleID, title: second.title, frame: secondSmall, isOnScreen: true, isTileCandidate: true)
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: DynamicDisplaySequenceProvider(
+                displaySnapshots: [[displayA], [displayA, displayB], [displayA, displayB]],
+                windowSnapshots: [[first, second], [firstNeedsLayout, secondNeedsLayout], [firstNeedsLayout, secondNeedsLayout]]
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service, intervalSeconds: 0.1, now: { currentTime })
+
+        #expect(maintainer.tick().commands == 0)
+        currentTime = Date(timeIntervalSince1970: 0.1)
+        let suppressed = maintainer.tick()
+        #expect(suppressed.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+
+        currentTime = Date(timeIntervalSince1970: 2.0)
+        let applied = maintainer.tick()
+        #expect(applied.commands == 2)
+        #expect(writer.requestedFrames[first.id] == firstTarget)
+        #expect(writer.requestedFrames[second.id] == secondTarget)
     }
 
     @Test

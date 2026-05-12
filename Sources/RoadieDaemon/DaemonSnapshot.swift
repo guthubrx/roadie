@@ -160,6 +160,10 @@ public struct SnapshotService {
             let indexedScope = stageIndex[window.id]
             let liveIndexedScope = indexedScope.flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
             let livePinnedScope = (pin?.homeScope).flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
+            if indexedScope != nil, liveIndexedScope == nil {
+                scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil, pin: pin))
+                continue
+            }
             let knownScope = liveIndexedScope ?? livePinnedScope
             guard let displayID = knownScope?.displayID ?? newWindowDisplayID(
                 for: window,

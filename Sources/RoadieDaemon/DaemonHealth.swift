@@ -92,12 +92,13 @@ public struct DaemonHealthService {
     public func heal() -> DaemonHealReport {
         let preflightSnapshot = service.snapshot()
         var parkingState = stageStore.state()
+        let initialParkingState = parkingState
         let parkingReport = DisplayParkingService().transition(
             state: &parkingState,
             liveDisplays: preflightSnapshot.displays,
             windows: preflightSnapshot.windows.map(\.window)
         )
-        if parkingReport.kind != .noop {
+        if parkingReport.kind != .noop || parkingState != initialParkingState {
             stageStore.save(parkingState)
         }
         appendParkingEvent(parkingReport)

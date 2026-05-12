@@ -167,6 +167,59 @@ struct DisplayParkingServiceTests {
     }
 
     @Test
+    func prunesEmptyParkedResiduesWithoutDroppingUserEmptyStages() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "external")
+        let logicalID = LogicalDisplayID(displayID: goneID)
+        let origin = StageOrigin(
+            logicalDisplayID: logicalID,
+            displayID: goneID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "docs"),
+            position: 1,
+            nameAtParking: "Docs",
+            parkedAt: Date(timeIntervalSince1970: 100)
+        )
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Host"),
+                    PersistentStage(
+                        id: StageID(rawValue: "parked-external-docs"),
+                        name: "Docs",
+                        parkingState: .parked,
+                        origin: origin,
+                        hostDisplayID: hostID
+                    ),
+                ]),
+                PersistentStageScope(displayID: goneID, logicalDisplayID: logicalID, stages: [
+                    PersistentStage(
+                        id: StageID(rawValue: "docs"),
+                        name: "Docs",
+                        parkingState: .parked,
+                        origin: origin,
+                        hostDisplayID: hostID
+                    ),
+                    PersistentStage(id: StageID(rawValue: "later"), name: "Later"),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        let report = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: []
+        )
+
+        #expect(report.kind == .noop)
+        #expect(report.reason == .noParkedStages)
+        #expect(state.scopes.flatMap(\.stages).contains { $0.parkingState == .parked } == false)
+        #expect(state.scopes.first { $0.displayID == goneID }?.stages.first { $0.id == StageID(rawValue: "later") }?.name == "Later")
+        #expect(state.scopes.first { $0.displayID == hostID }?.stages.map(\.name) == ["Host"])
+    }
+
+    @Test
     func preservesHostActiveStageAndNativeStageOrderWhenParking() {
         let hostID = DisplayID(rawValue: "built-in")
         let goneID = DisplayID(rawValue: "external")
