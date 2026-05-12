@@ -140,6 +140,68 @@ struct WindowPinLayoutMaintainerTests {
         #expect(tick.commands == 1)
         #expect(writer.requestedFrames[hiddenPinned.id] == visibleFrame)
     }
+
+    @Test
+    func collapsedVisiblePinHiddenInCornerIsNotRestoredByMaintainer() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let visibleFrame = Rect(x: 150, y: 120, width: 300, height: 240)
+        let hiddenFrame = Rect(
+            x: display.visibleFrame.x - 299,
+            y: display.visibleFrame.y + display.visibleFrame.height - 1,
+            width: 300,
+            height: 240
+        )
+        let hiddenPinned = WindowSnapshot(
+            id: WindowID(rawValue: 10),
+            pid: 10,
+            appName: "Pinned",
+            bundleID: "app.pinned",
+            title: "Pinned",
+            frame: hiddenFrame,
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let store = StageStore(path: tempPath("window-pin-maintainer-collapsed"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "2"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: hiddenPinned.id, bundleID: hiddenPinned.bundleID, title: hiddenPinned.title, frame: visibleFrame)
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"))
+                ])
+            ],
+            windowPins: [
+                PersistentWindowPin(
+                    windowID: hiddenPinned.id,
+                    homeScope: home,
+                    pinScope: .desktop,
+                    bundleID: hiddenPinned.bundleID,
+                    title: hiddenPinned.title,
+                    lastFrame: visibleFrame
+                )
+            ],
+            pinPresentations: [
+                PinPresentationState(
+                    windowID: hiddenPinned.id,
+                    presentation: .collapsed,
+                    restoreFrame: visibleFrame,
+                    proxyFrame: Rect(x: 150, y: 120, width: 160, height: 28)
+                )
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[hiddenPinned]])
+        let writer = RecordingWriter()
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 0)
+        #expect(writer.requestedFrames[hiddenPinned.id] == nil)
+    }
 }
 
 private final class MultiDisplaySequenceProvider: SystemSnapshotProviding, @unchecked Sendable {

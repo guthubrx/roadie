@@ -22,6 +22,25 @@ struct TitlebarContextMenuTests {
     }
 
     @Test
+    func disabledPinPopoverDoesNotDisableTitlebarContextMenu() {
+        let config = RoadieConfig(experimental: ExperimentalConfig(
+            titlebarContextMenu: TitlebarContextMenuConfig(enabled: true),
+            pinPopover: PinPopoverConfig(enabled: false)
+        ))
+        let snapshot = titlebarSnapshot()
+
+        let hit = TitlebarContextMenuController.hitTest(
+            point: CGPoint(x: 220, y: 120),
+            snapshot: snapshot,
+            settings: TitlebarContextMenuSettings(config: config.experimental.titlebarContextMenu)
+        )
+
+        #expect(config.experimental.pinPopover.enabled == false)
+        #expect(hit.isEligible)
+        #expect(hit.reason == .eligible)
+    }
+
+    @Test
     func contentClickIsNotTitlebar() {
         let snapshot = titlebarSnapshot()
         let hit = TitlebarContextMenuController.hitTest(

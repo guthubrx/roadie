@@ -474,13 +474,93 @@ public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
 
 public struct ExperimentalConfig: Equatable, Codable, Sendable {
     public var titlebarContextMenu: TitlebarContextMenuConfig
+    public var pinPopover: PinPopoverConfig
 
-    public init(titlebarContextMenu: TitlebarContextMenuConfig = TitlebarContextMenuConfig()) {
+    public init(
+        titlebarContextMenu: TitlebarContextMenuConfig = TitlebarContextMenuConfig(),
+        pinPopover: PinPopoverConfig = PinPopoverConfig()
+    ) {
         self.titlebarContextMenu = titlebarContextMenu
+        self.pinPopover = pinPopover
     }
 
     enum CodingKeys: String, CodingKey {
         case titlebarContextMenu = "titlebar_context_menu"
+        case pinPopover = "pin_popover"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            titlebarContextMenu: try c.decodeIfPresent(TitlebarContextMenuConfig.self, forKey: .titlebarContextMenu) ?? TitlebarContextMenuConfig(),
+            pinPopover: try c.decodeIfPresent(PinPopoverConfig.self, forKey: .pinPopover) ?? PinPopoverConfig()
+        )
+    }
+}
+
+public struct PinPopoverConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var showOnUnpinned: Bool
+    public var buttonSize: Double
+    public var buttonColor: String
+    public var titlebarHeight: Double
+    public var leadingExclusion: Double
+    public var trailingExclusion: Double
+    public var collapseEnabled: Bool
+    public var proxyHeight: Double
+    public var proxyMinWidth: Double
+
+    public init(
+        enabled: Bool = false,
+        showOnUnpinned: Bool = true,
+        buttonSize: Double = 12.5,
+        buttonColor: String = "#0A84FF",
+        titlebarHeight: Double = 36,
+        leadingExclusion: Double = 64,
+        trailingExclusion: Double = 16,
+        collapseEnabled: Bool = true,
+        proxyHeight: Double = 28,
+        proxyMinWidth: Double = 160
+    ) {
+        self.enabled = enabled
+        self.showOnUnpinned = showOnUnpinned
+        self.buttonSize = buttonSize
+        self.buttonColor = buttonColor
+        self.titlebarHeight = titlebarHeight
+        self.leadingExclusion = leadingExclusion
+        self.trailingExclusion = trailingExclusion
+        self.collapseEnabled = collapseEnabled
+        self.proxyHeight = proxyHeight
+        self.proxyMinWidth = proxyMinWidth
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case showOnUnpinned = "show_on_unpinned"
+        case buttonSize = "button_size"
+        case buttonColor = "button_color"
+        case titlebarHeight = "titlebar_height"
+        case leadingExclusion = "leading_exclusion"
+        case trailingExclusion = "trailing_exclusion"
+        case collapseEnabled = "collapse_enabled"
+        case proxyHeight = "proxy_height"
+        case proxyMinWidth = "proxy_min_width"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false,
+            showOnUnpinned: try c.decodeIfPresent(Bool.self, forKey: .showOnUnpinned) ?? true,
+            buttonSize: try c.decodeFlexibleDouble(forKey: .buttonSize) ?? 12.5,
+            buttonColor: try c.decodeIfPresent(String.self, forKey: .buttonColor) ?? "#0A84FF",
+            titlebarHeight: try c.decodeFlexibleDouble(forKey: .titlebarHeight) ?? 36,
+            leadingExclusion: try c.decodeFlexibleDouble(forKey: .leadingExclusion) ?? 64,
+            trailingExclusion: try c.decodeFlexibleDouble(forKey: .trailingExclusion) ?? 16,
+            collapseEnabled: try c.decodeIfPresent(Bool.self, forKey: .collapseEnabled) ?? true,
+            proxyHeight: try c.decodeFlexibleDouble(forKey: .proxyHeight) ?? 28,
+            proxyMinWidth: try c.decodeFlexibleDouble(forKey: .proxyMinWidth) ?? 160
+        )
     }
 }
 
@@ -629,6 +709,7 @@ private enum ConfigValidationRules {
         "width_adjustment",
         "experimental",
         "experimental.titlebar_context_menu",
+        "experimental.pin_popover",
         "rules",
         "rules.match",
         "rules.action"
@@ -682,6 +763,7 @@ private enum ConfigValidationRules {
                 items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
             }
             items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
+            items.append(contentsOf: validatePinPopover(config.experimental.pinPopover))
         }
         return items
     }
@@ -716,8 +798,12 @@ private enum ConfigValidationRules {
             "minimum_ratio",
             "maximum_ratio",
             "height",
+            "button_size",
+            "titlebar_height",
             "leading_exclusion",
-            "trailing_exclusion"
+            "trailing_exclusion",
+            "proxy_height",
+            "proxy_min_width"
         ]
         var items: [ConfigValidationItem] = []
         var currentTable = ""
@@ -784,6 +870,64 @@ private enum ConfigValidationRules {
             ))
         }
         return items
+    }
+
+    private static func validatePinPopover(_ config: PinPopoverConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.buttonSize < 8 || config.buttonSize > 28 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.button_size",
+                message: "must be between 8 and 28"
+            ))
+        }
+        if config.titlebarHeight < 12 || config.titlebarHeight > 96 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.titlebar_height",
+                message: "must be between 12 and 96"
+            ))
+        }
+        if config.leadingExclusion < 0 || config.leadingExclusion > 240 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.leading_exclusion",
+                message: "must be between 0 and 240"
+            ))
+        }
+        if config.trailingExclusion < 0 || config.trailingExclusion > 240 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.trailing_exclusion",
+                message: "must be between 0 and 240"
+            ))
+        }
+        if config.proxyHeight < 18 || config.proxyHeight > 64 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.proxy_height",
+                message: "must be between 18 and 64"
+            ))
+        }
+        if config.proxyMinWidth < 80 || config.proxyMinWidth > 640 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.proxy_min_width",
+                message: "must be between 80 and 640"
+            ))
+        }
+        if !isHexColor(config.buttonColor) {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.pin_popover.button_color",
+                message: "must be #RRGGBB or #RRGGBBAA"
+            ))
+        }
+        return items
+    }
+
+    private static func isHexColor(_ raw: String) -> Bool {
+        raw.range(of: #"^#[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"#, options: .regularExpression) != nil
     }
 }
 

@@ -106,6 +106,72 @@ struct ConfigTests {
     }
 
     @Test
+    func pinPopoverConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-pin-popover-\(UUID().uuidString).toml")
+        try """
+        [experimental.pin_popover]
+        enabled = true
+        show_on_unpinned = false
+        button_size = 16
+        button_color = "#1F6FEBCC"
+        titlebar_height = 38
+        leading_exclusion = 92
+        trailing_exclusion = 20
+        collapse_enabled = false
+        proxy_height = 30
+        proxy_min_width = 180
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+
+        #expect(config.experimental.pinPopover.enabled)
+        #expect(config.experimental.pinPopover.showOnUnpinned == false)
+        #expect(config.experimental.pinPopover.buttonSize == 16)
+        #expect(config.experimental.pinPopover.buttonColor == "#1F6FEBCC")
+        #expect(config.experimental.pinPopover.titlebarHeight == 38)
+        #expect(config.experimental.pinPopover.leadingExclusion == 92)
+        #expect(config.experimental.pinPopover.trailingExclusion == 20)
+        #expect(config.experimental.pinPopover.collapseEnabled == false)
+        #expect(config.experimental.pinPopover.proxyHeight == 30)
+        #expect(config.experimental.pinPopover.proxyMinWidth == 180)
+    }
+
+    @Test
+    func pinPopoverDefaultsToDisabled() {
+        let config = RoadieConfig()
+
+        #expect(config.experimental.pinPopover.enabled == false)
+        #expect(config.experimental.pinPopover.showOnUnpinned)
+        #expect(config.experimental.pinPopover.buttonSize == 12.5)
+        #expect(config.experimental.pinPopover.collapseEnabled)
+    }
+
+    @Test
+    func pinPopoverValidationRejectsUnsafeValues() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-pin-popover-invalid-\(UUID().uuidString).toml")
+        try """
+        [experimental.pin_popover]
+        button_size = 40
+        button_color = "blue"
+        titlebar_height = 4
+        proxy_height = 100
+        proxy_min_width = 20
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let items = RoadieConfigLoader.validate(path: url.path).items
+
+        #expect(items.contains { $0.path == "experimental.pin_popover.button_size" && $0.level == .error })
+        #expect(items.contains { $0.path == "experimental.pin_popover.button_color" && $0.level == .error })
+        #expect(items.contains { $0.path == "experimental.pin_popover.titlebar_height" && $0.level == .error })
+        #expect(items.contains { $0.path == "experimental.pin_popover.proxy_height" && $0.level == .error })
+        #expect(items.contains { $0.path == "experimental.pin_popover.proxy_min_width" && $0.level == .error })
+    }
+
+    @Test
     func displayTilingOverridesDecodeFromToml() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-display-gap-config-\(UUID().uuidString).toml")
