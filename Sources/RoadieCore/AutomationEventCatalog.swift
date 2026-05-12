@@ -34,8 +34,6 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "window.pin_scope_changed",
         "window.pin_removed",
         "window.pin_pruned",
-        "window.pin_collapsed",
-        "window.pin_restored",
         "display.added",
         "display.removed",
         "display.focused",
@@ -78,10 +76,6 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "titlebar_context_menu.ignored",
         "titlebar_context_menu.action",
         "titlebar_context_menu.failed",
-        "pin_popover.shown",
-        "pin_popover.ignored",
-        "pin_popover.action",
-        "pin_popover.failed",
         "state.snapshot"
     ]
 }

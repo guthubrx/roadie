@@ -36,25 +36,17 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var scope: StageScope?
     public var pin: PersistentWindowPin?
-    public var pinPresentation: PinPresentationState?
 
-    public init(
-        window: WindowSnapshot,
-        scope: StageScope?,
-        pin: PersistentWindowPin? = nil,
-        pinPresentation: PinPresentationState? = nil
-    ) {
+    public init(window: WindowSnapshot, scope: StageScope?, pin: PersistentWindowPin? = nil) {
         self.window = window
         self.scope = scope
         self.pin = pin
-        self.pinPresentation = pinPresentation
     }
 
     enum CodingKeys: String, CodingKey {
         case window
         case scope
         case pin
-        case pinPresentation
     }
 
     public init(from decoder: Decoder) throws {
@@ -62,7 +54,6 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
         self.window = try c.decode(WindowSnapshot.self, forKey: .window)
         self.scope = try c.decodeIfPresent(StageScope.self, forKey: .scope)
         self.pin = try c.decodeIfPresent(PersistentWindowPin.self, forKey: .pin)
-        self.pinPresentation = try c.decodeIfPresent(PinPresentationState.self, forKey: .pinPresentation)
     }
 }
 
@@ -144,7 +135,6 @@ public struct SnapshotService {
                 details: pinEventDetails(pin)
             ))
         }
-        persistedStages.prunePinPresentations(keepingPinnedWindowIDs: Set(persistedStages.windowPins.map(\.windowID)))
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
 
@@ -175,7 +165,6 @@ public struct SnapshotService {
                 continue
             }
             let pin = persistedStages.pin(for: window.id)
-            let pinPresentation = persistedStages.pinPresentation(for: window.id)
             let knownScope = stageIndex[window.id] ?? pin?.homeScope
             guard let displayID = knownScope?.displayID ?? newWindowDisplayID(
                 for: window,
@@ -206,9 +195,7 @@ public struct SnapshotService {
                 )
                 persistentScope.updateFrame(window: window)
                 persistedStages.update(persistentScope)
-                if pinPresentation?.presentation != .collapsed {
-                    persistedStages.updatePinFrame(window: window, now: now)
-                }
+                persistedStages.updatePinFrame(window: window, now: now)
             }
             let scope = StageScope(
                 displayID: displayID,
@@ -232,12 +219,7 @@ public struct SnapshotService {
                 try? state.assignWindow(window.id, to: scope)
             }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
-            scopedWindows.append(ScopedWindowSnapshot(
-                window: window,
-                scope: scope,
-                pin: pin,
-                pinPresentation: pinPresentation
-            ))
+            scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope, pin: pin))
         }
         var focusedID: WindowID?
         if followFocus,

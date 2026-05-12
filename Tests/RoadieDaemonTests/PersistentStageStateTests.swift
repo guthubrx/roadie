@@ -149,15 +149,6 @@ struct PersistentStageStateTests {
     }
 
     @Test
-    func missingPinPresentationsDecodeAsEmptyList() throws {
-        let data = #"{"scopes":[],"windowPins":[]}"#.data(using: .utf8)!
-
-        let decoded = try JSONDecoder().decode(PersistentStageState.self, from: data)
-
-        #expect(decoded.pinPresentations.isEmpty)
-    }
-
-    @Test
     func setPinKeepsSinglePinPerWindowAndCanChangeScope() {
         let home = StageScope(
             displayID: DisplayID(rawValue: "main"),
@@ -193,37 +184,6 @@ struct PersistentStageStateTests {
         #expect(removed?.windowID == WindowID(rawValue: 10))
         #expect(pruned.map(\.windowID) == [WindowID(rawValue: 20)])
         #expect(state.windowPins.isEmpty)
-    }
-
-    @Test
-    func pinPresentationIsUniqueAndRemovedWithPin() {
-        let home = StageScope(
-            displayID: DisplayID(rawValue: "main"),
-            desktopID: DesktopID(rawValue: 1),
-            stageID: StageID(rawValue: "1")
-        )
-        var state = PersistentStageState()
-        state.setPin(window: window(10), homeScope: home, pinScope: .desktop)
-
-        state.setPinPresentation(
-            windowID: WindowID(rawValue: 10),
-            presentation: .collapsed,
-            restoreFrame: Rect(x: 1, y: 2, width: 300, height: 200),
-            proxyFrame: Rect(x: 1, y: 2, width: 160, height: 28)
-        )
-        state.setPinPresentation(
-            windowID: WindowID(rawValue: 10),
-            presentation: .visible,
-            restoreFrame: nil,
-            proxyFrame: nil
-        )
-
-        #expect(state.pinPresentations.count == 1)
-        #expect(state.pinPresentation(for: WindowID(rawValue: 10))?.presentation == .visible)
-
-        _ = state.removePin(windowID: WindowID(rawValue: 10))
-
-        #expect(state.pinPresentations.isEmpty)
     }
 
     @Test

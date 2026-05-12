@@ -17,11 +17,11 @@
 
 **Objectif** : aligner le contexte projet et préparer les points d'extension sans comportement runtime visible.
 
-- [x] T001 Vérifier que `AGENTS.md` pointe vers `specs/006-pin-popover-collapse/plan.md`
-- [x] T002 [P] Ajouter un journal d'implémentation initial dans `specs/006-pin-popover-collapse/implementation.md`
-- [x] T003 [P] Identifier les surfaces de tests config dans `Tests/RoadieDaemonTests/ConfigTests.swift`
-- [x] T004 [P] Identifier les surfaces de tests menu existantes dans `Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift`
-- [x] T005 [P] Créer le fichier de tests dédié `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T001 Vérifier que `AGENTS.md` pointe vers `specs/006-pin-popover-collapse/plan.md`
+- [ ] T002 [P] Ajouter un journal d'implémentation initial dans `specs/006-pin-popover-collapse/implementation.md`
+- [ ] T003 [P] Identifier les surfaces de tests config dans `Tests/RoadieDaemonTests/ConfigTests.swift`
+- [ ] T004 [P] Identifier les surfaces de tests menu existantes dans `Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift`
+- [ ] T005 [P] Créer le fichier de tests dédié `Tests/RoadieDaemonTests/PinPopoverTests.swift`
 
 ---
 
@@ -31,18 +31,18 @@
 
 **Critique** : aucun récit utilisateur ne doit commencer avant cette phase.
 
-- [x] T006 Ajouter `PinPopoverConfig` dans `Sources/RoadieCore/Config.swift`
-- [x] T007 Ajouter `pinPopover` à `ExperimentalConfig` dans `Sources/RoadieCore/Config.swift`
-- [x] T008 Ajouter la validation TOML de `[experimental.pin_popover]` dans `Sources/RoadieCore/Config.swift`
-- [x] T009 [P] Ajouter les tests de décodage et défauts `PinPopoverConfig` dans `Tests/RoadieDaemonTests/ConfigTests.swift`
-- [x] T010 [P] Ajouter les tests de validation des bornes de config dans `Tests/RoadieDaemonTests/ConfigTests.swift`
-- [x] T011 Ajouter `PinPresentationMode` et `PinPresentationState` dans `Sources/RoadieDaemon/StageStore.swift`
-- [x] T012 Ajouter le stockage persistant des états de présentation de pin dans `Sources/RoadieDaemon/StageStore.swift`
-- [x] T013 Ajouter les helpers `presentation(for:)`, `setPresentation`, `removePresentation`, `prunePinPresentations` dans `Sources/RoadieDaemon/StageStore.swift`
-- [x] T014 [P] Ajouter les tests de persistance et rétrocompatibilité de présentation dans `Tests/RoadieDaemonTests/PersistentStageStateTests.swift`
-- [x] T015 [P] Ajouter les tests de nettoyage des présentations orphelines dans `Tests/RoadieDaemonTests/PersistentStageStateTests.swift`
-- [x] T016 Ajouter les événements `pin_popover.shown`, `pin_popover.ignored`, `pin_popover.action`, `window.pin_collapsed`, `window.pin_restored` dans `Sources/RoadieCore/AutomationEventCatalog.swift`
-- [x] T017 [P] Ajouter les tests catalogue des événements pin popover dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
+- [ ] T006 Ajouter `PinPopoverConfig` dans `Sources/RoadieCore/Config.swift`
+- [ ] T007 Ajouter `pinPopover` à `ExperimentalConfig` dans `Sources/RoadieCore/Config.swift`
+- [ ] T008 Ajouter la validation TOML de `[experimental.pin_popover]` dans `Sources/RoadieCore/Config.swift`
+- [ ] T009 [P] Ajouter les tests de décodage et défauts `PinPopoverConfig` dans `Tests/RoadieDaemonTests/ConfigTests.swift`
+- [ ] T010 [P] Ajouter les tests de validation des bornes de config dans `Tests/RoadieDaemonTests/ConfigTests.swift`
+- [ ] T011 Ajouter `PinPresentationMode` et `PinPresentationState` dans `Sources/RoadieDaemon/StageStore.swift`
+- [ ] T012 Ajouter le stockage persistant des états de présentation de pin dans `Sources/RoadieDaemon/StageStore.swift`
+- [ ] T013 Ajouter les helpers `presentation(for:)`, `setPresentation`, `removePresentation`, `prunePinPresentations` dans `Sources/RoadieDaemon/StageStore.swift`
+- [ ] T014 [P] Ajouter les tests de persistance et rétrocompatibilité de présentation dans `Tests/RoadieDaemonTests/PersistentStageStateTests.swift`
+- [ ] T015 [P] Ajouter les tests de nettoyage des présentations orphelines dans `Tests/RoadieDaemonTests/PersistentStageStateTests.swift`
+- [ ] T016 Ajouter les événements `pin_popover.shown`, `pin_popover.ignored`, `pin_popover.action`, `window.pin_collapsed`, `window.pin_restored` dans `Sources/RoadieCore/AutomationEventCatalog.swift`
+- [ ] T017 [P] Ajouter les tests catalogue des événements pin popover dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
 
 **Point de contrôle** : modèle, config et événements sont testables sans afficher d'UI.
 
@@ -56,21 +56,21 @@
 
 ### Tests pour Récit Utilisateur 1
 
-- [x] T018 [P] [US1] Ajouter un test de placement sûr du bouton dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T019 [P] [US1] Ajouter un test d'affichage paramétrable pour fenêtre non pinée dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T020 [P] [US1] Ajouter un test d'omission pour fenêtre trop petite ou plein écran dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T021 [P] [US1] Ajouter un test d'omission quand la fonctionnalité est désactivée dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T018 [P] [US1] Ajouter un test de placement sûr du bouton dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T019 [P] [US1] Ajouter un test d'omission pour fenêtre non pinée dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T020 [P] [US1] Ajouter un test d'omission pour fenêtre trop petite ou plein écran dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T021 [P] [US1] Ajouter un test d'omission quand la fonctionnalité est désactivée dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
 
 ### Implémentation pour Récit Utilisateur 1
 
-- [x] T022 [US1] Créer `PinPopoverController` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T023 [US1] Ajouter les types purs `PinPopoverSettings` et `PinPopoverPlacement` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T024 [US1] Implémenter le calcul pur de placement sûr du bouton dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T025 [US1] Implémenter le rendu du bouton circulaire bleu Roadie dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T026 [US1] Démarrer conditionnellement `PinPopoverController` dans `Sources/roadied/main.swift`
-- [x] T027 [US1] Journaliser `pin_popover.ignored` quand le bouton est omis pour sûreté dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T022 [US1] Créer `PinPopoverController` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T023 [US1] Ajouter les types purs `PinPopoverSettings` et `PinPopoverPlacement` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T024 [US1] Implémenter le calcul pur de placement sûr du bouton dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T025 [US1] Implémenter le rendu du bouton circulaire bleu Roadie dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T026 [US1] Démarrer conditionnellement `PinPopoverController` dans `Sources/roadied/main.swift`
+- [ ] T027 [US1] Journaliser `pin_popover.ignored` quand le bouton est omis pour sûreté dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
-**Point de contrôle** : le bouton existe pour une fenêtre gérée éligible sans modifier l'état des fenêtres non pinées.
+**Point de contrôle** : le bouton existe pour une fenêtre pinée éligible sans modifier les fenêtres non pinées.
 
 ---
 
@@ -82,19 +82,19 @@
 
 ### Tests pour Récit Utilisateur 2
 
-- [x] T028 [P] [US2] Ajouter un test de construction de menu avec section Pin dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T029 [P] [US2] Ajouter un test de cohérence des destinations avec `WindowContextActions.destinations` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T030 [P] [US2] Ajouter un test d'état actif `desktop` et `all_desktops` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T031 [P] [US2] Ajouter un test d'exécution d'action qui réutilise `WindowContextActions` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T028 [P] [US2] Ajouter un test de construction de menu avec section Pin dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T029 [P] [US2] Ajouter un test de cohérence des destinations avec `WindowContextActions.destinations` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T030 [P] [US2] Ajouter un test d'état actif `desktop` et `all_desktops` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T031 [P] [US2] Ajouter un test d'exécution d'action qui réutilise `WindowContextActions` dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
 
 ### Implémentation pour Récit Utilisateur 2
 
-- [x] T032 [US2] Extraire ou partager les helpers de destinations du menu de barre de titre dans `Sources/RoadieDaemon/TitlebarContextMenuController.swift`
-- [x] T033 [US2] Ajouter un modèle de menu compact `PinPopoverMenuModel` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T034 [US2] Implémenter les sections `Pin`, `Fenêtre`, `Déplacer` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T035 [US2] Router les actions stage/desktop/display vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T036 [US2] Router les actions de scope pin et unpin vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T037 [US2] Journaliser `pin_popover.shown` et `pin_popover.action` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T032 [US2] Extraire ou partager les helpers de destinations du menu de barre de titre dans `Sources/RoadieDaemon/TitlebarContextMenuController.swift`
+- [ ] T033 [US2] Ajouter un modèle de menu compact `PinPopoverMenuModel` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T034 [US2] Implémenter les sections `Pin`, `Fenêtre`, `Déplacer` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T035 [US2] Router les actions stage/desktop/display vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T036 [US2] Router les actions de scope pin et unpin vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T037 [US2] Journaliser `pin_popover.shown` et `pin_popover.action` dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
 **Point de contrôle** : le menu bouton peut remplacer le clic droit pour les actions existantes sans logique métier dupliquée.
 
@@ -108,21 +108,21 @@
 
 ### Tests pour Récit Utilisateur 3
 
-- [x] T038 [P] [US3] Ajouter un test `collapse` qui mémorise le frame de restauration dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T039 [P] [US3] Ajouter un test `restore` qui repasse le pin en présentation visible dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T040 [P] [US3] Ajouter un test de proxy exclu du layout dans `Tests/RoadieDaemonTests/LayoutMaintainerTests.swift`
-- [x] T041 [P] [US3] Ajouter un test de nettoyage d'un proxy quand la fenêtre live disparaît dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
-- [x] T042 [P] [US3] Ajouter un test de stabilité stage/desktop avec pin replié dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
+- [ ] T038 [P] [US3] Ajouter un test `collapse` qui mémorise le frame de restauration dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T039 [P] [US3] Ajouter un test `restore` qui repasse le pin en présentation visible dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T040 [P] [US3] Ajouter un test de proxy exclu du layout dans `Tests/RoadieDaemonTests/LayoutMaintainerTests.swift`
+- [ ] T041 [P] [US3] Ajouter un test de nettoyage d'un proxy quand la fenêtre live disparaît dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
+- [ ] T042 [P] [US3] Ajouter un test de stabilité stage/desktop avec pin replié dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
 
 ### Implémentation pour Récit Utilisateur 3
 
-- [x] T043 [US3] Ajouter les actions `collapsePin` et `restorePin` dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T044 [US3] Ajouter la mutation de présentation repliée dans `Sources/RoadieDaemon/StageStore.swift`
-- [x] T045 [US3] Adapter `LayoutMaintainer` pour ne pas restaurer automatiquement une vraie fenêtre volontairement repliée dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
-- [x] T046 [US3] Implémenter le proxy compact de pin replié dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T047 [US3] Implémenter la restauration depuis le proxy dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T048 [US3] Nettoyer l'état replié quand le pin est retiré dans `Sources/RoadieDaemon/WindowContextActions.swift`
-- [x] T049 [US3] Journaliser `window.pin_collapsed` et `window.pin_restored` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T043 [US3] Ajouter les actions `collapsePin` et `restorePin` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T044 [US3] Ajouter la mutation de présentation repliée dans `Sources/RoadieDaemon/StageStore.swift`
+- [ ] T045 [US3] Adapter `LayoutMaintainer` pour ne pas restaurer automatiquement une vraie fenêtre volontairement repliée dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
+- [ ] T046 [US3] Implémenter le proxy compact de pin replié dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T047 [US3] Implémenter la restauration depuis le proxy dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T048 [US3] Nettoyer l'état replié quand le pin est retiré dans `Sources/RoadieDaemon/WindowContextActions.swift`
+- [ ] T049 [US3] Journaliser `window.pin_collapsed` et `window.pin_restored` dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
 **Point de contrôle** : une fenêtre pinée peut être repliée/restaurée sans saut de layout ni perte de frame.
 
@@ -136,14 +136,14 @@
 
 ### Tests pour Récit Utilisateur 4
 
-- [x] T050 [P] [US4] Ajouter un test d'ordre des sections de menu dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T051 [P] [US4] Ajouter un test d'extension de mode désactivée sans casser les modes actuels dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T050 [P] [US4] Ajouter un test d'ordre des sections de menu dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T051 [P] [US4] Ajouter un test d'extension de mode désactivée sans casser les modes actuels dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
 
 ### Implémentation pour Récit Utilisateur 4
 
-- [x] T052 [US4] Structurer les modes de pin dans une section dédiée du modèle de menu dans `Sources/RoadieDaemon/PinPopoverController.swift`
-- [x] T053 [US4] Ajouter un état utilisateur explicite visible/replié/scope dans `Sources/RoadieDaemon/Formatters.swift`
-- [x] T054 [US4] Ajouter une sortie diagnostic des présentations de pin dans `Sources/roadie/main.swift`
+- [ ] T052 [US4] Structurer les modes de pin dans une section dédiée du modèle de menu dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T053 [US4] Ajouter un état utilisateur explicite visible/replié/scope dans `Sources/RoadieDaemon/Formatters.swift`
+- [ ] T054 [US4] Ajouter une sortie diagnostic des présentations de pin dans `Sources/roadie/main.swift`
 
 **Point de contrôle** : la zone Pin du menu est stable et prête à recevoir de futurs modes.
 
@@ -153,22 +153,22 @@
 
 **Objectif** : vérifier les régressions et documenter l'expérience utilisateur.
 
-- [x] T055 [P] Documenter le menu pin et le repliage en français dans `docs/fr/features.md`
-- [x] T056 [P] Documenter le menu pin et le repliage en anglais dans `docs/en/features.md`
-- [x] T057 Mettre à jour `specs/006-pin-popover-collapse/quickstart.md` si les libellés finaux changent
-- [x] T058 Exécuter `./scripts/with-xcode swift test --filter PinPopoverTests` et corriger toute régression
-- [x] T059 Exécuter `make test` et corriger toute régression
-- [x] T060 Exécuter `make build` et corriger toute erreur de compilation
+- [ ] T055 [P] Documenter le menu pin et le repliage en français dans `docs/fr/features.md`
+- [ ] T056 [P] Documenter le menu pin et le repliage en anglais dans `docs/en/features.md`
+- [ ] T057 Mettre à jour `specs/006-pin-popover-collapse/quickstart.md` si les libellés finaux changent
+- [ ] T058 Exécuter `./scripts/with-xcode swift test --filter PinPopoverTests` et corriger toute régression
+- [ ] T059 Exécuter `make test` et corriger toute régression
+- [ ] T060 Exécuter `make build` et corriger toute erreur de compilation
 - [ ] T061 Réaliser le scénario manuel bouton visible du quickstart et consigner le résultat dans `specs/006-pin-popover-collapse/implementation.md`
 - [ ] T062 Réaliser le scénario manuel repliage/restauration 20 cycles et consigner le résultat dans `specs/006-pin-popover-collapse/implementation.md`
 - [ ] T063 Réaliser le scénario manuel changement stage/desktop avec pin replié et consigner le résultat dans `specs/006-pin-popover-collapse/implementation.md`
-- [x] T064 [P] Ajouter un test de proxy replié affichant titre ou application reconnaissable dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T065 [P] Ajouter un test de désactivation `pin_popover` conservant le menu de barre de titre existant dans `Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift`
-- [x] T066 [P] Ajouter un test de non-régression garantissant qu'une fenêtre non pinée ne reçoit aucun état de présentation dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T067 [P] Ajouter un test vérifiant que le repliage ne redimensionne pas la fenêtre applicative comme mécanisme principal dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T068 [P] Ajouter un test garantissant que les fenêtres overlay Roadie du bouton/menu/proxy ne sont pas traitées comme fenêtres gérées dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
-- [x] T069 [P] Ajouter un test de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
-- [x] T070 Ajouter l'action de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Sources/RoadieDaemon/PinPopoverController.swift`
+- [ ] T064 [P] Ajouter un test de proxy replié affichant titre ou application reconnaissable dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T065 [P] Ajouter un test de désactivation `pin_popover` conservant le menu de barre de titre existant dans `Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift`
+- [ ] T066 [P] Ajouter un test de non-régression garantissant qu'une fenêtre non pinée ne reçoit aucun état de présentation dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T067 [P] Ajouter un test vérifiant que le repliage ne redimensionne pas la fenêtre applicative comme mécanisme principal dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T068 [P] Ajouter un test garantissant que les fenêtres overlay Roadie du bouton/menu/proxy ne sont pas traitées comme fenêtres gérées dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
+- [ ] T069 [P] Ajouter un test de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+- [ ] T070 Ajouter l'action de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
 ---
 
@@ -204,7 +204,7 @@
 
 ```bash
 Tâche: "Ajouter un test de placement sûr du bouton dans Tests/RoadieDaemonTests/PinPopoverTests.swift"
-Tâche: "Ajouter un test d'affichage paramétrable pour fenêtre non pinée dans Tests/RoadieDaemonTests/PinPopoverTests.swift"
+Tâche: "Ajouter un test d'omission pour fenêtre non pinée dans Tests/RoadieDaemonTests/PinPopoverTests.swift"
 Tâche: "Ajouter un test d'omission pour fenêtre trop petite ou plein écran dans Tests/RoadieDaemonTests/PinPopoverTests.swift"
 ```
 
