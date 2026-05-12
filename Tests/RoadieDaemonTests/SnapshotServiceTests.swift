@@ -2926,6 +2926,43 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotKeepsDisconnectedDisplayMembersWhenWindowsAreTemporarilyHidden() {
+        let hostDisplay = DisplayID(rawValue: "built-in")
+        let goneDisplay = DisplayID(rawValue: "fullscreen-space")
+        let hiddenWindowID = WindowID(rawValue: 10)
+        let liveDisplay = DisplaySnapshot(id: hostDisplay, index: 1, name: "Built-in", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let visibleHostWindow = WindowSnapshot(id: WindowID(rawValue: 20), pid: 20, appName: "A", bundleID: "a", title: "host-window", frame: Rect(x: 0, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-hidden-preserve-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: hostDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), name: "Host", members: [
+                    PersistentStageMember(windowID: visibleHostWindow.id, bundleID: visibleHostWindow.bundleID, title: visibleHostWindow.title, frame: visibleHostWindow.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: goneDisplay, activeStageID: StageID(rawValue: "2"), stages: [
+                PersistentStage(id: StageID(rawValue: "2"), name: "Fullscreen", members: [
+                    PersistentStageMember(windowID: hiddenWindowID, bundleID: "a", title: "hidden", frame: Rect(x: 1000, y: 0, width: 500, height: 500)),
+                ]),
+            ]),
+        ], activeDisplayID: hostDisplay))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [liveDisplay], windowSnapshots: [visibleHostWindow], focusedID: nil),
+            frameWriter: RecordingWriter(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot(followFocus: false)
+        let stateAfterSnapshot = stageStore.state()
+
+        #expect(stateAfterSnapshot.scopes.first { $0.displayID == goneDisplay }?.memberIDs(in: StageID(rawValue: "2")) == [hiddenWindowID])
+        #expect(stateAfterSnapshot.scopes.first { $0.displayID == hostDisplay }?.memberIDs(in: StageID(rawValue: "1")) == [visibleHostWindow.id])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func treeDumpExposesDisplayDesktopStageAndWindowHierarchy() {
         let display = DisplayID(rawValue: "display-a")
         let live = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: "Terminal", bundleID: "term", title: "live", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)

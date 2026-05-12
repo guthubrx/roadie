@@ -118,7 +118,7 @@ public struct SnapshotService {
         let liveWindowIDs = stageManagedWindowIDs
         let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
-        persistedStages.pruneMissingWindows(keeping: liveWindowIDs)
+        persistedStages.pruneMissingWindows(keeping: liveWindowIDs, liveDisplayIDs: liveDisplayIDs)
         let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs)
         for pin in prunedPins {
             events.append(RoadieEvent(
