@@ -84,5 +84,17 @@ struct AutomationEventTests {
         #expect(catalog.contains("window.pin_scope_changed"))
         #expect(catalog.contains("window.pin_removed"))
         #expect(catalog.contains("window.pin_pruned"))
+        #expect(catalog.contains("window.pin_collapsed"))
+        #expect(catalog.contains("window.pin_restored"))
+    }
+
+    @Test
+    func catalogContainsPinPopoverEvents() {
+        let catalog = AutomationEventCatalog()
+
+        #expect(catalog.contains("pin_popover.shown"))
+        #expect(catalog.contains("pin_popover.ignored"))
+        #expect(catalog.contains("pin_popover.action"))
+        #expect(catalog.contains("pin_popover.failed"))
     }
 }

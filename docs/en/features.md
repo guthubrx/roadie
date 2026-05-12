@@ -122,6 +122,44 @@ include_desktop_destinations = true
 include_display_destinations = true
 ```
 
+## Pin Menu and Collapse
+
+Roadie can show a small blue circular button on windows managed by Roadie. The
+button opens a compact menu that mirrors the title bar context menu actions:
+change the pin scope, remove the pin, or send the window to another stage,
+desktop, or display.
+
+TOML activation:
+
+```toml
+[experimental.pin_popover]
+enabled = true
+show_on_unpinned = true
+button_size = 12.5
+button_color = "#0A84FF"
+titlebar_height = 36
+leading_exclusion = 64
+trailing_exclusion = 16
+collapse_enabled = true
+proxy_height = 28
+proxy_min_width = 160
+```
+
+When `collapse_enabled = true`, a pinned window can be collapsed. Roadie stores
+its frame, hides the real window outside the visible work area, and shows a
+compact proxy with the window title. The proxy can reopen the menu and restore
+the window.
+
+Use cases:
+
+- keep a reference window pinned without permanently covering what is underneath;
+- remove or change a pin without using the title bar right-click menu;
+- file a pinned window to another stage or desktop from a visible entry point.
+
+The feature is experimental and can be disabled. With
+`show_on_unpinned = true`, non-pinned windows also get the button so they can be
+pinned directly. Popups/dialogs excluded from tiling are not affected.
+
 ## New App Placement
 
 Roadie can choose the landing display for a new real application window when it

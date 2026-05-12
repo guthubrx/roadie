@@ -9,15 +9,15 @@
 ```toml
 [experimental.pin_popover]
 enabled = true
+show_on_unpinned = true
 collapse_enabled = true
 ```
 
 4. Relancer `roadied`.
-5. Pinner une fenêtre depuis le menu existant.
 
 ## Scénario 1 : bouton visible
 
-1. Choisir une fenêtre pinée visible.
+1. Choisir une fenêtre gérée visible.
 2. Vérifier qu'un petit bouton circulaire bleu apparaît dans la zone de titre.
 3. Vérifier qu'il ne couvre pas les boutons fermer/minimiser/plein écran.
 4. Cliquer le bouton.
@@ -38,7 +38,7 @@ Résultat attendu : les destinations sont cohérentes, les actions indisponibles
 
 1. Placer une fenêtre pinée au-dessus d'une autre fenêtre.
 2. Ouvrir le menu depuis le bouton bleu.
-3. Choisir `Replier`.
+3. Choisir `Replier la fenêtre`.
 4. Vérifier que la fenêtre dessous redevient visible et interactable.
 5. Cliquer le proxy replié.
 6. Vérifier que la fenêtre revient à sa taille et position précédentes.
@@ -56,7 +56,7 @@ Résultat attendu : aucun saut de layout, aucune boucle de focus, aucun changeme
 
 ## Régressions à Vérifier
 
-- Une fenêtre non pinée ne reçoit pas de bouton permanent.
+- Une fenêtre non pinée reçoit le bouton si `show_on_unpinned = true`, mais ne reçoit aucun état de présentation tant qu'elle n'est pas pinée.
 - Le menu clic droit de barre de titre continue à fonctionner.
 - Les bordures de focus restent réactives.
 - Les popups, dialogues de sauvegarde et panneaux système ne reçoivent pas le bouton.

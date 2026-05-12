@@ -318,6 +318,31 @@ public final class TitlebarContextMenuController {
             .first
     }
 
+    nonisolated public static func availableDestinations(
+        for kind: WindowContextActionKind,
+        in destinations: [WindowDestination]
+    ) -> [WindowDestination] {
+        destinations.filter { $0.kind == kind && !$0.isCurrent && $0.isAvailable }
+    }
+
+    nonisolated public static func desktopStageDestinationGroups(
+        in destinations: [WindowDestination]
+    ) -> [(desktopID: String, label: String, stages: [WindowDestination])] {
+        let filtered = availableDestinations(for: .desktopStage, in: destinations)
+        let grouped = Dictionary(grouping: filtered) { destination in
+            destination.parentID ?? ""
+        }
+        var parentLabels: [String: String] = [:]
+        for destination in filtered {
+            guard let parentID = destination.parentID else { continue }
+            parentLabels[parentID] = destination.parentLabel ?? "Desktop \(parentID)"
+        }
+        return grouped.keys.sorted(by: desktopSort).compactMap { desktopID in
+            guard let stages = grouped[desktopID]?.sorted(by: { $0.label < $1.label }) else { return nil }
+            return (desktopID, parentLabels[desktopID] ?? "Desktop \(desktopID)", stages)
+        }
+    }
+
     private func buildMenu(
         windowID: WindowID,
         sourceScope: StageScope?,
@@ -405,7 +430,7 @@ public final class TitlebarContextMenuController {
         destinations: [WindowDestination],
         to menu: NSMenu
     ) {
-        let filtered = destinations.filter { $0.kind == kind && !$0.isCurrent && $0.isAvailable }
+        let filtered = Self.availableDestinations(for: kind, in: destinations)
         guard !filtered.isEmpty else { return }
         let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: title)
@@ -442,23 +467,14 @@ public final class TitlebarContextMenuController {
         destinations: [WindowDestination],
         to menu: NSMenu
     ) {
-        let filtered = destinations.filter { $0.kind == .desktopStage && !$0.isCurrent && $0.isAvailable }
-        guard !filtered.isEmpty else { return }
+        let grouped = Self.desktopStageDestinationGroups(in: destinations)
+        guard !grouped.isEmpty else { return }
         let parent = NSMenuItem(title: "Envoyer la fenêtre vers desktop/stage", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: parent.title)
-        let grouped = Dictionary(grouping: filtered) { destination in
-            destination.parentID ?? ""
-        }
-        var parentLabels: [String: String] = [:]
-        for destination in filtered {
-            guard let parentID = destination.parentID else { continue }
-            parentLabels[parentID] = destination.parentLabel ?? "Desktop \(parentID)"
-        }
-        for desktopID in grouped.keys.sorted(by: desktopSort) {
-            guard let stages = grouped[desktopID]?.sorted(by: { $0.label < $1.label }) else { continue }
-            let desktopItem = NSMenuItem(title: parentLabels[desktopID] ?? "Desktop \(desktopID)", action: nil, keyEquivalent: "")
+        for group in grouped {
+            let desktopItem = NSMenuItem(title: group.label, action: nil, keyEquivalent: "")
             let stageMenu = NSMenu(title: desktopItem.title)
-            for destination in stages {
+            for destination in group.stages {
                 let item = NSMenuItem(title: destination.label, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
                 item.representedObject = destination.id
                 let target = TitlebarMenuActionTarget { [weak self] targetID in
@@ -488,7 +504,7 @@ public final class TitlebarContextMenuController {
         menu.addItem(parent)
     }
 
-    private func desktopSort(_ lhs: String, _ rhs: String) -> Bool {
+    nonisolated private static func desktopSort(_ lhs: String, _ rhs: String) -> Bool {
         switch (Int(lhs), Int(rhs)) {
         case let (l?, r?): return l < r
         case (_?, nil): return true

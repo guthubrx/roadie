@@ -1,12 +1,13 @@
 # Contrat : Interface Menu Pin
 
-## Bouton de Fenêtre Pinée
+## Bouton de Fenêtre Roadie
 
 ### Conditions d'Affichage
 
-- La fenêtre est pinée.
+- La fenêtre est gérée par Roadie.
 - La fonctionnalité `experimental.pin_popover.enabled` est active.
-- La fenêtre est visible dans son scope courant.
+- Si la fenêtre n'est pas pinée, `experimental.pin_popover.show_on_unpinned` est actif.
+- Si la fenêtre est pinée, elle est visible dans son scope courant.
 - La fenêtre n'est pas en plein écran natif.
 - Le placement calculé est sûr.
 
