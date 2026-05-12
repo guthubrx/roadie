@@ -127,6 +127,7 @@ public enum TextFormatter {
     public static func daemonHeal(_ report: DaemonHealReport) -> String {
         [
             "status=\(report.failed ? "fail" : "ok")",
+            "parking=\(displayParking(report.parking).replacingOccurrences(of: "\n", with: " "))",
             "stateRepaired=\(report.state.repaired)",
             "layoutAttempted=\(report.layout.attempted)",
             "layoutApplied=\(report.layout.applied)",
@@ -134,6 +135,35 @@ public enum TextFormatter {
             "layoutFailed=\(report.layout.failed)",
             "healthFailed=\(report.health.failed)"
         ].joined(separator: "\n")
+    }
+
+    public static func displayParking(_ report: DisplayParkingReport) -> String {
+        var lines = [
+            "kind=\(report.kind.rawValue)",
+            "reason=\(report.reason.rawValue)",
+            "parkedStages=\(report.parkedStageCount)",
+            "restoredStages=\(report.restoredStageCount)",
+            "skippedStages=\(report.skippedStageCount)"
+        ]
+        if let originDisplayID = report.originDisplayID {
+            lines.append("originDisplay=\(originDisplayID.rawValue)")
+        }
+        if let originLogicalDisplayID = report.originLogicalDisplayID {
+            lines.append("originLogicalDisplay=\(originLogicalDisplayID.rawValue)")
+        }
+        if let hostDisplayID = report.hostDisplayID {
+            lines.append("hostDisplay=\(hostDisplayID.rawValue)")
+        }
+        if let restoredDisplayID = report.restoredDisplayID {
+            lines.append("restoredDisplay=\(restoredDisplayID.rawValue)")
+        }
+        if !report.candidateDisplayIDs.isEmpty {
+            lines.append("candidateDisplays=\(report.candidateDisplayIDs.map(\.rawValue).joined(separator: ","))")
+        }
+        if let confidence = report.confidence {
+            lines.append("confidence=\(String(format: "%.3f", confidence))")
+        }
+        return lines.joined(separator: "\n")
     }
 
     public static func metrics(_ metrics: RoadieMetrics) -> String {

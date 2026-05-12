@@ -17,6 +17,7 @@ Roadie est un window manager macOS en Swift qui combine :
 - tiling automatique `bsp`, `mutableBsp`, `masterStack` et `float`;
 - stages nommees et masquables, proches d'un workflow Stage Manager;
 - desktops virtuels Roadie sans controle des Spaces macOS natifs;
+- parking d'ecran pour garder les stages recuperables quand un moniteur est debranche;
 - commandes CLI pour BetterTouchTool, Karabiner, scripts shell ou launchers;
 - surface d'automatisation : events, rules, groups et query API.
 

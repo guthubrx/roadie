@@ -63,7 +63,7 @@ public struct StateAuditService {
         checks.append(staleScopesCheck(state: state, liveDisplayIDs: liveDisplayIDs))
         checks.append(staleDesktopSelectionsCheck(state: state, liveDisplayIDs: liveDisplayIDs))
         checks.append(staleDesktopLabelsCheck(state: state, liveDisplayIDs: liveDisplayIDs))
-        checks.append(activeStagesCheck(state: state))
+        checks.append(activeStagesCheck(state: state, liveDisplayIDs: liveDisplayIDs))
         checks.append(focusedMembersCheck(state: state))
         checks.append(duplicateMembershipCheck(state: state))
         checks.append(staleMembersCheck(state: state, liveWindowIDs: liveManagedWindowIDs))
@@ -79,20 +79,6 @@ public struct StateAuditService {
             entry.scope == nil ? nil : entry.window.id
         })
         var repaired = 0
-
-        if let fallbackDisplayID = fallbackDisplayID(in: snapshot, state: state) {
-            let beforeScopes = state.scopes.count
-            state.migrateDisconnectedDisplays(keeping: liveDisplayIDs, fallbackDisplayID: fallbackDisplayID)
-            repaired += max(0, beforeScopes - state.scopes.count)
-        }
-
-        let beforeSelections = state.desktopSelections.count
-        state.desktopSelections.removeAll { !liveDisplayIDs.contains($0.displayID) }
-        repaired += beforeSelections - state.desktopSelections.count
-
-        let beforeLabels = state.desktopLabels.count
-        state.desktopLabels.removeAll { !liveDisplayIDs.contains($0.displayID) }
-        repaired += beforeLabels - state.desktopLabels.count
 
         if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
             state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
@@ -119,7 +105,7 @@ public struct StateAuditService {
     private func staleScopesCheck(state: PersistentStageState, liveDisplayIDs: Set<DisplayID>) -> StateAuditCheck {
         let stale = state.scopes.filter { !liveDisplayIDs.contains($0.displayID) }
         return StateAuditCheck(
-            level: stale.isEmpty ? .ok : .fail,
+            level: stale.isEmpty ? .ok : .warn,
             name: "stale-scopes",
             message: "count=\(stale.count)"
         )
@@ -143,14 +129,23 @@ public struct StateAuditService {
         )
     }
 
-    private func activeStagesCheck(state: PersistentStageState) -> StateAuditCheck {
+    private func activeStagesCheck(state: PersistentStageState, liveDisplayIDs: Set<DisplayID>) -> StateAuditCheck {
         let broken = state.scopes.filter { scope in
             !scope.stages.contains { $0.id == scope.activeStageID }
         }
+        let liveBroken = broken.filter { liveDisplayIDs.contains($0.displayID) }
+        let level: StateAuditLevel
+        if !liveBroken.isEmpty {
+            level = .fail
+        } else if !broken.isEmpty {
+            level = .warn
+        } else {
+            level = .ok
+        }
         return StateAuditCheck(
-            level: broken.isEmpty ? .ok : .fail,
+            level: level,
             name: "active-stages",
-            message: "missing=\(broken.count)"
+            message: "missing=\(broken.count) liveMissing=\(liveBroken.count)"
         )
     }
 

@@ -1,0 +1,22 @@
+{
+  "displays": [
+    {
+      "id": "built-in",
+      "name": "Built-in Display",
+      "frame": { "x": 0, "y": 0, "width": 1728, "height": 1117 },
+      "visibleFrame": { "x": 0, "y": 25, "width": 1728, "height": 1092 },
+      "isMain": true
+    },
+    {
+      "id": "external-old",
+      "name": "LG HDR 4K",
+      "frame": { "x": 1728, "y": -300, "width": 3840, "height": 2160 },
+      "visibleFrame": { "x": 1728, "y": -275, "width": 3840, "height": 2077 },
+      "isMain": false
+    }
+  ],
+  "stages": [
+    { "displayID": "external-old", "desktopID": 1, "stageID": "1", "name": "Work" },
+    { "displayID": "external-old", "desktopID": 1, "stageID": "2", "name": "Perso" }
+  ]
+}

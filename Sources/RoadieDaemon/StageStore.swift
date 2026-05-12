@@ -3,6 +3,143 @@ import RoadieAX
 import RoadieCore
 import RoadieStages
 
+public struct LogicalDisplayID: RawRepresentable, Hashable, Codable, Sendable, CustomStringConvertible {
+    public let rawValue: String
+
+    public init(rawValue: String) {
+        precondition(!rawValue.isEmpty, "LogicalDisplayID must not be empty")
+        self.rawValue = rawValue
+    }
+
+    public init(displayID: DisplayID) {
+        self.init(rawValue: "display:\(displayID.rawValue)")
+    }
+
+    public var description: String { rawValue }
+}
+
+public struct DisplayFingerprint: Equatable, Codable, Sendable {
+    public var nameKey: String
+    public var sizeKey: String
+    public var visibleSizeKey: String
+    public var positionKey: String
+    public var mainHint: Bool
+    public var previousDisplayID: DisplayID?
+
+    public init(
+        nameKey: String,
+        sizeKey: String,
+        visibleSizeKey: String,
+        positionKey: String,
+        mainHint: Bool,
+        previousDisplayID: DisplayID? = nil
+    ) {
+        self.nameKey = nameKey
+        self.sizeKey = sizeKey
+        self.visibleSizeKey = visibleSizeKey
+        self.positionKey = positionKey
+        self.mainHint = mainHint
+        self.previousDisplayID = previousDisplayID
+    }
+
+    public init(display: DisplaySnapshot) {
+        self.init(
+            nameKey: Self.normalized(display.name),
+            sizeKey: Self.sizeKey(display.frame),
+            visibleSizeKey: Self.sizeKey(display.visibleFrame),
+            positionKey: Self.positionKey(display.frame),
+            mainHint: display.isMain,
+            previousDisplayID: display.id
+        )
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .lowercased()
+    }
+
+    private static func sizeKey(_ rect: Rect) -> String {
+        "\(Int(rect.width.rounded()))x\(Int(rect.height.rounded()))"
+    }
+
+    private static func positionKey(_ rect: Rect) -> String {
+        "\(Int(rect.x.rounded())):\(Int(rect.y.rounded()))"
+    }
+}
+
+public enum StageParkingState: String, Codable, Sendable {
+    case native
+    case parked
+    case restored
+}
+
+public struct StageOrigin: Equatable, Codable, Sendable {
+    public var logicalDisplayID: LogicalDisplayID
+    public var displayID: DisplayID
+    public var desktopID: DesktopID
+    public var stageID: StageID
+    public var position: Int
+    public var nameAtParking: String
+    public var parkedAt: Date
+
+    public init(
+        logicalDisplayID: LogicalDisplayID,
+        displayID: DisplayID,
+        desktopID: DesktopID,
+        stageID: StageID,
+        position: Int,
+        nameAtParking: String,
+        parkedAt: Date
+    ) {
+        self.logicalDisplayID = logicalDisplayID
+        self.displayID = displayID
+        self.desktopID = desktopID
+        self.stageID = stageID
+        self.position = position
+        self.nameAtParking = nameAtParking
+        self.parkedAt = parkedAt
+    }
+}
+
+public enum ParkingSessionStatus: String, Codable, Sendable {
+    case active
+    case restored
+    case ambiguous
+    case abandoned
+}
+
+public struct ParkingSessionState: Equatable, Codable, Sendable {
+    public var sessionID: String
+    public var originLogicalDisplayID: LogicalDisplayID
+    public var originDisplayID: DisplayID
+    public var hostDisplayID: DisplayID
+    public var startedAt: Date
+    public var restoredAt: Date?
+    public var stageIDs: [StageID]
+    public var status: ParkingSessionStatus
+
+    public init(
+        sessionID: String,
+        originLogicalDisplayID: LogicalDisplayID,
+        originDisplayID: DisplayID,
+        hostDisplayID: DisplayID,
+        startedAt: Date,
+        restoredAt: Date? = nil,
+        stageIDs: [StageID],
+        status: ParkingSessionStatus = .active
+    ) {
+        self.sessionID = sessionID
+        self.originLogicalDisplayID = originLogicalDisplayID
+        self.originDisplayID = originDisplayID
+        self.hostDisplayID = hostDisplayID
+        self.startedAt = startedAt
+        self.restoredAt = restoredAt
+        self.stageIDs = stageIDs
+        self.status = status
+    }
+}
+
 public struct StageStore: Sendable {
     private let url: URL
 
@@ -277,21 +414,9 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
     }
 
-    public mutating func migrateDisconnectedDisplays(keeping liveDisplayIDs: Set<DisplayID>, fallbackDisplayID: DisplayID) {
-        let staleScopes = scopes.filter { !liveDisplayIDs.contains($0.displayID) }
-        guard !staleScopes.isEmpty else { return }
-
-        scopes.removeAll { !liveDisplayIDs.contains($0.displayID) }
-        for staleScope in staleScopes {
-            var target = scope(displayID: fallbackDisplayID, desktopID: staleScope.desktopID)
-            target.mergeDisconnectedScope(staleScope)
-            update(target)
-        }
-
-        desktopSelections.removeAll { !liveDisplayIDs.contains($0.displayID) }
-        desktopLabels.removeAll { !liveDisplayIDs.contains($0.displayID) }
-        if activeDisplayID.map({ !liveDisplayIDs.contains($0) }) == true {
-            activeDisplayID = fallbackDisplayID
+    public mutating func remove(windowID: WindowID) {
+        for scopeIndex in scopes.indices {
+            scopes[scopeIndex].remove(windowID: windowID)
         }
     }
 
@@ -533,18 +658,43 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     public var displayID: DisplayID
     public var desktopID: DesktopID
     public var activeStageID: StageID
+    public var logicalDisplayID: LogicalDisplayID?
+    public var lastKnownDisplayFingerprint: DisplayFingerprint?
     public var stages: [PersistentStage]
 
     public init(
         displayID: DisplayID,
         desktopID: DesktopID = DesktopID(rawValue: 1),
         activeStageID: StageID = StageID(rawValue: "1"),
+        logicalDisplayID: LogicalDisplayID? = nil,
+        lastKnownDisplayFingerprint: DisplayFingerprint? = nil,
         stages: [PersistentStage] = [PersistentStage(id: StageID(rawValue: "1"))]
     ) {
         self.displayID = displayID
         self.desktopID = desktopID
         self.activeStageID = activeStageID
+        self.logicalDisplayID = logicalDisplayID
+        self.lastKnownDisplayFingerprint = lastKnownDisplayFingerprint
         self.stages = stages
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case displayID
+        case desktopID
+        case activeStageID
+        case logicalDisplayID
+        case lastKnownDisplayFingerprint
+        case stages
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.displayID = try c.decode(DisplayID.self, forKey: .displayID)
+        self.desktopID = try c.decodeIfPresent(DesktopID.self, forKey: .desktopID) ?? DesktopID(rawValue: 1)
+        self.activeStageID = try c.decodeIfPresent(StageID.self, forKey: .activeStageID) ?? StageID(rawValue: "1")
+        self.logicalDisplayID = try c.decodeIfPresent(LogicalDisplayID.self, forKey: .logicalDisplayID)
+        self.lastKnownDisplayFingerprint = try c.decodeIfPresent(DisplayFingerprint.self, forKey: .lastKnownDisplayFingerprint)
+        self.stages = try c.decodeIfPresent([PersistentStage].self, forKey: .stages) ?? [PersistentStage(id: activeStageID)]
     }
 
     public mutating func ensureStage(_ id: StageID) {
@@ -734,6 +884,10 @@ public struct PersistentStage: Equatable, Codable, Sendable {
     public var mode: WindowManagementMode
     public var focusedWindowID: WindowID?
     public var previousFocusedWindowID: WindowID?
+    public var parkingState: StageParkingState
+    public var origin: StageOrigin?
+    public var hostDisplayID: DisplayID?
+    public var restoredAt: Date?
     public var members: [PersistentStageMember]
     public var groups: [WindowGroup]
 
@@ -743,6 +897,10 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         mode: WindowManagementMode = .bsp,
         focusedWindowID: WindowID? = nil,
         previousFocusedWindowID: WindowID? = nil,
+        parkingState: StageParkingState = .native,
+        origin: StageOrigin? = nil,
+        hostDisplayID: DisplayID? = nil,
+        restoredAt: Date? = nil,
         members: [PersistentStageMember] = [],
         groups: [WindowGroup] = []
     ) {
@@ -751,6 +909,10 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.mode = mode
         self.focusedWindowID = focusedWindowID
         self.previousFocusedWindowID = previousFocusedWindowID
+        self.parkingState = parkingState
+        self.origin = origin
+        self.hostDisplayID = hostDisplayID
+        self.restoredAt = restoredAt
         self.members = members
         self.groups = groups
     }
@@ -761,6 +923,10 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         case mode
         case focusedWindowID
         case previousFocusedWindowID
+        case parkingState
+        case origin
+        case hostDisplayID
+        case restoredAt
         case members
         case groups
     }
@@ -772,6 +938,10 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.mode = try c.decodeIfPresent(WindowManagementMode.self, forKey: .mode) ?? .bsp
         self.focusedWindowID = try c.decodeIfPresent(WindowID.self, forKey: .focusedWindowID)
         self.previousFocusedWindowID = try c.decodeIfPresent(WindowID.self, forKey: .previousFocusedWindowID)
+        self.parkingState = try c.decodeIfPresent(StageParkingState.self, forKey: .parkingState) ?? .native
+        self.origin = try c.decodeIfPresent(StageOrigin.self, forKey: .origin)
+        self.hostDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .hostDisplayID)
+        self.restoredAt = try c.decodeIfPresent(Date.self, forKey: .restoredAt)
         self.members = try c.decodeIfPresent([PersistentStageMember].self, forKey: .members) ?? []
         self.groups = try c.decodeIfPresent([WindowGroup].self, forKey: .groups) ?? []
     }
