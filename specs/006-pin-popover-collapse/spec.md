@@ -9,17 +9,17 @@
 
 ### Récit Utilisateur 1 - Ouvrir un menu de pin depuis un bouton visible (Priorité : P1)
 
-En tant qu'utilisateur, je veux voir un petit bouton circulaire bleu sur les fenêtres gérées afin d'accéder rapidement aux actions de pin sans devoir retrouver le clic droit sur la barre de titre.
+En tant qu'utilisateur, je veux voir un petit bouton circulaire bleu sur les fenêtres pinées afin d'accéder rapidement aux actions de pin sans devoir retrouver le clic droit sur la barre de titre.
 
 **Pourquoi cette priorité** : C'est le point d'entrée de toute la fonctionnalité. Sans bouton visible et fiable, le menu ne résout pas le problème d'accessibilité des actions de pin.
 
-**Test indépendant** : Afficher une fenêtre gérée, vérifier qu'un bouton circulaire bleu apparaît dans la zone de titre sans masquer les boutons natifs essentiels, cliquer dessus, puis vérifier que le menu affiche les mêmes actions principales que le menu existant de barre de titre.
+**Test indépendant** : Pinner une fenêtre, vérifier qu'un bouton circulaire bleu apparaît dans la zone de titre sans masquer les boutons natifs essentiels, cliquer dessus, puis vérifier que le menu affiche les mêmes actions principales que le menu existant de barre de titre.
 
 **Scénarios d'acceptation** :
 
-1. **Étant donné** une fenêtre gérée visible, **lorsque** l'utilisateur regarde sa barre de titre, **alors** un bouton circulaire bleu de taille comparable aux boutons macOS est visible et identifiable comme contrôle Roadie.
-2. **Étant donné** une fenêtre gérée visible, **lorsque** l'utilisateur clique sur le bouton circulaire bleu, **alors** un menu compact de style macOS apparaît à proximité du bouton.
-3. **Étant donné** une fenêtre non pinée et `show_on_unpinned = true`, **lorsque** l'utilisateur ouvre le menu, **alors** les actions de pin sont disponibles sans action de repliage.
+1. **Étant donné** une fenêtre pinée visible, **lorsque** l'utilisateur regarde sa barre de titre, **alors** un bouton circulaire bleu de taille comparable aux boutons macOS est visible et identifiable comme contrôle Roadie.
+2. **Étant donné** une fenêtre pinée visible, **lorsque** l'utilisateur clique sur le bouton circulaire bleu, **alors** un menu compact de style macOS apparaît à proximité du bouton.
+3. **Étant donné** une fenêtre non pinée, **lorsque** l'utilisateur regarde sa barre de titre, **alors** aucun bouton de pin permanent n'est affiché sauf si Roadie est dans un mode explicitement prévu pour pinner cette fenêtre.
 
 ---
 
@@ -84,7 +84,7 @@ En tant qu'utilisateur avancé, je veux que le menu puisse exposer les modes de 
 
 ### Exigences Fonctionnelles
 
-- **FR-001** : Roadie DOIT afficher un contrôle circulaire bleu compact sur les fenêtres gérées lorsque cette fonctionnalité est activée avec `show_on_unpinned = true`, et au minimum sur les fenêtres pinées lorsque ce réglage est désactivé.
+- **FR-001** : Roadie DOIT afficher un contrôle circulaire bleu compact sur les fenêtres pinées lorsque cette fonctionnalité est activée.
 - **FR-002** : Le contrôle DOIT ressembler visuellement à un contrôle de barre de titre macOS par sa forme et sa taille approximative, tout en restant identifiable comme un contrôle Roadie.
 - **FR-003** : Le contrôle DOIT éviter de couvrir les boutons natifs fermer, minimiser, zoom, plein écran ou les contrôles courants de barre de titre lorsqu'il y a assez de place.
 - **FR-004** : L'utilisateur DOIT pouvoir ouvrir un menu contextuel compact depuis ce contrôle.
@@ -101,7 +101,7 @@ En tant qu'utilisateur avancé, je veux que le menu puisse exposer les modes de 
 - **FR-015** : Le menu DOIT garder les choix de modes de pin regroupés séparément des actions de déplacement vers stage, desktop et écran.
 - **FR-016** : Roadie DOIT fournir un moyen de désactiver ce contrôle visible tout en conservant le comportement du menu contextuel de barre de titre existant.
 - **FR-017** : Si le contrôle ne peut pas être placé sans risque sur une fenêtre précise, Roadie DOIT éviter de l'afficher sur cette fenêtre plutôt que couvrir les contrôles natifs de l'application.
-- **FR-018** : La fonctionnalité NE DOIT PAS changer le comportement des fenêtres non pinées sauf si l'utilisateur invoque explicitement une action liée au pin; l'affichage du bouton seul ne doit pas pinner, déplacer ni replier la fenêtre.
+- **FR-018** : La fonctionnalité NE DOIT PAS changer le comportement des fenêtres non pinées sauf si l'utilisateur invoque explicitement une action liée au pin.
 - **FR-019** : La fonctionnalité NE DOIT PAS déclencher d'oscillation de layout, de changement de stage ou de redirection de focus seulement parce que le menu ou le proxy replié est visible.
 - **FR-020** : Roadie DOIT exposer assez d'état utilisateur pour comprendre si une fenêtre pinée est visible, repliée, pinée au desktop courant ou pinée à tous les desktops.
 
@@ -126,7 +126,7 @@ En tant qu'utilisateur avancé, je veux que le menu puisse exposer les modes de 
 
 ## Hypothèses
 
-- La première version affiche le bouton sur les fenêtres gérées quand `show_on_unpinned = true`; les popups, dialogues et fenêtres non gérées restent exclus.
+- La première version cible uniquement les fenêtres déjà pinées ; les fenêtres non pinées gardent le menu contextuel de barre de titre comme point d'entrée principal.
 - L'objectif visuel est inspiré du popover macOS des contrôles de fenêtre, mais la fonctionnalité reste un menu Roadie, pas une copie du tiling macOS.
 - Le repliage utilise un proxy possédé par Roadie comme modèle d'expérience, plutôt qu'une tentative de forcer toutes les fenêtres applicatives à une hauteur réelle de barre de titre.
 - Les futurs modes de pin exacts sont hors périmètre ; cette fonctionnalité réserve et organise seulement la zone de menu qui les accueillera.

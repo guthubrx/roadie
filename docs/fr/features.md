@@ -122,45 +122,6 @@ include_desktop_destinations = true
 include_display_destinations = true
 ```
 
-## Menu Pin et repliage
-
-Roadie peut afficher un petit bouton circulaire bleu sur les fenetres gerees
-par Roadie. Ce bouton ouvre un menu compact qui reprend les actions du menu de
-barre de titre : changer le scope du pin, retirer le pin, envoyer la fenetre
-vers une stage, un desktop ou un ecran.
-
-Activation TOML :
-
-```toml
-[experimental.pin_popover]
-enabled = true
-show_on_unpinned = true
-button_size = 12.5
-button_color = "#0A84FF"
-titlebar_height = 36
-leading_exclusion = 64
-trailing_exclusion = 16
-collapse_enabled = true
-proxy_height = 28
-proxy_min_width = 160
-```
-
-Quand `collapse_enabled = true`, une fenetre pinnee peut etre repliee. Roadie
-memorise sa position, cache la vraie fenetre hors de l'espace visible et affiche
-un proxy compact avec son titre. Le proxy permet de rouvrir le menu et de
-deplier la fenetre.
-
-Cas d'usage :
-
-- garder une fenetre de reference pinnee sans masquer durablement ce qui est dessous;
-- retirer ou changer un pin sans utiliser le clic droit de barre de titre;
-- ranger une fenetre pinnee vers une autre stage ou un autre desktop depuis un point d'entree visible.
-
-La fonctionnalite est experimentale et desactivable. Avec
-`show_on_unpinned = true`, les fenetres non pinnees recoivent aussi le bouton
-pour pouvoir etre pinnees directement. Les popups/dialogues exclus du tiling ne
-sont pas concernes.
-
 ## Placement des nouvelles applications
 
 Roadie peut choisir l'ecran d'accueil d'une nouvelle vraie fenetre d'application

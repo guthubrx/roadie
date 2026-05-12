@@ -129,98 +129,6 @@ struct WindowPinSnapshotTests {
         #expect(store.state().windowPins.isEmpty)
         #expect(events.contains("window.pin_pruned"))
     }
-
-    @Test
-    func snapshotPrunesPresentationWhenPinnedWindowDisappears() {
-        let display = powerDisplay("display-main", index: 1, x: 0)
-        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let missingID = WindowID(rawValue: 999)
-        let store = StageStore(path: tempPath("window-pin-presentation-prune-snapshot"))
-        store.save(PersistentStageState(
-            scopes: [PersistentStageScope(displayID: display.id)],
-            windowPins: [
-                PersistentWindowPin(
-                    windowID: missingID,
-                    homeScope: home,
-                    pinScope: .desktop,
-                    bundleID: "app.missing",
-                    title: "Missing",
-                    lastFrame: Rect(x: 0, y: 0, width: 100, height: 100)
-                )
-            ],
-            pinPresentations: [
-                PinPresentationState(
-                    windowID: missingID,
-                    presentation: .collapsed,
-                    restoreFrame: Rect(x: 0, y: 0, width: 100, height: 100),
-                    proxyFrame: Rect(x: 0, y: 0, width: 160, height: 28)
-                )
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: []),
-            frameWriter: RecordingWriter(),
-            stageStore: store
-        )
-
-        _ = service.snapshot(followFocus: false)
-
-        #expect(store.state().pinPresentations.isEmpty)
-    }
-
-    @Test
-    func collapsedPinDoesNotEnterActiveLayoutAcrossStageSwitches() {
-        let display = powerDisplay("display-main", index: 1, x: 0)
-        let pinned = powerWindow(10, x: 100)
-        let active = powerWindow(20, x: 500)
-        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let store = StageStore(path: tempPath("window-pin-collapsed-stage-stability"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "2"), stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), members: [
-                        PersistentStageMember(windowID: pinned.id, bundleID: pinned.bundleID, title: pinned.title, frame: pinned.frame)
-                    ]),
-                    PersistentStage(id: StageID(rawValue: "2"), members: [
-                        PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame)
-                    ])
-                ])
-            ],
-            windowPins: [
-                PersistentWindowPin(
-                    windowID: pinned.id,
-                    homeScope: home,
-                    pinScope: .desktop,
-                    bundleID: pinned.bundleID,
-                    title: pinned.title,
-                    lastFrame: pinned.frame
-                )
-            ],
-            pinPresentations: [
-                PinPresentationState(
-                    windowID: pinned.id,
-                    presentation: .collapsed,
-                    restoreFrame: pinned.frame,
-                    proxyFrame: Rect(x: 100, y: 100, width: 180, height: 28)
-                )
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [pinned, active]),
-            frameWriter: RecordingWriter(),
-            stageStore: store
-        )
-
-        let snapshot = service.snapshot(followFocus: false)
-        let plan = service.applyPlan(from: snapshot)
-
-        #expect(snapshot.state.activeScope(on: display.id)?.stageID == StageID(rawValue: "2"))
-        #expect(snapshot.windows.first { $0.window.id == pinned.id }?.pinPresentation?.presentation == .collapsed)
-        #expect(snapshot.state.stage(scope: home)?.windowIDs.isEmpty == true)
-        #expect(plan.commands.map(\.window.id) == [active.id])
-    }
 }
 
 private final class SequenceSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
@@ -436,36 +344,6 @@ struct SnapshotServiceTests {
         let snapshot = service.snapshot()
 
         #expect(snapshot.windows.first?.scope == nil)
-    }
-
-    @Test
-    func roadieOverlayWindowsRemainUnscopedAndOutOfLayout() {
-        let display = DisplayID(rawValue: "display-a")
-        let overlay = WindowSnapshot(
-            id: WindowID(rawValue: 202),
-            pid: 123,
-            appName: "Roadie",
-            bundleID: "roadie.overlay.pin-popover",
-            title: "Roadie Pin",
-            frame: Rect(x: 10, y: 10, width: 160, height: 28),
-            isOnScreen: true,
-            isTileCandidate: false
-        )
-        let service = SnapshotService(
-            provider: FakeProvider(
-                displaySnapshots: [
-                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),
-                ],
-                windowSnapshots: [overlay]
-            ),
-            config: RoadieConfig()
-        )
-
-        let snapshot = service.snapshot()
-
-        #expect(snapshot.windows.first?.scope == nil)
-        #expect(snapshot.state.displays.values.allSatisfy { $0.desktops.values.allSatisfy { desktop in desktop.stages.values.allSatisfy { $0.windowIDs.isEmpty } } })
-        #expect(service.applyPlan(from: snapshot).commands.isEmpty)
     }
 
     @Test

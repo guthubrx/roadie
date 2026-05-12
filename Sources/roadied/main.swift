@@ -11,7 +11,6 @@ var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
-var pinPopoverController: PinPopoverController?
 var displayChangeObserver: NSObjectProtocol?
 
 func printUsage() {
@@ -54,8 +53,6 @@ case "run":
     focusFollowsMouseController?.start()
     titlebarContextMenuController = TitlebarContextMenuController()
     titlebarContextMenuController?.start()
-    pinPopoverController = PinPopoverController()
-    pinPopoverController?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,

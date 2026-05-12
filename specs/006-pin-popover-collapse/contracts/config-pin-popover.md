@@ -5,11 +5,10 @@
 ```toml
 [experimental.pin_popover]
 enabled = false
-show_on_unpinned = true
-button_size = 12.5
+button_size = 14
 button_color = "#0A84FF"
 titlebar_height = 36
-leading_exclusion = 64
+leading_exclusion = 84
 trailing_exclusion = 16
 collapse_enabled = true
 proxy_height = 28
@@ -21,8 +20,7 @@ proxy_min_width = 160
 | Clé | Règle |
 |-----|-------|
 | `enabled` | booléen |
-| `show_on_unpinned` | booléen |
-| `button_size` | nombre entre 8 et 28 |
+| `button_size` | nombre entre 8 et 24 |
 | `button_color` | couleur hexadécimale `#RRGGBB` ou `#RRGGBBAA` |
 | `titlebar_height` | nombre entre 16 et 96 |
 | `leading_exclusion` | nombre entre 0 et 240 |

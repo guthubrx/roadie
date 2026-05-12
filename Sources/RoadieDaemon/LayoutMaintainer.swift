@@ -553,7 +553,6 @@ public final class LayoutMaintainer {
             guard let pin = entry.pin,
                   let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
                   pin.visibility(in: activeScope).shouldBeVisible,
-                  entry.pinPresentation?.presentation != .collapsed,
                   isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
             else { continue }
 

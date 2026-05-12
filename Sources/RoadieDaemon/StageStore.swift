@@ -39,7 +39,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var desktopSelections: [PersistentDesktopSelection]
     public var desktopLabels: [PersistentDesktopLabel]
     public var windowPins: [PersistentWindowPin]
-    public var pinPresentations: [PinPresentationState]
     public var activeDisplayID: DisplayID?
     public var commandFocusProtection: CommandFocusProtection?
 
@@ -48,7 +47,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopSelections: [PersistentDesktopSelection] = [],
         desktopLabels: [PersistentDesktopLabel] = [],
         windowPins: [PersistentWindowPin] = [],
-        pinPresentations: [PinPresentationState] = [],
         activeDisplayID: DisplayID? = nil,
         commandFocusProtection: CommandFocusProtection? = nil
     ) {
@@ -56,7 +54,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopSelections = desktopSelections
         self.desktopLabels = desktopLabels
         self.windowPins = Self.uniquePins(windowPins)
-        self.pinPresentations = Self.uniquePinPresentations(pinPresentations)
         self.activeDisplayID = activeDisplayID
         self.commandFocusProtection = commandFocusProtection
     }
@@ -66,7 +63,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         case desktopSelections
         case desktopLabels
         case windowPins
-        case pinPresentations
         case activeDisplayID
         case commandFocusProtection
     }
@@ -77,7 +73,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
         self.windowPins = Self.uniquePins(try c.decodeIfPresent([PersistentWindowPin].self, forKey: .windowPins) ?? [])
-        self.pinPresentations = Self.uniquePinPresentations(try c.decodeIfPresent([PinPresentationState].self, forKey: .pinPresentations) ?? [])
         self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
         self.commandFocusProtection = try c.decodeIfPresent(CommandFocusProtection.self, forKey: .commandFocusProtection)
     }
@@ -86,14 +81,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         var byWindow: [WindowID: PersistentWindowPin] = [:]
         for pin in pins {
             byWindow[pin.windowID] = pin
-        }
-        return byWindow.values.sorted { $0.windowID.rawValue < $1.windowID.rawValue }
-    }
-
-    private static func uniquePinPresentations(_ presentations: [PinPresentationState]) -> [PinPresentationState] {
-        var byWindow: [WindowID: PinPresentationState] = [:]
-        for presentation in presentations {
-            byWindow[presentation.windowID] = presentation
         }
         return byWindow.values.sorted { $0.windowID.rawValue < $1.windowID.rawValue }
     }
@@ -146,10 +133,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         pin(for: windowID) != nil
     }
 
-    public func pinPresentation(for windowID: WindowID) -> PinPresentationState? {
-        pinPresentations.first { $0.windowID == windowID }
-    }
-
     @discardableResult
     public mutating func setPin(
         window: WindowSnapshot,
@@ -190,9 +173,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func removePin(windowID: WindowID) -> PersistentWindowPin? {
         guard let index = windowPins.firstIndex(where: { $0.windowID == windowID }) else { return nil }
-        let removed = windowPins.remove(at: index)
-        removePinPresentation(windowID: windowID)
-        return removed
+        return windowPins.remove(at: index)
     }
 
     @discardableResult
@@ -200,42 +181,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         let pruned = windowPins.filter { !liveWindowIDs.contains($0.windowID) }
         guard !pruned.isEmpty else { return [] }
         windowPins.removeAll { !liveWindowIDs.contains($0.windowID) }
-        prunePinPresentations(keepingPinnedWindowIDs: Set(windowPins.map(\.windowID)))
         return pruned
-    }
-
-    @discardableResult
-    public mutating func setPinPresentation(
-        windowID: WindowID,
-        presentation: PinPresentationMode,
-        restoreFrame: Rect?,
-        proxyFrame: Rect?,
-        now: Date = Date()
-    ) -> PinPresentationState {
-        let state = PinPresentationState(
-            windowID: windowID,
-            presentation: presentation,
-            restoreFrame: restoreFrame,
-            proxyFrame: proxyFrame,
-            updatedAt: now
-        )
-        if let index = pinPresentations.firstIndex(where: { $0.windowID == windowID }) {
-            pinPresentations[index] = state
-        } else {
-            pinPresentations.append(state)
-            pinPresentations.sort { $0.windowID.rawValue < $1.windowID.rawValue }
-        }
-        return state
-    }
-
-    @discardableResult
-    public mutating func removePinPresentation(windowID: WindowID) -> PinPresentationState? {
-        guard let index = pinPresentations.firstIndex(where: { $0.windowID == windowID }) else { return nil }
-        return pinPresentations.remove(at: index)
-    }
-
-    public mutating func prunePinPresentations(keepingPinnedWindowIDs pinnedWindowIDs: Set<WindowID>) {
-        pinPresentations.removeAll { !pinnedWindowIDs.contains($0.windowID) }
     }
 
     public mutating func updatePinFrame(window: WindowSnapshot, now: Date = Date()) {
@@ -300,10 +246,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         for index in windowPins.indices {
             guard let replacementID = remapped[windowPins[index].windowID] else { continue }
             windowPins[index].windowID = replacementID
-        }
-        for index in pinPresentations.indices {
-            guard let replacementID = remapped[pinPresentations[index].windowID] else { continue }
-            pinPresentations[index].windowID = replacementID
         }
         for scopeIndex in scopes.indices {
             for stageIndex in scopes[scopeIndex].stages.indices {
@@ -464,33 +406,6 @@ public struct CommandFocusProtection: Equatable, Codable, Sendable {
 public enum WindowPinScope: String, Codable, Sendable {
     case desktop
     case allDesktops = "all_desktops"
-}
-
-public enum PinPresentationMode: String, Codable, Sendable {
-    case visible
-    case collapsed
-}
-
-public struct PinPresentationState: Equatable, Codable, Sendable {
-    public var windowID: WindowID
-    public var presentation: PinPresentationMode
-    public var restoreFrame: Rect?
-    public var proxyFrame: Rect?
-    public var updatedAt: Date
-
-    public init(
-        windowID: WindowID,
-        presentation: PinPresentationMode,
-        restoreFrame: Rect? = nil,
-        proxyFrame: Rect? = nil,
-        updatedAt: Date = Date()
-    ) {
-        self.windowID = windowID
-        self.presentation = presentation
-        self.restoreFrame = restoreFrame
-        self.proxyFrame = proxyFrame
-        self.updatedAt = updatedAt
-    }
 }
 
 public struct PersistentWindowPin: Equatable, Codable, Sendable {
