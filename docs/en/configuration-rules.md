@@ -202,7 +202,6 @@ the same rule without editing `roadies.toml`:
 
 - `Toujours ouvrir cette app ici`: match by app;
 - `Toujours ouvrir cette app + ce titre ici`: match by app and title;
-- `Toujours ouvrir cette app + ce rôle ici`: match by app and AX role;
 - `Retirer l'affinité pour cette app`: deletes generated rules for that app.
 
 `Here` means the clicked window's display, Roadie desktop, and stage. The daemon

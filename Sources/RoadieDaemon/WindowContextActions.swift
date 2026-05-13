@@ -79,8 +79,6 @@ public struct WindowContextActions {
             return saveAffinity(kind: .app, window: entry.window, scope: scope, snapshot: snapshot)
         case .affinityAppTitle:
             return saveAffinity(kind: .appTitle, window: entry.window, scope: scope, snapshot: snapshot)
-        case .affinityAppRole:
-            return saveAffinity(kind: .appRole, window: entry.window, scope: scope, snapshot: snapshot)
         case .removeAffinityApp:
             let result = affinityService.removeAppAffinity(window: entry.window, scope: scope)
             return WindowContextActionResult(message: result.message, changed: result.changed)

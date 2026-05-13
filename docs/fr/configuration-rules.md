@@ -203,7 +203,6 @@ Depuis le menu de clic droit de barre de titre, la section
 
 - `Toujours ouvrir cette app ici` : match par app;
 - `Toujours ouvrir cette app + ce titre ici` : match par app et titre;
-- `Toujours ouvrir cette app + ce role ici` : match par app et role AX;
 - `Retirer l'affinite pour cette app` : supprime les rules generees pour cette app.
 
 La destination `ici` correspond a l'ecran, au desktop Roadie et a la stage de la
