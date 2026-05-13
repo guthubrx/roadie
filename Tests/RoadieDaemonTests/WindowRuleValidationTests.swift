@@ -70,6 +70,21 @@ struct WindowRuleValidationTests {
 
         #expect(items.containsError(path: "rules[0].action", message: "exclude cannot be combined"))
     }
+
+    @Test
+    func excludeWithPlacementActionReturnsValidationError() {
+        let rules = [
+            WindowRule(
+                id: "conflicting-placement",
+                match: RuleMatch(app: "Slack"),
+                action: RuleAction(exclude: true, assignDisplay: "LG HDR 4K")
+            )
+        ]
+
+        let items = WindowRuleValidator.validate(rules)
+
+        #expect(items.containsError(path: "rules[0].action", message: "exclude cannot be combined"))
+    }
 }
 
 private extension Array where Element == ConfigValidationItem {

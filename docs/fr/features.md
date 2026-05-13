@@ -228,6 +228,8 @@ Cas d'usage :
 ## Rules
 
 Les rules automatisent le traitement des fenetres selon app, titre, role, stage ou regex.
+Elles peuvent aussi placer une nouvelle vraie fenetre d'application sur une
+stage, un desktop Roadie et un ecran cible, sans suivre le focus par defaut.
 
 ```bash
 ./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
@@ -238,6 +240,7 @@ Les rules automatisent le traitement des fenetres selon app, titre, role, stage 
 Cas d'usage :
 
 - envoyer les terminaux de projet vers une stage `shell`;
+- ouvrir toujours Firefox sur la stage `web` de l'ecran externe;
 - taguer les docs comme scratchpad `research`;
 - detecter une mauvaise regex avant de relancer le daemon.
 

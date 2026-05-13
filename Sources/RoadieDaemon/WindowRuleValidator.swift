@@ -72,6 +72,7 @@ private extension RuleMatch {
 private extension RuleAction {
     var hasLayoutEffect: Bool {
         assignDesktop != nil ||
+            assignDisplay != nil ||
             assignStage != nil ||
             floating != nil ||
             layout != nil ||
