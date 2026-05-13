@@ -388,6 +388,79 @@ struct TitlebarContextMenuTests {
         #expect(store.state().pin(for: window.id)?.homeScope.stageID == StageID(rawValue: "2"))
         #expect(store.state().stageScope(for: window.id)?.stageID == StageID(rawValue: "2"))
     }
+
+    @Test
+    func affinityActionWritesGeneratedPlacementRule() throws {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 1,
+            appName: "Firefox",
+            bundleID: "org.mozilla.firefox",
+            title: "Docs",
+            frame: Rect(x: 100, y: 100, width: 300, height: 300),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow"
+        )
+        let provider = PowerUserProvider(displays: [main], windows: [window])
+        let store = titlebarStageStore("titlebar-affinity-action", scopes: [
+            titlebarScope(main.id, active: "web", stages: [
+                PersistentStage(id: StageID(rawValue: "web"), name: "Web", members: [titlebarMember(window)])
+            ])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let rulesPath = tempPath("titlebar-affinity-generated.toml")
+        defer { try? FileManager.default.removeItem(atPath: rulesPath) }
+
+        let result = WindowContextActions(
+            snapshotService: service,
+            stageStore: store,
+            affinityService: WindowRuleAffinityService(path: rulesPath),
+            stageLabelsVisible: { true }
+        ).execute(WindowContextAction(
+            windowID: window.id,
+            kind: .affinityApp,
+            targetID: WindowContextActionKind.affinityApp.rawValue,
+            sourceScope: nil
+        ))
+
+        let rules = try RoadieConfigLoader.loadRulesFile(from: rulesPath)
+        #expect(result.changed)
+        #expect(rules.count == 1)
+        #expect(rules[0].match.app == "Firefox")
+        #expect(rules[0].action.assignDisplay == "display-main")
+        #expect(rules[0].action.assignDesktop == "1")
+        #expect(rules[0].action.assignStage == "web")
+        #expect(rules[0].action.follow == false)
+    }
+
+    @Test
+    func affinityRemoveDeletesGeneratedAppRulesOnly() throws {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let window = titlebarWindow(1, x: 100)
+        let provider = PowerUserProvider(displays: [main], windows: [window])
+        let store = titlebarStageStore("titlebar-affinity-remove", scopes: [
+            titlebarScope(main.id, active: "1", stages: [titlebarStage("1", window)])
+        ], activeDisplayID: main.id)
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let rulesPath = tempPath("titlebar-affinity-remove-generated.toml")
+        defer { try? FileManager.default.removeItem(atPath: rulesPath) }
+        let affinity = WindowRuleAffinityService(path: rulesPath)
+        let actions = WindowContextActions(
+            snapshotService: service,
+            stageStore: store,
+            affinityService: affinity,
+            stageLabelsVisible: { true }
+        )
+
+        _ = actions.execute(WindowContextAction(windowID: window.id, kind: .affinityApp, targetID: "save", sourceScope: nil))
+        let removed = actions.execute(WindowContextAction(windowID: window.id, kind: .removeAffinityApp, targetID: "remove", sourceScope: nil))
+
+        #expect(removed.changed)
+        #expect(try RoadieConfigLoader.loadRulesFile(from: rulesPath).isEmpty)
+    }
 }
 
 private func titlebarSnapshot() -> DaemonSnapshot {

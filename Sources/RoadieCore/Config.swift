@@ -550,27 +550,44 @@ public enum RoadieConfigLoader {
         (NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath as String)
     }
 
+    public static func generatedRulesPath(for path: String? = nil) -> String {
+        let resolved = path ?? defaultConfigPath()
+        let url = URL(fileURLWithPath: NSString(string: resolved).expandingTildeInPath)
+        let filename = url.deletingPathExtension().lastPathComponent + ".generated.toml"
+        return url.deletingLastPathComponent().appendingPathComponent(filename).path
+    }
+
     public static func load(from path: String? = nil) throws -> RoadieConfig {
         let resolved = path ?? defaultConfigPath()
-        guard FileManager.default.fileExists(atPath: resolved) else {
-            return RoadieConfig()
+        var config = RoadieConfig()
+        if FileManager.default.fileExists(atPath: resolved) {
+            let raw = try String(contentsOfFile: resolved, encoding: .utf8)
+            config = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
         }
-        let raw = try String(contentsOfFile: resolved, encoding: .utf8)
-        return try TOMLDecoder().decode(RoadieConfig.self, from: raw)
+        config.rules.append(contentsOf: try generatedRules(from: generatedRulesPath(for: resolved)))
+        return config
     }
 
     public static func validate(path: String? = nil) -> ConfigValidationReport {
         let resolved = path ?? defaultConfigPath()
+        let generatedPath = generatedRulesPath(for: resolved)
+        var items: [ConfigValidationItem] = []
         guard FileManager.default.fileExists(atPath: resolved) else {
-            return ConfigValidationReport(items: [
+            items.append(
                 ConfigValidationItem(level: .warning, path: resolved, message: "config file not found; defaults will be used")
-            ])
+            )
+            items.append(contentsOf: validateGeneratedRules(path: generatedPath))
+            if items.isEmpty {
+                items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
+            }
+            return ConfigValidationReport(items: items)
         }
 
         do {
-            _ = try load(from: resolved)
             let raw = try String(contentsOfFile: resolved, encoding: .utf8)
-            var items = ConfigValidationRules.validate(rawToml: raw)
+            _ = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
+            items.append(contentsOf: ConfigValidationRules.validate(rawToml: raw))
+            items.append(contentsOf: validateGeneratedRules(path: generatedPath))
             if items.isEmpty {
                 items.append(ConfigValidationItem(level: .ok, path: resolved, message: "config is valid"))
             }
@@ -580,6 +597,43 @@ public enum RoadieConfigLoader {
                 ConfigValidationItem(level: .error, path: resolved, message: "config decode failed: \(error)")
             ])
         }
+    }
+
+    public static func rulesVersion(path: String? = nil) -> String {
+        let resolved = path ?? defaultConfigPath()
+        return [resolved, generatedRulesPath(for: resolved)]
+            .map { "\($0)=\(fileVersion($0) ?? "-")" }
+            .joined(separator: "|")
+    }
+
+    public static func loadRulesFile(from path: String) throws -> [WindowRule] {
+        try generatedRules(from: path)
+    }
+
+    private static func generatedRules(from path: String) throws -> [WindowRule] {
+        guard FileManager.default.fileExists(atPath: path) else { return [] }
+        let raw = try String(contentsOfFile: path, encoding: .utf8)
+        return try TOMLDecoder().decode(RoadieConfig.self, from: raw).rules
+    }
+
+    private static func validateGeneratedRules(path: String) -> [ConfigValidationItem] {
+        guard FileManager.default.fileExists(atPath: path) else { return [] }
+        do {
+            let raw = try String(contentsOfFile: path, encoding: .utf8)
+            _ = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
+            return ConfigValidationRules.validateGeneratedRules(rawToml: raw, path: path)
+        } catch {
+            return [
+                ConfigValidationItem(level: .error, path: path, message: "generated rules decode failed: \(error)")
+            ]
+        }
+    }
+
+    private static func fileVersion(_ path: String) -> String? {
+        let url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let checksum = data.reduce(UInt64(0)) { (($0 &* 31) &+ UInt64($1)) }
+        return "bytes:\(data.count):\(checksum)"
     }
 }
 
@@ -684,6 +738,19 @@ private enum ConfigValidationRules {
             items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
         }
         return items
+    }
+
+    static func validateGeneratedRules(rawToml: String, path: String) -> [ConfigValidationItem] {
+        tableNames(in: rawToml).sorted().compactMap { table in
+            guard ["rules", "rules.match", "rules.action"].contains(table) else {
+                return ConfigValidationItem(
+                    level: .warning,
+                    path: "\(path):\(table)",
+                    message: "generated rules file should only contain [[rules]] tables"
+                )
+            }
+            return nil
+        }
     }
 
     private static func tableNames(in rawToml: String) -> Set<String> {

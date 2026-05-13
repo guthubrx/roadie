@@ -241,6 +241,7 @@ Cas d'usage :
 
 - envoyer les terminaux de projet vers une stage `shell`;
 - ouvrir toujours Firefox sur la stage `web` de l'ecran externe;
+- creer cette affinite directement depuis le clic droit de barre de titre;
 - taguer les docs comme scratchpad `research`;
 - detecter une mauvaise regex avant de relancer le daemon.
 

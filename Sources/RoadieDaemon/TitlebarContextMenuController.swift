@@ -100,6 +100,10 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case pinDesktop = "pin_desktop"
     case pinAllDesktops = "pin_all_desktops"
     case unpin
+    case affinityApp = "affinity_app"
+    case affinityAppTitle = "affinity_app_title"
+    case affinityAppRole = "affinity_app_role"
+    case removeAffinityApp = "remove_affinity_app"
 }
 
 public struct WindowContextAction: Equatable, Sendable {
@@ -215,7 +219,7 @@ public final class TitlebarContextMenuController {
 
         let destinations = actions.destinations(for: windowID, in: snapshot, settings: settings)
         let pin = snapshot.windows.first(where: { $0.window.id == windowID })?.pin
-        let menu = buildMenu(windowID: windowID, sourceScope: hit.scope, destinations: destinations, pin: pin)
+        let menu = buildMenu(window: window, windowID: windowID, sourceScope: hit.scope, destinations: destinations, pin: pin)
         guard menu.items.contains(where: { $0.submenu != nil }) else {
             var noDestination = hit
             noDestination.isEligible = false
@@ -319,6 +323,7 @@ public final class TitlebarContextMenuController {
     }
 
     private func buildMenu(
+        window: WindowSnapshot,
         windowID: WindowID,
         sourceScope: StageScope?,
         destinations: [WindowDestination],
@@ -327,11 +332,57 @@ public final class TitlebarContextMenuController {
         menuTargets.removeAll(keepingCapacity: true)
         let menu = NSMenu(title: "Roadie")
         addWindowSubmenu(windowID: windowID, sourceScope: sourceScope, pin: pin, to: menu)
+        addAffinitySubmenu(window: window, windowID: windowID, sourceScope: sourceScope, to: menu)
         addSubmenu(title: "Envoyer la fenêtre vers stage", kind: .stage, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addDesktopStageSubmenu(windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addSubmenu(title: "Envoyer la fenêtre vers desktop", kind: .desktop, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         addSubmenu(title: "Envoyer la fenêtre vers écran", kind: .display, windowID: windowID, sourceScope: sourceScope, destinations: destinations, to: menu)
         return menu
+    }
+
+    private func addAffinitySubmenu(
+        window: WindowSnapshot,
+        windowID: WindowID,
+        sourceScope: StageScope?,
+        to menu: NSMenu
+    ) {
+        guard sourceScope != nil else { return }
+        let parent = NSMenuItem(title: "Affinité d'ouverture", action: nil, keyEquivalent: "")
+        let submenu = NSMenu(title: parent.title)
+        addActionItem(
+            title: "Toujours ouvrir cette app ici",
+            kind: .affinityApp,
+            windowID: windowID,
+            sourceScope: sourceScope,
+            to: submenu
+        )
+        addActionItem(
+            title: "Toujours ouvrir cette app + ce titre ici",
+            kind: .affinityAppTitle,
+            windowID: windowID,
+            sourceScope: sourceScope,
+            isEnabled: !window.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            to: submenu
+        )
+        let hasRole = !(window.role ?? "").isEmpty || !(window.subrole ?? "").isEmpty
+        addActionItem(
+            title: "Toujours ouvrir cette app + ce rôle ici",
+            kind: .affinityAppRole,
+            windowID: windowID,
+            sourceScope: sourceScope,
+            isEnabled: hasRole,
+            to: submenu
+        )
+        submenu.addItem(.separator())
+        addActionItem(
+            title: "Retirer l'affinité pour cette app",
+            kind: .removeAffinityApp,
+            windowID: windowID,
+            sourceScope: sourceScope,
+            to: submenu
+        )
+        parent.submenu = submenu
+        menu.addItem(parent)
     }
 
     private func addWindowSubmenu(
@@ -372,10 +423,12 @@ public final class TitlebarContextMenuController {
         kind: WindowContextActionKind,
         windowID: WindowID,
         sourceScope: StageScope?,
+        isEnabled: Bool = true,
         to menu: NSMenu
     ) {
         let item = NSMenuItem(title: title, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
         item.representedObject = kind.rawValue
+        item.isEnabled = isEnabled
         let target = TitlebarMenuActionTarget { [weak self] targetID in
             guard let self else { return }
             let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)

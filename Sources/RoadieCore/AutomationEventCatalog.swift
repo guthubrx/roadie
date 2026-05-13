@@ -60,6 +60,8 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "rule.placement_applied",
         "rule.placement_skipped",
         "rule.placement_deferred",
+        "rule.affinity_saved",
+        "rule.affinity_removed",
         "command.received",
         "command.applied",
         "command.failed",
