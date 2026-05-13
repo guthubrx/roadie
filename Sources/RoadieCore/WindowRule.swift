@@ -98,7 +98,9 @@ public struct RuleAction: Equatable, Codable, Sendable {
     public var manage: Bool?
     public var exclude: Bool?
     public var assignDesktop: String?
+    public var assignDisplay: String?
     public var assignStage: String?
+    public var follow: Bool?
     public var floating: Bool?
     public var layout: String?
     public var gapOverride: Int?
@@ -109,7 +111,9 @@ public struct RuleAction: Equatable, Codable, Sendable {
         manage: Bool? = nil,
         exclude: Bool? = nil,
         assignDesktop: String? = nil,
+        assignDisplay: String? = nil,
         assignStage: String? = nil,
+        follow: Bool? = nil,
         floating: Bool? = nil,
         layout: String? = nil,
         gapOverride: Int? = nil,
@@ -119,7 +123,9 @@ public struct RuleAction: Equatable, Codable, Sendable {
         self.manage = manage
         self.exclude = exclude
         self.assignDesktop = assignDesktop
+        self.assignDisplay = assignDisplay
         self.assignStage = assignStage
+        self.follow = follow
         self.floating = floating
         self.layout = layout
         self.gapOverride = gapOverride
@@ -131,7 +137,9 @@ public struct RuleAction: Equatable, Codable, Sendable {
         case manage
         case exclude
         case assignDesktop = "assign_desktop"
+        case assignDisplay = "assign_display"
         case assignStage = "assign_stage"
+        case follow
         case floating
         case layout
         case gapOverride = "gap_override"

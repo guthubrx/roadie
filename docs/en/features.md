@@ -225,7 +225,9 @@ Use cases:
 
 ## Rules
 
-Rules automate window handling by app, title, role, stage, or regex.
+Rules automate window handling by app, title, role, stage, or regex. They can
+also place a new real application window on a target stage, Roadie desktop, and
+display without following focus by default.
 
 ```bash
 ./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
@@ -236,6 +238,7 @@ Rules automate window handling by app, title, role, stage, or regex.
 Use cases:
 
 - send project terminals to a `shell` stage;
+- always open Firefox on the `web` stage of the external display;
 - tag documentation windows as `research` scratchpad candidates;
 - catch invalid regexes before restarting the daemon.
 

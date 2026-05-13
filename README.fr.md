@@ -82,7 +82,7 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Persiste les stages et l’état du layout entre les redémarrages du daemon.
 - Expose des commandes d’état, santé, métriques, événements et audit pour diagnostiquer.
 - Publie des événements automation JSONL et des projections JSON stables via `roadie query ...`.
-- Supporte des rules TOML avec validation, explain et événements runtime `rule.*`.
+- Supporte des rules TOML avec validation, explain, événements runtime `rule.*` et placement automatique stage/écran.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
 - Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
 - Fournit des outils de sûreté : reload config atomique, restore snapshot manuel, restore-on-exit/crash watcher limité, cleanup des fichiers générés.

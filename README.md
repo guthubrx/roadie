@@ -82,7 +82,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Persists stage membership and layout state across daemon restarts.
 - Exposes state, health, metrics, events, and audit commands for debugging.
 - Publishes JSONL automation events and stable `roadie query ...` JSON projections.
-- Supports TOML window rules with validation, explain, and runtime `rule.*` events.
+- Supports TOML window rules with validation, explain, runtime `rule.*` events, and automatic stage/display placement.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
 - Persists and exposes window groups for stack/tab-like workflows.
 - Provides safety tools: atomic config reload, manual restore snapshots, limited restore-on-exit/crash watcher, generated-file cleanup.

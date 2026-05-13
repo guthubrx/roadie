@@ -35,6 +35,7 @@ public final class LayoutMaintainer {
     private let manualResizeDebounceSeconds: TimeInterval
     private let now: () -> Date
     private let ruleEngine: WindowRuleEngine?
+    private let store: StageStore
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
@@ -45,12 +46,14 @@ public final class LayoutMaintainer {
     private var lastDisplaySignature: String?
     private var displayTopologySettlesUntil: Date?
     private var emittedRuleSkippedKeys: Set<String> = []
+    private var emittedRulePlacementIssueKeys: Set<String> = []
 
     public init(
         service: SnapshotService = SnapshotService(),
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
         ruleEngine: WindowRuleEngine? = LayoutMaintainer.defaultRuleEngine(),
+        store: StageStore = StageStore(),
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
@@ -59,6 +62,7 @@ public final class LayoutMaintainer {
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
         self.ruleEngine = ruleEngine
+        self.store = store
         self.now = now
     }
 
@@ -85,7 +89,10 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
         displayTopologySettlesUntil = nil
-        evaluateRules(in: snapshot)
+        let rulePlacements = evaluateRules(in: snapshot)
+        if rulePlacements > 0 {
+            return MaintenanceTick(commands: rulePlacements, applied: rulePlacements, clamped: 0, failed: 0)
+        }
 
         let restoredPins = restoreVisiblePinnedWindows(in: snapshot)
         if restoredPins > 0 {
@@ -251,12 +258,13 @@ public final class LayoutMaintainer {
             .joined(separator: "|")
     }
 
-    private func evaluateRules(in snapshot: DaemonSnapshot) {
-        guard let ruleEngine else { return }
+    private func evaluateRules(in snapshot: DaemonSnapshot) -> Int {
+        guard let ruleEngine else { return 0 }
         guard ruleEngine.validationErrors.isEmpty else {
             appendRuleFailedEvents(ruleEngine.validationErrors)
-            return
+            return 0
         }
+        var placements = 0
         for entry in snapshot.windows where entry.window.isOnScreen {
             let context = WindowRuleMatchContext(
                 display: entry.scope?.displayID.rawValue,
@@ -265,7 +273,11 @@ public final class LayoutMaintainer {
             )
             let application = ruleEngine.evaluate(window: entry.window, context: context)
             appendRuleEvents(application, window: entry.window)
+            if applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+                placements += 1
+            }
         }
+        return placements
     }
 
     private func appendRuleFailedEvents(_ validationErrors: [ConfigValidationItem]) {
@@ -342,8 +354,14 @@ public final class LayoutMaintainer {
         if let assignDesktop = application.assignDesktop {
             payload["assignDesktop"] = .string(assignDesktop)
         }
+        if let assignDisplay = application.assignDisplay {
+            payload["assignDisplay"] = .string(assignDisplay)
+        }
         if let assignStage = application.assignStage {
             payload["assignStage"] = .string(assignStage)
+        }
+        if let follow = application.follow {
+            payload["follow"] = .bool(follow)
         }
         if let floating = application.floating {
             payload["floating"] = .bool(floating)
@@ -358,6 +376,201 @@ public final class LayoutMaintainer {
             payload["scratchpad"] = .string(scratchpad)
         }
         return payload
+    }
+
+    private func applyRulePlacement(
+        _ application: WindowRuleApplication,
+        entry: ScopedWindowSnapshot,
+        snapshot: DaemonSnapshot
+    ) -> Bool {
+        guard application.matchedRuleID != nil,
+              application.assignDisplay != nil || application.assignDesktop != nil || application.assignStage != nil
+        else { return false }
+        guard !application.excluded else {
+            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "excluded")
+            return false
+        }
+        guard entry.window.isTileCandidate else {
+            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "not a tile candidate")
+            return false
+        }
+
+        var state = store.state()
+        guard let destination = resolvePlacementDestination(application, entry: entry, snapshot: snapshot, state: &state) else {
+            appendPlacementEvent("rule.placement_deferred", application: application, entry: entry, reason: "destination unavailable")
+            return false
+        }
+        if entry.scope == destination.scope {
+            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: destination.scope, reason: "already on target")
+            return false
+        }
+
+        let sourceScope = entry.scope
+        var targetScope = state.scope(displayID: destination.scope.displayID, desktopID: destination.scope.desktopID)
+        targetScope.ensureStage(destination.scope.stageID)
+        if destination.follow {
+            targetScope.activeStageID = destination.scope.stageID
+            state.switchDesktop(displayID: destination.scope.displayID, to: destination.scope.desktopID)
+            state.focusDisplay(destination.scope.displayID)
+        }
+        for scopeIndex in state.scopes.indices {
+            state.scopes[scopeIndex].remove(windowID: entry.window.id)
+        }
+        targetScope.assign(window: entry.window, to: destination.scope.stageID)
+        state.update(targetScope)
+        state.updatePinHomeScope(windowID: entry.window.id, to: destination.scope)
+        store.save(state)
+
+        if let sourceScope {
+            service.removeLayoutIntent(scope: sourceScope)
+        }
+        service.removeLayoutIntent(scope: destination.scope)
+
+        if !destination.follow {
+            let activeScope = state.activeScopeEquivalent(on: destination.scope.displayID)
+            if activeScope != destination.scope {
+                _ = service.setFrame(hiddenFrame(for: entry.window.frame.cgRect, on: destination.display, among: snapshot.displays), of: entry.window)
+            }
+        }
+
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        if destination.follow {
+            _ = service.focus(entry.window)
+        }
+        appendPlacementEvent(
+            "rule.placement_applied",
+            application: application,
+            entry: entry,
+            destination: destination.scope,
+            reason: "placed",
+            extra: ["layout": .int(result.attempted)]
+        )
+        return true
+    }
+
+    private func resolvePlacementDestination(
+        _ application: WindowRuleApplication,
+        entry: ScopedWindowSnapshot,
+        snapshot: DaemonSnapshot,
+        state: inout PersistentStageState
+    ) -> RulePlacementDestination? {
+        guard let display = resolveDisplay(application.assignDisplay, entry: entry, snapshot: snapshot) else {
+            return nil
+        }
+        guard let desktopID = resolveDesktop(application.assignDesktop, displayID: display.id, state: state) else {
+            return nil
+        }
+        var scope = state.scope(displayID: display.id, desktopID: desktopID)
+        guard let stageID = resolveStage(application.assignStage, scope: &scope) else {
+            return nil
+        }
+        state.update(scope)
+        return RulePlacementDestination(
+            display: display,
+            scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: stageID),
+            follow: application.follow ?? false
+        )
+    }
+
+    private func resolveDisplay(
+        _ raw: String?,
+        entry: ScopedWindowSnapshot,
+        snapshot: DaemonSnapshot
+    ) -> DisplaySnapshot? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmed, !trimmed.isEmpty {
+            if let display = snapshot.displays.first(where: { $0.id.rawValue == trimmed }) {
+                return display
+            }
+            if let display = snapshot.displays.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+                return display
+            }
+            if let index = Int(trimmed),
+               let display = snapshot.displays.first(where: { $0.index == index }) {
+                return display
+            }
+            return nil
+        }
+        if let displayID = entry.scope?.displayID,
+           let display = snapshot.displays.first(where: { $0.id == displayID }) {
+            return display
+        }
+        return snapshot.displays.first { $0.frame.cgRect.contains(entry.window.frame.center) } ?? snapshot.displays.first
+    }
+
+    private func resolveDesktop(_ raw: String?, displayID: DisplayID, state: PersistentStageState) -> DesktopID? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else {
+            return state.currentDesktopID(for: displayID)
+        }
+        if let rawValue = Int(trimmed), rawValue > 0 {
+            return DesktopID(rawValue: rawValue)
+        }
+        if let label = state.desktopLabels.first(where: {
+            $0.displayID == displayID && $0.label.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            return label.desktopID
+        }
+        return nil
+    }
+
+    private func resolveStage(_ raw: String?, scope: inout PersistentStageScope) -> StageID? {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, !trimmed.isEmpty else {
+            return scope.activeStageID
+        }
+        if let stage = scope.stages.first(where: { $0.id.rawValue == trimmed }) {
+            return stage.id
+        }
+        if let stage = scope.stages.first(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) {
+            return stage.id
+        }
+        let created = StageID(rawValue: trimmed)
+        _ = scope.createStage(created, name: trimmed)
+        return created
+    }
+
+    private func appendPlacementEvent(
+        _ type: String,
+        application: WindowRuleApplication,
+        entry: ScopedWindowSnapshot,
+        destination: StageScope? = nil,
+        reason: String,
+        extra: [String: AutomationPayload] = [:]
+    ) {
+        guard let matchedRuleID = application.matchedRuleID else { return }
+        let issueKey = "\(type)|\(matchedRuleID)|\(entry.window.id.rawValue)|\(reason)"
+        if type != "rule.placement_applied" {
+            guard !emittedRulePlacementIssueKeys.contains(issueKey) else { return }
+            emittedRulePlacementIssueKeys.insert(issueKey)
+        } else {
+            emittedRulePlacementIssueKeys = emittedRulePlacementIssueKeys.filter {
+                !$0.contains("|\(matchedRuleID)|\(entry.window.id.rawValue)|")
+            }
+        }
+        var payload: [String: AutomationPayload] = [
+            "windowID": .string(String(entry.window.id.rawValue)),
+            "app": .string(entry.window.appName),
+            "title": .string(entry.window.title),
+            "ruleID": .string(matchedRuleID),
+            "reason": .string(reason)
+        ]
+        if let destination {
+            payload["displayID"] = .string(destination.displayID.rawValue)
+            payload["desktopID"] = .int(destination.desktopID.rawValue)
+            payload["stageID"] = .string(destination.stageID.rawValue)
+        }
+        for (key, value) in extra {
+            payload[key] = value
+        }
+        events.append(RoadieEventEnvelope(
+            id: "rule_\(UUID().uuidString)",
+            type: type,
+            scope: .window,
+            subject: AutomationSubject(kind: "window", id: String(entry.window.id.rawValue)),
+            cause: .system,
+            payload: payload
+        ))
     }
 
     private func suppressKnownUnmovableFrames(in plan: ApplyPlan) -> ApplyPlan {
@@ -672,6 +885,12 @@ public final class LayoutMaintainer {
     }
 }
 
+private struct RulePlacementDestination {
+    var display: DisplaySnapshot
+    var scope: StageScope
+    var follow: Bool
+}
+
 private struct ClampedFrame {
     var requested: Rect
     var actual: Rect
@@ -705,6 +924,15 @@ private struct RevertedAppliedFrame {
 private enum HideCorner {
     case bottomLeft
     case bottomRight
+}
+
+private extension PersistentStageState {
+    func activeScopeEquivalent(on displayID: DisplayID) -> StageScope {
+        let desktopID = currentDesktopID(for: displayID)
+        let stageID = scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }?.activeStageID
+            ?? StageID(rawValue: "1")
+        return StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
+    }
 }
 
 private extension Rect {

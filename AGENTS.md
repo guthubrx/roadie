@@ -1,14 +1,14 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `007-display-stage-parking`.
+Current SpecKit feature: `008-window-rule-placement`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/007-display-stage-parking/spec.md`
-- `specs/007-display-stage-parking/plan.md`
-- `specs/007-display-stage-parking/research.md`
-- `specs/007-display-stage-parking/data-model.md`
-- `specs/007-display-stage-parking/contracts/`
+- `specs/008-window-rule-placement/spec.md`
+- `specs/008-window-rule-placement/plan.md`
+- `specs/008-window-rule-placement/research.md`
+- `specs/008-window-rule-placement/data-model.md`
+- `specs/008-window-rule-placement/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

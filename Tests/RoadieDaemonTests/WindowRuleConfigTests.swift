@@ -18,7 +18,9 @@ struct WindowRuleConfigTests {
         #expect(config.rules[0].match.app == "Terminal")
         #expect(config.rules[0].match.titleRegex == "roadie|zsh")
         #expect(config.rules[0].action.assignDesktop == "dev")
+        #expect(config.rules[0].action.assignDisplay == "Main")
         #expect(config.rules[0].action.assignStage == "shell")
+        #expect(config.rules[0].action.follow == false)
         #expect(config.rules[0].action.gapOverride == 4)
         #expect(config.rules[1].action.scratchpad == "research")
     }

@@ -115,7 +115,9 @@ stage = "dev"
 
 [rules.action]
 assign_desktop = "1"
+assign_display = "LG HDR 4K"
 assign_stage = "shell"
+follow = false
 floating = false
 layout = "tile"
 gap_override = 4
@@ -143,7 +145,9 @@ Une rule doit avoir au moins un champ de match.
 - `manage` : marqueur pour effets futurs.
 - `exclude` : sort la fenetre du tiling.
 - `assign_desktop` : desktop cible.
-- `assign_stage` : stage cible.
+- `assign_display` : ecran cible, resolu par ID Roadie, nom d'ecran, puis index numerique.
+- `assign_stage` : stage cible, resolue par ID puis par nom visible. Si elle n'existe pas, Roadie la cree.
+- `follow` : active la destination et focalise la fenetre apres placement si `true`. Par defaut `false`.
 - `floating` : comportement flottant.
 - `layout` : indication de layout.
 - `gap_override` : override de gaps.
@@ -163,6 +167,26 @@ Erreurs detectees :
 - aucun matcher;
 - regex invalide;
 - `exclude=true` combine avec des actions de placement/layout.
+
+## Placement automatique
+
+Pour ouvrir une application toujours sur une stage et un ecran precis :
+
+```toml
+[[rules]]
+id = "slack-com"
+priority = 100
+
+[rules.match]
+app = "Slack"
+
+[rules.action]
+assign_display = "LG HDR 4K"
+assign_stage = "Com"
+follow = false
+```
+
+Roadie ne vole pas le focus par defaut. Si l'ecran cible est absent, la fenetre reste dans son contexte courant et Roadie publie un evenement `rule.placement_deferred`.
 
 ## Explain
 

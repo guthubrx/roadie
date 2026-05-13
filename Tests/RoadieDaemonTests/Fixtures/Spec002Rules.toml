@@ -14,7 +14,9 @@ stage = "dev"
 
 [rules.action]
 assign_desktop = "dev"
+assign_display = "Main"
 assign_stage = "shell"
+follow = false
 floating = false
 layout = "tile"
 gap_override = 4

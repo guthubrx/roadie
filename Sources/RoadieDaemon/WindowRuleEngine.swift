@@ -8,7 +8,9 @@ public struct WindowRuleApplication: Equatable, Codable, Sendable {
     public var evaluations: [RuleEvaluation]
     public var excluded: Bool
     public var assignDesktop: String?
+    public var assignDisplay: String?
     public var assignStage: String?
+    public var follow: Bool?
     public var floating: Bool?
     public var layout: String?
     public var gapOverride: Int?
@@ -20,7 +22,9 @@ public struct WindowRuleApplication: Equatable, Codable, Sendable {
         evaluations: [RuleEvaluation],
         excluded: Bool = false,
         assignDesktop: String? = nil,
+        assignDisplay: String? = nil,
         assignStage: String? = nil,
+        follow: Bool? = nil,
         floating: Bool? = nil,
         layout: String? = nil,
         gapOverride: Int? = nil,
@@ -31,7 +35,9 @@ public struct WindowRuleApplication: Equatable, Codable, Sendable {
         self.evaluations = evaluations
         self.excluded = excluded
         self.assignDesktop = assignDesktop
+        self.assignDisplay = assignDisplay
         self.assignStage = assignStage
+        self.follow = follow
         self.floating = floating
         self.layout = layout
         self.gapOverride = gapOverride
@@ -108,7 +114,9 @@ private extension WindowRuleApplication {
             evaluations: evaluations,
             excluded: action.exclude ?? false,
             assignDesktop: action.assignDesktop,
+            assignDisplay: action.assignDisplay,
             assignStage: action.assignStage,
+            follow: action.follow,
             floating: action.floating,
             layout: action.layout,
             gapOverride: action.gapOverride,
@@ -123,7 +131,9 @@ extension RuleAction {
         if manage != nil { result.append("manage") }
         if exclude != nil { result.append("exclude") }
         if assignDesktop != nil { result.append("assign_desktop") }
+        if assignDisplay != nil { result.append("assign_display") }
         if assignStage != nil { result.append("assign_stage") }
+        if follow != nil { result.append("follow") }
         if floating != nil { result.append("floating") }
         if layout != nil { result.append("layout") }
         if gapOverride != nil { result.append("gap_override") }
