@@ -76,7 +76,11 @@ struct DropPreviewEngine {
               let scope = snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope),
               stage.mode != .float,
-              snapshot.windows.contains(where: { $0.window.id == sourceWindowID && $0.window.isTileCandidate })
+              snapshot.windows.contains(where: {
+                  $0.window.id == sourceWindowID
+                      && $0.scope == scope
+                      && WindowDragReorderEligibility.accepts($0.window)
+              })
         else { return nil }
 
         let activeEntries = snapshot.windows.filter { entry in
@@ -357,6 +361,20 @@ struct DropPreviewEngine {
     }
 }
 
+public enum WindowDragReorderEligibility {
+    public static func accepts(_ window: WindowSnapshot) -> Bool {
+        guard window.isTileCandidate else { return false }
+        if let furniture = window.furniture {
+            guard !furniture.isModal else { return false }
+            guard furniture.isResizable else { return false }
+        }
+        if let subrole = window.subrole, subrole != "AXStandardWindow" {
+            return false
+        }
+        return true
+    }
+}
+
 @MainActor
 final class WindowDragReorderController {
     private let preview: DropPreviewController
@@ -438,7 +456,7 @@ final class WindowDragReorderController {
         let candidates = snapshot.windows.compactMap { entry -> (WindowSnapshot, StageScope)? in
             guard let scope = entry.scope,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
-                  entry.window.isTileCandidate,
+                  WindowDragReorderEligibility.accepts(entry.window),
                   titleBarHitRect(for: entry.window.frame.cgRect).contains(axPoint)
             else { return nil }
             return (entry.window, scope)
