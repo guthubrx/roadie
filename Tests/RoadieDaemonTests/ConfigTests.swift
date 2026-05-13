@@ -106,6 +106,63 @@ struct ConfigTests {
     }
 
     @Test
+    func generatedRulesAreMergedWithUserConfig() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-generated-rules-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configURL = directory.appendingPathComponent("roadies.toml")
+        try """
+        [focus]
+        stage_follows_focus = false
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+        let generatedURL = URL(fileURLWithPath: RoadieConfigLoader.generatedRulesPath(for: configURL.path))
+        try """
+        [[rules]]
+        id = "affinity-app-firefox"
+        priority = 9000
+
+        [rules.match]
+        app = "Firefox"
+
+        [rules.action]
+        assign_display = "display-main"
+        assign_desktop = "1"
+        assign_stage = "web"
+        follow = false
+        """.write(to: generatedURL, atomically: true, encoding: .utf8)
+
+        let config = try RoadieConfigLoader.load(from: configURL.path)
+        let report = RoadieConfigLoader.validate(path: configURL.path)
+
+        #expect(config.focus.stageFollowsFocus == false)
+        #expect(config.rules.count == 1)
+        #expect(config.rules.first?.id == "affinity-app-firefox")
+        #expect(config.rules.first?.action.assignDisplay == "display-main")
+        #expect(report.hasErrors == false)
+    }
+
+    @Test
+    func generatedRulesValidationReportsGeneratedFileErrors() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-generated-rules-error-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let configURL = directory.appendingPathComponent("roadies.toml")
+        try "[focus]\nstage_follows_focus = false\n".write(to: configURL, atomically: true, encoding: .utf8)
+        let generatedURL = URL(fileURLWithPath: RoadieConfigLoader.generatedRulesPath(for: configURL.path))
+        try """
+        [[rules]]
+        id = 42
+        """.write(to: generatedURL, atomically: true, encoding: .utf8)
+
+        let report = RoadieConfigLoader.validate(path: configURL.path)
+
+        #expect(report.hasErrors)
+        #expect(report.items.contains { $0.path == generatedURL.path })
+    }
+
+    @Test
     func displayTilingOverridesDecodeFromToml() throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-display-gap-config-\(UUID().uuidString).toml")

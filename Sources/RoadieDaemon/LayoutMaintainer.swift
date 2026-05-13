@@ -34,8 +34,10 @@ public final class LayoutMaintainer {
     private let commandIntentHoldSeconds: TimeInterval
     private let manualResizeDebounceSeconds: TimeInterval
     private let now: () -> Date
-    private let ruleEngine: WindowRuleEngine?
+    private let staticRuleEngine: WindowRuleEngine?
     private let store: StageStore
+    private var cachedRuleEngine: WindowRuleEngine?
+    private var cachedRulesVersion: String?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
@@ -52,7 +54,7 @@ public final class LayoutMaintainer {
         service: SnapshotService = SnapshotService(),
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
-        ruleEngine: WindowRuleEngine? = LayoutMaintainer.defaultRuleEngine(),
+        ruleEngine: WindowRuleEngine? = nil,
         store: StageStore = StageStore(),
         now: @escaping () -> Date = Date.init
     ) {
@@ -61,7 +63,7 @@ public final class LayoutMaintainer {
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
-        self.ruleEngine = ruleEngine
+        self.staticRuleEngine = ruleEngine
         self.store = store
         self.now = now
     }
@@ -237,6 +239,20 @@ public final class LayoutMaintainer {
         return WindowRuleEngine(rules: config.rules)
     }
 
+    private func currentRuleEngine() -> WindowRuleEngine? {
+        if let staticRuleEngine {
+            return staticRuleEngine
+        }
+        let version = RoadieConfigLoader.rulesVersion()
+        if cachedRulesVersion != version {
+            cachedRulesVersion = version
+            cachedRuleEngine = Self.defaultRuleEngine()
+            emittedRuleSkippedKeys.removeAll()
+            emittedRulePlacementIssueKeys.removeAll()
+        }
+        return cachedRuleEngine
+    }
+
     private func displaySignature(_ displays: [DisplaySnapshot]) -> String {
         displays
             .map { display in
@@ -259,7 +275,7 @@ public final class LayoutMaintainer {
     }
 
     private func evaluateRules(in snapshot: DaemonSnapshot) -> Int {
-        guard let ruleEngine else { return 0 }
+        guard let ruleEngine = currentRuleEngine() else { return 0 }
         guard ruleEngine.validationErrors.isEmpty else {
             appendRuleFailedEvents(ruleEngine.validationErrors)
             return 0

@@ -8,6 +8,16 @@ Roadie lit sa configuration utilisateur ici :
 ~/.config/roadies/roadies.toml
 ```
 
+Les rules creees depuis l'interface sont stockees a part :
+
+```text
+~/.config/roadies/roadies.generated.toml
+```
+
+Roadie charge les deux fichiers. Le fichier `roadies.toml` reste la source
+humaine, et `roadies.generated.toml` contient les affinites creees depuis les
+menus.
+
 Commandes utiles :
 
 ```bash
@@ -187,6 +197,18 @@ follow = false
 ```
 
 Roadie ne vole pas le focus par defaut. Si l'ecran cible est absent, la fenetre reste dans son contexte courant et Roadie publie un evenement `rule.placement_deferred`.
+
+Depuis le menu de clic droit de barre de titre, la section
+`Affinite d'ouverture` peut creer la meme rule sans modifier `roadies.toml` :
+
+- `Toujours ouvrir cette app ici` : match par app;
+- `Toujours ouvrir cette app + ce titre ici` : match par app et titre;
+- `Toujours ouvrir cette app + ce role ici` : match par app et role AX;
+- `Retirer l'affinite pour cette app` : supprime les rules generees pour cette app.
+
+La destination `ici` correspond a l'ecran, au desktop Roadie et a la stage de la
+fenetre cliquee. Le daemon recharge automatiquement ces rules generees quand le
+fichier change.
 
 ## Explain
 

@@ -19,11 +19,13 @@ public struct WindowContextActions {
     private let stageStore: StageStore
     private let eventLog: EventLog
     private let stageLabelsVisible: () -> Bool
+    private let affinityService: WindowRuleAffinityService
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
         eventLog: EventLog = EventLog(),
+        affinityService: WindowRuleAffinityService = WindowRuleAffinityService(),
         stageLabelsVisible: @escaping () -> Bool = {
             let settings = RailSettings.load().stageLabel
             guard settings.enabled else { return false }
@@ -37,6 +39,7 @@ public struct WindowContextActions {
         self.snapshotService = snapshotService
         self.stageStore = stageStore
         self.eventLog = eventLog
+        self.affinityService = affinityService
         self.stageLabelsVisible = stageLabelsVisible
     }
 
@@ -72,6 +75,15 @@ public struct WindowContextActions {
         }
 
         switch action.kind {
+        case .affinityApp:
+            return saveAffinity(kind: .app, window: entry.window, scope: scope, snapshot: snapshot)
+        case .affinityAppTitle:
+            return saveAffinity(kind: .appTitle, window: entry.window, scope: scope, snapshot: snapshot)
+        case .affinityAppRole:
+            return saveAffinity(kind: .appRole, window: entry.window, scope: scope, snapshot: snapshot)
+        case .removeAffinityApp:
+            let result = affinityService.removeAppAffinity(window: entry.window, scope: scope)
+            return WindowContextActionResult(message: result.message, changed: result.changed)
         case .pinDesktop:
             return setPin(window: entry.window, sourceScope: scope, pinScope: .desktop, snapshot: snapshot)
         case .pinAllDesktops:
@@ -134,6 +146,19 @@ public struct WindowContextActions {
             ).send(windowID: action.windowID, toDisplayID: DisplayID(rawValue: action.targetID), focusMovedWindow: false)
             return WindowContextActionResult(message: result.message, changed: result.changed)
         }
+    }
+
+    private func saveAffinity(
+        kind: WindowRuleAffinityKind,
+        window: WindowSnapshot,
+        scope: StageScope,
+        snapshot: DaemonSnapshot
+    ) -> WindowContextActionResult {
+        guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else {
+            return WindowContextActionResult(message: "affinite non creee: ecran introuvable", changed: false)
+        }
+        let result = affinityService.saveAffinity(kind: kind, window: window, scope: scope, display: display)
+        return WindowContextActionResult(message: result.message, changed: result.changed)
     }
 
     private func setPin(

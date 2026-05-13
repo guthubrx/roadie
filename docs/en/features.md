@@ -239,6 +239,7 @@ Use cases:
 
 - send project terminals to a `shell` stage;
 - always open Firefox on the `web` stage of the external display;
+- create that affinity directly from the title bar right-click menu;
 - tag documentation windows as `research` scratchpad candidates;
 - catch invalid regexes before restarting the daemon.
 
