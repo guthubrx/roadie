@@ -102,7 +102,6 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case unpin
     case affinityApp = "affinity_app"
     case affinityAppTitle = "affinity_app_title"
-    case affinityAppRole = "affinity_app_role"
     case removeAffinityApp = "remove_affinity_app"
 }
 
@@ -362,15 +361,6 @@ public final class TitlebarContextMenuController {
             windowID: windowID,
             sourceScope: sourceScope,
             isEnabled: !window.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            to: submenu
-        )
-        let hasRole = !(window.role ?? "").isEmpty || !(window.subrole ?? "").isEmpty
-        addActionItem(
-            title: "Toujours ouvrir cette app + ce rôle ici",
-            kind: .affinityAppRole,
-            windowID: windowID,
-            sourceScope: sourceScope,
-            isEnabled: hasRole,
             to: submenu
         )
         submenu.addItem(.separator())
