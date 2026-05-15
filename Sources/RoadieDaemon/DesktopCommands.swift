@@ -131,7 +131,7 @@ public struct DesktopCommandService {
         targetScope.assign(window: active.window, to: targetScope.activeStageID)
         state.update(targetScope)
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-        state.updatePinHomeScope(windowID: active.window.id, to: targetStageScope)
+        let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
         store.save(state)
 
         if let sourceScope {
@@ -148,8 +148,14 @@ public struct DesktopCommandService {
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
-            details: ["windowID": String(active.window.id.rawValue), "follow": String(follow), "layout": String(result.attempted)]
+            details: [
+                "windowID": String(active.window.id.rawValue),
+                "follow": String(follow),
+                "layout": String(result.attempted),
+                "unpinned": String(removedPin != nil),
+            ]
         ))
+        appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
         return StageCommandResult(
             message: "window desktop \(desktopID.rawValue): hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
@@ -182,7 +188,7 @@ public struct DesktopCommandService {
         targetScope.assign(window: entry.window, to: targetScope.activeStageID)
         state.update(targetScope)
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-        state.updatePinHomeScope(windowID: entry.window.id, to: targetStageScope)
+        let removedPin = state.removePin(windowID: entry.window.id)
         store.save(state)
 
         if let sourceScope {
@@ -199,12 +205,25 @@ public struct DesktopCommandService {
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
-            details: ["windowID": String(entry.window.id.rawValue), "follow": String(follow), "layout": String(result.attempted)]
+            details: [
+                "windowID": String(entry.window.id.rawValue),
+                "follow": String(follow),
+                "layout": String(result.attempted),
+                "unpinned": String(removedPin != nil),
+            ]
         ))
+        appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
         return StageCommandResult(
             message: "window desktop \(desktopID.rawValue): window=\(windowID.rawValue) hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
         )
+    }
+
+    private func appendManualPinRemovalEvent(_ pin: PersistentWindowPin?, targetScope: StageScope) {
+        guard let pin else { return }
+        var details = pin.eventDetails
+        details["reason"] = "manual_window_move"
+        events.append(RoadieEvent(type: "window.pin_removed", scope: targetScope, details: details))
     }
 
     private func switchDisplay(

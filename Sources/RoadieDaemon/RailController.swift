@@ -344,7 +344,7 @@ public final class RailController {
             let item = NSMenuItem(title: target.title, action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
             let action = RailMenuActionTarget { [weak self] in
                 guard let self else { return }
-                self.perform(.moveWindow(windowID, target.stageID), displayID: displayID)
+                self.perform(.moveWindow(windowID, target.stageID, nil, true), displayID: displayID)
                 self.rebuildPanels()
             }
             item.target = action
@@ -481,14 +481,30 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_window_summon", details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]))
             _ = commandService.summon(windowID: windowID, displayID: displayID)
-        case .moveWindow(let windowID, let stageID):
-            print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)")
+        case .moveWindow(let windowID, let stageID, let insertionIndex, let focusAssignedWindow):
+            let insertionDescription = insertionIndex.map { " index \($0)" } ?? ""
+            print("rail move window \(windowID.rawValue) -> stage \(stageID.rawValue)\(insertionDescription)")
             fflush(stdout)
+            var details = [
+                "displayID": displayID.rawValue,
+                "windowID": String(windowID.rawValue),
+                "stageID": stageID.rawValue,
+                "focusAssignedWindow": String(focusAssignedWindow),
+            ]
+            if let insertionIndex {
+                details["insertionIndex"] = String(insertionIndex)
+            }
             events.append(RoadieEvent(
                 type: "rail_window_move",
-                details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "stageID": stageID.rawValue]
+                details: details
             ))
-            _ = commandService.assign(windowID: windowID, to: stageID.rawValue, displayID: displayID)
+            _ = commandService.assign(
+                windowID: windowID,
+                to: stageID.rawValue,
+                displayID: displayID,
+                insertionIndex: insertionIndex,
+                focusAssignedWindow: focusAssignedWindow
+            )
         case .moveWindowToDesktop(let windowID, let desktopID):
             print("rail move window \(windowID.rawValue) -> desktop \(desktopID.rawValue)")
             fflush(stdout)
@@ -594,7 +610,7 @@ public final class RailController {
 
         let targetDisplayID = displayID(at: screenPoint) ?? drag.displayID
         guard let panel = panels[targetDisplayID] ?? panels[drag.displayID] else { return }
-        guard let targetStageID = panel.dropStageID(at: screenPoint) else {
+        guard let target = panel.windowDropTarget(at: screenPoint, safeEmptyClick: false) else {
             guard displayID(at: screenPoint) != nil else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
@@ -606,10 +622,10 @@ public final class RailController {
             rebuildPanels()
             return
         }
-        guard targetStageID != drag.sourceStageID else { return }
-        print("rail drag window \(drag.windowID.rawValue) -> stage \(targetStageID.rawValue)")
+        guard target.stageID != drag.sourceStageID else { return }
+        print("rail drag window \(drag.windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
         fflush(stdout)
-        perform(.moveWindow(drag.windowID, targetStageID), displayID: targetDisplayID)
+        perform(.moveWindow(drag.windowID, target.stageID, target.insertionIndex, false), displayID: targetDisplayID)
         rebuildPanels()
     }
 
@@ -619,12 +635,12 @@ public final class RailController {
         }
         for (displayID, panel) in panels {
             guard panel.isVisible,
-                  let stageID = panel.windowDropStageID(at: screenPoint)
+                  let target = panel.windowDropTarget(at: screenPoint, safeEmptyClick: true)
             else { continue }
             windowDragController.cancelPendingDrag()
-            print("rail external drag window \(windowID.rawValue) -> stage \(stageID.rawValue)")
+            print("rail external drag window \(windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
             fflush(stdout)
-            perform(.moveWindow(windowID, stageID), displayID: displayID)
+            perform(.moveWindow(windowID, target.stageID, target.insertionIndex, false), displayID: displayID)
             rebuildPanels()
             return true
         }
@@ -820,13 +836,18 @@ public final class RailController {
 private enum RailAction {
     case switchStage(StageID)
     case summonWindow(WindowID)
-    case moveWindow(WindowID, StageID)
+    case moveWindow(WindowID, StageID, Int?, Bool)
     case moveWindowToDesktop(WindowID, DesktopID)
     case moveWindowToDisplay(WindowID, DisplayID)
     case placeWindow(WindowID, [WindowID], [WindowID: Rect])
     case moveStage(StageID, Int)
     case renameStage(StageID, String)
     case moveStageToDisplay(StageID, DisplayID)
+}
+
+private struct RailWindowDropTarget {
+    var stageID: StageID
+    var insertionIndex: Int
 }
 
 @MainActor
@@ -1314,11 +1335,22 @@ private final class RailPanel: NSPanel {
     }
 
     func windowDropStageID(at screenPoint: CGPoint) -> StageID? {
-        if let id = stageID(at: screenPoint) {
-            return id
+        windowDropTarget(at: screenPoint, safeEmptyClick: true)?.stageID
+    }
+
+    func windowDropTarget(at screenPoint: CGPoint, safeEmptyClick: Bool) -> RailWindowDropTarget? {
+        if let (card, localPoint) = stageCard(at: screenPoint) {
+            return RailWindowDropTarget(
+                stageID: card.stageID,
+                insertionIndex: card.windowInsertionIndex(at: localPoint)
+            )
         }
-        guard acceptsRailInteraction(at: screenPoint), isSafeEmptyClick(at: screenPoint) else { return nil }
-        return emptyStageIDs.first ?? nextGeneratedStageID()
+        guard acceptsRailInteraction(at: screenPoint) else { return nil }
+        if safeEmptyClick, !isSafeEmptyClick(at: screenPoint) {
+            return nil
+        }
+        let stageID = safeEmptyClick ? (emptyStageIDs.first ?? nextGeneratedStageID()) : emptyStageID(at: screenPoint)
+        return stageID.map { RailWindowDropTarget(stageID: $0, insertionIndex: 0) }
     }
 
     func emptyStageID(at screenPoint: CGPoint) -> StageID? {
@@ -1335,14 +1367,18 @@ private final class RailPanel: NSPanel {
     }
 
     func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
+        guard let (card, local) = stageCard(at: screenPoint) else { return nil }
+        return card.dragPayload(at: local)
+    }
+
+    private func stageCard(at screenPoint: CGPoint) -> (StageCardView, CGPoint)? {
         guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
         let windowPoint = convertPoint(fromScreen: screenPoint)
         let contentPoint = contentView.convert(windowPoint, from: nil)
         var view = contentView.hitTest(contentPoint)
         while let current = view {
             if let card = current as? StageCardView {
-                let local = card.convert(contentPoint, from: contentView)
-                return card.dragPayload(at: local)
+                return (card, card.convert(contentPoint, from: contentView))
             }
             view = current.superview
         }
@@ -2473,6 +2509,19 @@ private final class StageCardView: NSControl {
 
     func windowID(at point: CGPoint) -> WindowID? {
         hitPreview(at: point)?.member.windowID
+    }
+
+    func windowInsertionIndex(at point: CGPoint) -> Int {
+        let count = stage.members.count
+        guard count > 0 else { return 0 }
+        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
+        let preview = config.mode == .icons
+            ? cardRect.insetBy(dx: 8, dy: 18)
+            : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
+        let bounds = visualPreviewBounds(in: cardRect, preview: preview)
+        let clampedY = min(max(point.y, bounds.minY), bounds.maxY)
+        let unitFromTop = 1 - ((clampedY - bounds.minY) / max(1, bounds.height))
+        return min(max(Int((unitFromTop * CGFloat(count)).rounded()), 0), count)
     }
 
     private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {

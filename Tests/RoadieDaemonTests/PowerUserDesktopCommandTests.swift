@@ -183,7 +183,7 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
-    func desktopAssignUpdatesPinnedWindowHomeScope() {
+    func desktopAssignRemovesInstancePin() {
         let display = DisplayID(rawValue: "display-main")
         let window = powerWindow(1, x: 100)
         let provider = PowerUserProvider(windows: [window])
@@ -208,8 +208,42 @@ struct PowerUserDesktopCommandTests {
         let result = DesktopCommandService(service: service, store: store).assign(windowID: window.id, to: DesktopID(rawValue: 2), displayID: display)
 
         #expect(result.changed)
-        #expect(store.state().pin(for: window.id)?.homeScope.desktopID == DesktopID(rawValue: 2))
+        #expect(store.state().pin(for: window.id) == nil)
         #expect(store.state().stageScope(for: window.id)?.desktopID == DesktopID(rawValue: 2))
+    }
+
+    @Test
+    func displaySendRemovesInstancePin() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let side = powerDisplay("display-side", index: 2, x: 1000)
+        let window = powerWindow(1, x: 100)
+        let home = StageScope(displayID: main.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let provider = PowerUserProvider(displays: [main, side], windows: [window])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-display-pinned-send"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: main.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame)
+                    ])
+                ]),
+                PersistentStageScope(displayID: side.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"))
+                ])
+            ],
+            windowPins: [
+                PersistentWindowPin(windowID: window.id, homeScope: home, pinScope: .allDesktops, bundleID: window.bundleID, title: window.title, lastFrame: window.frame)
+            ],
+            activeDisplayID: main.id
+        ))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = WindowCommandService(service: service, stageStore: store).send(windowID: window.id, toDisplayID: side.id, focusMovedWindow: false)
+
+        #expect(result.changed)
+        #expect(store.state().pin(for: window.id) == nil)
+        #expect(store.state().stageScope(for: window.id)?.displayID == side.id)
     }
 }
 

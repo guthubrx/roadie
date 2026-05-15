@@ -36,17 +36,25 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
     public var window: WindowSnapshot
     public var scope: StageScope?
     public var pin: PersistentWindowPin?
+    public var isNewlyScoped: Bool
 
-    public init(window: WindowSnapshot, scope: StageScope?, pin: PersistentWindowPin? = nil) {
+    public init(
+        window: WindowSnapshot,
+        scope: StageScope?,
+        pin: PersistentWindowPin? = nil,
+        isNewlyScoped: Bool = false
+    ) {
         self.window = window
         self.scope = scope
         self.pin = pin
+        self.isNewlyScoped = isNewlyScoped
     }
 
     enum CodingKeys: String, CodingKey {
         case window
         case scope
         case pin
+        case isNewlyScoped
     }
 
     public init(from decoder: Decoder) throws {
@@ -54,6 +62,7 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
         self.window = try c.decode(WindowSnapshot.self, forKey: .window)
         self.scope = try c.decodeIfPresent(StageScope.self, forKey: .scope)
         self.pin = try c.decodeIfPresent(PersistentWindowPin.self, forKey: .pin)
+        self.isNewlyScoped = try c.decodeIfPresent(Bool.self, forKey: .isNewlyScoped) ?? false
     }
 }
 
@@ -118,13 +127,26 @@ public struct SnapshotService {
         let liveWindowIDs = stageManagedWindowIDs
         let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
-        persistedStages.pruneMissingWindows(keeping: liveWindowIDs, liveDisplayIDs: liveDisplayIDs)
+        let missingWindows = persistedStages.pruneMissingWindows(
+            keeping: liveWindowIDs,
+            liveDisplayIDs: liveDisplayIDs,
+            now: now
+        )
+        appendMissingWindowReconciliationEvent(missingWindows)
         let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs)
         for pin in prunedPins {
             events.append(RoadieEvent(
                 type: "window.pin_pruned",
                 scope: pin.homeScope,
                 details: pinEventDetails(pin)
+            ))
+        }
+        let prunedBookmarks = persistedStages.pruneMissingBookmarks(keeping: liveWindowIDs, now: now)
+        for bookmark in prunedBookmarks {
+            events.append(RoadieEvent(
+                type: "window.bookmark_pruned",
+                scope: bookmark.scope,
+                details: bookmarkEventDetails(bookmark)
             ))
         }
         var state = RoadieState()
@@ -208,6 +230,8 @@ public struct SnapshotService {
                 desktopID: desktopID,
                 stageID: stageID
             )
+            persistedStages.updateBookmarkObservation(window: window, scope: scope, now: now)
+            let isNewlyScoped = knownScope == nil
             let persistedScope = persistedStages.scopes.first {
                 $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
             }
@@ -225,7 +249,12 @@ public struct SnapshotService {
                 try? state.assignWindow(window.id, to: scope)
             }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
-            scopedWindows.append(ScopedWindowSnapshot(window: window, scope: scope, pin: pin))
+            scopedWindows.append(ScopedWindowSnapshot(
+                window: window,
+                scope: scope,
+                pin: pin,
+                isNewlyScoped: isNewlyScoped
+            ))
         }
         var focusedID: WindowID?
         if followFocus,
@@ -257,6 +286,25 @@ public struct SnapshotService {
             state: state,
             focusedWindowID: focusedID
         )
+    }
+
+    private func appendMissingWindowReconciliationEvent(_ report: MissingWindowReconciliationReport) {
+        guard !report.isEmpty else { return }
+        events.append(RoadieEvent(type: "windows.missing_reconciled", details: [
+            "markedMissing": String(report.markedMissingWindowIDs.count),
+            "restored": String(report.restoredWindowIDs.count),
+            "pruned": String(report.prunedWindowIDs.count),
+            "markedMissingIDs": formattedWindowIDs(report.markedMissingWindowIDs),
+            "restoredIDs": formattedWindowIDs(report.restoredWindowIDs),
+            "prunedIDs": formattedWindowIDs(report.prunedWindowIDs)
+        ]))
+    }
+
+    private func formattedWindowIDs(_ ids: Set<WindowID>, limit: Int = 12) -> String {
+        let ordered = ids.map(\.rawValue).sorted()
+        let prefix = ordered.prefix(limit).map(String.init).joined(separator: ",")
+        guard ordered.count > limit else { return prefix }
+        return "\(prefix),+\(ordered.count - limit)"
     }
 
     /// Contexte pre-calcule pour `applyTilingPolicy`. Construit une seule fois par snapshot
@@ -538,6 +586,18 @@ public struct SnapshotService {
             "displayID": pin.homeScope.displayID.rawValue,
             "desktopID": String(pin.homeScope.desktopID.rawValue),
             "stageID": pin.homeScope.stageID.rawValue
+        ]
+    }
+
+    private func bookmarkEventDetails(_ bookmark: PersistentWindowBookmark) -> [String: String] {
+        [
+            "name": bookmark.name,
+            "windowID": String(bookmark.windowID.rawValue),
+            "bundleID": bookmark.bundleID,
+            "title": bookmark.title,
+            "displayID": bookmark.scope.displayID.rawValue,
+            "desktopID": String(bookmark.scope.desktopID.rawValue),
+            "stageID": bookmark.scope.stageID.rawValue
         ]
     }
 }

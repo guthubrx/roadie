@@ -49,6 +49,7 @@ public final class LayoutMaintainer {
     private var displayTopologySettlesUntil: Date?
     private var emittedRuleSkippedKeys: Set<String> = []
     private var emittedRulePlacementIssueKeys: Set<String> = []
+    private var observedRulePlacementWindowIDs: Set<WindowID> = []
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -281,6 +282,8 @@ public final class LayoutMaintainer {
             return 0
         }
         var placements = 0
+        let liveWindowIDs = Set(snapshot.windows.map(\.window.id))
+        observedRulePlacementWindowIDs.formIntersection(liveWindowIDs)
         for entry in snapshot.windows where entry.window.isOnScreen {
             let context = WindowRuleMatchContext(
                 display: entry.scope?.displayID.rawValue,
@@ -292,6 +295,7 @@ public final class LayoutMaintainer {
             if applyRulePlacement(application, entry: entry, snapshot: snapshot) {
                 placements += 1
             }
+            observedRulePlacementWindowIDs.insert(entry.window.id)
         }
         return placements
     }
@@ -408,6 +412,10 @@ public final class LayoutMaintainer {
         }
         guard entry.window.isTileCandidate else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "not a tile candidate")
+            return false
+        }
+        guard !observedRulePlacementWindowIDs.contains(entry.window.id) else {
+            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "window already managed")
             return false
         }
 

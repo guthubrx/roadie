@@ -38,10 +38,12 @@ func printUsage() {
       roadie permissions [--prompt]
       roadie focus status
       roadie focus back-and-forth|left|right|up|down
+      roadie bookmark set|focus|jump|clear|list NAME
       roadie move|warp|wrap|resize left|right|up|down
       roadie mode bsp|mutableBsp|masterStack|float
       roadie window display N
       roadie window desktop N [--follow]
+      roadie window bookmark set|focus|jump|clear|list NAME
       roadie window reset
       roadie desktop list|current
       roadie desktop focus N|prev|next|last|back|back-and-forth
@@ -411,6 +413,8 @@ case "mode":
     runModeCommand(args.dropFirst().first)
 case "window":
     runWindowCommand(Array(args.dropFirst()))
+case "bookmark":
+    runBookmarkCommand(Array(args.dropFirst()))
 case "desktop":
     runDesktopCommand(Array(args.dropFirst()))
 case "stage":
@@ -609,6 +613,8 @@ func runDirectionalCommand(
 @MainActor
 func runWindowCommand(_ args: [String]) {
     switch args.first {
+    case "bookmark":
+        runBookmarkCommand(Array(args.dropFirst()))
     case "display":
         guard args.indices.contains(1), let index = Int(args[1]) else {
             fputs("roadie: window display requires an index\n", stderr)
@@ -638,6 +644,44 @@ func runWindowCommand(_ args: [String]) {
         }
     case "close":
         print("roadie: window close is not implemented in this build")
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runBookmarkCommand(_ args: [String]) {
+    let command = WindowBookmarkCommandService(service: service)
+    switch args.first {
+    case "set":
+        guard let name = args.dropFirst().first else {
+            fputs("roadie: bookmark set requires a name\n", stderr)
+            exit(64)
+        }
+        let result = command.set(name)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "focus", "jump":
+        guard let name = args.dropFirst().first else {
+            fputs("roadie: bookmark focus requires a name\n", stderr)
+            exit(64)
+        }
+        let result = command.focus(name)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "clear", "remove":
+        guard let name = args.dropFirst().first else {
+            fputs("roadie: bookmark clear requires a name\n", stderr)
+            exit(64)
+        }
+        let result = command.clear(name)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "list":
+        let result = command.list()
+        print(result.message)
+        exit(0)
     default:
         printUsage()
         exit(64)
