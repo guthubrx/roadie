@@ -57,12 +57,10 @@ public struct StageCommandService {
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: displayID, in: &state)
+        let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
+        let removedPin = active.scope == targetScope ? nil : state.removePin(windowID: active.window.id)
         scope.assign(window: active.window, to: stageID)
         state.update(scope)
-        state.updatePinHomeScope(
-            windowID: active.window.id,
-            to: StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
-        )
         store.save(state)
 
         if scope.activeStageID != stageID {
@@ -73,9 +71,13 @@ public struct StageCommandService {
         }
         events.append(RoadieEvent(
             type: "stage_assign",
-            scope: StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID),
-            details: ["windowID": String(active.window.id.rawValue)]
+            scope: targetScope,
+            details: [
+                "windowID": String(active.window.id.rawValue),
+                "unpinned": String(removedPin != nil),
+            ]
         ))
+        appendManualPinRemovalEvent(removedPin, targetScope: targetScope)
         return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
     }
 
@@ -102,6 +104,7 @@ public struct StageCommandService {
         windowID: WindowID,
         to rawStageID: String,
         displayID: DisplayID,
+        insertionIndex: Int? = nil,
         focusAssignedWindow: Bool = true
     ) -> StageCommandResult {
         let snapshot = service.snapshot()
@@ -112,21 +115,27 @@ public struct StageCommandService {
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: displayID, in: &state)
-        guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             scope.remove(windowID: windowID)
             state.update(scope)
             store.save(state)
             return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
         }
+        let window = entry.window
 
         for scopeIndex in state.scopes.indices {
             state.scopes[scopeIndex].remove(windowID: windowID)
         }
         scope = activeScope(displayID: displayID, in: &state)
-        scope.assign(window: window, to: stageID)
-        state.update(scope)
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
-        state.updatePinHomeScope(windowID: windowID, to: targetScope)
+        let removedPin = entry.scope == targetScope ? nil : state.removePin(windowID: windowID)
+        scope.assign(
+            window: window,
+            to: stageID,
+            insertionIndex: insertionIndex,
+            focusWindow: focusAssignedWindow
+        )
+        state.update(scope)
         store.save(state)
 
         if scope.activeStageID != stageID {
@@ -138,19 +147,29 @@ public struct StageCommandService {
         if focusAssignedWindow, scope.activeStageID == stageID {
             _ = service.focus(window)
         }
-        events.append(RoadieEvent(
-            type: "stage_assign_window",
-            scope: activeScope,
-            details: [
-                "stageID": stageID.rawValue,
-                "windowID": String(windowID.rawValue),
-                "layout": String(layoutResult.attempted)
-            ]
-        ))
+        var details = [
+            "stageID": stageID.rawValue,
+            "windowID": String(windowID.rawValue),
+            "layout": String(layoutResult.attempted),
+            "focusAssignedWindow": String(focusAssignedWindow),
+            "unpinned": String(removedPin != nil),
+        ]
+        if let insertionIndex {
+            details["insertionIndex"] = String(insertionIndex)
+        }
+        events.append(RoadieEvent(type: "stage_assign_window", scope: activeScope, details: details))
+        appendManualPinRemovalEvent(removedPin, targetScope: targetScope)
         return StageCommandResult(
             message: "stage assign \(stageID.rawValue): window=\(windowID.rawValue) layout=\(layoutResult.attempted)",
             changed: true
         )
+    }
+
+    private func appendManualPinRemovalEvent(_ pin: PersistentWindowPin?, targetScope: StageScope) {
+        guard let pin else { return }
+        var details = pin.eventDetails
+        details["reason"] = "manual_window_move"
+        events.append(RoadieEvent(type: "window.pin_removed", scope: targetScope, details: details))
     }
 
     public func list() -> StageCommandResult {

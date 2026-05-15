@@ -176,6 +176,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var desktopSelections: [PersistentDesktopSelection]
     public var desktopLabels: [PersistentDesktopLabel]
     public var windowPins: [PersistentWindowPin]
+    public var windowBookmarks: [PersistentWindowBookmark]
     public var activeDisplayID: DisplayID?
     public var commandFocusProtection: CommandFocusProtection?
 
@@ -184,6 +185,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopSelections: [PersistentDesktopSelection] = [],
         desktopLabels: [PersistentDesktopLabel] = [],
         windowPins: [PersistentWindowPin] = [],
+        windowBookmarks: [PersistentWindowBookmark] = [],
         activeDisplayID: DisplayID? = nil,
         commandFocusProtection: CommandFocusProtection? = nil
     ) {
@@ -191,6 +193,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopSelections = desktopSelections
         self.desktopLabels = desktopLabels
         self.windowPins = Self.uniquePins(windowPins)
+        self.windowBookmarks = Self.uniqueBookmarks(windowBookmarks)
         self.activeDisplayID = activeDisplayID
         self.commandFocusProtection = commandFocusProtection
     }
@@ -200,6 +203,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         case desktopSelections
         case desktopLabels
         case windowPins
+        case windowBookmarks
         case activeDisplayID
         case commandFocusProtection
     }
@@ -210,6 +214,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopSelections = try c.decodeIfPresent([PersistentDesktopSelection].self, forKey: .desktopSelections) ?? []
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
         self.windowPins = Self.uniquePins(try c.decodeIfPresent([PersistentWindowPin].self, forKey: .windowPins) ?? [])
+        self.windowBookmarks = Self.uniqueBookmarks(try c.decodeIfPresent([PersistentWindowBookmark].self, forKey: .windowBookmarks) ?? [])
         self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
         self.commandFocusProtection = try c.decodeIfPresent(CommandFocusProtection.self, forKey: .commandFocusProtection)
     }
@@ -220,6 +225,14 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
             byWindow[pin.windowID] = pin
         }
         return byWindow.values.sorted { $0.windowID.rawValue < $1.windowID.rawValue }
+    }
+
+    private static func uniqueBookmarks(_ bookmarks: [PersistentWindowBookmark]) -> [PersistentWindowBookmark] {
+        var byName: [String: PersistentWindowBookmark] = [:]
+        for bookmark in bookmarks {
+            byName[bookmark.name] = bookmark
+        }
+        return byName.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
@@ -268,6 +281,86 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
 
     public func isPinned(_ windowID: WindowID) -> Bool {
         pin(for: windowID) != nil
+    }
+
+    public func bookmark(named name: String) -> PersistentWindowBookmark? {
+        windowBookmarks.first { $0.name == PersistentWindowBookmark.normalizedName(name) }
+    }
+
+    @discardableResult
+    public mutating func setBookmark(
+        name: String,
+        window: WindowSnapshot,
+        scope: StageScope,
+        now: Date = Date()
+    ) -> PersistentWindowBookmark {
+        let normalized = PersistentWindowBookmark.normalizedName(name)
+        let bookmark = PersistentWindowBookmark(
+            name: normalized,
+            windowID: window.id,
+            scope: scope,
+            bundleID: window.bundleID,
+            title: window.title,
+            frame: window.frame,
+            createdAt: windowBookmarks.first { $0.name == normalized }?.createdAt ?? now,
+            updatedAt: now,
+            lastSeenAt: now,
+            missingSince: nil
+        )
+        windowBookmarks.removeAll { $0.name == normalized }
+        windowBookmarks.append(bookmark)
+        windowBookmarks = Self.uniqueBookmarks(windowBookmarks)
+        return bookmark
+    }
+
+    @discardableResult
+    public mutating func removeBookmark(named name: String) -> PersistentWindowBookmark? {
+        let normalized = PersistentWindowBookmark.normalizedName(name)
+        guard let index = windowBookmarks.firstIndex(where: { $0.name == normalized }) else { return nil }
+        return windowBookmarks.remove(at: index)
+    }
+
+    @discardableResult
+    public mutating func removeBookmarks(for windowID: WindowID) -> [PersistentWindowBookmark] {
+        let removed = windowBookmarks.filter { $0.windowID == windowID }
+        windowBookmarks.removeAll { $0.windowID == windowID }
+        return removed
+    }
+
+    @discardableResult
+    public mutating func pruneMissingBookmarks(
+        keeping liveWindowIDs: Set<WindowID>,
+        missingGrace: TimeInterval = 45,
+        now: Date = Date()
+    ) -> [PersistentWindowBookmark] {
+        var pruned: [PersistentWindowBookmark] = []
+        for index in windowBookmarks.indices {
+            if liveWindowIDs.contains(windowBookmarks[index].windowID) {
+                windowBookmarks[index].lastSeenAt = now
+                windowBookmarks[index].missingSince = nil
+            } else if let missingSince = windowBookmarks[index].missingSince {
+                if now.timeIntervalSince(missingSince) >= missingGrace {
+                    pruned.append(windowBookmarks[index])
+                }
+            } else {
+                windowBookmarks[index].missingSince = now
+            }
+        }
+        guard !pruned.isEmpty else { return [] }
+        let prunedNames = Set(pruned.map(\.name))
+        windowBookmarks.removeAll { prunedNames.contains($0.name) }
+        return pruned
+    }
+
+    public mutating func updateBookmarkObservation(window: WindowSnapshot, scope: StageScope, now: Date = Date()) {
+        for index in windowBookmarks.indices where windowBookmarks[index].windowID == window.id {
+            windowBookmarks[index].scope = scope
+            windowBookmarks[index].bundleID = window.bundleID
+            windowBookmarks[index].title = window.title
+            windowBookmarks[index].frame = window.frame
+            windowBookmarks[index].lastSeenAt = now
+            windowBookmarks[index].missingSince = nil
+        }
     }
 
     @discardableResult
@@ -384,6 +477,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
             guard let replacementID = remapped[windowPins[index].windowID] else { continue }
             windowPins[index].windowID = replacementID
         }
+        for index in windowBookmarks.indices {
+            guard let replacementID = remapped[windowBookmarks[index].windowID] else { continue }
+            windowBookmarks[index].windowID = replacementID
+        }
         for scopeIndex in scopes.indices {
             for stageIndex in scopes[scopeIndex].stages.indices {
                 var stage = scopes[scopeIndex].stages[stageIndex]
@@ -408,19 +505,31 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
     }
 
-    public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
-        for scopeIndex in scopes.indices {
-            scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs)
-        }
-    }
-
+    @discardableResult
     public mutating func pruneMissingWindows(
         keeping liveWindowIDs: Set<WindowID>,
-        liveDisplayIDs: Set<DisplayID>
-    ) {
-        for scopeIndex in scopes.indices where liveDisplayIDs.contains(scopes[scopeIndex].displayID) {
-            scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs)
+        missingGrace: TimeInterval = 45,
+        now: Date = Date()
+    ) -> MissingWindowReconciliationReport {
+        var report = MissingWindowReconciliationReport()
+        for scopeIndex in scopes.indices {
+            report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, now: now))
         }
+        return report
+    }
+
+    @discardableResult
+    public mutating func pruneMissingWindows(
+        keeping liveWindowIDs: Set<WindowID>,
+        liveDisplayIDs: Set<DisplayID>,
+        missingGrace: TimeInterval = 45,
+        now: Date = Date()
+    ) -> MissingWindowReconciliationReport {
+        var report = MissingWindowReconciliationReport()
+        for scopeIndex in scopes.indices where liveDisplayIDs.contains(scopes[scopeIndex].displayID) {
+            report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, now: now))
+        }
+        return report
     }
 
     public mutating func remove(windowID: WindowID) {
@@ -614,6 +723,18 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
             )
         }
     }
+
+    public var eventDetails: [String: String] {
+        [
+            "windowID": String(windowID.rawValue),
+            "bundleID": bundleID,
+            "title": title,
+            "pinScope": pinScope.rawValue,
+            "displayID": homeScope.displayID.rawValue,
+            "desktopID": String(homeScope.desktopID.rawValue),
+            "stageID": homeScope.stageID.rawValue,
+        ]
+    }
 }
 
 public struct PinMutation: Equatable, Sendable {
@@ -621,6 +742,48 @@ public struct PinMutation: Equatable, Sendable {
     public var previous: PersistentWindowPin?
     public var created: Bool
     public var scopeChanged: Bool
+}
+
+public struct PersistentWindowBookmark: Equatable, Codable, Sendable {
+    public var name: String
+    public var windowID: WindowID
+    public var scope: StageScope
+    public var bundleID: String
+    public var title: String
+    public var frame: Rect
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var lastSeenAt: Date?
+    public var missingSince: Date?
+
+    public init(
+        name: String,
+        windowID: WindowID,
+        scope: StageScope,
+        bundleID: String,
+        title: String,
+        frame: Rect,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
+        lastSeenAt: Date? = nil,
+        missingSince: Date? = nil
+    ) {
+        self.name = Self.normalizedName(name)
+        self.windowID = windowID
+        self.scope = scope
+        self.bundleID = bundleID
+        self.title = title
+        self.frame = frame
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastSeenAt = lastSeenAt
+        self.missingSince = missingSince
+    }
+
+    public static func normalizedName(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "default" : trimmed
+    }
 }
 
 public enum PinVisibilityReason: String, Codable, Sendable {
@@ -759,7 +922,12 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     // Complexite : O(stages * members). Pre-conditions : le total members est borne (~60-100).
     // Le balayage de toutes les stages est necessaire pour deplacer la fenetre depuis un stage
     // d'origine inconnu et nettoyer les groupes orphelins.
-    public mutating func assign(window: WindowSnapshot, to stageID: StageID) {
+    public mutating func assign(
+        window: WindowSnapshot,
+        to stageID: StageID,
+        insertionIndex: Int? = nil,
+        focusWindow: Bool = true
+    ) {
         ensureStage(stageID)
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == window.id }
@@ -774,13 +942,23 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             }
         }
         guard let index = stages.firstIndex(where: { $0.id == stageID }) else { return }
-        stages[index].members.append(PersistentStageMember(
+        let member = PersistentStageMember(
             windowID: window.id,
             bundleID: window.bundleID,
             title: window.title,
-            frame: window.frame
-        ))
-        stages[index].focusedWindowID = window.id
+            frame: window.frame,
+            lastSeenAt: Date(),
+            missingSince: nil
+        )
+        if let insertionIndex {
+            let targetIndex = min(max(insertionIndex, 0), stages[index].members.count)
+            stages[index].members.insert(member, at: targetIndex)
+        } else {
+            stages[index].members.append(member)
+        }
+        if focusWindow || stages[index].focusedWindowID == nil {
+            stages[index].focusedWindowID = window.id
+        }
     }
 
     public mutating func setMode(_ mode: WindowManagementMode, for stageID: StageID) {
@@ -840,25 +1018,53 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             stages[stageIndex].members[memberIndex].frame = window.frame
             stages[stageIndex].members[memberIndex].bundleID = window.bundleID
             stages[stageIndex].members[memberIndex].title = window.title
+            stages[stageIndex].members[memberIndex].lastSeenAt = Date()
+            stages[stageIndex].members[memberIndex].missingSince = nil
             return
         }
     }
 
-    public mutating func pruneMissingWindows(keeping liveWindowIDs: Set<WindowID>) {
+    @discardableResult
+    public mutating func pruneMissingWindows(
+        keeping liveWindowIDs: Set<WindowID>,
+        missingGrace: TimeInterval = 45,
+        now: Date = Date()
+    ) -> MissingWindowReconciliationReport {
+        var report = MissingWindowReconciliationReport()
         for stageIndex in stages.indices {
-            stages[stageIndex].members.removeAll { !liveWindowIDs.contains($0.windowID) }
+            var prunedWindowIDs: Set<WindowID> = []
+            for memberIndex in stages[stageIndex].members.indices {
+                let windowID = stages[stageIndex].members[memberIndex].windowID
+                if liveWindowIDs.contains(windowID) {
+                    if stages[stageIndex].members[memberIndex].missingSince != nil {
+                        report.restoredWindowIDs.insert(windowID)
+                    }
+                    stages[stageIndex].members[memberIndex].lastSeenAt = now
+                    stages[stageIndex].members[memberIndex].missingSince = nil
+                } else if let missingSince = stages[stageIndex].members[memberIndex].missingSince {
+                    if now.timeIntervalSince(missingSince) >= missingGrace {
+                        prunedWindowIDs.insert(windowID)
+                    }
+                } else {
+                    stages[stageIndex].members[memberIndex].missingSince = now
+                    report.markedMissingWindowIDs.insert(windowID)
+                }
+            }
+            report.prunedWindowIDs.formUnion(prunedWindowIDs)
+            stages[stageIndex].members.removeAll { prunedWindowIDs.contains($0.windowID) }
             stages[stageIndex].groups = stages[stageIndex].groups.compactMap { group in
                 var updated = group
-                for windowID in group.windowIDs where !liveWindowIDs.contains(windowID) {
+                for windowID in group.windowIDs where prunedWindowIDs.contains(windowID) {
                     updated.remove(windowID)
                 }
                 return updated.windowIDs.count >= 2 ? updated : nil
             }
             if let focusedWindowID = stages[stageIndex].focusedWindowID,
-               !liveWindowIDs.contains(focusedWindowID) {
+               prunedWindowIDs.contains(focusedWindowID) {
                 stages[stageIndex].focusedWindowID = stages[stageIndex].members.last?.windowID
             }
         }
+        return report
     }
 
     public func memberIDs(in stageID: StageID) -> [WindowID] {
@@ -956,17 +1162,54 @@ public struct PersistentStage: Equatable, Codable, Sendable {
     }
 }
 
+public struct MissingWindowReconciliationReport: Equatable, Sendable {
+    public var markedMissingWindowIDs: Set<WindowID>
+    public var restoredWindowIDs: Set<WindowID>
+    public var prunedWindowIDs: Set<WindowID>
+
+    public init(
+        markedMissingWindowIDs: Set<WindowID> = [],
+        restoredWindowIDs: Set<WindowID> = [],
+        prunedWindowIDs: Set<WindowID> = []
+    ) {
+        self.markedMissingWindowIDs = markedMissingWindowIDs
+        self.restoredWindowIDs = restoredWindowIDs
+        self.prunedWindowIDs = prunedWindowIDs
+    }
+
+    public var isEmpty: Bool {
+        markedMissingWindowIDs.isEmpty && restoredWindowIDs.isEmpty && prunedWindowIDs.isEmpty
+    }
+
+    public mutating func merge(_ other: MissingWindowReconciliationReport) {
+        markedMissingWindowIDs.formUnion(other.markedMissingWindowIDs)
+        restoredWindowIDs.formUnion(other.restoredWindowIDs)
+        prunedWindowIDs.formUnion(other.prunedWindowIDs)
+    }
+}
+
 public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var windowID: WindowID
     public var bundleID: String
     public var title: String
     public var frame: Rect
+    public var lastSeenAt: Date?
+    public var missingSince: Date?
 
-    public init(windowID: WindowID, bundleID: String, title: String, frame: Rect) {
+    public init(
+        windowID: WindowID,
+        bundleID: String,
+        title: String,
+        frame: Rect,
+        lastSeenAt: Date? = nil,
+        missingSince: Date? = nil
+    ) {
         self.windowID = windowID
         self.bundleID = bundleID
         self.title = title
         self.frame = frame
+        self.lastSeenAt = lastSeenAt
+        self.missingSince = missingSince
     }
 }
 

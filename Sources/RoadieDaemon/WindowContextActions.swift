@@ -174,7 +174,7 @@ public struct WindowContextActions {
         eventLog.append(RoadieEvent(
             type: eventType,
             scope: mutation.pin.homeScope,
-            details: pinEventDetails(mutation.pin)
+            details: mutation.pin.eventDetails
         ))
 
         let scopeLabel = pinScope == .desktop ? "ce desktop" : "tous les desktops"
@@ -205,21 +205,9 @@ public struct WindowContextActions {
         eventLog.append(RoadieEvent(
             type: "window.pin_removed",
             scope: target,
-            details: pinEventDetails(removed)
+            details: removed.eventDetails
         ))
         return WindowContextActionResult(message: "pin removed: window=\(window.id.rawValue)", changed: true)
-    }
-
-    private func pinEventDetails(_ pin: PersistentWindowPin) -> [String: String] {
-        [
-            "windowID": String(pin.windowID.rawValue),
-            "bundleID": pin.bundleID,
-            "title": pin.title,
-            "pinScope": pin.pinScope.rawValue,
-            "displayID": pin.homeScope.displayID.rawValue,
-            "desktopID": String(pin.homeScope.desktopID.rawValue),
-            "stageID": pin.homeScope.stageID.rawValue
-        ]
     }
 
     private func stageDestinations(in snapshot: DaemonSnapshot, scope: StageScope) -> [WindowDestination] {

@@ -315,8 +315,29 @@ public struct WindowCommandService {
         }
 
         let transferFrame = centeredFrame(active.window.frame.cgRect, in: display.visibleFrame.cgRect)
-        guard service.setFrame(transferFrame, of: active.window) != nil else {
+        let initialMove = setInitialTransferFrame(transferFrame, of: active.window)
+        guard let movedFrame = initialMove.frame else {
+            events.append(RoadieEvent(
+                type: "window_display_initial_move_failed",
+                scope: targetScopeID,
+                details: [
+                    "windowID": String(active.window.id.rawValue),
+                    "displayIndex": String(display.index),
+                    "attempts": String(initialMove.attempts)
+                ]
+            ))
             return WindowCommandResult(message: "display \(display.index): initial move failed", changed: false)
+        }
+        if initialMove.attempts > 1 {
+            events.append(RoadieEvent(
+                type: "window_display_initial_move_retried",
+                scope: targetScopeID,
+                details: [
+                    "windowID": String(active.window.id.rawValue),
+                    "displayIndex": String(display.index),
+                    "attempts": String(initialMove.attempts)
+                ]
+            ))
         }
 
         var state = stageStore.state()
@@ -330,7 +351,7 @@ public struct WindowCommandService {
             appName: active.window.appName,
             bundleID: active.window.bundleID,
             title: active.window.title,
-            frame: Rect(transferFrame),
+            frame: Rect(movedFrame),
             isOnScreen: active.window.isOnScreen,
             isTileCandidate: active.window.isTileCandidate,
             subrole: active.window.subrole,
@@ -339,7 +360,7 @@ public struct WindowCommandService {
         )
         targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
         state.update(targetScope)
-        state.updatePinHomeScope(windowID: active.window.id, to: targetScopeID)
+        let removedPin = state.removePin(windowID: active.window.id)
         stageStore.save(state)
 
         if let sourceScope {
@@ -362,13 +383,36 @@ public struct WindowCommandService {
                 "attempted": String(result.attempted),
                 "applied": String(result.applied),
                 "clamped": String(result.clamped),
-                "failed": String(result.failed)
+                "failed": String(result.failed),
+                "initialMoveAttempts": String(initialMove.attempts),
+                "unpinned": String(removedPin != nil),
             ]
         ))
+        appendManualPinRemovalEvent(removedPin, targetScope: targetScopeID)
         return WindowCommandResult(
             message: "display \(display.index): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
+    }
+
+    private func appendManualPinRemovalEvent(_ pin: PersistentWindowPin?, targetScope: StageScope) {
+        guard let pin else { return }
+        var details = pin.eventDetails
+        details["reason"] = "manual_window_move"
+        events.append(RoadieEvent(type: "window.pin_removed", scope: targetScope, details: details))
+    }
+
+    private func setInitialTransferFrame(_ frame: CGRect, of window: WindowSnapshot) -> (frame: CGRect?, attempts: Int) {
+        let maxAttempts = 3
+        for attempt in 1...maxAttempts {
+            if let movedFrame = service.setFrame(frame, of: window) {
+                return (movedFrame, attempt)
+            }
+            if attempt < maxAttempts {
+                Thread.sleep(forTimeInterval: 0.08)
+            }
+        }
+        return (nil, maxAttempts)
     }
 
     private func activeAndNeighbor(

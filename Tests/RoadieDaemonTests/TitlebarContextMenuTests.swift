@@ -368,7 +368,7 @@ struct TitlebarContextMenuTests {
     }
 
     @Test
-    func movingPinnedWindowToAnotherStageUpdatesPinHomeScope() {
+    func movingPinnedWindowToAnotherStageRemovesInstancePin() {
         let main = powerDisplay("display-main", index: 1, x: 0)
         let window = titlebarWindow(1, x: 100)
         let provider = PowerUserProvider(displays: [main], windows: [window])
@@ -385,7 +385,7 @@ struct TitlebarContextMenuTests {
         let moved = actions.execute(WindowContextAction(windowID: window.id, kind: .stage, targetID: "2", sourceScope: nil))
 
         #expect(moved.changed)
-        #expect(store.state().pin(for: window.id)?.homeScope.stageID == StageID(rawValue: "2"))
+        #expect(store.state().pin(for: window.id) == nil)
         #expect(store.state().stageScope(for: window.id)?.stageID == StageID(rawValue: "2"))
     }
 

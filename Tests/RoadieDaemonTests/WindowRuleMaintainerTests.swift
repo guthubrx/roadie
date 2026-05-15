@@ -234,6 +234,70 @@ struct WindowRuleMaintainerTests {
     }
 
     @Test
+    func tickDoesNotReapplyPlacementAfterWindowWasMovedManually() throws {
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-placement-manual-\(UUID().uuidString).jsonl")
+            .path
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-placement-manual-\(UUID().uuidString).json")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+
+        let displayID = DisplayID(rawValue: "display-main")
+        let window = ruleWindow(id: 69, appName: "BlueJay", title: "Grayjay")
+        var scope = PersistentStageScope(
+            displayID: displayID,
+            activeStageID: StageID(rawValue: "1"),
+            stages: [
+                PersistentStage(id: StageID(rawValue: "1"), name: "Affinity"),
+                PersistentStage(id: StageID(rawValue: "2"), name: "Manual")
+            ]
+        )
+        scope.assign(window: window, to: StageID(rawValue: "1"))
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [scope]))
+        let service = SnapshotService(
+            provider: RuleSystemSnapshotProvider(window: window),
+            frameWriter: RuleRecordingWriter(),
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            ruleEngine: WindowRuleEngine(rules: [
+                WindowRule(
+                    id: "bluejay-affinity",
+                    match: RuleMatch(app: "BlueJay"),
+                    action: RuleAction(assignStage: "1")
+                )
+            ]),
+            store: store
+        )
+
+        _ = maintainer.tick()
+
+        var movedState = store.state()
+        var movedScope = movedState.scope(displayID: displayID)
+        movedScope.assign(window: window, to: StageID(rawValue: "2"))
+        movedState.update(movedScope)
+        store.save(movedState)
+
+        _ = maintainer.tick()
+
+        #expect(store.state().stageScope(for: window.id) == StageScope(
+            displayID: displayID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "2")
+        ))
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"rule.placement_skipped\""))
+        #expect(events.contains("\"reason\":\"window already managed\""))
+    }
+
+    @Test
     func tickPlacesMatchedWindowOnNamedDisplay() throws {
         let eventPath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-rule-placement-display-\(UUID().uuidString).jsonl")

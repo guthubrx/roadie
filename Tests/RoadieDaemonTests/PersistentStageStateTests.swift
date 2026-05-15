@@ -89,6 +89,46 @@ struct PersistentStageStateTests {
     }
 
     @Test
+    func assignCanInsertAtRequestedIndexWithoutStealingTargetFocus() {
+        var scope = PersistentStageScope(displayID: DisplayID(rawValue: "main"), activeStageID: StageID(rawValue: "1"), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [
+                member(30),
+            ]),
+            PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: WindowID(rawValue: 20), members: [
+                member(10),
+                member(20),
+            ]),
+        ])
+
+        scope.assign(
+            window: window(30),
+            to: StageID(rawValue: "2"),
+            insertionIndex: 1,
+            focusWindow: false
+        )
+
+        let target = scope.stages.first { $0.id == StageID(rawValue: "2") }
+        #expect(target?.members.map(\.windowID.rawValue) == [10, 30, 20])
+        #expect(target?.focusedWindowID == WindowID(rawValue: 20))
+        #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
+    }
+
+    @Test
+    func assignDefaultsToAppendAndFocusMovedWindow() {
+        var scope = PersistentStageScope(displayID: DisplayID(rawValue: "main"), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [
+                member(10),
+            ]),
+        ])
+
+        scope.assign(window: window(20), to: StageID(rawValue: "1"))
+
+        let stage = scope.stages.first { $0.id == StageID(rawValue: "1") }
+        #expect(stage?.members.map(\.windowID.rawValue) == [10, 20])
+        #expect(stage?.focusedWindowID == WindowID(rawValue: 20))
+    }
+
+    @Test
     func reconcileWindowIDsKeepsStageMembershipAcrossRuntimeIDChange() {
         let scope = PersistentStageScope(displayID: DisplayID(rawValue: "main"), activeStageID: StageID(rawValue: "1"), stages: [
             PersistentStage(id: StageID(rawValue: "1"), members: [

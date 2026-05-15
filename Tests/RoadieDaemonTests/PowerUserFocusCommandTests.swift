@@ -84,6 +84,67 @@ struct PowerUserFocusCommandTests {
     }
 
     @Test
+    func bookmarkFocusReactivatesWindowStage() {
+        let display = DisplayID(rawValue: "display-main")
+        let first = powerWindow(1, x: 100)
+        let second = powerWindow(2, x: 500)
+        let provider = PowerUserProvider(windows: [first, second])
+        provider.focusedID = second.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-bookmark-focus"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "2"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: second.id, members: [
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let bookmarks = WindowBookmarkCommandService(service: service, store: store)
+
+        let set = bookmarks.set("work")
+        var state = store.state()
+        var scope = state.scope(displayID: display)
+        scope.activeStageID = StageID(rawValue: "1")
+        state.update(scope)
+        store.save(state)
+        provider.focusedID = first.id
+        let focused = bookmarks.focus("work")
+
+        #expect(set.changed)
+        #expect(focused.changed)
+        #expect(store.state().scopes.first { $0.displayID == display }?.activeStageID == StageID(rawValue: "2"))
+        #expect(writer.focused.last == second.id)
+    }
+
+    @Test
+    func staleBookmarkIsRemovedOnFocus() {
+        let display = DisplayID(rawValue: "display-main")
+        let provider = PowerUserProvider(windows: [powerWindow(1, x: 100)])
+        let store = StageStore(path: tempPath("power-bookmark-stale"))
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(PersistentStageState(windowBookmarks: [
+            PersistentWindowBookmark(
+                name: "gone",
+                windowID: WindowID(rawValue: 99),
+                scope: scope,
+                bundleID: "app.gone",
+                title: "Gone",
+                frame: Rect(x: 0, y: 0, width: 100, height: 100)
+            ),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+
+        let result = WindowBookmarkCommandService(service: service, store: store).focus("gone")
+
+        #expect(result.changed)
+        #expect(store.state().bookmark(named: "gone") == nil)
+    }
+
+    @Test
     func directionalFocusPrefersSameVisualBandBeforeDiagonalCandidate() {
         let provider = PowerUserProvider(windows: [
             powerWindow(1, x: 0, y: 400, width: 300, height: 300),

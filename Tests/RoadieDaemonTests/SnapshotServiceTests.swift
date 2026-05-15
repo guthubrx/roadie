@@ -208,6 +208,26 @@ private final class PartialFailureWriter: WindowFrameWriting, @unchecked Sendabl
     func focus(_ window: WindowSnapshot) -> Bool { true }
 }
 
+private final class TransientFailureWriter: WindowFrameWriting, @unchecked Sendable {
+    private let transientFailureWindowID: WindowID
+    private(set) var attempts: [WindowID: Int] = [:]
+
+    init(transientFailureWindowID: WindowID) {
+        self.transientFailureWindowID = transientFailureWindowID
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        let nextAttempt = (attempts[window.id] ?? 0) + 1
+        attempts[window.id] = nextAttempt
+        if window.id == transientFailureWindowID, nextAttempt == 1 {
+            return nil
+        }
+        return frame
+    }
+
+    func focus(_ window: WindowSnapshot) -> Bool { true }
+}
+
 @Suite
 struct SnapshotServiceTests {
     @Test
@@ -362,6 +382,82 @@ struct SnapshotServiceTests {
         #expect(persisted.activeDisplayID == liveDisplay)
         #expect(staleScope?.memberIDs(in: StageID(rawValue: "4")) == [window.id])
         #expect(liveScope?.memberIDs(in: StageID(rawValue: "1")).isEmpty == true)
+    }
+
+    @Test
+    func temporarilyMissingWindowKeepsStageAcrossFullscreenTransition() {
+        let display = DisplayID(rawValue: "display-a")
+        let visible = WindowSnapshot(
+            id: WindowID(rawValue: 101),
+            pid: 10,
+            appName: "Player",
+            bundleID: "player",
+            title: "video",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let temporarilyMissing = WindowSnapshot(
+            id: WindowID(rawValue: 202),
+            pid: 20,
+            appName: "Editor",
+            bundleID: "editor",
+            title: "document",
+            frame: Rect(x: 100, y: 100, width: 500, height: 300),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stageStore = StageStore(path: tempPath("snapshot-fullscreen-missing-window"))
+        let eventPath = tempPath("snapshot-fullscreen-missing-window-events")
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), members: [
+                    PersistentStageMember(windowID: temporarilyMissing.id, bundleID: temporarilyMissing.bundleID, title: temporarilyMissing.title, frame: temporarilyMissing.frame),
+                ]),
+            ]),
+        ]))
+        let displaySnapshot = DisplaySnapshot(
+            id: display,
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+
+        _ = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [visible], focusedID: visible.id),
+            stageStore: stageStore,
+            events: EventLog(path: eventPath)
+        ).snapshot(followFocus: false)
+
+        var stateDuringFullscreen = stageStore.state()
+        #expect(stateDuringFullscreen.scope(displayID: display).memberIDs(in: StageID(rawValue: "2")) == [temporarilyMissing.id])
+
+        let snapshotAfterFullscreenExit = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [displaySnapshot],
+                windowSnapshots: [visible, temporarilyMissing],
+                focusedID: visible.id
+            ),
+            stageStore: stageStore,
+            events: EventLog(path: eventPath)
+        ).snapshot(followFocus: false)
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        let restoredEntry = snapshotAfterFullscreenExit.windows.first { $0.window.id == temporarilyMissing.id }
+        #expect(restoredEntry?.scope == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2")))
+        #expect(restoredEntry?.isNewlyScoped == false)
+        #expect(events.contains("\"type\":\"windows.missing_reconciled\""))
+        #expect(events.contains("\"markedMissing\":\"1\""))
+        #expect(events.contains("\"restored\":\"1\""))
+        var stateAfterFullscreenExit = stageStore.state()
+        #expect(stateAfterFullscreenExit.scope(displayID: display).memberIDs(in: StageID(rawValue: "1")) == [visible.id])
+        #expect(stateAfterFullscreenExit.scope(displayID: display).memberIDs(in: StageID(rawValue: "2")) == [temporarilyMissing.id])
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 
     @Test
@@ -3053,5 +3149,47 @@ struct SnapshotServiceTests {
         }
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
+    func sendToDisplayRetriesTransientInitialMoveFailure() throws {
+        let displayA = DisplayID(rawValue: "display-a")
+        let displayB = DisplayID(rawValue: "display-b")
+        let sourceDisplay = DisplaySnapshot(id: displayA, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let targetDisplay = DisplaySnapshot(id: displayB, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500), isMain: false)
+        let moving = WindowSnapshot(id: WindowID(rawValue: 44), pid: 10, appName: "A", bundleID: "a", title: "moving", frame: Rect(x: 100, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)
+        let target = WindowSnapshot(id: WindowID(rawValue: 55), pid: 11, appName: "B", bundleID: "b", title: "target", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-retry-\(UUID().uuidString).json")
+            .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-display-retry-\(UUID().uuidString).jsonl")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        let writer = TransientFailureWriter(transientFailureWindowID: moving.id)
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [sourceDisplay, targetDisplay],
+                windowSnapshots: [moving, target],
+                focusedID: moving.id
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            stageStore: stageStore
+        )
+
+        let result = WindowCommandService(
+            service: service,
+            stageStore: stageStore,
+            events: EventLog(path: eventPath)
+        ).sendToDisplay(2)
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+
+        #expect(result.changed)
+        #expect((writer.attempts[moving.id] ?? 0) >= 2)
+        #expect(events.contains("\"type\":\"window_display_initial_move_retried\""))
+        #expect(events.contains("\"initialMoveAttempts\":\"2\""))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: eventPath)
     }
 }

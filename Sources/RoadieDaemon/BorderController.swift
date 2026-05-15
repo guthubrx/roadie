@@ -47,7 +47,7 @@ public final class BorderController {
             return
         }
 
-        let color = activeColor(for: entry.scope?.stageID, config: config)
+        let color = entry.pin == nil ? activeColor(for: entry.scope?.stageID, config: config) : .systemRed
         _ = groupIndicator(for: focusedWindowID, snapshot: snapshot)
         panel.render(
             frame: Self.axToNS(entry.window.frame.cgRect),
