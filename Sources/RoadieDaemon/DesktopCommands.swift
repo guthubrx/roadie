@@ -132,6 +132,9 @@ public struct DesktopCommandService {
         state.update(targetScope)
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
         let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
+        if sourceScope != targetStageScope {
+            state.suppressRulePlacement(window: active.window)
+        }
         store.save(state)
 
         if let sourceScope {
@@ -189,6 +192,7 @@ public struct DesktopCommandService {
         state.update(targetScope)
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
         let removedPin = state.removePin(windowID: entry.window.id)
+        state.suppressRulePlacement(window: entry.window)
         store.save(state)
 
         if let sourceScope {

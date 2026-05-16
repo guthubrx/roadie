@@ -15,7 +15,7 @@ private final class RuleSystemSnapshotProvider: SystemSnapshotProviding, @unchec
         isMain: true
     )
     let displaysOverride: [DisplaySnapshot]?
-    let window: WindowSnapshot
+    var window: WindowSnapshot
 
     init(window: WindowSnapshot, displays: [DisplaySnapshot]? = nil) {
         self.window = window
@@ -92,6 +92,48 @@ struct WindowRuleMaintainerTests {
         #expect(events.contains("\"type\":\"rule.applied\""))
         #expect(events.contains("\"ruleID\":\"terminal-dev\""))
         #expect(events.contains("\"scratchpad\":\"terminals\""))
+    }
+
+    @Test
+    func stableRuleMatchIsPublishedOnceUntilActionChanges() throws {
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-events-dedup-\(UUID().uuidString).jsonl")
+            .path
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-events-dedup-stage-\(UUID().uuidString).json")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+
+        let store = StageStore(path: stagePath)
+        let window = ruleWindow(id: 63, appName: "BlueJay", title: "Grayjay")
+        let service = SnapshotService(
+            provider: RuleSystemSnapshotProvider(window: window),
+            frameWriter: RuleRecordingWriter(),
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            ruleEngine: WindowRuleEngine(rules: [
+                WindowRule(
+                    id: "bluejay-affinity",
+                    match: RuleMatch(app: "BlueJay"),
+                    action: RuleAction(assignDisplay: "Missing Display", assignStage: "Video")
+                )
+            ]),
+            store: store
+        )
+
+        _ = maintainer.tick()
+        _ = maintainer.tick()
+        _ = maintainer.tick()
+
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.countOccurrences(of: "\"type\":\"rule.matched\"") == 1)
+        #expect(events.countOccurrences(of: "\"type\":\"rule.applied\"") == 1)
     }
 
     @Test
@@ -295,6 +337,136 @@ struct WindowRuleMaintainerTests {
         let events = try String(contentsOfFile: eventPath, encoding: .utf8)
         #expect(events.contains("\"type\":\"rule.placement_skipped\""))
         #expect(events.contains("\"reason\":\"window already managed\""))
+    }
+
+    @Test
+    func persistedManualOverrideSuppressesRulePlacementAfterRestart() throws {
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-placement-override-\(UUID().uuidString).jsonl")
+            .path
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rule-placement-override-\(UUID().uuidString).json")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+
+        let displayID = DisplayID(rawValue: "display-main")
+        let window = ruleWindow(id: 70, appName: "BlueJay", title: "Grayjay")
+        var scope = PersistentStageScope(
+            displayID: displayID,
+            activeStageID: StageID(rawValue: "2"),
+            stages: [
+                PersistentStage(id: StageID(rawValue: "1"), name: "Affinity"),
+                PersistentStage(id: StageID(rawValue: "2"), name: "Manual")
+            ]
+        )
+        scope.assign(window: window, to: StageID(rawValue: "2"))
+        var state = PersistentStageState(scopes: [scope])
+        state.suppressRulePlacement(window: window)
+        let store = StageStore(path: stagePath)
+        store.save(state)
+        let service = SnapshotService(
+            provider: RuleSystemSnapshotProvider(window: window),
+            frameWriter: RuleRecordingWriter(),
+            stageStore: store
+        )
+
+        let maintainerAfterRestart = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            ruleEngine: WindowRuleEngine(rules: [
+                WindowRule(
+                    id: "bluejay-affinity",
+                    match: RuleMatch(app: "BlueJay"),
+                    action: RuleAction(assignStage: "1")
+                )
+            ]),
+            store: store
+        )
+
+        _ = maintainerAfterRestart.tick()
+
+        #expect(store.state().stageScope(for: window.id) == StageScope(
+            displayID: displayID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "2")
+        ))
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"rule.placement_skipped\""))
+        #expect(events.contains("\"reason\":\"manual placement override\""))
+    }
+
+    @Test
+    func tickAdoptsManualWindowDragAcrossDisplaysBeforeRelayout() throws {
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-manual-display-drag-\(UUID().uuidString).jsonl")
+            .path
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-manual-display-drag-\(UUID().uuidString).json")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+
+        let main = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-main"),
+            index: 1,
+            name: "Main",
+            frame: Rect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: Rect(x: 0, y: 0, width: 1200, height: 800),
+            isMain: true
+        )
+        let external = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-external"),
+            index: 2,
+            name: "External",
+            frame: Rect(x: 1200, y: 0, width: 1600, height: 900),
+            visibleFrame: Rect(x: 1200, y: 0, width: 1600, height: 900),
+            isMain: false
+        )
+        var initialWindow = ruleWindow(id: 71, appName: "Word", title: "Doc")
+        initialWindow.frame = Rect(x: 100, y: 100, width: 500, height: 400)
+        var sourceScope = PersistentStageScope(
+            displayID: main.id,
+            activeStageID: StageID(rawValue: "1"),
+            stages: [PersistentStage(id: StageID(rawValue: "1"))]
+        )
+        sourceScope.assign(window: initialWindow, to: StageID(rawValue: "1"))
+        let targetScope = PersistentStageScope(
+            displayID: external.id,
+            activeStageID: StageID(rawValue: "6"),
+            stages: [PersistentStage(id: StageID(rawValue: "6"))]
+        )
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [sourceScope, targetScope]))
+        let provider = RuleSystemSnapshotProvider(window: initialWindow, displays: [main, external])
+        let writer = RuleRecordingWriter()
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            ruleEngine: WindowRuleEngine(rules: []),
+            store: store,
+            now: Date.init
+        )
+
+        _ = maintainer.tick()
+        provider.window.frame = Rect(x: 1300, y: 100, width: 500, height: 400)
+        _ = maintainer.tick()
+
+        #expect(store.state().stageScope(for: initialWindow.id) == StageScope(
+            displayID: external.id,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "6")
+        ))
+        #expect(store.state().suppressesRulePlacement(windowID: initialWindow.id, ruleID: "any-rule"))
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"window_manual_display_move_adopted\""))
+        #expect(events.contains("\"fromDisplayID\":\"display-main\""))
+        #expect(events.contains("\"toDisplayID\":\"display-external\""))
     }
 
     @Test
@@ -515,6 +687,19 @@ struct WindowRuleMaintainerTests {
 
 private func eventsContainPlacementApplied(path: String) -> Bool {
     ((try? String(contentsOfFile: path, encoding: .utf8)) ?? "").contains("\"type\":\"rule.placement_applied\"")
+}
+
+private extension String {
+    func countOccurrences(of needle: String) -> Int {
+        guard !needle.isEmpty else { return 0 }
+        var count = 0
+        var searchRange = startIndex..<endIndex
+        while let range = range(of: needle, options: [], range: searchRange) {
+            count += 1
+            searchRange = range.upperBound..<endIndex
+        }
+        return count
+    }
 }
 
 private func ruleWindow(id: UInt32, appName: String, title: String) -> WindowSnapshot {

@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieStages
 
 @MainActor
 public final class RailController {
@@ -654,9 +655,8 @@ public final class RailController {
         var config = RailVisualConfig.load()
         config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
         let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
-        thumbnails.prune(keeping: Set(state.scopes.flatMap { scope in
-            scope.stages.flatMap { stage in stage.members.map(\.windowID) }
-        }))
+        let liveWindowIDs = Set(snapshot.windows.map(\.window.id))
+        thumbnails.prune(keeping: liveWindowIDs)
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
         })
@@ -680,6 +680,7 @@ public final class RailController {
                 displayName: screen.localizedName,
                 config: config,
                 thumbnails: thumbnails,
+                liveWindowIDs: liveWindowIDs,
                 protectedWindowIDs: Set(protectedBlurredWindows.keys)
             )
             if panels[displayID] == nil {
@@ -810,6 +811,47 @@ public final class RailController {
         snapshot.displays
             .filter { $0.id != sourceDisplayID }
             .sorted { $0.index < $1.index }
+    }
+
+    nonisolated public static func railVisibleStageIDs(
+        in scope: PersistentStageScope,
+        liveWindowIDs: Set<WindowID>
+    ) -> [StageID] {
+        scope.stages
+            .filter { stage in
+                stage.members.contains { liveWindowIDs.contains($0.windowID) }
+            }
+            .map(\.id)
+    }
+
+    nonisolated public static func railDisplayStage(
+        _ stage: PersistentStage,
+        liveWindowIDs: Set<WindowID>
+    ) -> PersistentStage {
+        let liveMembers = stage.members.filter { liveWindowIDs.contains($0.windowID) }
+        let liveMemberIDs = Set(liveMembers.map(\.windowID))
+        let liveGroups = stage.groups.compactMap { group -> WindowGroup? in
+            var updated = group
+            for windowID in group.windowIDs where !liveMemberIDs.contains(windowID) {
+                updated.remove(windowID)
+            }
+            return updated.windowIDs.count >= 2 ? updated : nil
+        }
+        let focusedWindowID = stage.focusedWindowID.flatMap { liveMemberIDs.contains($0) ? $0 : nil }
+        let previousFocusedWindowID = stage.previousFocusedWindowID.flatMap { liveMemberIDs.contains($0) ? $0 : nil }
+        return PersistentStage(
+            id: stage.id,
+            name: stage.name,
+            mode: stage.mode,
+            focusedWindowID: focusedWindowID ?? liveMembers.first?.windowID,
+            previousFocusedWindowID: previousFocusedWindowID,
+            parkingState: stage.parkingState,
+            origin: stage.origin,
+            hostDisplayID: stage.hostDisplayID,
+            restoredAt: stage.restoredAt,
+            members: liveMembers,
+            groups: liveGroups
+        )
     }
 
     nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
@@ -1188,6 +1230,7 @@ private final class RailPanel: NSPanel {
         displayName: String,
         config: RailVisualConfig,
         thumbnails: WindowThumbnailStore,
+        liveWindowIDs: Set<WindowID>,
         protectedWindowIDs: Set<WindowID>
     ) {
         stack.arrangedSubviews.forEach { view in
@@ -1198,9 +1241,13 @@ private final class RailPanel: NSPanel {
         if config.headerVisible, config.headerPosition == .top {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
-        let ids = stageIDs(from: scope)
+        let ids = RailController.railVisibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs)
         visibleStageIDs = ids
-        emptyStageIDs = scope.stages.filter(\.members.isEmpty).map(\.id)
+        emptyStageIDs = scope.stages
+            .filter { stage in
+                !stage.members.contains { liveWindowIDs.contains($0.windowID) }
+            }
+            .map(\.id)
         stack.railBackgroundColor = config.backgroundColor
         stack.railBackgroundOpacity = config.backgroundOpacity
         emptyClickHideActive = config.emptyClickHideActive
@@ -1210,7 +1257,8 @@ private final class RailPanel: NSPanel {
             stack.addArrangedSubview(spacer)
         }
         for (index, id) in ids.enumerated() {
-            let stage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
+            let persistedStage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
+            let stage = RailController.railDisplayStage(persistedStage, liveWindowIDs: liveWindowIDs)
             let card = StageCardView(
                 stage: stage,
                 displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
@@ -1445,10 +1493,6 @@ private final class RailPanel: NSPanel {
             return StageID(rawValue: String(index))
         }
         return StageID(rawValue: UUID().uuidString)
-    }
-
-    private func stageIDs(from scope: PersistentStageScope) -> [StageID] {
-        scope.stages.filter { !$0.members.isEmpty }.map(\.id)
     }
 
     private static func isCustomStageName(_ name: String, id: StageID) -> Bool {

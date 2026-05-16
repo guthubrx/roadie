@@ -301,6 +301,36 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func failedFrameStaysSuppressedPastCooldownWhenObservedFrameIsUnchanged() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let provider = SequenceProvider(display: display, windowFrames: [[initial], [initial]])
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        let first = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(30)
+        let second = maintainer.tick()
+
+        #expect(first.failed == 1)
+        #expect(second.commands == 0)
+        #expect(writer.attempts == 1)
+    }
+
+    @Test
     func revertedAppliedFrameDoesNotTriggerRepeatedApplyLoop() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -326,6 +356,34 @@ struct LayoutMaintainerTests {
         #expect(first.commands == 1)
         #expect(first.applied == 1)
         #expect(second.commands == 0)
+    }
+
+    @Test
+    func activeWindowDragSuppressesMaintainerRelayout() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[initial]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        let now = Date(timeIntervalSince1970: 100)
+        let dragActivity = WindowDragActivity()
+        let maintainer = LayoutMaintainer(service: service, dragActivity: dragActivity, now: { now })
+        dragActivity.markActive(windowID: WindowID(rawValue: 1), now: now, holdSeconds: 5)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
     }
 
     @Test
@@ -397,6 +455,66 @@ struct LayoutMaintainerTests {
         #expect(events.contains("\"type\":\"layout_apply\""))
         try? FileManager.default.removeItem(atPath: intentPath)
         try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func fullscreenLikeChangeDoesNotTriggerManualResizeOrRelayout() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let splitLeft = Rect(x: 0, y: 0, width: 495, height: 500)
+        let splitRight = Rect(x: 505, y: 0, width: 495, height: 500)
+        let fullscreen = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [
+                [splitLeft, splitRight],
+                [fullscreen, splitRight],
+            ]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let initial = maintainer.tick()
+        let fullscreenTick = maintainer.tick()
+
+        #expect(initial.commands == 0)
+        #expect(fullscreenTick.commands == 0)
+        #expect(!fullscreenTick.manualResizeDetected)
+        #expect(writer.requestedFrames.isEmpty)
+    }
+
+    @Test
+    func fullscreenLikeWindowIsNotResizedByMaintainerPlan() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let fullscreen = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let small = Rect(x: 120, y: 0, width: 100, height: 500)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[fullscreen, small]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] != nil)
     }
 
     @Test
@@ -731,6 +849,61 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func inactiveFullscreenLikeStageWindowIsNotHidden() {
+        let intent = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let window = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "fullscreen",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-maintainer-fullscreen-hide-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display.id,
+                activeStageID: StageID(rawValue: "2"),
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2")),
+                ]
+            ),
+        ]))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[window]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intent.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intent.path)
+    }
+
+    @Test
     func inactiveFloatingStageWindowsAreHidden() {
         let intent = makeIntentStore()
         let display = DisplaySnapshot(
@@ -894,7 +1067,7 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func staleCommandIntentStillSuppressesReflowWhenLayoutMatches() {
+    func staleCommandIntentStillSuppressesReflowWhenLayoutMatchesWithoutRefreshingExpiry() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -938,7 +1111,7 @@ struct LayoutMaintainerTests {
 
         #expect(result.commands == 0)
         #expect(writer.requestedFrames.isEmpty)
-        #expect(intentStore.intent(for: intentScope)?.createdAt ?? Date.distantPast > initialCreatedAt)
+        #expect(intentStore.intent(for: intentScope)?.createdAt == initialCreatedAt)
         try? FileManager.default.removeItem(atPath: intentTemp.path)
     }
 }

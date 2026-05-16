@@ -361,6 +361,7 @@ public struct WindowCommandService {
         targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
         state.update(targetScope)
         let removedPin = state.removePin(windowID: active.window.id)
+        state.suppressRulePlacement(window: transferredWindow)
         stageStore.save(state)
 
         if let sourceScope {

@@ -116,7 +116,7 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             match: match,
             action: RuleAction(
                 assignDesktop: String(scope.desktopID.rawValue),
-                assignDisplay: display.id.rawValue,
+                assignDisplay: display.name.isEmpty ? display.id.rawValue : display.name,
                 assignStage: scope.stageID.rawValue,
                 follow: false
             )

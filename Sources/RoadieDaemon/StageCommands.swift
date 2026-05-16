@@ -59,7 +59,10 @@ public struct StageCommandService {
         var scope = activeScope(displayID: displayID, in: &state)
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
         let removedPin = active.scope == targetScope ? nil : state.removePin(windowID: active.window.id)
-        scope.assign(window: active.window, to: stageID)
+        if active.scope != targetScope {
+            state.suppressRulePlacement(window: active.window)
+        }
+        scope.assign(window: active.window, to: stageID, defaultMode: config.tiling.defaultStrategy)
         state.update(scope)
         store.save(state)
 
@@ -129,11 +132,15 @@ public struct StageCommandService {
         scope = activeScope(displayID: displayID, in: &state)
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
         let removedPin = entry.scope == targetScope ? nil : state.removePin(windowID: windowID)
+        if entry.scope != targetScope {
+            state.suppressRulePlacement(window: window)
+        }
         scope.assign(
             window: window,
             to: stageID,
             insertionIndex: insertionIndex,
-            focusWindow: focusAssignedWindow
+            focusWindow: focusAssignedWindow,
+            defaultMode: config.tiling.defaultStrategy
         )
         state.update(scope)
         store.save(state)
@@ -198,7 +205,7 @@ public struct StageCommandService {
         let stageID = StageID(rawValue: rawStageID)
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
-        guard scope.createStage(stageID, name: name) else {
+        guard scope.createStage(stageID, name: name, mode: config.tiling.defaultStrategy) else {
             return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
         }
         state.update(scope)
@@ -529,7 +536,7 @@ public struct StageCommandService {
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         for id in (1...6).map({ StageID(rawValue: String($0)) }) {
-            scope.ensureStage(id)
+            scope.ensureStage(id, mode: config.tiling.defaultStrategy)
         }
         let ordered = scope.stages.map(\.id)
         let currentIndex = ordered.firstIndex(of: scope.activeStageID) ?? 0
@@ -579,7 +586,7 @@ public struct StageCommandService {
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
-        scope.ensureStage(stageID)
+        scope.ensureStage(stageID, mode: config.tiling.defaultStrategy)
         state.focusDisplay(display.id)
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
@@ -790,7 +797,11 @@ public struct StageCommandService {
     }
 
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {
-        state.scope(displayID: displayID, desktopID: state.currentDesktopID(for: displayID))
+        state.scope(
+            displayID: displayID,
+            desktopID: state.currentDesktopID(for: displayID),
+            defaultMode: config.tiling.defaultStrategy
+        )
     }
 
     private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope) -> StageID? {
