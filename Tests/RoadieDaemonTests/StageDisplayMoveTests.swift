@@ -261,6 +261,28 @@ struct StageDisplayMoveTests {
         #expect(store.state().pin(for: moved.id)?.homeScope.displayID == side.id)
         #expect(store.state().stageScope(for: moved.id)?.displayID == side.id)
     }
+
+    @Test
+    func railDisplayFiltersPersistentMembersMissingFromRuntimeSnapshot() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let live = powerWindow(1, x: 100)
+        let missing = powerWindow(2, x: 300)
+        var persisted = stage("1", live, missing)
+        persisted.focusedWindowID = missing.id
+        persisted.previousFocusedWindowID = missing.id
+        let scope = scope(display.id, active: "1", stages: [
+            persisted,
+            stage("2", missing)
+        ])
+
+        let visibleIDs = RailController.railVisibleStageIDs(in: scope, liveWindowIDs: [live.id])
+        let displayStage = RailController.railDisplayStage(persisted, liveWindowIDs: [live.id])
+
+        #expect(visibleIDs == [StageID(rawValue: "1")])
+        #expect(displayStage.members.map(\.windowID) == [live.id])
+        #expect(displayStage.focusedWindowID == live.id)
+        #expect(displayStage.previousFocusedWindowID == nil)
+    }
 }
 
 private func stageStore(

@@ -67,6 +67,12 @@ public struct ScopedWindowSnapshot: Equatable, Codable, Sendable {
 }
 
 public struct SnapshotService {
+    // AX/macOS peut faire disparaitre des fenetres pendant un plein ecran, un changement
+    // de desktop, un redemarrage du daemon ou une reconfiguration display. Une absence
+    // courte n'est donc pas une preuve de fermeture : si on prune trop vite, la fenetre
+    // revient comme "nouvelle" et peut etre reassignee au mauvais ecran/stage.
+    private static let stageMembershipMissingGrace: TimeInterval = 30 * 60
+
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
     private let config: RoadieConfig
@@ -130,6 +136,7 @@ public struct SnapshotService {
         let missingWindows = persistedStages.pruneMissingWindows(
             keeping: liveWindowIDs,
             liveDisplayIDs: liveDisplayIDs,
+            missingGrace: Self.stageMembershipMissingGrace,
             now: now
         )
         appendMissingWindowReconciliationEvent(missingWindows)
@@ -155,8 +162,13 @@ public struct SnapshotService {
         for display in displays {
             state.ensureDisplay(display.id)
             let currentDesktopID = persistedStages.currentDesktopID(for: display.id)
-            var persistentScope = persistedStages.scope(displayID: display.id, desktopID: currentDesktopID)
-            persistentScope.applyConfiguredStages(config.stageManager)
+            var persistentScope = persistedStages.scope(
+                displayID: display.id,
+                desktopID: currentDesktopID,
+                defaultMode: config.tiling.defaultStrategy
+            )
+            persistentScope.applyConfiguredStages(config.stageManager, defaultMode: config.tiling.defaultStrategy)
+            persistentScope.adoptDefaultModeForEmptyDefaultStages(config.tiling.defaultStrategy)
             persistedStages.update(persistentScope)
             let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
             try? state.createStage(
@@ -204,9 +216,10 @@ public struct SnapshotService {
                 }
                 var persistentScope = persistedStages.scope(
                     displayID: displayID,
-                    desktopID: persistedStages.currentDesktopID(for: displayID)
+                    desktopID: persistedStages.currentDesktopID(for: displayID),
+                    defaultMode: config.tiling.defaultStrategy
                 )
-                persistentScope.assign(window: window, to: persistentScope.activeStageID)
+                persistentScope.assign(window: window, to: persistentScope.activeStageID, defaultMode: config.tiling.defaultStrategy)
                 persistedStages.update(persistentScope)
                 stageIndex[window.id] = StageScope(
                     displayID: persistentScope.displayID,
@@ -216,7 +229,8 @@ public struct SnapshotService {
             } else if !isHidden(window.frame.cgRect, in: displays) {
                 var persistentScope = persistedStages.scope(
                     displayID: displayID,
-                    desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID)
+                    desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
+                    defaultMode: config.tiling.defaultStrategy
                 )
                 persistentScope.updateFrame(window: window)
                 persistedStages.update(persistentScope)
@@ -224,7 +238,11 @@ public struct SnapshotService {
             }
             let desktopID = knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID)
             let stageID = knownScope?.stageID
-                ?? persistedStages.scope(displayID: displayID, desktopID: desktopID).activeStageID
+                ?? persistedStages.scope(
+                    displayID: displayID,
+                    desktopID: desktopID,
+                    defaultMode: config.tiling.defaultStrategy
+                ).activeStageID
             let scope = StageScope(
                 displayID: displayID,
                 desktopID: desktopID,
@@ -264,7 +282,11 @@ public struct SnapshotService {
            shouldFollowFocus(entry: focusedEntry, scope: focusedScope, persistedStages: persistedStages, displays: displays),
            !persistedStages.commandFocusProtectionBlocks(focusedScope: focusedScope, focusedWindowID: providerFocusedID, now: now),
            config.focus.stageFollowsFocus || state.activeScope(on: focusedScope.displayID) == focusedScope {
-            var persistentScope = persistedStages.scope(displayID: focusedScope.displayID, desktopID: focusedScope.desktopID)
+            var persistentScope = persistedStages.scope(
+                displayID: focusedScope.displayID,
+                desktopID: focusedScope.desktopID,
+                defaultMode: config.tiling.defaultStrategy
+            )
             persistentScope.activeStageID = focusedScope.stageID
             persistentScope.setFocusedWindow(providerFocusedID, in: focusedScope.stageID)
             persistedStages.update(persistentScope)
@@ -744,32 +766,6 @@ public extension SnapshotService {
             }
             return observed.isClose(to: frame, positionTolerance: 8, sizeTolerance: 8)
         }
-    }
-
-    func hasMatchingCommandIntent(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
-        guard let intent = intentStore.intent(for: scope),
-              intent.source == .command
-        else { return false }
-
-        let focusedWindowID = focusedWindowID()
-
-        let currentFrames: [WindowID: Rect] = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry in
-            guard entry.scope == scope else { return nil }
-            return (entry.window.id, entry.window.frame)
-        })
-        guard Set(currentFrames.keys) == Set(intent.windowIDs) else { return false }
-
-        return intent.placements.allSatisfy { id, frame in
-            guard let observed = currentFrames[id] else { return false }
-            if id == focusedWindowID {
-                return isLikelyFocusWindowChromeDelta(observed, baseline: frame) || observed.isClose(to: frame, positionTolerance: 12, sizeTolerance: 36)
-            }
-            return observed.isClose(to: frame, positionTolerance: 4, sizeTolerance: 4)
-        }
-    }
-
-    func touchCommandIntent(scope: StageScope, at date: Date = Date()) {
-        intentStore.touch(scope: scope, at: date)
     }
 
     func hasRecentCommandIntent(scope: StageScope, since date: Date) -> Bool {

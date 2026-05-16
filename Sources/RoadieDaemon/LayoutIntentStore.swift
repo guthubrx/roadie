@@ -69,12 +69,6 @@ public struct LayoutIntentStore: Sendable {
         write(intents)
     }
 
-    public func touch(scope: StageScope, at date: Date = Date()) {
-        guard var intent = intent(for: scope) else { return }
-        intent.createdAt = date
-        save(intent)
-    }
-
     public func remove(scope: StageScope) {
         var intents = load()
         intents.removeValue(forKey: scope.description)

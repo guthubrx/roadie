@@ -177,6 +177,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public var desktopLabels: [PersistentDesktopLabel]
     public var windowPins: [PersistentWindowPin]
     public var windowBookmarks: [PersistentWindowBookmark]
+    public var rulePlacementOverrides: [PersistentRulePlacementOverride]
     public var activeDisplayID: DisplayID?
     public var commandFocusProtection: CommandFocusProtection?
 
@@ -186,6 +187,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopLabels: [PersistentDesktopLabel] = [],
         windowPins: [PersistentWindowPin] = [],
         windowBookmarks: [PersistentWindowBookmark] = [],
+        rulePlacementOverrides: [PersistentRulePlacementOverride] = [],
         activeDisplayID: DisplayID? = nil,
         commandFocusProtection: CommandFocusProtection? = nil
     ) {
@@ -194,6 +196,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopLabels = desktopLabels
         self.windowPins = Self.uniquePins(windowPins)
         self.windowBookmarks = Self.uniqueBookmarks(windowBookmarks)
+        self.rulePlacementOverrides = Self.uniqueRulePlacementOverrides(rulePlacementOverrides)
         self.activeDisplayID = activeDisplayID
         self.commandFocusProtection = commandFocusProtection
     }
@@ -204,6 +207,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         case desktopLabels
         case windowPins
         case windowBookmarks
+        case rulePlacementOverrides
         case activeDisplayID
         case commandFocusProtection
     }
@@ -215,6 +219,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         self.desktopLabels = try c.decodeIfPresent([PersistentDesktopLabel].self, forKey: .desktopLabels) ?? []
         self.windowPins = Self.uniquePins(try c.decodeIfPresent([PersistentWindowPin].self, forKey: .windowPins) ?? [])
         self.windowBookmarks = Self.uniqueBookmarks(try c.decodeIfPresent([PersistentWindowBookmark].self, forKey: .windowBookmarks) ?? [])
+        self.rulePlacementOverrides = Self.uniqueRulePlacementOverrides(try c.decodeIfPresent([PersistentRulePlacementOverride].self, forKey: .rulePlacementOverrides) ?? [])
         self.activeDisplayID = try c.decodeIfPresent(DisplayID.self, forKey: .activeDisplayID)
         self.commandFocusProtection = try c.decodeIfPresent(CommandFocusProtection.self, forKey: .commandFocusProtection)
     }
@@ -235,11 +240,23 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         return byName.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    public mutating func scope(displayID: DisplayID, desktopID: DesktopID = DesktopID(rawValue: 1)) -> PersistentStageScope {
+    private static func uniqueRulePlacementOverrides(_ overrides: [PersistentRulePlacementOverride]) -> [PersistentRulePlacementOverride] {
+        var byWindow: [WindowID: PersistentRulePlacementOverride] = [:]
+        for override in overrides {
+            byWindow[override.windowID] = override
+        }
+        return byWindow.values.sorted { $0.windowID.rawValue < $1.windowID.rawValue }
+    }
+
+    public mutating func scope(
+        displayID: DisplayID,
+        desktopID: DesktopID = DesktopID(rawValue: 1),
+        defaultMode: WindowManagementMode = .bsp
+    ) -> PersistentStageScope {
         if let existing = scopes.first(where: { $0.displayID == displayID && $0.desktopID == desktopID }) {
             return existing
         }
-        let created = PersistentStageScope(displayID: displayID, desktopID: desktopID)
+        let created = PersistentStageScope(displayID: displayID, desktopID: desktopID, defaultMode: defaultMode)
         scopes.append(created)
         return created
     }
@@ -285,6 +302,41 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
 
     public func bookmark(named name: String) -> PersistentWindowBookmark? {
         windowBookmarks.first { $0.name == PersistentWindowBookmark.normalizedName(name) }
+    }
+
+    public func suppressesRulePlacement(windowID: WindowID, ruleID: String?) -> Bool {
+        guard let override = rulePlacementOverrides.first(where: { $0.windowID == windowID }) else { return false }
+        guard let overrideRuleID = override.ruleID, let ruleID else { return true }
+        return overrideRuleID == ruleID
+    }
+
+    @discardableResult
+    public mutating func suppressRulePlacement(
+        window: WindowSnapshot,
+        ruleID: String? = nil,
+        reason: String = "manual_window_move",
+        now: Date = Date()
+    ) -> PersistentRulePlacementOverride {
+        let createdAt = rulePlacementOverrides.first { $0.windowID == window.id }?.createdAt ?? now
+        let override = PersistentRulePlacementOverride(
+            windowID: window.id,
+            ruleID: ruleID,
+            bundleID: window.bundleID,
+            title: window.title,
+            reason: reason,
+            createdAt: createdAt,
+            updatedAt: now
+        )
+        rulePlacementOverrides.removeAll { $0.windowID == window.id }
+        rulePlacementOverrides.append(override)
+        rulePlacementOverrides = Self.uniqueRulePlacementOverrides(rulePlacementOverrides)
+        return override
+    }
+
+    @discardableResult
+    public mutating func removeRulePlacementOverride(windowID: WindowID) -> PersistentRulePlacementOverride? {
+        guard let index = rulePlacementOverrides.firstIndex(where: { $0.windowID == windowID }) else { return nil }
+        return rulePlacementOverrides.remove(at: index)
     }
 
     @discardableResult
@@ -515,6 +567,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         for scopeIndex in scopes.indices {
             report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, now: now))
         }
+        rulePlacementOverrides.removeAll { !liveWindowIDs.contains($0.windowID) }
         return report
     }
 
@@ -529,6 +582,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         for scopeIndex in scopes.indices where liveDisplayIDs.contains(scopes[scopeIndex].displayID) {
             report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, now: now))
         }
+        rulePlacementOverrides.removeAll { !liveWindowIDs.contains($0.windowID) }
         return report
     }
 
@@ -786,6 +840,34 @@ public struct PersistentWindowBookmark: Equatable, Codable, Sendable {
     }
 }
 
+public struct PersistentRulePlacementOverride: Equatable, Codable, Sendable {
+    public var windowID: WindowID
+    public var ruleID: String?
+    public var bundleID: String
+    public var title: String
+    public var reason: String
+    public var createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        windowID: WindowID,
+        ruleID: String? = nil,
+        bundleID: String,
+        title: String,
+        reason: String,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.windowID = windowID
+        self.ruleID = ruleID
+        self.bundleID = bundleID
+        self.title = title
+        self.reason = reason
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 public enum PinVisibilityReason: String, Codable, Sendable {
     case home
     case desktopPin = "desktop_pin"
@@ -840,14 +922,15 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         activeStageID: StageID = StageID(rawValue: "1"),
         logicalDisplayID: LogicalDisplayID? = nil,
         lastKnownDisplayFingerprint: DisplayFingerprint? = nil,
-        stages: [PersistentStage] = [PersistentStage(id: StageID(rawValue: "1"))]
+        stages: [PersistentStage]? = nil,
+        defaultMode: WindowManagementMode = .bsp
     ) {
         self.displayID = displayID
         self.desktopID = desktopID
         self.activeStageID = activeStageID
         self.logicalDisplayID = logicalDisplayID
         self.lastKnownDisplayFingerprint = lastKnownDisplayFingerprint
-        self.stages = stages
+        self.stages = stages ?? [PersistentStage(id: activeStageID, mode: defaultMode)]
     }
 
     enum CodingKeys: String, CodingKey {
@@ -869,12 +952,12 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         self.stages = try c.decodeIfPresent([PersistentStage].self, forKey: .stages) ?? [PersistentStage(id: activeStageID)]
     }
 
-    public mutating func ensureStage(_ id: StageID) {
+    public mutating func ensureStage(_ id: StageID, mode: WindowManagementMode = .bsp) {
         guard !stages.contains(where: { $0.id == id }) else { return }
-        stages.append(PersistentStage(id: id))
+        stages.append(PersistentStage(id: id, mode: mode))
     }
 
-    public mutating func applyConfiguredStages(_ config: StageManagerConfig) {
+    public mutating func applyConfiguredStages(_ config: StageManagerConfig, defaultMode: WindowManagementMode = .bsp) {
         if stages.isEmpty {
             activeStageID = StageID(rawValue: config.defaultStage)
         }
@@ -885,14 +968,21 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
                     stages[index].name = workspace.displayName
                 }
             } else {
-                stages.append(PersistentStage(id: id, name: workspace.displayName))
+                stages.append(PersistentStage(id: id, name: workspace.displayName, mode: defaultMode))
             }
         }
     }
 
-    public mutating func createStage(_ id: StageID, name: String? = nil) -> Bool {
+    public mutating func adoptDefaultModeForEmptyDefaultStages(_ defaultMode: WindowManagementMode) {
+        guard defaultMode != .bsp else { return }
+        for index in stages.indices where stages[index].members.isEmpty && stages[index].mode == .bsp {
+            stages[index].mode = defaultMode
+        }
+    }
+
+    public mutating func createStage(_ id: StageID, name: String? = nil, mode: WindowManagementMode = .bsp) -> Bool {
         guard !stages.contains(where: { $0.id == id }) else { return false }
-        stages.append(PersistentStage(id: id, name: name))
+        stages.append(PersistentStage(id: id, name: name, mode: mode))
         return true
     }
 
@@ -926,9 +1016,10 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         window: WindowSnapshot,
         to stageID: StageID,
         insertionIndex: Int? = nil,
-        focusWindow: Bool = true
+        focusWindow: Bool = true,
+        defaultMode: WindowManagementMode = .bsp
     ) {
-        ensureStage(stageID)
+        ensureStage(stageID, mode: defaultMode)
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == window.id }
             stages[index].groups = stages[index].groups.compactMap { group in

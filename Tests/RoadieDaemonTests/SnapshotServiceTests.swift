@@ -2260,6 +2260,63 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func temporarilyMissingWindowIsNotPrunedAfterShortAXGap() {
+        let display = DisplayID(rawValue: "display-a")
+        let live = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "Terminal",
+            bundleID: "terminal",
+            title: "live",
+            frame: Rect(x: 0, y: 0, width: 500, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let transient = WindowID(rawValue: 2)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-short-ax-gap-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(
+                displayID: display,
+                stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                        PersistentStageMember(
+                            windowID: transient,
+                            bundleID: "editor",
+                            title: "document",
+                            frame: Rect(x: 500, y: 0, width: 500, height: 500),
+                            missingSince: Date().addingTimeInterval(-90)
+                        ),
+                    ]),
+                ]
+            ),
+        ]))
+        let displaySnapshot = DisplaySnapshot(
+            id: display,
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [live], focusedID: live.id),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        _ = service.snapshot()
+
+        let scope = stageStore.state().scopes.first { $0.displayID == display }
+        #expect(scope?.memberIDs(in: StageID(rawValue: "1")) == [live.id, transient])
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
     func snapshotPrunesClosedWindowsFromPersistentStages() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(
