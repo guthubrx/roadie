@@ -40,6 +40,9 @@ A stage is a named group of windows inside a Roadie desktop. Only the active sta
 ./bin/roadie stage assign 2
 ./bin/roadie stage switch-position 2
 ./bin/roadie stage assign-position 2
+./bin/roadie stage switch-visible next
+./bin/roadie stage switch-visible prev
+./bin/roadie stage assign-empty
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
 ./bin/roadie stage move-to-display right --no-follow
@@ -47,6 +50,9 @@ A stage is a named group of windows inside a Roadie desktop. Only the active sta
 
 The `*-position` variants follow the visible nav rail order. They are intended
 for user shortcuts such as Alt-1, Alt-2, Alt-3.
+`stage switch-visible prev|next` cycles through non-empty stages in nav rail
+order. `stage assign-empty` sends the active window to the next unnamed empty
+stage, creating one if needed.
 
 A stage can also be sent to another display from the nav rail context menu. The
 focus behavior is controlled by `[focus].stage_move_follows_focus` and can be
