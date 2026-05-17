@@ -111,6 +111,9 @@ struct PowerUserDesktopCommandTests {
                 PersistentStage(id: StageID(rawValue: "work"), name: "Work", members: [
                     PersistentStageMember(windowID: work.id, bundleID: work.bundleID, title: work.title, frame: work.frame),
                 ]),
+                PersistentStage(id: StageID(rawValue: "stale"), name: "Stage stale", members: [
+                    PersistentStageMember(windowID: WindowID(rawValue: 999), bundleID: "com.example.missing", title: "Missing", frame: work.frame),
+                ]),
                 PersistentStage(id: StageID(rawValue: "empty"), name: "Stage empty"),
                 PersistentStage(id: StageID(rawValue: "six"), name: "Stage 6", members: [
                     PersistentStageMember(windowID: stageSix.id, bundleID: stageSix.bundleID, title: stageSix.title, frame: Rect(x: 350, y: 100, width: 300, height: 300)),

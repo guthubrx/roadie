@@ -310,7 +310,7 @@ public struct StageCommandService {
         }
         var state = store.state()
         let scope = activeScope(displayID: display.id, in: &state)
-        guard let stageID = stageID(atVisiblePosition: position, in: scope) else {
+        guard let stageID = stageID(atVisiblePosition: position, in: scope, liveWindowIDs: liveWindowIDs(in: snapshot)) else {
             return StageCommandResult(message: "stage switch-position \(position): not found", changed: false)
         }
         return switchDisplay(display, to: stageID, snapshot: snapshot)
@@ -573,7 +573,7 @@ public struct StageCommandService {
         }
         var state = store.state()
         let scope = activeScope(displayID: display.id, in: &state)
-        let ordered = visibleStageIDs(in: scope)
+        let ordered = visibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs(in: snapshot))
         guard !ordered.isEmpty else {
             return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no visible stage", changed: false)
         }
@@ -875,8 +875,8 @@ public struct StageCommandService {
         )
     }
 
-    private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope) -> StageID? {
-        let visible = visibleStageIDs(in: scope)
+    private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> StageID? {
+        let visible = visibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs)
         let ordered = visible.isEmpty ? scope.stages.map(\.id) : visible
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
@@ -892,8 +892,16 @@ public struct StageCommandService {
         return ordered[index]
     }
 
-    private func visibleStageIDs(in scope: PersistentStageScope) -> [StageID] {
-        scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+    private func visibleStageIDs(in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> [StageID] {
+        scope.stages
+            .filter { stage in
+                stage.members.contains { liveWindowIDs.contains($0.windowID) }
+            }
+            .map(\.id)
+    }
+
+    private func liveWindowIDs(in snapshot: DaemonSnapshot) -> Set<WindowID> {
+        Set(snapshot.windows.map(\.window.id))
     }
 
     private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {
