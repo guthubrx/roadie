@@ -19,6 +19,12 @@ public final class RailController {
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
     private var stageLabelTimer: Timer?
+    private var stageStoreWatcher: DispatchSourceFileSystemObject?
+    private var stageStoreWatchFileDescriptor: CInt = -1
+    private var pendingStageStoreRefresh: DispatchWorkItem?
+    private var lastStageStoreRailSignature: String?
+    private var pendingStageStoreRailSignature: String?
+    private var lastInteractiveRailRefreshAt: Date = .distantPast
     private var configWatcher: DispatchSourceFileSystemObject?
     private var configWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
@@ -45,14 +51,15 @@ public final class RailController {
 
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
-        rebuildPanels()
+        rebuildPanels(reason: "start")
         startClickMonitors()
         startHoverTimer()
         startStageLabelTimer()
         startConfigWatcher()
+        startStageStoreWatcher()
         refreshTimer?.invalidate()
         let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels() }
+            Task { @MainActor in self?.rebuildPanels(reason: "timer") }
         }
         refreshTimer = newRefreshTimer
         RunLoop.main.add(newRefreshTimer, forMode: .common)
@@ -61,7 +68,7 @@ public final class RailController {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.rebuildPanels() }
+            Task { @MainActor in self?.rebuildPanels(reason: "screen") }
         }
     }
 
@@ -81,7 +88,7 @@ public final class RailController {
         )
         source.setEventHandler { [weak self] in
             Task { @MainActor in
-                self?.rebuildPanels()
+                self?.rebuildPanels(reason: "config")
                 if source.data.contains(.rename) || source.data.contains(.delete) {
                     self?.startConfigWatcher()
                 }
@@ -92,6 +99,75 @@ public final class RailController {
         }
         configWatcher = source
         source.resume()
+    }
+
+    private func startStageStoreWatcher() {
+        if let stageStoreWatcher {
+            stageStoreWatcher.cancel()
+            self.stageStoreWatcher = nil
+        } else if stageStoreWatchFileDescriptor >= 0 {
+            close(stageStoreWatchFileDescriptor)
+        }
+        stageStoreWatchFileDescriptor = -1
+        let path = store.fileURL.path
+        stageStoreWatchFileDescriptor = open(path, O_EVTONLY)
+        guard stageStoreWatchFileDescriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: stageStoreWatchFileDescriptor,
+            eventMask: [.write, .rename, .delete],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.scheduleStageStoreRefresh(reason: "stage_store")
+                if source.data.contains(.rename) || source.data.contains(.delete) {
+                    self?.startStageStoreWatcher()
+                }
+            }
+        }
+        source.setCancelHandler { [fd = stageStoreWatchFileDescriptor] in
+            if fd >= 0 { close(fd) }
+        }
+        stageStoreWatcher = source
+        source.resume()
+    }
+
+    private func scheduleStageStoreRefresh(reason: String) {
+        let signature = Self.railSignature(for: store.state())
+        if signature == lastStageStoreRailSignature || signature == pendingStageStoreRailSignature {
+            return
+        }
+        pendingStageStoreRailSignature = signature
+        pendingStageStoreRefresh?.cancel()
+        let requestedAt = Date()
+        let item = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.pendingStageStoreRefresh = nil
+                self?.rebuildPanels(reason: reason, requestedAt: requestedAt, railSignature: signature)
+            }
+        }
+        pendingStageStoreRefresh = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20), execute: item)
+    }
+
+    private static func railSignature(for state: PersistentStageState) -> String {
+        var parts: [String] = []
+        parts.append("activeDisplay=\(state.activeDisplayID?.rawValue ?? "-")")
+        for selection in state.desktopSelections.sorted(by: { $0.displayID.rawValue < $1.displayID.rawValue }) {
+            let lastDesktopID = selection.lastDesktopID.map { String($0.rawValue) } ?? "-"
+            parts.append("desktop=\(selection.displayID.rawValue):\(selection.currentDesktopID.rawValue):last=\(lastDesktopID)")
+        }
+        for scope in state.scopes.sorted(by: {
+            if $0.displayID.rawValue != $1.displayID.rawValue { return $0.displayID.rawValue < $1.displayID.rawValue }
+            return $0.desktopID.rawValue < $1.desktopID.rawValue
+        }) {
+            parts.append("scope=\(scope.displayID.rawValue):\(scope.desktopID.rawValue):active=\(scope.activeStageID.rawValue)")
+            for stage in scope.stages {
+                let members = stage.members.map { String($0.windowID.rawValue) }.joined(separator: ",")
+                parts.append("stage=\(stage.id.rawValue):\(stage.name):\(stage.mode.rawValue):\(members)")
+            }
+        }
+        return parts.joined(separator: "|")
     }
 
     private func startClickMonitors() {
@@ -648,19 +724,26 @@ public final class RailController {
         return false
     }
 
-    private func rebuildPanels() {
+    private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
+        let startedAt = Date()
+        let latencyMs = requestedAt.map { startedAt.timeIntervalSince($0) * 1000 }
         let snapshot = snapshotService.snapshot()
+        let snapshotMs = Date().timeIntervalSince(startedAt) * 1000
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
+        lastStageStoreRailSignature = railSignature ?? Self.railSignature(for: state)
         var config = RailVisualConfig.load()
         config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
         let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
         let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
+        let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
+        var thumbnailCaptureBudget = initialThumbnailCaptureBudget
         thumbnails.prune(keeping: liveWindowIDs)
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
         })
 
+        var renderedStages = 0
         for (displayID, screen) in screensByDisplayID {
             screenFrames[displayID] = screen.frame
             if fullscreenDisplayIDs.contains(displayID) {
@@ -675,13 +758,15 @@ public final class RailController {
                 self?.relayoutAfterRailWidthChange(on: displayID)
             }
             panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
+            renderedStages += Self.railVisibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs).count
             panel.render(
                 scope: scope,
                 displayName: screen.localizedName,
                 config: config,
                 thumbnails: thumbnails,
                 liveWindowIDs: liveWindowIDs,
-                protectedWindowIDs: Set(protectedBlurredWindows.keys)
+                protectedWindowIDs: Set(protectedBlurredWindows.keys),
+                thumbnailCaptureBudget: &thumbnailCaptureBudget
             )
             if panels[displayID] == nil {
                 panels[displayID] = panel
@@ -697,6 +782,47 @@ public final class RailController {
             panels.removeValue(forKey: displayID)
             screenFrames.removeValue(forKey: displayID)
         }
+        let totalMs = Date().timeIntervalSince(startedAt) * 1000
+        if Self.isInteractiveRefresh(reason) {
+            lastInteractiveRailRefreshAt = Date()
+        }
+        if reason != "timer" || totalMs >= 80 {
+            var details = [
+                "reason": reason,
+                "durationMs": Self.formatMs(totalMs),
+                "snapshotMs": Self.formatMs(snapshotMs),
+                "displays": String(screensByDisplayID.count),
+                "stages": String(renderedStages),
+                "thumbnailCaptureBudget": String(initialThumbnailCaptureBudget),
+                "thumbnailCaptureUsed": String(initialThumbnailCaptureBudget - thumbnailCaptureBudget),
+            ]
+            if let latencyMs {
+                details["latencyMs"] = Self.formatMs(latencyMs)
+            }
+            events.append(RoadieEvent(type: "rail_refresh", details: details))
+        }
+    }
+
+    private static func formatMs(_ value: Double) -> String {
+        String(format: "%.1f", value)
+    }
+
+    private func thumbnailCaptureBudget(for reason: String, now: Date) -> Int {
+        switch reason {
+        case "stage_store", "direct":
+            return 0
+        case "timer":
+            if now.timeIntervalSince(lastInteractiveRailRefreshAt) < 2 {
+                return 0
+            }
+            return 1
+        default:
+            return 8
+        }
+    }
+
+    private static func isInteractiveRefresh(_ reason: String) -> Bool {
+        reason == "stage_store" || reason == "direct"
     }
 
     // Complexite : O(c + w) au lieu de O(c * w) en construisant un index windowID -> displayID.
@@ -1231,7 +1357,8 @@ private final class RailPanel: NSPanel {
         config: RailVisualConfig,
         thumbnails: WindowThumbnailStore,
         liveWindowIDs: Set<WindowID>,
-        protectedWindowIDs: Set<WindowID>
+        protectedWindowIDs: Set<WindowID>,
+        thumbnailCaptureBudget: inout Int
     ) {
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
@@ -1265,7 +1392,11 @@ private final class RailPanel: NSPanel {
                 isActive: id == scope.activeStageID,
                 accent: config.accent(for: id),
                 config: config,
-                thumbnails: thumbnails.images(for: stage.members, protectedWindowIDs: protectedWindowIDs)
+                thumbnails: thumbnails.images(
+                    for: stage.members,
+                    protectedWindowIDs: protectedWindowIDs,
+                    captureBudget: &thumbnailCaptureBudget
+                )
             )
             stack.addArrangedSubview(card)
         }
@@ -1544,9 +1675,14 @@ private final class WindowThumbnailStore {
     private let drmRefreshInterval: TimeInterval = 2
     private let refreshInterval: TimeInterval = 5
 
-    func images(for members: [PersistentStageMember], protectedWindowIDs: Set<WindowID>) -> [WindowID: NSImage] {
+    func images(
+        for members: [PersistentStageMember],
+        protectedWindowIDs: Set<WindowID>,
+        captureBudget: inout Int
+    ) -> [WindowID: NSImage] {
         Dictionary(uniqueKeysWithValues: members.compactMap { member in
-            guard let image = image(for: member, captureAllowed: !protectedWindowIDs.contains(member.windowID)) else { return nil }
+            let canCapture = !protectedWindowIDs.contains(member.windowID)
+            guard let image = image(for: member, captureAllowed: canCapture, captureBudget: &captureBudget) else { return nil }
             return (member.windowID, image)
         })
     }
@@ -1561,7 +1697,11 @@ private final class WindowThumbnailStore {
         images[windowID]
     }
 
-    private func image(for member: PersistentStageMember, captureAllowed: Bool) -> NSImage? {
+    private func image(
+        for member: PersistentStageMember,
+        captureAllowed: Bool,
+        captureBudget: inout Int
+    ) -> NSImage? {
         let now = Date()
         let isDRMSensitive = Self.isDRMSensitiveBundle(member.bundleID)
         let signature = "\(member.bundleID)\n\(member.title)"
@@ -1583,7 +1723,11 @@ private final class WindowThumbnailStore {
         guard captureAllowed else {
             return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
         }
+        guard captureBudget > 0 else {
+            return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
+        }
 
+        captureBudget -= 1
         if let captured = capture(member.windowID) {
             images[member.windowID] = captured
             capturedAt[member.windowID] = now
