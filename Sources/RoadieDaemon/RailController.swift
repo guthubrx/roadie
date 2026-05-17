@@ -655,7 +655,7 @@ public final class RailController {
         var config = RailVisualConfig.load()
         config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
         let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
-        let liveWindowIDs = Set(snapshot.windows.map(\.window.id))
+        let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
         thumbnails.prune(keeping: liveWindowIDs)
         let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
