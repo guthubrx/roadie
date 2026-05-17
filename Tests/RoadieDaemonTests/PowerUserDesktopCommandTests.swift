@@ -103,7 +103,9 @@ struct PowerUserDesktopCommandTests {
         let stageSix = powerWindow(2, x: 1200)
         let stageTwo = powerWindow(3, x: 1400)
         let stageSeven = powerWindow(4, x: 1600)
-        let provider = PowerUserProvider(windows: [work, stageSix, stageTwo, stageSeven])
+        var nonTileable = powerWindow(5, x: 1800)
+        nonTileable.isTileCandidate = false
+        let provider = PowerUserProvider(windows: [work, stageSix, stageTwo, stageSeven, nonTileable])
         provider.focusedID = work.id
         let store = StageStore(path: tempPath("power-stage-switch-visible"))
         store.save(PersistentStageState(scopes: [
@@ -113,6 +115,9 @@ struct PowerUserDesktopCommandTests {
                 ]),
                 PersistentStage(id: StageID(rawValue: "stale"), name: "Stage stale", members: [
                     PersistentStageMember(windowID: WindowID(rawValue: 999), bundleID: "com.example.missing", title: "Missing", frame: work.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "non-tileable"), name: "Stage non-tileable", members: [
+                    PersistentStageMember(windowID: nonTileable.id, bundleID: nonTileable.bundleID, title: nonTileable.title, frame: nonTileable.frame),
                 ]),
                 PersistentStage(id: StageID(rawValue: "empty"), name: "Stage empty"),
                 PersistentStage(id: StageID(rawValue: "six"), name: "Stage 6", members: [
