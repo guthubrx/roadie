@@ -126,6 +126,39 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
+    func stageSwitchIgnoresStaleFocusFromHiddenPreviousStage() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        var hidden = powerWindow(2, x: 999)
+        hidden.frame = Rect(x: 999, y: 499, width: 400, height: 300)
+        let provider = PowerUserProvider(windows: [visible, hidden])
+        provider.focusedID = visible.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-stage-switch-stale-focus"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: visible.id, members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hidden.id, members: [
+                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: Rect(x: 250, y: 50, width: 500, height: 350)),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(service: service, store: store).switchToPosition(2)
+        provider.focusedID = visible.id
+        let staleFocusSnapshot = service.snapshot()
+        var state = store.state()
+
+        #expect(result.changed)
+        #expect(state.scope(displayID: display).activeStageID == StageID(rawValue: "2"))
+        #expect(staleFocusSnapshot.state.activeScope(on: display)?.stageID == StageID(rawValue: "2"))
+        #expect(writer.focused.last == hidden.id)
+    }
+
+    @Test
     func stageAssignPositionUsesVisibleRailOrder() {
         let display = DisplayID(rawValue: "display-main")
         let left = powerWindow(1, x: 100)
