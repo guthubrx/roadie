@@ -29,13 +29,13 @@ public struct WindowCommandService {
 
     public init(
         service: SnapshotService = SnapshotService(),
-        stageStore: StageStore = StageStore(),
+        stageStore: StageStore? = nil,
         resizeStep: CGFloat = 80,
         mouseFollower: MouseFollower = MouseFollower(),
         events: EventLog = EventLog()
     ) {
         self.service = service
-        self.stageStore = stageStore
+        self.stageStore = stageStore ?? service.effectiveStageStore
         self.resizeStep = resizeStep
         self.mouseFollower = mouseFollower
         self.events = events

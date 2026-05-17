@@ -36,14 +36,14 @@ public struct StageCommandService {
 
     public init(
         service: SnapshotService = SnapshotService(),
-        store: StageStore = StageStore(),
+        store: StageStore? = nil,
         events: EventLog = EventLog(),
-        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig()
+        config: RoadieConfig? = nil
     ) {
         self.service = service
-        self.store = store
+        self.store = store ?? service.effectiveStageStore
         self.events = events
-        self.config = config
+        self.config = config ?? service.effectiveConfig
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
@@ -583,6 +583,7 @@ public struct StageCommandService {
         to stageID: StageID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
+        let startedAt = Date()
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
@@ -597,49 +598,75 @@ public struct StageCommandService {
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
         let targetStage = scope.stages.first(where: { $0.id == stageID })
+        let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
 
         scope.activeStageID = stageID
         state.update(scope)
+        let persistStartedAt = Date()
         store.save(state)
+        let persistMs = elapsedMs(since: persistStartedAt)
 
         var applied = 0
 
-        for id in previousMembers.subtracting(targetMembers) {
+        let hideStartedAt = Date()
+        for id in hiddenWindowIDs {
             guard let window = windowsByID[id] else { continue }
             if service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
                 applied += 1
             }
         }
+        let hideMs = elapsedMs(since: hideStartedAt)
 
+        let showStartedAt = Date()
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
             if service.setFrame(member.frame.cgRect, of: window) != nil {
                 applied += 1
             }
         }
+        let showMs = elapsedMs(since: showStartedAt)
 
+        let layoutStartedAt = Date()
         let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        let layoutMs = elapsedMs(since: layoutStartedAt)
         applied += layoutResult.applied + layoutResult.clamped
+        let focusStartedAt = Date()
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focusedWindow = windowsByID[focusedID] {
             _ = service.focus(focusedWindow)
         }
+        let focusMs = elapsedMs(since: focusStartedAt)
+        let totalMs = elapsedMs(since: startedAt)
         events.append(RoadieEvent(
             type: "stage_switch",
             scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
             details: [
                 "previousStageID": previousID.rawValue,
-                "hidden": String(previousMembers.subtracting(targetMembers).count),
+                "hidden": String(hiddenWindowIDs.count),
                 "shown": String(targetMembers.count),
                 "applied": String(applied),
-                "layout": String(layoutResult.attempted)
+                "layout": String(layoutResult.attempted),
+                "durationMs": formatMs(totalMs),
+                "persistMs": formatMs(persistMs),
+                "hideMs": formatMs(hideMs),
+                "showMs": formatMs(showMs),
+                "layoutMs": formatMs(layoutMs),
+                "focusMs": formatMs(focusMs)
             ]
         ))
 
         return StageCommandResult(
-            message: "stage switch \(stageID.rawValue): hidden=\(previousMembers.subtracting(targetMembers).count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
+            message: "stage switch \(stageID.rawValue): hidden=\(hiddenWindowIDs.count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
             changed: previousID != stageID || applied > 0 || layoutResult.attempted > 0
         )
+    }
+
+    private func elapsedMs(since start: Date) -> Double {
+        Date().timeIntervalSince(start) * 1000
+    }
+
+    private func formatMs(_ value: Double) -> String {
+        String(format: "%.1f", value)
     }
 
     private func resolveStageMoveTarget(

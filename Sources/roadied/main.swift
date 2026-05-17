@@ -100,22 +100,46 @@ case "run":
     RunLoop.main.add(timer, forMode: .common)
 
     // Live re-evaluation : declenche un tick() supplementaire des qu'AX nous notifie d'un
-    // changement de fenetre, sans attendre le prochain polling tick. Coalesce les rafales
-    // (250ms) et evite de doubler avec le polling regulier (skip si tick recent).
+    // changement de fenetre, sans attendre le prochain polling tick. Les changements de
+    // focus (AltTab/clic externe) ont une voie rapide ; les autres evenements restent
+    // coalesces plus largement pour eviter les rafales AX.
+    let liveEvents = EventLog()
     var pendingLiveTick: DispatchWorkItem?
-    var lastTickAt: Date = .distantPast
-    let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 250
-    let liveObserver = AXWindowEventObserver {
-        // Si on a tick il y a moins de 200ms (polling), on ne refait pas.
-        if Date().timeIntervalSince(lastTickAt) < 0.2 { return }
+    var lastLiveTickAt: Date = .distantPast
+    let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
+    let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
+    let fastNotifications: Set<String> = [
+        kAXFocusedWindowChangedNotification as String,
+        kAXMainWindowChangedNotification as String,
+        kAXWindowDeminiaturizedNotification as String,
+        kAXUIElementDestroyedNotification as String,
+    ]
+    let liveObserver = AXWindowEventObserver { notification in
+        let isFastEvent = fastNotifications.contains(notification)
+        if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
         pendingLiveTick?.cancel()
+        let requestedAt = Date()
+        let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
         let item = DispatchWorkItem {
             pendingLiveTick = nil
-            lastTickAt = Date()
-            target.tick(timer)
+            let beforeTick = Date()
+            let tick = target.performTick(timer)
+            lastLiveTickAt = Date()
+            if isFastEvent || tick.commands > 0 || tick.failed > 0 {
+                liveEvents.append(RoadieEvent(type: "live_tick", details: [
+                    "notification": notification,
+                    "fast": String(isFastEvent),
+                    "delayMs": String(format: "%.1f", delayMs),
+                    "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
+                    "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
+                    "commands": String(tick.commands),
+                    "applied": String(tick.applied),
+                    "failed": String(tick.failed),
+                ]))
+            }
         }
         pendingLiveTick = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(liveCoalesceMs)), execute: item)
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
     }
     if !args.contains("--no-live-events") {
         liveObserver.start()
@@ -185,15 +209,25 @@ private final class MaintenanceTimerTarget: NSObject {
         self.onTick = onTick
     }
 
-    @MainActor @objc func tick(_ timer: Timer) {
+    @discardableResult
+    @MainActor func performTick(_ timer: Timer) -> MaintenanceTick {
+        let tick: MaintenanceTick
         if shouldTick() {
-            onTick(maintainer.tick())
+            tick = maintainer.tick()
+            onTick(tick)
+        } else {
+            tick = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
         tickCount += 1
         if let maxTicks, tickCount >= maxTicks {
             timer.invalidate()
             NSApplication.shared.terminate(nil)
         }
+        return tick
+    }
+
+    @MainActor @objc func tick(_ timer: Timer) {
+        performTick(timer)
     }
 }
 

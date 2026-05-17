@@ -10,7 +10,7 @@ import Foundation
 /// la main thread (les sources AX sont ajoutees a CFRunLoopGetMain). La callback doit etre
 /// idempotente : elle peut etre invoquee plusieurs fois en rafale.
 public final class AXWindowEventObserver: @unchecked Sendable {
-    public typealias Callback = () -> Void
+    public typealias Callback = (_ notification: String) -> Void
 
     private let callback: Callback
     private var observers: [pid_t: AXObserver] = [:]
@@ -80,8 +80,8 @@ public final class AXWindowEventObserver: @unchecked Sendable {
         workspaceTokens.removeAll()
     }
 
-    fileprivate func handleEvent() {
-        callback()
+    fileprivate func handleEvent(notification: CFString) {
+        callback(notification as String)
     }
 
     private func subscribe(pid: pid_t) {
@@ -123,5 +123,5 @@ private func axObserverCallback(
 ) {
     guard let context else { return }
     let observerInstance = Unmanaged<AXWindowEventObserver>.fromOpaque(context).takeUnretainedValue()
-    observerInstance.handleEvent()
+    observerInstance.handleEvent(notification: notification)
 }
