@@ -147,6 +147,10 @@ public struct StageStore: Sendable {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
 
+    public var fileURL: URL {
+        url
+    }
+
     public static func defaultPath() -> String {
         if ProcessInfo.processInfo.processName.lowercased().contains("test") {
             return "\(NSTemporaryDirectory())roadie-test-stages-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString).json"
