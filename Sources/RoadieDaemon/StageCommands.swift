@@ -599,9 +599,17 @@ public struct StageCommandService {
         let targetMembers = Set(scope.memberIDs(in: stageID))
         let targetStage = scope.stages.first(where: { $0.id == stageID })
         let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
+        let targetFocusedWindowID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID
 
         scope.activeStageID = stageID
         state.update(scope)
+        state.protectCommandFocus(
+            displayID: display.id,
+            desktopID: scope.desktopID,
+            stageID: stageID,
+            windowID: targetFocusedWindowID,
+            duration: 3.0
+        )
         let persistStartedAt = Date()
         store.save(state)
         let persistMs = elapsedMs(since: persistStartedAt)
@@ -631,7 +639,7 @@ public struct StageCommandService {
         let layoutMs = elapsedMs(since: layoutStartedAt)
         applied += layoutResult.applied + layoutResult.clamped
         let focusStartedAt = Date()
-        if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+        if let focusedID = targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
             _ = service.focus(focusedWindow)
         }
