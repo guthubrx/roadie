@@ -136,6 +136,9 @@ Notes :
 ./bin/roadie stage assign 2
 ./bin/roadie stage switch-position 2
 ./bin/roadie stage assign-position 2
+./bin/roadie stage switch-visible next
+./bin/roadie stage switch-visible prev
+./bin/roadie stage assign-empty
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
 ./bin/roadie stage move-to-display right
@@ -147,6 +150,9 @@ Notes :
 `stage switch` et `stage assign` ciblent les IDs stables. `stage switch-position`
 et `stage assign-position` ciblent l'ordre visible du navrail : la position 1 est
 la premiere stage visible, meme si son ID interne est different.
+`stage switch-visible prev|next` parcourt uniquement les stages non vides, dans
+l'ordre affiche par le navrail. `stage assign-empty` envoie la fenetre active
+vers la prochaine stage vide non nommee, ou en cree une si necessaire.
 
 `stage move-to-display` accepte un index d'ecran ou une direction
 `left|right|up|down`. Sans flag, Roadie utilise la preference TOML :

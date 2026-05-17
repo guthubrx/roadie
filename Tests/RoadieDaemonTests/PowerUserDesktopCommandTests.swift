@@ -97,6 +97,48 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
+    func stageSwitchVisibleFollowsNonEmptyRailOrder() {
+        let display = DisplayID(rawValue: "display-main")
+        let work = powerWindow(1, x: 100)
+        let stageSix = powerWindow(2, x: 1200)
+        let stageTwo = powerWindow(3, x: 1400)
+        let stageSeven = powerWindow(4, x: 1600)
+        let provider = PowerUserProvider(windows: [work, stageSix, stageTwo, stageSeven])
+        provider.focusedID = work.id
+        let store = StageStore(path: tempPath("power-stage-switch-visible"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "work"), stages: [
+                PersistentStage(id: StageID(rawValue: "work"), name: "Work", members: [
+                    PersistentStageMember(windowID: work.id, bundleID: work.bundleID, title: work.title, frame: work.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "empty"), name: "Stage empty"),
+                PersistentStage(id: StageID(rawValue: "six"), name: "Stage 6", members: [
+                    PersistentStageMember(windowID: stageSix.id, bundleID: stageSix.bundleID, title: stageSix.title, frame: Rect(x: 350, y: 100, width: 300, height: 300)),
+                ]),
+                PersistentStage(id: StageID(rawValue: "perso"), name: "Perso"),
+                PersistentStage(id: StageID(rawValue: "two"), name: "Stage 2", members: [
+                    PersistentStageMember(windowID: stageTwo.id, bundleID: stageTwo.bundleID, title: stageTwo.title, frame: Rect(x: 650, y: 100, width: 300, height: 300)),
+                ]),
+                PersistentStage(id: StageID(rawValue: "seven"), name: "Stage 7", members: [
+                    PersistentStageMember(windowID: stageSeven.id, bundleID: stageSeven.bundleID, title: stageSeven.title, frame: Rect(x: 950, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+        let commands = StageCommandService(service: service, store: store)
+
+        let nextOne = commands.switchVisible(.next)
+        let nextTwo = commands.switchVisible(.next)
+        let previous = commands.switchVisible(.prev)
+        var state = store.state()
+
+        #expect(nextOne.changed)
+        #expect(nextTwo.changed)
+        #expect(previous.changed)
+        #expect(state.scope(displayID: display).activeStageID == StageID(rawValue: "six"))
+    }
+
+    @Test
     func stageSwitchPersistsTargetStageBeforeRestoringWindows() {
         let display = DisplayID(rawValue: "display-main")
         let visible = powerWindow(1, x: 100)
@@ -213,6 +255,39 @@ struct PowerUserDesktopCommandTests {
         #expect(result.changed)
         #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
         #expect(scope.memberIDs(in: StageID(rawValue: "2")).contains(window.id))
+    }
+
+    @Test
+    func stageAssignEmptySkipsNamedEmptyStagesAndCreatesNextStage() {
+        let display = DisplayID(rawValue: "display-main")
+        let window = powerWindow(1, x: 100)
+        let occupied = powerWindow(2, x: 600)
+        let provider = PowerUserProvider(windows: [window, occupied])
+        provider.focusedID = window.id
+        let store = StageStore(path: tempPath("power-stage-assign-empty"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), name: "Perso"),
+                PersistentStage(id: StageID(rawValue: "3")),
+                PersistentStage(id: StageID(rawValue: "4"), members: [
+                    PersistentStageMember(windowID: occupied.id, bundleID: occupied.bundleID, title: occupied.title, frame: occupied.frame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
+
+        let result = StageCommandService(service: service, store: store).assignEmpty()
+        var state = store.state()
+        let scope = state.scope(displayID: display)
+
+        #expect(result.changed)
+        #expect(scope.memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(scope.memberIDs(in: StageID(rawValue: "2")).isEmpty)
+        #expect(scope.memberIDs(in: StageID(rawValue: "3")).isEmpty)
+        #expect(scope.memberIDs(in: StageID(rawValue: "5")).contains(window.id))
     }
 
     @Test

@@ -330,6 +330,9 @@ Common commands:
 ./bin/roadie stage assign 2
 ./bin/roadie stage switch-position 2
 ./bin/roadie stage assign-position 2
+./bin/roadie stage switch-visible next
+./bin/roadie stage switch-visible prev
+./bin/roadie stage assign-empty
 ./bin/roadie stage reorder 2 1
 ./bin/roadie stage delete 4
 ./bin/roadie stage prev
@@ -339,6 +342,9 @@ Common commands:
 `stage switch` and `stage assign` target stable stage IDs. `stage switch-position`
 and `stage assign-position` target the visible order in the nav rail, so position
 1 is the first visible stage even if its internal ID is different.
+`stage switch-visible prev|next` cycles through non-empty stages only, matching
+the nav rail order. `stage assign-empty` sends the active window to the next
+unnamed empty stage, creating one if needed.
 
 Bring an inactive-stage window back into the active stage:
 

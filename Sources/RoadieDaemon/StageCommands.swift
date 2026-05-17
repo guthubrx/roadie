@@ -103,6 +103,20 @@ public struct StageCommandService {
         return assign(stageID.rawValue)
     }
 
+    public func assignEmpty() -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let active = activeWindow(in: snapshot),
+              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
+        else {
+            return StageCommandResult(message: "stage assign-empty: no active window", changed: false)
+        }
+
+        var state = store.state()
+        let scope = activeScope(displayID: displayID, in: &state)
+        let stageID = nextEmptyStageID(in: scope)
+        return assign(stageID.rawValue)
+    }
+
     public func assign(
         windowID: WindowID,
         to rawStageID: String,
@@ -552,6 +566,28 @@ public struct StageCommandService {
         return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot)
     }
 
+    public func switchVisible(_ direction: StageCycleDirection) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let display = activeDisplay(in: snapshot) else {
+            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no display", changed: false)
+        }
+        var state = store.state()
+        let scope = activeScope(displayID: display.id, in: &state)
+        let ordered = visibleStageIDs(in: scope)
+        guard !ordered.isEmpty else {
+            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no visible stage", changed: false)
+        }
+        let currentIndex = ordered.firstIndex(of: scope.activeStageID)
+        let nextIndex: Int
+        switch direction {
+        case .next:
+            nextIndex = currentIndex.map { ($0 + 1) % ordered.count } ?? 0
+        case .prev:
+            nextIndex = currentIndex.map { ($0 - 1 + ordered.count) % ordered.count } ?? (ordered.count - 1)
+        }
+        return switchDisplay(display, to: ordered[nextIndex], snapshot: snapshot)
+    }
+
     public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
@@ -840,7 +876,7 @@ public struct StageCommandService {
     }
 
     private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope) -> StageID? {
-        let visible = scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+        let visible = visibleStageIDs(in: scope)
         let ordered = visible.isEmpty ? scope.stages.map(\.id) : visible
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
@@ -854,6 +890,29 @@ public struct StageCommandService {
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
         return ordered[index]
+    }
+
+    private func visibleStageIDs(in scope: PersistentStageScope) -> [StageID] {
+        scope.stages.filter { !$0.members.isEmpty }.map(\.id)
+    }
+
+    private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {
+        if let empty = scope.stages.first(where: { $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {
+            return empty.id
+        }
+        return nextGeneratedStageID(in: scope)
+    }
+
+    private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {
+        let numericIDs = scope.stages.compactMap { Int($0.id.rawValue) }
+        let next = (numericIDs.max() ?? scope.stages.count) + 1
+        return StageID(rawValue: String(next))
+    }
+
+    private func isCustomStageName(_ name: String, id: StageID) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return trimmed != "Stage \(id.rawValue)"
     }
 
     private func activeDisplay(in snapshot: DaemonSnapshot) -> DisplaySnapshot? {

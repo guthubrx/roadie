@@ -55,6 +55,8 @@ func printUsage() {
       roadie stage reorder N POSITION
       roadie stage switch|assign N
       roadie stage switch-position|assign-position N
+      roadie stage switch-visible prev|next
+      roadie stage assign-empty
       roadie stage summon WINDOW_ID
       roadie stage move-to-display N|left|right|up|down [--follow|--no-follow]
       roadie stage mode bsp|mutableBsp|masterStack|float
@@ -809,6 +811,16 @@ func runStageCommand(_ args: [String]) {
         let result = StageCommandService(service: service).switchToPosition(position)
         print(result.message)
         exit(result.changed ? 0 : 1)
+    case "switch-visible":
+        guard let rawDirection = args.dropFirst().first,
+              let direction = StageCycleDirection(rawValue: rawDirection)
+        else {
+            fputs("roadie: stage switch-visible requires prev|next\n", stderr)
+            exit(64)
+        }
+        let result = StageCommandService(service: service).switchVisible(direction)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
     case "assign":
         guard let stageID = args.dropFirst().first else {
             fputs("roadie: stage assign requires a stage id\n", stderr)
@@ -823,6 +835,10 @@ func runStageCommand(_ args: [String]) {
             exit(64)
         }
         let result = StageCommandService(service: service).assignPosition(position)
+        print(result.message)
+        exit(result.changed ? 0 : 1)
+    case "assign-empty":
+        let result = StageCommandService(service: service).assignEmpty()
         print(result.message)
         exit(result.changed ? 0 : 1)
     case "summon":

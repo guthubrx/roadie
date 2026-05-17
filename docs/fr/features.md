@@ -40,6 +40,9 @@ Une stage est un groupe nomme de fenetres dans un desktop Roadie. Seule la stage
 ./bin/roadie stage assign 2
 ./bin/roadie stage switch-position 2
 ./bin/roadie stage assign-position 2
+./bin/roadie stage switch-visible next
+./bin/roadie stage switch-visible prev
+./bin/roadie stage assign-empty
 ./bin/roadie stage summon WINDOW_ID
 ./bin/roadie stage move-to-display 2
 ./bin/roadie stage move-to-display right --no-follow
@@ -47,6 +50,9 @@ Une stage est un groupe nomme de fenetres dans un desktop Roadie. Seule la stage
 
 Les variantes `*-position` suivent l'ordre visible du navrail ; elles sont faites
 pour les raccourcis utilisateur de type Alt-1, Alt-2, Alt-3.
+`stage switch-visible prev|next` parcourt les stages non vides dans l'ordre du
+navrail. `stage assign-empty` envoie la fenetre active vers la prochaine stage
+vide non nommee, ou en cree une si necessaire.
 
 Une stage peut aussi etre envoyee vers un autre ecran depuis le menu contextuel
 du navrail. Le comportement de focus est controle par `[focus].stage_move_follows_focus`
