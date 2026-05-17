@@ -91,7 +91,11 @@ struct PowerUserLayoutCommandTests {
             powerWindow(1, x: 0, y: 0, width: 495, height: 500),
             powerWindow(2, x: 505, y: 0, width: 495, height: 500),
         ])
-        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider))
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: PowerUserWriter(provider: provider),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp))
+        )
         _ = service.snapshot()
 
         let result = LayoutCommandService(service: service).toggleSplit()

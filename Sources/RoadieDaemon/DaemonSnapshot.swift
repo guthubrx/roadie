@@ -102,6 +102,18 @@ public struct SnapshotService {
         self.events = events
     }
 
+    public var effectiveConfig: RoadieConfig {
+        config
+    }
+
+    public var effectiveIntentStore: LayoutIntentStore {
+        intentStore
+    }
+
+    public var effectiveStageStore: StageStore {
+        stageStore
+    }
+
     public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()

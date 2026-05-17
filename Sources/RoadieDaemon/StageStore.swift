@@ -149,7 +149,7 @@ public struct StageStore: Sendable {
 
     public static func defaultPath() -> String {
         if ProcessInfo.processInfo.processName.lowercased().contains("test") {
-            return "\(NSTemporaryDirectory())roadie-test-stages-\(ProcessInfo.processInfo.processIdentifier).json"
+            return "\(NSTemporaryDirectory())roadie-test-stages-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString).json"
         }
         return "~/.roadies/stages.json"
     }

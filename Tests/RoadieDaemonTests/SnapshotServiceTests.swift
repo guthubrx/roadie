@@ -2317,7 +2317,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func snapshotPrunesClosedWindowsFromPersistentStages() {
+    func snapshotMarksClosedWindowsMissingBeforePruningPersistentStages() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(
             id: display,
@@ -2363,7 +2363,8 @@ struct SnapshotServiceTests {
         _ = service.snapshot()
 
         let scope = stageStore.state().scopes.first { $0.displayID == display }
-        #expect(scope?.memberIDs(in: StageID(rawValue: "1")) == [live.id])
+        #expect(scope?.memberIDs(in: StageID(rawValue: "1")) == [live.id, closed])
+        #expect(scope?.stages.first?.members.first { $0.windowID == closed }?.missingSince != nil)
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
@@ -3032,7 +3033,7 @@ struct SnapshotServiceTests {
         #expect(metrics.scopedWindows == 2)
         #expect(metrics.activeStages == 1)
         #expect(metrics.duplicateWindows == 1)
-        #expect(metrics.staleMembers == 0)
+        #expect(metrics.staleMembers == 1)
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 
@@ -3152,6 +3153,7 @@ struct SnapshotServiceTests {
         #expect(dump.displays.first?.desktops.first?.stages.first { $0.id == StageID(rawValue: "2") }?.mode == .masterStack)
         #expect(dump.displays.first?.desktops.first?.stages.first { $0.id == StageID(rawValue: "2") }?.windows == [
             TreeWindow(id: live.id, appName: live.appName, title: live.title, live: true),
+            TreeWindow(id: WindowID(rawValue: 99), appName: "gone.bundle", title: "gone", live: false),
         ])
         try? FileManager.default.removeItem(atPath: stagePath)
     }

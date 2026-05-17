@@ -58,7 +58,7 @@ public final class LayoutMaintainer {
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
         ruleEngine: WindowRuleEngine? = nil,
-        store: StageStore = StageStore(),
+        store: StageStore? = nil,
         dragActivity: WindowDragActivity = .shared,
         now: @escaping () -> Date = Date.init
     ) {
@@ -68,7 +68,7 @@ public final class LayoutMaintainer {
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
         self.staticRuleEngine = ruleEngine
-        self.store = store
+        self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
         self.now = now
     }
@@ -111,6 +111,10 @@ public final class LayoutMaintainer {
         if restoredPins > 0 {
             events.append(RoadieEvent(type: "window.pin_restored", details: ["applied": String(restoredPins)]))
             return MaintenanceTick(commands: restoredPins, applied: restoredPins, clamped: 0, failed: 0)
+        }
+
+        if let focusRestore = restoreFocusedActiveStageIfNeeded(in: snapshot) {
+            return focusRestore
         }
 
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
@@ -1050,6 +1054,86 @@ public final class LayoutMaintainer {
             }
         }
         return applied
+    }
+
+    private func restoreFocusedActiveStageIfNeeded(in snapshot: DaemonSnapshot) -> MaintenanceTick? {
+        let startedAt = Date()
+        guard let focusedWindowID = snapshot.focusedWindowID,
+              let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
+              let focusedScope = focusedEntry.scope,
+              snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
+              focusedEntry.window.isTileCandidate,
+              isHiddenCorner(focusedEntry.window.frame.cgRect, in: snapshot.displays)
+        else { return nil }
+
+        let activeHiddenEntries = snapshot.windows.filter { entry in
+            guard let scope = entry.scope,
+                  scope == focusedScope,
+                  entry.window.isTileCandidate,
+                  isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+            else { return false }
+            return true
+        }
+
+        let activeHiddenScopes = Set(activeHiddenEntries.compactMap(\.scope))
+        let activeHiddenWindowIDs = Set(activeHiddenEntries.map(\.window.id))
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let observedFrames = scopedFrames(in: snapshot)
+        let planStartedAt = Date()
+        let rawPlan = suppressKnownUnmovableFrames(
+            in: service.applyPlan(from: snapshot, priorityWindowIDs: activeHiddenWindowIDs),
+            snapshot: snapshot
+        )
+        let plan = ApplyPlan(commands: rawPlan.commands.filter { command in
+            guard let scope = windowsByID[command.window.id]?.scope else { return false }
+            return activeHiddenScopes.contains(scope)
+        })
+        let planMs = Date().timeIntervalSince(planStartedAt) * 1000
+
+        let applyStartedAt = Date()
+        var result = ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: [])
+        if !plan.commands.isEmpty {
+            result = service.apply(plan)
+            result = stabilizeClampedPositions(result, from: plan)
+            record(result, from: plan)
+            appendItemEvents(result)
+        }
+        let applyMs = Date().timeIntervalSince(applyStartedAt) * 1000
+
+        let hideStartedAt = Date()
+        let hiddenInactive = hideInactiveStageWindows(in: snapshot)
+        let hideMs = Date().timeIntervalSince(hideStartedAt) * 1000
+
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
+        let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
+        lastObservedFrames = hiddenInactive > 0
+            ? scopedFrames(in: service.snapshot(followFocus: false))
+            : appliedFrames
+
+        events.append(RoadieEvent(type: "stage_focus_restore", details: [
+            "hiddenActive": String(activeHiddenEntries.count),
+            "scopes": activeHiddenScopes
+                .map { "\($0.displayID.rawValue)/\($0.desktopID.rawValue)/\($0.stageID.rawValue)" }
+                .sorted()
+                .joined(separator: ","),
+            "commands": String(plan.commands.count),
+            "applied": String(result.applied),
+            "clamped": String(result.clamped),
+            "failed": String(result.failed),
+            "hiddenInactive": String(hiddenInactive),
+            "planMs": String(format: "%.1f", planMs),
+            "applyMs": String(format: "%.1f", applyMs),
+            "hideMs": String(format: "%.1f", hideMs),
+            "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000)
+        ]))
+
+        return MaintenanceTick(
+            commands: plan.commands.count + hiddenInactive,
+            applied: result.applied + hiddenInactive,
+            clamped: result.clamped,
+            failed: result.failed
+        )
     }
 
     private func restoreVisiblePinnedWindows(in snapshot: DaemonSnapshot) -> Int {

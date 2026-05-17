@@ -316,7 +316,7 @@ struct TitlebarContextMenuTests {
         ))
 
         #expect(result.changed == false)
-        #expect(store.state() == before)
+        #expect(ignoringMemberTimestamps(store.state()) == ignoringMemberTimestamps(before))
     }
 
     @Test
@@ -517,4 +517,17 @@ private func titlebarMember(_ window: WindowSnapshot) -> PersistentStageMember {
         title: window.title,
         frame: window.frame
     )
+}
+
+private func ignoringMemberTimestamps(_ state: PersistentStageState) -> PersistentStageState {
+    var copy = state
+    for scopeIndex in copy.scopes.indices {
+        for stageIndex in copy.scopes[scopeIndex].stages.indices {
+            for memberIndex in copy.scopes[scopeIndex].stages[stageIndex].members.indices {
+                copy.scopes[scopeIndex].stages[stageIndex].members[memberIndex].lastSeenAt = nil
+                copy.scopes[scopeIndex].stages[stageIndex].members[memberIndex].missingSince = nil
+            }
+        }
+    }
+    return copy
 }
