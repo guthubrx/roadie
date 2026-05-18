@@ -57,6 +57,8 @@ public struct TargetGridReport: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var generatedAt: Date
     public var display: TargetGridDisplay
+    public var scope: TargetGridScope
+    public var rootFrame: Rect
     public var rows: Int
     public var columns: Int
     public var maxDepth: Int
@@ -68,6 +70,8 @@ public struct TargetGridReport: Codable, Equatable, Sendable {
         schemaVersion: Int = 1,
         generatedAt: Date = Date(),
         display: TargetGridDisplay,
+        scope: TargetGridScope = .display,
+        rootFrame: Rect? = nil,
         rows: Int,
         columns: Int,
         maxDepth: Int,
@@ -78,6 +82,8 @@ public struct TargetGridReport: Codable, Equatable, Sendable {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
         self.display = display
+        self.scope = scope
+        self.rootFrame = rootFrame ?? display.frame
         self.rows = rows
         self.columns = columns
         self.maxDepth = maxDepth
@@ -102,15 +108,17 @@ public struct TargetGridService {
         self.config = config ?? service.effectiveConfig.experimental.targetGrid
     }
 
-    public func report(displayIndex: Int? = nil, parentPath: String = "") -> TargetGridReport {
+    public func report(displayIndex: Int? = nil, parentPath: String = "", scope: TargetGridScope? = nil) -> TargetGridReport {
         guard config.enabled else {
-            return emptyReport(displayIndex: displayIndex, parentPath: parentPath, error: "target_grid_disabled")
+            return emptyReport(displayIndex: displayIndex, parentPath: parentPath, scope: scope ?? config.defaultScope, error: "target_grid_disabled")
         }
-        guard let display = resolveDisplay(displayIndex: displayIndex) else {
-            return emptyReport(displayIndex: displayIndex, parentPath: parentPath, error: "unknown_display")
+        let effectiveScope = scope ?? config.defaultScope
+        guard let root = resolveRoot(displayIndex: displayIndex, scope: effectiveScope) else {
+            return emptyReport(displayIndex: displayIndex, parentPath: parentPath, scope: effectiveScope, error: "unknown_grid_root")
         }
         let cells = Self.cells(
-            display: display,
+            display: root.display,
+            rootFrame: root.frame,
             parentPath: parentPath,
             rows: config.rows,
             columns: config.columns,
@@ -118,7 +126,9 @@ public struct TargetGridService {
             alphabet: config.hintCharacters
         )
         return TargetGridReport(
-            display: TargetGridDisplay(display: display),
+            display: TargetGridDisplay(display: root.display),
+            scope: root.scope,
+            rootFrame: root.frame,
             rows: config.rows,
             columns: config.columns,
             maxDepth: config.maxDepth,
@@ -127,21 +137,21 @@ public struct TargetGridService {
         )
     }
 
-    public func targets(displayIndex: Int? = nil, parentPath: String = "") -> TargetQueryReport {
-        let grid = report(displayIndex: displayIndex, parentPath: parentPath)
+    public func targets(displayIndex: Int? = nil, parentPath: String = "", scope: TargetGridScope? = nil) -> TargetQueryReport {
+        let grid = report(displayIndex: displayIndex, parentPath: parentPath, scope: scope)
         let targets = grid.cells.map { cell in
             RoadieTarget(
                 id: "grid:\(cell.display.id)/\(cell.path)",
                 label: cell.label,
                 kind: .gridCell,
                 title: "Grid \(cell.path)",
-                subtitle: "\(cell.display.name) \(cell.row + 1),\(cell.column + 1)",
+                subtitle: "\(cell.display.name) \(grid.scope.rawValue) \(cell.row + 1),\(cell.column + 1)",
                 source: .roadie,
                 matchText: RoadieTarget.normalizedMatchText([cell.path, cell.label, cell.display.name]),
                 scope: TargetScopeSnapshot(displayId: cell.display.id),
                 frame: cell.frame,
                 actions: [.click, .doubleClick, .rightClick, .inspect],
-                diagnostics: ["grid_depth=\(cell.depth)", "display_index=\(cell.display.index)"]
+                diagnostics: ["grid_depth=\(cell.depth)", "display_index=\(cell.display.index)", "scope=\(grid.scope.rawValue)"]
             )
         }
         return TargetQueryReport(
@@ -151,13 +161,15 @@ public struct TargetGridService {
         )
     }
 
-    public func perform(_ action: TargetGridAction, path: String, to destinationPath: String? = nil, displayIndex: Int? = nil) -> TargetActionResult {
+    public func perform(_ action: TargetGridAction, path: String, to destinationPath: String? = nil, displayIndex: Int? = nil, scope: TargetGridScope? = nil) -> TargetActionResult {
         guard config.enabled else {
             return TargetActionResult(changed: false, message: "target_grid_disabled", error: "target_grid_disabled")
         }
-        guard let display = resolveDisplay(displayIndex: displayIndex),
+        let effectiveScope = scope ?? config.defaultScope
+        guard let root = resolveRoot(displayIndex: displayIndex, scope: effectiveScope),
               let source = Self.cell(
-                display: display,
+                display: root.display,
+                rootFrame: root.frame,
                 path: path,
                 rows: config.rows,
                 columns: config.columns,
@@ -185,7 +197,8 @@ public struct TargetGridService {
         case .drag:
             guard let destinationPath,
                   let destination = Self.cell(
-                    display: display,
+                    display: root.display,
+                    rootFrame: root.frame,
                     path: destinationPath,
                     rows: config.rows,
                     columns: config.columns,
@@ -200,18 +213,20 @@ public struct TargetGridService {
         if config.actionDelayMs > 0 {
             Thread.sleep(forTimeInterval: TimeInterval(config.actionDelayMs) / 1000)
         }
-        return TargetActionResult(changed: true, message: "grid \(action.rawValue) \(path)")
+        return TargetActionResult(changed: true, message: "grid \(action.rawValue) \(path) scope=\(effectiveScope.rawValue)")
     }
 
     public static func cells(
         display: DisplaySnapshot,
+        rootFrame: Rect? = nil,
         parentPath: String,
         rows: Int,
         columns: Int,
         maxDepth: Int,
         alphabet: String
     ) -> [TargetGridCell] {
-        guard let parentFrame = frame(for: parentPath, in: display.visibleFrame.cgRect, rows: rows, columns: columns, maxDepth: maxDepth, alphabet: alphabet) else {
+        let root = rootFrame?.cgRect ?? display.visibleFrame.cgRect
+        guard let parentFrame = frame(for: parentPath, in: root, rows: rows, columns: columns, maxDepth: maxDepth, alphabet: alphabet) else {
             return []
         }
         let labels = TargetHintService.labels(count: rows * columns, alphabet: alphabet)
@@ -244,6 +259,7 @@ public struct TargetGridService {
 
     public static func cell(
         display: DisplaySnapshot,
+        rootFrame: Rect? = nil,
         path: String,
         rows: Int,
         columns: Int,
@@ -251,7 +267,7 @@ public struct TargetGridService {
         alphabet: String
     ) -> TargetGridCell? {
         guard !path.isEmpty,
-              let frame = frame(for: path, in: display.visibleFrame.cgRect, rows: rows, columns: columns, maxDepth: maxDepth, alphabet: alphabet),
+              let frame = frame(for: path, in: rootFrame?.cgRect ?? display.visibleFrame.cgRect, rows: rows, columns: columns, maxDepth: maxDepth, alphabet: alphabet),
               let last = pathLabels(rows: rows, columns: columns, alphabet: alphabet).firstIndex(of: String(path.suffix(1)))
         else { return nil }
         let row = last / columns
@@ -312,8 +328,36 @@ public struct TargetGridService {
         TargetHintService.labels(count: rows * columns, alphabet: alphabet)
     }
 
-    private func resolveDisplay(displayIndex: Int?) -> DisplaySnapshot? {
+    private struct GridRoot {
+        var display: DisplaySnapshot
+        var scope: TargetGridScope
+        var frame: Rect
+    }
+
+    private func resolveRoot(displayIndex: Int?, scope: TargetGridScope) -> GridRoot? {
         let snapshot = service.snapshot(followFocus: false)
+        guard let display = resolveDisplay(displayIndex: displayIndex, in: snapshot) else {
+            return nil
+        }
+        switch scope {
+        case .display:
+            return GridRoot(display: display, scope: .display, frame: display.visibleFrame)
+        case .focusedWindow:
+            guard let focusedID = snapshot.focusedWindowID,
+                  let focused = snapshot.windows.first(where: { $0.window.id == focusedID })?.window,
+                  let focusedDisplay = displayContaining(focused.frame, in: snapshot.displays) ?? resolveDisplay(displayIndex: displayIndex, in: snapshot)
+            else {
+                return GridRoot(display: display, scope: .display, frame: display.visibleFrame)
+            }
+            let root = focused.frame.cgRect.intersection(focusedDisplay.visibleFrame.cgRect)
+            guard !root.isNull, root.width > 8, root.height > 8 else {
+                return GridRoot(display: focusedDisplay, scope: .display, frame: focusedDisplay.visibleFrame)
+            }
+            return GridRoot(display: focusedDisplay, scope: .focusedWindow, frame: Rect(root.integral))
+        }
+    }
+
+    private func resolveDisplay(displayIndex: Int?, in snapshot: DaemonSnapshot) -> DisplaySnapshot? {
         if let displayIndex {
             return snapshot.displays.first { $0.index == displayIndex }
         }
@@ -325,8 +369,22 @@ public struct TargetGridService {
         return snapshot.displays.first(where: \.isMain) ?? snapshot.displays.first
     }
 
-    private func emptyReport(displayIndex: Int?, parentPath: String, error: String) -> TargetGridReport {
-        let display = resolveDisplay(displayIndex: displayIndex) ?? DisplaySnapshot(
+    private func displayContaining(_ frame: Rect, in displays: [DisplaySnapshot]) -> DisplaySnapshot? {
+        let rect = frame.cgRect
+        return displays.max { lhs, rhs in
+            intersectionArea(lhs.visibleFrame.cgRect, rect) < intersectionArea(rhs.visibleFrame.cgRect, rect)
+        }
+    }
+
+    private func intersectionArea(_ lhs: CGRect, _ rhs: CGRect) -> CGFloat {
+        let rect = lhs.intersection(rhs)
+        guard !rect.isNull, rect.width > 0, rect.height > 0 else { return 0 }
+        return rect.width * rect.height
+    }
+
+    private func emptyReport(displayIndex: Int?, parentPath: String, scope: TargetGridScope, error: String) -> TargetGridReport {
+        let snapshot = service.snapshot(followFocus: false)
+        let display = resolveDisplay(displayIndex: displayIndex, in: snapshot) ?? DisplaySnapshot(
             id: DisplayID(rawValue: "unknown"),
             index: displayIndex ?? 0,
             name: "unknown",
@@ -336,6 +394,8 @@ public struct TargetGridService {
         )
         return TargetGridReport(
             display: TargetGridDisplay(display: display),
+            scope: scope,
+            rootFrame: display.visibleFrame,
             rows: config.rows,
             columns: config.columns,
             maxDepth: config.maxDepth,

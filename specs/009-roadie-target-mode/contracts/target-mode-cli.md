@@ -192,8 +192,8 @@ les clics applicatifs restent refusés tant que `app_mouse_actions_enabled` vaut
 ## Commandes grille
 
 ```bash
-roadie grid show [PATH] [--display N] [--json]
-roadie grid show [PATH] --visual --duration 3
+roadie grid show [PATH] [--display N] [--scope display|focused_window] [--json]
+roadie grid show [PATH] --visual --scope display|focused_window --duration 3
 roadie grid click A
 roadie grid double-click A
 roadie grid right-click A
@@ -205,6 +205,8 @@ roadie grid drag A L
 
 `PATH` est un chemin récursif de labels. Sans `PATH`, `grid show` retourne le
 premier niveau. Avec `PATH`, il retourne le niveau sous cette cellule.
+`--scope display` utilise tout l'ecran cible; `--scope focused_window` utilise
+la fenetre focussee comme racine recursive.
 
 ## Commandes record/replay
 

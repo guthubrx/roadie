@@ -27,7 +27,7 @@ func printUsage() {
       roadie group create|add|remove|focus|dissolve|list ...
       roadie query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets
       roadie targets list|pick|inspect|activate|show|interactive|hide ...
-      roadie grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag ...
+      roadie grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ...
       roadie record start NAME [--duration S] [--stop-file PATH]
       roadie record replay|list|inspect|delete ...
       roadie rail status|pin|unpin|toggle
@@ -1346,6 +1346,7 @@ func runGridCommand(_ args: [String]) -> Never {
     let grid = TargetGridService(service: service)
     let displayIndex = intValue(after: "--display", in: args, default: -1)
     let effectiveDisplay = displayIndex >= 0 ? displayIndex : nil
+    let scope = value(after: "--scope", in: args).flatMap(TargetGridScope.init(rawValue:))
     let path = positionalGridArgument(Array(args.dropFirst()))
 
     switch verb {
@@ -1357,20 +1358,23 @@ func runGridCommand(_ args: [String]) -> Never {
         if let effectiveDisplay {
             payload["display"] = String(effectiveDisplay)
         }
+        if let scope {
+            payload["scope"] = scope.rawValue
+        }
         if let duration = value(after: "--duration", in: args) {
             payload["duration"] = duration
         }
         queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "grid.interactive", arguments: payload), json: json)
     case "show":
         let parentPath = path ?? ""
-        let report = grid.report(displayIndex: effectiveDisplay, parentPath: parentPath)
+        let report = grid.report(displayIndex: effectiveDisplay, parentPath: parentPath, scope: scope)
         if args.contains("--visual") {
             guard service.effectiveConfig.experimental.targetGrid.overlayEnabled else {
                 let result = TargetActionResult(changed: false, message: "target_grid_overlay_disabled", error: "target_grid_overlay_disabled")
                 if json { printCodableJSON(result) } else { fputs("roadie: target_grid_overlay_disabled\n", stderr) }
                 exit(1)
             }
-            let targetsReport = grid.targets(displayIndex: effectiveDisplay, parentPath: parentPath)
+            let targetsReport = grid.targets(displayIndex: effectiveDisplay, parentPath: parentPath, scope: scope)
             let overlay = TargetOverlayState(visible: true, labelsOnly: true, report: targetsReport)
             let duration = value(after: "--duration", in: args).flatMap(Double.init) ?? service.effectiveConfig.experimental.targetMode.overlayDurationSeconds
             TargetOverlayPresenter.present(overlay, duration: duration, style: TargetOverlayStyle.grid(service.effectiveConfig.experimental.targetGrid))
@@ -1388,7 +1392,7 @@ func runGridCommand(_ args: [String]) -> Never {
             exit(64)
         }
         let action = TargetGridAction(rawValue: verb)!
-        let result = grid.perform(action, path: path, displayIndex: effectiveDisplay)
+        let result = grid.perform(action, path: path, displayIndex: effectiveDisplay, scope: scope)
         if json { printCodableJSON(result) } else { print(result.message) }
         exit(result.error == nil ? 0 : 1)
     case "drag":
@@ -1397,7 +1401,7 @@ func runGridCommand(_ args: [String]) -> Never {
             fputs("roadie: grid drag requires FROM TO\n", stderr)
             exit(64)
         }
-        let result = grid.perform(.drag, path: from, to: to, displayIndex: effectiveDisplay)
+        let result = grid.perform(.drag, path: from, to: to, displayIndex: effectiveDisplay, scope: scope)
         if json { printCodableJSON(result) } else { print(result.message) }
         exit(result.error == nil ? 0 : 1)
     default:
@@ -1485,7 +1489,7 @@ func positionalGridArgument(_ args: [String]) -> String? {
             index += 1
             continue
         }
-        if ["--display", "--duration", "--to", "--stop-file"].contains(item) {
+        if ["--display", "--duration", "--to", "--stop-file", "--scope"].contains(item) {
             index += 2
             continue
         }
@@ -1503,7 +1507,7 @@ func secondGridArgument(_ args: [String]) -> String? {
             index += 1
             continue
         }
-        if ["--display", "--duration", "--to"].contains(item) {
+        if ["--display", "--duration", "--to", "--scope"].contains(item) {
             index += 2
             continue
         }

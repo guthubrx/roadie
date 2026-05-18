@@ -307,8 +307,8 @@ Quand l'utilisateur active le boost AX, Roadie explore aussi les attributs visib
 - **FR-020**: Roadie MUST mark unimplemented Vimac/Homerow-like capabilities as future or experimental rather than silently pretending they exist.
 - **FR-021**: Roadie MUST make Target Mode capabilities independently configurable: core target mode, picker, overlay, app target discovery, app mouse actions and future scroll mode.
 - **FR-022**: Roadie MUST keep risky app-level mouse actions disabled by default even when app target discovery is enabled.
-- **FR-023**: Roadie MUST provide a configurable recursive grid with rows, columns, max depth, alphabet and overlay flag.
-- **FR-024**: Roadie MUST expose grid cells as structured JSON with path, label, display, frame and center.
+- **FR-023**: Roadie MUST provide a configurable recursive grid with rows, columns, max depth, alphabet, scope and overlay flag.
+- **FR-024**: Roadie MUST expose grid cells as structured JSON with path, label, display, scope, root frame, frame and center.
 - **FR-025**: Roadie MUST support grid actions: click, double-click, right-click, move, scroll-up, scroll-down and drag.
 - **FR-026**: Roadie MUST keep grid actions isolated from tiling and stage maintenance.
 - **FR-027**: Roadie MUST provide macro recording behind experimental configuration.
@@ -318,7 +318,8 @@ Quand l'utilisateur active le boost AX, Roadie explore aussi les attributs visib
 - **FR-031**: Roadie MUST try target-based replay before coordinate fallback when target context is available.
 - **FR-032**: Roadie MUST support AX boost traversal with additional child attributes, deduplication, timeout and max depth.
 - **FR-033**: Roadie MUST make grid, record, replay and AX boost independently configurable.
-- **FR-034**: Roadie MUST document that Vimac/Homerow/Neru concepts are reimplemented independently without copying source.
+- **FR-034**: Roadie MUST support both full-display and focused-window recursive grid scopes so users can bind them to different shortcuts.
+- **FR-035**: Roadie MUST document that Vimac/Homerow/Neru concepts are reimplemented independently without copying source.
 
 ### Key Entities *(include if feature involves data)*
 

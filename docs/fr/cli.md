@@ -257,7 +257,8 @@ le layout.
 ```bash
 ./bin/roadie grid show --json
 ./bin/roadie grid show A --visual --duration 2
-./bin/roadie grid interactive --duration 10
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
 ./bin/roadie grid click A
 ./bin/roadie grid double-click A
 ./bin/roadie grid right-click A
@@ -273,7 +274,9 @@ le layout.
 ./bin/roadie record delete demo
 ```
 
-La grille est configuree par `[experimental.target_grid]`. Par defaut, les
+La grille est configuree par `[experimental.target_grid]`. `--scope display`
+utilise l'ecran cible complet; `--scope focused_window` utilise la fenetre
+focussee comme racine, avec la meme recursion. Par defaut, les
 labels suivent un pavé 3x3 naturel sur clavier Mac AZERTY français :
 `A Z E / Q S D / W X C`, soit `hint_characters = "azeqsdwxc"`. Le mode
 `interactive` zoome recursivement dans la cellule tapee. `Espace` clique la

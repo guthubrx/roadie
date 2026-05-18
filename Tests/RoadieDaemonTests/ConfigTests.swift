@@ -522,6 +522,7 @@ struct ConfigTests {
         #expect(grid.columns == 3)
         #expect(grid.maxDepth == 3)
         #expect(grid.hintCharacters == "azeqsdwxc")
+        #expect(grid.defaultScope == .display)
         #expect(record.enabled == false)
         #expect(record.replayEnabled == false)
         #expect(record.includeAXContext)
@@ -574,6 +575,7 @@ struct ConfigTests {
         mouse_follow_grid = true
         focus_follow_grid = true
         label_placement = "center"
+        default_scope = "focused_window"
 
         [experimental.target_record]
         enabled = true
@@ -629,6 +631,7 @@ struct ConfigTests {
         #expect(grid.mouseFollowGrid)
         #expect(grid.focusFollowGrid)
         #expect(grid.labelPlacement == .center)
+        #expect(grid.defaultScope == .focusedWindow)
         #expect(record.enabled)
         #expect(record.indicator == .both)
         #expect(record.navrailBottomOffset == 64)

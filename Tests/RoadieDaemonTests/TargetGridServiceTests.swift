@@ -58,6 +58,42 @@ struct TargetGridServiceTests {
     }
 
     @Test
+    func gridCanUseFocusedWindowFrameAsRecursiveRoot() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-main"),
+            index: 1,
+            name: "Main",
+            frame: Rect(x: 0, y: 0, width: 900, height: 900),
+            visibleFrame: Rect(x: 0, y: 0, width: 900, height: 900),
+            isMain: true
+        )
+        let windowFrame = Rect(x: 90, y: 180, width: 450, height: 450)
+
+        let cells = TargetGridService.cells(
+            display: display,
+            rootFrame: windowFrame,
+            parentPath: "",
+            rows: 3,
+            columns: 3,
+            maxDepth: 3,
+            alphabet: "asdfghjkl"
+        )
+        let nested = TargetGridService.cell(
+            display: display,
+            rootFrame: windowFrame,
+            path: "AA",
+            rows: 3,
+            columns: 3,
+            maxDepth: 3,
+            alphabet: "asdfghjkl"
+        )
+
+        #expect(cells[0].frame == Rect(x: 90, y: 180, width: 150, height: 150))
+        #expect(cells[8].frame == Rect(x: 390, y: 480, width: 150, height: 150))
+        #expect(nested?.frame == Rect(x: 90, y: 180, width: 50, height: 50))
+    }
+
+    @Test
     func gridPathForPointUsesConfiguredDepth() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-main"),

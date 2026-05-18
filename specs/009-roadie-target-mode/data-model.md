@@ -60,6 +60,7 @@ clics applicatifs et le scroll-mode restent désactivés.
 - **rows / columns**: Découpage de chaque niveau.
 - **maxDepth**: Nombre maximal de subdivisions récursives.
 - **hintCharacters**: Alphabet des cellules.
+- **defaultScope**: `display` pour l'ecran cible complet ou `focused_window` pour la fenetre focussee.
 - **actionDelayMs**: Petite pause après action souris pour laisser macOS appliquer l'événement.
 
 ## TargetRecordConfig
@@ -110,6 +111,7 @@ clics applicatifs et le scroll-mode restent désactivés.
 - **path**: Chemin récursif, par exemple `A`, `AA`, `AAG`.
 - **label**: Label du niveau courant.
 - **display**: ID, index, nom et frame visible.
+- **scope / rootFrame**: Portee et frame racine utilisees avant subdivision.
 - **frame / center**: Coordonnées globales AX utilisables pour actions souris.
 - **row / column / depth**: Position logique dans la grille.
 

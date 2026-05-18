@@ -256,7 +256,8 @@ layout.
 ```bash
 ./bin/roadie grid show --json
 ./bin/roadie grid show A --visual --duration 2
-./bin/roadie grid interactive --duration 10
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
 ./bin/roadie grid click A
 ./bin/roadie grid double-click A
 ./bin/roadie grid right-click A
@@ -272,7 +273,9 @@ layout.
 ./bin/roadie record delete demo
 ```
 
-The grid is controlled by `[experimental.target_grid]`. By default, labels use a
+The grid is controlled by `[experimental.target_grid]`. `--scope display` uses
+the whole target display; `--scope focused_window` uses the focused window as
+the recursive root. By default, labels use a
 natural 3x3 block for a French Mac AZERTY keyboard: `A Z E / Q S D / W X C`,
 encoded as `hint_characters = "azeqsdwxc"`. `interactive` recursively zooms
 into the typed cell. `Space` clicks the current zone, arrow keys move the

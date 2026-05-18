@@ -163,10 +163,12 @@ public final class TargetModeRuntimeController: NSObject {
         let grid = TargetGridService(service: service)
         let displayIndex = command.int("display")
         let initialPath = command.string("path") ?? ""
+        let scope = command.string("scope").flatMap(TargetGridScope.init(rawValue:)) ?? config.defaultScope
         let duration = command.double("duration") ?? targetModeConfig.overlayDurationSeconds
 
         events.append(RoadieEvent(type: "target_mode.grid_started", details: [
             "display": displayIndex.map(String.init) ?? "current",
+            "scope": scope.rawValue,
             "path": initialPath,
             "duration": String(format: "%.2f", duration)
         ]))
@@ -179,11 +181,11 @@ public final class TargetModeRuntimeController: NSObject {
                 TargetOverlayState(
                     visible: true,
                     labelsOnly: true,
-                    report: grid.targets(displayIndex: selectedDisplayIndex, parentPath: parentPath)
+                    report: grid.targets(displayIndex: selectedDisplayIndex, parentPath: parentPath, scope: scope)
                 )
             },
             activate: { selectedDisplayIndex, selectedPath in
-                grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex)
+                grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
             },
             focusAt: { [weak self] frame in
                 self?.focusGridWindow(in: frame)

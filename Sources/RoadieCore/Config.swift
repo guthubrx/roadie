@@ -638,6 +638,11 @@ public enum TargetGridLabelPlacement: String, Codable, Equatable, Sendable {
     case center
 }
 
+public enum TargetGridScope: String, Codable, Equatable, Sendable {
+    case display
+    case focusedWindow = "focused_window"
+}
+
 public struct TargetGridConfig: Equatable, Codable, Sendable {
     public var enabled: Bool
     public var mode: TargetGridInteractionMode
@@ -664,6 +669,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
     public var mouseFollowGrid: Bool
     public var focusFollowGrid: Bool
     public var labelPlacement: TargetGridLabelPlacement
+    public var defaultScope: TargetGridScope
 
     public init(
         enabled: Bool = false,
@@ -690,7 +696,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         wakeMousePixels: Int = 1,
         mouseFollowGrid: Bool = false,
         focusFollowGrid: Bool = false,
-        labelPlacement: TargetGridLabelPlacement = .callout
+        labelPlacement: TargetGridLabelPlacement = .callout,
+        defaultScope: TargetGridScope = .display
     ) {
         self.enabled = enabled
         self.mode = mode
@@ -717,6 +724,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         self.mouseFollowGrid = mouseFollowGrid
         self.focusFollowGrid = focusFollowGrid
         self.labelPlacement = labelPlacement
+        self.defaultScope = defaultScope
     }
 
     enum CodingKeys: String, CodingKey {
@@ -745,6 +753,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         case mouseFollowGrid = "mouse_follow_grid"
         case focusFollowGrid = "focus_follow_grid"
         case labelPlacement = "label_placement"
+        case defaultScope = "default_scope"
     }
 
     public init(from decoder: Decoder) throws {
@@ -774,7 +783,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
             wakeMousePixels: try c.decodeIfPresent(Int.self, forKey: .wakeMousePixels) ?? 1,
             mouseFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .mouseFollowGrid) ?? false,
             focusFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .focusFollowGrid) ?? false,
-            labelPlacement: try c.decodeIfPresent(TargetGridLabelPlacement.self, forKey: .labelPlacement) ?? .callout
+            labelPlacement: try c.decodeIfPresent(TargetGridLabelPlacement.self, forKey: .labelPlacement) ?? .callout,
+            defaultScope: try c.decodeIfPresent(TargetGridScope.self, forKey: .defaultScope) ?? .display
         )
     }
 
