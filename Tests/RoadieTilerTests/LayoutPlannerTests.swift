@@ -215,6 +215,51 @@ struct LayoutPlannerTests {
     }
 
     @Test
+    func mutableBspPreservesObservedVerticalSplitOnWideContainer() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 1000, height: 300),
+                b: CGRect(x: 0, y: 310, width: 1000, height: 190),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 1000, height: 300))
+        #expect(plan.placements[b] == CGRect(x: 0, y: 310, width: 1000, height: 190))
+    }
+
+    @Test
+    func mutableBspPreservesObservedVerticalStackForThreeWindows() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let c = WindowID(rawValue: 3)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 900),
+            windowIDs: [a, b, c],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 1000, height: 290),
+                b: CGRect(x: 0, y: 300, width: 1000, height: 290),
+                c: CGRect(x: 0, y: 600, width: 1000, height: 300),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 1000, height: 290))
+        #expect(plan.placements[b] == CGRect(x: 0, y: 300, width: 1000, height: 290))
+        #expect(plan.placements[c] == CGRect(x: 0, y: 600, width: 1000, height: 300))
+    }
+
+    @Test
     func mutableBspFallsBackToBalancedPlanWithoutObservedFrames() {
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)

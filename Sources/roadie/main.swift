@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import RoadieAX
 import RoadieCore
 import RoadieDaemon
@@ -24,7 +25,11 @@ func printUsage() {
       roadie config show|validate|reload [--json] [--config PATH]
       roadie rules validate|list|explain [--json] [--config PATH]
       roadie group create|add|remove|focus|dissolve|list ...
-      roadie query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore
+      roadie query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets
+      roadie targets list|pick|inspect|activate|show|interactive|hide ...
+      roadie grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag ...
+      roadie record start NAME [--duration S] [--stop-file PATH]
+      roadie record replay|list|inspect|delete ...
       roadie rail status|pin|unpin|toggle
       roadie rail labels show|hide|status
       roadie doctor
@@ -339,6 +344,12 @@ case "group":
     runGroupCommand(Array(args.dropFirst()))
 case "query":
     runQueryCommand(Array(args.dropFirst()))
+case "targets":
+    runTargetsCommand(Array(args.dropFirst()))
+case "grid":
+    runGridCommand(Array(args.dropFirst()))
+case "record":
+    runRecordCommand(Array(args.dropFirst()))
 case "rail":
     guard let verb = args.dropFirst().first,
           ["status", "pin", "unpin", "toggle", "labels"].contains(verb)
@@ -503,6 +514,44 @@ func value(after flag: String, in args: [String]) -> String? {
 
 func intValue(after flag: String, in args: [String], default defaultValue: Int) -> Int {
     value(after: flag, in: args).flatMap(Int.init) ?? defaultValue
+}
+
+func queueTargetModeRuntimeCommand(_ command: TargetModeRuntimeCommand, json: Bool) -> Never {
+    guard isRoadiedRunning() else {
+        let result = TargetActionResult(
+            changed: false,
+            message: "roadied_not_running",
+            error: "roadied_not_running"
+        )
+        if json {
+            printCodableJSON(result)
+        } else {
+            fputs("roadie: roadied_not_running; run ./scripts/start\n", stderr)
+        }
+        exit(1)
+    }
+    DistributedNotificationCenter.default().postNotificationName(
+        TargetModeRuntimeNotification.name,
+        object: "roadie",
+        userInfo: command.userInfo,
+        deliverImmediately: true
+    )
+    let result = TargetActionResult(changed: true, message: "queued_to_roadied: \(command.name)")
+    if json {
+        printCodableJSON(result)
+    } else {
+        print(result.message)
+    }
+    exit(0)
+}
+
+func isRoadiedRunning(pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid") -> Bool {
+    guard let raw = try? String(contentsOfFile: pidFilePath).trimmingCharacters(in: .whitespacesAndNewlines),
+          let pid = Int32(raw)
+    else {
+        return false
+    }
+    return kill(pid, 0) == 0
 }
 
 func runPerformanceCommand(_ args: [String]) -> Never {
@@ -1127,6 +1176,341 @@ func runGroupCommand(_ args: [String]) -> Never {
         printUsage()
         exit(64)
     }
+}
+
+@MainActor
+func runTargetsCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let json = args.contains("--json")
+    let options = parseTargetOptions(Array(args.dropFirst()))
+    let targets = TargetHintService(service: service)
+
+    switch verb {
+    case "list":
+        let report = targets.list(options)
+        if json {
+            printCodableJSON(report)
+        } else {
+            print(TextFormatter.targets(report))
+        }
+        exit(report.error == nil || !report.targets.isEmpty ? 0 : 1)
+    case "pick":
+        guard let query = positionalTargetArgument(Array(args.dropFirst())) else {
+            fputs("roadie: targets pick requires QUERY_OR_LABEL\n", stderr)
+            exit(64)
+        }
+        let action = value(after: "--action", in: args).flatMap(TargetActionVerb.init(rawValue:))
+        let result = targets.pick(query, action: action, options: options)
+        if json {
+            printCodableJSON(result)
+        } else {
+            print(TextFormatter.targetPick(result))
+        }
+        exit(result.error == nil ? 0 : 1)
+    case "inspect":
+        guard service.effectiveConfig.experimental.targetMode.enabled else {
+            let result = TargetActionResult(changed: false, message: "target_mode_disabled", error: "target_mode_disabled")
+            if json {
+                printCodableJSON(result)
+            } else {
+                fputs("roadie: target_mode_disabled\n", stderr)
+            }
+            exit(1)
+        }
+        guard let targetValue = positionalTargetArgument(Array(args.dropFirst())) else {
+            fputs("roadie: targets inspect requires TARGET_ID_OR_LABEL\n", stderr)
+            exit(64)
+        }
+        switch TargetInspectionService(service: service).inspect(targetValue) {
+        case .success(let inspection):
+            if json {
+                printCodableJSON(inspection)
+            } else {
+                print(TextFormatter.targetInspection(inspection))
+            }
+            exit(0)
+        case .failure(let error):
+            let result = TargetActionResult(changed: false, message: error.description, error: error.description)
+            if json {
+                printCodableJSON(result)
+            } else {
+                fputs("roadie: \(error.description)\n", stderr)
+            }
+            exit(1)
+        }
+    case "activate":
+        guard let targetValue = positionalTargetArgument(Array(args.dropFirst())) else {
+            fputs("roadie: targets activate requires TARGET_ID_OR_LABEL\n", stderr)
+            exit(64)
+        }
+        let action = value(after: "--action", in: args).flatMap(TargetActionVerb.init(rawValue:))
+        let result = targets.activate(targetValue, action: action)
+        if json {
+            printCodableJSON(result)
+        } else {
+            print(result.message)
+        }
+        exit(result.error == nil ? 0 : 1)
+    case "show":
+        let overlay = targets.overlayState(options: options, labelsOnly: args.contains("--labels-only"), visible: true)
+        if args.contains("--visual") {
+            let config = service.effectiveConfig.experimental.targetMode
+            guard config.overlayEnabled else {
+                let result = TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled")
+                if json {
+                    printCodableJSON(result)
+                } else {
+                    fputs("roadie: target_overlay_disabled; set experimental.target_mode.overlay_enabled = true\n", stderr)
+                }
+                exit(1)
+            }
+            let duration = value(after: "--duration", in: args).flatMap(Double.init) ?? config.overlayDurationSeconds
+            TargetOverlayPresenter.present(overlay, duration: duration)
+            exit(0)
+        }
+        if json {
+            printCodableJSON(overlay)
+        } else {
+            print(TextFormatter.targetOverlay(overlay))
+        }
+        exit(0)
+    case "interactive":
+        var payload: [String: String] = [
+            "source": options.source.rawValue,
+            "max": String(options.maxResults),
+            "includeHidden": String(options.includeHidden),
+            "includeAppTargets": String(options.includeAppTargets)
+        ]
+        if let filter = options.filter {
+            payload["filter"] = filter
+        }
+        if let duration = value(after: "--duration", in: args) {
+            payload["duration"] = duration
+        }
+        if let action = value(after: "--action", in: args) {
+            payload["action"] = action
+        }
+        queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.interactive", arguments: payload), json: json)
+    case "hide":
+        let result = targets.overlayState(options: options, labelsOnly: true, visible: false)
+        if json {
+            printCodableJSON(result)
+        } else {
+            print(TextFormatter.targetOverlay(result))
+        }
+        exit(0)
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+func parseTargetOptions(_ args: [String]) -> TargetQueryOptions {
+    let source = value(after: "--source", in: args).flatMap(TargetSource.init(rawValue:)) ?? .roadie
+    return TargetQueryOptions(
+        source: source,
+        filter: value(after: "--filter", in: args),
+        maxResults: intValue(after: "--max", in: args, default: 120),
+        includeHidden: args.contains("--include-hidden"),
+        includeAppTargets: args.contains("--include-app-targets")
+    )
+}
+
+func positionalTargetArgument(_ args: [String]) -> String? {
+    var index = 0
+    while index < args.count {
+        let item = args[index]
+        if ["--json", "--include-hidden", "--include-app-targets", "--labels-only", "--visual"].contains(item) {
+            index += 1
+            continue
+        }
+        if ["--source", "--filter", "--max", "--action", "--duration"].contains(item) {
+            index += 2
+            continue
+        }
+        return item
+    }
+    return nil
+}
+
+@MainActor
+func runGridCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let json = args.contains("--json")
+    let grid = TargetGridService(service: service)
+    let displayIndex = intValue(after: "--display", in: args, default: -1)
+    let effectiveDisplay = displayIndex >= 0 ? displayIndex : nil
+    let path = positionalGridArgument(Array(args.dropFirst()))
+
+    switch verb {
+    case "interactive":
+        var payload: [String: String] = [:]
+        if let path {
+            payload["path"] = path
+        }
+        if let effectiveDisplay {
+            payload["display"] = String(effectiveDisplay)
+        }
+        if let duration = value(after: "--duration", in: args) {
+            payload["duration"] = duration
+        }
+        queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "grid.interactive", arguments: payload), json: json)
+    case "show":
+        let parentPath = path ?? ""
+        let report = grid.report(displayIndex: effectiveDisplay, parentPath: parentPath)
+        if args.contains("--visual") {
+            guard service.effectiveConfig.experimental.targetGrid.overlayEnabled else {
+                let result = TargetActionResult(changed: false, message: "target_grid_overlay_disabled", error: "target_grid_overlay_disabled")
+                if json { printCodableJSON(result) } else { fputs("roadie: target_grid_overlay_disabled\n", stderr) }
+                exit(1)
+            }
+            let targetsReport = grid.targets(displayIndex: effectiveDisplay, parentPath: parentPath)
+            let overlay = TargetOverlayState(visible: true, labelsOnly: true, report: targetsReport)
+            let duration = value(after: "--duration", in: args).flatMap(Double.init) ?? service.effectiveConfig.experimental.targetMode.overlayDurationSeconds
+            TargetOverlayPresenter.present(overlay, duration: duration, style: TargetOverlayStyle.grid(service.effectiveConfig.experimental.targetGrid))
+            exit(0)
+        }
+        if json {
+            printCodableJSON(report)
+        } else {
+            print(TextFormatter.targetGrid(report))
+        }
+        exit(report.error == nil ? 0 : 1)
+    case "click", "double-click", "right-click", "move", "scroll-up", "scroll-down":
+        guard let path else {
+            fputs("roadie: grid \(verb) requires PATH\n", stderr)
+            exit(64)
+        }
+        let action = TargetGridAction(rawValue: verb)!
+        let result = grid.perform(action, path: path, displayIndex: effectiveDisplay)
+        if json { printCodableJSON(result) } else { print(result.message) }
+        exit(result.error == nil ? 0 : 1)
+    case "drag":
+        guard let from = path,
+              let to = value(after: "--to", in: args) ?? secondGridArgument(Array(args.dropFirst())) else {
+            fputs("roadie: grid drag requires FROM TO\n", stderr)
+            exit(64)
+        }
+        let result = grid.perform(.drag, path: from, to: to, displayIndex: effectiveDisplay)
+        if json { printCodableJSON(result) } else { print(result.message) }
+        exit(result.error == nil ? 0 : 1)
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+@MainActor
+func runRecordCommand(_ args: [String]) -> Never {
+    guard let verb = args.first else {
+        printUsage()
+        exit(64)
+    }
+    let json = args.contains("--json")
+    let recorder = TargetMacroService(service: service)
+    switch verb {
+    case "start":
+        guard let name = positionalGridArgument(Array(args.dropFirst())) else {
+            fputs("roadie: record start requires NAME\n", stderr)
+            exit(64)
+        }
+        let duration = value(after: "--duration", in: args).flatMap(Double.init)
+        let stopFilePath = value(after: "--stop-file", in: args)
+        let result = recorder.record(name: name, duration: duration, stopFilePath: stopFilePath)
+        if json { printCodableJSON(result) } else { print(result.message) }
+        exit(result.error == nil ? 0 : 1)
+    case "replay":
+        guard let name = positionalGridArgument(Array(args.dropFirst())) else {
+            fputs("roadie: record replay requires NAME\n", stderr)
+            exit(64)
+        }
+        let result = recorder.replay(name)
+        if json { printCodableJSON(result) } else { print(result.message) }
+        exit(result.error == nil ? 0 : 1)
+    case "list":
+        let report = recorder.list()
+        if json { printCodableJSON(report) } else { print(TextFormatter.targetMacroList(report)) }
+        exit(0)
+    case "inspect":
+        guard let name = positionalGridArgument(Array(args.dropFirst())) else {
+            fputs("roadie: record inspect requires NAME\n", stderr)
+            exit(64)
+        }
+        do {
+            let recording = try recorder.inspect(name)
+            if json { printCodableJSON(recording) } else { print(TextFormatter.targetMacro(recording)) }
+            exit(0)
+        } catch {
+            if json {
+                printCodableJSON(TargetActionResult(changed: false, message: error.localizedDescription, error: "record_not_found"))
+            } else {
+                fputs("roadie: record inspect failed: \(error.localizedDescription)\n", stderr)
+            }
+            exit(1)
+        }
+    case "delete":
+        guard let name = positionalGridArgument(Array(args.dropFirst())) else {
+            fputs("roadie: record delete requires NAME\n", stderr)
+            exit(64)
+        }
+        do {
+            let result = try recorder.delete(name)
+            if json { printCodableJSON(result) } else { print(result.message) }
+            exit(0)
+        } catch {
+            if json {
+                printCodableJSON(TargetActionResult(changed: false, message: error.localizedDescription, error: "record_delete_failed"))
+            } else {
+                fputs("roadie: record delete failed: \(error.localizedDescription)\n", stderr)
+            }
+            exit(1)
+        }
+    default:
+        printUsage()
+        exit(64)
+    }
+}
+
+func positionalGridArgument(_ args: [String]) -> String? {
+    var index = 0
+    while index < args.count {
+        let item = args[index]
+        if ["--json", "--visual"].contains(item) {
+            index += 1
+            continue
+        }
+        if ["--display", "--duration", "--to", "--stop-file"].contains(item) {
+            index += 2
+            continue
+        }
+        return item
+    }
+    return nil
+}
+
+func secondGridArgument(_ args: [String]) -> String? {
+    var values: [String] = []
+    var index = 0
+    while index < args.count {
+        let item = args[index]
+        if ["--json", "--visual"].contains(item) {
+            index += 1
+            continue
+        }
+        if ["--display", "--duration", "--to"].contains(item) {
+            index += 2
+            continue
+        }
+        values.append(item)
+        index += 1
+    }
+    return values.dropFirst().first
 }
 
 @MainActor

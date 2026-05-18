@@ -819,6 +819,103 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func mutableBspVisibleAutoIntentDoesNotOverrideCurrentGeometry() {
+        let displayID = DisplayID(rawValue: "display-a")
+        let display = DisplaySnapshot(
+            id: displayID,
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 700, height: 500), isOnScreen: true, isTileCandidate: true)
+        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 710, y: 0, width: 290, height: 500), isOnScreen: true, isTileCandidate: true)
+        let scope = StageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stagePath = tempPath("mutable-bsp-visible-stage")
+        let intentPath = tempPath("mutable-bsp-visible-intent")
+        let stageStore = StageStore(path: stagePath)
+        let intentStore = LayoutIntentStore(path: intentPath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+                ])
+            ])
+        ]))
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [first.id, second.id],
+            placements: [
+                first.id: Rect(x: 0, y: 0, width: 495, height: 500),
+                second.id: Rect(x: 505, y: 0, width: 495, height: 500),
+            ],
+            source: .auto
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [first, second]),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore,
+            stageStore: stageStore
+        )
+
+        #expect(service.applyPlan(from: service.snapshot()).commands.isEmpty)
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
+    func mutableBspHiddenAutoIntentRestoresHiddenStageGeometry() {
+        let displayID = DisplayID(rawValue: "display-a")
+        let display = DisplaySnapshot(
+            id: displayID,
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)
+        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)
+        let scope = StageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stagePath = tempPath("mutable-bsp-hidden-stage")
+        let intentPath = tempPath("mutable-bsp-hidden-intent")
+        let stageStore = StageStore(path: stagePath)
+        let intentStore = LayoutIntentStore(path: intentPath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+                ])
+            ])
+        ]))
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [first.id, second.id],
+            placements: [
+                first.id: Rect(x: 0, y: 0, width: 495, height: 500),
+                second.id: Rect(x: 505, y: 0, width: 495, height: 500),
+            ],
+            source: .auto
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [first, second]),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore,
+            stageStore: stageStore
+        )
+
+        let commands = service.applyPlan(from: service.snapshot()).commands
+        #expect(commands.map(\.window.id) == [first.id, second.id])
+        #expect(commands[0].frame == Rect(x: 0, y: 0, width: 495, height: 500))
+        #expect(commands[1].frame == Rect(x: 505, y: 0, width: 495, height: 500))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
     func configWorkspacesSeedPersistentStageNames() {
         let display = DisplayID(rawValue: "display-a")
         let stagePath = FileManager.default.temporaryDirectory
@@ -949,6 +1046,57 @@ struct SnapshotServiceTests {
 
         #expect(snapshot.focusedWindowID == active.id)
         #expect(snapshot.state.activeScope(on: display) == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotIgnoresStaleHiddenFocusAfterExplicitStageSwitch() {
+        let display = DisplayID(rawValue: "display-a")
+        let active = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "active", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let hidden = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "Teams", bundleID: "com.microsoft.teams2", title: "Call", frame: Rect(x: 999, y: 499, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-stale-hidden-focus-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: active.id, members: [
+                        PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hidden.id, members: [
+                        PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: hidden.frame),
+                    ]),
+                ]),
+            ],
+            commandFocusProtection: CommandFocusProtection(
+                displayID: display,
+                desktopID: DesktopID(rawValue: 1),
+                stageID: StageID(rawValue: "1"),
+                windowID: active.id,
+                staleFocusedWindowID: hidden.id,
+                expiresAt: Date().addingTimeInterval(-1),
+                staleFocusExpiresAt: Date().addingTimeInterval(60)
+            )
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: [active, hidden],
+                focusedID: hidden.id
+            ),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let persisted = stageStore.state()
+        let persistedActiveStageID = persisted.scopes.first { $0.displayID == display }?.activeStageID
+
+        #expect(snapshot.focusedWindowID == active.id)
+        #expect(snapshot.state.activeScope(on: display) == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        #expect(persistedActiveStageID == StageID(rawValue: "1"))
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 

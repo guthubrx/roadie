@@ -81,6 +81,7 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Supporte des rules TOML avec validation, explain, événements runtime `rule.*` et placement automatique stage/écran.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
 - Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
+- Expose un target mode configurable pour labels clavier, picker par recherche, automatisation JSON, inspection de cibles et decouverte experimentale des zones applicatives.
 - Fournit des outils de sûreté : reload config atomique, restore snapshot manuel, restore-on-exit/crash watcher limité, cleanup des fichiers générés.
 - Expose des diagnostics performance read-only, sans instrumentation du chemin focus/bordure.
 
@@ -422,6 +423,22 @@ Interactions supportées :
 - Utiliser les chevrons au-dessus et au-dessous d’une stage pour réordonner les stages.
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
+
+## Target Mode
+
+Roadie expose un mode de cibles inspiré des concepts de Vimac, Homerow et Neru,
+réimplémenté sans dépendre de leur code : labels clavier, recherche, inspecteur,
+zones applicatives Accessibility, grille récursive et macros courtes.
+
+```bash
+./bin/roadie targets interactive --source all --include-app-targets
+./bin/roadie grid show --visual
+./bin/roadie record start demo --duration 10
+```
+
+Les surfaces risquées sont expérimentales et activables séparément dans
+`[experimental.target_mode]`, `[experimental.app_targets]`,
+`[experimental.target_grid]` et `[experimental.target_record]`.
 
 ## Dépannage
 

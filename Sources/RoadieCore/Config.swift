@@ -474,13 +474,424 @@ public struct WidthAdjustmentConfig: Equatable, Codable, Sendable {
 
 public struct ExperimentalConfig: Equatable, Codable, Sendable {
     public var titlebarContextMenu: TitlebarContextMenuConfig
+    public var targetMode: TargetModeConfig
+    public var appTargets: AppTargetsConfig
+    public var targetGrid: TargetGridConfig
+    public var targetRecord: TargetRecordConfig
 
-    public init(titlebarContextMenu: TitlebarContextMenuConfig = TitlebarContextMenuConfig()) {
+    public init(
+        titlebarContextMenu: TitlebarContextMenuConfig = TitlebarContextMenuConfig(),
+        targetMode: TargetModeConfig = TargetModeConfig(),
+        appTargets: AppTargetsConfig = AppTargetsConfig(),
+        targetGrid: TargetGridConfig = TargetGridConfig(),
+        targetRecord: TargetRecordConfig = TargetRecordConfig()
+    ) {
         self.titlebarContextMenu = titlebarContextMenu
+        self.targetMode = targetMode
+        self.appTargets = appTargets
+        self.targetGrid = targetGrid
+        self.targetRecord = targetRecord
     }
 
     enum CodingKeys: String, CodingKey {
         case titlebarContextMenu = "titlebar_context_menu"
+        case targetMode = "target_mode"
+        case appTargets = "app_targets"
+        case targetGrid = "target_grid"
+        case targetRecord = "target_record"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.titlebarContextMenu = try c.decodeIfPresent(TitlebarContextMenuConfig.self, forKey: .titlebarContextMenu) ?? TitlebarContextMenuConfig()
+        self.targetMode = try c.decodeIfPresent(TargetModeConfig.self, forKey: .targetMode) ?? TargetModeConfig()
+        self.appTargets = try c.decodeIfPresent(AppTargetsConfig.self, forKey: .appTargets) ?? AppTargetsConfig()
+        self.targetGrid = try c.decodeIfPresent(TargetGridConfig.self, forKey: .targetGrid) ?? TargetGridConfig()
+        self.targetRecord = try c.decodeIfPresent(TargetRecordConfig.self, forKey: .targetRecord) ?? TargetRecordConfig()
+    }
+}
+
+public struct TargetModeConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var pickerEnabled: Bool
+    public var overlayEnabled: Bool
+    public var overlayLabelsOnly: Bool
+    public var overlayDurationSeconds: Double
+    public var appMouseActionsEnabled: Bool
+    public var scrollModeEnabled: Bool
+
+    public init(
+        enabled: Bool = true,
+        pickerEnabled: Bool = true,
+        overlayEnabled: Bool = false,
+        overlayLabelsOnly: Bool = true,
+        overlayDurationSeconds: Double = 3,
+        appMouseActionsEnabled: Bool = false,
+        scrollModeEnabled: Bool = false
+    ) {
+        self.enabled = enabled
+        self.pickerEnabled = pickerEnabled
+        self.overlayEnabled = overlayEnabled
+        self.overlayLabelsOnly = overlayLabelsOnly
+        self.overlayDurationSeconds = overlayDurationSeconds
+        self.appMouseActionsEnabled = appMouseActionsEnabled
+        self.scrollModeEnabled = scrollModeEnabled
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case pickerEnabled = "picker_enabled"
+        case overlayEnabled = "overlay_enabled"
+        case overlayLabelsOnly = "overlay_labels_only"
+        case overlayDurationSeconds = "overlay_duration_seconds"
+        case appMouseActionsEnabled = "app_mouse_actions_enabled"
+        case scrollModeEnabled = "scroll_mode_enabled"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            pickerEnabled: try c.decodeIfPresent(Bool.self, forKey: .pickerEnabled) ?? true,
+            overlayEnabled: try c.decodeIfPresent(Bool.self, forKey: .overlayEnabled) ?? false,
+            overlayLabelsOnly: try c.decodeIfPresent(Bool.self, forKey: .overlayLabelsOnly) ?? true,
+            overlayDurationSeconds: try c.decodeFlexibleDouble(forKey: .overlayDurationSeconds) ?? 3,
+            appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
+            scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false
+        )
+    }
+}
+
+public struct AppTargetsConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var scope: String
+    public var maxTargets: Int
+    public var timeoutMs: Int
+    public var hintCharacters: String
+    public var includeRoles: [String]
+    public var axBoostEnabled: Bool
+    public var maxDepth: Int
+    public var additionalBoostBundleIDs: [String]
+
+    public init(
+        enabled: Bool = false,
+        scope: String = "frontmost_window",
+        maxTargets: Int = 150,
+        timeoutMs: Int = 120,
+        hintCharacters: String = "asdfghjkl",
+        includeRoles: [String] = ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow", "AXCheckBox", "AXRadioButton", "AXPopUpButton"],
+        axBoostEnabled: Bool = false,
+        maxDepth: Int = 12,
+        additionalBoostBundleIDs: [String] = []
+    ) {
+        self.enabled = enabled
+        self.scope = scope
+        self.maxTargets = min(500, max(1, maxTargets))
+        self.timeoutMs = min(2_000, max(10, timeoutMs))
+        self.hintCharacters = hintCharacters.isEmpty ? "asdfghjkl" : hintCharacters
+        self.includeRoles = includeRoles
+        self.axBoostEnabled = axBoostEnabled
+        self.maxDepth = min(40, max(1, maxDepth))
+        self.additionalBoostBundleIDs = additionalBoostBundleIDs
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case scope
+        case maxTargets = "max_targets"
+        case timeoutMs = "timeout_ms"
+        case hintCharacters = "hint_characters"
+        case includeRoles = "include_roles"
+        case axBoostEnabled = "ax_boost_enabled"
+        case maxDepth = "max_depth"
+        case additionalBoostBundleIDs = "additional_boost_bundle_ids"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false,
+            scope: try c.decodeIfPresent(String.self, forKey: .scope) ?? "frontmost_window",
+            maxTargets: try c.decodeIfPresent(Int.self, forKey: .maxTargets) ?? 150,
+            timeoutMs: try c.decodeIfPresent(Int.self, forKey: .timeoutMs) ?? 120,
+            hintCharacters: try c.decodeIfPresent(String.self, forKey: .hintCharacters) ?? "asdfghjkl",
+            includeRoles: try c.decodeIfPresent([String].self, forKey: .includeRoles) ?? ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow", "AXCheckBox", "AXRadioButton", "AXPopUpButton"],
+            axBoostEnabled: try c.decodeIfPresent(Bool.self, forKey: .axBoostEnabled) ?? false,
+            maxDepth: try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 12,
+            additionalBoostBundleIDs: try c.decodeIfPresent([String].self, forKey: .additionalBoostBundleIDs) ?? []
+        )
+    }
+}
+
+public enum TargetGridInteractionMode: String, Codable, Equatable, Sendable {
+    case autoClick = "auto_click"
+    case recursive
+}
+
+public enum TargetGridArrowEdgeBehavior: String, Codable, Equatable, Sendable {
+    case clamp
+    case wrap
+}
+
+public enum TargetGridLabelPlacement: String, Codable, Equatable, Sendable {
+    case callout
+    case center
+}
+
+public struct TargetGridConfig: Equatable, Codable, Sendable {
+    public var enabled: Bool
+    public var mode: TargetGridInteractionMode
+    public var overlayEnabled: Bool
+    public var overlayDrawGrid: Bool
+    public var overlayFillColor: String
+    public var overlayFillOpacity: Double
+    public var overlayBorderColor: String
+    public var overlayBorderOpacity: Double
+    public var overlayLabelColor: String
+    public var overlayLabelBackgroundOpacity: Double
+    public var rows: Int
+    public var columns: Int
+    public var maxDepth: Int
+    public var hintCharacters: String
+    public var confirmActionKey: String
+    public var resetKey: String
+    public var backKey: String
+    public var exitKey: String
+    public var arrowNavigationEnabled: Bool
+    public var arrowEdgeBehavior: TargetGridArrowEdgeBehavior
+    public var actionDelayMs: Int
+    public var wakeMousePixels: Int
+    public var mouseFollowGrid: Bool
+    public var focusFollowGrid: Bool
+    public var labelPlacement: TargetGridLabelPlacement
+
+    public init(
+        enabled: Bool = false,
+        mode: TargetGridInteractionMode = .recursive,
+        overlayEnabled: Bool = true,
+        overlayDrawGrid: Bool = true,
+        overlayFillColor: String = "#4DABF7",
+        overlayFillOpacity: Double = 0.10,
+        overlayBorderColor: String = "#4DABF7",
+        overlayBorderOpacity: Double = 0.55,
+        overlayLabelColor: String = "#FFFFFF",
+        overlayLabelBackgroundOpacity: Double = 0.84,
+        rows: Int = 3,
+        columns: Int = 3,
+        maxDepth: Int = 3,
+        hintCharacters: String = "azeqsdwxc",
+        confirmActionKey: String = "space",
+        resetKey: String = "r",
+        backKey: String = "backspace",
+        exitKey: String = "escape",
+        arrowNavigationEnabled: Bool = true,
+        arrowEdgeBehavior: TargetGridArrowEdgeBehavior = .clamp,
+        actionDelayMs: Int = 30,
+        wakeMousePixels: Int = 1,
+        mouseFollowGrid: Bool = false,
+        focusFollowGrid: Bool = false,
+        labelPlacement: TargetGridLabelPlacement = .callout
+    ) {
+        self.enabled = enabled
+        self.mode = mode
+        self.overlayEnabled = overlayEnabled
+        self.overlayDrawGrid = overlayDrawGrid
+        self.overlayFillColor = overlayFillColor.isEmpty ? "#4DABF7" : overlayFillColor
+        self.overlayFillOpacity = min(1, max(0, overlayFillOpacity))
+        self.overlayBorderColor = overlayBorderColor.isEmpty ? "#4DABF7" : overlayBorderColor
+        self.overlayBorderOpacity = min(1, max(0, overlayBorderOpacity))
+        self.overlayLabelColor = overlayLabelColor.isEmpty ? "#FFFFFF" : overlayLabelColor
+        self.overlayLabelBackgroundOpacity = min(1, max(0, overlayLabelBackgroundOpacity))
+        self.rows = min(12, max(2, rows))
+        self.columns = min(12, max(2, columns))
+        self.maxDepth = min(20, max(1, maxDepth))
+        self.hintCharacters = hintCharacters.isEmpty ? "azeqsdwxc" : hintCharacters
+        self.confirmActionKey = Self.normalizedKey(confirmActionKey, fallback: "space")
+        self.resetKey = Self.normalizedKey(resetKey, fallback: "r")
+        self.backKey = Self.normalizedKey(backKey, fallback: "backspace")
+        self.exitKey = Self.normalizedKey(exitKey, fallback: "escape")
+        self.arrowNavigationEnabled = arrowNavigationEnabled
+        self.arrowEdgeBehavior = arrowEdgeBehavior
+        self.actionDelayMs = min(1_000, max(0, actionDelayMs))
+        self.wakeMousePixels = min(20, max(0, wakeMousePixels))
+        self.mouseFollowGrid = mouseFollowGrid
+        self.focusFollowGrid = focusFollowGrid
+        self.labelPlacement = labelPlacement
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case overlayEnabled = "overlay_enabled"
+        case overlayDrawGrid = "overlay_draw_grid"
+        case overlayFillColor = "overlay_fill_color"
+        case overlayFillOpacity = "overlay_fill_opacity"
+        case overlayBorderColor = "overlay_border_color"
+        case overlayBorderOpacity = "overlay_border_opacity"
+        case overlayLabelColor = "overlay_label_color"
+        case overlayLabelBackgroundOpacity = "overlay_label_background_opacity"
+        case rows
+        case columns
+        case maxDepth = "max_depth"
+        case hintCharacters = "hint_characters"
+        case mode
+        case confirmActionKey = "confirm_action_key"
+        case resetKey = "reset_key"
+        case backKey = "back_key"
+        case exitKey = "exit_key"
+        case arrowNavigationEnabled = "arrow_navigation_enabled"
+        case arrowEdgeBehavior = "arrow_edge_behavior"
+        case actionDelayMs = "action_delay_ms"
+        case wakeMousePixels = "wake_mouse_pixels"
+        case mouseFollowGrid = "mouse_follow_grid"
+        case focusFollowGrid = "focus_follow_grid"
+        case labelPlacement = "label_placement"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false,
+            mode: try c.decodeIfPresent(TargetGridInteractionMode.self, forKey: .mode) ?? .recursive,
+            overlayEnabled: try c.decodeIfPresent(Bool.self, forKey: .overlayEnabled) ?? true,
+            overlayDrawGrid: try c.decodeIfPresent(Bool.self, forKey: .overlayDrawGrid) ?? true,
+            overlayFillColor: try c.decodeIfPresent(String.self, forKey: .overlayFillColor) ?? "#4DABF7",
+            overlayFillOpacity: try c.decodeFlexibleDouble(forKey: .overlayFillOpacity) ?? 0.10,
+            overlayBorderColor: try c.decodeIfPresent(String.self, forKey: .overlayBorderColor) ?? "#4DABF7",
+            overlayBorderOpacity: try c.decodeFlexibleDouble(forKey: .overlayBorderOpacity) ?? 0.55,
+            overlayLabelColor: try c.decodeIfPresent(String.self, forKey: .overlayLabelColor) ?? "#FFFFFF",
+            overlayLabelBackgroundOpacity: try c.decodeFlexibleDouble(forKey: .overlayLabelBackgroundOpacity) ?? 0.84,
+            rows: try c.decodeIfPresent(Int.self, forKey: .rows) ?? 3,
+            columns: try c.decodeIfPresent(Int.self, forKey: .columns) ?? 3,
+            maxDepth: try c.decodeIfPresent(Int.self, forKey: .maxDepth) ?? 3,
+            hintCharacters: try c.decodeIfPresent(String.self, forKey: .hintCharacters) ?? "azeqsdwxc",
+            confirmActionKey: try c.decodeIfPresent(String.self, forKey: .confirmActionKey) ?? "space",
+            resetKey: try c.decodeIfPresent(String.self, forKey: .resetKey) ?? "r",
+            backKey: try c.decodeIfPresent(String.self, forKey: .backKey) ?? "backspace",
+            exitKey: try c.decodeIfPresent(String.self, forKey: .exitKey) ?? "escape",
+            arrowNavigationEnabled: try c.decodeIfPresent(Bool.self, forKey: .arrowNavigationEnabled) ?? true,
+            arrowEdgeBehavior: try c.decodeIfPresent(TargetGridArrowEdgeBehavior.self, forKey: .arrowEdgeBehavior) ?? .clamp,
+            actionDelayMs: try c.decodeIfPresent(Int.self, forKey: .actionDelayMs) ?? 30,
+            wakeMousePixels: try c.decodeIfPresent(Int.self, forKey: .wakeMousePixels) ?? 1,
+            mouseFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .mouseFollowGrid) ?? false,
+            focusFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .focusFollowGrid) ?? false,
+            labelPlacement: try c.decodeIfPresent(TargetGridLabelPlacement.self, forKey: .labelPlacement) ?? .callout
+        )
+    }
+
+    private static func normalizedKey(_ value: String, fallback: String) -> String {
+        let cleaned = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+        guard !cleaned.isEmpty else { return fallback }
+        let parts = cleaned.split(separator: "+").map(String.init).map { part in
+            switch part {
+            case "option":
+                return "alt"
+            case "cmd":
+                return "command"
+            case "esc":
+                return "escape"
+            case "delete":
+                return "backspace"
+            case "enter":
+                return "return"
+            default:
+                return part
+            }
+        }
+        return parts.joined(separator: "+")
+    }
+}
+
+public struct TargetRecordConfig: Equatable, Codable, Sendable {
+    public enum IndicatorMode: String, Codable, Equatable, Sendable {
+        case notification
+        case navrail
+        case both
+        case none
+
+        public var showsNotification: Bool {
+            self == .notification || self == .both
+        }
+
+        public var showsNavrail: Bool {
+            self == .navrail || self == .both
+        }
+    }
+
+    public var enabled: Bool
+    public var replayEnabled: Bool
+    public var directory: String
+    public var defaultDurationSeconds: Double
+    public var maxDurationSeconds: Double
+    public var maxEvents: Int
+    public var includeMouseMoves: Bool
+    public var includeKeyEvents: Bool
+    public var includeAXContext: Bool
+    public var recordTextInput: Bool
+    public var indicator: IndicatorMode
+    public var navrailBottomOffset: Double
+
+    public init(
+        enabled: Bool = false,
+        replayEnabled: Bool = false,
+        directory: String = "~/.local/state/roadies/records",
+        defaultDurationSeconds: Double = 10,
+        maxDurationSeconds: Double = 120,
+        maxEvents: Int = 2_000,
+        includeMouseMoves: Bool = false,
+        includeKeyEvents: Bool = true,
+        includeAXContext: Bool = true,
+        recordTextInput: Bool = false,
+        indicator: IndicatorMode = .notification,
+        navrailBottomOffset: Double = 50
+    ) {
+        self.enabled = enabled
+        self.replayEnabled = replayEnabled
+        self.directory = directory
+        self.defaultDurationSeconds = min(maxDurationSeconds, max(0.5, defaultDurationSeconds))
+        self.maxDurationSeconds = min(3_600, max(1, maxDurationSeconds))
+        self.maxEvents = min(20_000, max(1, maxEvents))
+        self.includeMouseMoves = includeMouseMoves
+        self.includeKeyEvents = includeKeyEvents
+        self.includeAXContext = includeAXContext
+        self.recordTextInput = recordTextInput
+        self.indicator = indicator
+        self.navrailBottomOffset = min(400, max(0, navrailBottomOffset))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case replayEnabled = "replay_enabled"
+        case directory
+        case defaultDurationSeconds = "default_duration_seconds"
+        case maxDurationSeconds = "max_duration_seconds"
+        case maxEvents = "max_events"
+        case includeMouseMoves = "include_mouse_moves"
+        case includeKeyEvents = "include_key_events"
+        case includeAXContext = "include_ax_context"
+        case recordTextInput = "record_text_input"
+        case indicator
+        case navrailBottomOffset = "navrail_bottom_offset"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? false,
+            replayEnabled: try c.decodeIfPresent(Bool.self, forKey: .replayEnabled) ?? false,
+            directory: try c.decodeIfPresent(String.self, forKey: .directory) ?? "~/.local/state/roadies/records",
+            defaultDurationSeconds: try c.decodeFlexibleDouble(forKey: .defaultDurationSeconds) ?? 10,
+            maxDurationSeconds: try c.decodeFlexibleDouble(forKey: .maxDurationSeconds) ?? 120,
+            maxEvents: try c.decodeIfPresent(Int.self, forKey: .maxEvents) ?? 2_000,
+            includeMouseMoves: try c.decodeIfPresent(Bool.self, forKey: .includeMouseMoves) ?? false,
+            includeKeyEvents: try c.decodeIfPresent(Bool.self, forKey: .includeKeyEvents) ?? true,
+            includeAXContext: try c.decodeIfPresent(Bool.self, forKey: .includeAXContext) ?? true,
+            recordTextInput: try c.decodeIfPresent(Bool.self, forKey: .recordTextInput) ?? false,
+            indicator: try c.decodeIfPresent(IndicatorMode.self, forKey: .indicator) ?? .notification,
+            navrailBottomOffset: try c.decodeFlexibleDouble(forKey: .navrailBottomOffset) ?? 50
+        )
     }
 }
 
@@ -683,6 +1094,10 @@ private enum ConfigValidationRules {
         "width_adjustment",
         "experimental",
         "experimental.titlebar_context_menu",
+        "experimental.target_mode",
+        "experimental.app_targets",
+        "experimental.target_grid",
+        "experimental.target_record",
         "rules",
         "rules.match",
         "rules.action"
@@ -736,6 +1151,10 @@ private enum ConfigValidationRules {
                 items.append(ConfigValidationItem(level: .error, path: "width_adjustment.minimum_ratio", message: "must be lower than or equal to maximum_ratio"))
             }
             items.append(contentsOf: validateTitlebarContextMenu(config.experimental.titlebarContextMenu))
+            items.append(contentsOf: validateTargetMode(config.experimental.targetMode))
+            items.append(contentsOf: validateAppTargets(config.experimental.appTargets))
+            items.append(contentsOf: validateTargetGrid(config.experimental.targetGrid))
+            items.append(contentsOf: validateTargetRecord(config.experimental.targetRecord))
         }
         return items
     }
@@ -784,7 +1203,8 @@ private enum ConfigValidationRules {
             "maximum_ratio",
             "height",
             "leading_exclusion",
-            "trailing_exclusion"
+            "trailing_exclusion",
+            "overlay_duration_seconds"
         ]
         var items: [ConfigValidationItem] = []
         var currentTable = ""
@@ -848,6 +1268,118 @@ private enum ConfigValidationRules {
                 level: .warning,
                 path: "experimental.titlebar_context_menu",
                 message: "all destination families are disabled; menu will not be shown"
+            ))
+        }
+        return items
+    }
+
+    private static func validateTargetMode(_ config: TargetModeConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.overlayDurationSeconds < 0.2 || config.overlayDurationSeconds > 30 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_mode.overlay_duration_seconds",
+                message: "must be between 0.2 and 30"
+            ))
+        }
+        if !config.enabled &&
+            (config.pickerEnabled || config.overlayEnabled || config.appMouseActionsEnabled || config.scrollModeEnabled) {
+            items.append(ConfigValidationItem(
+                level: .warning,
+                path: "experimental.target_mode",
+                message: "target mode is disabled; sub-features will be ignored"
+            ))
+        }
+        return items
+    }
+
+    private static func validateAppTargets(_ config: AppTargetsConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.scope != "frontmost_window" {
+            items.append(ConfigValidationItem(
+                level: .warning,
+                path: "experimental.app_targets.scope",
+                message: "only frontmost_window is supported currently"
+            ))
+        }
+        if config.hintCharacters.count < 2 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.app_targets.hint_characters",
+                message: "must contain at least two characters"
+            ))
+        }
+        if config.includeRoles.isEmpty {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.app_targets.include_roles",
+                message: "must contain at least one AX role"
+            ))
+        }
+        if config.maxDepth < 1 || config.maxDepth > 40 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.app_targets.max_depth",
+                message: "must be between 1 and 40"
+            ))
+        }
+        return items
+    }
+
+    private static func validateTargetGrid(_ config: TargetGridConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.rows < 2 || config.rows > 12 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.rows",
+                message: "must be between 2 and 12"
+            ))
+        }
+        if config.columns < 2 || config.columns > 12 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.columns",
+                message: "must be between 2 and 12"
+            ))
+        }
+        if config.hintCharacters.count < config.rows * config.columns {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.hint_characters",
+                message: "must contain at least rows*columns characters"
+            ))
+        }
+        if config.maxDepth < 1 || config.maxDepth > 20 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.max_depth",
+                message: "must be between 1 and 20"
+            ))
+        }
+        if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.*_key",
+                message: "recursive grid keys must not be empty"
+            ))
+        }
+        return items
+    }
+
+    private static func validateTargetRecord(_ config: TargetRecordConfig) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        if config.defaultDurationSeconds > config.maxDurationSeconds {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_record.default_duration_seconds",
+                message: "must be lower than or equal to max_duration_seconds"
+            ))
+        }
+        if config.replayEnabled && !config.enabled {
+            items.append(ConfigValidationItem(
+                level: .warning,
+                path: "experimental.target_record.replay_enabled",
+                message: "replay is enabled but recording capability is disabled"
             ))
         }
         return items

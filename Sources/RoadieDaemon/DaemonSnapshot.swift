@@ -702,7 +702,9 @@ public extension SnapshotService {
 
             guard let stage = snapshot.state.stage(scope: scope) else { continue }
             let effectiveMode = mode ?? stage.mode
-            if effectiveMode.isTiled, let intent = validIntent(for: scope, from: snapshot) {
+            if effectiveMode.isTiled,
+               let intent = validIntent(for: scope, from: snapshot),
+               shouldApplyLayoutIntent(intent, mode: effectiveMode, scope: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
@@ -716,6 +718,25 @@ public extension SnapshotService {
             }
         }
         return ApplyPlan(commands: commands)
+    }
+
+    private func shouldApplyLayoutIntent(
+        _ intent: LayoutIntent,
+        mode: WindowManagementMode,
+        scope: StageScope,
+        from snapshot: DaemonSnapshot
+    ) -> Bool {
+        if intent.source == .command { return true }
+        if mode != .mutableBsp { return true }
+
+        let scopedWindows = snapshot.windows.filter { entry in
+            entry.scope == scope && intent.windowIDs.contains(entry.window.id)
+        }
+        guard !scopedWindows.isEmpty else { return true }
+
+        return scopedWindows.contains { entry in
+            !entry.window.isOnScreen || isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+        }
     }
 
     func orderedWindowIDs(
@@ -768,21 +789,111 @@ public extension SnapshotService {
     func hasMatchingIntent(
         scope: StageScope,
         frames: [UInt32: Rect],
-        focusedWindowID: WindowID? = nil
+        focusedWindowID: WindowID? = nil,
+        positionTolerance: CGFloat = 8,
+        sizeTolerance: CGFloat = 8,
+        focusedPositionTolerance: CGFloat = 12,
+        focusedSizeTolerance: CGFloat = 36,
+        allowFocusChromeDelta: Bool = true
     ) -> Bool {
         guard let intent = intentStore.intent(for: scope) else { return false }
         return intent.placements.allSatisfy { id, frame in
             guard let observed = frames[id.rawValue] else { return false }
             if id == focusedWindowID {
-                return isLikelyFocusWindowChromeDelta(observed, baseline: frame) || observed.isClose(to: frame, positionTolerance: 12, sizeTolerance: 36)
+                return (allowFocusChromeDelta && isLikelyFocusWindowChromeDelta(observed, baseline: frame))
+                    || observed.isClose(
+                        to: frame,
+                        positionTolerance: focusedPositionTolerance,
+                        sizeTolerance: focusedSizeTolerance
+                    )
             }
-            return observed.isClose(to: frame, positionTolerance: 8, sizeTolerance: 8)
+            return observed.isClose(to: frame, positionTolerance: positionTolerance, sizeTolerance: sizeTolerance)
         }
     }
 
     func hasRecentCommandIntent(scope: StageScope, since date: Date) -> Bool {
         guard let intent = intentStore.intent(for: scope) else { return false }
         return intent.source == .command && intent.createdAt >= date
+    }
+
+    func hasValidLayoutIntent(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
+        validIntent(for: scope, from: snapshot) != nil
+    }
+
+    @discardableResult
+    func saveCurrentLayoutIntentIfValid(scope: StageScope, from snapshot: DaemonSnapshot) -> Bool {
+        guard let stage = snapshot.state.stage(scope: scope),
+              stage.mode.isTiled,
+              snapshot.state.activeScope(on: scope.displayID) == scope
+        else { return false }
+
+        let orderedIDs = stage.mode == .mutableBsp
+            ? orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
+            : stage.windowIDs
+        let placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+            guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+            return (entry.window.id, entry.window.frame)
+        })
+        guard Set(placements.keys) == Set(orderedIDs) else { return false }
+
+        let intent = LayoutIntent(
+            scope: scope,
+            windowIDs: orderedIDs,
+            placements: placements,
+            source: .auto
+        )
+        if stage.mode == .mutableBsp {
+            intentStore.save(intent)
+            return true
+        }
+        guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot) else { return false }
+        intentStore.save(intent)
+        return true
+    }
+
+    @discardableResult
+    func repairMutableBspOrderForCurrentGeometry(
+        scopes: Set<StageScope>,
+        in snapshot: DaemonSnapshot,
+        reason: String
+    ) -> Bool {
+        guard !scopes.isEmpty else { return false }
+        var state = stageStore.state()
+        var repaired: [(scope: StageScope, old: [WindowID], new: [WindowID])] = []
+
+        for scope in scopes {
+            guard let stage = snapshot.state.stage(scope: scope),
+                  stage.mode == .mutableBsp,
+                  snapshot.state.activeScope(on: scope.displayID) == scope,
+                  let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+            else { continue }
+
+            let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+            let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+                windowsByID[id].map { (id, $0.frame.cgRect) }
+            })
+            let ordered = spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
+            guard ordered != stage.windowIDs,
+                  Set(ordered) == Set(stage.windowIDs),
+                  var persistentScope = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })
+            else { continue }
+
+            persistentScope.orderMembers(ordered, in: scope.stageID)
+            state.update(persistentScope)
+            repaired.append((scope, stage.windowIDs, ordered))
+            intentStore.remove(scope: scope)
+        }
+
+        guard !repaired.isEmpty else { return false }
+        stageStore.save(state)
+        for item in repaired {
+            events.append(RoadieEvent(type: "mutable_bsp_order_repaired", scope: item.scope, details: [
+                "reason": reason,
+                "old": item.old.map { String($0.rawValue) }.joined(separator: ","),
+                "new": item.new.map { String($0.rawValue) }.joined(separator: ",")
+            ]))
+        }
+        return true
     }
 
     func applyPlan(
@@ -957,6 +1068,16 @@ public extension SnapshotService {
         let dw = abs(observed.width - baseline.width)
         let dh = abs(observed.height - baseline.height)
         return dx <= 8 && (dy <= 12 || dh <= 12) && (dw <= 2 && dh <= 80)
+    }
+
+    private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        displays.contains { display in
+            let visible = display.visibleFrame.cgRect
+            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
+            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
+            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
+            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        }
     }
 
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {

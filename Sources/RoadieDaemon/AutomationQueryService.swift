@@ -27,6 +27,8 @@ public struct AutomationQueryService {
             return result(name, PerformanceLogService(eventLog: eventLog).summary())
         case "restore":
             return result(name, RestoreSafetyService(eventLog: eventLog).status())
+        case "targets":
+            return result(name, TargetHintService(service: service, eventLog: eventLog).list())
         default:
             break
         }

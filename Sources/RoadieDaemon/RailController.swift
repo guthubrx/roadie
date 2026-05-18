@@ -27,6 +27,8 @@ public final class RailController {
     private var lastInteractiveRailRefreshAt: Date = .distantPast
     private var configWatcher: DispatchSourceFileSystemObject?
     private var configWatchFileDescriptor: CInt = -1
+    private var recordingStatusWatcher: DispatchSourceFileSystemObject?
+    private var recordingStatusWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var pendingStageReorder: PendingStageReorder?
@@ -56,6 +58,7 @@ public final class RailController {
         startHoverTimer()
         startStageLabelTimer()
         startConfigWatcher()
+        startRecordingStatusWatcher()
         startStageStoreWatcher()
         refreshTimer?.invalidate()
         let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -98,6 +101,35 @@ public final class RailController {
             if fd >= 0 { close(fd) }
         }
         configWatcher = source
+        source.resume()
+    }
+
+    private func startRecordingStatusWatcher() {
+        recordingStatusWatcher?.cancel()
+        if recordingStatusWatchFileDescriptor >= 0 {
+            close(recordingStatusWatchFileDescriptor)
+            recordingStatusWatchFileDescriptor = -1
+        }
+        try? FileManager.default.createDirectory(at: TargetRecordingStatusStore.directoryURL, withIntermediateDirectories: true)
+        recordingStatusWatchFileDescriptor = open(TargetRecordingStatusStore.directoryURL.path, O_EVTONLY)
+        guard recordingStatusWatchFileDescriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: recordingStatusWatchFileDescriptor,
+            eventMask: [.write, .rename, .delete],
+            queue: .main
+        )
+        source.setEventHandler { [weak self] in
+            Task { @MainActor in
+                self?.rebuildPanels(reason: "recording_status")
+                if source.data.contains(.rename) || source.data.contains(.delete) {
+                    self?.startRecordingStatusWatcher()
+                }
+            }
+        }
+        source.setCancelHandler { [fd = recordingStatusWatchFileDescriptor] in
+            if fd >= 0 { close(fd) }
+        }
+        recordingStatusWatcher = source
         source.resume()
     }
 
@@ -734,6 +766,11 @@ public final class RailController {
         lastStageStoreRailSignature = railSignature ?? Self.railSignature(for: state)
         var config = RailVisualConfig.load()
         config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
+        let recordConfig = snapshotService.effectiveConfig.experimental.targetRecord
+        let recordingStatus = recordConfig.indicator.showsNavrail
+            ? TargetRecordingStatusStore().activeStatus()
+            : nil
+        let recordingIndicatorBottomOffset = CGFloat(recordConfig.navrailBottomOffset)
         let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
         let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
         let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
@@ -766,6 +803,8 @@ public final class RailController {
                 thumbnails: thumbnails,
                 liveWindowIDs: liveWindowIDs,
                 protectedWindowIDs: Set(protectedBlurredWindows.keys),
+                recordingStatus: recordingStatus,
+                recordingIndicatorBottomOffset: recordingIndicatorBottomOffset,
                 thumbnailCaptureBudget: &thumbnailCaptureBudget
             )
             if panels[displayID] == nil {
@@ -1217,6 +1256,7 @@ private final class RailPanel: NSPanel {
     private var isCollapsed = false
     private var lastPersistedVisibleWidth: Double?
     private var hideAfter: Date?
+    private var recordingIndicatorView: RecordingIndicatorView?
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -1358,8 +1398,12 @@ private final class RailPanel: NSPanel {
         thumbnails: WindowThumbnailStore,
         liveWindowIDs: Set<WindowID>,
         protectedWindowIDs: Set<WindowID>,
+        recordingStatus: TargetRecordingStatus?,
+        recordingIndicatorBottomOffset: CGFloat,
         thumbnailCaptureBudget: inout Int
     ) {
+        recordingIndicatorView?.removeFromSuperview()
+        recordingIndicatorView = nil
         stack.arrangedSubviews.forEach { view in
             stack.removeArrangedSubview(view)
             view.removeFromSuperview()
@@ -1403,6 +1447,19 @@ private final class RailPanel: NSPanel {
         if config.headerVisible, config.headerPosition == .bottom {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
+        if let recordingStatus {
+            showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset)
+        }
+    }
+
+    private func showRecordingIndicator(_ status: TargetRecordingStatus, bottomOffset: CGFloat) {
+        let indicator = RecordingIndicatorView(status: status)
+        recordingIndicatorView = indicator
+        stack.addSubview(indicator)
+        NSLayoutConstraint.activate([
+            indicator.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: horizontalInset),
+            indicator.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: -bottomOffset),
+        ])
     }
 
     private func positionContent(count: Int, config: RailVisualConfig) {
@@ -1668,6 +1725,49 @@ private final class FixedHeightSpacer: NSView {
 }
 
 @MainActor
+private final class RecordingIndicatorView: NSView {
+    private let status: TargetRecordingStatus
+
+    init(status: TargetRecordingStatus) {
+        self.status = status
+        super.init(frame: CGRect(x: 0, y: 0, width: 118, height: 26))
+        translatesAutoresizingMaskIntoConstraints = false
+        widthAnchor.constraint(equalToConstant: 118).isActive = true
+        heightAnchor.constraint(equalToConstant: 26).isActive = true
+        toolTip = "Recording \(status.name)"
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 118, height: 26)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let rect = bounds.insetBy(dx: 2, dy: 3)
+        NSColor(calibratedWhite: 0.02, alpha: 0.42).setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+
+        let dotRect = CGRect(x: rect.minX + 8, y: rect.midY - 4, width: 8, height: 8)
+        NSColor.systemRed.setFill()
+        NSBezierPath(ovalIn: dotRect).fill()
+
+        let label = "record"
+        label.draw(in: CGRect(x: dotRect.maxX + 8, y: rect.minY + 4, width: rect.width - 28, height: rect.height - 6), withAttributes: [
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: NSColor.systemRed.withAlphaComponent(0.92),
+        ])
+    }
+}
+
+@MainActor
 private final class WindowThumbnailStore {
     private var images: [WindowID: NSImage] = [:]
     private var signatures: [WindowID: String] = [:]
@@ -1704,7 +1804,11 @@ private final class WindowThumbnailStore {
     ) -> NSImage? {
         let now = Date()
         let isDRMSensitive = Self.isDRMSensitiveBundle(member.bundleID)
-        let signature = "\(member.bundleID)\n\(member.title)"
+        // The title can change frequently while the underlying window is the same
+        // (terminal prompt, browser tab title, media progress). Invalidating the
+        // thumbnail on title churn makes the rail alternate between app icon and
+        // screenshot on fast refreshes.
+        let signature = member.bundleID
         if signatures[member.windowID] != signature {
             images.removeValue(forKey: member.windowID)
             capturedAt.removeValue(forKey: member.windowID)

@@ -84,6 +84,9 @@ public final class LayoutMaintainer {
             self.lastDisplaySignature = currentDisplaySignature
             displayTopologySettlesUntil = tickNow.addingTimeInterval(max(1.5, intervalSeconds * 4))
             lastObservedFrames = scopedFrames(in: snapshot)
+            clampedFrames.removeAll()
+            failedFrames.removeAll()
+            revertedAppliedFrames.removeAll()
             events.append(RoadieEvent(type: "display.topology_settling", details: [
                 "from": lastDisplaySignature,
                 "to": currentDisplaySignature
@@ -97,7 +100,6 @@ public final class LayoutMaintainer {
         }
         displayTopologySettlesUntil = nil
         if dragActivity.isActive(now: tickNow) {
-            lastObservedFrames = scopedFrames(in: snapshot)
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
@@ -145,6 +147,26 @@ public final class LayoutMaintainer {
                 return tick
             }
 
+            let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)
+            if !modeledScopes.isEmpty {
+                priorityWindowIDs = []
+                manualResizeApplyAfter = nil
+                let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: [])
+                events.append(RoadieEvent(type: "external_geometry_snapped_to_layout_model", details: [
+                    "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                    "scopes": modeledScopes.map(\.description).sorted().joined(separator: ","),
+                    "commands": String(tick.commands)
+                ]))
+                return tick
+            }
+
+            if let tick = adoptMutableBspGeometryChange(
+                in: snapshot,
+                changedWindowIDs: changedWindowIDs
+            ) {
+                return tick
+            }
+
             if changedWindowIDs.count >= 2 {
                 lastObservedFrames = observedFrames
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
@@ -167,14 +189,41 @@ public final class LayoutMaintainer {
         }
         manualResizeApplyAfter = nil
 
-        let commandProtectedScopes = recentCommandScopes(in: snapshot, since: cutoff, now: now, windowIDs: priorityWindowIDs)
-        if !commandProtectedScopes.isEmpty {
+        let commandProtectedScopes = priorityWindowIDs.isEmpty
+            ? recentCommandScopes(in: snapshot, since: cutoff, now: now)
+            : []
+        let strictCommandProtectedScopes = strictAuthoritativeScopes(commandProtectedScopes, in: snapshot)
+        if !strictCommandProtectedScopes.isEmpty {
+            let driftedScopes = driftedCommandScopes(strictCommandProtectedScopes, frames: observedFrames)
+            if !driftedScopes.isEmpty {
+                for scope in driftedScopes {
+                    service.removeLayoutIntent(scope: scope)
+                }
+                lastCommandIntentAt = nil
+                let remainingProtectedScopes = strictCommandProtectedScopes.subtracting(driftedScopes)
+                let tick = applyPlan(
+                    from: snapshot,
+                    observedFrames: observedFrames,
+                    excluding: remainingProtectedScopes
+                )
+                events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
+                    "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
+                    "remainingProtectedScopes": remainingProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                    "commands": String(tick.commands)
+                ]))
+                return tick
+            }
             lastCommandIntentAt = now
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
-            let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: commandProtectedScopes)
+            let tick = applyPlan(
+                from: snapshot,
+                observedFrames: observedFrames,
+                excluding: strictCommandProtectedScopes,
+                updateBaselineWhenEmpty: false
+            )
             events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
-                "scopes": commandProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                "scopes": strictCommandProtectedScopes.map(\.description).sorted().joined(separator: ","),
                 "unprotectedCommands": String(tick.commands)
             ]))
             return tick
@@ -184,39 +233,87 @@ public final class LayoutMaintainer {
            priorityWindowIDs.isEmpty,
            now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
         {
-            let protectedScopes = recentCommandScopes(in: snapshot, since: cutoff, now: now)
+            let protectedScopes = strictAuthoritativeScopes(
+                recentCommandScopes(in: snapshot, since: cutoff, now: now),
+                in: snapshot
+            )
+            let driftedScopes = driftedCommandScopes(protectedScopes, frames: observedFrames)
+            if !driftedScopes.isEmpty {
+                for scope in driftedScopes {
+                    service.removeLayoutIntent(scope: scope)
+                }
+                self.lastCommandIntentAt = nil
+                let remainingProtectedScopes = protectedScopes.subtracting(driftedScopes)
+                let tick = applyPlan(
+                    from: snapshot,
+                    observedFrames: observedFrames,
+                    excluding: remainingProtectedScopes
+                )
+                events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
+                    "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
+                    "remainingProtectedScopes": remainingProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                    "commands": String(tick.commands)
+                ]))
+                return tick
+            }
             priorityWindowIDs = []
-            return applyPlan(from: snapshot, observedFrames: observedFrames, excluding: protectedScopes)
+            return applyPlan(
+                from: snapshot,
+                observedFrames: observedFrames,
+                excluding: protectedScopes,
+                updateBaselineWhenEmpty: false
+            )
         }
 
-        lastObservedFrames = observedFrames
-        let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs),
-            snapshot: snapshot
+        let repairedPlanningSnapshot = repairMutableBspOrderBeforePriorityApplyIfNeeded(
+            snapshot: snapshot,
+            priorityWindowIDs: priorityWindowIDs
         )
-        guard !plan.commands.isEmpty else {
+        let planningSnapshot = repairedPlanningSnapshot ?? snapshot
+        let planningObservedFrames = repairedPlanningSnapshot.map { scopedFrames(in: $0) } ?? observedFrames
+        let plan = suppressKnownUnmovableFrames(
+            in: service.applyPlan(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
+            snapshot: planningSnapshot
+        )
+        let protectedMutableScopes = priorityWindowIDs.isEmpty
+            ? stableVisibleMutableBspScopes(in: planningSnapshot)
+            : []
+        lastObservedFrames = planningObservedFrames
+        let windowsByID = Dictionary(uniqueKeysWithValues: planningSnapshot.windows.map { ($0.window.id, $0) })
+        let filteredPlan = ApplyPlan(commands: plan.commands.filter { command in
+            guard let scope = windowsByID[command.window.id]?.scope else { return true }
+            return !protectedMutableScopes.contains(scope)
+        })
+        if !protectedMutableScopes.isEmpty && filteredPlan.commands.count != plan.commands.count {
+            events.append(RoadieEvent(type: "mutable_bsp_auto_relayout_suppressed", details: [
+                "scopes": protectedMutableScopes.map(\.description).sorted().joined(separator: ","),
+                "suppressed": String(plan.commands.count - filteredPlan.commands.count)
+            ]))
+        }
+        guard !filteredPlan.commands.isEmpty else {
+            persistCurrentLayoutIntents(in: planningSnapshot)
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
-        var result = service.apply(plan)
-        result = stabilizeClampedPositions(result, from: plan)
-        if !priorityWindowIDs.isEmpty {
-            persistLayoutIntent(in: snapshot, result: result)
+        var result = service.apply(filteredPlan)
+        result = stabilizeClampedPositions(result, from: filteredPlan)
+        if result.clamped == 0 && result.failed == 0 {
+            persistLayoutIntent(in: planningSnapshot, result: result)
         }
-        record(result, from: plan)
+        record(result, from: filteredPlan)
         events.append(RoadieEvent(type: "layout_apply", details: [
-            "commands": String(plan.commands.count),
+            "commands": String(filteredPlan.commands.count),
             "applied": String(result.applied),
             "clamped": String(result.clamped),
             "failed": String(result.failed),
             "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ",")
         ]))
         appendItemEvents(result)
-        let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
+        let appliedFrames = framesAfterApplying(result, fallback: planningObservedFrames)
         priorityWindowIDs = []
         manualResizeApplyAfter = nil
         lastObservedFrames = appliedFrames
         return MaintenanceTick(
-            commands: plan.commands.count,
+            commands: filteredPlan.commands.count,
             applied: result.applied,
             clamped: result.clamped,
             failed: result.failed
@@ -226,9 +323,9 @@ public final class LayoutMaintainer {
     private func applyPlan(
         from snapshot: DaemonSnapshot,
         observedFrames: [UInt32: Rect],
-        excluding protectedScopes: Set<StageScope>
+        excluding protectedScopes: Set<StageScope>,
+        updateBaselineWhenEmpty: Bool = true
     ) -> MaintenanceTick {
-        lastObservedFrames = observedFrames
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
         let plan = suppressKnownUnmovableFrames(
             in: service.applyPlan(from: snapshot, priorityWindowIDs: priorityWindowIDs),
@@ -239,10 +336,17 @@ public final class LayoutMaintainer {
             return !protectedScopes.contains(scope)
         })
         guard !filtered.commands.isEmpty else {
+            if updateBaselineWhenEmpty || lastObservedFrames == nil {
+                lastObservedFrames = observedFrames
+            }
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
+        lastObservedFrames = observedFrames
         var result = service.apply(filtered)
         result = stabilizeClampedPositions(result, from: filtered)
+        if result.clamped == 0 && result.failed == 0 {
+            persistLayoutIntent(in: snapshot, result: result)
+        }
         record(result, from: filtered)
         appendItemEvents(result)
         lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
@@ -969,8 +1073,177 @@ public final class LayoutMaintainer {
                 placements[id] = frame
             }
             guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
-            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)
+            let orderedIDs = stage.mode == .mutableBsp
+                ? service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
+                : stage.windowIDs
+            service.saveLayoutIntent(scope: scope, windowIDs: orderedIDs, placements: placements)
         }
+    }
+
+    private func repairMutableBspOrderBeforePriorityApplyIfNeeded(
+        snapshot: DaemonSnapshot,
+        priorityWindowIDs: Set<WindowID>
+    ) -> DaemonSnapshot? {
+        guard !priorityWindowIDs.isEmpty else { return nil }
+        let scopes = activeMutableBspScopes(for: priorityWindowIDs, in: snapshot)
+        guard !scopes.isEmpty else { return nil }
+        let repaired = service.repairMutableBspOrderForCurrentGeometry(
+            scopes: scopes,
+            in: snapshot,
+            reason: "manual_resize_priority_apply"
+        )
+        return repaired ? service.snapshot(followFocus: false) : nil
+    }
+
+    private func persistCurrentLayoutIntents(in snapshot: DaemonSnapshot) {
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
+            guard !service.hasValidLayoutIntent(scope: scope, in: snapshot) else { continue }
+            _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: snapshot)
+        }
+    }
+
+    private func activeMutableBspScopes(
+        for windowIDs: Set<WindowID>,
+        in snapshot: DaemonSnapshot
+    ) -> Set<StageScope> {
+        Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard windowIDs.contains(entry.window.id),
+                  let scope = entry.scope,
+                  let stage = snapshot.state.stage(scope: scope),
+                  stage.mode == .mutableBsp,
+                  snapshot.state.activeScope(on: scope.displayID) == scope
+            else { return nil }
+            return scope
+        })
+    }
+
+    private func adoptMutableBspGeometryChange(
+        in snapshot: DaemonSnapshot,
+        changedWindowIDs: Set<WindowID>
+    ) -> MaintenanceTick? {
+        let mutableScopes = activeMutableBspScopes(for: changedWindowIDs, in: snapshot)
+        guard !mutableScopes.isEmpty else { return nil }
+
+        let repaired = service.repairMutableBspOrderForCurrentGeometry(
+            scopes: mutableScopes,
+            in: snapshot,
+            reason: changedWindowIDs.count >= 2
+                ? "manual_multi_window_geometry_change"
+                : "manual_window_geometry_change"
+        )
+        let updatedSnapshot = service.snapshot(followFocus: false)
+        let planningSnapshot = repaired ? updatedSnapshot : snapshot
+        for scope in mutableScopes {
+            service.removeLayoutIntent(scope: scope)
+        }
+
+        if changedWindowIDs.count == 1,
+           let propagated = propagateMutableBspSingleWindowResize(
+                in: planningSnapshot,
+                scopes: mutableScopes,
+                changedWindowIDs: changedWindowIDs
+           ) {
+            return propagated
+        }
+
+        for scope in mutableScopes {
+            _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: updatedSnapshot)
+        }
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
+        lastObservedFrames = scopedFrames(in: updatedSnapshot)
+        events.append(RoadieEvent(type: "mutable_bsp_geometry_adopted", details: [
+            "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+            "scopes": mutableScopes.map(\.description).sorted().joined(separator: ",")
+        ]))
+        return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
+    }
+
+    private func propagateMutableBspSingleWindowResize(
+        in snapshot: DaemonSnapshot,
+        scopes: Set<StageScope>,
+        changedWindowIDs: Set<WindowID>
+    ) -> MaintenanceTick? {
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let rawPlan = suppressKnownUnmovableFrames(
+            in: service.applyPlan(from: snapshot, priorityWindowIDs: changedWindowIDs),
+            snapshot: snapshot
+        )
+        let plan = ApplyPlan(commands: rawPlan.commands.filter { command in
+            guard !changedWindowIDs.contains(command.window.id),
+                  let scope = windowsByID[command.window.id]?.scope
+            else { return false }
+            return scopes.contains(scope)
+        })
+
+        let observedFrames = scopedFrames(in: snapshot)
+        if plan.commands.isEmpty {
+            for scope in scopes {
+                _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: snapshot)
+            }
+            priorityWindowIDs = []
+            manualResizeApplyAfter = nil
+            lastObservedFrames = observedFrames
+            events.append(RoadieEvent(type: "mutable_bsp_geometry_adopted", details: [
+                "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                "scopes": scopes.map(\.description).sorted().joined(separator: ","),
+                "reason": "single_window_no_neighbor_delta"
+            ]))
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
+        }
+
+        var result = service.apply(plan)
+        result = stabilizeClampedPositions(result, from: plan)
+        record(result, from: plan)
+        appendItemEvents(result)
+        if result.clamped == 0 && result.failed == 0 {
+            persistLayoutIntent(in: snapshot, result: result)
+        }
+
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
+        lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
+        events.append(RoadieEvent(type: "mutable_bsp_resize_propagated", details: [
+            "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+            "scopes": scopes.map(\.description).sorted().joined(separator: ","),
+            "commands": String(plan.commands.count),
+            "applied": String(result.applied),
+            "clamped": String(result.clamped),
+            "failed": String(result.failed)
+        ]))
+        return MaintenanceTick(
+            commands: plan.commands.count,
+            applied: result.applied,
+            clamped: result.clamped,
+            failed: result.failed,
+            manualResizeDetected: true
+        )
+    }
+
+    private func stableVisibleMutableBspScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+        Set(snapshot.displays.compactMap { display -> StageScope? in
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  let stage = snapshot.state.stage(scope: scope),
+                  stage.mode == .mutableBsp,
+                  !stage.windowIDs.isEmpty
+            else { return nil }
+
+            let entries = snapshot.windows.filter { entry in
+                entry.scope == scope && entry.window.isTileCandidate
+            }
+            guard Set(entries.map(\.window.id)) == Set(stage.windowIDs) else { return nil }
+            if let lastObservedFrames,
+               entries.contains(where: { lastObservedFrames[$0.window.id.rawValue] == nil }) {
+                return nil
+            }
+            guard entries.allSatisfy({ entry in
+                entry.window.isOnScreen
+                    && !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+            }) else { return nil }
+
+            return scope
+        })
     }
 
     private func changedWindows(in frames: [UInt32: Rect]) -> Set<WindowID> {
@@ -978,11 +1251,36 @@ public final class LayoutMaintainer {
         var result: Set<WindowID> = []
         for (id, frame) in frames {
             guard let previousFrame = previous[id] else { continue }
-            if !frame.isClose(to: previousFrame, positionTolerance: 36, sizeTolerance: 36) {
+            if !frame.isClose(to: previousFrame, positionTolerance: 16, sizeTolerance: 16) {
                 result.insert(WindowID(rawValue: id))
             }
         }
         return result
+    }
+
+    private func authoritativeModelScopes(
+        for windowIDs: Set<WindowID>,
+        in snapshot: DaemonSnapshot
+    ) -> Set<StageScope> {
+        Set(snapshot.windows.compactMap { entry -> StageScope? in
+            guard windowIDs.contains(entry.window.id),
+                  let scope = entry.scope,
+                  let stage = snapshot.state.stage(scope: scope),
+                  stage.mode == .bsp,
+                  snapshot.state.activeScope(on: scope.displayID) == scope,
+                  service.hasValidLayoutIntent(scope: scope, in: snapshot)
+            else { return nil }
+            return scope
+        })
+    }
+
+    private func strictAuthoritativeScopes(
+        _ scopes: Set<StageScope>,
+        in snapshot: DaemonSnapshot
+    ) -> Set<StageScope> {
+        Set(scopes.filter { scope in
+            snapshot.state.stage(scope: scope)?.mode == .bsp
+        })
     }
 
     private func changedFramesMatchSavedIntent(
@@ -1032,6 +1330,23 @@ public final class LayoutMaintainer {
             }
         }
         return result
+    }
+
+    private func driftedCommandScopes(_ scopes: Set<StageScope>, frames: [UInt32: Rect]) -> Set<StageScope> {
+        guard !scopes.isEmpty else { return [] }
+        let focusedWindowID = service.focusedWindowID()
+        return Set(scopes.filter { scope in
+            !service.hasMatchingIntent(
+                scope: scope,
+                frames: frames,
+                focusedWindowID: focusedWindowID,
+                positionTolerance: 16,
+                sizeTolerance: 16,
+                focusedPositionTolerance: 16,
+                focusedSizeTolerance: 16,
+                allowFocusChromeDelta: false
+            )
+        })
     }
 
     private func hideInactiveStageWindows(in snapshot: DaemonSnapshot) -> Int {
@@ -1222,8 +1537,15 @@ private struct ClampedFrame {
     var actual: Rect
 
     func matches(command: ApplyCommand) -> Bool {
-        requested.isClose(to: command.frame)
-            && command.window.frame.isClose(to: actual)
+        guard command.window.frame.isClose(to: actual, positionTolerance: 8, sizeTolerance: 8) else {
+            return false
+        }
+        if requested.isClose(to: command.frame) {
+            return true
+        }
+        return command.frame.width <= actual.width + 8
+            && command.frame.height <= actual.height + 8
+            && abs(command.frame.y - actual.y) <= 8
     }
 }
 

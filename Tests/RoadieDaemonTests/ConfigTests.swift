@@ -494,6 +494,182 @@ struct ConfigTests {
     }
 
     @Test
+    func targetModeDefaultsKeepRiskyFeaturesDisabled() {
+        let config = RoadieConfig()
+        let targetMode = config.experimental.targetMode
+        let grid = config.experimental.targetGrid
+        let record = config.experimental.targetRecord
+        let appTargets = config.experimental.appTargets
+
+        #expect(targetMode.enabled)
+        #expect(targetMode.pickerEnabled)
+        #expect(targetMode.overlayEnabled == false)
+        #expect(targetMode.overlayLabelsOnly)
+        #expect(targetMode.overlayDurationSeconds == 3)
+        #expect(targetMode.appMouseActionsEnabled == false)
+        #expect(targetMode.scrollModeEnabled == false)
+        #expect(appTargets.axBoostEnabled == false)
+        #expect(appTargets.maxDepth == 12)
+        #expect(grid.enabled == false)
+        #expect(grid.overlayEnabled)
+        #expect(grid.overlayDrawGrid)
+        #expect(grid.overlayFillColor == "#4DABF7")
+        #expect(grid.overlayFillOpacity == 0.10)
+        #expect(grid.overlayBorderColor == "#4DABF7")
+        #expect(grid.overlayBorderOpacity == 0.55)
+        #expect(grid.overlayLabelColor == "#FFFFFF")
+        #expect(grid.rows == 3)
+        #expect(grid.columns == 3)
+        #expect(grid.maxDepth == 3)
+        #expect(grid.hintCharacters == "azeqsdwxc")
+        #expect(record.enabled == false)
+        #expect(record.replayEnabled == false)
+        #expect(record.includeAXContext)
+        #expect(record.recordTextInput == false)
+    }
+
+    @Test
+    func targetModeConfigDecodesFromToml() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-target-mode-config-\(UUID().uuidString).toml")
+        try """
+        [experimental.target_mode]
+        enabled = true
+        picker_enabled = false
+        overlay_enabled = true
+        overlay_labels_only = false
+        overlay_duration_seconds = 5.5
+        app_mouse_actions_enabled = true
+        scroll_mode_enabled = true
+
+        [experimental.app_targets]
+        enabled = true
+        ax_boost_enabled = true
+        max_depth = 18
+        additional_boost_bundle_ids = ["org.mozilla.firefox"]
+
+        [experimental.target_grid]
+        enabled = true
+        mode = "auto_click"
+        overlay_enabled = false
+        overlay_draw_grid = false
+        overlay_fill_color = "#123456"
+        overlay_fill_opacity = 0.25
+        overlay_border_color = "#654321"
+        overlay_border_opacity = 0.75
+        overlay_label_color = "#ABCDEF"
+        overlay_label_background_opacity = 0.33
+        rows = 4
+        columns = 5
+        max_depth = 4
+        hint_characters = "abcdefghijklmnopqrst"
+        confirm_action_key = "Space"
+        reset_key = "R"
+        back_key = "Backspace"
+        exit_key = "Escape"
+        arrow_navigation_enabled = false
+        arrow_edge_behavior = "wrap"
+        action_delay_ms = 12
+        wake_mouse_pixels = 2
+        mouse_follow_grid = true
+        focus_follow_grid = true
+        label_placement = "center"
+
+        [experimental.target_record]
+        enabled = true
+        replay_enabled = true
+        default_duration_seconds = 7
+        max_events = 333
+        include_mouse_moves = true
+        record_text_input = true
+        indicator = "both"
+        navrail_bottom_offset = 64
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let config = try RoadieConfigLoader.load(from: url.path)
+        let targetMode = config.experimental.targetMode
+        let appTargets = config.experimental.appTargets
+        let grid = config.experimental.targetGrid
+        let record = config.experimental.targetRecord
+
+        #expect(targetMode.enabled)
+        #expect(targetMode.pickerEnabled == false)
+        #expect(targetMode.overlayEnabled)
+        #expect(targetMode.overlayLabelsOnly == false)
+        #expect(targetMode.overlayDurationSeconds == 5.5)
+        #expect(targetMode.appMouseActionsEnabled)
+        #expect(targetMode.scrollModeEnabled)
+        #expect(appTargets.enabled)
+        #expect(appTargets.axBoostEnabled)
+        #expect(appTargets.maxDepth == 18)
+        #expect(appTargets.additionalBoostBundleIDs == ["org.mozilla.firefox"])
+        #expect(grid.enabled)
+        #expect(grid.mode == .autoClick)
+        #expect(grid.overlayEnabled == false)
+        #expect(grid.overlayDrawGrid == false)
+        #expect(grid.overlayFillColor == "#123456")
+        #expect(grid.overlayFillOpacity == 0.25)
+        #expect(grid.overlayBorderColor == "#654321")
+        #expect(grid.overlayBorderOpacity == 0.75)
+        #expect(grid.overlayLabelColor == "#ABCDEF")
+        #expect(grid.overlayLabelBackgroundOpacity == 0.33)
+        #expect(grid.rows == 4)
+        #expect(grid.columns == 5)
+        #expect(grid.maxDepth == 4)
+        #expect(grid.hintCharacters == "abcdefghijklmnopqrst")
+        #expect(grid.confirmActionKey == "space")
+        #expect(grid.resetKey == "r")
+        #expect(grid.backKey == "backspace")
+        #expect(grid.exitKey == "escape")
+        #expect(grid.arrowNavigationEnabled == false)
+        #expect(grid.arrowEdgeBehavior == .wrap)
+        #expect(grid.actionDelayMs == 12)
+        #expect(grid.wakeMousePixels == 2)
+        #expect(grid.mouseFollowGrid)
+        #expect(grid.focusFollowGrid)
+        #expect(grid.labelPlacement == .center)
+        #expect(record.enabled)
+        #expect(record.indicator == .both)
+        #expect(record.navrailBottomOffset == 64)
+        #expect(record.replayEnabled)
+        #expect(record.defaultDurationSeconds == 7)
+        #expect(record.maxEvents == 333)
+        #expect(record.includeMouseMoves)
+        #expect(record.recordTextInput)
+    }
+
+    @Test
+    func targetModeValidationReportsUnsafeValues() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-target-mode-invalid-\(UUID().uuidString).toml")
+        try """
+        [experimental.target_mode]
+        enabled = false
+        picker_enabled = true
+        overlay_enabled = true
+        overlay_duration_seconds = 90
+        app_mouse_actions_enabled = true
+        scroll_mode_enabled = true
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let report = RoadieConfigLoader.validate(path: url.path)
+
+        #expect(report.hasErrors)
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .error,
+            path: "experimental.target_mode.overlay_duration_seconds",
+            message: "must be between 0.2 and 30"
+        )))
+        #expect(report.items.contains(ConfigValidationItem(
+            level: .warning,
+            path: "experimental.target_mode",
+            message: "target mode is disabled; sub-features will be ignored"
+        )))
+    }
+
+    @Test
     func mouseFollowerMovesToWindowCenterOnlyWhenEnabled() {
         let window = WindowSnapshot(
             id: WindowID(rawValue: 1),

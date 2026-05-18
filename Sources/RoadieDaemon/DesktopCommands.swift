@@ -275,7 +275,8 @@ public struct DesktopCommandService {
             displayID: display.id,
             desktopID: desktopID,
             stageID: targetScope.activeStageID,
-            windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID
+            windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+            staleFocusedWindowID: snapshot.focusedWindowID.flatMap { previousWindowIDs.subtracting(targetWindowIDs).contains($0) ? $0 : nil }
         )
         store.save(state)
 

@@ -63,6 +63,117 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
+    public static func targets(_ report: TargetQueryReport) -> String {
+        guard !report.targets.isEmpty else {
+            return report.error.map { "No targets found. error=\($0)" } ?? "No targets found."
+        }
+        var lines = ["LABEL\tKIND\tACTIVE\tTITLE\tSUBTITLE\tID\tACTIONS"]
+        for target in report.targets {
+            lines.append([
+                target.label,
+                target.kind.rawValue,
+                target.isActive ? "*" : "",
+                target.title,
+                target.subtitle,
+                target.id,
+                target.actions.map(\.rawValue).joined(separator: ",")
+            ].joined(separator: "\t"))
+        }
+        if let error = report.error {
+            lines.append("partial_error=\(error)")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func targetInspection(_ inspection: TargetInspection) -> String {
+        var lines = [
+            "id=\(inspection.target.id)",
+            "label=\(inspection.target.label)",
+            "kind=\(inspection.target.kind.rawValue)",
+            "summary=\(inspection.summary)",
+            "source=\(inspection.state.source)"
+        ]
+        if let app = inspection.identity.app { lines.append("app=\(app)") }
+        if let bundleID = inspection.identity.bundleId { lines.append("bundleId=\(bundleID)") }
+        if let title = inspection.identity.title { lines.append("title=\(title)") }
+        if let windowID = inspection.identity.windowId { lines.append("windowId=\(windowID)") }
+        if let displayID = inspection.identity.displayId { lines.append("displayId=\(displayID)") }
+        if let desktopID = inspection.identity.desktopId { lines.append("desktopId=\(desktopID)") }
+        if let stageID = inspection.identity.stageId { lines.append("stageId=\(stageID)") }
+        if let tileable = inspection.state.tileable { lines.append("tileable=\(tileable)") }
+        if let floating = inspection.state.floating { lines.append("floating=\(floating)") }
+        if let pinned = inspection.state.pinned { lines.append("pinned=\(pinned)") }
+        if let focused = inspection.state.focused { lines.append("focused=\(focused)") }
+        if let activeStage = inspection.state.activeStage { lines.append("activeStage=\(activeStage)") }
+        if !inspection.reasons.isEmpty {
+            lines.append("reasons=\(inspection.reasons.joined(separator: ","))")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func targetPick(_ pick: TargetPickResult) -> String {
+        if let result = pick.result {
+            return result.message
+        }
+        if !pick.candidates.isEmpty {
+            var lines = ["ambiguous target: \(pick.query)", "LABEL\tKIND\tTITLE\tSUBTITLE\tID\tACTIONS"]
+            for target in pick.candidates {
+                lines.append([
+                    target.label,
+                    target.kind.rawValue,
+                    target.title,
+                    target.subtitle,
+                    target.id,
+                    target.actions.map(\.rawValue).joined(separator: ",")
+                ].joined(separator: "\t"))
+            }
+            return lines.joined(separator: "\n")
+        }
+        return pick.error.map { "target pick failed: \($0)" } ?? "target pick: no result"
+    }
+
+    public static func targetOverlay(_ state: TargetOverlayState) -> String {
+        if !state.visible {
+            return "targets overlay hidden"
+        }
+        let mode = state.labelsOnly ? "labels-only" : "overlay"
+        return [targets(state.report), "overlay=\(mode)"].joined(separator: "\n")
+    }
+
+    public static func targetGrid(_ report: TargetGridReport) -> String {
+        if let error = report.error {
+            return "grid error=\(error)"
+        }
+        var lines = ["PATH\tLABEL\tDISPLAY\tROW\tCOL\tFRAME"]
+        for cell in report.cells {
+            lines.append([
+                cell.path,
+                cell.label,
+                "\(cell.display.index):\(cell.display.name)",
+                "\(cell.row + 1)",
+                "\(cell.column + 1)",
+                "\(Int(cell.frame.x)),\(Int(cell.frame.y)) \(Int(cell.frame.width))x\(Int(cell.frame.height))"
+            ].joined(separator: "\t"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    public static func targetMacroList(_ report: TargetMacroListReport) -> String {
+        guard !report.names.isEmpty else {
+            return "No recordings found. directory=\(report.directory)"
+        }
+        return (["RECORDING"] + report.names).joined(separator: "\n")
+    }
+
+    public static func targetMacro(_ recording: TargetMacroRecording) -> String {
+        [
+            "name=\(recording.name)",
+            "createdAt=\(recording.createdAt)",
+            "durationSeconds=\(recording.durationSeconds)",
+            "events=\(recording.events.count)"
+        ].joined(separator: "\n")
+    }
+
     public static func doctor(snapshot: DaemonSnapshot, plan: ApplyPlan, persistentState: PersistentStageState? = nil) -> String {
         let tileable = snapshot.windows.filter { $0.window.isTileCandidate && $0.scope != nil }
         let focused = snapshot.focusedWindowID.map(String.init(describing:)) ?? "-"

@@ -1,14 +1,14 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `008-window-rule-placement`.
+Current SpecKit feature: `009-roadie-target-mode`.
 
 For additional context about technologies to be used, project structure,
 shell commands, contracts, and architectural decisions, read:
 
-- `specs/008-window-rule-placement/spec.md`
-- `specs/008-window-rule-placement/plan.md`
-- `specs/008-window-rule-placement/research.md`
-- `specs/008-window-rule-placement/data-model.md`
-- `specs/008-window-rule-placement/contracts/`
+- `specs/009-roadie-target-mode/spec.md`
+- `specs/009-roadie-target-mode/plan.md`
+- `specs/009-roadie-target-mode/research.md`
+- `specs/009-roadie-target-mode/data-model.md`
+- `specs/009-roadie-target-mode/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

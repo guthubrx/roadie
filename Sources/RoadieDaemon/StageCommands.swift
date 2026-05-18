@@ -644,6 +644,7 @@ public struct StageCommandService {
             desktopID: scope.desktopID,
             stageID: stageID,
             windowID: targetFocusedWindowID,
+            staleFocusedWindowID: snapshot.focusedWindowID.flatMap { hiddenWindowIDs.contains($0) ? $0 : nil },
             duration: 3.0
         )
         let persistStartedAt = Date()

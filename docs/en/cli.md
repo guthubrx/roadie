@@ -204,6 +204,7 @@ available displays.
 ./bin/roadie query event_catalog
 ./bin/roadie query performance
 ./bin/roadie query restore
+./bin/roadie query targets
 ```
 
 Every `query` returns stable JSON:
@@ -214,3 +215,84 @@ Every `query` returns stable JSON:
   "data": []
 }
 ```
+
+## Target Mode
+
+```bash
+./bin/roadie targets list
+./bin/roadie targets list --json
+./bin/roadie targets list --source roadie|app|all
+./bin/roadie targets list --filter TEXT --max 40
+./bin/roadie targets pick QUERY_OR_LABEL
+./bin/roadie targets pick QUERY_OR_LABEL --action focus|switch|send-active|click|double-click|right-click
+./bin/roadie targets inspect TARGET_ID_OR_LABEL
+./bin/roadie targets inspect TARGET_ID_OR_LABEL --json
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action focus
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action switch
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action send-active
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action click
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action double-click
+./bin/roadie targets activate TARGET_ID_OR_LABEL --action right-click
+./bin/roadie targets show --json --labels-only
+./bin/roadie targets hide
+```
+
+`--source app` and `--source all` read application zones only when
+`[experimental.app_targets].enabled = true`, or when the command includes
+`--include-app-targets`. Application clicks stay disabled by default:
+`click`, `double-click`, and `right-click` also require
+`[experimental.target_mode].app_mouse_actions_enabled = true`. Unsupported
+actions return structured errors instead of silently falling back.
+
+The `[experimental.target_mode]` section can also disable all Target Mode
+commands (`enabled = false`) or only the picker (`picker_enabled = false`).
+
+`targets pick` applies the action only when the query resolves to one target. If
+the query is ambiguous, the command prints candidates and does not mutate the
+layout.
+
+## Grid And Macros
+
+```bash
+./bin/roadie grid show --json
+./bin/roadie grid show A --visual --duration 2
+./bin/roadie grid interactive --duration 10
+./bin/roadie grid click A
+./bin/roadie grid double-click A
+./bin/roadie grid right-click A
+./bin/roadie grid move A
+./bin/roadie grid scroll-up A
+./bin/roadie grid scroll-down A
+./bin/roadie grid drag A L
+
+./bin/roadie record start demo --duration 10
+./bin/roadie record list
+./bin/roadie record inspect demo --json
+./bin/roadie record replay demo
+./bin/roadie record delete demo
+```
+
+The grid is controlled by `[experimental.target_grid]`. By default, labels use a
+natural 3x3 block for a French Mac AZERTY keyboard: `A Z E / Q S D / W X C`,
+encoded as `hint_characters = "azeqsdwxc"`. `interactive` recursively zooms
+into the typed cell. `Space` clicks the current zone, arrow keys move the
+selection at the same depth, `Backspace` goes up, `R` returns to the root grid,
+and `Esc` cancels. At the root level, arrow keys switch the target display in
+the requested direction. Edge behavior is controlled by
+`arrow_edge_behavior = "clamp"` or `"wrap"`. `wake_mouse_pixels` performs a tiny
+cursor round-trip on each grid change to wake hover controls; `0` disables it.
+When `mouse_follow_grid = true`, the cursor follows the center of the current
+cell instead, which is useful to wake video controls on another display. When
+`focus_follow_grid = true`, the window under the current cell also receives
+focus. The
+`label_placement = "callout"` keeps external callouts; `"center"` places labels
+inside cell centers. `overlay_label_background_opacity` controls the grid label
+background opacity, from `0.0` transparent to `1.0` opaque. The interactive
+timeout is reset on each grid movement.
+Macros are controlled by
+`[experimental.target_record]`. Recordings keep coordinates, the best Roadie/AX
+target when available, and a grid-path fallback. Typed text is not recorded by
+default. The recording indicator is configured with
+`indicator = "notification"`, `"navrail"`, `"both"`, or `"none"`. When shown in
+the navrail, `navrail_bottom_offset` controls its distance from the bottom of
+the rail in pixels.

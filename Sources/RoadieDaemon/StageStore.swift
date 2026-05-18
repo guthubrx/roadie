@@ -640,20 +640,24 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         desktopID: DesktopID,
         stageID: StageID,
         windowID: WindowID?,
+        staleFocusedWindowID: WindowID? = nil,
         now: Date = Date(),
-        duration: TimeInterval = 2.0
+        duration: TimeInterval = 2.0,
+        staleFocusDuration: TimeInterval = 30 * 60
     ) {
         commandFocusProtection = CommandFocusProtection(
             displayID: displayID,
             desktopID: desktopID,
             stageID: stageID,
             windowID: windowID,
-            expiresAt: now.addingTimeInterval(duration)
+            staleFocusedWindowID: staleFocusedWindowID,
+            expiresAt: now.addingTimeInterval(duration),
+            staleFocusExpiresAt: staleFocusedWindowID.map { _ in now.addingTimeInterval(staleFocusDuration) }
         )
     }
 
     public mutating func pruneExpiredCommandFocusProtection(now: Date = Date()) {
-        if commandFocusProtection.map({ $0.expiresAt <= now }) == true {
+        if commandFocusProtection.map({ $0.expiresAt <= now && ($0.staleFocusExpiresAt ?? .distantPast) <= now }) == true {
             commandFocusProtection = nil
         }
     }
@@ -664,7 +668,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         now: Date = Date()
     ) -> Bool {
         guard let protection = commandFocusProtection,
-              protection.expiresAt > now,
               protection.displayID == focusedScope.displayID
         else { return false }
 
@@ -674,6 +677,12 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
             stageID: protection.stageID
         )
         if focusedScope == protectedScope { return false }
+        if let staleFocusedWindowID = protection.staleFocusedWindowID,
+           focusedWindowID == staleFocusedWindowID,
+           (protection.staleFocusExpiresAt ?? protection.expiresAt) > now {
+            return true
+        }
+        guard protection.expiresAt > now else { return false }
         if let protectedWindowID = protection.windowID,
            focusedWindowID == protectedWindowID {
             return false
@@ -687,20 +696,26 @@ public struct CommandFocusProtection: Equatable, Codable, Sendable {
     public var desktopID: DesktopID
     public var stageID: StageID
     public var windowID: WindowID?
+    public var staleFocusedWindowID: WindowID?
     public var expiresAt: Date
+    public var staleFocusExpiresAt: Date?
 
     public init(
         displayID: DisplayID,
         desktopID: DesktopID,
         stageID: StageID,
         windowID: WindowID?,
-        expiresAt: Date
+        staleFocusedWindowID: WindowID? = nil,
+        expiresAt: Date,
+        staleFocusExpiresAt: Date? = nil
     ) {
         self.displayID = displayID
         self.desktopID = desktopID
         self.stageID = stageID
         self.windowID = windowID
+        self.staleFocusedWindowID = staleFocusedWindowID
         self.expiresAt = expiresAt
+        self.staleFocusExpiresAt = staleFocusExpiresAt
     }
 }
 

@@ -208,6 +208,92 @@ Cas d'usage :
 - basculer entre deux contextes avec `desktop back-and-forth`;
 - rappeler un desktop sur l'ecran courant avec `desktop summon`.
 
+## Target mode
+
+Le target mode donne une liste stable de destinations activables au clavier ou
+par un agent externe. Il ne remplace pas le navrail : il expose les memes objets
+sous forme de cibles nommees, inspectables et actionnables.
+
+```bash
+./bin/roadie targets list
+./bin/roadie targets list --json
+./bin/roadie targets list --filter gray
+./bin/roadie targets inspect A
+./bin/roadie targets pick gray
+./bin/roadie targets activate A --action switch
+./bin/roadie targets activate S --action focus
+./bin/roadie targets activate D --action send-active
+./bin/roadie targets show --json --labels-only
+./bin/roadie query targets
+```
+
+Les cibles Roadie couvrent les fenetres, stages, ecrans, desktops et bookmarks.
+Chaque cible a un label court (`A`, `S`, `D`, puis `AA`, etc.), un ID stable et
+une liste d'actions possibles. Les labels sont faits pour l'humain; les IDs sont
+faits pour les scripts.
+
+Les zones applicatives sensibles peuvent etre listees en mode experimental via
+Accessibility. Ce mode est desactive par defaut pour eviter de scanner les apps
+pendant les chemins chauds du window manager.
+
+Les briques Target Mode sont configurables separement. Le socle CLI et le picker
+restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
+les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne
+les demande pas.
+
+```toml
+[experimental.target_mode]
+enabled = true
+picker_enabled = true
+overlay_enabled = false
+overlay_labels_only = true
+overlay_duration_seconds = 3
+app_mouse_actions_enabled = false
+scroll_mode_enabled = false
+```
+
+```toml
+[experimental.app_targets]
+enabled = false
+scope = "frontmost_window"
+max_targets = 150
+timeout_ms = 120
+hint_characters = "asdfghjkl"
+include_roles = ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow"]
+```
+
+```toml
+[experimental.target_grid]
+enabled = true
+overlay_enabled = true
+overlay_draw_grid = true
+overlay_fill_color = "#4DABF7"
+overlay_fill_opacity = 0.10
+overlay_border_color = "#4DABF7"
+overlay_border_opacity = 0.55
+overlay_label_color = "#FFFFFF"
+rows = 3
+columns = 3
+max_depth = 3
+hint_characters = "azeqsdwxc"
+```
+
+Cas d'usage :
+
+- sauter vers une fenetre bookmarkee ou une stage sans memoriser son ID;
+- chercher une cible par texte avec `targets pick` et refuser proprement les ambiguities;
+- envoyer la fenetre active vers une cible affichee par label;
+- fournir a un agent une API JSON plus robuste qu'une capture d'ecran;
+- inspecter pourquoi une cible est stale, pinnee, flottante ou hors tiling.
+
+Meme si `experimental.app_targets.enabled = true`, les actions `click`,
+`double-click` et `right-click` sur les zones applicatives sont refusees tant que
+`experimental.target_mode.app_mouse_actions_enabled = false`.
+
+Ce qui reste volontairement borne : l'overlay graphique complet, le scroll-mode
+type Vimac et le controle applicatif profond. Les app targets restent
+experimentales, limitees par timeout et desactivees par defaut.
+
 ## Commandes power-user
 
 Roadie expose des primitives de layout inspirees des window managers power-user.
@@ -329,3 +415,25 @@ Cas d'usage :
 - elargir rapidement une fenetre active sans changer de layout global;
 - voir les types d'interactions recentes dans `events.jsonl`;
 - garder des seuils cibles documentes sans toucher au daemon.
+
+## Target mode, grille et macros
+
+Target Mode donne un inventaire actionnable des stages, fenetres, displays,
+desktops, bookmarks et zones applicatives Accessibility. La grille recursive
+ajoute un langage spatial quand AX ne voit pas tout. Le record/replay permet de
+capturer une manipulation courte avec contexte de cible et fallback grille. Un
+indicateur `record` peut apparaitre dans le navrail pendant la capture.
+
+```bash
+./bin/roadie targets interactive --source all --include-app-targets
+./bin/roadie grid show --visual --duration 2
+./bin/roadie record start demo --duration 10
+./bin/roadie record replay demo
+```
+
+Cas d'usage :
+
+- basculer vers une stage ou une fenetre par label plutot que par ID;
+- cliquer un bouton d'app expose par Accessibility;
+- cibler une zone non accessible via une cellule de grille;
+- montrer une manipulation a un agent puis la rejouer ou l'analyser.

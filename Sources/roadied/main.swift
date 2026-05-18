@@ -11,6 +11,7 @@ var railController: RailController?
 var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
+var targetModeRuntimeController: TargetModeRuntimeController?
 var displayChangeObserver: NSObjectProtocol?
 var pendingDisplayHeal: Task<Void, Never>?
 var displaySettlingUntil: Date = .distantPast
@@ -56,6 +57,8 @@ case "run":
     focusFollowsMouseController?.start()
     titlebarContextMenuController = TitlebarContextMenuController()
     titlebarContextMenuController?.start()
+    targetModeRuntimeController = TargetModeRuntimeController(service: service)
+    targetModeRuntimeController?.start()
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,

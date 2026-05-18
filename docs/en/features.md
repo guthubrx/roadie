@@ -206,6 +206,90 @@ Use cases:
 - switch between two contexts with `desktop back-and-forth`;
 - bring a desktop to the current display with `desktop summon`.
 
+## Target Mode
+
+Target mode provides a stable list of keyboard-addressable destinations for
+humans and external agents. It does not replace the nav rail: it exposes the
+same concepts as named, inspectable, actionable targets.
+
+```bash
+./bin/roadie targets list
+./bin/roadie targets list --json
+./bin/roadie targets list --filter gray
+./bin/roadie targets inspect A
+./bin/roadie targets pick gray
+./bin/roadie targets activate A --action switch
+./bin/roadie targets activate S --action focus
+./bin/roadie targets activate D --action send-active
+./bin/roadie targets show --json --labels-only
+./bin/roadie query targets
+```
+
+Roadie targets cover windows, stages, displays, desktops, and bookmarks. Each
+target has a short label (`A`, `S`, `D`, then `AA`, etc.), a stable ID, and a
+list of supported actions. Labels are for humans; IDs are for scripts.
+
+Application-sensitive zones can be listed experimentally through Accessibility.
+This mode is disabled by default so app scanning does not run on window-manager
+hot paths.
+
+Target Mode building blocks are independently configurable. The CLI foundation
+and picker stay enabled by default, while the future visual overlay, app mouse
+actions, and app scroll mode stay off until the user opts in.
+
+```toml
+[experimental.target_mode]
+enabled = true
+picker_enabled = true
+overlay_enabled = false
+overlay_labels_only = true
+overlay_duration_seconds = 3
+app_mouse_actions_enabled = false
+scroll_mode_enabled = false
+```
+
+```toml
+[experimental.app_targets]
+enabled = false
+scope = "frontmost_window"
+max_targets = 150
+timeout_ms = 120
+hint_characters = "asdfghjkl"
+include_roles = ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow"]
+```
+
+```toml
+[experimental.target_grid]
+enabled = true
+overlay_enabled = true
+overlay_draw_grid = true
+overlay_fill_color = "#4DABF7"
+overlay_fill_opacity = 0.10
+overlay_border_color = "#4DABF7"
+overlay_border_opacity = 0.55
+overlay_label_color = "#FFFFFF"
+rows = 3
+columns = 3
+max_depth = 3
+hint_characters = "azeqsdwxc"
+```
+
+Use cases:
+
+- jump to a bookmarked window or stage without remembering its ID;
+- search for a target with `targets pick` and fail cleanly on ambiguity;
+- send the active window to a target selected by label;
+- give an agent a JSON API that is more robust than screenshots;
+- inspect why a target is stale, pinned, floating, or excluded from tiling.
+
+Even when `experimental.app_targets.enabled = true`, `click`, `double-click`,
+and `right-click` on application targets are refused until
+`experimental.target_mode.app_mouse_actions_enabled = true`.
+
+Still intentionally bounded: the full visual overlay, Vimac-like scroll mode,
+and deep application control. App targets remain experimental, timeout-limited,
+and disabled by default.
+
 ## Power-User Commands
 
 Roadie exposes layout primitives inspired by power-user window managers.
@@ -327,3 +411,25 @@ Use cases:
 - quickly widen the active window without changing the whole layout mode;
 - inspect recent interaction event types in `events.jsonl`;
 - keep target thresholds documented without touching the daemon.
+
+## Target Mode, Grid And Macros
+
+Target Mode exposes actionable stages, windows, displays, desktops, bookmarks,
+and Accessibility application zones. The recursive grid adds a spatial language
+when AX cannot see everything. Record/replay captures short manipulations with
+target context and grid fallback. A `record` indicator can appear in the navrail
+while capture is running.
+
+```bash
+./bin/roadie targets interactive --source all --include-app-targets
+./bin/roadie grid show --visual --duration 2
+./bin/roadie record start demo --duration 10
+./bin/roadie record replay demo
+```
+
+Use cases:
+
+- switch to a stage or window by label instead of ID;
+- click an application button exposed by Accessibility;
+- target a non-accessible zone through a grid cell;
+- show a manipulation to an agent, then replay or analyze it.

@@ -72,6 +72,15 @@ public struct WindowCommandService {
         return WindowCommandResult(message: ok ? "focus back-and-forth \(target.id.rawValue)" : "focus back-and-forth failed", changed: ok)
     }
 
+    public func focus(windowID: WindowID) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        guard let target = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+            return WindowCommandResult(message: "focus: unknown window \(windowID.rawValue)", changed: false)
+        }
+        let ok = focusWindow(target)
+        return WindowCommandResult(message: ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
+    }
+
     public func move(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
