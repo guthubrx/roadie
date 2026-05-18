@@ -164,11 +164,14 @@ public final class TargetModeRuntimeController: NSObject {
         let displayIndex = command.int("display")
         let initialPath = command.string("path") ?? ""
         let scope = command.string("scope").flatMap(TargetGridScope.init(rawValue:)) ?? config.defaultScope
+        let frozenRoot = grid.root(displayIndex: displayIndex, scope: scope)
         let duration = command.double("duration") ?? targetModeConfig.overlayDurationSeconds
 
         events.append(RoadieEvent(type: "target_mode.grid_started", details: [
             "display": displayIndex.map(String.init) ?? "current",
             "scope": scope.rawValue,
+            "resolvedScope": frozenRoot?.scope.rawValue ?? "none",
+            "rootDisplay": frozenRoot.map { String($0.display.index) } ?? "none",
             "path": initialPath,
             "duration": String(format: "%.2f", duration)
         ]))
@@ -178,16 +181,27 @@ public final class TargetModeRuntimeController: NSObject {
             config: config,
             displayIndex: displayIndex,
             stateProvider: { selectedDisplayIndex, parentPath in
-                TargetOverlayState(
+                if let frozenRoot {
+                    return TargetOverlayState(
+                        visible: true,
+                        labelsOnly: true,
+                        report: grid.targets(root: frozenRoot, parentPath: parentPath)
+                    )
+                }
+                return TargetOverlayState(
                     visible: true,
                     labelsOnly: true,
                     report: grid.targets(displayIndex: selectedDisplayIndex, parentPath: parentPath, scope: scope)
                 )
             },
             activate: { selectedDisplayIndex, selectedPath in
-                grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
+                if let frozenRoot {
+                    return grid.perform(.click, path: selectedPath, root: frozenRoot)
+                }
+                return grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
             },
             focusAt: { [weak self] frame in
+                guard scope == .display else { return }
                 self?.focusGridWindow(in: frame)
             },
             displayNeighbor: { [weak self] selectedDisplayIndex, direction in
