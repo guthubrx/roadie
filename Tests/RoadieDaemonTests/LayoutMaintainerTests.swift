@@ -668,6 +668,56 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func mutableBspRelayoutsLiveWindowsWhenStageMemberDisappears() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let live = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "Live",
+            bundleID: "app.live",
+            title: "Live",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let closed = WindowID(rawValue: 2)
+        let store = StageStore(path: tempPath("mutable-bsp-closed-member"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                        PersistentStageMember(windowID: closed, bundleID: "app.closed", title: "Closed", frame: Rect(x: 505, y: 0, width: 495, height: 500)),
+                    ])
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[live]])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(service: service, store: store)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[live.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
+        #expect(store.state().scopes.first?.memberIDs(in: StageID(rawValue: "1")) == [live.id, closed])
+    }
+
+    @Test
     func mutableBspNewWindowStillReceivesAutomaticLayout() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),

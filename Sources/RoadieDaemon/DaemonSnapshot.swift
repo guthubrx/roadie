@@ -749,13 +749,14 @@ public extension SnapshotService {
         else { return [] }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-        let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+        let liveStageWindowIDs = stage.windowIDs.filter { windowsByID[$0] != nil }
+        let currentFrames = Dictionary(uniqueKeysWithValues: liveStageWindowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
         let effectiveMode = mode ?? stage.mode
-        guard effectiveMode.usesSpatialBSPOrdering else { return stage.windowIDs }
+        guard effectiveMode.usesSpatialBSPOrdering else { return liveStageWindowIDs }
 
-        return spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
+        return spatiallyOrdered(liveStageWindowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
     }
 
     func innerGap() -> Double {
@@ -827,9 +828,7 @@ public extension SnapshotService {
               snapshot.state.activeScope(on: scope.displayID) == scope
         else { return false }
 
-        let orderedIDs = stage.mode == .mutableBsp
-            ? orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
-            : stage.windowIDs
+        let orderedIDs = orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
         let placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
             return (entry.window.id, entry.window.frame)
@@ -869,12 +868,13 @@ public extension SnapshotService {
             else { continue }
 
             let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-            let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
+            let liveStageWindowIDs = stage.windowIDs.filter { windowsByID[$0] != nil }
+            let currentFrames = Dictionary(uniqueKeysWithValues: liveStageWindowIDs.compactMap { id in
                 windowsByID[id].map { (id, $0.frame.cgRect) }
             })
-            let ordered = spatiallyOrdered(stage.windowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
-            guard ordered != stage.windowIDs,
-                  Set(ordered) == Set(stage.windowIDs),
+            let ordered = spatiallyOrdered(liveStageWindowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
+            guard ordered != liveStageWindowIDs,
+                  Set(ordered) == Set(liveStageWindowIDs),
                   var persistentScope = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })
             else { continue }
 
@@ -936,6 +936,7 @@ public extension SnapshotService {
         else { return LayoutPlan(placements: [:]) }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let liveOrderedWindowIDs = orderedWindowIDs.filter { windowsByID[$0] != nil }
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
@@ -944,11 +945,11 @@ public extension SnapshotService {
             scope: scope,
             mode: effectiveMode,
             container: display.visibleFrame.cgRect,
-            windowIDs: orderedWindowIDs,
+            windowIDs: liveOrderedWindowIDs,
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
             splitPolicy: config.tiling.splitPolicy,
-            outerGaps: outerGaps(windowCount: orderedWindowIDs.count, display: display),
+            outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner
         ))
     }

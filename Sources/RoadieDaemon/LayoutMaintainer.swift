@@ -1222,12 +1222,21 @@ public final class LayoutMaintainer {
     }
 
     private func stableVisibleMutableBspScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
-        Set(snapshot.displays.compactMap { display -> StageScope? in
+        let persistentState = store.state()
+        return Set(snapshot.displays.compactMap { display -> StageScope? in
             guard let scope = snapshot.state.activeScope(on: display.id),
                   let stage = snapshot.state.stage(scope: scope),
                   stage.mode == .mutableBsp,
                   !stage.windowIDs.isEmpty
             else { return nil }
+            let persistentStage = persistentState.scopes
+                .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+                .stages
+                .first { $0.id == scope.stageID }
+            if let persistentStage,
+               Set(persistentStage.members.map(\.windowID)) != Set(stage.windowIDs) {
+                return nil
+            }
 
             let entries = snapshot.windows.filter { entry in
                 entry.scope == scope && entry.window.isTileCandidate
