@@ -51,14 +51,29 @@ Ce n’est pas un tableau de supériorité. Il sert seulement à clarifier le p�
 | Fonctionnalité | yabai | AeroSpace | Roadie |
 |---|---:|---:|---:|
 | Tiling BSP | oui | oui | oui |
+| Arbre de tiling modifiable par l'utilisateur | oui | partiel | oui |
 | Layout master-stack | partiel | oui | oui |
+| Mode float | oui | oui | oui |
 | Contrôle des Spaces macOS natifs | oui, avec configuration système supplémentaire | non | non |
 | Desktops virtuels sans Spaces natifs | non | oui | oui |
 | Stages nommées dans un desktop | non | non | oui |
 | Nav rail avec thumbnails | non | non | oui |
+| Navigation et réordonnancement visibles des stages | non | non | oui |
+| Parking d'écran et restauration au rebranchement | non | partiel | oui |
 | Tiling multi-écran | oui | oui | oui |
+| Rules de fenêtres et placement automatique | oui | oui | oui |
+| Actions contextuelles sur barre de titre | non | non | oui |
+| Groupes ou stacks de fenêtres | oui | partiel | oui |
+| Commandes power-user sur l'arbre | oui | oui | oui |
 | Focus follows mouse | oui | oui | oui |
 | Bordure de focus overlay | non | non | oui |
+| Labels clavier de cibles | non | non | oui |
+| Découverte des zones applicatives | non | non | expérimental |
+| Grille récursive écran | non | non | expérimental |
+| Grille récursive fenêtre focusée | non | non | expérimental |
+| Record/replay de macros courtes | non | non | expérimental |
+| Query API JSON stable | oui | oui | oui |
+| Événements automation JSONL | oui | oui | oui |
 | Usage CLI-first | oui | oui | oui |
 
 Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour découvrir et déplacer les fenêtres, et Enregistrement d’écran uniquement pour les thumbnails du rail.

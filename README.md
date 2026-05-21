@@ -51,14 +51,29 @@ This is not a superiority table. It is only meant to make Roadie's scope clear.
 | Feature | yabai | AeroSpace | Roadie |
 |---|---:|---:|---:|
 | BSP tiling | yes | yes | yes |
+| User-mutable tiling tree | yes | partial | yes |
 | Master-stack layout | partial | yes | yes |
+| Float mode | yes | yes | yes |
 | Native macOS Spaces control | yes, with extra system setup | no | no |
 | Virtual desktops without native Spaces | no | yes | yes |
 | Named stages inside a desktop | no | no | yes |
 | Stage rail with thumbnails | no | no | yes |
+| Visible stage navigation and reorder | no | no | yes |
+| Display parking and reconnect recovery | no | partial | yes |
 | Multi-display tiling | yes | yes | yes |
+| Window rules and automatic placement | yes | yes | yes |
+| Title-bar context actions | no | no | yes |
+| Window groups or stacks | yes | partial | yes |
+| Power-user tree commands | yes | yes | yes |
 | Focus follows mouse | yes | yes | yes |
 | Focus border overlay | no | no | yes |
+| Keyboard target labels | no | no | yes |
+| App element target discovery | no | no | experimental |
+| Recursive display grid | no | no | experimental |
+| Recursive focused-window grid | no | no | experimental |
+| Short macro record/replay | no | no | experimental |
+| Stable JSON query API | yes | yes | yes |
+| JSONL automation events | yes | yes | yes |
 | CLI-first operation | yes | yes | yes |
 
 Roadie does not require disabling SIP. It uses Accessibility for window discovery and movement, and Screen Recording only for rail thumbnails.
