@@ -106,6 +106,50 @@ Cas d'usage :
 - nudger une fenetre par petits pas;
 - borner les ratios pour eviter des frames absurdes.
 
+## Mode Cibles Et Grilles
+
+Les noms utilisateur sont **Mode Cibles**, **Grille Ecran** et **Grille
+Fenetre**. Les cles TOML gardent leurs noms techniques pour compatibilite.
+
+```toml
+[experimental.target_mode]
+enabled = true
+picker_enabled = true
+overlay_enabled = true
+overlay_duration_seconds = 10
+app_mouse_actions_enabled = true
+
+[experimental.app_targets]
+enabled = true
+scope = "frontmost_window"
+max_targets = 150
+timeout_ms = 120
+
+[experimental.target_grid]
+enabled = true
+overlay_enabled = true
+rows = 3
+columns = 3
+max_depth = 3
+hint_characters = "azeqsdwxc"
+label_placement = "center"
+mouse_follow_grid = true
+focus_follow_grid = true
+wake_mouse_pixels = 1
+
+[experimental.target_record]
+enabled = true
+indicator = "navrail"
+navrail_bottom_offset = 50
+```
+
+Cas d'usage :
+
+- activer les labels clavier sur les objets Roadie;
+- utiliser Grille Ecran quand toute la surface de l'ecran est la cible;
+- utiliser Grille Fenetre quand la fenetre focussee est la surface de travail;
+- afficher l'enregistrement de macro dans le navrail sans passer par une notification.
+
 ## Rules
 
 Les rules automatisent l'assignation ou l'etiquetage des fenetres.

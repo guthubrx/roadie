@@ -81,7 +81,9 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Supporte des rules TOML avec validation, explain, événements runtime `rule.*` et placement automatique stage/écran.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
 - Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
-- Expose un target mode configurable pour labels clavier, picker par recherche, automatisation JSON, inspection de cibles et decouverte experimentale des zones applicatives.
+- Expose le Mode Cibles pour labels clavier, picker par recherche, automatisation JSON, inspection de cibles et decouverte experimentale des zones applicatives.
+- Fournit deux grilles spatiales configurables : Grille Ecran pour cibler recursivement un ecran complet, et Grille Fenetre pour cibler recursivement la fenetre focussee.
+- Enregistre de courtes macros souris avec contexte de cible et fallback grille.
 - Fournit des outils de sûreté : reload config atomique, restore snapshot manuel, restore-on-exit/crash watcher limité, cleanup des fichiers générés.
 - Expose des diagnostics performance read-only, sans instrumentation du chemin focus/bordure.
 
@@ -424,15 +426,27 @@ Interactions supportées :
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
 
-## Target Mode
+## Mode Cibles, Grille Ecran Et Grille Fenetre
 
-Roadie expose un mode de cibles inspiré des concepts de Vimac, Homerow et Neru,
-réimplémenté sans dépendre de leur code : labels clavier, recherche, inspecteur,
-zones applicatives Accessibility, grille récursive et macros courtes.
+Roadie expose un **Mode Cibles** : des labels courts pour les fenetres, stages,
+ecrans, desktops, bookmarks et, en option, les zones applicatives Accessibility.
+Ces cibles peuvent etre cherchees, inspectees, activees et exportees en JSON
+pour des scripts ou des agents.
+
+Roadie fournit aussi deux grilles recursives :
+
+- **Grille Ecran** pour cibler un ecran complet.
+- **Grille Fenetre** pour cibler la fenetre actuellement focussee.
+
+Les deux grilles utilisent le meme langage spatial : taper le label d'une
+cellule zoome dedans, `Espace` valide, les fleches deplacent la selection et
+`Esc` annule. Les macros courtes peuvent stocker le meilleur contexte de cible
+plus un fallback grille.
 
 ```bash
 ./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid show --visual
+./bin/roadie grid interactive --scope display
+./bin/roadie grid interactive --scope focused_window
 ./bin/roadie record start demo --duration 10
 ```
 

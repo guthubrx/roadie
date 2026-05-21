@@ -216,7 +216,7 @@ Every `query` returns stable JSON:
 }
 ```
 
-## Target Mode
+## Keyboard Targets
 
 ```bash
 ./bin/roadie targets list
@@ -244,14 +244,14 @@ Every `query` returns stable JSON:
 `[experimental.target_mode].app_mouse_actions_enabled = true`. Unsupported
 actions return structured errors instead of silently falling back.
 
-The `[experimental.target_mode]` section can also disable all Target Mode
+The `[experimental.target_mode]` section can also disable all Keyboard Target
 commands (`enabled = false`) or only the picker (`picker_enabled = false`).
 
 `targets pick` applies the action only when the query resolves to one target. If
 the query is ambiguous, the command prints candidates and does not mutate the
 layout.
 
-## Grid And Macros
+## Display Grid, Window Grid, And Macros
 
 ```bash
 ./bin/roadie grid show --json
@@ -273,8 +273,9 @@ layout.
 ./bin/roadie record delete demo
 ```
 
-The grid is controlled by `[experimental.target_grid]`. `--scope display` uses
-the whole target display; `--scope focused_window` uses the focused window as
+Both grids are controlled by `[experimental.target_grid]`.
+`--scope display` is the **Display Grid** and uses the whole target display.
+`--scope focused_window` is the **Window Grid** and uses the focused window as
 the recursive root. By default, labels use a
 natural 3x3 block for a French Mac AZERTY keyboard: `A Z E / Q S D / W X C`,
 encoded as `hint_characters = "azeqsdwxc"`. `interactive` recursively zooms

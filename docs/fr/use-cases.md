@@ -146,3 +146,49 @@ Objectif : eviter l'accumulation de logs et backups.
 ```
 
 Commencer par `--dry-run` permet de voir les fichiers candidats avant suppression ou rotation.
+
+## 9. Navigation clavier avec labels
+
+Objectif : sauter vers une fenetre, une stage, un ecran, un desktop ou un
+bookmark sans memoriser les IDs internes.
+
+```bash
+./bin/roadie targets interactive --source all
+./bin/roadie targets pick work --action switch
+./bin/roadie targets inspect A --json
+```
+
+A utiliser quand :
+
+- le navrail est visible mais la cible est plus simple a taper qu'a cliquer;
+- un script ou un agent a besoin d'une liste structuree de destinations;
+- une recherche ambigue doit echouer proprement au lieu de deplacer des fenetres.
+
+## 10. Ciblage spatial quand Accessibility ne voit pas un controle
+
+Objectif : cibler une zone visuelle meme quand l'application n'expose pas
+d'element Accessibility utile.
+
+```bash
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
+```
+
+Utilise **Grille Ecran** pour cibler un ecran complet ou changer de zone entre
+ecrans. Utilise **Grille Fenetre** quand l'interaction reste dans la fenetre
+focussee : lecteur video, canvas, webview ou panneau applicatif dense.
+
+## 11. Capture de macros courtes
+
+Objectif : enregistrer une courte manipulation souris avec coordonnees et
+contexte semantique de cible.
+
+```bash
+./bin/roadie record start demo --duration 10
+./bin/roadie record inspect demo --json
+./bin/roadie record replay demo
+```
+
+Les recordings gardent une meilleure cible Roadie ou Accessibility quand elle
+existe, plus un fallback grille. Le replay peut donc preferer les cibles stables
+et n'utiliser les coordonnees qu'en dernier recours.

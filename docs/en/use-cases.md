@@ -146,3 +146,48 @@ Goal: avoid accumulating logs and backups.
 ```
 
 Start with `--dry-run` to inspect candidate files before deletion or rotation.
+
+## 9. Keyboard-First Navigation With Labels
+
+Goal: jump to a window, stage, display, desktop, or bookmark without remembering
+internal IDs.
+
+```bash
+./bin/roadie targets interactive --source all
+./bin/roadie targets pick work --action switch
+./bin/roadie targets inspect A --json
+```
+
+Use this when:
+
+- the nav rail is visible but the target is easier to type than click;
+- a script or agent needs a structured list of possible destinations;
+- you want ambiguous searches to fail safely instead of moving windows.
+
+## 10. Spatial Targeting When Accessibility Cannot See A Control
+
+Goal: target a visual area even when the application does not expose a useful
+Accessibility element.
+
+```bash
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
+```
+
+Use **Display Grid** for full-screen or cross-display targeting. Use **Window
+Grid** when the interaction belongs inside the focused window, such as a video
+player, canvas, webview, or dense application pane.
+
+## 11. Short Macro Capture
+
+Goal: record a short mouse manipulation with both coordinates and semantic
+target context.
+
+```bash
+./bin/roadie record start demo --duration 10
+./bin/roadie record inspect demo --json
+./bin/roadie record replay demo
+```
+
+Recordings keep a best-effort Roadie or Accessibility target and a grid fallback,
+so replay can prefer stable targets and use coordinates only when needed.

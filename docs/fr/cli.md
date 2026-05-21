@@ -216,7 +216,7 @@ Chaque `query` retourne un JSON stable :
 }
 ```
 
-## Target mode
+## Mode Cibles
 
 ```bash
 ./bin/roadie targets list
@@ -245,14 +245,14 @@ Chaque `query` retourne un JSON stable :
 impossibles renvoient une erreur structuree au lieu de tenter un fallback
 implicite.
 
-La section `[experimental.target_mode]` permet aussi de couper tout le Target
-Mode (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
+La section `[experimental.target_mode]` permet aussi de couper tout le Mode
+Cibles (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
 
 `targets pick` applique l'action seulement si la requete pointe vers une cible
 unique. En cas d'ambiguite, la commande affiche les candidates et ne change pas
 le layout.
 
-## Grille et macros
+## Grille Ecran, Grille Fenetre Et Macros
 
 ```bash
 ./bin/roadie grid show --json
@@ -274,9 +274,10 @@ le layout.
 ./bin/roadie record delete demo
 ```
 
-La grille est configuree par `[experimental.target_grid]`. `--scope display`
-utilise l'ecran cible complet; `--scope focused_window` utilise la fenetre
-focussee comme racine, avec la meme recursion. Par defaut, les
+Les deux grilles sont configurees par `[experimental.target_grid]`.
+`--scope display` correspond a la **Grille Ecran** et utilise l'ecran cible
+complet. `--scope focused_window` correspond a la **Grille Fenetre** et utilise
+la fenetre focussee comme racine, avec la meme recursion. Par defaut, les
 labels suivent un pavé 3x3 naturel sur clavier Mac AZERTY français :
 `A Z E / Q S D / W X C`, soit `hint_characters = "azeqsdwxc"`. Le mode
 `interactive` zoome recursivement dans la cellule tapee. `Espace` clique la

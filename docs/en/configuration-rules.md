@@ -105,6 +105,50 @@ Use cases:
 - nudge a window by small steps;
 - bound ratios to avoid absurd frames.
 
+## Keyboard Targets And Grids
+
+The user-facing names are **Keyboard Targets**, **Display Grid**, and **Window
+Grid**. The TOML keys keep their lower-level names for compatibility.
+
+```toml
+[experimental.target_mode]
+enabled = true
+picker_enabled = true
+overlay_enabled = true
+overlay_duration_seconds = 10
+app_mouse_actions_enabled = true
+
+[experimental.app_targets]
+enabled = true
+scope = "frontmost_window"
+max_targets = 150
+timeout_ms = 120
+
+[experimental.target_grid]
+enabled = true
+overlay_enabled = true
+rows = 3
+columns = 3
+max_depth = 3
+hint_characters = "azeqsdwxc"
+label_placement = "center"
+mouse_follow_grid = true
+focus_follow_grid = true
+wake_mouse_pixels = 1
+
+[experimental.target_record]
+enabled = true
+indicator = "navrail"
+navrail_bottom_offset = 50
+```
+
+Use cases:
+
+- enable keyboard-addressable labels over Roadie objects;
+- use Display Grid when a whole display is the interaction surface;
+- use Window Grid when the focused window is the interaction surface;
+- keep macro recording visible in the nav rail while avoiding notifications.
+
 ## Rules
 
 Rules automate window assignment or labeling.

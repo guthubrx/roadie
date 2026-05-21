@@ -1,4 +1,4 @@
-# Ce que Roadie a gagné avec le Target Mode
+# Ce que Roadie a gagné avec le Mode Cibles
 
 Ces exemples sont adaptés à ton workspace au moment de l'écriture. Les **labels**
 (`A`, `S`, `AF`, `SJ`, etc.) sont des raccourcis générés à partir de l'état
@@ -11,7 +11,7 @@ roadie targets list --max 40
 
 **Pour l'utilisateur**
 
-Roadie sait maintenant présenter le bureau comme une **liste de cibles actionnables** plutôt que comme un ensemble de coordonnées à viser à la souris. Concrètement, les **fenêtres**, **stages**, **écrans**, **desktops** et **bookmarks** peuvent recevoir des labels courts, puis être retrouvés ou activés par commande. L'idée est proche de Vimac/Homerow : au lieu de chercher visuellement puis cliquer précisément, on peut dire **"va vers cette cible"**, **"cherche gray"**, **"active ce label"** ou **"envoie la fenêtre active vers cette stage"**.
+Roadie sait maintenant présenter le bureau comme une **liste de cibles actionnables** plutôt que comme un ensemble de coordonnées à viser à la souris. Concrètement, les **fenêtres**, **stages**, **écrans**, **desktops** et **bookmarks** peuvent recevoir des labels courts, puis être retrouvés ou activés par commande. Le principe est simple : au lieu de chercher visuellement puis cliquer precisement, on peut dire **"va vers cette cible"**, **"cherche gray"**, **"active ce label"** ou **"envoie la fenêtre active vers cette stage"**.
 
 ```bash
 roadie targets list
@@ -52,7 +52,10 @@ Au moment du relevé, l'app frontmost exposait des cibles applicatives iTerm2 :
 dans ton TOML, `roadie targets activate D --action click` peut vraiment cliquer
 dans l'app active.
 
-On a enfin préparé un **overlay visuel de labels**. Il peut afficher temporairement des labels au-dessus des cibles, et il est derrière un paramètre expérimental. Le but est d'aller vers une navigation clavier plus directe, sans imposer cette interface à tous les utilisateurs.
+On a aussi préparé un **overlay visuel de labels**. Il peut afficher
+temporairement des labels au-dessus des cibles, et il est derrière un paramètre
+expérimental. Le but est d'aller vers une navigation clavier plus directe, sans
+imposer cette interface à tous les utilisateurs.
 
 ```bash
 roadie targets show --json --labels-only
@@ -63,6 +66,25 @@ roadie targets hide
 L'overlay doit te montrer les labels au-dessus des cibles Roadie courantes :
 écrans, stages et fenêtres comme **Work**, **Stage 7**, **Stage 6**, **Firefox**,
 **iTerm2** et **BlueJay**.
+
+Roadie a maintenant deux grilles recursives :
+
+- **Grille Ecran** : elle couvre un ecran complet et permet de viser une zone
+  meme si aucune cible Accessibility n'est disponible.
+- **Grille Fenetre** : elle utilise la fenetre focussee comme racine, pour viser
+  plus vite un bouton, un canvas, une video ou une zone dense dans l'app active.
+
+```bash
+roadie grid interactive --scope display --duration 10
+roadie grid interactive --scope focused_window --duration 10
+roadie grid click A
+roadie grid drag A L
+```
+
+Le chemin de grille devient un langage spatial stable : `AZQ` signifie
+"descendre dans telle cellule, puis telle sous-cellule, puis telle sous-cellule".
+Un humain peut s'en servir au clavier; un agent peut aussi l'utiliser comme
+fallback quand l'arbre Accessibility est incomplet.
 
 **Pour le debug**
 
@@ -92,7 +114,10 @@ roadie events tail 30
 souvent plusieurs boutons. Roadie doit donc répondre **ambiguous target** et ne
 rien modifier.
 
-On a aussi mis des **garde-fous de configuration**. Le Target Mode, le picker, l'overlay, les app targets, les clics applicatifs et le futur scroll-mode peuvent être activés ou coupés séparément. C'est utile pour diagnostiquer : si un morceau pose problème, on peut le désactiver sans perdre tout Roadie.
+On a aussi mis des **garde-fous de configuration**. Le Mode Cibles, le picker,
+l'overlay, les app targets, les clics applicatifs, les grilles et le record
+peuvent être activés ou coupés séparément. C'est utile pour diagnostiquer : si
+un morceau pose problème, on peut le désactiver sans perdre tout Roadie.
 
 ```toml
 [experimental.target_mode]
@@ -111,6 +136,19 @@ max_targets = 150
 timeout_ms = 120
 hint_characters = "asdfghjkl"
 include_roles = ["AXButton", "AXLink", "AXTextField", "AXMenuItem", "AXRow", "AXCheckBox", "AXRadioButton", "AXPopUpButton"]
+
+[experimental.target_grid]
+enabled = true
+overlay_enabled = true
+hint_characters = "azeqsdwxc"
+label_placement = "center"
+mouse_follow_grid = true
+focus_follow_grid = true
+
+[experimental.target_record]
+enabled = true
+indicator = "navrail"
+navrail_bottom_offset = 50
 ```
 
 ```bash
@@ -143,7 +181,11 @@ roadie targets activate SJ --action focus --json
 Cette séquence dit à un agent : inspecte la fenêtre **Grayjay**, vérifie les
 candidates pour `gray`, puis focalise explicitement la cible `SJ`.
 
-Enfin, les app targets ouvrent la porte à une **interaction plus fine avec les applications** : repérer un bouton ou un champ dans la fenêtre active, le lister, l'inspecter, et éventuellement cliquer dessus si l'option est activée. On n'a pas copié le code de Vimac ou Homerow ; on a repris le concept utile et on l'a adapté à Roadie, avec des **garde-fous macOS** et des **sorties structurées** pour l'automatisation.
+Enfin, les app targets ouvrent la porte à une **interaction plus fine avec les
+applications** : repérer un bouton ou un champ dans la fenêtre active, le
+lister, l'inspecter, et éventuellement cliquer dessus si l'option est activée.
+Cette surface reste concue comme une brique Roadie native, avec des
+**garde-fous macOS** et des **sorties structurees** pour l'automatisation.
 
 ```bash
 roadie targets list --source app --json --max 50

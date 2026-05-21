@@ -208,9 +208,9 @@ Cas d'usage :
 - basculer entre deux contextes avec `desktop back-and-forth`;
 - rappeler un desktop sur l'ecran courant avec `desktop summon`.
 
-## Target mode
+## Mode Cibles
 
-Le target mode donne une liste stable de destinations activables au clavier ou
+Le Mode Cibles donne une liste stable de destinations activables au clavier ou
 par un agent externe. Il ne remplace pas le navrail : il expose les memes objets
 sous forme de cibles nommees, inspectables et actionnables.
 
@@ -236,7 +236,7 @@ Les zones applicatives sensibles peuvent etre listees en mode experimental via
 Accessibility. Ce mode est desactive par defaut pour eviter de scanner les apps
 pendant les chemins chauds du window manager.
 
-Les briques Target Mode sont configurables separement. Le socle CLI et le picker
+Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
 les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne
 les demande pas.
@@ -290,9 +290,8 @@ Meme si `experimental.app_targets.enabled = true`, les actions `click`,
 `double-click` et `right-click` sur les zones applicatives sont refusees tant que
 `experimental.target_mode.app_mouse_actions_enabled = false`.
 
-Ce qui reste volontairement borne : l'overlay graphique complet, le scroll-mode
-type Vimac et le controle applicatif profond. Les app targets restent
-experimentales, limitees par timeout et desactivees par defaut.
+Ce qui reste volontairement borne : le controle applicatif profond. Les app
+targets restent experimentales, limitees par timeout et desactivees par defaut.
 
 ## Commandes power-user
 
@@ -416,17 +415,25 @@ Cas d'usage :
 - voir les types d'interactions recentes dans `events.jsonl`;
 - garder des seuils cibles documentes sans toucher au daemon.
 
-## Target mode, grille et macros
+## Mode Cibles, Grille Ecran, Grille Fenetre Et Macros
 
-Target Mode donne un inventaire actionnable des stages, fenetres, displays,
-desktops, bookmarks et zones applicatives Accessibility. La grille recursive
-ajoute un langage spatial quand AX ne voit pas tout. Le record/replay permet de
-capturer une manipulation courte avec contexte de cible et fallback grille. Un
-indicateur `record` peut apparaitre dans le navrail pendant la capture.
+Le Mode Cibles donne un inventaire actionnable des stages, fenetres, displays,
+desktops, bookmarks et zones applicatives Accessibility.
+
+La **Grille Ecran** ajoute un langage spatial recursif sur un ecran complet
+quand Accessibility ne voit pas tout. La **Grille Fenetre** utilise le meme
+langage recursif, mais limite la racine a la fenetre focussee. Elle est utile
+pour les lecteurs video, les webviews, les canvases et les panneaux applicatifs
+denses.
+
+Le record/replay permet de capturer une manipulation courte avec contexte de
+cible et fallback grille. Un indicateur `record` peut apparaitre dans le navrail
+pendant la capture.
 
 ```bash
 ./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid show --visual --duration 2
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
 ./bin/roadie record start demo --duration 10
 ./bin/roadie record replay demo
 ```
@@ -435,5 +442,6 @@ Cas d'usage :
 
 - basculer vers une stage ou une fenetre par label plutot que par ID;
 - cliquer un bouton d'app expose par Accessibility;
-- cibler une zone non accessible via une cellule de grille;
+- cibler une zone non accessible via la Grille Ecran;
+- cibler un controle dans la fenetre focussee via la Grille Fenetre;
 - montrer une manipulation a un agent puis la rejouer ou l'analyser.

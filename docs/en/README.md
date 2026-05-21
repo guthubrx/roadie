@@ -19,6 +19,7 @@ Roadie is a Swift macOS window manager combining:
 - Roadie virtual desktops without controlling native macOS Spaces;
 - display parking that keeps stages recoverable when a monitor is unplugged;
 - CLI commands for BetterTouchTool, Karabiner, shell scripts, or launchers;
-- automation surfaces: events, rules, groups, and query API.
+- automation surfaces: events, rules, groups, query API, Keyboard Targets,
+  Display Grid, Window Grid, and short macro recording.
 
 Roadie keeps SIP enabled and does not use OSAX/SkyLight to control native Spaces.

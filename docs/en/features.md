@@ -206,9 +206,9 @@ Use cases:
 - switch between two contexts with `desktop back-and-forth`;
 - bring a desktop to the current display with `desktop summon`.
 
-## Target Mode
+## Keyboard Targets
 
-Target mode provides a stable list of keyboard-addressable destinations for
+Keyboard Targets provide a stable list of keyboard-addressable destinations for
 humans and external agents. It does not replace the nav rail: it exposes the
 same concepts as named, inspectable, actionable targets.
 
@@ -233,7 +233,7 @@ Application-sensitive zones can be listed experimentally through Accessibility.
 This mode is disabled by default so app scanning does not run on window-manager
 hot paths.
 
-Target Mode building blocks are independently configurable. The CLI foundation
+Keyboard Target building blocks are independently configurable. The CLI foundation
 and picker stay enabled by default, while the future visual overlay, app mouse
 actions, and app scroll mode stay off until the user opts in.
 
@@ -286,9 +286,8 @@ Even when `experimental.app_targets.enabled = true`, `click`, `double-click`,
 and `right-click` on application targets are refused until
 `experimental.target_mode.app_mouse_actions_enabled = true`.
 
-Still intentionally bounded: the full visual overlay, Vimac-like scroll mode,
-and deep application control. App targets remain experimental, timeout-limited,
-and disabled by default.
+Still intentionally bounded: deep application control remains experimental,
+timeout-limited, and disabled by default.
 
 ## Power-User Commands
 
@@ -412,17 +411,24 @@ Use cases:
 - inspect recent interaction event types in `events.jsonl`;
 - keep target thresholds documented without touching the daemon.
 
-## Target Mode, Grid And Macros
+## Keyboard Targets, Display Grid, Window Grid, And Macros
 
-Target Mode exposes actionable stages, windows, displays, desktops, bookmarks,
-and Accessibility application zones. The recursive grid adds a spatial language
-when AX cannot see everything. Record/replay captures short manipulations with
-target context and grid fallback. A `record` indicator can appear in the navrail
-while capture is running.
+Keyboard Targets expose actionable stages, windows, displays, desktops,
+bookmarks, and Accessibility application zones.
+
+The **Display Grid** adds a recursive spatial language over a full display when
+Accessibility cannot see everything. The **Window Grid** uses the same recursive
+language but scopes it to the focused window, which is useful for video players,
+webviews, canvases, and dense application panes.
+
+Record/replay captures short manipulations with target context and grid
+fallback. A `record` indicator can appear in the navrail while capture is
+running.
 
 ```bash
 ./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid show --visual --duration 2
+./bin/roadie grid interactive --scope display --duration 10
+./bin/roadie grid interactive --scope focused_window --duration 10
 ./bin/roadie record start demo --duration 10
 ./bin/roadie record replay demo
 ```
@@ -431,5 +437,6 @@ Use cases:
 
 - switch to a stage or window by label instead of ID;
 - click an application button exposed by Accessibility;
-- target a non-accessible zone through a grid cell;
+- target a non-accessible zone through Display Grid;
+- target a control inside the focused window through Window Grid;
 - show a manipulation to an agent, then replay or analyze it.

@@ -81,7 +81,9 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Supports TOML window rules with validation, explain, runtime `rule.*` events, and automatic stage/display placement.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
 - Persists and exposes window groups for stack/tab-like workflows.
-- Exposes configurable target-mode commands for keyboard labels, search picking, JSON automation, target inspection, and experimental app-zone discovery.
+- Exposes Keyboard Targets for labels, search picking, JSON automation, target inspection, and experimental app-zone discovery.
+- Provides two configurable spatial grids: Display Grid for full-screen recursive targeting, and Window Grid for recursive targeting inside the focused window.
+- Records short mouse macros with target context and grid fallback.
 - Provides safety tools: atomic config reload, manual restore snapshots, limited restore-on-exit/crash watcher, generated-file cleanup.
 - Exposes read-only performance diagnostics without instrumenting focus/border hot paths.
 
@@ -452,15 +454,26 @@ Supported interactions:
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.
 
-## Target Mode
+## Keyboard Targets, Display Grid, And Window Grid
 
-Roadie exposes a target mode inspired by Vimac, Homerow, and Neru concepts,
-implemented independently: keyboard labels, search, inspector, Accessibility
-application zones, recursive grid, and short macros.
+Roadie exposes **Keyboard Targets**: short labels for windows, stages,
+displays, desktops, bookmarks, and optional Accessibility application zones.
+Targets can be searched, inspected, activated, and exported as JSON for scripts
+or agents.
+
+Roadie also provides two spatial grid modes:
+
+- **Display Grid** targets a whole display.
+- **Window Grid** targets the currently focused window.
+
+Both grids use the same spatial language: type a cell label to zoom into that
+cell, use `Space` to validate, arrows to move, and `Esc` to cancel. Short macro
+recording can store the best target context plus a grid fallback.
 
 ```bash
 ./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid show --visual
+./bin/roadie grid interactive --scope display
+./bin/roadie grid interactive --scope focused_window
 ./bin/roadie record start demo --duration 10
 ```
 
