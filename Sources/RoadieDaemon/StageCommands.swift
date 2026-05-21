@@ -33,20 +33,25 @@ public struct StageCommandService {
     private let store: StageStore
     private let events: EventLog
     private let config: RoadieConfig
+    private let commandActivity: LayoutCommandActivity
 
     public init(
         service: SnapshotService = SnapshotService(),
         store: StageStore? = nil,
         events: EventLog = EventLog(),
-        config: RoadieConfig? = nil
+        config: RoadieConfig? = nil,
+        commandActivity: LayoutCommandActivity = .shared
     ) {
         self.service = service
         self.store = store ?? service.effectiveStageStore
         self.events = events
         self.config = config ?? service.effectiveConfig
+        self.commandActivity = commandActivity
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
+        beginLayoutCommand("stage.assign")
+        defer { finishLayoutCommand("stage.assign") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
@@ -124,6 +129,8 @@ public struct StageCommandService {
         insertionIndex: Int? = nil,
         focusAssignedWindow: Bool = true
     ) -> StageCommandResult {
+        beginLayoutCommand("stage.assign_window")
+        defer { finishLayoutCommand("stage.assign_window") }
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
@@ -159,8 +166,12 @@ public struct StageCommandService {
         state.update(scope)
         store.save(state)
 
+        var visibilityRepairFrame: CGRect?
         if scope.activeStageID != stageID {
             _ = service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+        } else if let frame = visibleFrame(for: window.frame.cgRect, on: display) {
+            visibilityRepairFrame = frame
+            _ = service.setFrame(frame, of: window)
         }
 
         let activeScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
@@ -175,6 +186,10 @@ public struct StageCommandService {
             "focusAssignedWindow": String(focusAssignedWindow),
             "unpinned": String(removedPin != nil),
         ]
+        if let visibilityRepairFrame {
+            details["visibilityRepair"] = "true"
+            details["visibilityRepairFrame"] = "\(Rect(visibilityRepairFrame))"
+        }
         if let insertionIndex {
             details["insertionIndex"] = String(insertionIndex)
         }
@@ -204,7 +219,7 @@ public struct StageCommandService {
         store.save(state)
 
         var lines = ["ACTIVE\tID\tMODE\tWINDOWS\tNAME"]
-        for stage in scope.stages {
+        for stage in scope.stages where isSelectableStage(stage) {
             let active = stage.id == scope.activeStageID ? "*" : ""
             lines.append("\(active)\t\(stage.id.rawValue)\t\(stage.mode.rawValue)\t\(stage.members.count)\t\(stage.name)")
         }
@@ -369,6 +384,8 @@ public struct StageCommandService {
         followFocus: Bool? = nil,
         source: String = "cli"
     ) -> StageCommandResult {
+        beginLayoutCommand("stage.move_display")
+        defer { finishLayoutCommand("stage.move_display") }
         let snapshot = service.snapshot()
         guard let sourceDisplay = snapshot.displays.first(where: { $0.id == sourceDisplayID }),
               let targetDisplay = resolveStageMoveTarget(target, from: sourceDisplay, in: snapshot.displays)
@@ -500,6 +517,8 @@ public struct StageCommandService {
         orderedWindowIDs: [WindowID],
         placements providedPlacements: [WindowID: Rect] = [:]
     ) -> StageCommandResult {
+        beginLayoutCommand("stage.place_window")
+        defer { finishLayoutCommand("stage.place_window") }
         let snapshot = service.snapshot()
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
@@ -552,7 +571,7 @@ public struct StageCommandService {
         for id in (1...6).map({ StageID(rawValue: String($0)) }) {
             scope.ensureStage(id, mode: config.tiling.defaultStrategy)
         }
-        let ordered = scope.stages.map(\.id)
+        let ordered = selectableStageIDs(in: scope)
         let currentIndex = ordered.firstIndex(of: scope.activeStageID) ?? 0
         let nextIndex: Int
         switch direction {
@@ -589,6 +608,8 @@ public struct StageCommandService {
     }
 
     public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
+        beginLayoutCommand("stage.mode")
+        defer { finishLayoutCommand("stage.mode") }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
@@ -619,6 +640,8 @@ public struct StageCommandService {
         to stageID: StageID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
+        beginLayoutCommand("stage.switch")
+        defer { finishLayoutCommand("stage.switch") }
         let startedAt = Date()
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
@@ -708,6 +731,14 @@ public struct StageCommandService {
 
     private func elapsedMs(since start: Date) -> Double {
         Date().timeIntervalSince(start) * 1000
+    }
+
+    private func beginLayoutCommand(_ reason: String) {
+        commandActivity.markActive(reason: reason)
+    }
+
+    private func finishLayoutCommand(_ reason: String) {
+        commandActivity.finish(reason: reason)
     }
 
     private func formatMs(_ value: Double) -> String {
@@ -878,15 +909,16 @@ public struct StageCommandService {
 
     private func stageID(atVisiblePosition position: Int, in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> StageID? {
         let visible = visibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs)
-        let ordered = visible.isEmpty ? scope.stages.map(\.id) : visible
+        let ordered = visible.isEmpty ? selectableStageIDs(in: scope) : visible
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
         return ordered[index]
     }
 
     private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {
-        let visible = scope.stages.filter { !$0.members.isEmpty }.map(\.id)
-        let remaining = scope.stages.map(\.id).filter { !visible.contains($0) }
+        let candidates = scope.stages.filter(isSelectableStage)
+        let visible = candidates.filter { !$0.members.isEmpty }.map(\.id)
+        let remaining = candidates.map(\.id).filter { !visible.contains($0) }
         let ordered = visible + remaining
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
@@ -896,9 +928,19 @@ public struct StageCommandService {
     private func visibleStageIDs(in scope: PersistentStageScope, liveWindowIDs: Set<WindowID>) -> [StageID] {
         scope.stages
             .filter { stage in
-                stage.members.contains { liveWindowIDs.contains($0.windowID) }
+                isSelectableStage(stage)
+                    && stage.members.contains { liveWindowIDs.contains($0.windowID) }
             }
             .map(\.id)
+    }
+
+    private func selectableStageIDs(in scope: PersistentStageScope) -> [StageID] {
+        let ids = scope.stages.filter(isSelectableStage).map(\.id)
+        return ids.isEmpty ? scope.stages.map(\.id) : ids
+    }
+
+    private func isSelectableStage(_ stage: PersistentStage) -> Bool {
+        stage.parkingState != .parked || !stage.members.isEmpty
     }
 
     private func liveWindowIDs(in snapshot: DaemonSnapshot) -> Set<WindowID> {
@@ -906,7 +948,7 @@ public struct StageCommandService {
     }
 
     private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {
-        if let empty = scope.stages.first(where: { $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {
+        if let empty = scope.stages.first(where: { isSelectableStage($0) && $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {
             return empty.id
         }
         return nextGeneratedStageID(in: scope)
@@ -942,52 +984,28 @@ public struct StageCommandService {
     }
 
     private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        let corner = optimalHideCorner(for: display, among: displays)
+        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
+    }
+
+    private func visibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect? {
         let visible = display.visibleFrame.cgRect
-        switch corner {
-        case .bottomLeft:
-            return CGRect(
-                x: visible.minX + 1 - frame.width,
-                y: visible.maxY - 1,
-                width: frame.width,
-                height: frame.height
-            ).integral
-        case .bottomRight:
-            return CGRect(
-                x: visible.maxX - 1,
-                y: visible.maxY - 1,
-                width: frame.width,
-                height: frame.height
-            ).integral
-        }
-    }
+        let overlap = frame.intersection(visible)
+        let minimumVisibleWidth = min(120, max(32, frame.width * 0.25))
+        let minimumVisibleHeight = min(80, max(32, frame.height * 0.25))
+        let frameCenter = CGPoint(x: frame.midX, y: frame.midY)
+        let isUsable = visible.contains(frameCenter)
+            && overlap.width >= minimumVisibleWidth
+            && overlap.height >= minimumVisibleHeight
+        guard !isUsable else { return nil }
 
-    private func optimalHideCorner(for display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> HideCorner {
-        let frame = display.frame.cgRect
-        let xOffset = frame.width * 0.1
-        let yOffset = frame.height * 0.1
-        let bottomLeft = CGPoint(x: frame.minX, y: frame.maxY)
-        let bottomRight = CGPoint(x: frame.maxX, y: frame.maxY)
-
-        let leftScore = overlapScore(points: [
-            CGPoint(x: bottomLeft.x - 2, y: bottomLeft.y - yOffset),
-            CGPoint(x: bottomLeft.x + xOffset, y: bottomLeft.y + 2),
-            CGPoint(x: bottomLeft.x - 2, y: bottomLeft.y + 2),
-        ], displays: displays)
-        let rightScore = overlapScore(points: [
-            CGPoint(x: bottomRight.x + 2, y: bottomRight.y - yOffset),
-            CGPoint(x: bottomRight.x - xOffset, y: bottomRight.y + 2),
-            CGPoint(x: bottomRight.x + 2, y: bottomRight.y + 2),
-        ], displays: displays)
-        return leftScore < rightScore ? .bottomLeft : .bottomRight
-    }
-
-    private func overlapScore(points: [CGPoint], displays: [DisplaySnapshot]) -> Int {
-        points.enumerated().reduce(0) { score, item in
-            let weight = item.offset == 2 ? 10 : 1
-            let overlaps = displays.filter { $0.frame.cgRect.contains(item.element) }.count
-            return score + weight * overlaps
-        }
+        let width = min(frame.width, visible.width)
+        let height = min(frame.height, visible.height)
+        return CGRect(
+            x: visible.midX - width / 2,
+            y: visible.midY - height / 2,
+            width: width,
+            height: height
+        ).integral
     }
 
     private func centeredFrame(_ frame: CGRect, in container: CGRect) -> CGRect {
@@ -1007,9 +1025,4 @@ public struct StageCommandService {
 public enum StageCycleDirection: String, Sendable {
     case prev
     case next
-}
-
-private enum HideCorner {
-    case bottomLeft
-    case bottomRight
 }

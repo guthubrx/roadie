@@ -120,6 +120,53 @@ struct DropPreviewEngineTests {
         #expect(candidate?.placements[source.id] == Rect(x: 0, y: 255, width: 495, height: 245))
         #expect(candidate?.placements[peer.id] == Rect(x: 505, y: 0, width: 495, height: 500))
     }
+
+    @Test
+    func mutableBspDragPreviewIgnoresTransientDraggedSourceFrame() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let target = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
+        let peer = previewWindow(2, title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245))
+        let persistedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245))
+        let draggedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 1900, y: 1700, width: 395, height: 220))
+        let stageStore = StageStore(path: tempPreviewPath())
+        stageStore.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(
+                    displayID: display.id,
+                    stages: [
+                        PersistentStage(
+                            id: StageID(rawValue: "1"),
+                            mode: .mutableBsp,
+                            members: [target, peer, persistedSource].map {
+                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
+                            }
+                        ),
+                    ]
+                ),
+            ],
+            activeDisplayID: display.id
+        ))
+        let service = SnapshotService(
+            provider: DropPreviewProvider(displays: [display], windows: [target, peer, draggedSource]),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: stageStore
+        )
+        let engine = DropPreviewEngine(service: service)
+
+        let candidate = engine.candidate(sourceWindowID: draggedSource.id, atAXPoint: CGPoint(x: 250, y: 420))
+
+        #expect(candidate?.operation == .insertDown)
+        #expect(candidate?.placements[target.id] == Rect(x: 0, y: 0, width: 495, height: 245))
+        #expect(candidate?.placements[draggedSource.id] == Rect(x: 0, y: 255, width: 495, height: 245))
+        #expect(candidate?.placements[peer.id] == Rect(x: 505, y: 0, width: 495, height: 500))
+    }
 }
 
 private func previewWindow(_ rawID: UInt32, title: String, frame: Rect) -> WindowSnapshot {

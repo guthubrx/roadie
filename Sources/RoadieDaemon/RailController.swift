@@ -1416,7 +1416,8 @@ private final class RailPanel: NSPanel {
         visibleStageIDs = ids
         emptyStageIDs = scope.stages
             .filter { stage in
-                !stage.members.contains { liveWindowIDs.contains($0.windowID) }
+                stage.parkingState != .parked
+                    && !stage.members.contains { liveWindowIDs.contains($0.windowID) }
             }
             .map(\.id)
         stack.railBackgroundColor = config.backgroundColor

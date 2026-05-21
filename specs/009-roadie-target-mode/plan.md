@@ -57,6 +57,9 @@ Sources/
 │   ├── AppTargetQueryService.swift
 │   ├── TargetGridService.swift
 │   ├── TargetMacroService.swift
+│   ├── TargetModeRuntimeController.swift
+│   ├── TargetOverlayPresenter.swift
+│   ├── RoadieScreenCoordinate.swift
 │   ├── Formatters.swift
 │   └── AutomationQueryService.swift
 └── roadie/
@@ -68,6 +71,7 @@ Tests/
     ├── TargetInspectionServiceTests.swift
     ├── AppTargetQueryServiceTests.swift
     ├── TargetGridServiceTests.swift
+    ├── TargetModeRuntimeControllerTests.swift
     └── TargetMacroServiceTests.swift
 ```
 

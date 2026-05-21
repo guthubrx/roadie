@@ -2,7 +2,7 @@
 
 **Branche**: `031-display-stage-parking`  
 **Créée le**: 2026-05-12  
-**Statut**: Brouillon  
+**Statut**: Implemented
 **Entrée**: Description utilisateur : "Quand un écran est débranché, les stages qui étaient présents sur cet écran doivent être rapatriées sur l'écran restant comme nouvelles stages. Si l'écran est rebranché, Roadie doit se souvenir de leur origine et remettre les mêmes stages sur l'écran revenu, dans l'état courant, sans perdre les changements faits pendant l'absence."
 
 ## Parcours Utilisateur et Tests
@@ -84,6 +84,8 @@ En tant qu'utilisateur, je veux que Roadie garde une trace claire des stages rap
 - **FR-013**: Roadie DOIT gérer les stages vides des écrans disparus sans créer de clutter visible inutile, tout en conservant assez d'information pour restaurer l'organisation plus tard.
 - **FR-014**: Roadie DOIT éviter les oscillations répétées de placement des stages pendant les changements d'écran rapides.
 - **FR-015**: Roadie DOIT exposer assez d'information d'état pour que l'utilisateur ou un diagnostic sache si une stage est native, rapatriée ou restaurée.
+- **FR-016**: Roadie DOIT matérialiser comme stages restaurées locales les stages parkées anciennes quand leur écran d'origine n'est plus reconnu après un délai conservateur.
+- **FR-017**: Roadie DOIT conserver temporairement les stages fraîchement parkées pour permettre un rebranchement rapide avant toute matérialisation locale définitive.
 
 ### Entités Clés
 
@@ -105,6 +107,7 @@ En tant qu'utilisateur, je veux que Roadie garde une trace claire des stages rap
 - **SC-006**: Les utilisateurs peuvent continuer à travailler sur les stages rapatriées sans reconstruire manuellement leur organisation de stages, leurs placements de fenêtres ou leurs modes de layout.
 - **SC-007**: Les changements effectués pendant l'absence de l'écran sont conservés dans 100% des cas où les fenêtres concernées restent vivantes.
 - **SC-008**: Les changements d'écran rapides ne provoquent pas plus d'un rapatriement ou d'une restauration finale visible par période de stabilisation.
+- **SC-009**: Les stages parkées anciennes dont l'écran d'origine n'est plus reconnaissable redeviennent des stages locales visibles sans garder d'ID technique `parked-*`.
 
 ## Hypothèses
 

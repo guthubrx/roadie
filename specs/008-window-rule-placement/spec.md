@@ -2,7 +2,7 @@
 
 **Feature Branch**: `008-window-rule-placement`  
 **Created**: 2026-05-13  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: Demande utilisateur : "permettre qu'une application s'ouvre toujours sur une stage particulière et sur un écran particulier"
 
 ## User Scenarios & Testing *(mandatory)*

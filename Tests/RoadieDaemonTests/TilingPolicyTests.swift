@@ -100,6 +100,26 @@ struct TilingPolicyTests {
     }
 
     @Test
+    func shortStandardProgressWindowWithoutFullscreenIsExcluded() {
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                bundleID: "com.apple.finder",
+                appName: "Finder",
+                title: "Copying 31470 items",
+                frame: Rect(x: 0, y: 0, width: 520, height: 88),
+                furniture: WindowFurniture(
+                    hasCloseButton: true,
+                    hasMinimizeButton: true,
+                    isMain: true,
+                    isResizable: true
+                )
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
     func nonResizableStandardUtilityWindowIsExcluded() {
         let result = SnapshotService.applyTilingPolicy(
             to: window(

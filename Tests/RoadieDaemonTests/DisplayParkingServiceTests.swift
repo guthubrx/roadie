@@ -452,6 +452,160 @@ struct DisplayParkingServiceTests {
     }
 
     @Test
+    func materializesOldParkedStagesWhenOriginDisplayIsNoLongerRecognized() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "old-external")
+        let origin = StageOrigin(
+            logicalDisplayID: LogicalDisplayID(displayID: goneID),
+            displayID: goneID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "6"),
+            position: 1,
+            nameAtParking: "Stage 6",
+            parkedAt: Date(timeIntervalSince1970: 100)
+        )
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Host"),
+                    PersistentStage(id: StageID(rawValue: "6"), name: "Stage 6"),
+                    PersistentStage(
+                        id: StageID(rawValue: "parked-old-external-6"),
+                        name: "Stage 6",
+                        parkingState: .parked,
+                        origin: origin,
+                        hostDisplayID: hostID,
+                        members: [member(20)]
+                    ),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        let report = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: [window(20)],
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        let host = state.scopes.first { $0.displayID == hostID }
+        let recovered = host?.stages.first { $0.id == StageID(rawValue: "6") }
+
+        #expect(report.reason == .parkedStagesRecovered)
+        #expect(recovered?.parkingState == .restored)
+        #expect(recovered?.members.map(\.windowID) == [WindowID(rawValue: 20)])
+        #expect(host?.stages.contains { $0.id.rawValue.hasPrefix("parked-") } == false)
+    }
+
+    @Test
+    func materializesMultipleOldParkedStagesInOneTransition() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "old-external")
+        let logicalID = LogicalDisplayID(displayID: goneID)
+        let parkedAt = Date(timeIntervalSince1970: 100)
+        let firstOrigin = StageOrigin(
+            logicalDisplayID: logicalID,
+            displayID: goneID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "6"),
+            position: 1,
+            nameAtParking: "Stage 6",
+            parkedAt: parkedAt
+        )
+        let secondOrigin = StageOrigin(
+            logicalDisplayID: logicalID,
+            displayID: goneID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "3-restored-2"),
+            position: 2,
+            nameAtParking: "Com",
+            parkedAt: parkedAt
+        )
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Host"),
+                    PersistentStage(id: StageID(rawValue: "3"), name: "Com"),
+                    PersistentStage(id: StageID(rawValue: "6"), name: "Stage 6"),
+                    PersistentStage(
+                        id: StageID(rawValue: "parked-old-external-6"),
+                        name: "Stage 6",
+                        parkingState: .parked,
+                        origin: firstOrigin,
+                        hostDisplayID: hostID,
+                        members: [member(20)]
+                    ),
+                    PersistentStage(
+                        id: StageID(rawValue: "parked-old-external-3-restored-2"),
+                        name: "Com",
+                        parkingState: .parked,
+                        origin: secondOrigin,
+                        hostDisplayID: hostID,
+                        members: [member(30)]
+                    ),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        let report = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: [window(20), window(30)],
+            now: Date(timeIntervalSince1970: 200)
+        )
+
+        let host = state.scopes.first { $0.displayID == hostID }
+
+        #expect(report.restoredStageCount == 2)
+        #expect(host?.stages.contains { $0.parkingState == .parked } == false)
+        #expect(host?.stages.first { $0.id == StageID(rawValue: "6") }?.members.map(\.windowID) == [WindowID(rawValue: 20)])
+        #expect(host?.stages.first { $0.id == StageID(rawValue: "3") }?.members.map(\.windowID) == [WindowID(rawValue: 30)])
+    }
+
+    @Test
+    func keepsFreshParkedStagesTemporaryForFastReconnect() {
+        let hostID = DisplayID(rawValue: "built-in")
+        let goneID = DisplayID(rawValue: "old-external")
+        let origin = StageOrigin(
+            logicalDisplayID: LogicalDisplayID(displayID: goneID),
+            displayID: goneID,
+            desktopID: DesktopID(rawValue: 1),
+            stageID: StageID(rawValue: "6"),
+            position: 1,
+            nameAtParking: "Stage 6",
+            parkedAt: Date(timeIntervalSince1970: 100)
+        )
+        var state = PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: hostID, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), name: "Host"),
+                    PersistentStage(
+                        id: StageID(rawValue: "parked-old-external-6"),
+                        name: "Stage 6",
+                        parkingState: .parked,
+                        origin: origin,
+                        hostDisplayID: hostID,
+                        members: [member(20)]
+                    ),
+                ]),
+            ],
+            activeDisplayID: hostID
+        )
+
+        _ = DisplayParkingService().transition(
+            state: &state,
+            liveDisplays: [display("built-in", isMain: true)],
+            windows: [window(20)],
+            now: Date(timeIntervalSince1970: 120)
+        )
+
+        let host = state.scopes.first { $0.displayID == hostID }
+        #expect(host?.stages.first { $0.id.rawValue.hasPrefix("parked-") }?.parkingState == .parked)
+    }
+
+    @Test
     func parkingAndRestoreCompleteWithinConfiguredFiveSecondBudget() {
         let hostID = DisplayID(rawValue: "built-in")
         let goneID = DisplayID(rawValue: "external")

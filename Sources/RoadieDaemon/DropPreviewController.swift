@@ -75,6 +75,7 @@ struct DropPreviewEngine {
     }
 
     func candidate(sourceWindowID: WindowID, atAXPoint axPoint: CGPoint, displayID forcedDisplayID: DisplayID? = nil) -> DropPreviewCandidate? {
+        let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
         let snapshot = service.snapshot()
         guard let display = display(containing: axPoint, forcedDisplayID: forcedDisplayID, in: snapshot.displays),
               let scope = snapshot.state.activeScope(on: display.id),
@@ -111,6 +112,7 @@ struct DropPreviewEngine {
                     target: target.window,
                     operation: operation,
                     activeEntries: activeEntries,
+                    persistedSourceFrame: persistedFrame(for: sourceWindowID, in: scope, state: persistedStateBeforeSnapshot),
                     display: display
                 ) ?? [:]
             } else {
@@ -245,6 +247,7 @@ struct DropPreviewEngine {
         target: WindowSnapshot,
         operation: DropPreviewOperation,
         activeEntries: [ScopedWindowSnapshot],
+        persistedSourceFrame: CGRect?,
         display: DisplaySnapshot
     ) -> [WindowID: CGRect]? {
         guard operation != .swap, operation != .append else { return nil }
@@ -272,7 +275,12 @@ struct DropPreviewEngine {
         let windows = activeEntries.map(\.window)
         let peers = windows.filter { $0.id != sourceID }
         guard peers.contains(where: { $0.id == target.id }) else { return nil }
-        let container = union(windows.map { $0.frame.cgRect })
+
+        // During a native titlebar drag, macOS continuously moves the source
+        // window frame under the cursor. Use the stable stage frame instead,
+        // otherwise the transient drag frame expands and distorts the layout.
+        let stableFrames = peers.map { $0.frame.cgRect } + [persistedSourceFrame].compactMap { $0 }
+        let container = union(stableFrames)
             ?? display.visibleFrame.cgRect
         let orderedGroups = spatiallySortedWindows(peers, in: container).map { window -> DropReflowGroup in
             window.id == target.id
@@ -283,6 +291,18 @@ struct DropPreviewEngine {
         let expectedIDs = Set(windows.map(\.id))
         guard Set(result.keys) == expectedIDs else { return nil }
         return result
+    }
+
+    private func persistedFrame(for sourceID: WindowID, in scope: StageScope, state: PersistentStageState) -> CGRect? {
+        state
+            .scopes
+            .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+            .stages
+            .first { $0.id == scope.stageID }?
+            .members
+            .first { $0.windowID == sourceID }?
+            .frame
+            .cgRect
     }
 
     private func planReflowGroups(_ groups: [DropReflowGroup], in rect: CGRect, gap: CGFloat) -> [WindowID: CGRect] {

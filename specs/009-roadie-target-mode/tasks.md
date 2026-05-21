@@ -257,6 +257,17 @@
 
 ---
 
+## Phase 20: Correctifs grille récursive scoppée
+
+**Goal**: Stabiliser les grilles full-display et focused-window après livraison initiale, sans perturber le layout.
+
+- [x] T069 [US11] Ajouter le scope de grille focused-window et la sélection de racine dans `Sources/RoadieDaemon/TargetGridService.swift` `(commit 9180786)`
+- [x] T070 [US11] Exposer les options CLI/config de grille scoppée dans `Sources/roadie/main.swift` et `Sources/RoadieCore/Config.swift` `(commit 9180786)`
+- [x] T071 [US11] Figer la racine de grille focused-window pendant une session interactive dans `Sources/RoadieDaemon/TargetModeRuntimeController.swift` `(commit 006c49b)`
+- [x] T072 [US11] Ajouter les tests de grille scoppée et de racine focus figée dans `Tests/RoadieDaemonTests/TargetGridServiceTests.swift` `(commits 9180786, 006c49b)`
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -283,5 +294,6 @@
 4. Add isolated app targets.
 5. Add picker, overlay-state and enriched app actions.
 6. Add grid, record/replay and AX boost as independently configurable experimental surfaces.
+7. Stabilize scoped grid roots so interactive sessions do not jump when focus changes during grid navigation.
 7. Document BTT/Karabiner integration boundaries and non-delivered future features.
 8. Run tests/build and update status.

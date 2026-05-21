@@ -7,6 +7,8 @@
 
 **Organisation** : les tâches sont groupées par récit utilisateur pour permettre une implémentation et une validation indépendantes.
 
+**État rétrospectif** : **ABANDONNÉ**. L'implémentation expérimentale du bouton bleu/repliage a été livrée dans `5099b1d feat(roadie): Add pin popover controls`, puis annulée par `5d22491 Revert "feat(roadie): Add pin popover controls"`. Le stash `d543285` conserve un backup expérimental non livré. Les tâches ci-dessous restent non cochées pour documenter l'intention abandonnée ; les pins réellement conservés sont couverts par `specs/005-window-pins` et les correctifs transverses par `specs/010-layout-stability-hardening`.
+
 ## Format : `[ID] [P?] [Récit] Description`
 
 - **[P]** : tâche parallélisable si elle touche des fichiers distincts et ne dépend pas d'une tâche incomplète.
@@ -22,6 +24,8 @@
 - [ ] T003 [P] Identifier les surfaces de tests config dans `Tests/RoadieDaemonTests/ConfigTests.swift`
 - [ ] T004 [P] Identifier les surfaces de tests menu existantes dans `Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift`
 - [ ] T005 [P] Créer le fichier de tests dédié `Tests/RoadieDaemonTests/PinPopoverTests.swift`
+
+**ABANDONNÉ** : phase non livrée après rollback `5d22491`; ne pas reprendre sans nouvelle spec dédiée.
 
 ---
 
@@ -43,6 +47,8 @@
 - [ ] T015 [P] Ajouter les tests de nettoyage des présentations orphelines dans `Tests/RoadieDaemonTests/PersistentStageStateTests.swift`
 - [ ] T016 Ajouter les événements `pin_popover.shown`, `pin_popover.ignored`, `pin_popover.action`, `window.pin_collapsed`, `window.pin_restored` dans `Sources/RoadieCore/AutomationEventCatalog.swift`
 - [ ] T017 [P] Ajouter les tests catalogue des événements pin popover dans `Tests/RoadieDaemonTests/AutomationEventTests.swift`
+
+**ABANDONNÉ** : fondations retirées par rollback `5d22491`; la configuration `[experimental.pin_popover]` ne doit pas être considérée comme disponible.
 
 **Point de contrôle** : modèle, config et événements sont testables sans afficher d'UI.
 
@@ -70,6 +76,8 @@
 - [ ] T026 [US1] Démarrer conditionnellement `PinPopoverController` dans `Sources/roadied/main.swift`
 - [ ] T027 [US1] Journaliser `pin_popover.ignored` quand le bouton est omis pour sûreté dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
+**ABANDONNÉ** : le bouton visible a été retiré ; l'accès utilisateur conservé passe par le menu contextuel de barre de titre.
+
 **Point de contrôle** : le bouton existe pour une fenêtre pinée éligible sans modifier les fenêtres non pinées.
 
 ---
@@ -95,6 +103,8 @@
 - [ ] T035 [US2] Router les actions stage/desktop/display vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
 - [ ] T036 [US2] Router les actions de scope pin et unpin vers `WindowContextActions` dans `Sources/RoadieDaemon/PinPopoverController.swift`
 - [ ] T037 [US2] Journaliser `pin_popover.shown` et `pin_popover.action` dans `Sources/RoadieDaemon/PinPopoverController.swift`
+
+**ABANDONNÉ** : pas de menu `PinPopoverController` livré ; la source d'autorité reste `WindowContextActions`.
 
 **Point de contrôle** : le menu bouton peut remplacer le clic droit pour les actions existantes sans logique métier dupliquée.
 
@@ -124,6 +134,8 @@
 - [ ] T048 [US3] Nettoyer l'état replié quand le pin est retiré dans `Sources/RoadieDaemon/WindowContextActions.swift`
 - [ ] T049 [US3] Journaliser `window.pin_collapsed` et `window.pin_restored` dans `Sources/RoadieDaemon/PinPopoverController.swift`
 
+**ABANDONNÉ** : le repliage par proxy n'est pas livré ; les correctifs de stabilité de pins/fenêtres cachées sont rattachés à SPEC-010.
+
 **Point de contrôle** : une fenêtre pinée peut être repliée/restaurée sans saut de layout ni perte de frame.
 
 ---
@@ -144,6 +156,8 @@
 - [ ] T052 [US4] Structurer les modes de pin dans une section dédiée du modèle de menu dans `Sources/RoadieDaemon/PinPopoverController.swift`
 - [ ] T053 [US4] Ajouter un état utilisateur explicite visible/replié/scope dans `Sources/RoadieDaemon/Formatters.swift`
 - [ ] T054 [US4] Ajouter une sortie diagnostic des présentations de pin dans `Sources/roadie/main.swift`
+
+**ABANDONNÉ** : aucun mode de présentation pin-popover n'est disponible dans l'état courant.
 
 **Point de contrôle** : la zone Pin du menu est stable et prête à recevoir de futurs modes.
 
@@ -169,6 +183,8 @@
 - [ ] T068 [P] Ajouter un test garantissant que les fenêtres overlay Roadie du bouton/menu/proxy ne sont pas traitées comme fenêtres gérées dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift`
 - [ ] T069 [P] Ajouter un test de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Tests/RoadieDaemonTests/PinPopoverTests.swift`
 - [ ] T070 Ajouter l'action de menu minimal du proxy replié pour restaurer ou retirer le pin dans `Sources/RoadieDaemon/PinPopoverController.swift`
+
+**ABANDONNÉ** : validation non applicable après rollback `5d22491`.
 
 ---
 

@@ -440,7 +440,6 @@ public struct WindowContextActions {
     }
 
     private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        let visible = display.visibleFrame.cgRect
-        return CGRect(x: visible.maxX - 1, y: visible.maxY - 1, width: frame.width, height: frame.height).integral
+        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
     }
 }

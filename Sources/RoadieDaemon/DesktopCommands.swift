@@ -7,11 +7,18 @@ public struct DesktopCommandService {
     private let service: SnapshotService
     private let store: StageStore
     private let events: EventLog
+    private let commandActivity: LayoutCommandActivity
 
-    public init(service: SnapshotService = SnapshotService(), store: StageStore = StageStore(), events: EventLog = EventLog()) {
+    public init(
+        service: SnapshotService = SnapshotService(),
+        store: StageStore = StageStore(),
+        events: EventLog = EventLog(),
+        commandActivity: LayoutCommandActivity = .shared
+    ) {
         self.service = service
         self.store = store
         self.events = events
+        self.commandActivity = commandActivity
     }
 
     public func list() -> StageCommandResult {
@@ -113,6 +120,8 @@ public struct DesktopCommandService {
     }
 
     public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
+        beginLayoutCommand("desktop.assign_active_window")
+        defer { finishLayoutCommand("desktop.assign_active_window") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays),
@@ -171,6 +180,8 @@ public struct DesktopCommandService {
         displayID: DisplayID,
         follow: Bool = false
     ) -> StageCommandResult {
+        beginLayoutCommand("desktop.assign_window")
+        defer { finishLayoutCommand("desktop.assign_window") }
         let snapshot = service.snapshot()
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
@@ -235,6 +246,8 @@ public struct DesktopCommandService {
         to desktopID: DesktopID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
+        beginLayoutCommand("desktop.switch")
+        defer { finishLayoutCommand("desktop.switch") }
         var state = store.state()
         let previousDesktopID = state.currentDesktopID(for: display.id)
         if previousDesktopID == desktopID {
@@ -345,11 +358,18 @@ public struct DesktopCommandService {
     }
 
     private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        let visible = display.visibleFrame.cgRect
-        return CGRect(x: visible.maxX - 1, y: visible.maxY - 1, width: frame.width, height: frame.height).integral
+        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
     }
 
     private func isHidden(_ frame: CGRect) -> Bool {
         frame.maxX < -1000 || frame.minX < -10000
+    }
+
+    private func beginLayoutCommand(_ reason: String) {
+        commandActivity.markActive(reason: reason)
+    }
+
+    private func finishLayoutCommand(_ reason: String) {
+        commandActivity.finish(reason: reason)
     }
 }

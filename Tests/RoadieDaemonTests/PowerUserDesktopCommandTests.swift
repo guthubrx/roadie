@@ -176,6 +176,37 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
+    func stageSwitchMarksLayoutCommandActivity() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        var hidden = powerWindow(2, x: 999)
+        hidden.frame = Rect(x: 999, y: 499, width: 400, height: 300)
+        let provider = PowerUserProvider(windows: [visible, hidden])
+        provider.focusedID = visible.id
+        let store = StageStore(path: tempPath("power-stage-switch-command-activity"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), members: [
+                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: Rect(x: 250, y: 50, width: 500, height: 350)),
+                ]),
+            ]),
+        ]))
+        let writer = PowerUserWriter(provider: provider)
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let commandActivity = LayoutCommandActivity(path: tempPath("power-stage-switch-command-activity-lock"), enabled: true)
+        commandActivity.reset()
+
+        let result = StageCommandService(service: service, store: store, commandActivity: commandActivity).switchToPosition(2)
+
+        #expect(result.changed)
+        #expect(commandActivity.isActive())
+        commandActivity.reset()
+    }
+
+    @Test
     func stageSwitchIgnoresStaleFocusFromHiddenPreviousStage() {
         let display = DisplayID(rawValue: "display-main")
         let visible = powerWindow(1, x: 100)

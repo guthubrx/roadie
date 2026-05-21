@@ -18,6 +18,7 @@ public enum DisplayParkingReason: String, Codable, Sendable {
     case alreadyStable = "already_stable"
     case deferredUntilStable = "deferred_until_stable"
     case windowMoveFailedVisible = "window_move_failed_visible"
+    case parkedStagesRecovered = "parked_stages_recovered"
 }
 
 public struct DisplayParkingReport: Equatable, Codable, Sendable {
@@ -81,6 +82,21 @@ public struct DisplayParkingService: Sendable {
             stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
             _ = pruneEmptyParkedResidues(state: &state)
             return restoreReport
+        }
+
+        let recoveredParkedCount = materializeExpiredParkedStages(
+            state: &state,
+            liveDisplays: liveDisplays,
+            now: now
+        )
+        if recoveredParkedCount > 0 {
+            stampLiveDisplayMetadata(state: &state, liveDisplays: liveDisplays)
+            _ = pruneEmptyParkedResidues(state: &state)
+            return DisplayParkingReport(
+                kind: .noop,
+                reason: .parkedStagesRecovered,
+                restoredStageCount: recoveredParkedCount
+            )
         }
 
         var hostScope = state.scope(displayID: hostDisplay.id, desktopID: state.currentDesktopID(for: hostDisplay.id))
@@ -340,7 +356,7 @@ public struct DisplayParkingService: Sendable {
                 parkedIDs.contains(stage.id) && stage.parkingState == .parked && !stage.members.isEmpty
             }
             if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }),
-               let firstStage = state.scopes[scopeIndex].stages.first {
+               let firstStage = firstSelectableStage(in: state.scopes[scopeIndex]) {
                 state.scopes[scopeIndex].activeStageID = firstStage.id
             }
         }
@@ -363,11 +379,125 @@ public struct DisplayParkingService: Sendable {
             if state.scopes[scopeIndex].stages.isEmpty {
                 state.scopes[scopeIndex].stages = [PersistentStage(id: state.scopes[scopeIndex].activeStageID)]
             } else if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }),
-                      let firstStage = state.scopes[scopeIndex].stages.first {
+                      let firstStage = firstSelectableStage(in: state.scopes[scopeIndex]) {
                 state.scopes[scopeIndex].activeStageID = firstStage.id
             }
         }
         return prunedCount
+    }
+
+    private func materializeExpiredParkedStages(
+        state: inout PersistentStageState,
+        liveDisplays: [DisplaySnapshot],
+        now: Date,
+        minimumParkedAge: TimeInterval = 60
+    ) -> Int {
+        let liveDisplayIDs = Set(liveDisplays.map(\.id))
+        var recoveredCount = 0
+
+        for scopeIndex in state.scopes.indices where liveDisplayIDs.contains(state.scopes[scopeIndex].displayID) {
+            var scope = state.scopes[scopeIndex]
+            var remappedActiveStageID: StageID?
+
+            var stageIndex = scope.stages.startIndex
+            while stageIndex < scope.stages.endIndex {
+                let stage = scope.stages[stageIndex]
+                guard stage.parkingState == .parked,
+                      let origin = stage.origin,
+                      !stage.members.isEmpty,
+                      now.timeIntervalSince(origin.parkedAt) >= minimumParkedAge
+                else {
+                    stageIndex += 1
+                    continue
+                }
+
+                let fingerprint = fingerprintForRestore(
+                    state: state,
+                    origin: origin,
+                    logicalDisplayID: origin.logicalDisplayID
+                )
+                let decision = DisplayTopology.recognizeDisplay(for: fingerprint, in: liveDisplays)
+                guard decision.displayID == nil, !decision.isAmbiguous else {
+                    stageIndex += 1
+                    continue
+                }
+
+                let originalID = stage.id
+                var recoveredStage = stage
+                let preferredID = materializedStageID(for: recoveredStage, in: scope, excluding: stageIndex)
+                if preferredID != originalID,
+                   let emptyConflictIndex = scope.stages.firstIndex(where: {
+                       $0.id == preferredID && $0.members.isEmpty && $0.parkingState != .parked
+                   }) {
+                    scope.stages.remove(at: emptyConflictIndex)
+                    let adjustedIndex = emptyConflictIndex < stageIndex ? stageIndex - 1 : stageIndex
+                    scope.stages[adjustedIndex].id = preferredID
+                    scope.stages[adjustedIndex].parkingState = .restored
+                    scope.stages[adjustedIndex].hostDisplayID = nil
+                    scope.stages[adjustedIndex].restoredAt = now
+                } else {
+                    recoveredStage.id = preferredID
+                    recoveredStage.parkingState = .restored
+                    recoveredStage.hostDisplayID = nil
+                    recoveredStage.restoredAt = now
+                    scope.stages[stageIndex] = recoveredStage
+                }
+
+                if scope.activeStageID == originalID {
+                    remappedActiveStageID = preferredID
+                }
+                recoveredCount += 1
+                stageIndex = scope.stages.startIndex
+            }
+
+            if let remappedActiveStageID {
+                scope.activeStageID = remappedActiveStageID
+            }
+            if !scope.stages.contains(where: { $0.id == scope.activeStageID }),
+               let fallback = firstSelectableStage(in: scope) {
+                scope.activeStageID = fallback.id
+            }
+            state.scopes[scopeIndex] = scope
+        }
+
+        return recoveredCount
+    }
+
+    private func materializedStageID(
+        for stage: PersistentStage,
+        in scope: PersistentStageScope,
+        excluding excludedIndex: Int
+    ) -> StageID {
+        if let sameNameEmpty = scope.stages.enumerated().first(where: { item in
+            item.offset != excludedIndex
+                && item.element.parkingState != .parked
+                && item.element.members.isEmpty
+                && item.element.name == stage.name
+        })?.element.id {
+            return sameNameEmpty
+        }
+
+        let preferred = stage.origin?.stageID ?? stage.id
+        let existing = scope.stages.enumerated().filter { $0.offset != excludedIndex }
+        if !existing.contains(where: { $0.element.id == preferred }) {
+            return preferred
+        }
+        if existing.contains(where: { $0.element.id == preferred && $0.element.members.isEmpty && $0.element.parkingState != .parked }) {
+            return preferred
+        }
+
+        var suffix = 2
+        var candidate = StageID(rawValue: "\(preferred.rawValue)-recovered-\(suffix)")
+        while existing.contains(where: { $0.element.id == candidate }) {
+            suffix += 1
+            candidate = StageID(rawValue: "\(preferred.rawValue)-recovered-\(suffix)")
+        }
+        return candidate
+    }
+
+    private func firstSelectableStage(in scope: PersistentStageScope) -> PersistentStage? {
+        scope.stages.first { $0.parkingState != .parked || !$0.members.isEmpty }
+            ?? scope.stages.first
     }
 
     private func fingerprintForRestore(

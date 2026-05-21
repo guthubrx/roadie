@@ -186,11 +186,7 @@ public struct WindowBookmarkCommandService {
     }
 
     private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        let displayOffset = displays.firstIndex(where: { $0.id == display.id }) ?? 0
-        let offset = CGFloat(200 + displayOffset * 40)
-        let x = display.frame.x + display.frame.width + offset
-        let y = display.frame.y + display.frame.height + offset
-        return CGRect(x: x, y: y, width: max(frame.width, 80), height: max(frame.height, 60)).integral
+        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
     }
 
     private func isHidden(_ frame: CGRect) -> Bool {

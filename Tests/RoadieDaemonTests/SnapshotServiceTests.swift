@@ -266,6 +266,64 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func policyExcludedWindowDoesNotRemainStageManaged() {
+        let display = DisplayID(rawValue: "display-a")
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stageStore = StageStore(path: tempPath("snapshot-policy-excluded-stage-managed"))
+        let normal = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "Terminal",
+            bundleID: "term",
+            title: "main",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow",
+            furniture: WindowFurniture(hasCloseButton: true, hasFullscreenButton: true, fullscreenButtonEnabled: true, isResizable: true)
+        )
+        let progress = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 20,
+            appName: "Finder",
+            bundleID: "com.apple.finder",
+            title: "Copy",
+            frame: Rect(x: 100, y: 100, width: 404, height: 88),
+            isOnScreen: true,
+            isTileCandidate: true,
+            subrole: "AXStandardWindow",
+            role: "AXWindow",
+            furniture: WindowFurniture(hasCloseButton: true, hasMinimizeButton: true, hasZoomButton: true, isMain: true, isResizable: true)
+        )
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: scope.stageID, stages: [
+                PersistentStage(id: scope.stageID, members: [
+                    PersistentStageMember(windowID: normal.id, bundleID: normal.bundleID, title: normal.title, frame: normal.frame),
+                    PersistentStageMember(windowID: progress.id, bundleID: progress.bundleID, title: progress.title, frame: progress.frame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+                ],
+                windowSnapshots: [normal, progress]
+            ),
+            frameWriter: RecordingWriter(),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot(followFocus: false)
+
+        #expect(snapshot.windows.first { $0.window.id == progress.id }?.window.isTileCandidate == false)
+        #expect(snapshot.windows.first { $0.window.id == progress.id }?.scope == nil)
+        #expect(snapshot.state.stage(scope: scope)?.windowIDs == [normal.id])
+        #expect(service.applyPlan(from: snapshot).commands.map(\.window.id) == [normal.id])
+    }
+
+    @Test
     func newTileCandidatesCanFollowMouseDisplay() {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
@@ -489,7 +547,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func policyExcludedWindowsAreScopedButNotTiled() {
+    func policyExcludedWindowsAreNotStageManaged() {
         let display = DisplayID(rawValue: "display-a")
         let window = WindowSnapshot(
             id: WindowID(rawValue: 201),
@@ -527,9 +585,9 @@ struct SnapshotServiceTests {
         var persisted = stageStore.state()
 
         #expect(snapshot.windows.first?.window.isTileCandidate == false)
-        #expect(scope == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
-        #expect(persisted.scope(displayID: display).memberIDs(in: StageID(rawValue: "1")) == [window.id])
-        #expect(scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == [])
+        #expect(scope == nil)
+        #expect(persisted.scope(displayID: display).memberIDs(in: StageID(rawValue: "1")) == [])
+        #expect(scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == nil)
         #expect(service.applyPlan(from: snapshot).commands.isEmpty)
     }
 
@@ -1101,6 +1159,119 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func snapshotSuppressesHiddenCrossDisplayFocusWhenAWindowJustWentMissing() throws {
+        let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
+        let activeLeft = powerWindow(1, x: 100)
+        let missingLeft = powerWindow(2, x: 500)
+        let hiddenRight = powerWindow(
+            3,
+            x: rightDisplay.visibleFrame.x + rightDisplay.visibleFrame.width - 1,
+            y: rightDisplay.visibleFrame.y + rightDisplay.visibleFrame.height - 1,
+            width: 300,
+            height: 240,
+            app: "Teams"
+        )
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-cross-display-missing-focus-\(UUID().uuidString).json")
+            .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-cross-display-missing-focus-events-\(UUID().uuidString).jsonl")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: activeLeft.id, members: [
+                    PersistentStageMember(windowID: activeLeft.id, bundleID: activeLeft.bundleID, title: activeLeft.title, frame: activeLeft.frame),
+                    PersistentStageMember(windowID: missingLeft.id, bundleID: missingLeft.bundleID, title: missingLeft.title, frame: missingLeft.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hiddenRight.id, members: [
+                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: hiddenRight.frame),
+                ]),
+            ]),
+        ], activeDisplayID: leftDisplay.id))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [leftDisplay, rightDisplay],
+                windowSnapshots: [activeLeft, hiddenRight],
+                focusedID: hiddenRight.id
+            ),
+            stageStore: stageStore,
+            events: EventLog(path: eventPath)
+        )
+
+        let snapshot = service.snapshot()
+        let persisted = stageStore.state()
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+
+        #expect(snapshot.focusedWindowID == activeLeft.id)
+        #expect(snapshot.state.activeScope(on: leftDisplay.id)?.stageID == StageID(rawValue: "1"))
+        #expect(snapshot.state.activeScope(on: rightDisplay.id)?.stageID == StageID(rawValue: "1"))
+        #expect(persisted.activeDisplayID == leftDisplay.id)
+        #expect(events.contains("\"type\":\"focus.hidden_cross_display_after_missing_suppressed\""))
+        #expect(events.contains("\"markedMissingIDs\":\"2\""))
+    }
+
+    @Test
+    func snapshotStillFollowsHiddenCrossDisplayFocusWhenNoWindowWentMissing() {
+        let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
+        let activeLeft = powerWindow(1, x: 100)
+        let hiddenRight = powerWindow(
+            3,
+            x: rightDisplay.visibleFrame.x + rightDisplay.visibleFrame.width - 1,
+            y: rightDisplay.visibleFrame.y + rightDisplay.visibleFrame.height - 1,
+            width: 300,
+            height: 240,
+            app: "Teams"
+        )
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-cross-display-focus-allowed-\(UUID().uuidString).json")
+            .path
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: activeLeft.id, members: [
+                    PersistentStageMember(windowID: activeLeft.id, bundleID: activeLeft.bundleID, title: activeLeft.title, frame: activeLeft.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: hiddenRight.id, members: [
+                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: hiddenRight.frame),
+                ]),
+            ]),
+        ], activeDisplayID: leftDisplay.id))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [leftDisplay, rightDisplay],
+                windowSnapshots: [activeLeft, hiddenRight],
+                focusedID: hiddenRight.id
+            ),
+            stageStore: stageStore
+        )
+
+        let snapshot = service.snapshot()
+        let persisted = stageStore.state()
+
+        #expect(snapshot.focusedWindowID == hiddenRight.id)
+        #expect(snapshot.state.activeScope(on: rightDisplay.id)?.stageID == StageID(rawValue: "2"))
+        #expect(persisted.activeDisplayID == rightDisplay.id)
+    }
+
+    @Test
     func floatStageModeDoesNotReplaySavedTilingIntent() {
         let display = DisplayID(rawValue: "display-a")
         let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 10, y: 10, width: 200, height: 200), isOnScreen: true, isTileCandidate: true)
@@ -1334,7 +1505,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func configExclusionsKeepMatchingBundlesScopedButUntiled() {
+    func configExclusionsKeepMatchingBundlesOutOfStageManagement() {
         let display = DisplayID(rawValue: "display-a")
         let window = WindowSnapshot(
             id: WindowID(rawValue: 300),
@@ -1358,9 +1529,9 @@ struct SnapshotServiceTests {
 
         let snapshot = service.snapshot()
 
-        #expect(snapshot.windows.first?.scope == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
+        #expect(snapshot.windows.first?.scope == nil)
         #expect(snapshot.windows.first?.window.isTileCandidate == false)
-        #expect(snapshot.windows.first?.scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == [])
+        #expect(snapshot.windows.first?.scope.flatMap { snapshot.state.stage(scope: $0)?.windowIDs } == nil)
         #expect(service.applyPlan(from: snapshot).commands.isEmpty)
     }
 
@@ -1744,7 +1915,7 @@ struct SnapshotServiceTests {
         let assignResult = StageCommandService(service: assignService, store: stageStore).assign("2")
 
         #expect(assignResult.changed)
-        #expect(assignWriter.requestedFrames[right.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(assignWriter.requestedFrames[right.id] == Rect(x: 999, y: 0, width: 495, height: 500))
 
         let hiddenRight = WindowSnapshot(id: right.id, pid: right.pid, appName: right.appName, bundleID: right.bundleID, title: right.title, frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let switchWriter = RecordingWriter()
@@ -1758,7 +1929,7 @@ struct SnapshotServiceTests {
         let state = stageStore.state()
 
         #expect(switchResult.changed)
-        #expect(switchWriter.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(switchWriter.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
         #expect(switchWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
         #expect(switchWriter.focusedWindowIDs == [right.id])
         #expect(state.activeDisplayID == display)
@@ -1807,6 +1978,92 @@ struct SnapshotServiceTests {
     }
 
     @Test
+    func stageSummonRepairsWindowVisibleOnDifferentDisplay() {
+        let leftDisplay = DisplayID(rawValue: "display-a")
+        let rightDisplay = DisplayID(rawValue: "display-b")
+        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true)
+        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 800), isMain: false)
+        let window = WindowSnapshot(id: WindowID(rawValue: 7), pid: 7, appName: "Settings", bundleID: "settings", title: "Settings", frame: Rect(x: 1200, y: 100, width: 300, height: 300), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-summon-visible-repair-\(UUID().uuidString).json")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+            ]),
+            PersistentStageScope(displayID: rightDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+        ], activeDisplayID: leftDisplay))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [leftSnapshot, rightSnapshot], windowSnapshots: [window], focusedID: window.id),
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let result = StageCommandService(service: service, store: stageStore).summon(windowID: window.id, displayID: leftDisplay)
+
+        #expect(result.changed)
+        let repaired = writer.requestedFrames[window.id]
+        #expect(repaired != nil)
+        if let repaired {
+            let center = CGPoint(x: repaired.cgRect.midX, y: repaired.cgRect.midY)
+            #expect(leftSnapshot.visibleFrame.cgRect.contains(center))
+            #expect(!rightSnapshot.visibleFrame.cgRect.contains(center))
+        }
+        try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func snapshotLeavesVisibleDisplayDriftForMaintainerRepair() {
+        let leftDisplay = DisplayID(rawValue: "display-a")
+        let rightDisplay = DisplayID(rawValue: "display-b")
+        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true)
+        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: "B", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 800), isMain: false)
+        let window = WindowSnapshot(id: WindowID(rawValue: 8), pid: 8, appName: "Settings", bundleID: "settings", title: "Settings", frame: Rect(x: 1200, y: 100, width: 300, height: 300), isOnScreen: true, isTileCandidate: true)
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-scope-physical-repair-\(UUID().uuidString).json")
+            .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-scope-physical-repair-\(UUID().uuidString).jsonl")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: Rect(x: 100, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+            ]),
+        ], activeDisplayID: leftDisplay))
+        let service = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [leftSnapshot, rightSnapshot], windowSnapshots: [window], focusedID: nil),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore,
+            events: EventLog(path: eventPath)
+        )
+
+        let snapshot = service.snapshot(followFocus: false)
+        var state = stageStore.state()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(snapshot.windows.first { $0.window.id == window.id }?.scope?.displayID == leftDisplay)
+        #expect(state.scope(displayID: leftDisplay).memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(state.scope(displayID: rightDisplay).memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(!events.contains("window.scope_reconciled_to_physical_display"))
+        try? FileManager.default.removeItem(atPath: stagePath)
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
     func desktopFocusHidesOutgoingDesktopAndRestoresIncomingDesktop() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
@@ -1843,7 +2100,7 @@ struct SnapshotServiceTests {
         let state = stageStore.state()
 
         #expect(result.changed)
-        #expect(writer.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(writer.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
         #expect(writer.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
         #expect(writer.focusedWindowIDs == [right.id])
         #expect(state.currentDesktopID(for: display) == DesktopID(rawValue: 2))
@@ -1926,7 +2183,7 @@ struct SnapshotServiceTests {
         let target = state.scopes.first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: 2) }
 
         #expect(result.changed)
-        #expect(writer.requestedFrames[left.id] == Rect(x: 999, y: 499, width: 495, height: 500))
+        #expect(writer.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
         #expect(source?.memberIDs(in: StageID(rawValue: "1")) == [])
         #expect(target?.memberIDs(in: StageID(rawValue: "1")) == [left.id])
         #expect(state.currentDesktopID(for: display) == DesktopID(rawValue: 1))
@@ -3349,10 +3606,15 @@ struct SnapshotServiceTests {
         #expect(writer.requestedFrames[moving.id] == Rect(x: 1000, y: 0, width: 495, height: 500))
         #expect(writer.requestedFrames[target.id] == Rect(x: 1505, y: 0, width: 495, height: 500))
         if let sourceScope {
-            #expect(intentStore.intent(for: StageScope(displayID: sourceScope.displayID, desktopID: sourceScope.desktopID, stageID: sourceScope.activeStageID)) == nil)
+            let intent = intentStore.intent(for: StageScope(displayID: sourceScope.displayID, desktopID: sourceScope.desktopID, stageID: sourceScope.activeStageID))
+            #expect(intent?.windowIDs == [left.id])
+            #expect(intent?.placements[left.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
         }
         if let targetScope {
-            #expect(intentStore.intent(for: StageScope(displayID: targetScope.displayID, desktopID: targetScope.desktopID, stageID: targetScope.activeStageID)) == nil)
+            let intent = intentStore.intent(for: StageScope(displayID: targetScope.displayID, desktopID: targetScope.desktopID, stageID: targetScope.activeStageID))
+            #expect(intent?.windowIDs == [moving.id, target.id])
+            #expect(intent?.placements[moving.id] == Rect(x: 1000, y: 0, width: 495, height: 500))
+            #expect(intent?.placements[target.id] == Rect(x: 1505, y: 0, width: 495, height: 500))
         }
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: intentPath)

@@ -2,7 +2,7 @@
 
 **Branche** : `029-titlebar-context-menu`  
 **Créée le** : 2026-05-10  
-**Statut** : Brouillon  
+**Statut** : Implemented
 **Entrée utilisateur** : "Ajouter une fonctionnalite experimentale, configurable dans le TOML, qui affiche un menu Roadie quand l'utilisateur fait clic droit dans la zone de barre de titre d'une fenetre. Le menu doit permettre d'envoyer la fenetre vers une autre stage, un autre desktop ou un autre display, sans interferer avec les menus contextuels internes des applications."
 
 ## Scénarios Utilisateur et Tests *(obligatoire)*

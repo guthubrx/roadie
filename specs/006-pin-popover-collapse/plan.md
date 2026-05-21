@@ -1,11 +1,13 @@
 # Plan d'Implémentation : Menu Pin et Repliage
 
-**Branche** : `030-window-pins` | **Date** : 2026-05-11 | **Spécification** : [spec.md](./spec.md)  
+**Branche** : `030-window-pins` | **Date** : 2026-05-11 | **Spécification** : [spec.md](./spec.md) | **Statut** : Abandonné après rollback
 **Entrée** : spécification fonctionnelle issue de `/specs/006-pin-popover-collapse/spec.md`
 
 ## Résumé
 
 Ajouter, sur les fenêtres déjà pinées, un petit contrôle circulaire bleu qui ouvre un menu compact de style macOS. Ce menu reprend les actions du clic droit de barre de titre, expose l'état de pin courant, et ajoute le repliage en proxy Roadie pour libérer la vue sur les fenêtres situées dessous. L'approche technique garde la fenêtre pinée hors layout automatique, conserve les actions existantes comme source d'autorité, et ajoute uniquement une couche de présentation contrôlée par une configuration expérimentale.
+
+**Résultat réel** : cette direction a été testée puis annulée. L'UI permanente attachée aux barres de titre s'est révélée trop fragile visuellement et trop risquée pour le layout. Le commit `5099b1d feat(roadie): Add pin popover controls` a été annulé par `5d22491 Revert "feat(roadie): Add pin popover controls"`. Les tâches restent volontairement non cochées et marquées comme abandonnées dans `tasks.md`.
 
 ## Contexte Technique
 

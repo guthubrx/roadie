@@ -2,7 +2,7 @@
 
 **Feature Branch**: `028-stage-display-move`  
 **Created**: 2026-05-10  
-**Status**: Draft  
+**Status**: Implemented
 **Input**: User description: "1 ok. 2 ok, ok pour la valeur par défaut mais moi je veux pas le follow. 3 ok et je voudrais un menu contextuel sur clic droit avec une entrée pour envoyer vers un autre écran"
 
 ## User Scenarios & Testing *(mandatory)*

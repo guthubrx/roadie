@@ -7,12 +7,12 @@ Spec: 009-roadie-target-mode
 Titre: Roadie Target Mode
 Statut: Implemented
 Priorité: P1
-Tâches: 68/68 (100%)
+Tâches: 72/72 (100%)
 Tests: 364/364 (100%)
 
 Résumé:
 - Contexte: Vimac et Homerow montrent qu'un bureau macOS peut devenir navigable par labels, recherche et inspection plutôt que par coordonnées souris.
-- Objectif: Donner à Roadie une couche de cibles actionnables pour humains et agents, couvrant les objets Roadie, un picker clavier, une base overlay, des actions enrichies et les zones sensibles applicatives exposées par Accessibility.
+- Objectif: Donner à Roadie une couche de cibles actionnables pour humains et agents, couvrant les objets Roadie, un picker clavier, une base overlay, des actions enrichies, les zones sensibles applicatives exposées par Accessibility et les grilles récursives scoppées.
 - Dépendances: SPEC-002, SPEC-003, SPEC-004, SPEC-005, SPEC-008
 
 Fichiers:

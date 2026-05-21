@@ -217,7 +217,7 @@ public struct StateAuditService {
             }
 
             if !state.scopes[scopeIndex].stages.contains(where: { $0.id == state.scopes[scopeIndex].activeStageID }) {
-                state.scopes[scopeIndex].activeStageID = state.scopes[scopeIndex].stages.first?.id ?? StageID(rawValue: "1")
+                state.scopes[scopeIndex].activeStageID = selectableStage(in: state.scopes[scopeIndex])?.id ?? StageID(rawValue: "1")
                 repaired += 1
             }
 
@@ -244,5 +244,10 @@ public struct StateAuditService {
         }
 
         return repaired
+    }
+
+    private func selectableStage(in scope: PersistentStageScope) -> PersistentStage? {
+        scope.stages.first { $0.parkingState != .parked || !$0.members.isEmpty }
+            ?? scope.stages.first
     }
 }

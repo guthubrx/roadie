@@ -2,8 +2,10 @@
 
 **Branche** : `030-window-pins`  
 **Créée le** : 2026-05-11  
-**Statut** : Brouillon  
+**Statut** : Abandonné après rollback
 **Entrée utilisateur** : "un menu comme ca, déclenché par un pseudo bouton cercle bleu qui ressemble aux boutons macos en type (cercle) et taille, qui doublonne les fonctionalités qu'on a sur le clic droit sur les barre de titre et qui ajoute le repliage d'une fenetre comme tu recommandes option 2) et ca permettrait aussi de gerer les mode pins qui restera a affiner dans un secon temps"
+
+**État rétrospectif** : l'implémentation initiale du bouton bleu et du repliage a été revertée car elle créait trop d'effets de bord visuels et de layout. La demande fonctionnelle reste archivée comme idée de design, mais la livraison active se limite aujourd'hui aux pins et au menu contextuel de barre de titre couverts par les autres specs. Commit d'annulation : `5d22491 Revert "feat(roadie): Add pin popover controls"`. Sauvegarde expérimentale non livrée : stash `d543285`.
 
 ## Scénarios Utilisateur & Tests *(obligatoire)*
 

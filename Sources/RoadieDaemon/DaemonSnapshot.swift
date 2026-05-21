@@ -118,15 +118,15 @@ public struct SnapshotService {
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let rawWindows = provider.windows()
-        let stageManagedWindowIDs = Set(rawWindows.compactMap { window in
-            window.isTileCandidate ? window.id : nil
-        })
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
         let windows = rawWindows.map { window in
             Self.applyTilingPolicy(to: window, config: config, context: policyContext)
         }
+        let stageManagedWindowIDs = Set(windows.compactMap { window in
+            window.isTileCandidate ? window.id : nil
+        })
         let providerFocusedID = provider.focusedWindowID()
         var persistedStages = stageStore.state()
         let now = Date()
@@ -142,6 +142,7 @@ public struct SnapshotService {
                 windows: windows
             )
         }
+        let activeDisplayIDBeforeMissingReconciliation = persistedStages.activeDisplayID
         let liveWindowIDs = stageManagedWindowIDs
         let mouseLocation = provider.mouseLocation()
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
@@ -291,6 +292,13 @@ public struct SnapshotService {
            let providerFocusedID,
            let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
            let focusedScope = focusedEntry.scope,
+           !shouldSuppressHiddenCrossDisplayFocusAfterMissing(
+                entry: focusedEntry,
+                scope: focusedScope,
+                previousActiveDisplayID: activeDisplayIDBeforeMissingReconciliation,
+                missingWindows: missingWindows,
+                displays: displays
+           ),
            shouldFollowFocus(entry: focusedEntry, scope: focusedScope, persistedStages: persistedStages, displays: displays),
            !persistedStages.commandFocusProtectionBlocks(focusedScope: focusedScope, focusedWindowID: providerFocusedID, now: now),
            config.focus.stageFollowsFocus || state.activeScope(on: focusedScope.displayID) == focusedScope {
@@ -320,6 +328,28 @@ public struct SnapshotService {
             state: state,
             focusedWindowID: focusedID
         )
+    }
+
+    private func shouldSuppressHiddenCrossDisplayFocusAfterMissing(
+        entry: ScopedWindowSnapshot,
+        scope: StageScope,
+        previousActiveDisplayID: DisplayID?,
+        missingWindows: MissingWindowReconciliationReport,
+        displays: [DisplaySnapshot]
+    ) -> Bool {
+        guard !missingWindows.markedMissingWindowIDs.isEmpty,
+              let previousActiveDisplayID,
+              previousActiveDisplayID != scope.displayID,
+              isHidden(entry.window.frame.cgRect, in: displays)
+        else { return false }
+
+        events.append(RoadieEvent(type: "focus.hidden_cross_display_after_missing_suppressed", scope: scope, details: [
+            "windowID": String(entry.window.id.rawValue),
+            "previousActiveDisplayID": previousActiveDisplayID.rawValue,
+            "focusedDisplayID": scope.displayID.rawValue,
+            "markedMissingIDs": formattedWindowIDs(missingWindows.markedMissingWindowIDs)
+        ]))
+        return true
     }
 
     private func appendMissingWindowReconciliationEvent(_ report: MissingWindowReconciliationReport) {
@@ -405,6 +435,11 @@ public struct SnapshotService {
         }
 
         if tile && config.tiling.popupFilter,
+           isShortNonFullscreenUtilityWindow(window) {
+            tile = false
+        }
+
+        if tile && config.tiling.popupFilter,
            isNonResizableStandardWindow(window) {
             tile = false
         }
@@ -471,6 +506,19 @@ public struct SnapshotService {
         ].contains { title.contains($0) }
         let isNonResizable = window.furniture.map { !$0.hasFullscreenButton } ?? false
         return isSmall && isNonResizable && titleLooksLikeSettings
+    }
+
+    private static func isShortNonFullscreenUtilityWindow(_ window: WindowSnapshot) -> Bool {
+        guard window.subrole == "AXStandardWindow",
+              let furniture = window.furniture
+        else { return false }
+
+        let frame = window.frame.cgRect
+        let isShortPanel = frame.height <= 180
+        let cannotBecomeDocumentWindow = !furniture.hasFullscreenButton || furniture.fullscreenButtonDisabled
+        let hasWindowChrome = furniture.hasCloseButton || furniture.hasMinimizeButton || furniture.hasZoomButton
+
+        return isShortPanel && cannotBecomeDocumentWindow && hasWindowChrome
     }
 
     private static func isNonResizableStandardWindow(_ window: WindowSnapshot) -> Bool {
@@ -817,6 +865,31 @@ public extension SnapshotService {
         return intent.source == .command && intent.createdAt >= date
     }
 
+    func commandLayoutIntentNeedsApply(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
+        guard let intent = validIntent(for: scope, from: snapshot),
+              intent.source == .command
+        else { return false }
+
+        let frames = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (UInt32, Rect)? in
+            guard entry.scope == scope,
+                  intent.placements[entry.window.id] != nil
+            else { return nil }
+            return (entry.window.id.rawValue, entry.window.frame)
+        })
+        guard frames.count == intent.placements.count else { return true }
+
+        return !hasMatchingIntent(
+            scope: scope,
+            frames: frames,
+            focusedWindowID: snapshot.focusedWindowID,
+            positionTolerance: 16,
+            sizeTolerance: 16,
+            focusedPositionTolerance: 16,
+            focusedSizeTolerance: 16,
+            allowFocusChromeDelta: false
+        )
+    }
+
     func hasValidLayoutIntent(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
         validIntent(for: scope, from: snapshot) != nil
     }
@@ -1072,13 +1145,7 @@ public extension SnapshotService {
     }
 
     private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        displays.contains { display in
-            let visible = display.visibleFrame.cgRect
-            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
-            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
-            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
-            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
-        }
+        HiddenWindowPlacement.isHidden(frame, in: displays)
     }
 
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {

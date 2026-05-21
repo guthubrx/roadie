@@ -26,19 +26,22 @@ public struct WindowCommandService {
     private let resizeStep: CGFloat
     private let mouseFollower: MouseFollower
     private let events: EventLog
+    private let commandActivity: LayoutCommandActivity
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore? = nil,
         resizeStep: CGFloat = 80,
         mouseFollower: MouseFollower = MouseFollower(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        commandActivity: LayoutCommandActivity = .shared
     ) {
         self.service = service
         self.stageStore = stageStore ?? service.effectiveStageStore
         self.resizeStep = resizeStep
         self.mouseFollower = mouseFollower
         self.events = events
+        self.commandActivity = commandActivity
     }
 
     public func focus(_ direction: Direction) -> WindowCommandResult {
@@ -82,6 +85,8 @@ public struct WindowCommandService {
     }
 
     public func move(_ direction: Direction) -> WindowCommandResult {
+        beginLayoutCommand("window.move.\(direction.rawValue)")
+        defer { finishLayoutCommand("window.move.\(direction.rawValue)") }
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
@@ -118,6 +123,8 @@ public struct WindowCommandService {
     }
 
     public func warp(_ direction: Direction) -> WindowCommandResult {
+        beginLayoutCommand("window.warp.\(direction.rawValue)")
+        defer { finishLayoutCommand("window.warp.\(direction.rawValue)") }
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
@@ -153,6 +160,8 @@ public struct WindowCommandService {
     }
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
+        beginLayoutCommand("window.resize.\(direction.rawValue)")
+        defer { finishLayoutCommand("window.resize.\(direction.rawValue)") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
@@ -194,6 +203,8 @@ public struct WindowCommandService {
     }
 
     public func reset() -> WindowCommandResult {
+        beginLayoutCommand("window.reset")
+        defer { finishLayoutCommand("window.reset") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -229,6 +240,8 @@ public struct WindowCommandService {
     }
 
     public func toggleFullscreen() -> WindowCommandResult {
+        beginLayoutCommand("window.toggle_fullscreen")
+        defer { finishLayoutCommand("window.toggle_fullscreen") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -267,6 +280,8 @@ public struct WindowCommandService {
     }
 
     public func toggleNativeFullscreen() -> WindowCommandResult {
+        beginLayoutCommand("window.toggle_native_fullscreen")
+        defer { finishLayoutCommand("window.toggle_native_fullscreen") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot) else {
             return WindowCommandResult(message: "toggle native-fullscreen: no active window", changed: false)
@@ -310,6 +325,8 @@ public struct WindowCommandService {
         to display: DisplaySnapshot,
         focusMovedWindow: Bool
     ) -> WindowCommandResult {
+        beginLayoutCommand("window.display")
+        defer { finishLayoutCommand("window.display") }
         let sourceScope = active.scope
         var initialStageState = stageStore.state()
         let targetDesktopID = initialStageState.currentDesktopID(for: display.id)
@@ -379,7 +396,17 @@ public struct WindowCommandService {
         service.removeLayoutIntent(scope: targetScopeID)
 
         let updatedSnapshot = service.snapshot()
-        let result = service.apply(service.applyPlan(from: updatedSnapshot))
+        let plan = service.applyPlan(from: updatedSnapshot)
+        let result = service.apply(plan)
+        if result.attempted > 0 && result.failed < result.attempted {
+            persistIntentsAfterDisplayMove(
+                from: updatedSnapshot,
+                targetScope: targetScopeID,
+                sourceScope: sourceScope,
+                plan: plan,
+                result: result
+            )
+        }
         if focusMovedWindow {
             _ = focusWindow(active.window)
         }
@@ -410,6 +437,47 @@ public struct WindowCommandService {
         var details = pin.eventDetails
         details["reason"] = "manual_window_move"
         events.append(RoadieEvent(type: "window.pin_removed", scope: targetScope, details: details))
+    }
+
+    private func beginLayoutCommand(_ reason: String) {
+        commandActivity.markActive(reason: reason)
+    }
+
+    private func finishLayoutCommand(_ reason: String) {
+        commandActivity.finish(reason: reason)
+    }
+
+    private func persistIntentsAfterDisplayMove(
+        from snapshot: DaemonSnapshot,
+        targetScope: StageScope,
+        sourceScope: StageScope?,
+        plan: ApplyPlan,
+        result: ApplyResult
+    ) {
+        let scopes = Set([targetScope, sourceScope].compactMap { $0 })
+        guard !scopes.isEmpty else { return }
+        let resultFrames = Dictionary(uniqueKeysWithValues: result.items.compactMap { item -> (WindowID, Rect)? in
+            guard item.status != .failed else { return nil }
+            return (item.windowID, item.actual ?? item.requested)
+        })
+        let plannedFrames = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id, $0.frame) })
+
+        for scope in scopes {
+            guard let stage = snapshot.state.stage(scope: scope) else { continue }
+            var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+                return (entry.window.id, entry.window.frame)
+            })
+            for (id, frame) in plannedFrames where placements[id] != nil {
+                placements[id] = frame
+            }
+            for (id, frame) in resultFrames where placements[id] != nil {
+                placements[id] = frame
+            }
+            let ordered = service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
+            guard Set(placements.keys) == Set(ordered) else { continue }
+            service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
+        }
     }
 
     private func setInitialTransferFrame(_ frame: CGRect, of window: WindowSnapshot) -> (frame: CGRect?, attempts: Int) {

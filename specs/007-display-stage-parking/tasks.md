@@ -143,6 +143,17 @@
 
 ---
 
+## Phase 7 : Récupération tardive des stages parkées
+
+**Objectif**: éviter que de vieilles stages rapatriées restent indéfiniment avec des IDs techniques `parked-*` quand l'écran d'origine ne reviendra probablement plus, tout en gardant une fenêtre de reconnexion rapide.
+
+- [x] T066 Ajouter la raison `parked_stages_recovered` dans `Sources/RoadieDaemon/DisplayParkingService.swift` `(worktree 2026-05-20)`
+- [x] T067 Implémenter la matérialisation des stages parkées anciennes quand l'écran d'origine n'est plus reconnu dans `Sources/RoadieDaemon/DisplayParkingService.swift` `(worktree 2026-05-20)`
+- [x] T068 Préserver les stages parkées fraîches pendant le délai de reconnexion rapide dans `Sources/RoadieDaemon/DisplayParkingService.swift` `(worktree 2026-05-20)`
+- [x] T069 Ajouter les tests `materializesOldParkedStagesWhenOriginDisplayIsNoLongerRecognized`, `materializesMultipleOldParkedStagesInOneTransition` et `keepsFreshParkedStagesTemporaryForFastReconnect` dans `Tests/RoadieDaemonTests/DisplayParkingServiceTests.swift` `(worktree 2026-05-20)`
+
+---
+
 ## Dépendances et ordre d'exécution
 
 ### Dépendances de phases

@@ -2,7 +2,7 @@
 
 **Branche** : `030-window-pins`  
 **Créée le** : 2026-05-11  
-**Statut** : Brouillon  
+**Statut** : Implemented
 **Entrée utilisateur** : "Ajouter des pins de fenêtres depuis le menu contextuel de barre de titre : pin sur une stage du même desktop, pin visible sur toutes les stages du desktop courant, pin visible sur tous les desktops, avec options de retrait du pin et sans re-tiler les fenêtres flottantes."
 
 ## Scénarios Utilisateur & Tests *(obligatoire)*
