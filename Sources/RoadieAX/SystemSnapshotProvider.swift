@@ -283,6 +283,16 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
             let layer = info[kCGWindowLayer as String] as? Int ?? 0
             let alpha = info[kCGWindowAlpha as String] as? Double ?? 1
             let appName = info[kCGWindowOwnerName as String] as? String ?? ""
+
+            // Multi-process roadied (SPEC-011 atomique) : un BorderController dans le
+            // process A ne doit pas considerer le RailPanel d'un process B comme une
+            // fenetre etrangere occluante. Le filtre pid!=currentPID ne suffit plus
+            // quand rail/border/tiler tournent dans des process separes ; on filtre
+            // par appName + bundleID pour exclure toute fenetre appartenant a un
+            // process roadied, quelque soit son PID.
+            if appName == "roadied" || appName == "roadie" {
+                return nil
+            }
             let title = info[kCGWindowName as String] as? String ?? ""
             let app = NSRunningApplication(processIdentifier: pid)
             let bundleID = app?.bundleIdentifier ?? ""
