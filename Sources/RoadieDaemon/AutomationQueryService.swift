@@ -29,6 +29,15 @@ public struct AutomationQueryService {
             return result(name, RestoreSafetyService(eventLog: eventLog).status())
         case "targets":
             return result(name, TargetHintService(service: service, eventLog: eventLog).list())
+        case "components":
+            let entries = ComponentLockFile.registry().map { entry -> AutomationPayload in
+                .object([
+                    "component": .string(entry.component),
+                    "pid": .int(Int(entry.pid)),
+                    "startedAt": .string(ISO8601DateFormatter().string(from: entry.startedAt))
+                ])
+            }
+            return AutomationQueryResult(kind: name, data: .array(entries))
         default:
             break
         }
