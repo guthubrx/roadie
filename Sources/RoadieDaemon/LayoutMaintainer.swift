@@ -33,6 +33,7 @@ public final class LayoutMaintainer {
     private let intervalSeconds: TimeInterval
     private let commandIntentHoldSeconds: TimeInterval
     private let manualResizeDebounceSeconds: TimeInterval
+    private let displayDriftReconcileHoldSeconds: TimeInterval
     private let now: () -> Date
     private let staticRuleEngine: WindowRuleEngine?
     private let store: StageStore
@@ -48,6 +49,7 @@ public final class LayoutMaintainer {
     private var lastCommandIntentAt: Date?
     private var manualResizeApplyAfter: Date?
     private var lastDisplaySignature: String?
+    private var lastDisplayTopologyChangedAt: Date?
     private var displayTopologySettlesUntil: Date?
     private var emittedRuleSkippedKeys: Set<String> = []
     private var emittedRuleAppliedKeys: Set<String> = []
@@ -71,6 +73,7 @@ public final class LayoutMaintainer {
         self.intervalSeconds = intervalSeconds
         self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
         self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
+        self.displayDriftReconcileHoldSeconds = max(8, intervalSeconds * 16)
         self.staticRuleEngine = ruleEngine
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
@@ -87,6 +90,7 @@ public final class LayoutMaintainer {
         let tickNow = now()
         if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
             self.lastDisplaySignature = currentDisplaySignature
+            lastDisplayTopologyChangedAt = tickNow
             displayTopologySettlesUntil = tickNow.addingTimeInterval(max(1.5, intervalSeconds * 4))
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
@@ -1289,7 +1293,15 @@ public final class LayoutMaintainer {
     }
 
     private func reconcileStableVisibleDisplayDrift(in snapshot: DaemonSnapshot) -> MaintenanceTick? {
-        var state = store.state()
+        let tickNow = now()
+        if let lastDisplayTopologyChangedAt,
+           tickNow.timeIntervalSince(lastDisplayTopologyChangedAt) < displayDriftReconcileHoldSeconds
+        {
+            return nil
+        }
+
+        let originalState = store.state()
+        var state = originalState
         var reconciled: [(window: WindowSnapshot, source: StageScope, target: StageScope)] = []
 
         for entry in snapshot.windows {
@@ -1334,6 +1346,41 @@ public final class LayoutMaintainer {
         guard !reconciled.isEmpty else { return nil }
         store.save(state)
 
+        let updatedSnapshot = service.snapshot(followFocus: false)
+        let plan = suppressKnownUnmovableFrames(
+            in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: Set(reconciled.map(\.window.id))),
+            snapshot: updatedSnapshot
+        )
+        let result = service.apply(plan)
+        record(result, from: plan)
+        appendItemEvents(result)
+        if result.failed > 0 {
+            store.save(originalState)
+            lastObservedFrames = scopedFrames(in: snapshot)
+            events.append(RoadieEvent(type: "window.scope_reconcile_failed", details: [
+                "windows": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
+                "commands": String(plan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed),
+                "reason": "frame_apply_failed"
+            ]))
+            events.append(RoadieEvent(type: "layout_apply", details: [
+                "commands": String(plan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed),
+                "reason": "physical_display_reconcile_failed",
+                "priorityWindowIDs": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
+            ]))
+            return MaintenanceTick(
+                commands: plan.commands.count,
+                applied: result.applied,
+                clamped: result.clamped,
+                failed: result.failed
+            )
+        }
+
         for item in reconciled {
             service.removeLayoutIntent(scope: item.source)
             service.removeLayoutIntent(scope: item.target)
@@ -1347,14 +1394,6 @@ public final class LayoutMaintainer {
             ]))
         }
 
-        let updatedSnapshot = service.snapshot(followFocus: false)
-        let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: Set(reconciled.map(\.window.id))),
-            snapshot: updatedSnapshot
-        )
-        let result = service.apply(plan)
-        record(result, from: plan)
-        appendItemEvents(result)
         lastObservedFrames = framesAfterApplying(result, fallback: scopedFrames(in: updatedSnapshot))
         events.append(RoadieEvent(type: "layout_apply", details: [
             "commands": String(plan.commands.count),

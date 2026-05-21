@@ -1499,6 +1499,102 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func failedStableVisibleDisplayDriftDoesNotCommitMembership() throws {
+        let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
+        let window = powerWindow(9, x: 1200, y: 100, width: 300, height: 300, app: "Settings")
+        let stagePath = tempPath("layout-maintainer-physical-display-reconcile-failed")
+        let eventPath = tempPath("layout-maintainer-physical-display-reconcile-failed-events")
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+            ]),
+        ]))
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [leftDisplay, rightDisplay], windowSnapshots: [[window]]),
+            frameWriter: writer,
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store)
+
+        let tick = maintainer.tick()
+        var state = store.state()
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+
+        #expect(tick.failed > 0)
+        #expect(state.scope(displayID: leftDisplay.id).memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(state.scope(displayID: rightDisplay.id).memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(events.contains("\"type\":\"window.scope_reconcile_failed\""))
+        #expect(!events.contains("\"type\":\"window.scope_reconciled_to_physical_display\""))
+    }
+
+    @Test
+    func stableVisibleDisplayDriftIsIgnoredImmediatelyAfterTopologyChange() throws {
+        let initialDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let movedDisplay = powerDisplay("display-a", index: 2, x: 1000)
+        let newDisplay = powerDisplay("display-b", index: 1, x: 0)
+        let window = powerWindow(9, x: 100, y: 100, width: 300, height: 300, app: "Settings")
+        let stagePath = tempPath("layout-maintainer-physical-display-reconcile-topology")
+        let eventPath = tempPath("layout-maintainer-physical-display-reconcile-topology-events")
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: initialDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: newDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+            ]),
+        ]))
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let service = SnapshotService(
+            provider: DynamicDisplaySequenceProvider(
+                displaySnapshots: [[initialDisplay], [newDisplay, movedDisplay], [newDisplay, movedDisplay]],
+                windowSnapshots: [[window], [window], [window]]
+            ),
+            frameWriter: RecordingWriter(),
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            store: store,
+            now: { currentTime }
+        )
+
+        _ = maintainer.tick()
+        currentTime = Date(timeIntervalSince1970: 0.1)
+        _ = maintainer.tick()
+        currentTime = Date(timeIntervalSince1970: 2.0)
+        _ = maintainer.tick()
+
+        var state = store.state()
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(state.scope(displayID: initialDisplay.id).memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(state.scope(displayID: newDisplay.id).memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(!events.contains("\"type\":\"window.scope_reconciled_to_physical_display\""))
+    }
+
+    @Test
     func displayTopologyChangeSuppressesRelayoutUntilSettled() {
         let displayA = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
