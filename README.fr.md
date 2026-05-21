@@ -48,48 +48,73 @@ Si tu veux un window manager macOS généraliste et mature, regarde d’abord ya
 
 Ce n’est pas un tableau de supériorité. Il sert seulement à clarifier le périmètre de Roadie.
 
+Légende : ✅ supporté, ◐ partiel ou plus étroit, ❌ non supporté,
+🧪 expérimental, ⚙️ nécessite un setup supplémentaire ou un outil externe.
+
+### Layout Et Contrôle Des Fenêtres
+
 | Fonctionnalité | yabai | AeroSpace | Roadie |
 |---|---:|---:|---:|
-| Tiling BSP | oui | oui | oui |
-| Arbre de tiling modifiable par l'utilisateur | oui | oui | partiel |
-| Layout master-stack | partiel | oui | oui |
-| Mode float | oui | oui | oui |
-| Contrôle des Spaces macOS natifs | oui, avec configuration système supplémentaire | non | non |
-| Création/destruction/déplacement des Spaces macOS natifs | oui, avec configuration système supplémentaire | non | non |
-| Desktops virtuels sans Spaces natifs | non | oui | oui |
-| Stages nommées dans un desktop | non | non | oui |
-| Nav rail avec thumbnails | non | non | oui |
-| Navigation et réordonnancement visibles des stages | non | non | oui |
-| Parking d'écran et restauration au rebranchement | non | partiel | oui |
-| Tiling multi-écran | oui | oui | oui |
-| Déplacement de workspace/stage vers un autre écran | oui | oui | oui |
-| Rules de fenêtres et placement automatique | oui | oui, via callbacks | oui |
-| Effets riches dans les rules | oui | partiel | partiel |
-| Placement de fenêtre sur grille | oui | non | non |
-| Point d'insertion de fenêtre | oui | non | partiel |
-| Actions contextuelles sur barre de titre | non | non | oui |
-| Layout stack/tab/accordion | oui, stack | oui, accordion | partiel, groupes seulement |
-| Fenêtres scratchpad | oui | non | partiel |
-| Commandes power-user sur l'arbre | oui | oui | partiel |
-| Hotkeys intégrées | non, `skhd` externe | oui | non, BTT/Karabiner externe |
-| Binding modes | non | oui | non |
-| Callbacks de configuration | config shell/signals | oui | partiel |
-| Reload déclaratif de configuration | config shell | oui | oui |
-| Focus follows mouse | oui | oui | oui |
-| Bordure de focus overlay | non | non | oui |
-| Toggles opacity/layers/PiP/shadow | oui, avec configuration système supplémentaire | non | non |
-| Aides fullscreen natif | oui | oui | partiel |
-| Awareness Mission Control | oui | partiel | partiel |
-| Labels clavier de cibles | non | non | oui |
-| Découverte des zones applicatives | non | non | expérimental |
-| Grille récursive écran | non | non | expérimental |
-| Grille récursive fenêtre focusée | non | non | expérimental |
-| Record/replay de macros courtes | non | non | expérimental |
-| Query API JSON stable | oui | oui | oui |
-| Flux d'événements automation | oui, signals | oui, subscribe | oui, JSONL |
-| Usage CLI-first | oui | oui | oui |
+| Tiling BSP | ✅ | ✅ | ✅ |
+| Arbre de tiling modifiable par l'utilisateur | ✅ | ✅ | ◐ |
+| Layout master-stack | ◐ | ✅ | ✅ |
+| Mode float | ✅ | ✅ | ✅ |
+| Placement de fenêtre sur grille | ✅ | ❌ | ❌ |
+| Point d'insertion de fenêtre | ✅ | ❌ | ◐ |
+| Layout stack/tab/accordion | ✅ stack | ✅ accordion | ◐ groupes seulement |
+| Fenêtres scratchpad | ✅ | ❌ | ◐ |
+| Commandes power-user sur l'arbre | ✅ | ✅ | ◐ |
 
-`partiel` signifie que Roadie a une version plus étroite ou moins mature de la
+### Desktops, Stages Et Écrans
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Contrôle des Spaces macOS natifs | ✅ ⚙️ | ❌ | ❌ |
+| Création/destruction/déplacement des Spaces macOS natifs | ✅ ⚙️ | ❌ | ❌ |
+| Desktops virtuels sans Spaces natifs | ❌ | ✅ | ✅ |
+| Stages nommées dans un desktop | ❌ | ❌ | ✅ |
+| Nav rail avec thumbnails | ❌ | ❌ | ✅ |
+| Navigation et réordonnancement visibles des stages | ❌ | ❌ | ✅ |
+| Parking d'écran et restauration au rebranchement | ❌ | ◐ | ✅ |
+| Tiling multi-écran | ✅ | ✅ | ✅ |
+| Déplacement de workspace/stage vers un autre écran | ✅ | ✅ | ✅ |
+| Awareness Mission Control | ✅ | ◐ | ◐ |
+
+### Rules, Automatisation Et Configuration
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Rules de fenêtres et placement automatique | ✅ | ✅ callbacks | ✅ |
+| Effets riches dans les rules | ✅ | ◐ | ◐ |
+| Hotkeys intégrées | ❌ ⚙️ `skhd` | ✅ | ❌ ⚙️ BTT/Karabiner |
+| Binding modes | ❌ | ✅ | ❌ |
+| Callbacks de configuration | ✅ signals | ✅ | ◐ |
+| Reload déclaratif de configuration | ◐ shell | ✅ | ✅ |
+| Query API JSON stable | ✅ | ✅ | ✅ |
+| Flux d'événements automation | ✅ signals | ✅ subscribe | ✅ JSONL |
+| Usage CLI-first | ✅ | ✅ | ✅ |
+
+### Focus Et Comportement Visuel
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Focus follows mouse | ✅ | ✅ | ✅ |
+| Bordure de focus overlay | ❌ | ❌ | ✅ |
+| Toggles opacity/layers/PiP/shadow | ✅ ⚙️ | ❌ | ❌ |
+| Aides fullscreen natif | ✅ | ✅ | ◐ |
+| Actions contextuelles sur barre de titre | ❌ | ❌ | ✅ |
+
+### Cibles Clavier Et Grilles
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Labels clavier de cibles | ❌ | ❌ | ✅ |
+| Découverte des zones applicatives | ❌ | ❌ | 🧪 |
+| Grille récursive écran | ❌ | ❌ | 🧪 |
+| Grille récursive fenêtre focusée | ❌ | ❌ | 🧪 |
+| Record/replay de macros courtes | ❌ | ❌ | 🧪 |
+
+`◐` signifie que Roadie a une version plus étroite ou moins mature de la
 fonctionnalité, pas une parité complète avec yabai ou AeroSpace.
 
 Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour découvrir et déplacer les fenêtres, et Enregistrement d’écran uniquement pour les thumbnails du rail.

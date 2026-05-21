@@ -48,49 +48,74 @@ If you need a mature general-purpose macOS WM, look at yabai or AeroSpace first.
 
 This is not a superiority table. It is only meant to make Roadie's scope clear.
 
+Legend: ✅ supported, ◐ partial or narrower, ❌ not supported, 🧪 experimental,
+⚙️ requires extra setup or an external companion tool.
+
+### Layout And Window Control
+
 | Feature | yabai | AeroSpace | Roadie |
 |---|---:|---:|---:|
-| BSP tiling | yes | yes | yes |
-| User-mutable tiling tree | yes | yes | partial |
-| Master-stack layout | partial | yes | yes |
-| Float mode | yes | yes | yes |
-| Native macOS Spaces control | yes, with extra system setup | no | no |
-| Create/destroy/move native macOS Spaces | yes, with extra system setup | no | no |
-| Virtual desktops without native Spaces | no | yes | yes |
-| Named stages inside a desktop | no | no | yes |
-| Stage rail with thumbnails | no | no | yes |
-| Visible stage navigation and reorder | no | no | yes |
-| Display parking and reconnect recovery | no | partial | yes |
-| Multi-display tiling | yes | yes | yes |
-| Move workspace/stage to another display | yes | yes | yes |
-| Window rules and automatic placement | yes | yes, via callbacks | yes |
-| Rich rule effects | yes | partial | partial |
-| Window grid placement | yes | no | no |
-| Window insert point | yes | no | partial |
-| Title-bar context actions | no | no | yes |
-| Stack/tab/accordion layout | yes, stack | yes, accordion | partial, groups only |
-| Scratchpad windows | yes | no | partial |
-| Power-user tree commands | yes | yes | partial |
-| Integrated hotkeys | no, external `skhd` | yes | no, external BTT/Karabiner |
-| Binding modes | no | yes | no |
-| Config callbacks | shell config/signals | yes | partial |
-| Declarative config reload | shell config | yes | yes |
-| Focus follows mouse | yes | yes | yes |
-| Focus border overlay | no | no | yes |
-| Window opacity/layers/PiP/shadow toggles | yes, with extra system setup | no | no |
-| Native fullscreen helpers | yes | yes | partial |
-| Mission Control awareness | yes | partial | partial |
-| Keyboard target labels | no | no | yes |
-| App element target discovery | no | no | experimental |
-| Recursive display grid | no | no | experimental |
-| Recursive focused-window grid | no | no | experimental |
-| Short macro record/replay | no | no | experimental |
-| Stable JSON query API | yes | yes | yes |
-| Automation event stream | yes, signals | yes, subscribe | yes, JSONL |
-| CLI-first operation | yes | yes | yes |
+| BSP tiling | ✅ | ✅ | ✅ |
+| User-mutable tiling tree | ✅ | ✅ | ◐ |
+| Master-stack layout | ◐ | ✅ | ✅ |
+| Float mode | ✅ | ✅ | ✅ |
+| Window grid placement | ✅ | ❌ | ❌ |
+| Window insert point | ✅ | ❌ | ◐ |
+| Stack/tab/accordion layout | ✅ stack | ✅ accordion | ◐ groups only |
+| Scratchpad windows | ✅ | ❌ | ◐ |
+| Power-user tree commands | ✅ | ✅ | ◐ |
 
-`partial` means Roadie has a narrower or less mature version of the feature, not
-full parity with yabai or AeroSpace.
+### Workspaces, Stages, And Displays
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Native macOS Spaces control | ✅ ⚙️ | ❌ | ❌ |
+| Create/destroy/move native macOS Spaces | ✅ ⚙️ | ❌ | ❌ |
+| Virtual desktops without native Spaces | ❌ | ✅ | ✅ |
+| Named stages inside a desktop | ❌ | ❌ | ✅ |
+| Stage rail with thumbnails | ❌ | ❌ | ✅ |
+| Visible stage navigation and reorder | ❌ | ❌ | ✅ |
+| Display parking and reconnect recovery | ❌ | ◐ | ✅ |
+| Multi-display tiling | ✅ | ✅ | ✅ |
+| Move workspace/stage to another display | ✅ | ✅ | ✅ |
+| Mission Control awareness | ✅ | ◐ | ◐ |
+
+### Rules, Automation, And Configuration
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Window rules and automatic placement | ✅ | ✅ callbacks | ✅ |
+| Rich rule effects | ✅ | ◐ | ◐ |
+| Integrated hotkeys | ❌ ⚙️ `skhd` | ✅ | ❌ ⚙️ BTT/Karabiner |
+| Binding modes | ❌ | ✅ | ❌ |
+| Config callbacks | ✅ signals | ✅ | ◐ |
+| Declarative config reload | ◐ shell | ✅ | ✅ |
+| Stable JSON query API | ✅ | ✅ | ✅ |
+| Automation event stream | ✅ signals | ✅ subscribe | ✅ JSONL |
+| CLI-first operation | ✅ | ✅ | ✅ |
+
+### Focus And Visual Behavior
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Focus follows mouse | ✅ | ✅ | ✅ |
+| Focus border overlay | ❌ | ❌ | ✅ |
+| Window opacity/layers/PiP/shadow toggles | ✅ ⚙️ | ❌ | ❌ |
+| Native fullscreen helpers | ✅ | ✅ | ◐ |
+| Title-bar context actions | ❌ | ❌ | ✅ |
+
+### Keyboard Targeting And Grids
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Keyboard target labels | ❌ | ❌ | ✅ |
+| App element target discovery | ❌ | ❌ | 🧪 |
+| Recursive display grid | ❌ | ❌ | 🧪 |
+| Recursive focused-window grid | ❌ | ❌ | 🧪 |
+| Short macro record/replay | ❌ | ❌ | 🧪 |
+
+`◐` means Roadie has a narrower or less mature version of the feature, not full
+parity with yabai or AeroSpace.
 
 Roadie does not require disabling SIP. It uses Accessibility for window discovery and movement, and Screen Recording only for rail thumbnails.
 
