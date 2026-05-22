@@ -1,0 +1,43 @@
+{
+  "cycle": 1,
+  "mode": "fix",
+  "scope": "SPEC-013 (013-persistent-bsp-tree)",
+  "summary": {"critical": 0, "high": 0, "medium": 0, "low": 1, "info": 2, "total": 3},
+  "findings": [
+    {
+      "id": "P1",
+      "severity": "info",
+      "category": "performance",
+      "file": "Sources/RoadieTiler/BSPTree.swift",
+      "title": "inserting O(n^2) au pire, n borne documente",
+      "description": "inserting fait un contains par niveau pendant la descente (O(n^2) arbre degenere), reconciled O(k*n). n = fenetres d'un stage, borne par construction (<20, plafond ~50). Hors hot path serre. Commentaire de complexite Article XVIII ajoute documentant le compromis lisibilite/perf.",
+      "status": "compliant"
+    },
+    {
+      "id": "R1",
+      "severity": "low",
+      "category": "robustness",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "title": "reconciledBSPTree persiste a chaque layoutPlan si l'arbre change",
+      "description": "reconciledBSPTree peut etre appele plusieurs fois par tick (layoutPlan multiple). La persistance n'a lieu que si l'arbre change ET persistStateChanges (writer), donc bornee et sure (flock SPEC-011). Acceptable. A surveiller si layoutPlan devient tres frequent.",
+      "status": "noted"
+    },
+    {
+      "id": "INFO2",
+      "severity": "info",
+      "category": "quality",
+      "file": "Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "title": "Repli equilibre si arbre desynchronise",
+      "description": "Filet de securite : si l'arbre ne couvre pas exactement les fenetres demandees, repli sur BSPTree.balanced. Evite toute fenetre non placee en cas d'incoherence transitoire. Bon pattern defensif.",
+      "status": "resolved"
+    }
+  ],
+  "complexity_audit_article_xviii": {
+    "patterns_scanned": ["double_nested_loop", "linear_search_in_loop", "n_plus_1", "repeated_sort", "non_memoized_recursion"],
+    "findings_count": 1,
+    "compliant_count": 1,
+    "note": "BSPTree.inserting/reconciled : complexite documentee, n borne par construction. Conforme Article XVIII §4."
+  },
+  "build_status": {"roadied": "ok", "roadie": "ok"},
+  "tests_status": {"full_suite": {"total": 455, "passed": 455, "failed": 0}}
+}

@@ -1,0 +1,15 @@
+{
+  "grade": "A",
+  "date": "2026-05-22",
+  "spec": "013",
+  "scope": "SPEC-013 (013-persistent-bsp-tree)",
+  "domains": {
+    "security": "A",
+    "complexity_article_xviii": "A",
+    "quality": "A",
+    "tests": "A",
+    "robustness": "A-",
+    "performance": "A"
+  },
+  "summary": {"total_findings": 3, "criticals": 0, "highs": 0, "mediums": 0, "lows": 1, "infos": 2}
+}
