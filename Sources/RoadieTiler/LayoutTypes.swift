@@ -8,6 +8,12 @@ public struct LayoutRequest: Equatable, Sendable {
     public var windowIDs: [WindowID]
     public var currentFrames: [WindowID: CGRect]
     public var priorityWindowIDs: Set<WindowID>
+    /// Fenetres tout juste decouvertes (isNewlyScoped). Leur `currentFrame` est la
+    /// position arbitraire attribuee par macOS a la creation : elle NE DOIT PAS servir
+    /// de base au calcul du ratio de split, sinon la nouvelle fenetre herite d'une
+    /// taille aleatoire (bug observe : 13% de l'ecran au lieu de 50%). Tout split
+    /// impliquant une de ces fenetres defaute a 50/50.
+    public var newWindowIDs: Set<WindowID>
     public var splitPolicy: String
     public var outerGaps: Insets
     public var innerGap: Double
@@ -19,6 +25,7 @@ public struct LayoutRequest: Equatable, Sendable {
         windowIDs: [WindowID],
         currentFrames: [WindowID: CGRect] = [:],
         priorityWindowIDs: Set<WindowID> = [],
+        newWindowIDs: Set<WindowID> = [],
         splitPolicy: String = "balanced",
         outerGaps: Insets = .zero,
         innerGap: Double = 0
@@ -29,6 +36,7 @@ public struct LayoutRequest: Equatable, Sendable {
         self.windowIDs = windowIDs
         self.currentFrames = currentFrames
         self.priorityWindowIDs = priorityWindowIDs
+        self.newWindowIDs = newWindowIDs
         self.splitPolicy = splitPolicy
         self.outerGaps = outerGaps
         self.innerGap = max(0, innerGap)

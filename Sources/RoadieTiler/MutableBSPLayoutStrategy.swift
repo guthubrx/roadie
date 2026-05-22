@@ -17,6 +17,7 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
             innerGap: CGFloat(request.innerGap),
             currentFrames: request.currentFrames,
             priorityWindowIDs: request.priorityWindowIDs,
+            newWindowIDs: request.newWindowIDs,
             splitPolicy: request.splitPolicy,
             placements: &placements
         )
@@ -29,6 +30,7 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
         innerGap: CGFloat,
         currentFrames: [WindowID: CGRect],
         priorityWindowIDs: Set<WindowID>,
+        newWindowIDs: Set<WindowID>,
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
@@ -58,14 +60,15 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
                 horizontal: true,
                 innerGap: gap,
                 currentFrames: currentFrames,
-                priorityWindowIDs: priorityWindowIDs
+                priorityWindowIDs: priorityWindowIDs,
+                newWindowIDs: newWindowIDs
             )
             let leftWidth = floor(usableWidth * ratio)
             let rightWidth = usableWidth - leftWidth
             let leftRect = CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height)
             let rightRect = CGRect(x: rect.minX + leftWidth + gap, y: rect.minY, width: rightWidth, height: rect.height)
-            split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, splitPolicy: splitPolicy, placements: &placements)
-            split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+            split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+            split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
         } else {
             let gap = max(innerGap, titleBarSeamGap)
             let usableHeight = max(0, rect.height - gap)
@@ -76,14 +79,15 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
                 horizontal: false,
                 innerGap: gap,
                 currentFrames: currentFrames,
-                priorityWindowIDs: priorityWindowIDs
+                priorityWindowIDs: priorityWindowIDs,
+                newWindowIDs: newWindowIDs
             )
             let topHeight = floor(usableHeight * ratio)
             let bottomHeight = usableHeight - topHeight
             let topRect = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: topHeight)
             let bottomRect = CGRect(x: rect.minX, y: rect.minY + topHeight + gap, width: rect.width, height: bottomHeight)
-            split(windows: leftWindows, rect: topRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, splitPolicy: splitPolicy, placements: &placements)
-            split(windows: rightWindows, rect: bottomRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+            split(windows: leftWindows, rect: topRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
+            split(windows: rightWindows, rect: bottomRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
         }
     }
 
@@ -94,8 +98,24 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
         horizontal: Bool,
         innerGap: CGFloat,
         currentFrames: [WindowID: CGRect],
-        priorityWindowIDs: Set<WindowID>
+        priorityWindowIDs: Set<WindowID>,
+        newWindowIDs: Set<WindowID>
     ) -> CGFloat {
+        // Une nouvelle fenetre n'a pas de taille "voulue" : sa frame courante est la
+        // position arbitraire de macOS. On split donc 50/50 plutot que d'heriter de
+        // cette frame. Exception : si un resize explicite (priority) est en cours dans
+        // ce split, on laisse le calcul priority habituel (le resize gagne, meme si
+        // l'autre cote est une nouvelle fenetre).
+        let anyPriority = left.contains { priorityWindowIDs.contains($0) }
+            || right.contains { priorityWindowIDs.contains($0) }
+        if !anyPriority {
+            let leftHasNew = left.contains { newWindowIDs.contains($0) }
+            let rightHasNew = right.contains { newWindowIDs.contains($0) }
+            if leftHasNew || rightHasNew {
+                return 0.5
+            }
+        }
+
         guard let leftFrame = unionFrame(for: left, in: currentFrames),
               let rightFrame = unionFrame(for: right, in: currentFrames)
         else { return 0.5 }
