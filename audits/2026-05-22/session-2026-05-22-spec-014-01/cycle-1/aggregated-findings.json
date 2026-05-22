@@ -1,0 +1,33 @@
+{
+  "cycle": 1,
+  "mode": "fix",
+  "scope": "SPEC-014 (014-bsp-tree-manipulation)",
+  "summary": {"critical": 0, "high": 0, "medium": 0, "low": 0, "info": 2, "total": 2},
+  "findings": [
+    {
+      "id": "INFO1",
+      "severity": "info",
+      "category": "performance",
+      "file": "Sources/RoadieTiler/BSPTree.swift",
+      "title": "swapping/warping/resizing O(n) sur l'arbre, n borne",
+      "description": "Operations recursives O(n) feuilles (swapping/relabelling, resizing). warping = removing+inserting O(n). n borne par fenetres d'un stage. Hors hot path serre (commandes utilisateur ponctuelles). Conforme Article XVIII.",
+      "status": "compliant"
+    },
+    {
+      "id": "INFO2",
+      "severity": "info",
+      "category": "quality",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "title": "Branchement isSpatialBSP isole, modes existants intacts",
+      "description": "move/warp/resize verifient isSpatialBSP(scope:) avant de basculer sur l'arbre ; le chemin mutableBsp est inchange. applyBSPTreeMutation centralise persistance + invalidation d'intent. Bon pattern.",
+      "status": "resolved"
+    }
+  ],
+  "complexity_audit_article_xviii": {
+    "patterns_scanned": ["double_nested_loop", "linear_search_in_loop", "non_memoized_recursion", "repeated_sort"],
+    "findings_count": 0,
+    "note": "Operations d'arbre O(n) n borne, hors hot path. Conforme."
+  },
+  "build_status": {"roadied": "ok", "roadie": "ok"},
+  "tests_status": {"full_suite": {"total": 465, "passed": 465, "failed": 0}}
+}
