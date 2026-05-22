@@ -92,52 +92,56 @@ private func runComponent(_ name: String, start: () -> Void) -> Never {
     exit(0)
 }
 
-switch args.first {
-case "run":
-    guard args.contains("--yes") else {
-        fputs("roadied: refusing to maintain layout without --yes\n", stderr)
-        exit(2)
-    }
-    let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
-    let ticks = value(after: "--ticks").flatMap(Int.init)
-    let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
-    let shouldStartTiler = !args.contains("--no-tiler")
-    let shouldStartRail = !args.contains("--no-rail")
-    let shouldStartBorder = !args.contains("--no-border")
-    let shouldStartFocusMouse = !args.contains("--no-focus-mouse")
-    let shouldStartTitlebarMenu = !args.contains("--no-titlebar-menu")
-    let shouldStartTargetMode = !args.contains("--no-target-mode")
-    let shouldStartRestoreSafety = !args.contains("--no-restore-safety")
-    let interval = max(100, intervalMs) / 1000
-    let maintainer = LayoutMaintainer(intervalSeconds: interval)
-    let restoreSafety = RestoreSafetyService(service: service)
+// MARK: - Fonctions de démarrage des composants (source unique, SPEC-012)
+//
+// Chaque composant a UNE seule fonction de démarrage, appelée à la fois par le mode
+// monolithique (`run`) et par sa sous-commande modulaire. Cela élimine la duplication
+// qui causait des divergences de comportement entre les deux modes (SPEC-011).
+
+@MainActor
+func startRailComponent() {
+    railController = RailController()
+    railController?.start()
+}
+
+@MainActor
+func startBorderComponent() {
+    borderController = BorderController()
+    borderController?.start()
+}
+
+@MainActor
+func startFocusMouseComponent() {
+    focusFollowsMouseController = FocusFollowsMouseController()
+    focusFollowsMouseController?.start()
+}
+
+@MainActor
+func startTitlebarMenuComponent() {
+    titlebarContextMenuController = TitlebarContextMenuController()
+    titlebarContextMenuController?.start()
+}
+
+@MainActor
+func startTargetModeComponent() {
+    targetModeRuntimeController = TargetModeRuntimeController(service: service)
+    targetModeRuntimeController?.start()
+}
+
+@MainActor
+func startRestoreSafetyComponent() {
+    let safetyService = RestoreSafetyService(service: service)
     let pid = ProcessInfo.processInfo.processIdentifier
-    var reportedAccessibilityDenied = false
-    var restoreSafetyController: RestoreSafetyRuntimeController?
-    if shouldStartRestoreSafety {
-        restoreSafetyController = RestoreSafetyRuntimeController(service: restoreSafety, pid: pid)
-        restoreSafetyController?.start()
-    }
-    if shouldStartRail {
-        railController = RailController()
-        railController?.start()
-    }
-    if shouldStartBorder {
-        borderController = BorderController()
-        borderController?.start()
-    }
-    if shouldStartFocusMouse {
-        focusFollowsMouseController = FocusFollowsMouseController()
-        focusFollowsMouseController?.start()
-    }
-    if shouldStartTitlebarMenu {
-        titlebarContextMenuController = TitlebarContextMenuController()
-        titlebarContextMenuController?.start()
-    }
-    if shouldStartTargetMode {
-        targetModeRuntimeController = TargetModeRuntimeController(service: service)
-        targetModeRuntimeController?.start()
-    }
+    let controller = RestoreSafetyRuntimeController(service: safetyService, pid: pid)
+    controller.start()
+}
+
+/// Au changement de paramètres d'écran (display branché/débranché), planifie un
+/// "parking heal" : `DaemonHealthService.heal()` migre les fenêtres des écrans
+/// disparus vers un écran présent. Sans cet observer, les fenêtres d'un écran
+/// déconnecté restent orphelines (floating) indéfiniment.
+@MainActor
+func installDisplayChangeObserver(displaySettleSeconds: Double) {
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,
@@ -158,82 +162,110 @@ case "run":
             }
         }
     }
+}
 
-    if shouldStartTiler {
-        let target = MaintenanceTimerTarget(
-            maintainer: maintainer,
-            maxTicks: ticks,
-            shouldTick: { Date() >= displaySettlingUntil }
-        ) { tick in
-            if tick.accessibilityDenied {
-                if !reportedAccessibilityDenied {
-                    fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
-                    fflush(stderr)
-                    reportedAccessibilityDenied = true
-                }
-                return
-            }
-            reportedAccessibilityDenied = false
-            if tick.commands > 0 || tick.failed > 0 {
-                print("commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)")
-                fflush(stdout)
-            }
-        }
-        let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
-        RunLoop.main.add(timer, forMode: .common)
+/// Démarre le tiler : observer d'écran + timer de polling + voie rapide AX.
+/// La voie rapide re-tile en ~15-80ms dès qu'une fenêtre apparaît/change, sans
+/// attendre le prochain tick de polling.
+@MainActor
+func startTilerComponent(interval: Double, ticks: Int?, displaySettleSeconds: Double, enableLiveEvents: Bool) {
+    installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds)
 
-        // Live re-evaluation : declenche un tick() supplementaire des qu'AX nous notifie d'un
-        // changement de fenetre, sans attendre le prochain polling tick. Les changements de
-        // focus (AltTab/clic externe) ont une voie rapide ; les autres evenements restent
-        // coalesces plus largement pour eviter les rafales AX.
-        let liveEvents = EventLog()
-        var pendingLiveTick: DispatchWorkItem?
-        var lastLiveTickAt: Date = .distantPast
-        let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
-        let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
-        let fastNotifications: Set<String> = [
-            kAXWindowCreatedNotification as String,
-            kAXFocusedWindowChangedNotification as String,
-            kAXMainWindowChangedNotification as String,
-            kAXWindowDeminiaturizedNotification as String,
-            kAXUIElementDestroyedNotification as String,
-        ]
-        let liveObserver = AXWindowEventObserver { notification in
-            let isFastEvent = fastNotifications.contains(notification)
-            if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
-            pendingLiveTick?.cancel()
-            let requestedAt = Date()
-            let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
-            let item = DispatchWorkItem {
-                pendingLiveTick = nil
-                let beforeTick = Date()
-                let tick = target.performTick(timer)
-                lastLiveTickAt = Date()
-                if isFastEvent || tick.commands > 0 || tick.failed > 0 {
-                    liveEvents.append(RoadieEvent(type: "live_tick", details: [
-                        "notification": notification,
-                        "fast": String(isFastEvent),
-                        "delayMs": String(format: "%.1f", delayMs),
-                        "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
-                        "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
-                        "commands": String(tick.commands),
-                        "applied": String(tick.applied),
-                        "failed": String(tick.failed),
-                    ]))
-                }
+    let maintainer = LayoutMaintainer(intervalSeconds: interval)
+    var reportedAccessibilityDenied = false
+    let target = MaintenanceTimerTarget(
+        maintainer: maintainer,
+        maxTicks: ticks,
+        shouldTick: { Date() >= displaySettlingUntil }
+    ) { tick in
+        if tick.accessibilityDenied {
+            if !reportedAccessibilityDenied {
+                fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
+                fflush(stderr)
+                reportedAccessibilityDenied = true
             }
-            pendingLiveTick = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
+            return
         }
-        if !args.contains("--no-live-events") {
-            liveObserver.start()
+        reportedAccessibilityDenied = false
+        if tick.commands > 0 || tick.failed > 0 {
+            print("commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)")
+            fflush(stdout)
         }
-    } else {
-        // Sans tiler, on garde le maintainer instancie pour ne pas casser les references
-        // (les autres controleurs peuvent dependre indirectement de SnapshotService partage)
-        // mais on ne demarre ni timer ni AX observer.
-        _ = maintainer
-        _ = restoreSafety
+    }
+    let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
+    RunLoop.main.add(timer, forMode: .common)
+
+    guard enableLiveEvents else { return }
+    let liveEvents = EventLog()
+    var pendingLiveTick: DispatchWorkItem?
+    var lastLiveTickAt: Date = .distantPast
+    let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
+    let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
+    let fastNotifications: Set<String> = [
+        kAXWindowCreatedNotification as String,
+        kAXFocusedWindowChangedNotification as String,
+        kAXMainWindowChangedNotification as String,
+        kAXWindowDeminiaturizedNotification as String,
+        kAXUIElementDestroyedNotification as String,
+    ]
+    let liveObserver = AXWindowEventObserver { notification in
+        let isFastEvent = fastNotifications.contains(notification)
+        if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
+        pendingLiveTick?.cancel()
+        let requestedAt = Date()
+        let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
+        let item = DispatchWorkItem {
+            pendingLiveTick = nil
+            let beforeTick = Date()
+            let tick = target.performTick(timer)
+            lastLiveTickAt = Date()
+            if isFastEvent || tick.commands > 0 || tick.failed > 0 {
+                liveEvents.append(RoadieEvent(type: "live_tick", details: [
+                    "notification": notification,
+                    "fast": String(isFastEvent),
+                    "delayMs": String(format: "%.1f", delayMs),
+                    "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
+                    "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
+                    "commands": String(tick.commands),
+                    "applied": String(tick.applied),
+                    "failed": String(tick.failed),
+                ]))
+            }
+        }
+        pendingLiveTick = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
+    }
+    liveObserver.start()
+    tilerLiveObserver = liveObserver
+}
+
+switch args.first {
+case "run":
+    guard args.contains("--yes") else {
+        fputs("roadied: refusing to maintain layout without --yes\n", stderr)
+        exit(2)
+    }
+    let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
+    let ticks = value(after: "--ticks").flatMap(Int.init)
+    let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
+    let interval = max(100, intervalMs) / 1000
+
+    // Démarrage des composants via les fonctions uniques partagées avec le mode modulaire
+    // (SPEC-012). Ordre historique préservé. Chaque composant est actif par défaut,
+    // désactivable via son flag --no-*.
+    if !args.contains("--no-restore-safety") { startRestoreSafetyComponent() }
+    if !args.contains("--no-rail") { startRailComponent() }
+    if !args.contains("--no-border") { startBorderComponent() }
+    if !args.contains("--no-focus-mouse") { startFocusMouseComponent() }
+    if !args.contains("--no-titlebar-menu") { startTitlebarMenuComponent() }
+    if !args.contains("--no-target-mode") { startTargetModeComponent() }
+    if !args.contains("--no-tiler") {
+        startTilerComponent(
+            interval: interval,
+            ticks: ticks,
+            displaySettleSeconds: displaySettleSeconds,
+            enableLiveEvents: !args.contains("--no-live-events")
+        )
     }
     NSApplication.shared.run()
 case "tiler":
@@ -246,134 +278,25 @@ case "tiler":
     let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
     let interval = max(100, intervalMs) / 1000
     runComponent("tiler") {
-        let maintainer = LayoutMaintainer(intervalSeconds: interval)
-        var reportedAccessibilityDenied = false
-        // Au changement de parametres d'ecran (display branche/debranche), planifie un
-        // "parking heal" : DaemonHealthService.heal() migre les fenetres des ecrans
-        // disparus vers un ecran present. Indispensable en mode modulaire SPEC-011 ou la
-        // sous-commande tiler est le seul writer : sans cet observer, les fenetres d'un
-        // ecran deconnecte restent orphelines (floating) indefiniment.
-        displayChangeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { _ in
-            Task { @MainActor in
-                displaySettlingUntil = Date().addingTimeInterval(displaySettleSeconds)
-                pendingDisplayHeal?.cancel()
-                pendingDisplayHeal = Task { @MainActor in
-                    let nanoseconds = UInt64(displaySettleSeconds * 1_000_000_000)
-                    try? await Task.sleep(nanoseconds: nanoseconds)
-                    guard !Task.isCancelled else { return }
-                    pendingDisplayHeal = nil
-                    displaySettlingUntil = .distantPast
-                    let report = DaemonHealthService().heal()
-                    print("display-change-heal parking=\(report.parking.kind.rawValue)/\(report.parking.reason.rawValue) state=\(report.state.repaired) layout=\(report.layout.attempted) failed=\(report.failed)")
-                    fflush(stdout)
-                }
-            }
-        }
-        let target = MaintenanceTimerTarget(
-            maintainer: maintainer,
-            maxTicks: ticks,
-            shouldTick: { Date() >= displaySettlingUntil }
-        ) { tick in
-            if tick.accessibilityDenied {
-                if !reportedAccessibilityDenied {
-                    fputs("roadied tiler: accessibilityTrusted=false\n", stderr)
-                    reportedAccessibilityDenied = true
-                }
-                return
-            }
-            reportedAccessibilityDenied = false
-            if tick.commands > 0 || tick.failed > 0 {
-                print("commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)")
-                fflush(stdout)
-            }
-        }
-        let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
-        RunLoop.main.add(timer, forMode: .common)
-
-        // Voie rapide AX : re-tile des qu'une fenetre apparait/change, sans attendre le
-        // prochain tick de polling (jusqu'a `interval`). Sans cela, en mode modulaire, une
-        // nouvelle fenetre reste visible a sa position macOS jusqu'au prochain polling.
-        // Identique au mode monolithique (case "run").
-        let liveEvents = EventLog()
-        var pendingLiveTick: DispatchWorkItem?
-        var lastLiveTickAt: Date = .distantPast
-        let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
-        let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
-        let fastNotifications: Set<String> = [
-            kAXWindowCreatedNotification as String,
-            kAXFocusedWindowChangedNotification as String,
-            kAXMainWindowChangedNotification as String,
-            kAXWindowDeminiaturizedNotification as String,
-            kAXUIElementDestroyedNotification as String,
-        ]
-        let liveObserver = AXWindowEventObserver { notification in
-            let isFastEvent = fastNotifications.contains(notification)
-            if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
-            pendingLiveTick?.cancel()
-            let requestedAt = Date()
-            let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
-            let item = DispatchWorkItem {
-                pendingLiveTick = nil
-                let beforeTick = Date()
-                let tick = target.performTick(timer)
-                lastLiveTickAt = Date()
-                if isFastEvent || tick.commands > 0 || tick.failed > 0 {
-                    liveEvents.append(RoadieEvent(type: "live_tick", details: [
-                        "notification": notification,
-                        "fast": String(isFastEvent),
-                        "delayMs": String(format: "%.1f", delayMs),
-                        "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
-                        "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
-                        "commands": String(tick.commands),
-                        "applied": String(tick.applied),
-                        "failed": String(tick.failed),
-                    ]))
-                }
-            }
-            pendingLiveTick = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
-        }
-        if !args.contains("--no-live-events") {
-            liveObserver.start()
-            tilerLiveObserver = liveObserver
-        }
+        startTilerComponent(
+            interval: interval,
+            ticks: ticks,
+            displaySettleSeconds: displaySettleSeconds,
+            enableLiveEvents: !args.contains("--no-live-events")
+        )
     }
 case "rail":
-    runComponent("rail") {
-        railController = RailController()
-        railController?.start()
-    }
+    runComponent("rail") { startRailComponent() }
 case "border":
-    runComponent("border") {
-        borderController = BorderController()
-        borderController?.start()
-    }
+    runComponent("border") { startBorderComponent() }
 case "focus-mouse":
-    runComponent("focus-mouse") {
-        focusFollowsMouseController = FocusFollowsMouseController()
-        focusFollowsMouseController?.start()
-    }
+    runComponent("focus-mouse") { startFocusMouseComponent() }
 case "titlebar-menu":
-    runComponent("titlebar-menu") {
-        titlebarContextMenuController = TitlebarContextMenuController()
-        titlebarContextMenuController?.start()
-    }
+    runComponent("titlebar-menu") { startTitlebarMenuComponent() }
 case "target-mode":
-    runComponent("target-mode") {
-        targetModeRuntimeController = TargetModeRuntimeController(service: service)
-        targetModeRuntimeController?.start()
-    }
+    runComponent("target-mode") { startTargetModeComponent() }
 case "restore-safety":
-    runComponent("restore-safety") {
-        let safetyService = RestoreSafetyService(service: service)
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let controller = RestoreSafetyRuntimeController(service: safetyService, pid: pid)
-        controller.start()
-    }
+    runComponent("restore-safety") { startRestoreSafetyComponent() }
 case "restore-watch":
     guard let rawPID = value(after: "--pid"), let pid = Int32(rawPID) else {
         fputs("roadied: restore-watch requires --pid PID\n", stderr)
