@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieTiler
 
 public enum Direction: String, Sendable {
     case left
@@ -84,6 +85,24 @@ public struct WindowCommandService {
         return WindowCommandResult(message: ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
     }
 
+    /// Applique une mutation sur l'arbre BSP persistant d'un stage `.spatialBsp` et force le
+    /// re-tile (retrait de l'intent). Persistance gérée par stageStore (flock + writer).
+    /// Retourne true si l'arbre a changé.
+    private func applyBSPTreeMutation(scope: StageScope, mutate: (BSPTree) -> BSPTree) -> Bool {
+        var state = stageStore.state()
+        guard let existing = state.bspTree(for: scope) else { return false }
+        let mutated = mutate(existing)
+        guard mutated != existing else { return false }
+        state.setBSPTree(mutated, for: scope)
+        stageStore.save(state)
+        service.removeLayoutIntent(scope: scope)
+        return true
+    }
+
+    private func isSpatialBSP(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
+        snapshot.state.stage(scope: scope)?.mode == .spatialBsp
+    }
+
     public func move(_ direction: Direction) -> WindowCommandResult {
         beginLayoutCommand("window.move.\(direction.rawValue)")
         defer { finishLayoutCommand("window.move.\(direction.rawValue)") }
@@ -92,6 +111,14 @@ public struct WindowCommandService {
               let scope = pair.active.scope
         else {
             return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "move")
+        }
+        // Mode arbre persistant : échanger les deux feuilles dans l'arbre (yabai --swap).
+        if isSpatialBSP(scope: scope, in: snapshot) {
+            let changed = applyBSPTreeMutation(scope: scope) {
+                $0.swapping(pair.active.window.id, pair.neighbor.window.id)
+            }
+            _ = focusWindow(pair.active.window)
+            return WindowCommandResult(message: "move \(direction.rawValue): bsp swap changed=\(changed)", changed: changed)
         }
         service.removeLayoutIntent(scope: scope)
         let ordered = swappedWindowIDs(
@@ -131,6 +158,17 @@ public struct WindowCommandService {
         else {
             return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "warp")
         }
+        // Mode arbre persistant : déplacer la fenêtre à côté de la voisine (yabai --warp).
+        if isSpatialBSP(scope: scope, in: snapshot) {
+            let side: BSPInsertionSide = (direction == .right || direction == .down) ? .right : .left
+            let wide = snapshot.displays.first(where: { $0.id == scope.displayID })
+                .map { $0.visibleFrame.cgRect.width >= $0.visibleFrame.cgRect.height } ?? true
+            let changed = applyBSPTreeMutation(scope: scope) {
+                $0.warping(pair.active.window.id, nextTo: pair.neighbor.window.id, side: side, containerIsWide: wide)
+            }
+            _ = focusWindow(pair.active.window)
+            return WindowCommandResult(message: "warp \(direction.rawValue): bsp warp changed=\(changed)", changed: changed)
+        }
         service.removeLayoutIntent(scope: scope)
         guard let plan = structuralWarpPlan(
             in: snapshot,
@@ -167,6 +205,17 @@ public struct WindowCommandService {
               let scope = active.scope
         else {
             return WindowCommandResult(message: "no active window", changed: false)
+        }
+        // Mode arbre persistant : ajuster le ratio du split concerné (resize qui persiste).
+        if isSpatialBSP(scope: scope, in: snapshot) {
+            let orientation: BSPOrientation = (direction == .left || direction == .right) ? .vertical : .horizontal
+            let step = 0.05
+            let delta = (direction == .right || direction == .down) ? step : -step
+            let changed = applyBSPTreeMutation(scope: scope) {
+                $0.resizing(window: active.window.id, orientation: orientation, delta: delta)
+            }
+            _ = focusWindow(active.window)
+            return WindowCommandResult(message: "resize \(direction.rawValue): bsp ratio changed=\(changed)", changed: changed)
         }
         let frame = resizedFrame(active.window.frame.cgRect, direction: direction)
         service.removeLayoutIntent(scope: scope)

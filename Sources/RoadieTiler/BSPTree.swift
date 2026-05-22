@@ -182,6 +182,79 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         }
     }
 
+    // MARK: - Manipulation interactive (SPEC-014)
+
+    /// Échange la position de deux feuilles dans l'arbre. La structure (splits, ratios) est
+    /// préservée ; seules les fenêtres aux feuilles permutent. Utilisé par `move`/`swap`.
+    public func swapping(_ a: WindowID, _ b: WindowID) -> BSPTree {
+        guard a != b, contains(a), contains(b) else { return self }
+        return relabelling(a, b)
+    }
+
+    /// Remplace toute feuille `a` par `b` et inversement, récursivement. Suppose que les
+    /// deux fenêtres existent (vérifié par `swapping`).
+    private func relabelling(_ a: WindowID, _ b: WindowID) -> BSPTree {
+        switch self {
+        case .empty:
+            return self
+        case .leaf(let id):
+            if id == a { return .leaf(b) }
+            if id == b { return .leaf(a) }
+            return self
+        case .split(let orientation, let ratio, let first, let second):
+            return .split(orientation: orientation, ratio: ratio,
+                          first: first.relabelling(a, b),
+                          second: second.relabelling(a, b))
+        }
+    }
+
+    /// Déplace `window` à côté de `neighbor` : retire `window` (son frère récupère l'espace)
+    /// puis l'insère en divisant le pane de `neighbor`. Change la structure. Utilisé par `warp`.
+    public func warping(_ window: WindowID, nextTo neighbor: WindowID, side: BSPInsertionSide, containerIsWide: Bool) -> BSPTree {
+        guard window != neighbor, contains(window), contains(neighbor) else { return self }
+        return removing(window).inserting(window, nextTo: neighbor, side: side, containerIsWide: containerIsWide)
+    }
+
+    /// Ajuste le ratio du split ancêtre le plus profond de l'orientation donnée qui contient
+    /// `window`. `delta` est signé : positif agrandit le `first`, négatif le `second`.
+    /// Utilisé par `resize` (orientation `.vertical` pour gauche/droite, `.horizontal` pour haut/bas).
+    public func resizing(window: WindowID, orientation: BSPOrientation, delta: Double) -> BSPTree {
+        resizing(window: window, orientation: orientation, delta: delta, applied: false).tree
+    }
+
+    private func resizing(window: WindowID, orientation: BSPOrientation, delta: Double, applied: Bool) -> (tree: BSPTree, applied: Bool) {
+        switch self {
+        case .empty, .leaf:
+            return (self, false)
+        case .split(let splitOrientation, let ratio, let first, let second):
+            let windowInFirst = first.contains(window)
+            let windowInSecond = second.contains(window)
+            guard windowInFirst || windowInSecond else { return (self, false) }
+
+            // Descendre d'abord pour ajuster le split le plus PROFOND de la bonne orientation.
+            if windowInFirst {
+                let child = first.resizing(window: window, orientation: orientation, delta: delta, applied: applied)
+                if child.applied {
+                    return (.split(orientation: splitOrientation, ratio: ratio, first: child.tree, second: second), true)
+                }
+            } else {
+                let child = second.resizing(window: window, orientation: orientation, delta: delta, applied: applied)
+                if child.applied {
+                    return (.split(orientation: splitOrientation, ratio: ratio, first: first, second: child.tree), true)
+                }
+            }
+
+            // Aucun descendant n'a appliqué : ce nœud le fait s'il est de la bonne orientation.
+            if splitOrientation == orientation {
+                // Si la fenêtre est dans `first`, agrandir = augmenter le ratio ; sinon l'inverse.
+                let signed = windowInFirst ? delta : -delta
+                let newRatio = min(max(ratio + signed, 0.05), 0.95)
+                return (.split(orientation: splitOrientation, ratio: newRatio, first: first, second: second), true)
+            }
+            return (self, false)
+        }
+    }
+
     // MARK: - Construction depuis une liste (migration)
 
     /// Construit un arbre équilibré à partir d'une liste ordonnée de fenêtres.
