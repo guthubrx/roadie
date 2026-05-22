@@ -348,19 +348,26 @@ public struct FocusConfig: Equatable, Codable, Sendable {
 
 public struct WindowPlacementConfig: Equatable, Codable, Sendable {
     public var newAppsTarget: String
+    /// Côté d'insertion d'une nouvelle fenêtre en mode BSP à arbre persistant (`spatial_bsp`).
+    /// "right" = nouvelle fenêtre à droite/en bas du pane focalisé ; "left" = gauche/haut.
+    public var newWindowSide: String
 
-    public init(newAppsTarget: String = "macos") {
+    public init(newAppsTarget: String = "macos", newWindowSide: String = "right") {
         self.newAppsTarget = newAppsTarget
+        self.newWindowSide = newWindowSide
     }
 
     enum CodingKeys: String, CodingKey {
         case newAppsTarget = "new_apps_target"
+        case newWindowSide = "new_window_side"
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let value = try c.decodeIfPresent(String.self, forKey: .newAppsTarget) ?? "macos"
         self.newAppsTarget = ["mouse", "focused_display", "macos"].contains(value) ? value : "macos"
+        let side = try c.decodeIfPresent(String.self, forKey: .newWindowSide) ?? "right"
+        self.newWindowSide = ["right", "left"].contains(side) ? side : "right"
     }
 }
 

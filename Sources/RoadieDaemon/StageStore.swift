@@ -2,6 +2,7 @@ import Foundation
 import RoadieAX
 import RoadieCore
 import RoadieStages
+import RoadieTiler
 
 public struct LogicalDisplayID: RawRepresentable, Hashable, Codable, Sendable, CustomStringConvertible {
     public let rawValue: String
@@ -268,6 +269,23 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public mutating func update(_ scope: PersistentStageScope) {
         scopes.removeAll { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }
         scopes.append(scope)
+    }
+
+    /// Arbre BSP persistant d'un stage (mode `.spatialBsp`). nil si absent.
+    public func bspTree(for scope: StageScope) -> BSPTree? {
+        scopes
+            .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+            .stages
+            .first { $0.id == scope.stageID }?
+            .bspTree
+    }
+
+    /// Écrit l'arbre BSP d'un stage. No-op si le scope/stage n'existe pas.
+    public mutating func setBSPTree(_ tree: BSPTree?, for scope: StageScope) {
+        guard let scopeIndex = scopes.firstIndex(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }),
+              let stageIndex = scopes[scopeIndex].stages.firstIndex(where: { $0.id == scope.stageID })
+        else { return }
+        scopes[scopeIndex].stages[stageIndex].bspTree = tree
     }
 
     // Complexite : O(scopes * stages * members) au pire en lookup unique.
@@ -1215,6 +1233,9 @@ public struct PersistentStage: Equatable, Codable, Sendable {
     public var restoredAt: Date?
     public var members: [PersistentStageMember]
     public var groups: [WindowGroup]
+    /// Arbre BSP persistant (mode `.spatialBsp` uniquement). Optionnel : nil pour les autres
+    /// modes et pour les stages sérialisés avant SPEC-013 (rétro-compat).
+    public var bspTree: BSPTree?
 
     public init(
         id: StageID,
@@ -1227,7 +1248,8 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         hostDisplayID: DisplayID? = nil,
         restoredAt: Date? = nil,
         members: [PersistentStageMember] = [],
-        groups: [WindowGroup] = []
+        groups: [WindowGroup] = [],
+        bspTree: BSPTree? = nil
     ) {
         self.id = id
         self.name = name ?? "Stage \(id.rawValue)"
@@ -1240,6 +1262,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.restoredAt = restoredAt
         self.members = members
         self.groups = groups
+        self.bspTree = bspTree
     }
 
     enum CodingKeys: String, CodingKey {
@@ -1254,6 +1277,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         case restoredAt
         case members
         case groups
+        case bspTree
     }
 
     public init(from decoder: Decoder) throws {
@@ -1269,6 +1293,7 @@ public struct PersistentStage: Equatable, Codable, Sendable {
         self.restoredAt = try c.decodeIfPresent(Date.self, forKey: .restoredAt)
         self.members = try c.decodeIfPresent([PersistentStageMember].self, forKey: .members) ?? []
         self.groups = try c.decodeIfPresent([WindowGroup].self, forKey: .groups) ?? []
+        self.bspTree = try c.decodeIfPresent(BSPTree.self, forKey: .bspTree)
     }
 }
 

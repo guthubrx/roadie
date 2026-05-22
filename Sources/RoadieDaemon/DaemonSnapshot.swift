@@ -1058,6 +1058,18 @@ public extension SnapshotService {
             entry.isNewlyScoped ? entry.window.id : nil
         })
         let effectiveMode = mode ?? stage.mode
+        // Mode BSP à arbre persistant (SPEC-013) : on reconcilie l'arbre du stage avec les
+        // fenêtres réelles (insertion des nouvelles à côté du focus, retrait des disparues),
+        // on le persiste si writer autorisé, et on le fournit à la stratégie pour le placement.
+        var bspTree: BSPTree? = nil
+        if effectiveMode == .spatialBsp {
+            bspTree = reconciledBSPTree(
+                for: scope,
+                liveOrderedWindowIDs: liveOrderedWindowIDs,
+                focus: snapshot.focusedWindowID,
+                containerIsWide: display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
+            )
+        }
         return LayoutPlanner.plan(LayoutRequest(
             scope: scope,
             mode: effectiveMode,
@@ -1066,10 +1078,36 @@ public extension SnapshotService {
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
             newWindowIDs: newWindowIDs,
+            bspTree: bspTree,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner
         ))
+    }
+
+    /// Reconcilie l'arbre BSP persistant d'un stage avec les fenêtres réellement présentes.
+    /// Persiste l'arbre mis à jour uniquement si ce process est writer (persistStateChanges),
+    /// pour ne pas écraser l'état canonique en mode lecteur (SPEC-011/012).
+    private func reconciledBSPTree(
+        for scope: StageScope,
+        liveOrderedWindowIDs: [WindowID],
+        focus: WindowID?,
+        containerIsWide: Bool
+    ) -> BSPTree {
+        var state = stageStore.state()
+        let existing = state.bspTree(for: scope) ?? .empty
+        let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
+        let reconciled = existing.reconciled(
+            liveWindowIDs: liveOrderedWindowIDs,
+            focus: focus,
+            side: side,
+            containerIsWide: containerIsWide
+        )
+        if persistStateChanges, reconciled != existing {
+            state.setBSPTree(reconciled, for: scope)
+            stageStore.save(state)
+        }
+        return reconciled
     }
 
     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {

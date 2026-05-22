@@ -14,6 +14,8 @@ public struct LayoutRequest: Equatable, Sendable {
     /// taille aleatoire (bug observe : 13% de l'ecran au lieu de 50%). Tout split
     /// impliquant une de ces fenetres defaute a 50/50.
     public var newWindowIDs: Set<WindowID>
+    /// Arbre BSP persistant (mode `.spatialBsp` uniquement). Ignoré par les autres modes.
+    public var bspTree: BSPTree?
     public var splitPolicy: String
     public var outerGaps: Insets
     public var innerGap: Double
@@ -26,6 +28,7 @@ public struct LayoutRequest: Equatable, Sendable {
         currentFrames: [WindowID: CGRect] = [:],
         priorityWindowIDs: Set<WindowID> = [],
         newWindowIDs: Set<WindowID> = [],
+        bspTree: BSPTree? = nil,
         splitPolicy: String = "balanced",
         outerGaps: Insets = .zero,
         innerGap: Double = 0
@@ -37,6 +40,7 @@ public struct LayoutRequest: Equatable, Sendable {
         self.currentFrames = currentFrames
         self.priorityWindowIDs = priorityWindowIDs
         self.newWindowIDs = newWindowIDs
+        self.bspTree = bspTree
         self.splitPolicy = splitPolicy
         self.outerGaps = outerGaps
         self.innerGap = max(0, innerGap)
@@ -72,6 +76,8 @@ public enum LayoutPlanner {
             return MasterStackLayoutStrategy().plan(request)
         case .float:
             return FloatLayoutStrategy().plan(request)
+        case .spatialBsp:
+            return SpatialBSPLayoutStrategy().plan(request)
         }
     }
 }
