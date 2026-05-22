@@ -6,6 +6,17 @@ import RoadieCore
 import RoadieDaemon
 
 let args = resolvedArguments()
+// SPEC-011 atomique : les sous-commandes lecteur ne persistent pas l'etat canonique
+// (stages.json, intent.json). Seuls `tiler` et `run` (legacy monolithique) sont
+// writers autorises. Sans cela, plusieurs process roadied (rail + border + focus + ...)
+// font chacun leur snapshot() avec mutation+save, et s'ecrasent mutuellement, causant
+// des nouvelles fenetres assignees au mauvais stage (cf. bug observe).
+private let roadieReaderCommands: Set<String> = [
+    "rail", "border", "focus-mouse", "titlebar-menu", "target-mode", "restore-safety"
+]
+if let first = args.first, roadieReaderCommands.contains(first) {
+    setenv("ROADIE_PERSIST_STATE_CHANGES", "0", 1)
+}
 let service = SnapshotService()
 var railController: RailController?
 var borderController: BorderController?
@@ -15,6 +26,9 @@ var targetModeRuntimeController: TargetModeRuntimeController?
 var displayChangeObserver: NSObjectProtocol?
 var pendingDisplayHeal: Task<Void, Never>?
 var displaySettlingUntil: Date = .distantPast
+// Retenu globalement : la sous-commande `tiler` (runComponent) retourne avant
+// NSApplication.run(), donc une reference locale serait desallouee.
+var tilerLiveObserver: AXWindowEventObserver?
 
 func printUsage() {
     print("""
@@ -178,6 +192,7 @@ case "run":
         let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
         let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
         let fastNotifications: Set<String> = [
+            kAXWindowCreatedNotification as String,
             kAXFocusedWindowChangedNotification as String,
             kAXMainWindowChangedNotification as String,
             kAXWindowDeminiaturizedNotification as String,
@@ -228,13 +243,40 @@ case "tiler":
     }
     let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
     let ticks = value(after: "--ticks").flatMap(Int.init)
+    let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
     let interval = max(100, intervalMs) / 1000
     runComponent("tiler") {
         let maintainer = LayoutMaintainer(intervalSeconds: interval)
         var reportedAccessibilityDenied = false
+        // Au changement de parametres d'ecran (display branche/debranche), planifie un
+        // "parking heal" : DaemonHealthService.heal() migre les fenetres des ecrans
+        // disparus vers un ecran present. Indispensable en mode modulaire SPEC-011 ou la
+        // sous-commande tiler est le seul writer : sans cet observer, les fenetres d'un
+        // ecran deconnecte restent orphelines (floating) indefiniment.
+        displayChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                displaySettlingUntil = Date().addingTimeInterval(displaySettleSeconds)
+                pendingDisplayHeal?.cancel()
+                pendingDisplayHeal = Task { @MainActor in
+                    let nanoseconds = UInt64(displaySettleSeconds * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: nanoseconds)
+                    guard !Task.isCancelled else { return }
+                    pendingDisplayHeal = nil
+                    displaySettlingUntil = .distantPast
+                    let report = DaemonHealthService().heal()
+                    print("display-change-heal parking=\(report.parking.kind.rawValue)/\(report.parking.reason.rawValue) state=\(report.state.repaired) layout=\(report.layout.attempted) failed=\(report.failed)")
+                    fflush(stdout)
+                }
+            }
+        }
         let target = MaintenanceTimerTarget(
             maintainer: maintainer,
-            maxTicks: ticks
+            maxTicks: ticks,
+            shouldTick: { Date() >= displaySettlingUntil }
         ) { tick in
             if tick.accessibilityDenied {
                 if !reportedAccessibilityDenied {
@@ -251,6 +293,54 @@ case "tiler":
         }
         let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
         RunLoop.main.add(timer, forMode: .common)
+
+        // Voie rapide AX : re-tile des qu'une fenetre apparait/change, sans attendre le
+        // prochain tick de polling (jusqu'a `interval`). Sans cela, en mode modulaire, une
+        // nouvelle fenetre reste visible a sa position macOS jusqu'au prochain polling.
+        // Identique au mode monolithique (case "run").
+        let liveEvents = EventLog()
+        var pendingLiveTick: DispatchWorkItem?
+        var lastLiveTickAt: Date = .distantPast
+        let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
+        let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
+        let fastNotifications: Set<String> = [
+            kAXWindowCreatedNotification as String,
+            kAXFocusedWindowChangedNotification as String,
+            kAXMainWindowChangedNotification as String,
+            kAXWindowDeminiaturizedNotification as String,
+            kAXUIElementDestroyedNotification as String,
+        ]
+        let liveObserver = AXWindowEventObserver { notification in
+            let isFastEvent = fastNotifications.contains(notification)
+            if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
+            pendingLiveTick?.cancel()
+            let requestedAt = Date()
+            let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
+            let item = DispatchWorkItem {
+                pendingLiveTick = nil
+                let beforeTick = Date()
+                let tick = target.performTick(timer)
+                lastLiveTickAt = Date()
+                if isFastEvent || tick.commands > 0 || tick.failed > 0 {
+                    liveEvents.append(RoadieEvent(type: "live_tick", details: [
+                        "notification": notification,
+                        "fast": String(isFastEvent),
+                        "delayMs": String(format: "%.1f", delayMs),
+                        "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
+                        "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
+                        "commands": String(tick.commands),
+                        "applied": String(tick.applied),
+                        "failed": String(tick.failed),
+                    ]))
+                }
+            }
+            pendingLiveTick = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
+        }
+        if !args.contains("--no-live-events") {
+            liveObserver.start()
+            tilerLiveObserver = liveObserver
+        }
     }
 case "rail":
     runComponent("rail") {

@@ -5,6 +5,13 @@ import Foundation
 enum JSONPersistence {
     /// Charge un Codable depuis l'URL ; retourne `defaultValue` si le fichier n'existe pas
     /// ou si le decoding echoue.
+    ///
+    /// IMPORTANT : aucune prise de verrou en lecture. Les writes utilisent `.atomic`
+    /// (ecriture dans un fichier temporaire puis rename(2), operation atomique POSIX) :
+    /// un lecteur voit donc toujours soit l'ancien fichier complet, soit le nouveau
+    /// complet, jamais un etat partiel. Prendre un LOCK_SH ici provoquait une famine
+    /// du writer (tiler) car les composants lecteurs (border 120ms, focus-mouse 100ms)
+    /// tenaient le shared lock quasi en permanence, empechant le LOCK_EX du writer.
     static func load<T: Decodable>(_ type: T.Type, from url: URL, default defaultValue: T) -> T {
         guard let data = try? Data(contentsOf: url) else { return defaultValue }
         return (try? JSONDecoder().decode(type, from: data)) ?? defaultValue
@@ -21,6 +28,8 @@ enum JSONPersistence {
     }
 
     /// Variante throwing avec encoder configurable (utile pour `iso8601` et autres).
+    /// Acquire un verrou exclusif inter-process pendant tout l'encode+write. Resout
+    /// les race conditions cross-process en mode atomique SPEC-011 (cf. FileLock).
     static func writeThrowing<T: Encodable>(
         _ value: T,
         to url: URL,
@@ -30,13 +39,17 @@ enum JSONPersistence {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        configure(encoder)
-        try encoder.encode(value).write(to: url, options: .atomic)
+        let lockPath = FileLock.lockPath(for: url)
+        try FileLock.withLock(path: lockPath, mode: .exclusive) {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            configure(encoder)
+            try encoder.encode(value).write(to: url, options: .atomic)
+        }
     }
 
     /// Variante load throwing avec decoder configurable (utile pour `iso8601`).
+    /// Aucune prise de verrou en lecture (cf. `load`).
     static func loadThrowing<T: Decodable>(
         _ type: T.Type,
         from url: URL,

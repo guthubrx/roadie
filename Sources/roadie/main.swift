@@ -546,12 +546,15 @@ func queueTargetModeRuntimeCommand(_ command: TargetModeRuntimeCommand, json: Bo
 }
 
 func isRoadiedRunning(pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid") -> Bool {
-    guard let raw = try? String(contentsOfFile: pidFilePath).trimmingCharacters(in: .whitespacesAndNewlines),
-          let pid = Int32(raw)
-    else {
-        return false
+    if let raw = try? String(contentsOfFile: pidFilePath).trimmingCharacters(in: .whitespacesAndNewlines),
+       let pid = Int32(raw),
+       kill(pid, 0) == 0 {
+        return true
     }
-    return kill(pid, 0) == 0
+    // Mode atomique SPEC-011 : aucun roadied.pid global, mais des PID files par
+    // composant. Le target-mode doit etre alive pour que la notification soit
+    // recue (cf. TargetModeRuntimeController.start).
+    return ComponentLockFile.registry().contains { $0.component == "target-mode" }
 }
 
 func runPerformanceCommand(_ args: [String]) -> Never {

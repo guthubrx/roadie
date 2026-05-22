@@ -81,6 +81,28 @@ public struct SnapshotService {
     private let intentStore: LayoutIntentStore
     private let stageStore: StageStore
     private let events: EventLog
+    /// Si `false`, `snapshot()` n'ecrit aucun changement dans `stages.json` / `intent.json`.
+    /// Active pour les sous-commandes "lecteurs" (rail, border, focus-mouse, etc.) en mode
+    /// SPEC-011 atomique, pour eviter qu'ils ne s'ecrasent mutuellement l'etat canonique
+    /// maintenu par `tiler` ou `run`. Les commandes utilisateur explicites (StageCommands,
+    /// WindowCommands, etc.) continuent a ecrire via leurs propres `stageStore.save(...)`
+    /// proteges par flock POSIX (FileLock).
+    private let persistStateChanges: Bool
+
+    /// Detecte via la variable d'env `ROADIE_PERSIST_STATE_CHANGES` si le snapshot
+    /// doit persister ses mutations dans `stages.json`. SPEC-011 atomique : le
+    /// dispatch des sous-commandes lecteur (rail, border, focus-mouse, etc.) set
+    /// cette env a "0" pour qu'aucun de ces process n'ecrase l'etat canonique
+    /// maintenu par `tiler` (qui lui garde `persistStateChanges=true`).
+    public static var defaultPersistStateChanges: Bool {
+        guard let raw = ProcessInfo.processInfo.environment["ROADIE_PERSIST_STATE_CHANGES"] else {
+            return true
+        }
+        switch raw.lowercased() {
+        case "0", "false", "no", "off": return false
+        default: return true
+        }
+    }
 
     public init(
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
@@ -90,7 +112,8 @@ public struct SnapshotService {
         railRuntimeStateStore: RailRuntimeStateStore = RailRuntimeStateStore(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
         stageStore: StageStore = StageStore(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        persistStateChanges: Bool = Self.defaultPersistStateChanges
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
@@ -100,6 +123,7 @@ public struct SnapshotService {
         self.intentStore = intentStore
         self.stageStore = stageStore
         self.events = events
+        self.persistStateChanges = persistStateChanges
     }
 
     public var effectiveConfig: RoadieConfig {
@@ -152,22 +176,32 @@ public struct SnapshotService {
             missingGrace: Self.stageMembershipMissingGrace,
             now: now
         )
-        appendMissingWindowReconciliationEvent(missingWindows)
+        // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode
+        // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent
+        // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont
+        // dupliques N fois (un par composant) dans events.jsonl.
+        if persistStateChanges {
+            appendMissingWindowReconciliationEvent(missingWindows)
+        }
         let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs)
-        for pin in prunedPins {
-            events.append(RoadieEvent(
-                type: "window.pin_pruned",
-                scope: pin.homeScope,
-                details: pinEventDetails(pin)
-            ))
+        if persistStateChanges {
+            for pin in prunedPins {
+                events.append(RoadieEvent(
+                    type: "window.pin_pruned",
+                    scope: pin.homeScope,
+                    details: pinEventDetails(pin)
+                ))
+            }
         }
         let prunedBookmarks = persistedStages.pruneMissingBookmarks(keeping: liveWindowIDs, now: now)
-        for bookmark in prunedBookmarks {
-            events.append(RoadieEvent(
-                type: "window.bookmark_pruned",
-                scope: bookmark.scope,
-                details: bookmarkEventDetails(bookmark)
-            ))
+        if persistStateChanges {
+            for bookmark in prunedBookmarks {
+                events.append(RoadieEvent(
+                    type: "window.bookmark_pruned",
+                    scope: bookmark.scope,
+                    details: bookmarkEventDetails(bookmark)
+                ))
+            }
         }
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
@@ -207,6 +241,9 @@ public struct SnapshotService {
             let indexedScope = stageIndex[window.id]
             let liveIndexedScope = indexedScope.flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
             let livePinnedScope = (pin?.homeScope).flatMap { liveDisplayIDs.contains($0.displayID) ? $0 : nil }
+            // Fenetre indexee sur un display deconnecte : on PRESERVE le membership (scope nil
+            // transitoire) jusqu'au "parking heal" (DaemonHealthService.heal) declenche par le
+            // changement de parametres d'ecran. Migrer ici casserait le retour propre du display.
             if indexedScope != nil, liveIndexedScope == nil {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil, pin: pin))
                 continue
@@ -319,7 +356,9 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
-        stageStore.save(persistedStages)
+        if persistStateChanges {
+            stageStore.save(persistedStages)
+        }
 
         return DaemonSnapshot(
             permissions: permissions,
@@ -1013,6 +1052,11 @@ public extension SnapshotService {
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
+        // Fenetres tout juste decouvertes : leur frame macOS est arbitraire, le moteur
+        // doit les splitter 50/50 et non heriter de cette frame.
+        let newWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.isNewlyScoped ? entry.window.id : nil
+        })
         let effectiveMode = mode ?? stage.mode
         return LayoutPlanner.plan(LayoutRequest(
             scope: scope,
@@ -1021,6 +1065,7 @@ public extension SnapshotService {
             windowIDs: liveOrderedWindowIDs,
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
+            newWindowIDs: newWindowIDs,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner

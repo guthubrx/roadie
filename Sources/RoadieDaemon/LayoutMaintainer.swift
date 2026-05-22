@@ -489,6 +489,13 @@ public final class LayoutMaintainer {
         ]
 
         guard let matchedRuleID = application.matchedRuleID else {
+            // Pas d'event rule.skipped pour les fenetres non gerables (overlays systeme :
+            // Window Server StatusIndicator, Control Center, popups ephemeres). Elles
+            // reapparaissent avec un nouveau windowID en permanence et generaient un spam
+            // de rule.skipped (~7-13/min) sans valeur diagnostique. On ne loggue le skip
+            // que pour les vraies fenetres candidates (utile : "pourquoi ma regle ne
+            // matche pas cette fenetre ?").
+            guard window.isTileCandidate else { return }
             let skippedKey = ruleEventKey(window: window, suffix: "skipped")
             guard !emittedRuleSkippedKeys.contains(skippedKey) else { return }
             emittedRuleSkippedKeys.insert(skippedKey)
@@ -533,7 +540,12 @@ public final class LayoutMaintainer {
     }
 
     private func ruleEventKey(window: WindowSnapshot, suffix: String) -> String {
-        "\(suffix)|\(window.id.rawValue)|\(window.appName)|\(window.title)"
+        // Le titre est volontairement EXCLU : il change frequemment (terminal qui affiche
+        // une commande, navigateur qui change d'onglet) et provoquait une re-emission de
+        // rule.skipped a chaque changement de titre (spam ~7-10 events/min). La transition
+        // skipped <-> matched est deja detectee par les deux sets emittedRuleSkippedKeys /
+        // emittedRuleAppliedKeys, donc une regle title_regex reste correctement reevaluee.
+        "\(suffix)|\(window.id.rawValue)|\(window.appName)"
     }
 
     private func ruleAppliedEventKey(window: WindowSnapshot, application: WindowRuleApplication) -> String {
