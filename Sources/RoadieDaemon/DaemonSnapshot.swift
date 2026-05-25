@@ -957,7 +957,12 @@ public extension SnapshotService {
             intentStore.save(intent)
             return true
         }
-        guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot) else { return false }
+        guard intentStillTilesCurrentContainer(
+            intent,
+            scope: scope,
+            from: snapshot,
+            requireReasonableTileSizes: true
+        ) else { return false }
         intentStore.save(intent)
         return true
     }
@@ -1085,6 +1090,36 @@ public extension SnapshotService {
         ))
     }
 
+    /// Reconcilie les arbres BSP de TOUS les stages `.spatialBsp` ayant des fenêtres live,
+    /// indépendamment du stage actif ou d'une décision de re-tile. Retourne les scopes dont
+    /// l'arbre a changé (nouvelle/fenêtre disparue), pour que l'appelant force un re-tile.
+    /// Sans cela, l'arbre d'un stage n'était reconcilié que lors d'un re-tile explicite, donc
+    /// une fenêtre ouverte/fermée n'était pas intégrée immédiatement (SPEC-013 fix).
+    @discardableResult
+    func reconcileSpatialBSPTrees(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+        guard persistStateChanges else { return [] }
+        var changedScopes: Set<StageScope> = []
+        let scopes = Set(snapshot.windows.compactMap(\.scope))
+        for scope in scopes {
+            guard let stage = snapshot.state.stage(scope: scope), stage.mode == .spatialBsp,
+                  let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+            else { continue }
+            let ordered = orderedWindowIDs(in: scope, from: snapshot)
+            guard !ordered.isEmpty else { continue }
+            let wide = display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
+            var state = stageStore.state()
+            let existing = state.bspTree(for: scope) ?? .empty
+            let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
+            let reconciled = existing.reconciled(liveWindowIDs: ordered, focus: snapshot.focusedWindowID, side: side, containerIsWide: wide)
+            if reconciled != existing {
+                state.setBSPTree(reconciled, for: scope)
+                stageStore.save(state)
+                changedScopes.insert(scope)
+            }
+        }
+        return changedScopes
+    }
+
     /// Reconcilie l'arbre BSP persistant d'un stage avec les fenêtres réellement présentes.
     /// Persiste l'arbre mis à jour uniquement si ce process est writer (persistStateChanges),
     /// pour ne pas écraser l'état canonique en mode lecteur (SPEC-011/012).
@@ -1120,11 +1155,10 @@ public extension SnapshotService {
             return nil
         }
         if intent.source == .command,
-           isRecentCommandIntent(intent),
-           hasCommandIntentShape(for: intent, snapshot: snapshot, scope: scope) {
+           intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot, requireReasonableTileSizes: false) {
             return intent
         }
-        guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot) else {
+        guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot, requireReasonableTileSizes: true) else {
             intentStore.remove(scope: scope)
             return nil
         }
@@ -1134,7 +1168,8 @@ public extension SnapshotService {
     private func intentStillTilesCurrentContainer(
         _ intent: LayoutIntent,
         scope: StageScope,
-        from snapshot: DaemonSnapshot
+        from snapshot: DaemonSnapshot,
+        requireReasonableTileSizes: Bool
     ) -> Bool {
         guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
               !intent.windowIDs.isEmpty
@@ -1148,7 +1183,9 @@ public extension SnapshotService {
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
-        guard framesHaveReasonableTileSizes(frames, in: container) else { return false }
+        if requireReasonableTileSizes {
+            guard framesHaveReasonableTileSizes(frames, in: container) else { return false }
+        }
 
         let intentArea = frames.reduce(CGFloat(0)) { $0 + $1.area }
         return intentArea >= targetArea * 0.95

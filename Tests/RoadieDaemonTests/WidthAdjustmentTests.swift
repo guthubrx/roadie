@@ -8,7 +8,9 @@ struct WidthAdjustmentTests {
     func appliesExplicitRatioToActiveWindow() {
         let provider = PowerUserProvider(windows: [powerWindow(1, x: 100), powerWindow(2, x: 500)])
         let writer = PowerUserWriter(provider: provider)
-        let service = SnapshotService(provider: provider, frameWriter: writer)
+        // Config explicite pour ne pas dépendre du roadies.toml de la machine : WidthAdjustment
+        // ne supporte pas spatial_bsp, et charger la config réelle rendait le test fragile.
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig())
         _ = service.snapshot()
 
         let result = WidthAdjustmentService(service: service, events: EventLog(path: tempPath("width-events"))).apply(

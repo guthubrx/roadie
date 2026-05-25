@@ -11,7 +11,6 @@ struct SpatialBSPConfigTests {
         #expect(WindowManagementMode(roadieValue: "spatial_bsp") == .spatialBsp)
         #expect(WindowManagementMode(roadieValue: "spatial") == .spatialBsp)
         #expect(WindowManagementMode(roadieValue: "tree") == .spatialBsp)
-        #expect(WindowManagementMode(roadieValue: "yabai") == .spatialBsp)
         #expect(WindowManagementMode.spatialBsp.usesPersistentBSPTree)
         #expect(!WindowManagementMode.mutableBsp.usesPersistentBSPTree)
     }
@@ -60,6 +59,15 @@ struct SpatialBSPConfigTests {
         default_strategy = "spatial_bsp"
         """)
         #expect(config.tiling.defaultStrategy == .spatialBsp)
+    }
+
+    @Test
+    func tilingModeParsesYabaiAsMutableBsp() throws {
+        let config = try loadConfig("""
+        [tiling]
+        default_strategy = "yabai"
+        """)
+        #expect(config.tiling.defaultStrategy == .mutableBsp)
     }
 
     @Test

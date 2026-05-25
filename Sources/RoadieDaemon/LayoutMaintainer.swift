@@ -57,6 +57,7 @@ public final class LayoutMaintainer {
     private var observedRulePlacementWindowIDs: Set<WindowID> = []
     private var lastGrowthClampedExcludedWindowIDs: Set<WindowID> = []
     private var lastCommandActivitySuppressedAt: Date?
+    private var lastMutableBspSuppressionSignature: String?
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -86,6 +87,13 @@ public final class LayoutMaintainer {
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
+        // SPEC-013/014 : reconcilie les arbres BSP persistants de tous les stages spatial_bsp
+        // (intègre les fenêtres ouvertes/fermées). Si un arbre change, on invalide l'intent du
+        // scope pour forcer un re-tile immédiat depuis l'arbre, sans attendre un autre déclencheur.
+        let changedTreeScopes = service.reconcileSpatialBSPTrees(in: snapshot)
+        for scope in changedTreeScopes {
+            service.removeLayoutIntent(scope: scope)
+        }
         let currentDisplaySignature = displaySignature(snapshot.displays)
         let tickNow = now()
         if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
@@ -96,6 +104,7 @@ public final class LayoutMaintainer {
             clampedFrames.removeAll()
             failedFrames.removeAll()
             revertedAppliedFrames.removeAll()
+            lastMutableBspSuppressionSignature = nil
             events.append(RoadieEvent(type: "display.topology_settling", details: [
                 "from": lastDisplaySignature,
                 "to": currentDisplaySignature
@@ -310,10 +319,10 @@ public final class LayoutMaintainer {
             return !protectedMutableScopes.contains(scope)
         })
         if !protectedMutableScopes.isEmpty && filteredPlan.commands.count != plan.commands.count {
-            events.append(RoadieEvent(type: "mutable_bsp_auto_relayout_suppressed", details: [
-                "scopes": protectedMutableScopes.map(\.description).sorted().joined(separator: ","),
-                "suppressed": String(plan.commands.count - filteredPlan.commands.count)
-            ]))
+            appendMutableBspSuppressionEvent(
+                scopes: protectedMutableScopes,
+                suppressed: plan.commands.count - filteredPlan.commands.count
+            )
         }
         guard !filteredPlan.commands.isEmpty else {
             persistCurrentLayoutIntents(in: planningSnapshot)
@@ -323,6 +332,9 @@ public final class LayoutMaintainer {
         result = stabilizeClampedPositions(result, from: filteredPlan)
         if result.clamped == 0 && result.failed == 0 {
             persistLayoutIntent(in: planningSnapshot, result: result)
+        }
+        if result.applied > 0 || result.clamped > 0 || result.failed > 0 {
+            lastMutableBspSuppressionSignature = nil
         }
         record(result, from: filteredPlan)
         events.append(RoadieEvent(type: "layout_apply", details: [
@@ -1168,6 +1180,17 @@ public final class LayoutMaintainer {
         }
     }
 
+    private func appendMutableBspSuppressionEvent(scopes: Set<StageScope>, suppressed: Int) {
+        let scopeDescriptions = scopes.map(\.description).sorted()
+        let signature = scopeDescriptions.joined(separator: ",")
+        guard signature != lastMutableBspSuppressionSignature else { return }
+        lastMutableBspSuppressionSignature = signature
+        events.append(RoadieEvent(type: "mutable_bsp_auto_relayout_suppressed", details: [
+            "scopes": scopeDescriptions.joined(separator: ","),
+            "suppressed": String(suppressed)
+        ]))
+    }
+
     private func activeMutableBspScopes(
         for windowIDs: Set<WindowID>,
         in snapshot: DaemonSnapshot
@@ -1455,9 +1478,29 @@ public final class LayoutMaintainer {
                 entry.window.isOnScreen
                     && !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
             }) else { return nil }
+            guard stableMutableBspFramesLookUsable(entries.map(\.window.frame.cgRect), on: display) else {
+                return nil
+            }
 
             return scope
         })
+    }
+
+    private func stableMutableBspFramesLookUsable(_ frames: [CGRect], on display: DisplaySnapshot) -> Bool {
+        let container = display.visibleFrame.cgRect
+        guard frames.allSatisfy({ container.insetBy(dx: -24, dy: -24).contains($0) }) else {
+            return false
+        }
+        guard frames.count > 1 else { return true }
+        for index in frames.indices {
+            for otherIndex in frames.index(after: index)..<frames.endIndex {
+                let intersection = frames[index].intersection(frames[otherIndex])
+                if max(0, intersection.width) * max(0, intersection.height) > 16 {
+                    return false
+                }
+            }
+        }
+        return true
     }
 
     private func changedWindows(in frames: [UInt32: Rect]) -> Set<WindowID> {

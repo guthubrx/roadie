@@ -9,13 +9,13 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
         switch roadieValue {
         case "bsp":
             self = .bsp
-        case "mutableBsp", "mutable_bsp", "mutable-bsp":
+        case "mutableBsp", "mutable_bsp", "mutable-bsp", "yabai":
             self = .mutableBsp
         case "masterStack", "master_stack", "master-stack":
             self = .masterStack
         case "float", "floating":
             self = .float
-        case "spatialBsp", "spatial_bsp", "spatial-bsp", "spatial", "tree", "yabai":
+        case "spatialBsp", "spatial_bsp", "spatial-bsp", "spatial", "tree":
             self = .spatialBsp
         default:
             return nil

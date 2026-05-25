@@ -3348,11 +3348,60 @@ struct SnapshotServiceTests {
             stageStore: stageStore
         )
 
-        let report = DaemonHealthService(service: service, stageStore: stageStore, pidFilePath: missingPidPath).run()
+        let report = DaemonHealthService(
+            service: service,
+            stageStore: stageStore,
+            pidFilePath: missingPidPath,
+            componentRegistry: { [] }
+        ).run()
 
         #expect(!report.failed)
         #expect(report.checks.contains(DaemonHealthCheck(level: .warn, name: "pidfile", message: "missing")))
         try? FileManager.default.removeItem(atPath: stagePath)
+    }
+
+    @Test
+    func daemonHealthReportsModularComponentsWhenMonolithicPidfileIsMissing() throws {
+        let display = DisplayID(rawValue: "display-a")
+        let stagePath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-components-\(UUID().uuidString).json")
+            .path
+        let missingPidPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-health-components-\(UUID().uuidString).pid")
+            .path
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(activeDisplayID: display))
+        let component = "health-\(UUID().uuidString)"
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),
+                ],
+                windowSnapshots: []
+            ),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: stageStore
+        )
+
+        let report = DaemonHealthService(
+            service: service,
+            stageStore: stageStore,
+            pidFilePath: missingPidPath,
+            componentRegistry: {
+                [(component: component, pid: Int32(ProcessInfo.processInfo.processIdentifier), startedAt: Date())]
+            }
+        ).run()
+
+        #expect(!report.failed)
+        #expect(report.checks.contains { check in
+            check.level == .ok
+                && check.name == "components"
+                && check.message.contains(component)
+        })
     }
 
     @Test

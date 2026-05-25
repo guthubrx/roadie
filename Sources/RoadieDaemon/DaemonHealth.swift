@@ -59,17 +59,20 @@ public struct DaemonHealthService {
     private let stageStore: StageStore
     private let events: EventLog
     private let pidFilePath: String
+    private let componentRegistry: () -> [(component: String, pid: Int32, startedAt: Date)]
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore = StageStore(),
         events: EventLog = EventLog(),
-        pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid"
+        pidFilePath: String = "\(NSHomeDirectory())/.roadies/roadied.pid",
+        componentRegistry: @escaping () -> [(component: String, pid: Int32, startedAt: Date)] = ComponentLockFile.registry
     ) {
         self.service = service
         self.stageStore = stageStore
         self.events = events
         self.pidFilePath = pidFilePath
+        self.componentRegistry = componentRegistry
     }
 
     public func run() -> DaemonHealthReport {
@@ -153,6 +156,14 @@ public struct DaemonHealthService {
         guard let raw = try? String(contentsOfFile: pidFilePath).trimmingCharacters(in: .whitespacesAndNewlines),
               let pid = Int32(raw)
         else {
+            let components = componentRegistry()
+            if !components.isEmpty {
+                return DaemonHealthCheck(
+                    level: .ok,
+                    name: "components",
+                    message: "running=\(components.count) names=\(components.map(\.component).joined(separator: ","))"
+                )
+            }
             return DaemonHealthCheck(level: .warn, name: "pidfile", message: "missing")
         }
 

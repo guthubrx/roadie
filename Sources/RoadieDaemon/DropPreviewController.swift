@@ -18,8 +18,18 @@ final class DropPreviewController {
     }
 
     @discardableResult
-    func update(sourceWindowID: WindowID, at point: CGPoint, displayID: DisplayID? = nil) -> DropPreviewCandidate? {
-        guard let candidate = engine.candidate(sourceWindowID: sourceWindowID, at: point, displayID: displayID) else {
+    func update(
+        sourceWindowID: WindowID,
+        at point: CGPoint,
+        displayID: DisplayID? = nil,
+        stableSourceFrame: CGRect? = nil
+    ) -> DropPreviewCandidate? {
+        guard let candidate = engine.candidate(
+            sourceWindowID: sourceWindowID,
+            at: point,
+            displayID: displayID,
+            stableSourceFrame: stableSourceFrame
+        ) else {
             hide()
             return nil
         }
@@ -69,12 +79,27 @@ struct DropPreviewEngine {
         self.service = service
     }
 
-    func candidate(sourceWindowID: WindowID, at point: CGPoint, displayID forcedDisplayID: DisplayID? = nil) -> DropPreviewCandidate? {
+    func candidate(
+        sourceWindowID: WindowID,
+        at point: CGPoint,
+        displayID forcedDisplayID: DisplayID? = nil,
+        stableSourceFrame: CGRect? = nil
+    ) -> DropPreviewCandidate? {
         let axPoint = ScreenCoordinate.nsPointToAX(point)
-        return candidate(sourceWindowID: sourceWindowID, atAXPoint: axPoint, displayID: forcedDisplayID)
+        return candidate(
+            sourceWindowID: sourceWindowID,
+            atAXPoint: axPoint,
+            displayID: forcedDisplayID,
+            stableSourceFrame: stableSourceFrame
+        )
     }
 
-    func candidate(sourceWindowID: WindowID, atAXPoint axPoint: CGPoint, displayID forcedDisplayID: DisplayID? = nil) -> DropPreviewCandidate? {
+    func candidate(
+        sourceWindowID: WindowID,
+        atAXPoint axPoint: CGPoint,
+        displayID forcedDisplayID: DisplayID? = nil,
+        stableSourceFrame: CGRect? = nil
+    ) -> DropPreviewCandidate? {
         let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
         let snapshot = service.snapshot()
         guard let display = display(containing: axPoint, forcedDisplayID: forcedDisplayID, in: snapshot.displays),
@@ -107,14 +132,25 @@ struct DropPreviewEngine {
             operation = dropOperation(at: axPoint, in: target.window.frame.cgRect, sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID })
             ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
             if stage.mode == .mutableBsp {
-                placements = reflowingTargetPlacements(
-                    sourceID: sourceWindowID,
-                    target: target.window,
-                    operation: operation,
-                    activeEntries: activeEntries,
-                    persistedSourceFrame: persistedFrame(for: sourceWindowID, in: scope, state: persistedStateBeforeSnapshot),
-                    display: display
-                ) ?? [:]
+                let persistedSourceFrame = stableSourceFrame
+                    ?? persistedFrame(for: sourceWindowID, in: scope, state: persistedStateBeforeSnapshot)
+                if operation == .swap {
+                    placements = swapPlacements(
+                        sourceID: sourceWindowID,
+                        target: target.window,
+                        activeEntries: activeEntries,
+                        persistedSourceFrame: persistedSourceFrame
+                    ) ?? [:]
+                } else {
+                    placements = reflowingTargetPlacements(
+                        sourceID: sourceWindowID,
+                        target: target.window,
+                        operation: operation,
+                        activeEntries: activeEntries,
+                        persistedSourceFrame: persistedSourceFrame,
+                        display: display
+                    ) ?? [:]
+                }
             } else {
                 placements = structuralPlacements(
                     sourceID: sourceWindowID,
@@ -186,6 +222,20 @@ struct DropPreviewEngine {
             insertionIndex = min(adjustedTargetIndex + 1, result.count)
         }
         result.insert(sourceID, at: insertionIndex)
+        return result
+    }
+
+    private func swapPlacements(
+        sourceID: WindowID,
+        target: WindowSnapshot,
+        activeEntries: [ScopedWindowSnapshot],
+        persistedSourceFrame: CGRect?
+    ) -> [WindowID: CGRect]? {
+        guard let source = activeEntries.first(where: { $0.window.id == sourceID })?.window else { return nil }
+        let sourceFrame = persistedSourceFrame ?? source.frame.cgRect
+        var result = Dictionary(uniqueKeysWithValues: activeEntries.map { ($0.window.id, $0.window.frame.cgRect) })
+        result[sourceID] = target.frame.cgRect
+        result[target.id] = sourceFrame
         return result
     }
 
@@ -502,7 +552,13 @@ final class WindowDragReorderController {
             pending = nil
             return
         }
-        pending = PendingWindowDrag(windowID: source.window.id, displayID: source.scope.displayID, startPoint: point, didDrag: false)
+        pending = PendingWindowDrag(
+            windowID: source.window.id,
+            displayID: source.scope.displayID,
+            startPoint: point,
+            sourceFrame: source.window.frame.cgRect,
+            didDrag: false
+        )
     }
 
     func handleMouseDragged(to point: CGPoint) {
@@ -510,7 +566,7 @@ final class WindowDragReorderController {
         guard hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y) > 8 else { return }
         drag.didDrag = true
         WindowDragActivity.shared.markActive(windowID: drag.windowID)
-        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point),
+        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point, stableSourceFrame: drag.sourceFrame),
            candidate != drag.lastCandidate {
             events.append(RoadieEvent(type: "window_drag_preview", scope: candidate.scope, details: [
                 "windowID": String(candidate.sourceWindowID.rawValue),
@@ -529,7 +585,7 @@ final class WindowDragReorderController {
             WindowDragActivity.shared.finish()
         }
         guard drag.didDrag,
-              let candidate = preview.update(sourceWindowID: drag.windowID, at: point)
+              let candidate = preview.update(sourceWindowID: drag.windowID, at: point, stableSourceFrame: drag.sourceFrame)
         else { return }
         let result = commandService.place(
             windowID: candidate.sourceWindowID,
@@ -567,6 +623,7 @@ private struct PendingWindowDrag {
     var windowID: WindowID
     var displayID: DisplayID
     var startPoint: CGPoint
+    var sourceFrame: CGRect
     var didDrag: Bool
     var lastCandidate: DropPreviewCandidate?
 }

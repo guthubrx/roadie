@@ -345,6 +345,7 @@ struct LayoutPlannerTests {
         #expect(WindowManagementMode(roadieValue: "mutableBsp") == .mutableBsp)
         #expect(WindowManagementMode(roadieValue: "mutable_bsp") == .mutableBsp)
         #expect(WindowManagementMode(roadieValue: "mutable-bsp") == .mutableBsp)
+        #expect(WindowManagementMode(roadieValue: "yabai") == .mutableBsp)
     }
 
     @Test

@@ -429,7 +429,7 @@ struct LayoutMaintainerTests {
             config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
         )
         let now = Date(timeIntervalSince1970: 100)
-        let dragActivity = WindowDragActivity()
+        let dragActivity = WindowDragActivity(path: tempPath("window-drag-activity-monolithic"))
         let maintainer = LayoutMaintainer(service: service, dragActivity: dragActivity, now: { now })
         dragActivity.markActive(windowID: WindowID(rawValue: 1), now: now, holdSeconds: 5)
 
@@ -437,6 +437,50 @@ struct LayoutMaintainerTests {
 
         #expect(tick.commands == 0)
         #expect(writer.requestedFrames.isEmpty)
+    }
+
+    @Test
+    func activeWindowDragSuppressesMaintainerRelayoutAcrossActivityInstances() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let provider = SequenceProvider(display: display, windowFrames: [
+            [
+                Rect(x: 0, y: 0, width: 495, height: 500),
+                Rect(x: 505, y: 0, width: 495, height: 500),
+            ],
+            [
+                Rect(x: 300, y: 120, width: 495, height: 500),
+                Rect(x: 505, y: 0, width: 495, height: 500),
+            ],
+        ])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
+        )
+        var currentTime = Date(timeIntervalSince1970: 100)
+        let activityPath = tempPath("window-drag-activity-modular")
+        let dragProducer = WindowDragActivity(path: activityPath)
+        let dragConsumer = WindowDragActivity(path: activityPath)
+        let maintainer = LayoutMaintainer(service: service, dragActivity: dragConsumer, now: { currentTime })
+
+        let initial = maintainer.tick()
+        dragProducer.markActive(windowID: WindowID(rawValue: 1), now: currentTime, holdSeconds: 5)
+        currentTime = currentTime.addingTimeInterval(0.1)
+        let dragging = maintainer.tick()
+
+        #expect(initial.commands == 0)
+        #expect(dragging.commands == 0)
+        #expect(!dragging.manualResizeDetected)
+        #expect(writer.requestedFrames.isEmpty)
+        dragProducer.reset()
     }
 
     @Test
@@ -513,7 +557,7 @@ struct LayoutMaintainerTests {
             config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
         )
         var currentTime = Date(timeIntervalSince1970: 100)
-        let dragActivity = WindowDragActivity()
+        let dragActivity = WindowDragActivity(path: tempPath("window-drag-activity-release"))
         let maintainer = LayoutMaintainer(service: service, dragActivity: dragActivity, now: { currentTime })
 
         let initial = maintainer.tick()
@@ -761,6 +805,112 @@ struct LayoutMaintainerTests {
         #expect(first.commands == 0)
         #expect(second.commands == 0)
         #expect(writer.requestedFrames.isEmpty)
+    }
+
+    @Test
+    func mutableBspStableSuppressionDoesNotSpamEvents() throws {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let left = Rect(x: 0, y: 0, width: 600, height: 500)
+        let right = Rect(x: 700, y: 0, width: 300, height: 500)
+        let eventPath = tempPath("mutable-bsp-stable-suppression-events")
+        let provider = SequenceProvider(display: display, windowFrames: [
+            [left, right],
+            [left, right],
+        ])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let first = maintainer.tick()
+        let second = maintainer.tick()
+
+        #expect(first.commands == 0)
+        #expect(second.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.components(separatedBy: "\"type\":\"mutable_bsp_auto_relayout_suppressed\"").count - 1 == 1)
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func mutableBspOverlappingVisibleFramesAreRelayouted() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1200, height: 600),
+            visibleFrame: Rect(x: 0, y: 0, width: 1200, height: 600),
+            isMain: true
+        )
+        let wide = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "Wide",
+            bundleID: "app.wide",
+            title: "Wide",
+            frame: Rect(x: 0, y: 0, width: 900, height: 600),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let overlapping = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "Overlap",
+            bundleID: "app.overlap",
+            title: "Overlap",
+            frame: Rect(x: 600, y: 0, width: 300, height: 600),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let right = WindowSnapshot(
+            id: WindowID(rawValue: 3),
+            pid: 13,
+            appName: "Right",
+            bundleID: "app.right",
+            title: "Right",
+            frame: Rect(x: 910, y: 0, width: 290, height: 600),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stageID = StageID(rawValue: "1")
+        let store = StageStore(path: tempPath("mutable-bsp-overlap-relayout"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: stageID, stages: [
+                    PersistentStage(id: stageID, mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: wide.id, bundleID: wide.bundleID, title: wide.title, frame: wide.frame),
+                        PersistentStageMember(windowID: overlapping.id, bundleID: overlapping.bundleID, title: overlapping.title, frame: overlapping.frame),
+                        PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
+                    ])
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[wide, overlapping, right]])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(service: service, store: store)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands > 0)
+        #expect(writer.requestedFrames[overlapping.id] != nil)
     }
 
     @Test
@@ -1991,6 +2141,54 @@ struct LayoutMaintainerTests {
         #expect(result.commands == 2)
         #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 495, height: 500))
         #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 505, y: 0, width: 495, height: 500))
+        try? FileManager.default.removeItem(atPath: intentTemp.path)
+    }
+
+    @Test
+    func mutableBspCommandIntentCanKeepSmallPaneAfterFreshnessWindow() {
+        let intentTemp = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let intentScope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let writer = RecordingWriter()
+        let intentStore = intentTemp.store
+        intentStore.save(
+            LayoutIntent(
+                scope: intentScope,
+                windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+                placements: [
+                    WindowID(rawValue: 1): Rect(x: 0, y: 0, width: 100, height: 500),
+                    WindowID(rawValue: 2): Rect(x: 110, y: 0, width: 890, height: 500),
+                ],
+                createdAt: Date().addingTimeInterval(-30),
+                source: .command
+            )
+        )
+
+        let service = SnapshotService(
+            provider: SequenceProvider(
+                display: display,
+                windowFrames: [
+                    [Rect(x: 0, y: 0, width: 495, height: 500), Rect(x: 505, y: 0, width: 495, height: 500)],
+                ]
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore
+        )
+
+        let maintainer = LayoutMaintainer(service: service, intervalSeconds: 0.1)
+        let result = maintainer.tick()
+
+        #expect(result.commands == 2)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 100, height: 500))
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 110, y: 0, width: 890, height: 500))
         try? FileManager.default.removeItem(atPath: intentTemp.path)
     }
 
