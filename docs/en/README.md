@@ -9,6 +9,7 @@ English documentation for daily Roadie usage, configuration, and scripting integ
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)
+- [v0.3.0 release notes](../releases/v0.3.0.md)
 
 ## Positioning
 
@@ -18,6 +19,8 @@ Roadie is a Swift macOS window manager combining:
 - named, hideable stages inspired by Stage Manager workflows;
 - Roadie virtual desktops without controlling native macOS Spaces;
 - display parking that keeps stages recoverable when a monitor is unplugged;
+- a modular runtime that can split tiling, rail, borders, focus, target mode,
+  title-bar actions, and restore safety into separate components;
 - CLI commands for BetterTouchTool, Karabiner, shell scripts, or launchers;
 - automation surfaces: events, rules, groups, query API, Keyboard Targets,
   Display Grid, Window Grid, and short macro recording.

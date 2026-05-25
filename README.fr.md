@@ -14,6 +14,8 @@
 
 Roadie est un petit gestionnaire de fenêtres tiling pour macOS, écrit en Swift, construit autour d’une idée simple : le tiling automatique et un workflow de type Stage Manager devraient pouvoir cohabiter.
 
+Release courante : [v0.3.0](docs/releases/v0.3.0.md).
+
 ## Pourquoi Ce Projet Existe
 
 À l’origine, je ne voulais pas écrire un window manager. Pendant des années, [yabai](https://github.com/koekeishiya/yabai) a été la base de mon poste macOS : puissant, précis, et profondément structurant pour tous ceux qui font du tiling sur macOS. Roadie doit beaucoup à yabai, fonctionnellement et culturellement.
@@ -22,11 +24,14 @@ Le déclencheur a été personnel : je n’ai jamais réussi à faire cohabiter 
 
 Roadie se concentre donc sur cette combinaison précise :
 
-- Tiling `bsp` et `masterStack` pour les fenêtres visibles.
+- Tiling `bsp`, `mutableBsp` et `masterStack` pour les fenêtres visibles.
 - Stages Roadie : groupes de fenêtres nommés, masquables, restaurables, réordonnables et représentés visuellement.
 - Desktops virtuels Roadie sans contrôle des Spaces macOS natifs.
 - Support multi-écran où chaque écran garde son desktop courant, sa stage active et son layout.
 - Parking d’écran : quand un écran disparaît, Roadie rapatrie ses stages non vides sur un écran restant au lieu de les fusionner dans la stage active.
+- Runtime modulaire : tiler, rail, bordures, focus-follows-mouse, mode cibles,
+  actions de barre de titre et restore safety peuvent tourner dans des
+  composants séparés.
 
 Roadie n’essaie pas de remplacer yabai. yabai est plus large, plus ancien et beaucoup plus mature. Roadie est volontairement plus petit, et très orienté autour de mon workflow.
 
@@ -64,6 +69,16 @@ Légende : ✅ supporté, ◐ partiel ou plus étroit, ❌ non supporté,
 | Layout stack/tab/accordion | ✅ stack | ✅ accordion | ◐ groupes seulement |
 | Fenêtres scratchpad | ✅ | ❌ | ◐ |
 | Commandes power-user sur l'arbre | ✅ | ✅ | ◐ |
+
+### Runtime Et Mode Compagnon
+
+| Fonctionnalité | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Daemon window-manager complet unique | ✅ | ✅ | ✅ |
+| Composants modulaires | ❌ | ❌ | ✅ |
+| Lancer seulement overlays/stages avec un autre WM | ⚙️ | ⚙️ | 🧪 base prête |
+| Santé par composant | ◐ | ◐ | ✅ |
+| Logs par composant | ◐ | ◐ | ✅ |
 
 ### Desktops, Stages Et Écrans
 
@@ -122,6 +137,9 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 ## Ce Que Fait Roadie Aujourd’hui
 
 - Tile les fenêtres visibles avec les modes `bsp`, `mutableBsp`, `masterStack` ou `float`.
+- Tourne soit en daemon monolithique, soit en composants modulaires separes :
+  `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, `target-mode` et
+  `restore-safety`.
 - Gère des groupes de fenêtres par stage, écran et desktop Roadie.
 - Fournit des desktops virtuels Roadie sans contrôler les Spaces macOS natifs.
 - Supporte plusieurs écrans indépendamment.
@@ -136,6 +154,8 @@ Roadie ne nécessite pas de désactiver SIP. Il utilise Accessibilité pour déc
 - Publie des événements automation JSONL et des projections JSON stables via `roadie query ...`.
 - Supporte des rules TOML avec validation, explain, événements runtime `rule.*` et placement automatique stage/écran.
 - Supporte des commandes power-user comme `focus back-and-forth`, `layout insert`, `layout flatten` et `layout zoom-parent`.
+- Supporte un arbre BSP persistant et des operations BSP mutables plus proches
+  de yabai : move, warp, resize, insert, swap et preservation des ratios observes.
 - Persiste et expose des groupes de fenêtres pour des workflows stack/tab-like.
 - Expose le Mode Cibles pour labels clavier, picker par recherche, automatisation JSON, inspection de cibles et decouverte experimentale des zones applicatives.
 - Fournit deux grilles spatiales configurables : Grille Ecran pour cibler recursivement un ecran complet, et Grille Fenetre pour cibler recursivement la fenetre focussee.
@@ -236,6 +256,28 @@ make dmg
 ./scripts/logs
 ./scripts/roadie daemon health
 ```
+
+## Runtime Modulaire
+
+Le chemin classique `make start` lance Roadie comme un daemon unique. Le chemin
+modulaire lance les memes capacites sous forme de processus separes :
+
+```bash
+./scripts/start-modular
+./bin/roadie query components
+./bin/roadie daemon health
+```
+
+Le script modulaire standard lance aujourd'hui tout le set de composants, y
+compris le tiler. L'interet architectural est plus large : permettre a Roadie de
+devenir non seulement un window manager complet, mais aussi un ensemble de
+composants utilisables comme couche compagnon avec yabai, AeroSpace ou un autre
+gestionnaire de fenetres.
+
+Cet usage "companion mode" reste volontairement note comme experimental : les
+frontieres runtime, les locks de composants, la sante par composant et les logs
+separes sont en place, mais les profils explicites "stage-only" ou
+"overlay-only" restent a formaliser.
 
 ## Build DMG Et Installation Non Signée Apple
 
@@ -348,6 +390,7 @@ Changer le mode de layout de la stage courante :
 
 ```bash
 ./bin/roadie mode bsp
+./bin/roadie mode mutableBsp
 ./bin/roadie mode masterStack
 ./bin/roadie mode float
 ```

@@ -14,6 +14,8 @@ English | [Français](README.fr.md)
 
 Roadie is a small macOS tiling window manager written in Swift, built around one idea: automatic tiling and a Stage Manager-like workflow should be able to live together.
 
+Current release: [v0.3.0](docs/releases/v0.3.0.md).
+
 ## Why This Project Exists
 
 I never set out to write a window manager. For years, [yabai](https://github.com/koekeishiya/yabai) has been the foundation of my macOS workstation: sharp, powerful, and deeply influential for anyone who cares about tiling on macOS. Roadie owes a lot to yabai, both functionally and culturally.
@@ -27,6 +29,8 @@ So Roadie focuses on that specific combination:
 - Roadie virtual desktops managed without controlling native macOS Spaces.
 - Multi-display support where each display keeps its own current desktop, active stage, and layout.
 - Display parking: when a monitor disappears, Roadie parks its non-empty stages on a remaining display instead of merging them into the active stage.
+- A modular runtime where tiling, rail, borders, focus-follow-mouse, target mode,
+  title-bar actions, and restore safety can run as separate components.
 
 Roadie is not trying to replace yabai. yabai is broader, older, and much more mature. Roadie is intentionally smaller and opinionated around my workflow.
 
@@ -64,6 +68,16 @@ Legend: ✅ supported, ◐ partial or narrower, ❌ not supported, 🧪 experime
 | Stack/tab/accordion layout | ✅ stack | ✅ accordion | ◐ groups only |
 | Scratchpad windows | ✅ | ❌ | ◐ |
 | Power-user tree commands | ✅ | ✅ | ◐ |
+
+### Runtime And Companion Mode
+
+| Feature | yabai | AeroSpace | Roadie |
+|---|---:|---:|---:|
+| Single full window-manager daemon | ✅ | ✅ | ✅ |
+| Modular components | ❌ | ❌ | ✅ |
+| Run only overlays/stages beside another WM | ⚙️ | ⚙️ | 🧪 foundation |
+| Component-level health checks | ◐ | ◐ | ✅ |
+| Per-component logs | ◐ | ◐ | ✅ |
 
 ### Workspaces, Stages, And Displays
 
@@ -122,6 +136,9 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 ## What Roadie Does Today
 
 - Tiles visible windows with `bsp`, `mutableBsp`, `masterStack`, or `float` modes.
+- Runs either as a monolithic daemon or as modular components with separate
+  `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, `target-mode`,
+  and `restore-safety` processes.
 - Keeps stage groups per display and Roadie desktop.
 - Provides Roadie virtual desktops without controlling native macOS Spaces.
 - Supports multiple displays independently.
@@ -136,6 +153,8 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 - Publishes JSONL automation events and stable `roadie query ...` JSON projections.
 - Supports TOML window rules with validation, explain, runtime `rule.*` events, and automatic stage/display placement.
 - Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
+- Supports a persistent BSP tree and mutable BSP operations closer to yabai:
+  move, warp, resize, insert, swap, and observed split-ratio preservation.
 - Persists and exposes window groups for stack/tab-like workflows.
 - Exposes Keyboard Targets for labels, search picking, JSON automation, target inspection, and experimental app-zone discovery.
 - Provides two configurable spatial grids: Display Grid for full-screen recursive targeting, and Window Grid for recursive targeting inside the focused window.
@@ -236,6 +255,27 @@ Equivalent direct commands:
 ./scripts/logs
 ./scripts/roadie daemon health
 ```
+
+## Modular Runtime
+
+The classic `make start` path runs Roadie as one daemon. The modular path starts
+the same capabilities as separate processes:
+
+```bash
+./scripts/start-modular
+./bin/roadie query components
+./bin/roadie daemon health
+```
+
+The standard modular script currently starts the full component set, including
+the tiler. Its architectural purpose is broader: it lets Roadie evolve from a
+single all-or-nothing window manager into a set of components that can also be
+used as a companion layer beside yabai, AeroSpace, or another window manager.
+
+Today, that companion-mode usage is intentionally described as experimental:
+the runtime boundaries, component locks, health checks, and per-component logs
+are in place, but explicit "stage-only" or "overlay-only" startup profiles are
+still future work.
 
 ## DMG Build And Unsigned Installation
 

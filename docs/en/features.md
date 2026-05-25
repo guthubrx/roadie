@@ -28,6 +28,37 @@ Use cases:
 - multi-display operations with different modes per display/stage;
 - temporary tiling pause on a `float` stage.
 
+## Modular Runtime
+
+Roadie can run as a classic monolithic daemon or as a set of separate runtime
+components:
+
+- `tiler`: applies layouts and keeps tiled stages consistent;
+- `rail`: renders the stage rail and thumbnails;
+- `border`: draws the focus border overlay;
+- `focus-mouse`: handles focus-follows-mouse;
+- `titlebar-menu`: handles title-bar drag/drop and context actions;
+- `target-mode`: exposes keyboard targets, grids, and target activation;
+- `restore-safety`: writes restore snapshots and handles crash/exit recovery.
+
+Start the full modular profile:
+
+```bash
+./scripts/start-modular
+./bin/roadie query components
+./bin/roadie daemon health
+```
+
+This is useful today for observability and targeted debugging: each component
+has its own process, lock file, and stdout/stderr logs under `~/.roadies`.
+
+It also creates the foundation for companion-mode usage. In that model, Roadie
+can eventually provide stages, rail, borders, focus helpers, target mode, or
+restore safety beside another window manager such as yabai or AeroSpace instead
+of always owning the full tiling loop. The standard modular script still starts
+the tiler, so explicit stage-only or overlay-only profiles remain experimental
+future work rather than a stable public contract.
+
 ## Stages
 
 A stage is a named group of windows inside a Roadie desktop. Only the active stage is visible; inactive stages are hidden but restorable.
