@@ -785,7 +785,10 @@ public struct SnapshotService {
             "exporter"
         ].contains(normalizedTitle)
 
-        return (isSmall && genericTitle) || systemPanelTitle
+        // Sans titre ni AX, quelle que soit la taille : ces fenetres sont des surcouches
+        // (liserés JankyBorders, Dock, HUD) que Roadie ne peut de toute facon pas deplacer.
+        // Les ranger fait sauter le layout a chaque apparition ou disparition.
+        return normalizedTitle.isEmpty || (isSmall && genericTitle) || systemPanelTitle
     }
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {

@@ -218,6 +218,24 @@ struct TilingPolicyTests {
     }
 
     @Test
+    func unidentifiedLargeUntitledOverlayIsExcluded() {
+        // Liseré JankyBorders : fenetre layer 0 sans AX, aussi grande que la fenetre entourée.
+        let result = SnapshotService.applyTilingPolicy(
+            to: window(
+                bundleID: "",
+                appName: "borders",
+                title: "",
+                frame: Rect(x: -12, y: -12, width: 2072, height: 1304),
+                subrole: nil,
+                role: nil,
+                furniture: nil
+            ),
+            config: config()
+        )
+        #expect(result.isTileCandidate == false)
+    }
+
+    @Test
     func unidentifiedLittleSnitchUrlPanelIsExcluded() {
         let result = SnapshotService.applyTilingPolicy(
             to: window(
