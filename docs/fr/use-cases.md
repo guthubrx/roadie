@@ -14,11 +14,11 @@ Setup conseille :
 Commandes :
 
 ```bash
-./bin/roadie desktop label 1 Dev
-./bin/roadie stage rename 1 Dev
-./bin/roadie stage create docs
-./bin/roadie stage create comms
-./bin/roadie mode masterStack
+roadie desktop label 1 Dev
+roadie stage rename 1 Dev
+roadie stage create docs
+roadie stage create comms
+roadie mode masterStack
 ```
 
 Rule typique :
@@ -43,9 +43,9 @@ emit_event = true
 Objectif : garder un ecran principal pour le travail actif et deplacer une stage complete vers un ecran secondaire.
 
 ```bash
-./bin/roadie display list
-./bin/roadie stage move-to-display 2
-./bin/roadie desktop summon 2
+roadie display list
+roadie stage move-to-display 2
+roadie desktop summon 2
 ```
 
 Cas concret :
@@ -59,16 +59,16 @@ Cas concret :
 Objectif : grouper plusieurs fenetres de documentation et les retrouver via queries.
 
 ```bash
-./bin/roadie windows list
-./bin/roadie group create research 12345 67890
-./bin/roadie group focus research 67890
-./bin/roadie query groups
+roadie windows list
+roadie group create research 12345 67890
+roadie group focus research 67890
+roadie query groups
 ```
 
 Integration possible :
 
 ```bash
-./bin/roadie query groups | jq '.data'
+roadie query groups | jq '.data'
 ```
 
 ## 4. Barre de statut locale
@@ -76,7 +76,7 @@ Integration possible :
 Objectif : afficher la fenetre active, la stage et les evenements importants.
 
 ```bash
-./bin/roadie events subscribe --from-now --initial-state --scope window --scope stage
+roadie events subscribe --from-now --initial-state --scope window --scope stage
 ```
 
 Le consommateur doit :
@@ -90,8 +90,8 @@ Le consommateur doit :
 Objectif : eviter qu'une rule TOML cassee perturbe la session.
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
-./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
+roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
 ```
 
 Workflow recommande :
@@ -106,10 +106,10 @@ Workflow recommande :
 Objectif : reparer l'etat local sans supprimer toute la configuration.
 
 ```bash
-./bin/roadie state audit
-./bin/roadie state heal
-./bin/roadie daemon heal
-./bin/roadie daemon health
+roadie state audit
+roadie state heal
+roadie daemon heal
+roadie daemon health
 ```
 
 Utiliser cette sequence apres :
@@ -123,15 +123,15 @@ Utiliser cette sequence apres :
 Objectif : garder une porte de retour explicite et verifier le snapshot utilise aussi par le watcher crash.
 
 ```bash
-./bin/roadie config reload --json
-./bin/roadie restore snapshot --json
-./bin/roadie restore status
+roadie config reload --json
+roadie restore snapshot --json
+roadie restore status
 ```
 
 Si les frames doivent etre restaurees explicitement :
 
 ```bash
-./bin/roadie restore apply --yes
+roadie restore apply --yes
 ```
 
 Ce restore matche les fenetres par ID courant. Le watcher crash utilise le meme mecanisme seulement si le daemon disparait sans sortie propre; il ne tourne pas dans le chemin focus/bordure.
@@ -141,8 +141,8 @@ Ce restore matche les fenetres par ID courant. Le watcher crash utilise le meme 
 Objectif : eviter l'accumulation de logs et backups.
 
 ```bash
-./bin/roadie cleanup --dry-run
-./bin/roadie cleanup --apply
+roadie cleanup --dry-run
+roadie cleanup --apply
 ```
 
 Commencer par `--dry-run` permet de voir les fichiers candidats avant suppression ou rotation.
@@ -153,9 +153,9 @@ Objectif : sauter vers une fenetre, une stage, un ecran, un desktop ou un
 bookmark sans memoriser les IDs internes.
 
 ```bash
-./bin/roadie targets interactive --source all
-./bin/roadie targets pick work --action switch
-./bin/roadie targets inspect A --json
+roadie targets interactive --source all
+roadie targets pick work --action switch
+roadie targets inspect A --json
 ```
 
 A utiliser quand :
@@ -170,8 +170,8 @@ Objectif : cibler une zone visuelle meme quand l'application n'expose pas
 d'element Accessibility utile.
 
 ```bash
-./bin/roadie grid interactive --scope display --duration 10
-./bin/roadie grid interactive --scope focused_window --duration 10
+roadie grid interactive --scope display --duration 10
+roadie grid interactive --scope focused_window --duration 10
 ```
 
 Utilise **Grille Ecran** pour cibler un ecran complet ou changer de zone entre
@@ -184,9 +184,9 @@ Objectif : enregistrer une courte manipulation souris avec coordonnees et
 contexte semantique de cible.
 
 ```bash
-./bin/roadie record start demo --duration 10
-./bin/roadie record inspect demo --json
-./bin/roadie record replay demo
+roadie record start demo --duration 10
+roadie record inspect demo --json
+roadie record replay demo
 ```
 
 Les recordings gardent une meilleure cible Roadie ou Accessibility quand elle

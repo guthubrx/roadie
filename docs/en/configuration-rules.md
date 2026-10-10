@@ -20,10 +20,32 @@ Roadie loads both files. `roadies.toml` stays the human-owned source, while
 Useful commands:
 
 ```bash
-./bin/roadie config validate
-./bin/roadie config show
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie config validate
+roadie config show
+roadie rules validate --config ~/.config/roadies/roadies.toml
 ```
+
+## Example File And Validation
+
+A complete, commented example is in `examples/roadies.toml` at the repository root. Copy it as a starting point:
+
+```bash
+mkdir -p ~/.config/roadies
+cp examples/roadies.toml ~/.config/roadies/roadies.toml
+roadie config validate
+```
+
+`config validate` reports each problem as one line: level, full key name, message. The messages are in French.
+
+| Level | Example | Meaning |
+|---|---|---|
+| `error` | `focus.stage_follows_focus  attendu booléen, reçu texte` | The value has the wrong type, or a required key is missing. Roadie keeps the previous valid configuration. |
+| `warning` | `tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` | Unknown key or table. Roadie ignores it. The suggestion is the closest valid name. |
+| `warning` | `desktops.count  clé sans effet` | Roadie reads the key but does not use it. |
+
+Keys without effect today: the whole `[desktops]` table, and `enabled` and `hide_strategy` in `[stage_manager]`. Remove them from your file. Roadie desktops are always available, and you create them with `roadie desktop` commands.
+
+Every table that the rail reads is accepted: `[fx.rail]` and its sub-tables `layout`, `header`, `header.display`, `header.desktop`, `stages`, `preview`, `stacked`, `stage_labels`, and `parallax`.
 
 ## Layout
 
@@ -50,7 +72,6 @@ Use cases:
 
 ```toml
 [stage_manager]
-enabled = true
 default_stage = "1"
 
 [[stage_manager.workspaces]]
@@ -85,6 +106,7 @@ Important options:
 - `empty_click_hide_active`: allows clicking empty rail space to switch to an empty stage. Default is `false` so a miss-click cannot hide the active stage.
 - `empty_click_safety_margin`: minimum horizontal margin before an empty click is accepted.
 - `layout_mode = "resize"` reserves space for the rail; `overlay` lets the rail sit above the desktop.
+- `hide_on_maximized`: default is `false`. The rail hides in front of a window in native macOS fullscreen only. With `true`, the rail also hides in front of a window that fills the display without native fullscreen (a maximized window). A tiled window alone in its stage does not count as maximized.
 - clicks in macOS-reserved areas such as the menu bar are ignored.
 
 ## Manual Width Adjustment
@@ -210,7 +232,7 @@ A rule must have at least one match field.
 ## Validation
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules validate --config ~/.config/roadies/roadies.toml
 ```
 
 Detected errors:
@@ -254,7 +276,7 @@ automatically reloads generated rules when the generated file changes.
 ## Explain
 
 ```bash
-./bin/roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs --json
+roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs --json
 ```
 
 Use `explain` before adding a rule to your local production setup. It is a dry run: Roadie shows which rule would match and which actions would be applied.

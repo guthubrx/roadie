@@ -1,0 +1,59 @@
+# Roadie shortcuts for skhd / Raccourcis Roadie pour skhd.
+#
+# Copy to ~/.config/skhd/skhdrc, then run: skhd --reload
+# Copier vers ~/.config/skhd/skhdrc, puis lancer : skhd --reload
+#
+# After `make install`, the roadie binary lives in ~/.local/bin (skhd has a short PATH).
+# Après `make install`, le binaire roadie est dans ~/.local/bin (le PATH de skhd est court).
+# With the daemon running, these commands go through its socket: no extra permission is needed.
+# Quand le daemon tourne, ces commandes passent par son socket : aucune permission en plus.
+
+# Key codes in hexadecimal (0x..) are for an ANSI keyboard. Check yours with: skhd --observe
+# Les codes hexadécimaux (0x..) valent pour un clavier ANSI. Vérifier avec : skhd --observe
+
+# Focus (alt + h j k l)
+alt - h : ~/.local/bin/roadie focus left
+alt - j : ~/.local/bin/roadie focus down
+alt - k : ~/.local/bin/roadie focus up
+alt - l : ~/.local/bin/roadie focus right
+alt - tab : ~/.local/bin/roadie focus back-and-forth
+
+# Move a window in the tree (shift + alt + h j k l)
+# Déplacer une fenêtre dans l'arbre (shift + alt + h j k l)
+shift + alt - h : ~/.local/bin/roadie move left
+shift + alt - j : ~/.local/bin/roadie move down
+shift + alt - k : ~/.local/bin/roadie move up
+shift + alt - l : ~/.local/bin/roadie move right
+
+# Layout mode of the current stage / Mode de layout de la stage courante
+ctrl + alt - b : ~/.local/bin/roadie mode bsp
+ctrl + alt - m : ~/.local/bin/roadie mode masterStack
+ctrl + alt - f : ~/.local/bin/roadie mode float
+
+# Stages: switch with alt + 1..3, send the window with shift + alt + 1..3
+# Stages : changer avec alt + 1..3, envoyer la fenêtre avec shift + alt + 1..3
+alt - 1 : ~/.local/bin/roadie stage switch 1
+alt - 2 : ~/.local/bin/roadie stage switch 2
+alt - 3 : ~/.local/bin/roadie stage switch 3
+shift + alt - 1 : ~/.local/bin/roadie stage assign 1
+shift + alt - 2 : ~/.local/bin/roadie stage assign 2
+shift + alt - 3 : ~/.local/bin/roadie stage assign 3
+alt - 0x21 : ~/.local/bin/roadie stage switch-visible prev
+alt - 0x1E : ~/.local/bin/roadie stage switch-visible next
+
+# Desktops: ctrl + alt + 1..3 / Desktops : ctrl + alt + 1..3
+ctrl + alt - 1 : ~/.local/bin/roadie desktop focus 1
+ctrl + alt - 2 : ~/.local/bin/roadie desktop focus 2
+ctrl + alt - 3 : ~/.local/bin/roadie desktop focus 3
+
+# Displays / Écrans
+alt - 0x2B : ~/.local/bin/roadie display focus left
+alt - 0x2F : ~/.local/bin/roadie display focus right
+shift + alt - 0x2F : ~/.local/bin/roadie window display 2
+
+# Width presets / Largeurs prédéfinies
+ctrl + alt - 0x18 : ~/.local/bin/roadie layout width next
+ctrl + alt - 0x1B : ~/.local/bin/roadie layout width prev
+
+# Rebalance the current stage / Rééquilibrer la stage courante
+ctrl + alt - 0 : ~/.local/bin/roadie balance

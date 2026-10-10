@@ -17,7 +17,7 @@ echo "== terminal accessibility =="
 if [[ -x "$roadied_bin" ]]; then
   "$roadied_bin" permissions
 else
-  echo "missing runtime binary; run make start"
+  echo "missing runtime binary; run make dev-start"
 fi
 
 echo "== runtime =="
@@ -30,7 +30,7 @@ if [[ -f "$pidfile" ]]; then
     echo "stale pidfile: $pidfile"
   fi
 else
-  echo "no pidfile; run make start"
+  echo "no pidfile; run make dev-start"
 fi
 
 echo "== launchd =="

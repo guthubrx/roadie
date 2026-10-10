@@ -257,6 +257,17 @@ public struct DesktopsConfig: Equatable, Codable, Sendable {
         case backAndForth = "back_and_forth"
         case mode
     }
+
+    // Toutes les clés sont facultatives : un décodage synthétisé les rendrait obligatoires.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            count: try c.decodeIfPresent(Int.self, forKey: .count) ?? 10,
+            backAndForth: try c.decodeIfPresent(Bool.self, forKey: .backAndForth) ?? true,
+            mode: try c.decodeIfPresent(String.self, forKey: .mode) ?? "global"
+        )
+    }
 }
 
 public struct StageManagerConfig: Equatable, Codable, Sendable {
@@ -277,6 +288,17 @@ public struct StageManagerConfig: Equatable, Codable, Sendable {
         case hideStrategy = "hide_strategy"
         case defaultStage = "default_stage"
         case workspaces
+    }
+
+    // Toutes les clés sont facultatives : un décodage synthétisé les rendrait obligatoires.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            hideStrategy: try c.decodeIfPresent(String.self, forKey: .hideStrategy) ?? "corner",
+            defaultStage: try c.decodeIfPresent(String.self, forKey: .defaultStage) ?? "1",
+            workspaces: try c.decodeIfPresent([StageDefinition].self, forKey: .workspaces) ?? []
+        )
     }
 }
 
@@ -304,6 +326,11 @@ public struct ExclusionsConfig: Equatable, Codable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case floatingBundles = "floating_bundles"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.floatingBundles = try c.decodeIfPresent([String].self, forKey: .floatingBundles) ?? []
     }
 }
 
@@ -376,6 +403,16 @@ public struct EffectsConfig: Equatable, Codable, Sendable {
 
     public init(borders: BorderConfig = BorderConfig()) {
         self.borders = borders
+    }
+
+    // `borders` est facultatif : `[fx.rail]` seul est une configuration valide.
+    enum CodingKeys: String, CodingKey {
+        case borders
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.borders = try c.decodeIfPresent(BorderConfig.self, forKey: .borders) ?? BorderConfig()
     }
 }
 
@@ -1011,8 +1048,9 @@ public enum RoadieConfigLoader {
             return ConfigValidationReport(items: items)
         }
 
+        var raw = ""
         do {
-            let raw = try String(contentsOfFile: resolved, encoding: .utf8)
+            raw = try String(contentsOfFile: resolved, encoding: .utf8)
             _ = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
             items.append(contentsOf: ConfigValidationRules.validate(rawToml: raw))
             items.append(contentsOf: validateGeneratedRules(path: generatedPath))
@@ -1022,7 +1060,7 @@ public enum RoadieConfigLoader {
             return ConfigValidationReport(items: items)
         } catch {
             return ConfigValidationReport(items: [
-                ConfigValidationItem(level: .error, path: resolved, message: "config decode failed: \(error)")
+                ConfigValidationItem(level: .error, path: resolved, message: ConfigValidationRules.describe(decodeError: error, rawToml: raw))
             ])
         }
     }
@@ -1046,13 +1084,14 @@ public enum RoadieConfigLoader {
 
     private static func validateGeneratedRules(path: String) -> [ConfigValidationItem] {
         guard FileManager.default.fileExists(atPath: path) else { return [] }
+        var raw = ""
         do {
-            let raw = try String(contentsOfFile: path, encoding: .utf8)
+            raw = try String(contentsOfFile: path, encoding: .utf8)
             _ = try TOMLDecoder().decode(RoadieConfig.self, from: raw)
             return ConfigValidationRules.validateGeneratedRules(rawToml: raw, path: path)
         } catch {
             return [
-                ConfigValidationItem(level: .error, path: path, message: "generated rules decode failed: \(error)")
+                ConfigValidationItem(level: .error, path: path, message: ConfigValidationRules.describe(decodeError: error, rawToml: raw))
             ]
         }
     }
@@ -1106,6 +1145,18 @@ private enum ConfigValidationRules {
         "fx",
         "fx.borders",
         "fx.borders.stage_overrides",
+        // Tables lues par RailSettings (Sources/RoadieDaemon/RailSettings.swift).
+        "fx.rail",
+        "fx.rail.layout",
+        "fx.rail.header",
+        "fx.rail.header.display",
+        "fx.rail.header.desktop",
+        "fx.rail.stages",
+        "fx.rail.preview",
+        "fx.rail.preview.stage_overrides",
+        "fx.rail.stacked",
+        "fx.rail.stage_labels",
+        "fx.rail.parallax",
         "focus",
         "window_placement",
         "width_adjustment",
@@ -1129,13 +1180,55 @@ private enum ConfigValidationRules {
         "signals.hooks",
         "fx.animations",
         "fx.opacity",
-        "fx.opacity.stage_hide",
-        "fx.rail",
-        "fx.rail.stage_labels",
-        "fx.rail.stacked",
-        "fx.rail.preview",
-        "fx.rail.preview.stage_overrides",
-        "fx.rail.parallax"
+        "fx.opacity.stage_hide"
+    ]
+
+    /// Clés réellement lues, par table. Une table absente de ce dictionnaire n'est pas vérifiée.
+    /// Source : les `CodingKeys` de ce fichier, `WindowRule.swift` et `RailSettings.swift`.
+    private static let knownKeys: [String: Set<String>] = {
+        let labelKeys: Set<String> = ["enabled", "template", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y"]
+        let gapKeys: Set<String> = ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"]
+        return [
+            "": [],
+            "fx": [],
+            "tiling": gapKeys.union(["default_strategy", "split_policy", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
+            "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
+            "desktops": ["enabled", "count", "back_and_forth", "mode"],
+            "stage_manager": ["enabled", "hide_strategy", "default_stage", "workspaces"],
+            "stage_manager.workspaces": ["id", "display_name"],
+            "exclusions": ["floating_bundles"],
+            "fx.borders": ["enabled", "thickness", "corner_radius", "active_color", "inactive_color", "pulse_on_focus", "stage_overrides"],
+            "fx.borders.stage_overrides": ["stage_id", "active_color"],
+            "fx.rail": ["renderer", "width", "background_color", "background_opacity", "auto_hide", "edge_hit_width", "edge_magnetism_width", "animation_ms", "hide_delay_ms", "layout_mode", "dynamic_left_gap", "empty_click_hide_active", "empty_click_safety_margin", "hide_on_maximized"],
+            "fx.rail.layout": ["header_position", "stages_position", "spacing", "top_padding", "bottom_padding"],
+            "fx.rail.header": ["enabled", "placement", "alignment", "top_padding", "bottom_padding", "height", "width", "title_color", "subtitle_color", "title_font_size", "subtitle_font_size", "font_family", "title_weight", "subtitle_weight", "title_template", "subtitle_template"],
+            "fx.rail.header.display": labelKeys,
+            "fx.rail.header.desktop": labelKeys,
+            "fx.rail.stage_labels": ["enabled", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y", "placement", "z_order", "visibility_seconds", "fade_seconds"],
+            "fx.rail.stages": ["position", "alignment", "gap"],
+            "fx.rail.preview": ["width", "height", "leading_padding", "trailing_padding", "vertical_padding"],
+            "fx.rail.preview.stage_overrides": ["stage_id", "active_color"],
+            "fx.rail.stacked": ["offset_x", "offset_y", "scale_per_layer", "opacity_per_layer"],
+            "fx.rail.parallax": ["rotation", "offset_x", "offset_y", "scale_per_layer", "opacity_per_layer", "darken_per_layer", "width", "height", "leading_padding", "trailing_padding", "vertical_padding"],
+            "focus": ["stage_follows_focus", "assign_follows_focus", "stage_move_follows_focus", "focus_follows_mouse", "mouse_follows_focus"],
+            "window_placement": ["new_apps_target", "new_window_side"],
+            "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
+            "experimental": [],
+            "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled"],
+            "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
+            "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope"],
+            "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
+            "rules": ["id", "enabled", "priority", "stop_processing", "match", "action"],
+            "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
+            "rules.action": ["manage", "exclude", "assign_desktop", "assign_display", "assign_stage", "follow", "floating", "layout", "gap_override", "scratchpad", "emit_event"]
+        ]
+    }()
+
+    /// Clés décodées mais lues nulle part dans le daemon (vérifié par recherche dans `Sources/`).
+    private static let ineffectiveKeys: [String: Set<String>] = [
+        "desktops": ["enabled", "count", "back_and_forth", "mode"],
+        "stage_manager": ["enabled", "hide_strategy"]
     ]
 
     static func validate(rawToml: String) -> [ConfigValidationItem] {
@@ -1155,9 +1248,12 @@ private enum ConfigValidationRules {
                 items.append(ConfigValidationItem(
                     level: .warning,
                     path: table,
-                    message: "unknown table ignored"
+                    message: "table inconnue, ignorée" + suggestionSuffix(for: table, among: supportedTables.union(knownUnsupportedTables))
                 ))
             }
+        }
+        if let root = try? TOMLTable(string: rawToml) {
+            items.append(contentsOf: keyChecks(in: root, path: ""))
         }
         items.append(contentsOf: scalarTypeChecks(rawToml: rawToml))
         if let config = try? TOMLDecoder().decode(RoadieConfig.self, from: rawToml) {
@@ -1186,6 +1282,157 @@ private enum ConfigValidationRules {
                 )
             }
             return nil
+        }
+    }
+
+    /// Signale les clés inconnues (avec suggestion) et les clés sans effet.
+    /// Complexité : O(k * c * l²) — k clés du fichier, c candidats de la table (≤ 30), l longueur d'un nom (≤ 40).
+    private static func keyChecks(in table: TOMLTable, path: String) -> [ConfigValidationItem] {
+        var items: [ConfigValidationItem] = []
+        let known = knownKeys[path]
+        for key in table.keys.sorted() {
+            guard let value = table[key] else { continue }
+            let childPath = path.isEmpty ? key : "\(path).\(key)"
+            if let child = value.table {
+                items.append(contentsOf: keyChecks(in: child, path: childPath))
+            } else if let array = value.array, array.count > 0, array.allSatisfy({ $0.table != nil }) {
+                for element in array {
+                    if let child = element.table {
+                        items.append(contentsOf: keyChecks(in: child, path: childPath))
+                    }
+                }
+            } else if let known {
+                if ineffectiveKeys[path]?.contains(key) == true {
+                    items.append(ConfigValidationItem(
+                        level: .warning,
+                        path: childPath,
+                        message: "clé sans effet : roadie ne la lit pas"
+                    ))
+                } else if !known.contains(key) {
+                    items.append(ConfigValidationItem(
+                        level: .warning,
+                        path: childPath,
+                        message: "clé inconnue, ignorée" + suggestionSuffix(for: key, among: known)
+                    ))
+                }
+            }
+        }
+        return items
+    }
+
+    private static func suggestionSuffix(for name: String, among candidates: Set<String>) -> String {
+        guard let best = closest(to: name, among: candidates) else { return "" }
+        return " ; vouliez-vous dire « \(best) » ?"
+    }
+
+    /// Candidat le plus proche par distance d'édition, à 2 modifications au plus (1 pour un nom court).
+    private static func closest(to name: String, among candidates: Set<String>) -> String? {
+        let limit = name.count <= 4 ? 1 : 2
+        return candidates
+            .map { (candidate: $0, distance: editDistance(name, $0)) }
+            .filter { $0.distance <= limit }
+            .min { ($0.distance, $0.candidate) < ($1.distance, $1.candidate) }?
+            .candidate
+    }
+
+    /// Distance de Levenshtein. Complexité : O(a * b) en temps, O(b) en mémoire.
+    private static func editDistance(_ lhs: String, _ rhs: String) -> Int {
+        let a = Array(lhs)
+        let b = Array(rhs)
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var previous = Array(0...b.count)
+        for i in 1...a.count {
+            var current = [i] + Array(repeating: 0, count: b.count)
+            for j in 1...b.count {
+                let cost = a[i - 1] == b[j - 1] ? 0 : 1
+                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+            }
+            previous = current
+        }
+        return previous[b.count]
+    }
+
+    /// Traduit une erreur de décodage en message lisible : `table.clé : attendu X, reçu Y`.
+    static func describe(decodeError error: Error, rawToml: String) -> String {
+        if let parseError = error as? TOMLParseError {
+            let begin = parseError.source.begin
+            return "syntaxe TOML invalide (ligne \(begin.line), colonne \(begin.column)) : \(parseError.description)"
+        }
+        guard let decodingError = error as? DecodingError else { return "\(error)" }
+        let context: DecodingError.Context
+        var expected: String?
+        switch decodingError {
+        case .typeMismatch(let type, let ctx), .valueNotFound(let type, let ctx):
+            context = ctx
+            expected = expectedName("\(type)")
+        case .keyNotFound(_, let ctx):
+            context = ctx
+            // TOMLKit : `A "String" does not exist at ...`
+            let parts = ctx.debugDescription.split(separator: "\"", omittingEmptySubsequences: false)
+            expected = parts.count > 1 ? expectedName(String(parts[1])) : nil
+        case .dataCorrupted(let ctx):
+            context = ctx
+        @unknown default:
+            return "\(error)"
+        }
+        let path = displayPath(context.codingPath)
+        let received = (try? TOMLTable(string: rawToml)).flatMap { rawValue(at: context.codingPath, in: $0) }
+        var message = path.isEmpty ? "" : "\(path) : "
+        switch (expected, received) {
+        case (let expected?, let received?):
+            message += "attendu \(expected), reçu \(receivedName(received.type))"
+        case (let expected?, nil):
+            message += "clé obligatoire absente (attendu \(expected))"
+        default:
+            message += context.debugDescription
+        }
+        return message
+    }
+
+    private static func displayPath(_ codingPath: [CodingKey]) -> String {
+        codingPath.reduce(into: "") { result, key in
+            if let index = key.intValue {
+                result += "[\(index)]"
+            } else {
+                result += result.isEmpty ? key.stringValue : ".\(key.stringValue)"
+            }
+        }
+    }
+
+    private static func rawValue(at codingPath: [CodingKey], in root: TOMLTable) -> TOMLValueConvertible? {
+        var current: TOMLValueConvertible = root
+        for key in codingPath {
+            if let index = key.intValue {
+                guard let array = current.array, index >= 0, index < array.count else { return nil }
+                current = array[index]
+            } else {
+                guard let next = current.table?[key.stringValue] else { return nil }
+                current = next
+            }
+        }
+        return current
+    }
+
+    private static func expectedName(_ swiftType: String) -> String {
+        switch swiftType {
+        case "String": return "texte"
+        case "Bool": return "booléen"
+        case "Double": return "nombre"
+        case "Int": return "entier"
+        default: return swiftType
+        }
+    }
+
+    private static func receivedName(_ type: TOMLType) -> String {
+        switch type {
+        case .string: return "texte"
+        case .bool: return "booléen"
+        case .double: return "nombre"
+        case .int: return "entier"
+        case .table: return "table"
+        case .array: return "tableau"
+        case .date, .time, .dateTime: return "date"
         }
     }
 

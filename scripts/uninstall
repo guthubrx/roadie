@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Désinstalle Roadie : remet les fenêtres masquées, arrête le service, supprime LaunchAgent et binaires.
+# L'état (~/.roadies, ~/.local/state/roadies) est conservé sauf réponse explicite.
+# La configuration (~/.config/roadies) n'est JAMAIS supprimée par ce script.
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd "$script_dir/.." && pwd)"
+label="com.roadie.roadied"
+service="gui/$(id -u)/$label"
+plist="$HOME/Library/LaunchAgents/$label.plist"
+local_bin_dir="$HOME/.local/bin"
+state_dirs=("$HOME/.roadies" "$HOME/.local/state/roadies")
+
+# 1. Remettre les fenêtres des stages masqués à l'écran avant d'arrêter le daemon.
+roadie_bin="$local_bin_dir/roadie"
+[[ -x "$roadie_bin" ]] || roadie_bin="$repo_root/bin/roadie"
+if [[ -x "$roadie_bin" ]]; then
+  echo "Remise à l'écran des fenêtres masquées..."
+  if ! "$roadie_bin" restore unhide-all; then
+    echo "ATTENTION : 'roadie restore unhide-all' a échoué ou n'existe pas dans cette version." >&2
+    echo "  Si des fenêtres restent hors écran, relancez Roadie puis utilisez 'roadie restore apply --yes'." >&2
+  fi
+else
+  echo "Binaire roadie introuvable : étape de remise à l'écran ignorée." >&2
+fi
+
+# 2. Arrêter et décharger le service (sans kill : launchd envoie le signal d'arrêt).
+if launchctl print "$service" >/dev/null 2>&1; then
+  launchctl bootout "$service"
+  echo "$label arrêté"
+else
+  echo "$label n'était pas chargé"
+fi
+
+# 3. Supprimer le LaunchAgent et les binaires installés.
+rm -f "$plist" "$local_bin_dir/roadied" "$local_bin_dir/roadie"
+echo "Supprimés : $plist, $local_bin_dir/roadied, $local_bin_dir/roadie"
+
+# 4. Proposer de conserver l'état (stages, historique, logs). Sans terminal, on le conserve.
+existing_state=()
+for dir in "${state_dirs[@]}"; do
+  [[ -d "$dir" ]] && existing_state+=("$dir")
+done
+if [[ ${#existing_state[@]} -gt 0 ]]; then
+  answer="o"
+  if [[ -t 0 ]]; then
+    printf "Conserver l'état de Roadie (%s) ? [O/n] " "${existing_state[*]}"
+    read -r answer || answer="o"
+  fi
+  case "$answer" in
+    n|N|non|NON)
+      rm -rf "${existing_state[@]}"
+      echo "État supprimé."
+      ;;
+    *)
+      echo "État conservé : ${existing_state[*]}"
+      ;;
+  esac
+fi
+
+echo "Configuration conservée : ~/.config/roadies (à supprimer à la main si besoin)."
+echo "Permissions : retirez roadied de Réglages Système > Confidentialité et sécurité > Accessibilité et Enregistrement de l'écran."

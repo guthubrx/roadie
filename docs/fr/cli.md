@@ -1,26 +1,30 @@
 # Commandes CLI
 
-Toutes les commandes ci-dessous peuvent etre appelees directement avec `./bin/roadie` ou via `./scripts/roadie`.
+Toutes les commandes ci-dessous utilisent le binaire `roadie`. `make install` le place dans `~/.local/bin` ; ajoute ce dossier à ton `PATH`. Depuis les sources, `./scripts/roadie` lance les mêmes commandes avec `swift run`.
+
+Quand le daemon tourne, `roadie` lui envoie chaque commande par le socket `~/.roadies/roadied.sock`. La commande n'a pas besoin de sa propre permission Accessibilité. Si le daemon est arrêté, `roadie` exécute la commande lui-même et a alors besoin de la permission. `daemon start|stop|restart|health`, `doctor`, `permissions` et `config validate` tournent toujours en local.
 
 ## Etat et diagnostic
 
 ```bash
-./bin/roadie daemon health
-./bin/roadie daemon heal
-./bin/roadie state dump --json
-./bin/roadie state audit
-./bin/roadie state heal
-./bin/roadie metrics --json
-./bin/roadie doctor
-./bin/roadie self-test
-./bin/roadie performance summary
-./bin/roadie performance recent --limit 20
-./bin/roadie performance thresholds --json
+roadie daemon health
+roadie daemon heal
+roadie state dump --json
+roadie state audit
+roadie state heal
+roadie metrics --json
+roadie doctor
+roadie self-test
+roadie performance summary
+roadie performance recent --limit 20
+roadie performance thresholds --json
 ```
 
 Utilisation typique :
 
 - `daemon health` : verifier que le daemon et l'etat sont coherents.
+- `doctor` : rapport complet sur le daemon (en marche ou non), les permissions Accessibilité et Enregistrement d'écran, et la validité de la configuration. Il lit `~/.roadies/daemon-status.json`, que le daemon met à jour régulièrement.
+- `--version` : affiche la version. `roadied --version` fait de même pour le binaire du daemon.
 - `state audit` : detecter doublons, references obsoletes ou scopes casses.
 - `state heal` : reparer les incoherences conservatrices.
 - `metrics --json` : alimenter un script ou un dashboard.
@@ -29,16 +33,16 @@ Utilisation typique :
 ## Fenetres et focus
 
 ```bash
-./bin/roadie windows list
-./bin/roadie windows list --json
-./bin/roadie focus left|right|up|down
-./bin/roadie focus back-and-forth
-./bin/roadie move left|right|up|down
-./bin/roadie warp left|right|up|down
-./bin/roadie resize left|right|up|down
-./bin/roadie window display 2
-./bin/roadie window desktop 2 --follow
-./bin/roadie window reset
+roadie windows list
+roadie windows list --json
+roadie focus left|right|up|down
+roadie focus back-and-forth
+roadie move left|right|up|down
+roadie warp left|right|up|down
+roadie resize left|right|up|down
+roadie window display 2
+roadie window desktop 2 --follow
+roadie window reset
 ```
 
 Cas d'usage :
@@ -51,24 +55,24 @@ Cas d'usage :
 ## Layout
 
 ```bash
-./bin/roadie mode bsp
-./bin/roadie mode mutableBsp
-./bin/roadie mode masterStack
-./bin/roadie mode float
-./bin/roadie layout plan --json
-./bin/roadie layout apply --yes
-./bin/roadie layout split horizontal
-./bin/roadie layout split vertical
-./bin/roadie layout join-with left|right|up|down
-./bin/roadie layout insert left|right|up|down
-./bin/roadie layout toggle-split [left|right|up|down]
-./bin/roadie layout flatten
-./bin/roadie layout zoom-parent
-./bin/roadie layout width next
-./bin/roadie layout width prev
-./bin/roadie layout width nudge 0.05
-./bin/roadie layout width ratio 0.67
-./bin/roadie balance
+roadie mode bsp
+roadie mode mutableBsp
+roadie mode masterStack
+roadie mode float
+roadie layout plan --json
+roadie layout apply --yes
+roadie layout split horizontal
+roadie layout split vertical
+roadie layout join-with left|right|up|down
+roadie layout insert left|right|up|down
+roadie layout toggle-split [left|right|up|down]
+roadie layout flatten
+roadie layout zoom-parent
+roadie layout width next
+roadie layout width prev
+roadie layout width nudge 0.05
+roadie layout width ratio 0.67
+roadie balance
 ```
 
 Cas d'usage :
@@ -82,10 +86,10 @@ Cas d'usage :
 ## Navrail
 
 ```bash
-./bin/roadie rail status
-./bin/roadie rail pin
-./bin/roadie rail unpin
-./bin/roadie rail toggle
+roadie rail status
+roadie rail pin
+roadie rail unpin
+roadie rail toggle
 ```
 
 Le navrail accepte aussi les interactions souris :
@@ -97,54 +101,56 @@ Le navrail accepte aussi les interactions souris :
 ## Securite et fichiers generes
 
 ```bash
-./bin/roadie config validate --json
-./bin/roadie config reload --json
-./bin/roadie restore snapshot --json
-./bin/roadie restore status --json
-./bin/roadie restore apply --yes --json
-./bin/roadie cleanup --dry-run --json
-./bin/roadie cleanup --apply
+roadie config validate --json
+roadie config reload --json
+roadie restore snapshot --json
+roadie restore status --json
+roadie restore apply --yes --json
+roadie restore unhide-all
+roadie cleanup --dry-run --json
+roadie cleanup --apply
 ```
 
 Notes :
 
 - `config reload` valide avant d'appliquer et conserve l'ancienne config si la nouvelle est invalide.
+- `restore unhide-all` ramène à l'écran toutes les fenêtres masquées ou parquées par Roadie. Utilise-la après un crash, ou avant de désinstaller Roadie (`make uninstall` la lance pour toi).
 - `restore snapshot` et `restore apply` restent disponibles manuellement; le daemon ecrit aussi un snapshot au demarrage/arret propre.
-- le crash watcher restaure uniquement si `roadied` disparait sans marker de sortie propre; `roadied run --yes --no-restore-safety` le desactive.
+- le daemon remet les fenêtres masquées quand il s'arrête, et un watcher le fait après un crash; `roadied run --yes --no-restore-safety` désactive les deux.
 - `cleanup --dry-run` affiche ce qui serait supprime ou rotate avant toute action.
 
 ## Ecrans, desktops et stages
 
 ```bash
-./bin/roadie display list
-./bin/roadie display current
-./bin/roadie display focus 2
+roadie display list
+roadie display current
+roadie display focus 2
 
-./bin/roadie desktop list
-./bin/roadie desktop current
-./bin/roadie desktop focus 2
-./bin/roadie desktop prev
-./bin/roadie desktop next
-./bin/roadie desktop back-and-forth
-./bin/roadie desktop summon 3
-./bin/roadie desktop label 2 DeepWork
+roadie desktop list
+roadie desktop current
+roadie desktop focus 2
+roadie desktop prev
+roadie desktop next
+roadie desktop back-and-forth
+roadie desktop summon 3
+roadie desktop label 2 DeepWork
 
-./bin/roadie stage list
-./bin/roadie stage create 4
-./bin/roadie stage rename 4 Comms
-./bin/roadie stage switch 2
-./bin/roadie stage assign 2
-./bin/roadie stage switch-position 2
-./bin/roadie stage assign-position 2
-./bin/roadie stage switch-visible next
-./bin/roadie stage switch-visible prev
-./bin/roadie stage assign-empty
-./bin/roadie stage summon WINDOW_ID
-./bin/roadie stage move-to-display 2
-./bin/roadie stage move-to-display right
-./bin/roadie stage move-to-display right --no-follow
-./bin/roadie stage prev
-./bin/roadie stage next
+roadie stage list
+roadie stage create 4
+roadie stage rename 4 Comms
+roadie stage switch 2
+roadie stage assign 2
+roadie stage switch-position 2
+roadie stage assign-position 2
+roadie stage switch-visible next
+roadie stage switch-visible prev
+roadie stage assign-empty
+roadie stage summon WINDOW_ID
+roadie stage move-to-display 2
+roadie stage move-to-display right
+roadie stage move-to-display right --no-follow
+roadie stage prev
+roadie stage next
 ```
 
 `stage switch` et `stage assign` ciblent les IDs stables. `stage switch-position`
@@ -169,42 +175,42 @@ autres ecrans disponibles.
 ## Rules
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
-./bin/roadie rules list --json
-./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
+roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules list --json
+roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
 ```
 
 ## Groupes de fenetres
 
 ```bash
-./bin/roadie group create terminals 12345 67890
-./bin/roadie group add terminals 11111
-./bin/roadie group focus terminals 67890
-./bin/roadie group remove terminals 12345
-./bin/roadie group dissolve terminals
-./bin/roadie group list
+roadie group create terminals 12345 67890
+roadie group add terminals 11111
+roadie group focus terminals 67890
+roadie group remove terminals 12345
+roadie group dissolve terminals
+roadie group list
 ```
 
 ## Evenements et queries
 
 ```bash
-./bin/roadie events tail 50
-./bin/roadie events subscribe --from-now --initial-state
-./bin/roadie events subscribe --from-now --type window.focused --scope window
+roadie events tail 50
+roadie events subscribe --from-now --initial-state
+roadie events subscribe --from-now --type window.focused --scope window
 
-./bin/roadie query state
-./bin/roadie query windows
-./bin/roadie query displays
-./bin/roadie query desktops
-./bin/roadie query stages
-./bin/roadie query groups
-./bin/roadie query rules
-./bin/roadie query health
-./bin/roadie query events
-./bin/roadie query event_catalog
-./bin/roadie query performance
-./bin/roadie query restore
-./bin/roadie query targets
+roadie query state
+roadie query windows
+roadie query displays
+roadie query desktops
+roadie query stages
+roadie query groups
+roadie query rules
+roadie query health
+roadie query events
+roadie query event_catalog
+roadie query performance
+roadie query restore
+roadie query targets
 ```
 
 Chaque `query` retourne un JSON stable :
@@ -219,22 +225,22 @@ Chaque `query` retourne un JSON stable :
 ## Mode Cibles
 
 ```bash
-./bin/roadie targets list
-./bin/roadie targets list --json
-./bin/roadie targets list --source roadie|app|all
-./bin/roadie targets list --filter TEXT --max 40
-./bin/roadie targets pick QUERY_OR_LABEL
-./bin/roadie targets pick QUERY_OR_LABEL --action focus|switch|send-active|click|double-click|right-click
-./bin/roadie targets inspect TARGET_ID_OR_LABEL
-./bin/roadie targets inspect TARGET_ID_OR_LABEL --json
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action focus
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action switch
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action send-active
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action click
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action double-click
-./bin/roadie targets activate TARGET_ID_OR_LABEL --action right-click
-./bin/roadie targets show --json --labels-only
-./bin/roadie targets hide
+roadie targets list
+roadie targets list --json
+roadie targets list --source roadie|app|all
+roadie targets list --filter TEXT --max 40
+roadie targets pick QUERY_OR_LABEL
+roadie targets pick QUERY_OR_LABEL --action focus|switch|send-active|click|double-click|right-click
+roadie targets inspect TARGET_ID_OR_LABEL
+roadie targets inspect TARGET_ID_OR_LABEL --json
+roadie targets activate TARGET_ID_OR_LABEL --action focus
+roadie targets activate TARGET_ID_OR_LABEL --action switch
+roadie targets activate TARGET_ID_OR_LABEL --action send-active
+roadie targets activate TARGET_ID_OR_LABEL --action click
+roadie targets activate TARGET_ID_OR_LABEL --action double-click
+roadie targets activate TARGET_ID_OR_LABEL --action right-click
+roadie targets show --json --labels-only
+roadie targets hide
 ```
 
 `--source app` et `--source all` lisent les zones applicatives uniquement si
@@ -255,23 +261,23 @@ le layout.
 ## Grille Ecran, Grille Fenetre Et Macros
 
 ```bash
-./bin/roadie grid show --json
-./bin/roadie grid show A --visual --duration 2
-./bin/roadie grid interactive --scope display --duration 10
-./bin/roadie grid interactive --scope focused_window --duration 10
-./bin/roadie grid click A
-./bin/roadie grid double-click A
-./bin/roadie grid right-click A
-./bin/roadie grid move A
-./bin/roadie grid scroll-up A
-./bin/roadie grid scroll-down A
-./bin/roadie grid drag A L
+roadie grid show --json
+roadie grid show A --visual --duration 2
+roadie grid interactive --scope display --duration 10
+roadie grid interactive --scope focused_window --duration 10
+roadie grid click A
+roadie grid double-click A
+roadie grid right-click A
+roadie grid move A
+roadie grid scroll-up A
+roadie grid scroll-down A
+roadie grid drag A L
 
-./bin/roadie record start demo --duration 10
-./bin/roadie record list
-./bin/roadie record inspect demo --json
-./bin/roadie record replay demo
-./bin/roadie record delete demo
+roadie record start demo --duration 10
+roadie record list
+roadie record inspect demo --json
+roadie record replay demo
+roadie record delete demo
 ```
 
 Les deux grilles sont configurees par `[experimental.target_grid]`.
@@ -302,3 +308,14 @@ texte saisi n'est pas enregistre par defaut. L'indicateur d'enregistrement se
 regle avec `indicator = "notification"`, `"navrail"`, `"both"` ou `"none"`.
 Quand il est affiche dans le navrail, `navrail_bottom_offset` controle sa
 distance au bas du rail en pixels.
+
+## Raccourcis
+
+Roadie n'a pas de moteur de raccourcis clavier. Utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
+
+- `examples/skhd/skhdrc` : raccourcis pour [skhd](https://github.com/koekeishiya/skhd). Copie-le vers `~/.config/skhd/skhdrc`, puis lance `skhd --reload`.
+- `examples/karabiner/roadie.json` : règles pour Karabiner-Elements. Copie-le vers `~/.config/karabiner/assets/complex_modifications/`, puis active les règles dans Karabiner-Elements > Complex Modifications > Add predefined rule.
+
+Les deux fichiers appellent `~/.local/bin/roadie`. Ils couvrent le focus, le déplacement de fenêtre, le changement de stage et de desktop, le mode de layout et le rééquilibrage. Avec BetterTouchTool, crée un déclencheur de type « Execute Terminal Command » avec les mêmes commandes.
+
+Comme le daemon exécute les commandes, ces outils n'ont pas besoin de la permission Accessibilité pour `roadie` (voir [Permissions](../../README.fr.md#permissions)).

@@ -1,0 +1,109 @@
+# Roadie example configuration / Exemple de configuration Roadie.
+#
+# Copy to ~/.config/roadies/roadies.toml, then check it with: roadie config validate
+# Copier vers ~/.config/roadies/roadies.toml, puis vérifier avec : roadie config validate
+#
+# Every value below is the default unless a comment says otherwise.
+# Chaque valeur ci-dessous est la valeur par défaut, sauf indication contraire.
+
+# EN: Tiling engine. default_strategy: bsp | mutableBsp | masterStack | float.
+# FR: Moteur de tiling. default_strategy : bsp | mutableBsp | masterStack | float.
+[tiling]
+default_strategy = "bsp"
+gaps_outer = 8
+gaps_inner = 4
+master_ratio = 0.6
+# EN: Remove the gaps when a stage holds a single window.
+# FR: Supprime les marges quand une stage ne contient qu'une fenêtre.
+smart_gaps_solo = false
+
+# EN: Per-display outer gaps. Match a display by name or id (see: roadie display list).
+# FR: Marges extérieures par écran. Cible un écran par nom ou id (voir : roadie display list).
+# [[tiling.display_overrides]]
+# display_name = "LG HDR 4K"
+# gaps_outer_left = 150
+
+# EN: Stage that is active on an empty desktop, and optional named stages.
+# FR: Stage active sur un desktop vide, et stages nommées facultatives.
+[stage_manager]
+default_stage = "1"
+
+[[stage_manager.workspaces]]
+id = "dev"
+display_name = "Dev"
+
+[[stage_manager.workspaces]]
+id = "web"
+display_name = "Web"
+
+# EN: Applications that Roadie never tiles (bundle identifiers).
+# FR: Applications que Roadie ne tile jamais (identifiants de bundle).
+[exclusions]
+floating_bundles = ["com.apple.systempreferences"]
+
+# EN: Focus behavior. Focus follows mouse is off by default.
+# FR: Comportement du focus. Le focus suit la souris : désactivé par défaut.
+[focus]
+stage_follows_focus = true
+assign_follows_focus = false
+stage_move_follows_focus = true
+focus_follows_mouse = false
+mouse_follows_focus = false
+
+# EN: Where new application windows go: mouse | focused_display | macos.
+# FR: Où vont les nouvelles fenêtres : mouse | focused_display | macos.
+[window_placement]
+new_apps_target = "macos"
+new_window_side = "right"
+
+# EN: Width presets used by: roadie layout width next|prev.
+# FR: Largeurs prédéfinies utilisées par : roadie layout width next|prev.
+[width_adjustment]
+presets = [0.5, 0.67, 0.8, 1.0]
+nudge_step = 0.05
+
+# EN: Colored border around the focused window. Off by default.
+# FR: Bordure colorée autour de la fenêtre active. Désactivée par défaut.
+[fx.borders]
+enabled = false
+thickness = 2
+corner_radius = 10
+active_color = "#7AA2F7"
+inactive_color = "#414868"
+
+# EN: Stage rail. Needs the Screen Recording permission for live thumbnails.
+# FR: Rail de stages. Demande la permission Enregistrement de l'écran pour les vignettes.
+[fx.rail]
+renderer = "stacked-previews"
+width = 150
+# EN: Hide the rail on a native fullscreen window. Set hide_on_maximized = true
+#     to hide it in front of a maximized window too.
+# FR: Masque le rail devant une fenêtre en plein écran natif. Mettre
+#     hide_on_maximized = true pour le masquer aussi devant une fenêtre agrandie.
+hide_on_maximized = false
+auto_hide = false
+layout_mode = "overlay"
+# EN: A click on empty rail space does nothing, so a miss-click cannot hide the stage.
+# FR: Un clic dans le vide du rail ne fait rien : un clic raté ne masque pas la stage.
+empty_click_hide_active = false
+
+[fx.rail.layout]
+header_position = "top"
+stages_position = "center"
+
+[fx.rail.stage_labels]
+enabled = true
+
+# EN: Window rules. Check them with: roadie rules validate
+# FR: Règles de fenêtres. Vérifier avec : roadie rules validate
+[[rules]]
+id = "firefox-pip"
+priority = 100
+match = { app = "Firefox", title_regex = "Picture-in-Picture" }
+action = { exclude = true }
+
+[[rules]]
+id = "terminal-on-dev"
+priority = 50
+match = { app = "Terminal" }
+action = { assign_stage = "dev", follow = false }

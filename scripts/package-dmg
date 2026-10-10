@@ -9,6 +9,19 @@ app_version="${ROADIE_VERSION:-0.3.0}"
 app_bundle="$dist_dir/$app_name.app"
 dmg_path="$dist_dir/$app_name.dmg"
 icon_path="$repo_root/docs/assets/roadie-logo.png"
+
+require() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Outil manquant : $1. $2" >&2
+    exit 69
+  }
+}
+require create-dmg "Installez-le avec : brew install create-dmg"
+require sips "Outil système macOS introuvable."
+require iconutil "Outil système macOS introuvable."
+require codesign "Installez les Command Line Tools : xcode-select --install"
+require perl "Outil système macOS introuvable."
+
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/roadie-dmg.XXXXXX")"
 iconset="$tmp_dir/Roadie.iconset"
 

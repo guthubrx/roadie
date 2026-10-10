@@ -21,10 +21,32 @@ menus.
 Commandes utiles :
 
 ```bash
-./bin/roadie config validate
-./bin/roadie config show
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie config validate
+roadie config show
+roadie rules validate --config ~/.config/roadies/roadies.toml
 ```
+
+## Fichier d'exemple et validation
+
+Un exemple complet et commenté est dans `examples/roadies.toml`, à la racine du dépôt. Copie-le comme point de départ :
+
+```bash
+mkdir -p ~/.config/roadies
+cp examples/roadies.toml ~/.config/roadies/roadies.toml
+roadie config validate
+```
+
+`config validate` signale chaque problème sur une ligne : niveau, nom complet de la clé, message.
+
+| Niveau | Exemple | Sens |
+|---|---|---|
+| `error` | `focus.stage_follows_focus  attendu booléen, reçu texte` | La valeur a le mauvais type, ou une clé obligatoire manque. Roadie garde la dernière configuration valide. |
+| `warning` | `tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` | Clé ou table inconnue. Roadie l'ignore. La suggestion est le nom valide le plus proche. |
+| `warning` | `desktops.count  clé sans effet` | Roadie lit la clé mais ne l'utilise pas. |
+
+Clés sans effet aujourd'hui : toute la table `[desktops]`, ainsi que `enabled` et `hide_strategy` dans `[stage_manager]`. Retire-les de ton fichier. Les desktops Roadie sont toujours disponibles, et tu les crées avec les commandes `roadie desktop`.
+
+Toutes les tables lues par le rail sont acceptées : `[fx.rail]` et ses sous-tables `layout`, `header`, `header.display`, `header.desktop`, `stages`, `preview`, `stacked`, `stage_labels` et `parallax`.
 
 ## Layout
 
@@ -51,7 +73,6 @@ Cas d'usage :
 
 ```toml
 [stage_manager]
-enabled = true
 default_stage = "1"
 
 [[stage_manager.workspaces]]
@@ -86,6 +107,7 @@ Options importantes :
 - `empty_click_hide_active` : autorise le clic sur zone vide du navrail pour basculer vers une stage vide. Le défaut est `false` pour qu'un clic raté ne masque pas la stage active.
 - `empty_click_safety_margin` : marge horizontale minimale avant qu'un clic vide soit accepte.
 - `layout_mode = "resize"` reserve une bande au navrail; `overlay` laisse le rail au-dessus du bureau.
+- `hide_on_maximized` : le défaut est `false`. Le rail se masque seulement devant une fenêtre en plein écran natif macOS. Avec `true`, le rail se masque aussi devant une fenêtre qui remplit l'écran sans plein écran natif (fenêtre agrandie). Une fenêtre tilée seule dans sa stage ne compte pas comme agrandie.
 - les clics dans les zones macOS reservees, comme la barre de menu, sont ignores.
 
 ## Ajustement manuel de largeur
@@ -211,7 +233,7 @@ Une rule doit avoir au moins un champ de match.
 ## Validation
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules validate --config ~/.config/roadies/roadies.toml
 ```
 
 Erreurs detectees :
@@ -256,7 +278,7 @@ fichier change.
 ## Explain
 
 ```bash
-./bin/roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs --json
+roadie rules explain --app Firefox --title "Roadie Documentation" --stage docs --json
 ```
 
 Utilise `explain` avant d'ajouter une rule en production locale. C'est l'equivalent d'un dry-run : Roadie montre quelle rule matcherait et quelles actions seraient appliquees.

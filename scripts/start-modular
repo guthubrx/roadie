@@ -8,23 +8,40 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 log_dir="$HOME/.roadies"
 runtime_bin_dir="$repo_root/bin"
-local_bin_dir="$HOME/.local/bin"
 
-mkdir -p "$log_dir" "$runtime_bin_dir" "$local_bin_dir"
+require() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Outil manquant : $1. $2" >&2
+    exit 69
+  }
+}
+require tmux "Installez-le avec : brew install tmux"
+require codesign "Installez les Command Line Tools : xcode-select --install"
 
+mkdir -p "$log_dir" "$runtime_bin_dir"
+
+# Développement : les binaires restent dans ./bin. Ceux de `make install` (~/.local/bin) ne sont pas touchés.
 # Build une seule fois pour tous les composants.
 "$script_dir/with-xcode" swift build --configuration debug --product roadied
 "$script_dir/with-xcode" swift build --configuration debug --product roadie
 bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration debug)"
 cp "$bin_dir/roadied" "$runtime_bin_dir/roadied"
 cp "$bin_dir/roadie" "$runtime_bin_dir/roadie"
-cp "$bin_dir/roadied" "$local_bin_dir/roadied"
-cp "$bin_dir/roadie" "$local_bin_dir/roadie"
-chmod +x "$runtime_bin_dir/roadied" "$runtime_bin_dir/roadie" "$local_bin_dir/roadied" "$local_bin_dir/roadie"
+chmod +x "$runtime_bin_dir/roadied" "$runtime_bin_dir/roadie"
 codesign --force --sign - "$runtime_bin_dir/roadied" >/dev/null 2>&1 || true
 codesign --force --sign - "$runtime_bin_dir/roadie" >/dev/null 2>&1 || true
-codesign --force --sign - "$local_bin_dir/roadied" >/dev/null 2>&1 || true
-codesign --force --sign - "$local_bin_dir/roadie" >/dev/null 2>&1 || true
+
+# Un seul lanceur à la fois : le LaunchAgent (KeepAlive) relancerait en boucle un tiler refusé
+# par le verrou d'instance. On le décharge avant de lancer les composants.
+label="com.roadie.roadied"
+if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+  launchctl bootout "gui/$(id -u)/$label"
+  echo "$label déchargé (utilisez 'make restart' pour le relancer)"
+fi
+if command -v tmux >/dev/null 2>&1 && tmux has-session -t roadied 2>/dev/null; then
+  echo "La session tmux 'roadied' (make dev-start) tourne. Lancez 'make stop' d'abord." >&2
+  exit 1
+fi
 
 # Liste des composants a lancer. Pour exclure un composant, retirer sa ligne.
 COMPONENTS=(
@@ -34,8 +51,8 @@ COMPONENTS=(
   "focus-mouse:run-focus-mouse"
   "titlebar-menu:run-titlebar-menu"
   "target-mode:run-target-mode"
-  "restore-safety:run-restore-safety"
 )
+# La sécurité de restauration vit dans `roadied tiler` (et `run`) : ce n'est plus un composant.
 
 launch_component() {
   local name="$1"
@@ -43,7 +60,11 @@ launch_component() {
   local session="roadie-${name}"
   local stdout_log="$log_dir/${name}.stdout.log"
   local stderr_log="$log_dir/${name}.stderr.log"
+  # Le tiler écrit roadied.pid (verrou d'instance partagé avec `roadied run`), les autres <nom>.pid.
   local pid_file="$log_dir/${name}.pid"
+  if [[ "$name" == "tiler" ]]; then
+    pid_file="$log_dir/roadied.pid"
+  fi
 
   # Tuer ancienne session si elle existe, mais pas le composant lui-meme.
   tmux kill-session -t "$session" 2>/dev/null || true
@@ -59,8 +80,11 @@ launch_component() {
     fi
     sleep 0.1
   done
-  : > "$stdout_log"
-  : > "$stderr_log"
+  # Rotation d'une génération : le log précédent reste lisible en .1.
+  for log in "$stdout_log" "$stderr_log"; do
+    [[ -s "$log" ]] && mv -f "$log" "$log.1"
+    : > "$log"
+  done
 
   # Note : on traduit "tiler" -> "tiler" (les sous-commandes roadied sont tiler|rail|etc.)
   local subcommand="$name"

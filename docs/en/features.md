@@ -14,11 +14,11 @@ Available modes:
 Examples:
 
 ```bash
-./bin/roadie mode bsp
-./bin/roadie mode mutableBsp
-./bin/roadie mode masterStack
-./bin/roadie mode float
-./bin/roadie balance
+roadie mode bsp
+roadie mode mutableBsp
+roadie mode masterStack
+roadie mode float
+roadie balance
 ```
 
 Use cases:
@@ -38,15 +38,18 @@ components:
 - `border`: draws the focus border overlay;
 - `focus-mouse`: handles focus-follows-mouse;
 - `titlebar-menu`: handles title-bar drag/drop and context actions;
-- `target-mode`: exposes keyboard targets, grids, and target activation;
-- `restore-safety`: writes restore snapshots and handles crash/exit recovery.
+- `target-mode`: exposes keyboard targets, grids, and target activation.
+
+Restore safety is not a separate component: it runs inside `roadied run` and `roadied tiler`. The old `roadied restore-safety` command still exists, but it only prints a message and exits with code 0.
+
+`roadied run` and `roadied tiler` share one instance lock (`~/.roadies/roadied.lock`), so only one of them can run. A second instance exits with code 1. Use one launcher at a time: the LaunchAgent, `make dev-start`, or `./scripts/start-modular`. The tiler writes `~/.roadies/roadied.pid`; the other components write `<name>.pid`.
 
 Start the full modular profile:
 
 ```bash
 ./scripts/start-modular
-./bin/roadie query components
-./bin/roadie daemon health
+roadie query components
+roadie daemon health
 ```
 
 This is useful today for observability and targeted debugging: each component
@@ -64,19 +67,19 @@ future work rather than a stable public contract.
 A stage is a named group of windows inside a Roadie desktop. Only the active stage is visible; inactive stages are hidden but restorable.
 
 ```bash
-./bin/roadie stage list
-./bin/roadie stage create 4
-./bin/roadie stage rename 4 Comms
-./bin/roadie stage switch 2
-./bin/roadie stage assign 2
-./bin/roadie stage switch-position 2
-./bin/roadie stage assign-position 2
-./bin/roadie stage switch-visible next
-./bin/roadie stage switch-visible prev
-./bin/roadie stage assign-empty
-./bin/roadie stage summon WINDOW_ID
-./bin/roadie stage move-to-display 2
-./bin/roadie stage move-to-display right --no-follow
+roadie stage list
+roadie stage create 4
+roadie stage rename 4 Comms
+roadie stage switch 2
+roadie stage assign 2
+roadie stage switch-position 2
+roadie stage assign-position 2
+roadie stage switch-visible next
+roadie stage switch-visible prev
+roadie stage assign-empty
+roadie stage summon WINDOW_ID
+roadie stage move-to-display 2
+roadie stage move-to-display right --no-follow
 ```
 
 The `*-position` variants follow the visible nav rail order. They are intended
@@ -229,11 +232,11 @@ windows unexpectedly.
 Roadie desktops are virtual. They do not create or control native macOS Spaces.
 
 ```bash
-./bin/roadie desktop list
-./bin/roadie desktop focus 2
-./bin/roadie desktop back-and-forth
-./bin/roadie desktop summon 3
-./bin/roadie desktop label 2 DeepWork
+roadie desktop list
+roadie desktop focus 2
+roadie desktop back-and-forth
+roadie desktop summon 3
+roadie desktop label 2 DeepWork
 ```
 
 Use cases:
@@ -249,16 +252,16 @@ humans and external agents. It does not replace the nav rail: it exposes the
 same concepts as named, inspectable, actionable targets.
 
 ```bash
-./bin/roadie targets list
-./bin/roadie targets list --json
-./bin/roadie targets list --filter gray
-./bin/roadie targets inspect A
-./bin/roadie targets pick gray
-./bin/roadie targets activate A --action switch
-./bin/roadie targets activate S --action focus
-./bin/roadie targets activate D --action send-active
-./bin/roadie targets show --json --labels-only
-./bin/roadie query targets
+roadie targets list
+roadie targets list --json
+roadie targets list --filter gray
+roadie targets inspect A
+roadie targets pick gray
+roadie targets activate A --action switch
+roadie targets activate S --action focus
+roadie targets activate D --action send-active
+roadie targets show --json --labels-only
+roadie query targets
 ```
 
 Roadie targets cover windows, stages, displays, desktops, and bookmarks. Each
@@ -330,14 +333,14 @@ timeout-limited, and disabled by default.
 Roadie exposes layout primitives inspired by power-user window managers.
 
 ```bash
-./bin/roadie focus back-and-forth
-./bin/roadie layout split horizontal
-./bin/roadie layout split vertical
-./bin/roadie layout flatten
-./bin/roadie layout insert right
-./bin/roadie layout join-with left
-./bin/roadie layout zoom-parent
-./bin/roadie layout toggle-split
+roadie focus back-and-forth
+roadie layout split horizontal
+roadie layout split vertical
+roadie layout flatten
+roadie layout insert right
+roadie layout join-with left
+roadie layout zoom-parent
+roadie layout toggle-split
 ```
 
 Use cases:
@@ -355,9 +358,9 @@ also place a new real application window on a target stage, Roadie desktop, and
 display without following focus by default.
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
-./bin/roadie rules list --json
-./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
+roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules list --json
+roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
 ```
 
 Use cases:
@@ -373,12 +376,12 @@ Use cases:
 Window groups associate multiple windows with the same user intent.
 
 ```bash
-./bin/roadie group create terminals 12345 67890
-./bin/roadie group add terminals 11111
-./bin/roadie group focus terminals 67890
-./bin/roadie group remove terminals 12345
-./bin/roadie group dissolve terminals
-./bin/roadie group list
+roadie group create terminals 12345 67890
+roadie group add terminals 11111
+roadie group focus terminals 67890
+roadie group remove terminals 12345
+roadie group dissolve terminals
+roadie group list
 ```
 
 Use cases:
@@ -392,11 +395,11 @@ Use cases:
 Roadie publishes JSONL events and exposes stable JSON queries.
 
 ```bash
-./bin/roadie events subscribe --from-now --initial-state
-./bin/roadie query state
-./bin/roadie query windows
-./bin/roadie query groups
-./bin/roadie query events
+roadie events subscribe --from-now --initial-state
+roadie query state
+roadie query windows
+roadie query groups
+roadie query events
 ```
 
 Use cases:
@@ -408,15 +411,15 @@ Use cases:
 
 ## Restore Safety And Administration
 
-Roadie writes a restore snapshot on daemon startup and clean exit. A separate watcher can restore frames only when the `roadied` process disappears without marking a clean exit. It does not run in the focus/border path and can be disabled with `roadied run --yes --no-restore-safety`.
+The daemon (`roadied run` or `roadied tiler`) writes a restore snapshot at startup, at each stage change, and every 30 seconds. On SIGTERM, SIGINT, or SIGHUP, it brings hidden windows back before it exits. A small watcher process (`restore-watch`) follows the daemon and does the same if the daemon disappears without a clean exit. None of this runs in the focus/border path. To disable it, start the daemon with `roadied run --yes --no-restore-safety`. To bring every hidden window back by hand, run `roadie restore unhide-all`.
 
 ```bash
-./bin/roadie config reload --json
-./bin/roadie restore snapshot --json
-./bin/roadie restore status --json
-./bin/roadie restore apply --yes --json
-./bin/roadie cleanup --dry-run --json
-./bin/roadie cleanup --apply
+roadie config reload --json
+roadie restore snapshot --json
+roadie restore status --json
+roadie restore apply --yes --json
+roadie cleanup --dry-run --json
+roadie cleanup --apply
 ```
 
 Use cases:
@@ -431,14 +434,14 @@ Use cases:
 Width adjustments are manual commands. Performance diagnostics read the event log; they do not time the focus/border path in real time.
 
 ```bash
-./bin/roadie layout width next
-./bin/roadie layout width prev
-./bin/roadie layout width nudge 0.05
-./bin/roadie layout width ratio 0.67
+roadie layout width next
+roadie layout width prev
+roadie layout width nudge 0.05
+roadie layout width ratio 0.67
 
-./bin/roadie performance summary
-./bin/roadie performance recent --limit 20
-./bin/roadie performance thresholds --json
+roadie performance summary
+roadie performance recent --limit 20
+roadie performance thresholds --json
 ```
 
 Use cases:
@@ -462,11 +465,11 @@ fallback. A `record` indicator can appear in the navrail while capture is
 running.
 
 ```bash
-./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid interactive --scope display --duration 10
-./bin/roadie grid interactive --scope focused_window --duration 10
-./bin/roadie record start demo --duration 10
-./bin/roadie record replay demo
+roadie targets interactive --source all --include-app-targets
+roadie grid interactive --scope display --duration 10
+roadie grid interactive --scope focused_window --duration 10
+roadie record start demo --duration 10
+roadie record replay demo
 ```
 
 Use cases:

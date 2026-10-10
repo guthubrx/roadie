@@ -14,11 +14,11 @@ Suggested setup:
 Commands:
 
 ```bash
-./bin/roadie desktop label 1 Dev
-./bin/roadie stage rename 1 Dev
-./bin/roadie stage create docs
-./bin/roadie stage create comms
-./bin/roadie mode masterStack
+roadie desktop label 1 Dev
+roadie stage rename 1 Dev
+roadie stage create docs
+roadie stage create comms
+roadie mode masterStack
 ```
 
 Typical rule:
@@ -43,9 +43,9 @@ emit_event = true
 Goal: keep the main display for active work and move a full stage to a secondary display.
 
 ```bash
-./bin/roadie display list
-./bin/roadie stage move-to-display 2
-./bin/roadie desktop summon 2
+roadie display list
+roadie stage move-to-display 2
+roadie desktop summon 2
 ```
 
 Concrete scenario:
@@ -59,16 +59,16 @@ Concrete scenario:
 Goal: group several documentation windows and expose them through queries.
 
 ```bash
-./bin/roadie windows list
-./bin/roadie group create research 12345 67890
-./bin/roadie group focus research 67890
-./bin/roadie query groups
+roadie windows list
+roadie group create research 12345 67890
+roadie group focus research 67890
+roadie query groups
 ```
 
 Possible integration:
 
 ```bash
-./bin/roadie query groups | jq '.data'
+roadie query groups | jq '.data'
 ```
 
 ## 4. Local Status Bar
@@ -76,7 +76,7 @@ Possible integration:
 Goal: display the active window, stage, and important events.
 
 ```bash
-./bin/roadie events subscribe --from-now --initial-state --scope window --scope stage
+roadie events subscribe --from-now --initial-state --scope window --scope stage
 ```
 
 The consumer should:
@@ -90,8 +90,8 @@ The consumer should:
 Goal: avoid a broken TOML rule disrupting the session.
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
-./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
+roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev --json
 ```
 
 Recommended workflow:
@@ -106,10 +106,10 @@ Recommended workflow:
 Goal: repair local state without deleting all configuration.
 
 ```bash
-./bin/roadie state audit
-./bin/roadie state heal
-./bin/roadie daemon heal
-./bin/roadie daemon health
+roadie state audit
+roadie state heal
+roadie daemon heal
+roadie daemon health
 ```
 
 Use this sequence after:
@@ -123,15 +123,15 @@ Use this sequence after:
 Goal: keep an explicit fallback and inspect the same snapshot used by the crash watcher.
 
 ```bash
-./bin/roadie config reload --json
-./bin/roadie restore snapshot --json
-./bin/roadie restore status
+roadie config reload --json
+roadie restore snapshot --json
+roadie restore status
 ```
 
 If frames must be restored explicitly:
 
 ```bash
-./bin/roadie restore apply --yes
+roadie restore apply --yes
 ```
 
 This restore matches windows by current window ID. The crash watcher uses the same mechanism only when the daemon disappears without a clean exit; it does not run in the focus/border path.
@@ -141,8 +141,8 @@ This restore matches windows by current window ID. The crash watcher uses the sa
 Goal: avoid accumulating logs and backups.
 
 ```bash
-./bin/roadie cleanup --dry-run
-./bin/roadie cleanup --apply
+roadie cleanup --dry-run
+roadie cleanup --apply
 ```
 
 Start with `--dry-run` to inspect candidate files before deletion or rotation.
@@ -153,9 +153,9 @@ Goal: jump to a window, stage, display, desktop, or bookmark without remembering
 internal IDs.
 
 ```bash
-./bin/roadie targets interactive --source all
-./bin/roadie targets pick work --action switch
-./bin/roadie targets inspect A --json
+roadie targets interactive --source all
+roadie targets pick work --action switch
+roadie targets inspect A --json
 ```
 
 Use this when:
@@ -170,8 +170,8 @@ Goal: target a visual area even when the application does not expose a useful
 Accessibility element.
 
 ```bash
-./bin/roadie grid interactive --scope display --duration 10
-./bin/roadie grid interactive --scope focused_window --duration 10
+roadie grid interactive --scope display --duration 10
+roadie grid interactive --scope focused_window --duration 10
 ```
 
 Use **Display Grid** for full-screen or cross-display targeting. Use **Window
@@ -184,9 +184,9 @@ Goal: record a short mouse manipulation with both coordinates and semantic
 target context.
 
 ```bash
-./bin/roadie record start demo --duration 10
-./bin/roadie record inspect demo --json
-./bin/roadie record replay demo
+roadie record start demo --duration 10
+roadie record inspect demo --json
+roadie record replay demo
 ```
 
 Recordings keep a best-effort Roadie or Accessibility target and a grid fallback,

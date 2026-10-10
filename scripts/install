@@ -2,14 +2,28 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "$script_dir/.." && pwd)"
 label="com.roadie.roadied"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 log_dir="$HOME/.roadies"
-runtime_bin_dir="$repo_root/bin"
+# Les binaires installés vivent hors du dépôt : le LaunchAgent ne dépend pas du dossier source.
 local_bin_dir="$HOME/.local/bin"
 
-mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
+# Identité de signature stable (ex. "Apple Development: Nom (ID)"). macOS lie la permission
+# Accessibility à la signature : avec la signature ad hoc, elle est perdue à chaque installation.
+codesign_identity="${ROADIE_CODESIGN_IDENTITY:-}"
+if [[ -n "$codesign_identity" ]]; then
+  if ! security find-identity -v -p codesigning | grep -qF "$codesign_identity"; then
+    echo "ROADIE_CODESIGN_IDENTITY introuvable dans le trousseau : $codesign_identity" >&2
+    echo "Liste des identités disponibles : security find-identity -v -p codesigning" >&2
+    exit 1
+  fi
+else
+  echo "ATTENTION : ROADIE_CODESIGN_IDENTITY n'est pas défini, signature ad hoc." >&2
+  echo "  macOS oubliera la permission Accessibility de roadied à chaque nouvelle installation." >&2
+  echo "  Définissez ROADIE_CODESIGN_IDENTITY pour une signature stable." >&2
+fi
+
+mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$local_bin_dir"
 
 echo "Building Roadie release binaries..."
 "$script_dir/with-xcode" swift build --configuration release --product roadied
@@ -18,8 +32,6 @@ bin_dir="$("$script_dir/with-xcode" swift build --show-bin-path --configuration 
 
 build_roadied="$bin_dir/roadied"
 build_roadie="$bin_dir/roadie"
-runtime_roadied="$runtime_bin_dir/roadied"
-runtime_roadie="$runtime_bin_dir/roadie"
 local_roadied="$local_bin_dir/roadied"
 local_roadie="$local_bin_dir/roadie"
 
@@ -38,13 +50,15 @@ install_binary() {
   local tmp="$target.tmp"
   cp "$source" "$tmp"
   chmod +x "$tmp"
-  codesign --force --sign - "$tmp" >/dev/null 2>&1 || true
+  if [[ -n "$codesign_identity" ]]; then
+    codesign --force --sign "$codesign_identity" "$tmp"
+  else
+    codesign --force --sign - "$tmp" >/dev/null 2>&1 || echo "ATTENTION : signature ad hoc impossible pour $target" >&2
+  fi
   mv "$tmp" "$target"
 }
 
 echo "Installing binaries..."
-install_binary "$build_roadied" "$runtime_roadied"
-install_binary "$build_roadie" "$runtime_roadie"
 install_binary "$build_roadied" "$local_roadied"
 install_binary "$build_roadie" "$local_roadie"
 
@@ -58,12 +72,12 @@ cat > "$plist" <<PLIST
   <string>$label</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$runtime_roadied</string>
+    <string>$local_roadied</string>
     <string>run</string>
     <string>--yes</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>$repo_root</string>
+  <string>$HOME</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -77,8 +91,6 @@ cat > "$plist" <<PLIST
 PLIST
 
 echo "Installed:"
-echo "  $runtime_roadied"
-echo "  $runtime_roadie"
 echo "  $local_roadied"
 echo "  $local_roadie"
 echo "LaunchAgent:"
@@ -86,6 +98,9 @@ echo "  $plist"
 
 if [[ "${ROADIE_INSTALL_NO_START:-0}" == "1" ]]; then
   echo "Start skipped because ROADIE_INSTALL_NO_START=1."
+elif command -v tmux >/dev/null 2>&1 && tmux has-session -t roadied 2>/dev/null; then
+  echo "Start skipped: a development session (make dev-start) is running."
+  echo "Run 'make stop', then 'make restart' (one launcher at a time)."
 elif launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   echo "$label is already loaded. Run 'make restart' when you want to reload the installed binaries."
 else

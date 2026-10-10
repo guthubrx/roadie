@@ -1,7 +1,8 @@
 #!/usr/bin/env zsh
 set -euo pipefail
 
-project="/path/to/roadie"
+# Racine du dépôt déduite de l'emplacement du script (scripts/btt/ -> racine).
+project="${0:A:h:h:h}"
 state_dir="${TMPDIR:-/tmp}/roadie-record-toggle"
 pid_file="$state_dir/pid"
 stop_file="$state_dir/stop"

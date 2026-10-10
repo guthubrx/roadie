@@ -210,6 +210,7 @@ struct ConfigTests {
         dynamic_left_gap = true
         empty_click_hide_active = false
         empty_click_safety_margin = 24
+        hide_on_maximized = true
 
         [fx.rail.layout]
         header_position = "top"
@@ -300,6 +301,7 @@ struct ConfigTests {
         #expect(settings.dynamicLeftGap == true)
         #expect(settings.emptyClickHideActive == false)
         #expect(settings.emptyClickSafetyMargin == 24)
+        #expect(settings.hideOnMaximized == true)
         #expect(settings.layout.headerPosition == "top")
         #expect(settings.layout.stagesPosition == "bottom")
         #expect(settings.layout.spacing == 17)
@@ -353,6 +355,13 @@ struct ConfigTests {
         #expect(settings.layout.stagesPosition == "center")
         #expect(settings.stages.position == "center")
         #expect(settings.layout.topPadding == 50)
+    }
+
+    @Test
+    func railSettingsHideOnMaximizedDefaultsToNativeFullscreenOnly() {
+        #expect(RailSettings.load(raw: "").hideOnMaximized == false)
+        #expect(RailSettings.load(raw: "[fx.rail]\nhide_on_maximized = \"nope\"").hideOnMaximized == false)
+        #expect(RailSettings.load(raw: "[fx.rail]\nhide_on_maximized = true").hideOnMaximized == true)
     }
 
     @Test
@@ -670,6 +679,162 @@ struct ConfigTests {
             path: "experimental.target_mode",
             message: "target mode is disabled; sub-features will be ignored"
         )))
+    }
+
+    // MARK: - Validation SPEC-016 (clés inconnues, messages lisibles, tables fx.rail.*)
+
+    private func validate(_ toml: String) throws -> ConfigValidationReport {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-validate-\(UUID().uuidString).toml")
+        try toml.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+        return RoadieConfigLoader.validate(path: url.path)
+    }
+
+    @Test
+    func validationSuggestsClosestKnownKeyForTypos() throws {
+        let report = try validate("""
+        [tiling]
+        gaps_inr = 4
+
+        [fx.borderz]
+        enabled = true
+        """)
+
+        #expect(!report.hasErrors)
+        let key = report.items.first { $0.path == "tiling.gaps_inr" }
+        #expect(key?.level == .warning)
+        #expect(key?.message.contains("gaps_inner") == true)
+        let table = report.items.first { $0.path == "fx.borderz" }
+        #expect(table?.message.contains("fx.borders") == true)
+    }
+
+    @Test
+    func validationDoesNotSuggestWhenNothingIsClose() throws {
+        let report = try validate("""
+        [tiling]
+        completely_unrelated_option = 1
+        """)
+
+        let item = report.items.first { $0.path == "tiling.completely_unrelated_option" }
+        #expect(item?.level == .warning)
+        #expect(item?.message.contains("vouliez-vous dire") == false)
+    }
+
+    @Test
+    func validationTranslatesDecodeErrors() throws {
+        let wrongType = try validate("""
+        [focus]
+        stage_follows_focus = "yes"
+        """)
+        #expect(wrongType.hasErrors)
+        #expect(wrongType.items.first?.message == "focus.stage_follows_focus : attendu booléen, reçu texte")
+
+        let missingKey = try validate("""
+        [[rules]]
+        priority = 3
+        """)
+        #expect(missingKey.hasErrors)
+        #expect(missingKey.items.first?.message == "rules[0].id : clé obligatoire absente (attendu texte)")
+    }
+
+    @Test
+    func validationAcceptsEveryRailTableWithoutWarning() throws {
+        let report = try validate("""
+        [fx.rail]
+        renderer = "stacked-previews"
+        width = 150
+        background_color = "#000000"
+        background_opacity = 0
+        auto_hide = false
+        edge_hit_width = 8
+        edge_magnetism_width = 24
+        animation_ms = 160
+        hide_delay_ms = 350
+        layout_mode = "overlay"
+        dynamic_left_gap = false
+        empty_click_hide_active = false
+        empty_click_safety_margin = 12
+        hide_on_maximized = true
+
+        [fx.rail.layout]
+        header_position = "top"
+        stages_position = "center"
+        spacing = 13
+        top_padding = 50
+        bottom_padding = 16
+
+        [fx.rail.header]
+        enabled = true
+        title_template = "{display}"
+
+        [fx.rail.header.display]
+        enabled = true
+        template = "{display}"
+        font_size = 13
+
+        [fx.rail.header.desktop]
+        enabled = true
+        template = "Desktop {desktop}"
+
+        [fx.rail.stage_labels]
+        enabled = true
+        placement = "below"
+
+        [fx.rail.stages]
+        position = "center"
+        gap = 13
+
+        [fx.rail.preview]
+        width = 160
+
+        [fx.rail.stacked]
+        offset_x = 60
+
+        [fx.rail.parallax]
+        rotation = 35
+
+        [[fx.rail.preview.stage_overrides]]
+        stage_id = "2"
+        active_color = "#6BE675"
+        """)
+
+        #expect(report.items == [ConfigValidationItem(level: .ok, path: report.items.first?.path ?? "", message: "config is valid")])
+    }
+
+    @Test
+    func validationFlagsKeysThatHaveNoEffect() throws {
+        let report = try validate("""
+        [desktops]
+        count = 5
+
+        [stage_manager]
+        enabled = true
+        hide_strategy = "corner"
+        default_stage = "1"
+        """)
+
+        #expect(!report.hasErrors)
+        for path in ["desktops.count", "stage_manager.enabled", "stage_manager.hide_strategy"] {
+            let item = report.items.first { $0.path == path }
+            #expect(item?.level == .warning)
+            #expect(item?.message.hasPrefix("clé sans effet") == true)
+        }
+        #expect(report.items.contains { $0.path == "stage_manager.default_stage" } == false)
+    }
+
+    @Test
+    func shippedExampleConfigIsValidWithoutWarning() throws {
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let example = repoRoot.appendingPathComponent("examples/roadies.toml").path
+
+        let report = RoadieConfigLoader.validate(path: example)
+
+        #expect(report.items.allSatisfy { $0.level == .ok }, "\(report.items)")
+        #expect(report.items.isEmpty == false)
     }
 
     @Test

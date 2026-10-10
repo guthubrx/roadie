@@ -1,4 +1,4 @@
-.PHONY: test build install permissions displays windows snapshot state plan apply maintain start stop restart status logs doctor self-test events config dmg package-dmg clean
+.PHONY: test build install uninstall permissions displays windows snapshot state plan apply maintain dev-start stop restart status logs doctor self-test events config dmg package-dmg clean
 
 test:
 	./scripts/test
@@ -8,6 +8,9 @@ build:
 
 install:
 	./scripts/install
+
+uninstall:
+	./scripts/uninstall
 
 permissions:
 	./scripts/roadie permissions
@@ -44,13 +47,27 @@ apply:
 maintain:
 	./scripts/roadied run --yes
 
-start:
+# Démarrage de développement : build debug, binaires dans ./bin, session tmux.
+dev-start:
 	./scripts/start
 
 stop:
 	./scripts/stop
 
-restart: stop start
+# Redémarre le service installé par `make install` (binaires de ~/.local/bin). Ne lance jamais tmux.
+# Un seul lanceur à la fois : le verrou d'instance du daemon refuse une 2e instance, et launchd
+# (KeepAlive) la relancerait en boucle. On refuse donc si une session de développement tourne.
+# Si le service est déchargé (après `make stop`), roadiedctl le recharge.
+restart:
+	@if command -v tmux >/dev/null 2>&1 && tmux has-session -t roadied 2>/dev/null; then \
+		echo "Une session de développement (make dev-start) tourne. Lancez 'make stop' d'abord : un seul lanceur à la fois." >&2; \
+		exit 1; \
+	fi
+	@if launchctl print gui/$$(id -u)/com.roadie.roadied >/dev/null 2>&1; then \
+		launchctl kickstart -k gui/$$(id -u)/com.roadie.roadied; \
+	else \
+		./scripts/roadiedctl start; \
+	fi
 
 status:
 	./scripts/status

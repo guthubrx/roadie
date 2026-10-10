@@ -8,7 +8,7 @@ Roadie exposes two complementary surfaces:
 ## Events
 
 ```bash
-./bin/roadie events subscribe --from-now --initial-state
+roadie events subscribe --from-now --initial-state
 ```
 
 Example line:
@@ -32,10 +32,10 @@ Example line:
 Options:
 
 ```bash
-./bin/roadie events subscribe --from-now
-./bin/roadie events subscribe --initial-state
-./bin/roadie events subscribe --type window.focused
-./bin/roadie events subscribe --scope rule
+roadie events subscribe --from-now
+roadie events subscribe --initial-state
+roadie events subscribe --type window.focused
+roadie events subscribe --scope rule
 ```
 
 Semantics:
@@ -109,24 +109,24 @@ Administration:
 The public catalog is also available through the CLI:
 
 ```bash
-./bin/roadie query event_catalog
+roadie query event_catalog
 ```
 
 ## Query API
 
 ```bash
-./bin/roadie query state
-./bin/roadie query windows
-./bin/roadie query displays
-./bin/roadie query desktops
-./bin/roadie query stages
-./bin/roadie query groups
-./bin/roadie query rules
-./bin/roadie query health
-./bin/roadie query events
-./bin/roadie query event_catalog
-./bin/roadie query performance
-./bin/roadie query restore
+roadie query state
+roadie query windows
+roadie query displays
+roadie query desktops
+roadie query stages
+roadie query groups
+roadie query rules
+roadie query health
+roadie query events
+roadie query event_catalog
+roadie query performance
+roadie query restore
 ```
 
 Stable format:
@@ -152,7 +152,7 @@ Use cases:
 ## SketchyBar Or Script Example
 
 ```bash
-./bin/roadie events subscribe --from-now --type window.focused |
+roadie events subscribe --from-now --type window.focused |
 while read -r line; do
   app=$(printf '%s' "$line" | jq -r '.payload.app // "-"')
   echo "Focused app: $app"

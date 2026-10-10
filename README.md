@@ -137,8 +137,8 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 
 - Tiles visible windows with `bsp`, `mutableBsp`, `masterStack`, or `float` modes.
 - Runs either as a monolithic daemon or as modular components with separate
-  `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, `target-mode`,
-  and `restore-safety` processes.
+  `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode`
+  processes. Restore safety lives inside the `run` and `tiler` processes.
 - Keeps stage groups per display and Roadie desktop.
 - Provides Roadie virtual desktops without controlling native macOS Spaces.
 - Supports multiple displays independently.
@@ -179,10 +179,11 @@ Main guides:
 
 ## Requirements
 
-- macOS.
-- Xcode Command Line Tools.
+- macOS 14 or later.
+- Xcode Command Line Tools. Full Xcode is not required.
 - Accessibility permission for `roadied`.
-- Screen Recording permission if you want real window thumbnails in the rail.
+- Screen Recording permission for `roadied`, only if you want real window thumbnails in the rail.
+- Optional tools: `tmux` for the modular runtime, `create-dmg` to build the DMG.
 
 Install Xcode Command Line Tools if needed:
 
@@ -190,16 +191,24 @@ Install Xcode Command Line Tools if needed:
 xcode-select --install
 ```
 
-## Build
+The project scripts use `/Applications/Xcode.app` when it exists. Otherwise they use the Command Line Tools reported by `xcode-select -p`. They also clean the shell environment of variables that may inject incompatible linker flags. If no Swift toolchain is found, the script stops and tells you to install the Command Line Tools.
+
+## Build And Development Run
 
 From the repository root:
 
 ```bash
 make test
-make start
+make dev-start
 ```
 
-The project scripts force the Xcode toolchain and avoid shell environments that may inject incompatible linker flags.
+`make dev-start` is meant for development. It builds in debug mode, copies the binaries into `./bin` only, unloads the installed LaunchAgent, and runs the daemon in a `tmux` session. It does not touch the binaries installed by `make install`. In this mode, use `./bin/roadie` and grant Accessibility to `bin/roadied` in this folder. For daily use, install Roadie with `make install` instead.
+
+**One launcher at a time.** `roadied run` and `roadied tiler` take an instance lock (`~/.roadies/roadied.lock`). A second instance exits with code 1. The LaunchAgent restarts a failed process (`KeepAlive`), so it would retry in a loop if a `tmux` session already runs the daemon. For this reason:
+
+- `make dev-start` and `./scripts/start-modular` unload the LaunchAgent first;
+- `make restart` never starts `tmux`, and it refuses to run while a development session exists. Run `make stop` first;
+- to go back to the installed service, run `make stop`, then `make restart`.
 
 ## Manual Installation
 
@@ -212,16 +221,30 @@ make install
 This hides the usual macOS service setup:
 
 - builds `roadie` and `roadied` in release mode;
-- installs them in `./bin` for this repository;
-- also installs them in `~/.local/bin` for shell usage;
-- ad-hoc signs both binaries;
-- creates `~/Library/LaunchAgents/com.roadie.roadied.plist`;
+- installs them in `~/.local/bin`, outside the repository, so the service keeps working if you move or delete the source folder;
+- signs both binaries (see below);
+- creates `~/Library/LaunchAgents/com.roadie.roadied.plist`, which starts `~/.local/bin/roadied`;
 - starts the LaunchAgent when it is not already loaded.
+
+Add `~/.local/bin` to your `PATH` so that you can type `roadie` in a terminal.
 
 If Roadie is already running, `make install` does not stop it. Run this when you want the running daemon to reload the newly installed binaries:
 
 ```bash
 make restart
+```
+
+`make restart` restarts the installed service with `launchctl kickstart -k`. It does not build anything. If the service is not loaded, it loads it first.
+
+### Code signing and permissions
+
+macOS ties the Accessibility permission to the code signature of `roadied`. By default, `make install` uses an ad hoc signature, which changes at each install. macOS may then forget the permission, and you must grant it again. The script prints a warning in this case.
+
+To keep the permission between installs, sign with a stable identity:
+
+```bash
+security find-identity -v -p codesigning
+ROADIE_CODESIGN_IDENTITY="Apple Development: Your Name (TEAMID)" make install
 ```
 
 If you only want to install files without starting the LaunchAgent:
@@ -236,7 +259,8 @@ Useful commands:
 make test
 make build
 make install
-make start
+make uninstall
+make dev-start
 make stop
 make restart
 make status
@@ -249,22 +273,39 @@ Equivalent direct commands:
 
 ```bash
 ./scripts/test
-./scripts/start
+./scripts/start        # make dev-start
 ./scripts/stop
 ./scripts/status
 ./scripts/logs
 ./scripts/roadie daemon health
 ```
 
+Logs are kept in `~/.roadies/`. At each start, the previous log is kept as `roadied.stdout.log.1` and `roadied.stderr.log.1`, so a crash stays readable after a restart.
+
+## Uninstall
+
+```bash
+make uninstall
+```
+
+The script does these steps in order:
+
+1. runs `roadie restore unhide-all` so that no window stays hidden or off screen;
+2. stops the LaunchAgent (`launchctl bootout`);
+3. deletes the LaunchAgent file and the binaries in `~/.local/bin`;
+4. asks whether to keep Roadie state (`~/.roadies`, `~/.local/state/roadies`). Without a terminal, it keeps it.
+
+The script never deletes your configuration in `~/.config/roadies`. Delete it by hand if you want. To finish, remove `roadied` from System Settings > Privacy & Security > Accessibility and Screen Recording.
+
 ## Modular Runtime
 
-The classic `make start` path runs Roadie as one daemon. The modular path starts
+The classic path (`make install`, or `make dev-start` while developing) runs Roadie as one daemon. The modular path starts
 the same capabilities as separate processes:
 
 ```bash
 ./scripts/start-modular
-./bin/roadie query components
-./bin/roadie daemon health
+roadie query components
+roadie daemon health
 ```
 
 The standard modular script currently starts the full component set, including
@@ -293,7 +334,7 @@ dist/Roadie.dmg
 
 The DMG contains `Roadie.app` and an `/Applications` shortcut, so installation is the usual drag-and-drop flow.
 
-Important: this build is ad-hoc signed, not Developer ID signed, and not notarized. That means macOS Gatekeeper will not treat it like a fully trusted public app.
+Important: this build is ad hoc signed, not Developer ID signed, and not notarized. That means macOS Gatekeeper will not treat it like a fully trusted public app.
 
 For users, the expected first-run flow is:
 
@@ -312,25 +353,40 @@ xattr -dr com.apple.quarantine /Applications/Roadie.app
 
 This limitation is normal until the app is signed with an Apple Developer ID certificate and notarized by Apple.
 
+The DMG needs `create-dmg` (`brew install create-dmg`). The script checks its tools first and stops with a clear message if one is missing.
+
+The app has no menu bar icon and no Dock icon. To quit it, quit `roadied` in Activity Monitor. To uninstall it, quit `roadied`, then drag `Roadie.app` to the Trash.
+
 The packaged app currently starts Roadie for the current user session. A future signed installer can add a login item or LaunchAgent automatically; for now, startup-at-login is intentionally left explicit.
 
 ## Permissions
 
-Roadie needs Accessibility permission to read and move windows.
+Roadie asks for two permissions. Both go to the `roadied` daemon.
 
-After building and starting the daemon, add this binary in System Settings > Privacy & Security > Accessibility:
+| Permission | Used for | Required |
+|---|---|---|
+| Accessibility | Read and move windows | Yes |
+| Screen Recording | Live window thumbnails in the rail | No. Without it, the rail shows app icons. |
+
+After `make install`, add this binary in System Settings > Privacy & Security > Accessibility, and in Screen Recording if you want thumbnails:
 
 ```text
-/path/to/roadie/bin/roadied
+~/.local/bin/roadied
 ```
 
-Then restart the daemon:
+In the file picker, press Cmd+Shift+G and type the path, because `.local` is a hidden folder. Then restart the daemon:
 
 ```bash
 make restart
 ```
 
-Screen Recording is optional but recommended. Without it, the nav rail may show fallback app icons instead of live thumbnails.
+### The `roadie` command needs no permission
+
+When the daemon runs, the `roadie` command sends your request to it through a local socket (`~/.roadies/roadied.sock`). The daemon does the work with its own permissions. So BetterTouchTool, Karabiner, skhd, or a shell script that calls `roadie` does not need Accessibility permission. It also does not scan all windows for each key press, which makes shortcuts faster.
+
+If the daemon is stopped, `roadie` runs the command itself. In that case, the program that started it (terminal, BetterTouchTool) needs Accessibility permission. Some commands always run locally: `daemon start|stop|restart|health`, `doctor`, `permissions`, and `config validate`.
+
+Run `roadie doctor` to see the real state of the daemon, both permissions, and the validity of your configuration. The daemon publishes this state in `~/.roadies/daemon-status.json` (process id, version, permissions, configuration validity, update time), and `roadie doctor` reads that file. Doctor treats the daemon as stopped when its process is gone or when the file is more than 90 seconds old.
 
 ## Configuration
 
@@ -340,24 +396,39 @@ The user configuration file is:
 ~/.config/roadies/roadies.toml
 ```
 
+A commented example is in [`examples/roadies.toml`](examples/roadies.toml). Copy it as a starting point:
+
+```bash
+mkdir -p ~/.config/roadies
+cp examples/roadies.toml ~/.config/roadies/roadies.toml
+```
+
 Validate it with:
 
 ```bash
-./bin/roadie config validate
+roadie config validate
 ```
+
+The validation reports each problem with its full key name. The messages are in French:
+
+- `error  focus.stage_follows_focus  attendu booléen, reçu texte` means a value has the wrong type;
+- `warning  tiling.gaps_inr  clé inconnue, ignorée ; vouliez-vous dire « gaps_inner » ?` means a typo, with the closest valid key;
+- `warning  desktops.count  clé sans effet` means Roadie reads the key from the file but does not use it. This applies to the whole `[desktops]` table and to `enabled` and `hide_strategy` in `[stage_manager]`.
+
+Shortcut examples for skhd and Karabiner-Elements are in `examples/skhd/skhdrc` and `examples/karabiner/roadie.json`. See [Shortcuts](docs/en/cli.md#shortcuts).
 
 Inspect the loaded configuration:
 
 ```bash
-./bin/roadie config show
+roadie config show
 ```
 
 Validate and inspect rules:
 
 ```bash
-./bin/roadie rules validate --config ~/.config/roadies/roadies.toml
-./bin/roadie rules list --json
-./bin/roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
+roadie rules validate --config ~/.config/roadies/roadies.toml
+roadie rules list --json
+roadie rules explain --app Terminal --title roadie --role AXWindow --stage dev
 ```
 
 ## Daily Use
@@ -371,44 +442,44 @@ make restart
 Check the runtime state:
 
 ```bash
-./bin/roadie daemon health
-./bin/roadie state audit
-./bin/roadie metrics
-./bin/roadie tree dump
+roadie daemon health
+roadie state audit
+roadie metrics
+roadie tree dump
 ```
 
 List windows and displays:
 
 ```bash
-./bin/roadie windows list
-./bin/roadie display list
+roadie windows list
+roadie display list
 ```
 
 Switch layout mode for the current stage:
 
 ```bash
-./bin/roadie mode bsp
-./bin/roadie mode mutableBsp
-./bin/roadie mode masterStack
-./bin/roadie mode float
+roadie mode bsp
+roadie mode mutableBsp
+roadie mode masterStack
+roadie mode float
 ```
 
 Move focus or windows:
 
 ```bash
-./bin/roadie focus left
-./bin/roadie focus right
-./bin/roadie focus back-and-forth
-./bin/roadie move left
-./bin/roadie warp right
-./bin/roadie resize left
-./bin/roadie display focus right
+roadie focus left
+roadie focus right
+roadie focus back-and-forth
+roadie move left
+roadie warp right
+roadie resize left
+roadie display focus right
 ```
 
 Move the focused window to another display:
 
 ```bash
-./bin/roadie window display 2
+roadie window display 2
 ```
 
 ## Stages
@@ -418,20 +489,20 @@ Stages are groups of windows. Only the active stage is visible; inactive stages 
 Common commands:
 
 ```bash
-./bin/roadie stage list
-./bin/roadie stage create 4
-./bin/roadie stage rename 4 Comms
-./bin/roadie stage switch 2
-./bin/roadie stage assign 2
-./bin/roadie stage switch-position 2
-./bin/roadie stage assign-position 2
-./bin/roadie stage switch-visible next
-./bin/roadie stage switch-visible prev
-./bin/roadie stage assign-empty
-./bin/roadie stage reorder 2 1
-./bin/roadie stage delete 4
-./bin/roadie stage prev
-./bin/roadie stage next
+roadie stage list
+roadie stage create 4
+roadie stage rename 4 Comms
+roadie stage switch 2
+roadie stage assign 2
+roadie stage switch-position 2
+roadie stage assign-position 2
+roadie stage switch-visible next
+roadie stage switch-visible prev
+roadie stage assign-empty
+roadie stage reorder 2 1
+roadie stage delete 4
+roadie stage prev
+roadie stage next
 ```
 
 `stage switch` and `stage assign` target stable stage IDs. `stage switch-position`
@@ -444,15 +515,15 @@ unnamed empty stage, creating one if needed.
 Bring an inactive-stage window back into the active stage:
 
 ```bash
-./bin/roadie stage summon WINDOW_ID
+roadie stage summon WINDOW_ID
 ```
 
 Move the active stage to another display:
 
 ```bash
-./bin/roadie stage move-to-display 2
-./bin/roadie stage move-to-display right
-./bin/roadie stage move-to-display right --no-follow
+roadie stage move-to-display 2
+roadie stage move-to-display right
+roadie stage move-to-display right --no-follow
 ```
 
 Without a flag, Roadie uses `[focus].stage_move_follows_focus`. `--follow` and
@@ -464,26 +535,26 @@ the same operation from a stage card context menu.
 Roadie desktops are virtual desktops managed by Roadie. They do not create, switch, or control native macOS Spaces.
 
 ```bash
-./bin/roadie desktop list
-./bin/roadie desktop current
-./bin/roadie desktop focus 2
-./bin/roadie desktop focus next
-./bin/roadie desktop focus prev
-./bin/roadie desktop focus back
-./bin/roadie desktop back-and-forth
-./bin/roadie desktop summon 3
-./bin/roadie desktop label 2 DeepWork
+roadie desktop list
+roadie desktop current
+roadie desktop focus 2
+roadie desktop focus next
+roadie desktop focus prev
+roadie desktop focus back
+roadie desktop back-and-forth
+roadie desktop summon 3
+roadie desktop label 2 DeepWork
 ```
 
 ## Power-User Layout Commands
 
 ```bash
-./bin/roadie layout split horizontal
-./bin/roadie layout split vertical
-./bin/roadie layout insert right
-./bin/roadie layout join-with left
-./bin/roadie layout flatten
-./bin/roadie layout zoom-parent
+roadie layout split horizontal
+roadie layout split vertical
+roadie layout insert right
+roadie layout join-with left
+roadie layout flatten
+roadie layout zoom-parent
 ```
 
 These commands persist layout intent where applicable, so the maintainer does not immediately undo deliberate manual structure.
@@ -491,12 +562,12 @@ These commands persist layout intent where applicable, so the maintainer does no
 ## Window Groups
 
 ```bash
-./bin/roadie group create terminals 12345 67890
-./bin/roadie group add terminals 11111
-./bin/roadie group focus terminals 67890
-./bin/roadie group remove terminals 12345
-./bin/roadie group dissolve terminals
-./bin/roadie group list
+roadie group create terminals 12345 67890
+roadie group add terminals 11111
+roadie group focus terminals 67890
+roadie group remove terminals 12345
+roadie group dissolve terminals
+roadie group list
 ```
 
 Groups are persisted in Roadie's stage state and exposed through `roadie query groups`.
@@ -506,28 +577,28 @@ Groups are persisted in Roadie's stage state and exposed through `roadie query g
 Subscribe to live events:
 
 ```bash
-./bin/roadie events subscribe --from-now --initial-state
+roadie events subscribe --from-now --initial-state
 ```
 
 Read stable JSON projections:
 
 ```bash
-./bin/roadie query state
-./bin/roadie query windows
-./bin/roadie query displays
-./bin/roadie query desktops
-./bin/roadie query stages
-./bin/roadie query groups
-./bin/roadie query rules
-./bin/roadie query health
-./bin/roadie query events
+roadie query state
+roadie query windows
+roadie query displays
+roadie query desktops
+roadie query stages
+roadie query groups
+roadie query rules
+roadie query health
+roadie query events
 ```
 
 Move the focused window to another Roadie desktop:
 
 ```bash
-./bin/roadie window desktop 2
-./bin/roadie window desktop 2 --follow
+roadie window desktop 2
+roadie window desktop 2 --follow
 ```
 
 ## Nav Rail
@@ -550,6 +621,8 @@ Supported interactions:
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.
 
+By default, the rail hides in front of a window in native macOS fullscreen. To hide it in front of a maximized window too, set `hide_on_maximized = true` in `[fx.rail]`.
+
 ## Keyboard Targets, Display Grid, And Window Grid
 
 Roadie exposes **Keyboard Targets**: short labels for windows, stages,
@@ -567,10 +640,10 @@ cell, use `Space` to validate, arrows to move, and `Esc` to cancel. Short macro
 recording can store the best target context plus a grid fallback.
 
 ```bash
-./bin/roadie targets interactive --source all --include-app-targets
-./bin/roadie grid interactive --scope display
-./bin/roadie grid interactive --scope focused_window
-./bin/roadie record start demo --duration 10
+roadie targets interactive --source all --include-app-targets
+roadie grid interactive --scope display
+roadie grid interactive --scope focused_window
+roadie record start demo --duration 10
 ```
 
 Risky surfaces are experimental and independently configurable through
@@ -582,30 +655,49 @@ Risky surfaces are experimental and independently configurable through
 Run the quick health checks:
 
 ```bash
-./bin/roadie daemon health
-./bin/roadie state audit
-./bin/roadie self-test
+roadie daemon health
+roadie state audit
+roadie self-test
 ```
 
 Repair conservative state issues:
 
 ```bash
-./bin/roadie state heal
-./bin/roadie daemon heal
+roadie state heal
+roadie daemon heal
 ```
 
 Inspect logs and events:
 
 ```bash
 make logs
-./bin/roadie events tail 50
+roadie events tail 50
 ```
 
-If windows stop moving after a rebuild, re-check Accessibility for `bin/roadied`, then restart:
+Get a full report on the daemon, the two permissions, and the configuration:
+
+```bash
+roadie doctor
+roadied --version
+```
+
+`roadied --version` (and `roadie --version`) prints the version, which helps when you compare the installed binary with the running daemon.
+
+If windows stay hidden or off screen (for example after a crash), bring them all back:
+
+```bash
+roadie restore unhide-all
+```
+
+If windows stop moving after a new install, check that `~/.local/bin/roadied` is still enabled in Accessibility (see [Code signing and permissions](#code-signing-and-permissions)), then restart:
 
 ```bash
 make restart
 ```
+
+The daemon restores hidden windows when it receives a stop signal (SIGTERM, SIGINT, SIGHUP) and a small watcher process does the same if the daemon crashes. To run the daemon without this safety, start it with `roadied run --yes --no-restore-safety`.
+
+The previous run logs are in `~/.roadies/roadied.stderr.log.1` and `~/.roadies/roadied.stdout.log.1`.
 
 ## Repository Layout
 
@@ -619,6 +711,7 @@ Sources/roadie         CLI
 Sources/roadied        Daemon entry point
 Tests                  Unit tests
 scripts                Build and runtime helpers
+examples               Example config, skhd and Karabiner shortcuts
 ```
 
 ## Status

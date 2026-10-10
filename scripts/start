@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
+# Démarrage de DÉVELOPPEMENT (make dev-start) : build debug, binaires dans ./bin, session tmux.
+# Pour redémarrer le service installé par `make install`, utiliser `make restart`.
+# Un seul lanceur à la fois : `roadied run` prend un verrou d'instance (~/.roadies/roadied.lock).
+# Le LaunchAgent (KeepAlive) relancerait en boucle une instance refusée, donc il est déchargé ici.
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 label="com.roadie.roadied"
-plist="$HOME/Library/LaunchAgents/$label.plist"
 log_dir="$HOME/.roadies"
 runtime_bin_dir="$repo_root/bin"
-local_bin_dir="$HOME/.local/bin"
 pidfile="$log_dir/roadied.pid"
 tmux_session="roadied"
 
-mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$runtime_bin_dir" "$local_bin_dir"
-: > "$log_dir/roadied.stdout.log"
-: > "$log_dir/roadied.stderr.log"
+mkdir -p "$log_dir" "$runtime_bin_dir"
 
 "$script_dir/with-xcode" swift build --configuration debug --product roadied
 "$script_dir/with-xcode" swift build --configuration debug --product roadie
@@ -22,8 +22,6 @@ build_bin="$bin_dir/roadied"
 build_cli="$bin_dir/roadie"
 roadied_bin="$runtime_bin_dir/roadied"
 roadie_bin="$runtime_bin_dir/roadie"
-local_roadied_bin="$local_bin_dir/roadied"
-local_roadie_bin="$local_bin_dir/roadie"
 
 if [[ ! -x "$build_bin" ]]; then
   echo "roadied binary not found: $build_bin" >&2
@@ -35,42 +33,9 @@ if [[ ! -x "$build_cli" ]]; then
 fi
 cp "$build_bin" "$roadied_bin"
 cp "$build_cli" "$roadie_bin"
-cp "$build_bin" "$local_roadied_bin"
-cp "$build_cli" "$local_roadie_bin"
-chmod +x "$roadied_bin"
-chmod +x "$roadie_bin" "$local_roadied_bin" "$local_roadie_bin"
+chmod +x "$roadied_bin" "$roadie_bin"
 codesign --force --sign - "$roadied_bin" >/dev/null 2>&1 || true
 codesign --force --sign - "$roadie_bin" >/dev/null 2>&1 || true
-codesign --force --sign - "$local_roadied_bin" >/dev/null 2>&1 || true
-codesign --force --sign - "$local_roadie_bin" >/dev/null 2>&1 || true
-
-cat > "$plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
-  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$label</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$roadied_bin</string>
-    <string>run</string>
-    <string>--yes</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>$repo_root</string>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>$log_dir/roadied.stdout.log</string>
-  <key>StandardErrorPath</key>
-  <string>$log_dir/roadied.stderr.log</string>
-</dict>
-</plist>
-PLIST
 
 if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   launchctl bootout "gui/$(id -u)/$label" >/dev/null 2>&1 || true
@@ -80,32 +45,42 @@ if [[ -f "$pidfile" ]]; then
   old_pid="$(cat "$pidfile")"
   if ps -p "$old_pid" -o args= 2>/dev/null | grep -q "$roadied_bin run --yes"; then
     kill "$old_pid" >/dev/null 2>&1 || true
-    sleep 1
+    # Attendre la libération du verrou d'instance (le daemon remet les fenêtres avant de sortir).
+    for _ in {1..50}; do
+      kill -0 "$old_pid" 2>/dev/null || break
+      sleep 0.1
+    done
   fi
   rm -f "$pidfile"
 fi
 
+# Rotation d'une génération : le log précédent reste lisible en .1 (utile après un crash).
+# Faite après l'arrêt de l'ancienne instance, qui écrit encore dans ces fichiers.
+rotate_log() {
+  [[ -s "$1" ]] && mv -f "$1" "$1.1"
+  : > "$1"
+}
+rotate_log "$log_dir/roadied.stdout.log"
+rotate_log "$log_dir/roadied.stderr.log"
+
 if command -v tmux >/dev/null 2>&1; then
   tmux kill-session -t "$tmux_session" >/dev/null 2>&1 || true
   tmux new-session -d -s "$tmux_session" "cd '$repo_root' && exec '$roadied_bin' run --yes >> '$log_dir/roadied.stdout.log' 2>> '$log_dir/roadied.stderr.log'"
-  pid="$(tmux list-panes -t "$tmux_session" -F '#{pane_pid}')"
-  echo "$pid" > "$pidfile"
 else
   (
     cd "$repo_root"
     nohup "$roadied_bin" run --yes >> "$log_dir/roadied.stdout.log" 2>> "$log_dir/roadied.stderr.log" < /dev/null &
-    echo "$!" > "$pidfile"
   )
 fi
 
+# Le daemon écrit lui-même roadied.pid après avoir pris le verrou d'instance.
 sleep 1
-pid="$(cat "$pidfile")"
-if ! ps -p "$pid" >/dev/null 2>&1; then
+pid="$(cat "$pidfile" 2>/dev/null || true)"
+if [[ -z "$pid" ]] || ! ps -p "$pid" >/dev/null 2>&1; then
   echo "roadied failed to start; logs: $log_dir/roadied.stderr.log" >&2
   exit 1
 fi
 
 echo "roadied started"
 echo "pid: $pid"
-echo "plist: $plist"
 echo "logs: $log_dir/roadied.stdout.log $log_dir/roadied.stderr.log"
