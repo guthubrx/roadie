@@ -2,7 +2,7 @@
 
 **Feature Branch**: `016-roadie-stabilization`
 **Created**: 2026-10-10
-**Status**: Draft
+**Status**: Implemented (validation manuelle en attente)
 **Dependencies**: SPEC-010-layout-stability-hardening, SPEC-011-atomic-components, SPEC-012-component-lifecycle-unification, SPEC-013-persistent-bsp-tree, SPEC-014-bsp-tree-manipulation, SPEC-015-navrail-fullscreen-state
 **Input**: User description: "Corriger l'ensemble des 39 constats de la revue de stabilité, de robustesse, de performance et d'utilisabilité (points 1 à 39)."
 **Source détaillée des constats**: [review-findings.md](./review-findings.md)

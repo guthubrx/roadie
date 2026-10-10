@@ -122,7 +122,7 @@
 ## Phase 12 : Polish
 
 - [x] T120 Build complet + suite complète verts ; `grep -rn "/Users/" Sources scripts` vide ; `CGWindowListCreateImage` et `activateIgnoringOtherApps` absents de `Sources`
-- [ ] T121 Mettre à jour `specs/016-roadie-stabilization/implementation.md` (journal par lot : commits, fichiers, tests) et l'index des sessions
+- [x] T121 Mettre à jour `specs/016-roadie-stabilization/implementation.md` (journal par lot : commits, fichiers, tests) et l'index des sessions
 
 ## Dépendances
 

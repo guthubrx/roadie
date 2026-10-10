@@ -5,7 +5,7 @@
 - **Spec** : 016-roadie-stabilization
 - **Branche** : `016-roadie-stabilization`
 - **Démarré** : 2026-10-10
-- **Terminé** : En cours (Converge, contre-revue d'implémentation et audit restants)
+- **Terminé** : 2026-10-10 (toutes les tâches cochées ; validation manuelle sur bureau réel en attente)
 - **Mode** : 10 agents en parallèle, propriété exclusive de fichiers par lot (voir plan.md) ; commits par lot après build et suite complète verts.
 - **Volume** : 72 fichiers sous `Sources/` et `Tests/`, +10 724 / -5 818 lignes (dont le déplacement de ~1 650 lignes de `Sources/roadie/main.swift` vers `CLICommandRouter.swift` et le découpage de `RailController.swift`).
 
@@ -81,12 +81,35 @@
 ### Incident de commit
 - `4dd023a` (docs) a été créé avec `git commit -a` et a embarqué une partie des changements AX en cours du lot K4 ; complété par `5226feb`. Aucune perte ; message de `4dd023a` incomplet. Depuis, chaque commit nomme ses fichiers.
 
+### Audit v14 pre-merge (mode fix, 1 cycle + scoring)
+- **Statut** : ✅ corrections appliquées, **non commitées** (l'orchestrateur appelant commite) ; rapport : `audits/2026-10-10/session-2026-10-10-016-roadie-stabilization-01/` (`fix-report.md`, `scoring.md`).
+- **Constats** : 0 CRITICAL, 0 HIGH ; 7 MEDIUM/LOW corrigés : PERF-001 (FR-023 : `RailSettings.load(path:)` relu seulement si le fichier change), PERF-003 (O(n²) de `AutomationSnapshotService.windowSnapshots`), QUAL-008 (FR-015/FR-037 : marqueur de reprise illisible copié et traité comme arrêt non propre), MIN-002 (FR-034 : `fx.rail.header.height/width` signalées sans effet), AI-001 (`window close` non implémenté sort en 1), TEST-001 (règle d'ambiguïté du rattachement), TEST-002 (expiration des refus de taille).
+- **Fichiers** : `Sources/RoadieDaemon/RailSettings.swift`, `AutomationSnapshotService.swift`, `WindowPresentationStateResolver.swift`, `RestoreSafetyService.swift`, `CLICommandRouter.swift`, `Sources/RoadieCore/Config.swift` ; tests `ConfigTests`, `RestoreSafetyServiceTests`, `CLICommandRouterTests`, `PersistentStageStateTests`, `LayoutMaintainerTests`.
+- **Tests** : build OK ; `./scripts/test` 626 tests / 69 suites verts ; contrôles rouges ou mutations confirmant chaque nouveau test.
+
 ## Tests exécutés
 
 - `./scripts/with-xcode swift build` : OK.
-- `./scripts/test` : **590 tests, 67 suites, tous passent** (contre 518 avant la spec).
+- `./scripts/test` : **626 tests, 69 suites, tous passent** (518 avant la spec ; 590 après la vague 1, 616 après la convergence 1, 620 après la convergence 3, 626 après l'audit).
 - `grep -rn "/Users/" Sources scripts` : vide. `CGWindowListCreateImage` et `activateIgnoringOtherApps` : absents de `Sources`.
 - **Test manuel** : non fait (bureau réel requis) — voir `quickstart.md`.
+
+## Convergence et audit
+
+| Étape | Issue |
+|---|---|
+| Converge passage 1 | 6 manques (T201-T206) + 7 défauts contre-revue Codex (T207-T212) + relecture T111 (T213-T219) → corrigés |
+| Converge passage 2 | 2 manques (T301-T302) ; nettoyage T220-T227 (-387 / +194 lignes) |
+| Converge passage 3 | **CONVERGED** |
+| Audit v14 (fix, grille pre-merge) | **A- (87,3/100)**, 0 critique / 0 élevé, 20 moyens, 30 faibles ; 7 corrections (`d3c0903`) ; validateur : 0 erreur |
+
+Session d'audit : `audits/2026-10-10/session-2026-10-10-016-roadie-stabilization-01/`.
+
+## Suites recommandées (hors périmètre de cette spec)
+
+- Modes dégradés peu visibles : état illisible absent de `doctor` (OBS-001), échec d'ouverture du socket (OBS-002), commande « succès » sans état enregistré (REL-002), commande exécutée après départ du client (REL-001).
+- Scripts : `scripts/doctor` (binaire installé), `scripts/install` (double démarrage), `cleanup --apply` sur un log ouvert.
+- Découpage de `tick` (352 lignes), `switchDisplay` (315), `dispatch` (378).
 
 ## Non vérifié
 
