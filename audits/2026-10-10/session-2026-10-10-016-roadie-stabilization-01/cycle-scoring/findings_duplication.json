@@ -1,0 +1,371 @@
+{
+  "module": "07",
+  "part": "all",
+  "findings": [
+    {
+      "id": "DUP-001",
+      "subcategory": "duplication",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1797,
+      "title": "Test de proximité de cadres recopié 8 fois, dont 2 copies identiques éditées en parallèle",
+      "description": "`Rect.isClose(to:positionTolerance:sizeTolerance:)` existe en deux copies strictement identiques (Type 1) : `private extension Rect` dans DaemonSnapshot.swift et dans LayoutMaintainer.swift. Le diff (FR-041, tolérances explicites) a dû retirer les valeurs par défaut `= 48` dans les DEUX copies, ainsi que dans la variante CGRect de RoadieTiler/LayoutTypes.swift : les copies évoluent donc ensemble. Autour d'elles, 5 variantes `framesAreClose` (LayoutCommandService, WindowCommands avec seuil 1 codé en dur, LayoutMaintainer, WindowPresentationStateResolver, SystemSnapshotProvider) et `AXWindowFrameWriter.isClose` (ajoutée par le diff) refont la même comparaison de 4 coordonnées.",
+      "evidence": "private extension Rect {\n    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {\n        abs(x - other.x) <= positionTolerance\n            && abs(y - other.y) <= positionTolerance\n            && abs(width - other.width) <= sizeTolerance\n            && abs(height - other.height) <= sizeTolerance\n    }\n--- LayoutMaintainer.swift:3073 ---\n    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {\n        abs(x - other.x) <= positionTolerance\n            && abs(y - other.y) <= positionTolerance\n            && abs(width - other.width) <= sizeTolerance\n            && abs(height - other.height) <= sizeTolerance",
+      "impact": "Une règle de proximité (ex. FR-041) doit être corrigée à 8 endroits ; l'oubli d'une copie crée une dérive silencieuse de décision de relayout. Aucun défaut actuel prouvé : les copies identiques sont cohérentes aujourd'hui.",
+      "remediation": "Définir une seule extension publique `Rect.isClose(to:positionTolerance:sizeTolerance:)` dans RoadieCore/Geometry.swift (RoadieAX, RoadieTiler et RoadieDaemon dépendent déjà de RoadieCore) et supprimer les deux copies privées. Faire passer les variantes CGRect/`framesAreClose` par `Rect(cg).isClose(...)` avec une tolérance nommée de `LayoutTolerance`. Garder `AXWindowFrameWriter.isClose` (seuil `<` et non `<=`) tant qu'une décision explicite n'est pas prise.",
+      "remediation_code": "// Sources/RoadieCore/Geometry.swift\npublic extension Rect {\n    /// Tolérances explicites (SPEC-016 FR-041) : pas de valeur par défaut implicite.\n    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {\n        abs(x - other.x) <= positionTolerance\n            && abs(y - other.y) <= positionTolerance\n            && abs(width - other.width) <= sizeTolerance\n            && abs(height - other.height) <= sizeTolerance\n    }\n\n    func isClose(to other: Rect, tolerance: Double) -> Bool {\n        isClose(to: other, positionTolerance: tolerance, sizeTolerance: tolerance)\n    }\n}\n// puis supprimer `private extension Rect { func isClose ... }` dans DaemonSnapshot.swift et LayoutMaintainer.swift",
+      "verification": "`swift build` puis `swift test --filter LayoutMaintainerTests` et `--filter SnapshotServiceTests` : 0 échec. `rg -n 'func isClose\\(to other: Rect' Sources` doit retourner 1 seule définition. Relancer jscpd : la paire DaemonSnapshot.swift/LayoutMaintainer.swift disparaît.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 8,
+      "occurrences_count": 8,
+      "all_locations": [
+        "Sources/RoadieDaemon/DaemonSnapshot.swift:1797",
+        "Sources/RoadieDaemon/LayoutMaintainer.swift:3073",
+        "Sources/RoadieTiler/LayoutTypes.swift:100",
+        "Sources/RoadieDaemon/LayoutCommandService.swift:297",
+        "Sources/RoadieDaemon/WindowCommands.swift:1163",
+        "Sources/RoadieDaemon/LayoutMaintainer.swift:1310",
+        "Sources/RoadieDaemon/WindowPresentationStateResolver.swift:98",
+        "Sources/RoadieAX/SystemSnapshotProvider.swift:954"
+      ],
+      "references": [
+        "SPEC-016 FR-041",
+        "T302"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-002",
+      "subcategory": "duplication",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 2882,
+      "title": "Centrage + bornage d'un cadre : 4 copies, dont une ajoutée par le diff, avec dérive",
+      "description": "`centeredVisibleFrame` (nouvelle dans le diff, restauration de la fenêtre focalisée) recopie la fin de `StageCommands.visibleFrame(for:on:)` (bornage `min(frame, visible)` puis centrage). `WindowCommands.centeredFrame` fait la même chose avec `container`. `StageCommands.centeredFrame` NE borne PAS la taille : les deux fonctions de même nom et de même signature ont donc deux comportements différents selon le fichier. Type 2 avec dérive déjà présente.",
+      "evidence": "    private func centeredVisibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect {\n        let visible = display.visibleFrame.cgRect\n        let width = min(frame.width, visible.width)\n        let height = min(frame.height, visible.height)\n        return CGRect(\n            x: visible.midX - width / 2,\n            y: visible.midY - height / 2,\n            width: width,\n            height: height\n        ).integral\n    }\n--- StageCommands.swift:1494 ---\n    private func centeredFrame(_ frame: CGRect, in container: CGRect) -> CGRect {\n        CGRect(\n            x: container.midX - frame.width / 2,\n            y: container.midY - frame.height / 2,\n            width: frame.width,\n            height: frame.height\n        ).integral\n--- WindowCommands.swift:1283 ---\n    private func centeredFrame(_ frame: CGRect, in container: CGRect) -> CGRect {\n        let width = min(frame.width, container.width)\n        let height = min(frame.height, container.height)\n        return CGRect(\n            x: container.midX - width / 2,",
+      "impact": "Corriger le centrage (ex. marge de barre de menus) demande 4 modifications. `StageCommands.centeredFrame` est appelé pour poser une fenêtre sur l'écran cible (transfert de stage) : une fenêtre plus grande que la zone visible cible n'y est pas réduite, contrairement à la version de WindowCommands. Effet visuel non reproduit dans cet audit.",
+      "remediation": "Ajouter une seule extension `CGRect.centeredClamped(in:)` (bornage de la taille puis centrage, `.integral`) dans RoadieCore/Geometry.swift, et l'utiliser dans les 4 sites. Décider explicitement du comportement de StageCommands.centeredFrame (borner ou non) avant de remplacer, et couvrir par un test.",
+      "remediation_code": "// Sources/RoadieCore/Geometry.swift\npublic extension CGRect {\n    /// Réduit la taille à `container` si besoin, puis centre dans `container`.\n    func centeredClamped(in container: CGRect) -> CGRect {\n        let w = min(width, container.width)\n        let h = min(height, container.height)\n        return CGRect(x: container.midX - w / 2, y: container.midY - h / 2, width: w, height: h).integral\n    }\n}\n// LayoutMaintainer: frame.centeredClamped(in: display.visibleFrame.cgRect)",
+      "verification": "Ajouter un test : cadre 2000x1200 centré dans un conteneur 1000x500 retourne 1000x500 centré. `swift test --filter RestoreSafety` et `--filter LayoutMaintainer` : 0 échec. `rg -n 'midX - (width|frame.width) / 2' Sources` ne retourne plus que l'extension.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "duplication_type": "RENAMED",
+      "duplication_lines": 11,
+      "occurrences_count": 4,
+      "all_locations": [
+        "Sources/RoadieDaemon/LayoutMaintainer.swift:2882",
+        "Sources/RoadieDaemon/StageCommands.swift:1467",
+        "Sources/RoadieDaemon/StageCommands.swift:1494",
+        "Sources/RoadieDaemon/WindowCommands.swift:1283"
+      ],
+      "references": [
+        "SPEC-016 FR-037",
+        "T301"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-003",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+      "line": 344,
+      "title": "hideOverlayNow() et cleanup() copiés à l'identique (31 lignes) dans deux sessions",
+      "description": "Le diff (T224) a factorisé `reenableEventTap` et `installEventTap` dans le protocole `KeyEventTapSession`, qui porte déjà `eventTap` et `runLoopSource`. Mais `hideOverlayNow()` et `cleanup()` restent copiés mot pour mot dans `TargetInteractiveSession` et `TargetGridInteractiveSession` (jscpd : 31 lignes, 122 tokens, Type 1). La factorisation s'est arrêtée à mi-chemin dans le même fichier.",
+      "evidence": "    private func hideOverlayNow() {\n        guard !windows.isEmpty else { return }\n        for window in windows {\n            window.alphaValue = 0\n            window.orderOut(nil)\n            window.close()\n        }\n        windows = []\n        NSApplication.shared.updateWindows()\n    }\n\n    private func cleanup() {\n--- seconde copie : Sources/RoadieDaemon/TargetOverlayPresenter.swift:666 ---\n    private func hideOverlayNow() {\n        guard !windows.isEmpty else { return }\n        for window in windows {",
+      "impact": "Toute correction du démontage du tap clavier (ex. ordre `tapEnable(false)` / retrait de la source) doit être faite deux fois ; le démontage d'un tap est précisément le chemin de sortie qui doit rester sûr. Environ 25 lignes supprimables à comportement constant.",
+      "remediation": "Ajouter au protocole `KeyEventTapSession` les propriétés `timer` et `windows` (déjà présentes dans les deux classes) et déplacer `cleanup()` / `hideOverlayNow()` dans l'extension du protocole. Les deux classes gardent leur propre `finish`.",
+      "remediation_code": "extension KeyEventTapSession {\n    func tearDownEventTap() {\n        if let runLoopSource {\n            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)\n        }\n        runLoopSource = nil\n        if let eventTap {\n            CGEvent.tapEnable(tap: eventTap, enable: false)\n        }\n        eventTap = nil\n    }\n}\n// Chaque session : cleanup() { timer?.invalidate(); timer = nil; tearDownEventTap(); hideOverlayNow() }",
+      "verification": "`swift build` ; `swift test --filter Target` : 0 échec ; jscpd ne retourne plus la paire TargetOverlayPresenter.swift 338-368 / 660-690.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 31,
+      "occurrences_count": 2,
+      "all_locations": [
+        "Sources/RoadieDaemon/TargetOverlayPresenter.swift:344-368",
+        "Sources/RoadieDaemon/TargetOverlayPresenter.swift:666-690"
+      ],
+      "references": [
+        "T224"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-004",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 342,
+      "title": "Branche « intent invalidé par geste manuel » dupliquée deux fois dans le même tick (13 lignes)",
+      "description": "Deux branches consécutives de la fonction de tick suppriment les intents dérivés, recalculent `remainingProtectedScopes`, rappellent `applyPlan(... excluding: remainingProtectedScopes.union(tickExcludedScopes))` et émettent le même événement. Le diff a dû modifier les DEUX copies de la même façon (`settlingLayoutScopes` devenu `tickExcludedScopes`), preuve qu'elles évoluent ensemble. Seul le jeu de scopes protégés (`strictCommandProtectedScopes` ou `protectedScopes`) et l'écriture de `lastCommandIntentAt` diffèrent.",
+      "evidence": "                }\n                lastCommandIntentAt = nil\n                let remainingProtectedScopes = strictCommandProtectedScopes.subtracting(driftedScopes)\n                let tick = applyPlan(\n                    from: snapshot,\n                    observedFrames: observedFrames,\n                    excluding: remainingProtectedScopes.union(tickExcludedScopes)\n                )\n                events.append(RoadieEvent(type: \"command_intent_invalidated_by_manual_geometry\", details: [\n                    \"scopes\": driftedScopes.map(\\.description).sorted().joined(separator: \",\"),\n                    \"remainingProtectedScopes\": remainingProtectedScopes.map(\\.description).sorted().joined(separator: \",\"),\n                    \"commands\": String(tick.commands)\n                ]))",
+      "impact": "Risque de dérive entre les deux branches sur un chemin qui décide de relayouter ou non après un geste manuel (FR-040). Pas de défaut actuel : les deux copies sont identiques.",
+      "remediation": "Extraire une méthode privée `invalidateDriftedIntents(_ drifted: Set<StageScope>, protected: Set<StageScope>, snapshot:, observedFrames:, excluded:) -> MaintenanceTick` qui porte la suite commune. Moins de 5 paramètres, aucune branche conditionnelle ajoutée.",
+      "remediation_code": "private func replanAfterDriftedIntents(\n    _ drifted: Set<StageScope>,\n    protected: Set<StageScope>,\n    snapshot: DaemonSnapshot,\n    observedFrames: [WindowID: Rect],\n    excluded: Set<StageScope>\n) -> MaintenanceTick {\n    for scope in drifted { service.removeLayoutIntent(scope: scope) }\n    lastCommandIntentAt = nil\n    let remaining = protected.subtracting(drifted)\n    let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: remaining.union(excluded))\n    events.append(RoadieEvent(type: \"command_intent_invalidated_by_manual_geometry\", details: [\n        \"scopes\": drifted.map(\\.description).sorted().joined(separator: \",\"),\n        \"remainingProtectedScopes\": remaining.map(\\.description).sorted().joined(separator: \",\"),\n        \"commands\": String(tick.commands)\n    ]))\n    return tick\n}",
+      "verification": "`swift test --filter LayoutMaintainerTests` : 0 échec (les tests de dérive d'intent couvrent les deux branches). jscpd : la paire LayoutMaintainer.swift 344-356 / 387-399 disparaît.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "duplication_type": "STRICT",
+      "duplication_lines": 13,
+      "occurrences_count": 2,
+      "all_locations": [
+        "Sources/RoadieDaemon/LayoutMaintainer.swift:342-354",
+        "Sources/RoadieDaemon/LayoutMaintainer.swift:385-397"
+      ],
+      "references": [
+        "SPEC-016 FR-040"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-005",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/RailPanel.swift",
+      "line": 373,
+      "title": "Remontée de la hiérarchie de vues recopiée 3 fois alors que stageCard(at:) existe",
+      "description": "`stageCard(at:)` fait déjà : conversion du point écran, `hitTest`, remontée des superviews jusqu'à un `StageCardView`. `action(at:)`, `stageID(at:)` et `stageDragPayload(at:)` réécrivent la même boucle à la main (Type 2). Le code vient de RailController, scindé par le diff (1152b7f) : la duplication a été déplacée telle quelle, pas introduite.",
+      "evidence": "    func action(at screenPoint: CGPoint) -> RailAction? {\n        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }\n        let windowPoint = convertPoint(fromScreen: screenPoint)\n        let contentPoint = contentView.convert(windowPoint, from: nil)\n        var view = contentView.hitTest(contentPoint)\n        while let current = view {\n            if let card = current as? StageCardView {\n                let local = card.convert(contentPoint, from: contentView)\n                return card.action(at: local)\n            }\n            view = current.superview\n        }\n        return nil\n    }\n--- stageCard(at:) Sources/RoadieDaemon/RailPanel.swift:459 ---\n    private func stageCard(at screenPoint: CGPoint) -> (StageCardView, CGPoint)? {\n        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }\n        let windowPoint = convertPoint(fromScreen: screenPoint)\n        let contentPoint = contentView.convert(windowPoint, from: nil)\n        var view = contentView.hitTest(contentPoint)\n        while let current = view {\n            if let card = current as? StageCardView {\n                return (card, card.convert(contentPoint, from: contentView))\n            }\n            view = current.superview\n        }",
+      "impact": "Trois copies d'un chemin de hit-test à garder alignées (ex. changement de test de zone `acceptsRailInteraction`). Environ 30 lignes supprimables à comportement constant.",
+      "remediation": "Faire passer les trois fonctions par `stageCard(at:)` : `action(at:)` devient `stageCard(at: p).flatMap { $0.0.action(at: $0.1) }`, `stageID(at:)` devient `stageCard(at: p)?.0.stageID`, et `stageDragPayload(at:)` utilise `(card, local)`.",
+      "remediation_code": "func action(at screenPoint: CGPoint) -> RailAction? {\n    guard let (card, local) = stageCard(at: screenPoint) else { return nil }\n    return card.action(at: local)\n}\n\nfunc stageID(at screenPoint: CGPoint) -> StageID? {\n    stageCard(at: screenPoint)?.0.stageID\n}",
+      "verification": "`swift test --filter Rail` : 0 échec. Test manuel : clic sur une carte de stage, glisser une stage, survol hors carte (aucune action). jscpd : les clones RailPanel.swift 373-381 / 388-396 / 459-465 / 473-481 disparaissent.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "duplication_type": "RENAMED",
+      "duplication_lines": 13,
+      "occurrences_count": 4,
+      "all_locations": [
+        "Sources/RoadieDaemon/RailPanel.swift:373",
+        "Sources/RoadieDaemon/RailPanel.swift:388",
+        "Sources/RoadieDaemon/RailPanel.swift:459",
+        "Sources/RoadieDaemon/RailPanel.swift:473"
+      ],
+      "references": [
+        "commit 1152b7f"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-006",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+      "line": 500,
+      "title": "Découpe BSP (split + planGroup, 38 lignes) copiée entre DropPreviewController et WindowCommands",
+      "description": "`split(_:horizontally:gap:firstCount:secondCount:)` et `planGroup(_:in:horizontal:gap:)` sont identiques mot pour mot (jscpd : 38 lignes, 371 tokens, Type 1, plus gros bloc du périmètre). Ce sont des fonctions pures de géométrie, sans état. Les deux copies existaient déjà avant le diff (base 3560183) ; elles sont signalées parce que le diff a modifié les deux fichiers (+132/-65 lignes) sans les toucher. S'y ajoutent `framesAreClose` (LayoutCommandService/WindowCommands) et la construction `ApplyCommand` à partir des placements, répétée 3 fois (WindowCommands 986 et 1034, LayoutCommandService 63).",
+      "evidence": "    private func split(\n        _ rect: CGRect,\n        horizontally: Bool,\n        gap: CGFloat,\n        firstCount: Int,\n        secondCount: Int\n    ) -> (first: CGRect, second: CGRect) {\n        let total = CGFloat(firstCount + secondCount)\n        let ratio = total > 0 ? CGFloat(firstCount) / total : 0.5\n        if horizontally {\n            let usable = max(0, rect.width - gap)\n            let firstWidth = floor(usable * ratio)\n--- WindowCommands.swift:1119 ---\n    private func split(\n        _ rect: CGRect,\n        horizontally: Bool,\n        gap: CGFloat,\n        firstCount: Int,\n        secondCount: Int",
+      "impact": "Hors diff : dette existante. Un correctif de découpe (ex. arrondi, gap) doit être appliqué dans les deux fichiers, sinon l'aperçu de dépôt et la commande divergent.",
+      "remediation": "Déplacer `split` et `planGroup` en fonctions statiques d'un enum `BSPSplitGeometry` dans RoadieTiler (déjà dépendance des deux), et les appeler des deux côtés. À traiter dans un chantier distinct, pas dans SPEC-016.",
+      "remediation_code": "// Sources/RoadieTiler/BSPSplitGeometry.swift\npublic enum BSPSplitGeometry {\n    public static func split(_ rect: CGRect, horizontally: Bool, gap: CGFloat, firstCount: Int, secondCount: Int) -> (first: CGRect, second: CGRect) { /* corps actuel */ }\n    public static func planGroup(_ ids: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] { /* corps actuel */ }\n}",
+      "verification": "`swift test --filter DropPreview` et `--filter PowerUserFocusCommand` : 0 échec. jscpd : la paire DropPreviewController 497-534 / WindowCommands 1116-1153 disparaît.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 38,
+      "occurrences_count": 2,
+      "all_locations": [
+        "Sources/RoadieDaemon/DropPreviewController.swift:500-537",
+        "Sources/RoadieDaemon/WindowCommands.swift:1119-1156"
+      ],
+      "references": [
+        "hors diff (présent dans 3560183)"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-007",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+      "line": 359,
+      "title": "activeWindow(in:) existe en 4 variantes proches mais non équivalentes (Type 3)",
+      "description": "Quatre commandes réimplémentent « quelle est la fenêtre active ». DesktopCommands lit le focus en direct (`service.focusedWindowID()`), StageCommands lit `snapshot.focusedWindowID`, WindowCommands et WindowBookmarkCommands ajoutent un repli par stage (`stage.focusedWindowID`, `windowIDs.last`) et un test de scope différent. jscpd remonte trois paires de 12 à 19 lignes. Code antérieur au diff, non modifié par lui. Les variantes divergent par choix ou par accident : ce n'est pas un Type 1.",
+      "evidence": "    private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {\n        if let focusedID = service.focusedWindowID(),\n           let focused = snapshot.windows.first(where: { entry in\n               guard let scope = entry.scope else { return false }\n               return entry.window.id == focusedID\n                   && entry.window.isTileCandidate\n--- StageCommands.swift:1218 ---\n    private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {\n        if let focusedID = snapshot.focusedWindowID,\n           let focused = snapshot.windows.first(where: { entry in",
+      "impact": "Selon la commande, la « fenêtre active » peut être une fenêtre différente après un changement de focus récent. Non reproduit. Un correctif de définition doit viser 4 sites.",
+      "remediation": "Ne pas factoriser sans décision : documenter la sémantique voulue de chaque variante (focus live ou snapshot, avec ou sans repli), puis converger vers une seule fonction `DaemonSnapshot.activeWindow(focusedID:)` si les comportements sont censés être identiques. Sinon ajouter un commentaire « DUPLICATION INTENTIONNELLE » avec la raison.",
+      "remediation_code": "// À décider d'abord. Si la sémantique est unique :\nextension DaemonSnapshot {\n    func activeWindow(focusedID: WindowID?) -> ScopedWindowSnapshot? { /* variante retenue */ }\n}",
+      "verification": "Ajouter un test qui fige la fenêtre active pour chaque commande dans un snapshot où `focusedWindowID` diffère du focus AX live ; `swift test --filter PowerUser` : 0 échec.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "duplication_type": "NEAR_MISS",
+      "duplication_lines": 19,
+      "occurrences_count": 4,
+      "all_locations": [
+        "Sources/RoadieDaemon/DesktopCommands.swift:359",
+        "Sources/RoadieDaemon/StageCommands.swift:1218",
+        "Sources/RoadieDaemon/WindowCommands.swift:886",
+        "Sources/RoadieDaemon/WindowBookmarkCommands.swift:173"
+      ],
+      "references": [
+        "hors diff (présent dans 3560183)"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-008",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 906,
+      "title": "Dictionnaire d'événement de signet copié à l'identique (12 lignes)",
+      "description": "`DaemonSnapshot.bookmarkEventDetails` et `WindowBookmarkCommands.eventDetails` construisent le même dictionnaire de 7 clés à partir d'un `PersistentWindowBookmark` (Type 1, jscpd 12 lignes). Code antérieur au diff. Le nom des clés d'événement fait partie du contrat des événements : une clé ajoutée d'un seul côté changerait la charge utile selon la source.",
+      "evidence": "    private func bookmarkEventDetails(_ bookmark: PersistentWindowBookmark) -> [String: String] {\n        [\n            \"name\": bookmark.name,\n            \"windowID\": String(bookmark.windowID.rawValue),\n            \"bundleID\": bookmark.bundleID,\n            \"title\": bookmark.title,\n            \"displayID\": bookmark.scope.displayID.rawValue,\n            \"desktopID\": String(bookmark.scope.desktopID.rawValue),\n            \"stageID\": bookmark.scope.stageID.rawValue\n        ]\n    }\n--- WindowBookmarkCommands.swift:194 ---\n    private func eventDetails(_ bookmark: PersistentWindowBookmark) -> [String: String] {\n        [\n            \"name\": bookmark.name,",
+      "impact": "Dérive possible du schéma d'événement `bookmark.*` entre les deux émetteurs.",
+      "remediation": "Définir `PersistentWindowBookmark.eventDetails` (propriété calculée, au plus près du type) et supprimer les deux fonctions privées.",
+      "remediation_code": "extension PersistentWindowBookmark {\n    var eventDetails: [String: String] {\n        [\n            \"name\": name,\n            \"windowID\": String(windowID.rawValue),\n            \"bundleID\": bundleID,\n            \"title\": title,\n            \"displayID\": scope.displayID.rawValue,\n            \"desktopID\": String(scope.desktopID.rawValue),\n            \"stageID\": scope.stageID.rawValue\n        ]\n    }\n}",
+      "verification": "`swift test --filter Bookmark` : 0 échec ; `rg -n 'func (bookmarkEventDetails|eventDetails\\(_ bookmark)' Sources` ne retourne rien.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 12,
+      "occurrences_count": 2,
+      "all_locations": [
+        "Sources/RoadieDaemon/DaemonSnapshot.swift:906-917",
+        "Sources/RoadieDaemon/WindowBookmarkCommands.swift:194-205"
+      ],
+      "references": [
+        "hors diff (présent dans 3560183)"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-009",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "line": 1138,
+      "title": "beginLayoutCommand/finishLayoutCommand : wrappers passthrough copiés dans 3 commandes, 2 identiques",
+      "description": "Chaque service de commande possède deux méthodes privées qui ne font que relayer vers `commandActivity.markActive` / `finish`. Le diff (FR-040) a ajouté le paramètre `scopes` aux copies de StageCommands et WindowCommands (identiques, jscpd 12 lignes) mais pas à celle de DesktopCommands, qui suspend donc encore tout le maintien. Écart possiblement voulu, mais non documenté. Les wrappers ne portent aucune règle métier (Article XIX : wrapper passthrough).",
+      "evidence": "    /// Sans `scopes`, la commande suspend tout le maintien ; avec, seulement ces scopes (FR-040).\n    private func beginLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {\n        commandActivity.markActive(reason: reason, scopes: scopes)\n    }\n\n    private func finishLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {\n        commandActivity.finish(reason: reason, scopes: scopes)\n    }\n\n--- DesktopCommands.swift:379 ---\n    private func beginLayoutCommand(_ reason: String) {\n        commandActivity.markActive(reason: reason)\n    }\n\n    private func finishLayoutCommand(_ reason: String) {\n        commandActivity.finish(reason: reason)",
+      "impact": "Trois copies à garder alignées ; l'asymétrie `scopes` de DesktopCommands peut passer pour un oubli de FR-040 à la prochaine relecture. Environ 20 lignes supprimables.",
+      "remediation": "Appeler directement `commandActivity.markActive(reason:scopes:)` / `finish(reason:scopes:)` (les paramètres ont déjà des valeurs par défaut) et supprimer les 6 wrappers. Pour DesktopCommands, commenter pourquoi la suspension reste globale, si c'est voulu.",
+      "remediation_code": "commandActivity.markActive(reason: reason, scopes: scopes)\n// ... puis, en fin de commande :\ncommandActivity.finish(reason: reason, scopes: scopes)",
+      "verification": "`swift build` ; `swift test --filter PowerUserDesktopCommand` et `--filter LayoutMaintainer` : 0 échec ; `rg -n 'func (begin|finish)LayoutCommand' Sources` vide.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 12,
+      "occurrences_count": 3,
+      "all_locations": [
+        "Sources/RoadieDaemon/StageCommands.swift:1138",
+        "Sources/RoadieDaemon/WindowCommands.swift:687",
+        "Sources/RoadieDaemon/DesktopCommands.swift:379"
+      ],
+      "references": [
+        "SPEC-016 FR-040"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-010",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+      "line": 471,
+      "title": "Fixtures de tests répétées : 6,0 % de duplication dans les tests du diff (42 clones)",
+      "description": "jscpd (min 15 lignes / 100 tokens) sur les 18 fichiers de test du diff : 822 lignes dupliquées sur 13 698 (6,00 %), 42 clones, plus gros bloc 40 lignes (LayoutMaintainerTests 877-916 / 1108-1147). 26 clones sont dans LayoutMaintainerTests et 13 dans SnapshotServiceTests ; ils reconstruisent à chaque test le même `DisplaySnapshot` de 8 lignes (57 occurrences de `DisplaySnapshot(` dans LayoutMaintainerTests, 102 dans SnapshotServiceTests) et la même configuration `SequenceProvider`. Le recouvrement avec les lignes ajoutées par le diff est quasi nul (1 clone sur 42) : dette héritée, non introduite.",
+      "evidence": "        let display = DisplaySnapshot(\n            id: DisplayID(rawValue: \"display-a\"),\n            index: 1,\n            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let provider = SequenceProvider(display: display, windowFrames: [",
+      "impact": "Les tests sont longs à lire et lents à adapter lors d'un changement de fixture, mais aucun risque de production. La duplication de tests reste LOW.",
+      "remediation": "Si un chantier de tests est ouvert : ajouter un helper `makeDisplay(id:width:height:)` partagé dans Tests/RoadieDaemonTests (un helper local existe déjà dans DisplayParkingServiceTests et DisplayTopologyTests). Ne rien faire dans SPEC-016.",
+      "verification": "Après refactor : `swift test` à 100 % ; jscpd sur les tests sous 3 %.",
+      "effort": "M",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 40,
+      "occurrences_count": 42,
+      "all_locations": [
+        "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:877-916",
+        "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:1108-1147"
+      ],
+      "references": [],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    },
+    {
+      "id": "DUP-011",
+      "subcategory": "duplication",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/StageCardView.swift",
+      "line": 249,
+      "title": "stageLabelFont() recopie headerFont(label:) (8 lignes)",
+      "description": "`stageLabelFont()` est `headerFont(label: config.stageLabel)` écrit en entier : même nettoyage de `fontFamily`, même test « system », même repli sur `systemFont`. Le fichier est nouveau dans le diff (extrait de RailController, où les deux fonctions existaient déjà).",
+      "evidence": "    private func stageLabelFont() -> NSFont {\n        let label = config.stageLabel\n        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)\n        if !family.isEmpty, family.lowercased() != \"system\",\n           let font = NSFont(name: family, size: label.fontSize) {\n            return font\n        }\n        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)\n    }\n--- headerFont:73 ---\n    private func headerFont(label: RailLabelConfig) -> NSFont {\n        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)\n        if !family.isEmpty, family.lowercased() != \"system\",",
+      "impact": "Deux endroits pour la règle de résolution de police ; ~8 lignes supprimables.",
+      "remediation": "Remplacer le corps de `stageLabelFont()` par `headerFont(label: config.stageLabel)`, ou supprimer `stageLabelFont()` et appeler `headerFont` à l'unique site (ligne `.font: stageLabelFont()`).",
+      "remediation_code": "private func stageLabelFont() -> NSFont {\n    headerFont(label: config.stageLabel)\n}",
+      "verification": "`swift build` ; contrôle visuel du libellé de stage dans le rail.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "duplication_type": "STRICT",
+      "duplication_lines": 8,
+      "occurrences_count": 2,
+      "all_locations": [
+        "Sources/RoadieDaemon/StageCardView.swift:73",
+        "Sources/RoadieDaemon/StageCardView.swift:249"
+      ],
+      "references": [
+        "commit 1152b7f"
+      ],
+      "category": "duplication",
+      "status": "open",
+      "fingerprint": "",
+      "exploitability": "N/A",
+      "path_type": "cold"
+    }
+  ],
+  "positive_findings": [
+    "T219-T222 vérifiés : un seul test de vivacité de pid (`ProcessLiveness.isAlive`, Sources/RoadieDaemon/ProcessLiveness.swift:7, EPERM compté vivant) référencé depuis 11 sites ; un seul `kill(pid, 0)` dans Sources ; une seule détection de test (`TestEnvironment.isRunningTests`, TestEnvironment.swift:6) appelée depuis 7 sites ; `rg 'processName.contains(\"test\")|isRunningTests'` ne trouve plus de copie.",
+    "T224 vérifié : une seule fonction `isHidden` (HiddenWindowPlacement.swift:30) et `NSColor(hex:)` (NSColorHex.swift:5) ; les 5 wrappers `hiddenFrame(for:on:among:)` de la base 3560183 sont supprimés (seule subsiste la variable locale `hiddenFrames` de WindowCommands) et les 14 sites appellent `HiddenWindowPlacement.frame` ; aucune copie de `color(hex:fallback:)` ni de parseur hexadécimal restante.",
+    "Duplication globale faible : 0,78 % sur les fichiers Sources du diff (min 10 lignes / 70 tokens), 0,95 % sur tout `Sources`, 0 % sur les 9 scripts shell du diff ; aucun bloc supérieur à 100 lignes ; 12 clones sur 14 portent sur des lignes non modifiées par le diff."
+  ],
+  "warnings": [
+    "jscpd n'a analysé que les fichiers du diff (61 fichiers Sources, 18 fichiers de test, 9 scripts) : un clone dont une moitié est hors diff n'apparaît pas dans le rapport restreint. Un passage sur tout `Sources` (90 fichiers, 0,95 %) a servi de contrôle de cohérence, sans exploitation fine.",
+    "Les clones inférieurs à 10 lignes / 70 tokens n'ont pas été classifiés un par un (passe 6 lignes / 50 tokens : 66 clones, 2,03 %, seuls ceux touchant des lignes ajoutées ont été lus).",
+    "Aucun commentaire « DUPLICATION INTENTIONNELLE », « False DRY » ou « do not factor » n'existe dans Sources (grep vide) : aucun clone n'a donc été exclu pour cette raison.",
+    "Les décisions « factoriser / garder » de DUP-007 (Type 3) et DUP-002 (comportement de StageCommands.centeredFrame) exigent une décision de comportement du mainteneur ; elles n'ont pas été testées à l'exécution."
+  ],
+  "notes": "jscpd 1 (Sources du diff, --min-lines 10 --min-tokens 70, 61 fichiers, 29 457 lignes) : duplicated_code = {jscpd_percentage: 0.78, duplicated_lines: 229, duplicated_tokens: 1855 (0.93 %), clones: 14, max_block_lines: 38 (371 tokens, DropPreviewController.swift:497-534 / WindowCommands.swift:1116-1153), total_occurrences: 14, blocs > 100 lignes: 0, blocs > 200 lignes: 0}. Provenance : sur 14 clones, 12 ne contiennent aucune ligne ajoutée par le diff ; 2 (LayoutMaintainer 344/387 et begin/finishLayoutCommand) contiennent 1 à 5 lignes modifiées. jscpd 2 (passe fine 6/50) : 2.03 %, 599 lignes, 66 clones. jscpd tests (Tests du diff, --min-lines 15 --min-tokens 100, 18 fichiers, 13 698 lignes) : 6.00 % (822 lignes, 5.48 % en tokens), 42 clones, plus gros bloc 40 lignes, sévérité LOW. Scripts shell (9 fichiers, 734 lignes) : 0 clone. Contrôle large (tout Sources, 90 fichiers, 34 009 lignes) : 0.95 %, 322 lignes, 18 clones, max 43 lignes. Seuils checklist 2 : global 0.78 % < 5 % (pas de DUP global), aucun bloc > 100 lignes. Aucune duplication Type 1 de logique métier introduite par le diff sur isHidden, pid, détection de test, hiddenFrame, NSColor(hex:). Clones de logique introduits ou touchés par le diff : DUP-001 (isClose, 8 copies), DUP-002 (centrage borné, copie neuve dans LayoutMaintainer), DUP-003 (cleanup tap clavier), DUP-004, DUP-009. Potentiel minimalisme lié à la duplication : environ 130 lignes suppressibles à comportement constant (DUP-001 ~30, DUP-002 ~25, DUP-003 ~25, DUP-005 ~30, DUP-009 ~20, DUP-011 ~8). Hors diff (dette existante, LOW) : DUP-006, DUP-007, DUP-008. Fichiers de sortie jscpd : /tmp/roadie-jscpd/, /tmp/roadie-jscpd-tests/, /tmp/roadie-jscpd-low/, /tmp/roadie-jscpd-all/ (aucun dans le dépôt)."
+}

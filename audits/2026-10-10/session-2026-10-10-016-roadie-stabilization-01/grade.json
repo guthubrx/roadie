@@ -1,0 +1,80 @@
+{
+  "grade": "A-",
+  "date": "2026-10-10",
+  "spec": "016",
+  "scope": "SPEC-016 roadie-stabilization : diff 3560183..HEAD (Sources, Tests, scripts, Makefile ; 91 fichiers), grille pre-merge, mode fix 1 cycle + scoring",
+  "coverage_percent": 100,
+  "justification": "Aucun CRITICAL ni HIGH ; 7 défauts MEDIUM/LOW corrigés et testés pendant l'audit (non commités). Note globale A- (87,3/100, moyenne pondérée) : le domaine qualité (C, 63) reste pénalisé par des fonctions très longues (tick, switchDisplay, dispatch) et des tolérances littérales résiduelles (FR-041) ; fiabilité B+ pour des modes dégradés peu visibles (état illisible, socket absent).",
+  "metrics": {
+    "reliability": {
+      "grade": "B+",
+      "numeric": 84,
+      "findings_count": 12
+    },
+    "tests": {
+      "grade": "A",
+      "numeric": 92,
+      "findings_count": 6
+    },
+    "complexity": {
+      "grade": "A",
+      "numeric": 91,
+      "findings_count": 7
+    },
+    "quality": {
+      "grade": "C",
+      "numeric": 63,
+      "findings_count": 17
+    },
+    "architecture": {
+      "grade": "A",
+      "numeric": 99,
+      "findings_count": 1
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "duplication": {
+      "grade": "A",
+      "numeric": 94,
+      "findings_count": 2
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 94,
+      "findings_count": 2
+    },
+    "observability": {
+      "grade": "A",
+      "numeric": 93,
+      "findings_count": 3
+    },
+    "security": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "performance": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "supply_chain": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "llm_security": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "ux": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    }
+  }
+}

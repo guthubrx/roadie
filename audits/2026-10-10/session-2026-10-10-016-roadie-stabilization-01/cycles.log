@@ -1,0 +1,18 @@
+# Journal des cycles - audit v14 SPEC-016 (mode fix, MAX_CYCLES=1, AUTO_COMMIT=false)
+[PRE] branche 016-roadie-stabilization (pas main), arbre propre, baseline : build OK, 620 tests / 69 suites verts.
+[SELECTION] 0 CRITICAL/HIGH après agrégation et Phase 2bis. Extension documentée : MEDIUM/LOW à défaut net, dans le périmètre, contraires à une exigence FR ou à un test annoncé, vérifiables par la suite Swift. Exclus : correctifs de scripts launchd (non testables), choix de conception (REL-001, REL-002, OBS-001, OBS-002, QUAL-001), refactors (QUAL-003, QUAL-004, QUAL-009, QUAL-010), code mort préexistant (MIN-001).
+[FIX 1] PERF-001 tentative 1 : cache par chemin de RailSettings.load(path:) invalidé par fileModificationStamp. Test railSettingsFileIsReparsedOnlyWhenItChanges vert ; contrôle rouge (cache retiré) : échec attendu (width 150 != 200). OK.
+[FIX 2] PERF-003 tentative 1 : windowSnapshots -> statesByWindowID (O(n)) ; retrait de state(for:in:) devenu sans appelant. Tests AutomationSnapshot/WindowPresentationStateResolver (19) verts. OK.
+[FIX 3] QUAL-008 tentative 1 : runMarkerResult (absent/chargé/illisible) ; startRun restaure si marqueur illisible ; copie .corrupt-<date>. Test startRunRecoversWhenRunMarkerIsUnreadable vert ; contrôle rouge (service HEAD) : 3 échecs attendus. OK.
+[FIX 4] MIN-002 tentative 1 : fx.rail.header.height/width dans ineffectiveKeys. ConfigTests (37) verts, test validationFlagsKeysThatHaveNoEffect étendu. OK.
+[FIX 5] AI-001 tentative 1 : window close (non implémenté) -> code 1 comme toggle floating. Test unimplementedCommandsExitOne ; CLICommandRouterTests (13) verts. OK.
+[FIX 6] TEST-001 tentative 1 : 2 tests de la règle d'ambiguïté. Mutation (écart >= 0) : test rouge attendu. OK.
+[FIX 7] TEST-002 tentative 1 : test clampedSizeRefusalIsRetriedAfterRefusalMemoryExpires -> ÉCHEC des assertions de comptage (observé : 2 demandes au 1er tick, application puis réparation ; 0 pendant la mémoire ; 2 après expiration). Hypothèse « 1 demande par tick » réfutée par la donnée runtime ; code de production correct.
+[FIX 7] TEST-002 tentative 2 : assertions relatives (aucune demande pendant la mémoire, nouvelle demande après 30 s). Vert ; mutation (expiration de clampedFrames retirée) : rouge attendu. OK. Disjoncteur non déclenché.
+[POST] ./scripts/with-xcode swift build OK ; ./scripts/test : 626 tests / 69 suites verts. Aucun commit (consigne appelant).
+[CONTRE-REVUE] Agent indépendant (lecture seule) sur le diff des 7 corrections : 7/7 CONFIRMÉES, 26 tests ciblés verts. Réserves :
+  - PERF-001 : un fichier existant mais illisible restait en cache (valeurs par défaut) jusqu'à la prochaine édition -> RETENUE, corrigée : seule une lecture réussie est mise en cache ; test étendu (contrôle rouge : 2 échecs attendus).
+  - MIN-002 : champs morts LegacyHeader.height/.width -> RETENUE, supprimés (comportement constant) ; commentaire de Config.swift aligné.
+  - QUAL-008 : double lecture non atomique du marqueur (copie .corrupt et événement parasites possibles) ; écrasement sans copie si la copie échoue -> RETENUE comme finding résiduel LOW (REL) du cycle-scoring, non corrigée (même schéma préexistant dans loadSnapshotResult).
+  - Test startRunRecoversWhenRunMarkerIsUnreadable polluerait ~/.roadies hors HOME temporaire -> RÉFUTÉE : EventLog.swift:75 redirige le chemin par défaut sous TestEnvironment.isRunningTests.
+[POST-2] ./scripts/with-xcode swift build OK ; ./scripts/test : 626 tests / 69 suites verts.

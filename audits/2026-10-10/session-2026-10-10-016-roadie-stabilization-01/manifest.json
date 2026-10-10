@@ -1,0 +1,127 @@
+{
+  "audit_meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-10T20:41:56Z",
+    "scope": "/path/to/roadie (SPEC-016, diff 3560183..HEAD sur Sources Tests scripts Makefile)",
+    "scope_mode": "diff",
+    "diff": {
+      "base": "3560183",
+      "head": "17c6a0a",
+      "files_count": 91
+    },
+    "mode": "LIGHT",
+    "grid": "pre-merge"
+  },
+  "repo": {
+    "files_count": 153,
+    "languages": [
+      "swift",
+      "bash",
+      "make"
+    ],
+    "frameworks": [
+      "AppKit",
+      "ApplicationServices (AX)",
+      "CoreGraphics",
+      "ScreenCaptureKit",
+      "TOMLKit",
+      "swift-testing"
+    ],
+    "type": "macos-daemon-cli",
+    "has_ui": true,
+    "has_llm_integration": false,
+    "db_type": "json-files (~/.roadies, flock + rename atomique)",
+    "ci_system": null,
+    "container": false
+  },
+  "sampling": null,
+  "hot_paths": [
+    {
+      "type": "daemon_tick",
+      "path": "Sources/RoadieDaemon/LayoutMaintainer.swift:103",
+      "trigger": "timer du tiler (roadied run/tiler), chaque tick"
+    },
+    {
+      "type": "snapshot",
+      "path": "Sources/RoadieDaemon/DaemonSnapshot.swift:182",
+      "trigger": "chaque tick + commandes + lecteurs (sharedSnapshot:165)"
+    },
+    {
+      "type": "ax_enumeration",
+      "path": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "trigger": "chaque snapshot, appels AX bloquants bornés à 0,5 s"
+    },
+    {
+      "type": "state_transaction",
+      "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+      "trigger": "mutate sous flock, multi-processus"
+    },
+    {
+      "type": "ipc_endpoint",
+      "path": "Sources/RoadieDaemon/CommandSocketServer.swift:62",
+      "route": "socket Unix ~/.roadies/roadied.sock (0600), une ligne JSON argv"
+    },
+    {
+      "type": "cli_dispatch",
+      "path": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "trigger": "chaque raccourci clavier -> roadie <cmd>"
+    },
+    {
+      "type": "ui_timer",
+      "path": "Sources/RoadieDaemon/RailController.swift:64",
+      "render": "navrail, timers de rebuild et de fondu"
+    },
+    {
+      "type": "lifecycle",
+      "path": "Sources/roadied/main.swift",
+      "trigger": "démarrage, signaux TERM/INT/HUP, restauration à l'arrêt"
+    }
+  ],
+  "threat_model": {
+    "assets": [
+      "Positions et visibilité des fenêtres de l'utilisateur (perte = fenêtre hors écran)",
+      "Fichiers d'état ~/.roadies (stages, intents, restore.json)",
+      "Permissions TCC Accessibility et Screen Recording accordées au binaire signé",
+      "Contenu des fenêtres capturé pour les vignettes du rail"
+    ],
+    "attackers": {
+      "anonymous_external": "bas (aucun port réseau)",
+      "local_same_user": "moyen (socket 0600 et fichiers ~/.roadies accessibles au même utilisateur ; peut piloter le daemon AX)",
+      "local_other_user": "bas (socket 0600, umask 0177 au bind)",
+      "supply_chain": "bas (une dépendance : TOMLKit)"
+    },
+    "surface": [
+      "1 socket Unix local (argv JSON -> CLICommandRouter dans le daemon)",
+      "Fichier TOML de config rechargé à chaud",
+      "Fichiers JSON d'état multi-processus",
+      "Scripts shell install/uninstall/start (launchctl, codesign)"
+    ],
+    "sensitive_hot_paths": [
+      "socket -> router -> AX (exécution de commandes avec la permission AX du daemon)",
+      "restore à l'arrêt -> fenêtres perdues si échec",
+      "mutate multi-processus -> perte de mise à jour"
+    ]
+  },
+  "slos": {
+    "defined": true,
+    "source": "specs/016-roadie-stabilization/spec.md (SC-003 commande < 1 s avec application gelée ; SC-004 0 écriture au repos sur 60 s ; SC-005 0 snapshot au survol)"
+  },
+  "modules_actifs": [
+    "00",
+    "01",
+    "02",
+    "04",
+    "05",
+    "06",
+    "07",
+    "09",
+    "10",
+    "11",
+    "12"
+  ],
+  "warnings": [
+    "Module 03 (sécurité) et 08 (performance) hors grille pre-merge ; la surface socket est décrite au threat model sans audit OWASP dédié",
+    "Core Web Vitals non applicables (Swift/AppKit)",
+    "Pas de CI détectée (.github absent)"
+  ]
+}

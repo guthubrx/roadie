@@ -1,0 +1,25 @@
+# Configuration Audit v14.0
+- AUDIT_ROOT_PATH     : /path/to/roadie
+- AUDIT_SCOPE         : SPEC-016 (specs/016-roadie-stabilization) - fichiers de Sources/, Tests/, scripts/, Makefile modifiés entre 3560183 et HEAD (17c6a0a)
+- SCOPE_MODE          : diff (DIFF_BASE = 3560183, imposé par l'appelant ; 91 fichiers, liste dans diff_files.txt)
+- AUDIT_MODE          : fix
+- AUDIT_GRID          : pre-merge
+- MODULES_ACTIFS      : [00,01,02,04,05,06,07,09,10,11,12]
+- MAX_CYCLES          : 1 (+ cycle-scoring en lecture seule)
+- MAX_FIXES_PER_CYCLE : 10
+- MAX_RETRY_PER_FINDING : 2
+- AUTO_COMMIT         : false (imposé par l'orchestrateur appelant : aucun git add/commit ; il commitera lui-même)
+- SKIP_HOOKS          : false
+- BASELINE_PATH       : /path/to/roadie/audits/baseline.json (absent = baseline vide)
+- SESSION_DIR         : /path/to/roadie/audits/2026-10-10/session-2026-10-10-016-roadie-stabilization-01/
+- SAMPLING_THRESHOLD  : 500 (non atteint : pas d'échantillonnage)
+- MODE_PARALLELISME   : agents
+- MODELE_SUBAGENTS    : sonnet (checklists) ; contre-audit par agents séparés (modèle hérité)
+- MAX_FINDINGS_PER_DOMAIN : 50
+- SEVERITY_DEFAULTS   : CRITICAL/HIGH block_release=true ; MEDIUM/LOW false
+- DUPLICATION_THRESHOLDS : warn 5 % / crit 10 % ; blocs 100 / 200 lignes
+- COMPLEXITY_THRESHOLDS  : warn 15 / crit 25 / 50 lignes par fonction
+- EXCLUDE_PATHS       : défauts v14 (.build/**, audits/**, .worktrees/**, dist/**, ...)
+- Contraintes appelant : ne pas lancer le daemon réel, ne pas toucher ~/.roadies ni ~/.config, aucun kill ; build `./scripts/with-xcode swift build`, tests `./scripts/test` (HOME temporaire).
+- Stack               : Swift 6 / macOS 14+, pas de front web (Core Web Vitals ignorés ; module 08 hors grille).
+- Baseline tests (HEAD 17c6a0a) : build OK ; 620 tests / 69 suites verts.
