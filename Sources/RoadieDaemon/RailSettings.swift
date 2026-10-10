@@ -147,7 +147,7 @@ public struct RailSettings: Equatable, Sendable {
             hideDelayMS: number(rail["hide_delay_ms"], default: 350, min: 0, max: 5000),
             layoutMode: normalizedLayoutMode(rail["layout_mode"]),
             dynamicLeftGap: bool(rail["dynamic_left_gap"], default: false),
-            emptyClickHideActive: bool(rail["empty_click_hide_active"], default: true),
+            emptyClickHideActive: bool(rail["empty_click_hide_active"], default: false),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
             preview: Preview(
                 width: number(preview["width"], default: 160, min: 60, max: 240),
@@ -321,7 +321,7 @@ public struct RailSettings: Equatable, Sendable {
         hideDelayMS: 350,
         layoutMode: "overlay",
         dynamicLeftGap: false,
-        emptyClickHideActive: true,
+        emptyClickHideActive: false,
         emptyClickSafetyMargin: 12,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
         stacked: Stacked(offsetX: 60, offsetY: 80, scalePerLayer: 0.05, opacityPerLayer: 0.08),

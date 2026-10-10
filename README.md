@@ -539,7 +539,7 @@ It shows non-empty stages, live thumbnails when available, fallback app icons wh
 Supported interactions:
 
 - Click a stage thumbnail stack to switch stage.
-- Click empty rail space to hide the active stage and switch to an empty stage. This can be disabled with `empty_click_hide_active = false`.
+- Empty rail clicks are inert by default, so a miss-click cannot hide the active stage. Set `empty_click_hide_active = true` only if you explicitly want empty rail space to switch to an empty stage.
 - Drag a thumbnail to another stage to move that window there.
 - Drag a thumbnail into the active workspace to summon it.
 - Drag a thumbnail to an empty rail area to place it in an empty or newly created stage.

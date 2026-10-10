@@ -77,13 +77,13 @@ width = 150
 auto_hide = false
 layout_mode = "overlay"
 dynamic_left_gap = false
-empty_click_hide_active = true
+empty_click_hide_active = false
 empty_click_safety_margin = 12
 ```
 
 Options importantes :
 
-- `empty_click_hide_active` : autorise le clic sur zone vide du navrail pour basculer vers une stage vide. Mets `false` si tu veux que les zones vides ne fassent rien.
+- `empty_click_hide_active` : autorise le clic sur zone vide du navrail pour basculer vers une stage vide. Le défaut est `false` pour qu'un clic raté ne masque pas la stage active.
 - `empty_click_safety_margin` : marge horizontale minimale avant qu'un clic vide soit accepte.
 - `layout_mode = "resize"` reserve une bande au navrail; `overlay` laisse le rail au-dessus du bureau.
 - les clics dans les zones macOS reservees, comme la barre de menu, sont ignores.

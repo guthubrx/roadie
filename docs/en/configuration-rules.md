@@ -76,13 +76,13 @@ width = 150
 auto_hide = false
 layout_mode = "overlay"
 dynamic_left_gap = false
-empty_click_hide_active = true
+empty_click_hide_active = false
 empty_click_safety_margin = 12
 ```
 
 Important options:
 
-- `empty_click_hide_active`: allows clicking empty rail space to switch to an empty stage. Set it to `false` if empty rail areas should do nothing.
+- `empty_click_hide_active`: allows clicking empty rail space to switch to an empty stage. Default is `false` so a miss-click cannot hide the active stage.
 - `empty_click_safety_margin`: minimum horizontal margin before an empty click is accepted.
 - `layout_mode = "resize"` reserves space for the rail; `overlay` lets the rail sit above the desktop.
 - clicks in macOS-reserved areas such as the menu bar are ignored.
