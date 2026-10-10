@@ -260,15 +260,26 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle {
         finish(TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled"))
     }
 
+    fileprivate func reenableEventTap() {
+        guard !finished, let eventTap else { return }
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+    }
+
     private func installEventTap() -> Bool {
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
-            guard type == .keyDown, let refcon else { return Unmanaged.passUnretained(event) }
+            guard let refcon else { return Unmanaged.passUnretained(event) }
+            let session = Unmanaged<TargetInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
+            // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                Task { @MainActor in session.reenableEventTap() }
+                return Unmanaged.passUnretained(event)
+            }
+            guard type == .keyDown else { return Unmanaged.passUnretained(event) }
             let input = KeyInput(event: event)
             guard input.isRoadieHandled else {
                 return Unmanaged.passUnretained(event)
             }
-            let session = Unmanaged<TargetInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
             Task { @MainActor in
                 session.handle(input)
             }
@@ -382,7 +393,6 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle {
         }
         windows = []
         NSApplication.shared.updateWindows()
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
     }
 
     private func cleanup() {
@@ -489,15 +499,26 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
         windows.forEach { $0.orderFrontRegardless() }
     }
 
+    fileprivate func reenableEventTap() {
+        guard !finished, let eventTap else { return }
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+    }
+
     private func installEventTap() -> Bool {
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
-            guard type == .keyDown, let refcon else { return Unmanaged.passUnretained(event) }
+            guard let refcon else { return Unmanaged.passUnretained(event) }
+            let session = Unmanaged<TargetGridInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
+            // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                Task { @MainActor in session.reenableEventTap() }
+                return Unmanaged.passUnretained(event)
+            }
+            guard type == .keyDown else { return Unmanaged.passUnretained(event) }
             let input = KeyInput(event: event)
             guard input.isRoadieHandled else {
                 return Unmanaged.passUnretained(event)
             }
-            let session = Unmanaged<TargetGridInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
             Task { @MainActor in
                 session.handle(input)
             }
@@ -751,7 +772,6 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
         }
         windows = []
         NSApplication.shared.updateWindows()
-        RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
     }
 
     private func cleanup() {

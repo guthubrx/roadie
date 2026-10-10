@@ -528,9 +528,10 @@ public struct TargetHintService {
     private static func roadieTargets(from snapshot: DaemonSnapshot, state: PersistentStageState, includeHidden: Bool) -> [RoadieTarget] {
         var targets: [RoadieTarget] = []
         let liveWindowIDs = Set(snapshot.windows.map(\.window.id))
-        let liveWindowFramesByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window.frame) })
+        let liveWindowFramesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window.frame) }, uniquingKeysWith: { first, _ in first })
         let railFramesByStageKey = railStageFrames(from: snapshot, state: state)
-        let displayIndexByID = Dictionary(uniqueKeysWithValues: snapshot.displays.map { ($0.id, $0.index) })
+        // Deux ecrans peuvent partager un UUID (clones, docks) : on garde le premier au lieu de planter.
+        let displayIndexByID = Dictionary(snapshot.displays.map { ($0.id, $0.index) }, uniquingKeysWith: { first, _ in first })
         let focusedWindowID = snapshot.focusedWindowID
 
         for display in snapshot.displays.sorted(by: { $0.index < $1.index }) {
@@ -640,7 +641,7 @@ public struct TargetHintService {
     }
 
     private static func railStageFrames(from snapshot: DaemonSnapshot, state: PersistentStageState) -> [String: Rect] {
-        let displaysByID = Dictionary(uniqueKeysWithValues: snapshot.displays.map { ($0.id, $0) })
+        let displaysByID = Dictionary(snapshot.displays.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let settings = RailSettings.load()
         var frames: [String: Rect] = [:]
 

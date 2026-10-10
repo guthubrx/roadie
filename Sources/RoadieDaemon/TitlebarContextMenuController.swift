@@ -160,7 +160,7 @@ public final class TitlebarContextMenuController {
     public init(
         snapshotService: SnapshotService = SnapshotService(),
         actions: WindowContextActions = WindowContextActions(),
-        configLoader: @escaping () -> RoadieConfig = { (try? RoadieConfigLoader.load()) ?? RoadieConfig() },
+        configLoader: @escaping () -> RoadieConfig = { ConfigReloadService.shared.currentConfig() },
         events: EventLog = EventLog()
     ) {
         self.snapshotService = snapshotService
@@ -309,16 +309,10 @@ public final class TitlebarContextMenuController {
         )
     }
 
+    // Complexite : O(n). `snapshot.windows` suit l'ordre CG (devant vers derriere) : la premiere
+    // fenetre qui contient le point est celle que l'utilisateur voit, meme si une plus petite est cachee dessous.
     nonisolated private static func window(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        snapshot.windows
-            .filter { $0.window.isOnScreen && $0.window.frame.cgRect.contains(point) }
-            .sorted {
-                let lhsArea = $0.window.frame.width * $0.window.frame.height
-                let rhsArea = $1.window.frame.width * $1.window.frame.height
-                if lhsArea == rhsArea { return $0.window.id > $1.window.id }
-                return lhsArea < rhsArea
-            }
-            .first
+        snapshot.windows.first { $0.window.isOnScreen && $0.window.frame.cgRect.contains(point) }
     }
 
     private func buildMenu(

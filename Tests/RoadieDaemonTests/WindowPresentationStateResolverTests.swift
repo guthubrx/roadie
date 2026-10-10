@@ -2,7 +2,7 @@ import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
-import RoadieDaemon
+@testable import RoadieDaemon
 import RoadieStages
 
 @Suite
@@ -25,6 +25,55 @@ struct WindowPresentationStateResolverTests {
         let state = WindowPresentationStateResolver.state(for: window, on: display)
 
         #expect(state == .maximized)
+    }
+
+    @Test
+    func soleTiledWindowCoveringDisplayIsNotMaximized() {
+        let display = powerDisplay()
+        let window = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [display],
+            windows: [ScopedWindowSnapshot(window: window, scope: scope)],
+            state: RoadieState()
+        )
+
+        let states = WindowPresentationStateResolver().statesByWindowID(in: snapshot)
+
+        #expect(states[window.id] == .normal)
+        #expect(WindowPresentationStateResolver.state(for: window, on: display, isOnlyTiledWindowInScope: true) == .normal)
+    }
+
+    @Test
+    func coveringWindowIsMaximizedWhenStageHasAnotherTiledWindow() {
+        let display = powerDisplay()
+        let covering = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let other = powerWindow(2, x: 100, y: 100, width: 300, height: 300)
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let otherStage = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [display],
+            windows: [
+                ScopedWindowSnapshot(window: covering, scope: scope),
+                ScopedWindowSnapshot(window: other, scope: scope),
+            ],
+            state: RoadieState()
+        )
+        let alone = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [display],
+            windows: [
+                ScopedWindowSnapshot(window: covering, scope: scope),
+                ScopedWindowSnapshot(window: other, scope: otherStage),
+            ],
+            state: RoadieState()
+        )
+
+        #expect(WindowPresentationStateResolver().statesByWindowID(in: snapshot)[covering.id] == .maximized)
+        // Une fenêtre d'une autre stage ne compte pas : la fenêtre est seule dans son scope.
+        #expect(WindowPresentationStateResolver().statesByWindowID(in: alone)[covering.id] == .normal)
     }
 
     @Test
@@ -59,9 +108,37 @@ struct WindowPresentationStateResolverTests {
             isOnScreen: true,
             isTileCandidate: true
         )
+        let sibling = powerWindow(2, x: 200, y: 200, width: 300, height: 300)
         let persistentScope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
             PersistentStage(id: StageID(rawValue: "1"), members: [
-                PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: maximizedFrame)
+                PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: maximizedFrame),
+                PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame)
+            ])
+        ])
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [display],
+            windows: [
+                ScopedWindowSnapshot(window: window, scope: scope),
+                ScopedWindowSnapshot(window: sibling, scope: scope),
+            ],
+            state: RoadieState()
+        )
+
+        let states = RailController.railWindowPresentationStates(in: persistentScope, snapshot: snapshot)
+
+        #expect(states[window.id] == .maximized)
+        #expect(states[sibling.id] == .normal)
+    }
+
+    @Test
+    func railShowsSoleTiledWindowAsNormalEvenWhenItCoversDisplay() {
+        let display = powerDisplay()
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let window = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let persistentScope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [
+                PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame)
             ])
         ])
         let snapshot = DaemonSnapshot(
@@ -73,7 +150,7 @@ struct WindowPresentationStateResolverTests {
 
         let states = RailController.railWindowPresentationStates(in: persistentScope, snapshot: snapshot)
 
-        #expect(states[window.id] == .maximized)
+        #expect(states[window.id] == .normal)
     }
 
     @Test
@@ -183,7 +260,7 @@ struct WindowPresentationStateResolverTests {
     }
 
     @Test
-    func railRepresentsMissingMaximizedMember() {
+    func railDropsMissingMaximizedMemberAfterGrace() {
         let display = powerDisplay()
         let windowID = WindowID(rawValue: 47)
         let persistentScope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
@@ -202,8 +279,56 @@ struct WindowPresentationStateResolverTests {
         let ids = RailController.railVisibleStageIDs(in: persistentScope, liveWindowIDs: [])
         let stage = RailController.railDisplayStage(persistentScope.stages[0], liveWindowIDs: [])
 
-        #expect(ids == [StageID(rawValue: "1")])
-        #expect(stage.members.map(\.windowID) == [windowID])
+        #expect(ids.isEmpty)
+        #expect(stage.members.isEmpty)
+    }
+
+    @Test
+    func railDropsMissingNativeFullscreenMemberAfterFifteenSeconds() {
+        let display = powerDisplay()
+        let windowID = WindowID(rawValue: 48)
+        func scope(missingFor seconds: TimeInterval) -> PersistentStageScope {
+            PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(
+                        windowID: windowID,
+                        bundleID: "app.fullscreen",
+                        title: "Native",
+                        frame: display.frame,
+                        presentationState: .nativeFullscreen,
+                        missingSince: Date(timeIntervalSinceNow: -seconds)
+                    )
+                ])
+            ])
+        }
+
+        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 10), liveWindowIDs: []) == [StageID(rawValue: "1")])
+        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 20), liveWindowIDs: []).isEmpty)
+    }
+
+    @Test
+    func railContentSignatureIsStableUntilVisibleContentChanges() {
+        let display = powerDisplay()
+        let first = powerWindow(1, x: 10)
+        let second = powerWindow(2, x: 400)
+        let scope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [
+                PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+            ])
+        ])
+        let live: Set<WindowID> = [first.id, second.id]
+
+        func signature(live: Set<WindowID>, states: [WindowID: WindowPresentationState] = [:]) -> String {
+            RailDisplayContent(scope: scope, presentationStates: states, liveWindowIDs: live).signature
+        }
+
+        // Deux cycles identiques : même signature, donc aucune reconstruction des vues.
+        #expect(signature(live: live) == signature(live: live))
+        // Une fenêtre qui disparaît (hors délai de grâce non atteint, elle reste représentée) ne change rien
+        // tant que le contenu visible est identique ; un changement d'état de présentation, si.
+        #expect(signature(live: live) != signature(live: live, states: [first.id: .maximized]))
+        #expect(signature(live: live) != signature(live: [first.id]))
     }
 
     @Test

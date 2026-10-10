@@ -207,6 +207,7 @@ public struct TargetMacroService {
             retainedCapture.release()
             return TargetActionResult(changed: false, message: "event_tap_failed", error: "event_tap_failed")
         }
+        capture.tap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
@@ -362,6 +363,8 @@ private final class MacroCaptureBox: @unchecked Sendable {
     let includeAXContext: Bool
     let recordTextInput: Bool
     let targetContext: TargetMacroContext
+    /// Tap à réactiver si macOS le désactive (timeout ou saisie utilisateur), SPEC-016.
+    var tap: CFMachPort?
     var events: [TargetMacroEvent] = []
 
     init(
@@ -426,6 +429,10 @@ private func macroTapCallback(
 ) -> Unmanaged<CGEvent>? {
     guard let refcon else { return Unmanaged.passUnretained(event) }
     let box = Unmanaged<MacroCaptureBox>.fromOpaque(refcon).takeUnretainedValue()
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        if let tap = box.tap { CGEvent.tapEnable(tap: tap, enable: true) }
+        return Unmanaged.passUnretained(event)
+    }
     let elapsed = Date().timeIntervalSince(box.startedAt)
     let point = event.location
     let modifiers = event.flags.rawValue

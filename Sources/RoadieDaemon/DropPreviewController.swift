@@ -8,6 +8,7 @@ final class DropPreviewController {
     private let engine: DropPreviewEngine
     private let overlay = DropPreviewOverlayWindow()
     private var lastCandidate: DropPreviewCandidate?
+    private var dragContext: DropPreviewContext?
 
     init(engine: DropPreviewEngine = DropPreviewEngine()) {
         self.engine = engine
@@ -15,6 +16,22 @@ final class DropPreviewController {
 
     var candidate: DropPreviewCandidate? {
         lastCandidate
+    }
+
+    /// Fige le snapshot utilise pendant tout le drag (SPEC-016 FR-025) : un seul snapshot au lieu d'un par mouvement.
+    /// Un contexte deja pris par l'appelant peut etre transmis pour eviter un second snapshot.
+    func beginDrag(context: DropPreviewContext? = nil) {
+        dragContext = context ?? engine.makeContext()
+    }
+
+    func endDrag() {
+        dragContext = nil
+        hide()
+    }
+
+    /// Snapshot de depart d'un drag de fenetre, partage avec la recherche de la fenetre source.
+    func makeContext() -> DropPreviewContext {
+        engine.makeContext()
     }
 
     @discardableResult
@@ -28,7 +45,8 @@ final class DropPreviewController {
             sourceWindowID: sourceWindowID,
             at: point,
             displayID: displayID,
-            stableSourceFrame: stableSourceFrame
+            stableSourceFrame: stableSourceFrame,
+            context: dragContext
         ) else {
             hide()
             return nil
@@ -42,6 +60,12 @@ final class DropPreviewController {
         lastCandidate = nil
         overlay.hide()
     }
+}
+
+/// Etat fige au debut d'un drag : snapshot complet et etat persiste lu juste avant.
+struct DropPreviewContext {
+    var snapshot: DaemonSnapshot
+    var persistedStateBeforeSnapshot: PersistentStageState
 }
 
 struct DropPreviewCandidate: Equatable {
@@ -79,18 +103,26 @@ struct DropPreviewEngine {
         self.service = service
     }
 
+    /// Lit l'etat persiste puis le snapshot partage (lecture seule pendant le drag). Cout : au plus un snapshot.
+    func makeContext() -> DropPreviewContext {
+        let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
+        return DropPreviewContext(snapshot: service.sharedSnapshot(), persistedStateBeforeSnapshot: persistedStateBeforeSnapshot)
+    }
+
     func candidate(
         sourceWindowID: WindowID,
         at point: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        stableSourceFrame: CGRect? = nil
+        stableSourceFrame: CGRect? = nil,
+        context: DropPreviewContext? = nil
     ) -> DropPreviewCandidate? {
         let axPoint = ScreenCoordinate.nsPointToAX(point)
         return candidate(
             sourceWindowID: sourceWindowID,
             atAXPoint: axPoint,
             displayID: forcedDisplayID,
-            stableSourceFrame: stableSourceFrame
+            stableSourceFrame: stableSourceFrame,
+            context: context
         )
     }
 
@@ -98,10 +130,12 @@ struct DropPreviewEngine {
         sourceWindowID: WindowID,
         atAXPoint axPoint: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        stableSourceFrame: CGRect? = nil
+        stableSourceFrame: CGRect? = nil,
+        context: DropPreviewContext? = nil
     ) -> DropPreviewCandidate? {
-        let persistedStateBeforeSnapshot = service.effectiveStageStore.state()
-        let snapshot = service.snapshot()
+        let context = context ?? makeContext()
+        let persistedStateBeforeSnapshot = context.persistedStateBeforeSnapshot
+        let snapshot = context.snapshot
         guard let display = display(containing: axPoint, forcedDisplayID: forcedDisplayID, in: snapshot.displays),
               let scope = snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope),
@@ -542,13 +576,14 @@ final class WindowDragReorderController {
 
     func cancelPendingDrag() {
         pending = nil
-        preview.hide()
+        preview.endDrag()
         WindowDragActivity.shared.finish()
     }
 
     func handleMouseDown(at point: CGPoint) {
         preview.hide()
-        guard let source = sourceWindowForDragStart(at: point) else {
+        let context = preview.makeContext()
+        guard let source = sourceWindowForDragStart(at: point, in: context.snapshot) else {
             pending = nil
             return
         }
@@ -557,13 +592,18 @@ final class WindowDragReorderController {
             displayID: source.scope.displayID,
             startPoint: point,
             sourceFrame: source.window.frame.cgRect,
-            didDrag: false
+            didDrag: false,
+            context: context
         )
     }
 
     func handleMouseDragged(to point: CGPoint) {
         guard var drag = pending else { return }
         guard hypot(point.x - drag.startPoint.x, point.y - drag.startPoint.y) > 8 else { return }
+        if !drag.didDrag {
+            // Le snapshot pris au mouse-down sert pour tous les mouvements du drag.
+            preview.beginDrag(context: drag.context)
+        }
         drag.didDrag = true
         WindowDragActivity.shared.markActive(windowID: drag.windowID)
         if let candidate = preview.update(sourceWindowID: drag.windowID, at: point, stableSourceFrame: drag.sourceFrame),
@@ -581,7 +621,7 @@ final class WindowDragReorderController {
         guard let drag = pending else { return }
         pending = nil
         defer {
-            preview.hide()
+            preview.endDrag()
             WindowDragActivity.shared.finish()
         }
         guard drag.didDrag,
@@ -600,8 +640,7 @@ final class WindowDragReorderController {
         ]))
     }
 
-    private func sourceWindowForDragStart(at point: CGPoint) -> (window: WindowSnapshot, scope: StageScope)? {
-        let snapshot = SnapshotService().snapshot()
+    private func sourceWindowForDragStart(at point: CGPoint, in snapshot: DaemonSnapshot) -> (window: WindowSnapshot, scope: StageScope)? {
         let axPoint = ScreenCoordinate.nsPointToAX(point)
         let candidates = snapshot.windows.compactMap { entry -> (WindowSnapshot, StageScope)? in
             guard let scope = entry.scope,
@@ -626,6 +665,7 @@ private struct PendingWindowDrag {
     var sourceFrame: CGRect
     var didDrag: Bool
     var lastCandidate: DropPreviewCandidate?
+    var context: DropPreviewContext
 }
 
 @MainActor

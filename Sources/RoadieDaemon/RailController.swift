@@ -15,25 +15,33 @@ public final class RailController {
     private let desktopCommandService: DesktopCommandService
     private let events = EventLog()
     private let railRuntimeStateStore = RailRuntimeStateStore()
-    private let thumbnails = WindowThumbnailStore()
+    private lazy var thumbnails = RailThumbnailStore(onMissingPermission: { [weak self] in
+        self?.events.append(RoadieEvent(type: "rail_screen_recording_missing", details: [
+            "effect": "app_icon_fallback"
+        ]))
+    })
     private var panels: [DisplayID: RailPanel] = [:]
     private var screenFrames: [DisplayID: CGRect] = [:]
+    /// Cadres (coordonnees AX) des fenetres gerees de la stage active de chaque ecran, releves au dernier cycle.
+    /// Le survol du rail les lit au lieu de demander un snapshot complet (SPEC-016 FR-024).
+    private var managedWindowFrames: [DisplayID: [CGRect]] = [:]
+    private var lastRenderSignature: String?
+    private var lastRenderedSettings: RailSettings?
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
     private var stageLabelTimer: Timer?
-    private var stageStoreWatcher: DispatchSourceFileSystemObject?
-    private var stageStoreWatchFileDescriptor: CInt = -1
+    private var screenObserver: NSObjectProtocol?
+    private var stageStoreWatcher: RailFileWatcher?
+    private var configWatcher: RailFileWatcher?
+    private var recordingStatusWatcher: RailFileWatcher?
     private var pendingStageStoreRefresh: DispatchWorkItem?
     private var lastStageStoreRailSignature: String?
     private var pendingStageStoreRailSignature: String?
     private var lastInteractiveRailRefreshAt: Date = .distantPast
-    private var configWatcher: DispatchSourceFileSystemObject?
-    private var configWatchFileDescriptor: CInt = -1
-    private var recordingStatusWatcher: DispatchSourceFileSystemObject?
-    private var recordingStatusWatchFileDescriptor: CInt = -1
     private var clickMonitors: [Any] = []
     private var pendingDrag: PendingRailDrag?
     private var pendingStageReorder: PendingStageReorder?
+    private var dragReleasedSince: Date?
     private var dragGhost: RailDragGhostWindow?
     private let dropPreview = DropPreviewController()
     private var stageMenuTargets: [NSObject] = []
@@ -58,17 +66,17 @@ public final class RailController {
         rebuildPanels(reason: "start")
         startClickMonitors()
         startHoverTimer()
-        startStageLabelTimer()
-        startConfigWatcher()
-        startRecordingStatusWatcher()
-        startStageStoreWatcher()
+        startWatchers()
         refreshTimer?.invalidate()
         let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels(reason: "timer") }
         }
         refreshTimer = newRefreshTimer
         RunLoop.main.add(newRefreshTimer, forMode: .common)
-        NotificationCenter.default.addObserver(
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+        }
+        screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
             queue: .main
@@ -77,93 +85,51 @@ public final class RailController {
         }
     }
 
-    private func startConfigWatcher() {
-        configWatcher?.cancel()
-        if configWatchFileDescriptor >= 0 {
-            close(configWatchFileDescriptor)
-            configWatchFileDescriptor = -1
+    /// Arrete tout ce que `start()` a mis en place : timers, surveillances de fichiers, moniteurs souris,
+    /// observateur d'ecran et panneaux. Appelable plusieurs fois ; `start()` peut ensuite etre rappele.
+    public func stop() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        stageLabelTimer?.invalidate()
+        stageLabelTimer = nil
+        pendingStageStoreRefresh?.cancel()
+        pendingStageStoreRefresh = nil
+        pendingStageStoreRailSignature = nil
+        [configWatcher, recordingStatusWatcher, stageStoreWatcher].forEach { $0?.stop() }
+        clickMonitors.forEach { NSEvent.removeMonitor($0) }
+        clickMonitors.removeAll()
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
         }
-        let path = NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath
-        configWatchFileDescriptor = open(path, O_EVTONLY)
-        guard configWatchFileDescriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: configWatchFileDescriptor,
-            eventMask: [.write, .rename, .delete],
-            queue: .main
-        )
-        source.setEventHandler { [weak self] in
-            Task { @MainActor in
-                self?.rebuildPanels(reason: "config")
-                if source.data.contains(.rename) || source.data.contains(.delete) {
-                    self?.startConfigWatcher()
-                }
-            }
-        }
-        source.setCancelHandler { [fd = configWatchFileDescriptor] in
-            if fd >= 0 { close(fd) }
-        }
-        configWatcher = source
-        source.resume()
+        screenObserver = nil
+        cancelRailDrags()
+        panels.values.forEach { $0.orderOut(nil) }
+        panels.removeAll()
+        screenFrames.removeAll()
+        lastRenderSignature = nil
+        lastRenderedSettings = nil
     }
 
-    private func startRecordingStatusWatcher() {
-        recordingStatusWatcher?.cancel()
-        if recordingStatusWatchFileDescriptor >= 0 {
-            close(recordingStatusWatchFileDescriptor)
-            recordingStatusWatchFileDescriptor = -1
-        }
-        try? FileManager.default.createDirectory(at: TargetRecordingStatusStore.directoryURL, withIntermediateDirectories: true)
-        recordingStatusWatchFileDescriptor = open(TargetRecordingStatusStore.directoryURL.path, O_EVTONLY)
-        guard recordingStatusWatchFileDescriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: recordingStatusWatchFileDescriptor,
-            eventMask: [.write, .rename, .delete],
-            queue: .main
+    private func startWatchers() {
+        configWatcher = RailFileWatcher(
+            path: { NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath },
+            onChange: { [weak self] in self?.rebuildPanels(reason: "config") }
         )
-        source.setEventHandler { [weak self] in
-            Task { @MainActor in
-                self?.rebuildPanels(reason: "recording_status")
-                if source.data.contains(.rename) || source.data.contains(.delete) {
-                    self?.startRecordingStatusWatcher()
-                }
-            }
-        }
-        source.setCancelHandler { [fd = recordingStatusWatchFileDescriptor] in
-            if fd >= 0 { close(fd) }
-        }
-        recordingStatusWatcher = source
-        source.resume()
-    }
-
-    private func startStageStoreWatcher() {
-        if let stageStoreWatcher {
-            stageStoreWatcher.cancel()
-            self.stageStoreWatcher = nil
-        } else if stageStoreWatchFileDescriptor >= 0 {
-            close(stageStoreWatchFileDescriptor)
-        }
-        stageStoreWatchFileDescriptor = -1
-        let path = store.fileURL.path
-        stageStoreWatchFileDescriptor = open(path, O_EVTONLY)
-        guard stageStoreWatchFileDescriptor >= 0 else { return }
-        let source = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: stageStoreWatchFileDescriptor,
-            eventMask: [.write, .rename, .delete],
-            queue: .main
+        recordingStatusWatcher = RailFileWatcher(
+            path: {
+                try? FileManager.default.createDirectory(at: TargetRecordingStatusStore.directoryURL, withIntermediateDirectories: true)
+                return TargetRecordingStatusStore.directoryURL.path
+            },
+            onChange: { [weak self] in self?.rebuildPanels(reason: "recording_status") }
         )
-        source.setEventHandler { [weak self] in
-            Task { @MainActor in
-                self?.scheduleStageStoreRefresh(reason: "stage_store")
-                if source.data.contains(.rename) || source.data.contains(.delete) {
-                    self?.startStageStoreWatcher()
-                }
-            }
-        }
-        source.setCancelHandler { [fd = stageStoreWatchFileDescriptor] in
-            if fd >= 0 { close(fd) }
-        }
-        stageStoreWatcher = source
-        source.resume()
+        let stageStorePath = store.fileURL.path
+        stageStoreWatcher = RailFileWatcher(
+            path: { stageStorePath },
+            onChange: { [weak self] in self?.scheduleStageStoreRefresh(reason: "stage_store") }
+        )
+        [configWatcher, recordingStatusWatcher, stageStoreWatcher].forEach { $0?.start() }
     }
 
     private func scheduleStageStoreRefresh(reason: String) {
@@ -216,12 +182,15 @@ public final class RailController {
         }) {
             clickMonitors.append(local)
         }
+        // Le moniteur global ne voit que les evenements livres a une autre application : si le curseur est
+        // sur un panneau, c'est que celui-ci laissait passer le clic (passthrough). Le rail ne doit pas
+        // agir en plus de la fenetre qui a recu le clic.
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .rightMouseDown, .rightMouseDragged, .rightMouseUp], handler: { [weak self] event in
             DispatchQueue.main.async {
                 if Self.isRightMouseEvent(event.type) {
-                    _ = self?.handleRightMouse(event.type, at: NSEvent.mouseLocation)
+                    _ = self?.handleRightMouse(event.type, at: NSEvent.mouseLocation, fromGlobalMonitor: true)
                 } else {
-                    self?.handleMouse(event.type, at: NSEvent.mouseLocation)
+                    self?.handleMouse(event.type, at: NSEvent.mouseLocation, fromGlobalMonitor: true)
                 }
             }
         }) {
@@ -240,18 +209,9 @@ public final class RailController {
         RunLoop.main.add(newHoverTimer, forMode: .common)
     }
 
-    private func startStageLabelTimer() {
-        stageLabelTimer?.invalidate()
-        let newTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshStageLabelFade()
-            }
-        }
-        stageLabelTimer = newTimer
-        RunLoop.main.add(newTimer, forMode: .common)
-    }
-
+    // Complexite : O(p) par tick - p = nombre de panneaux ; aucun snapshot (cadres du dernier cycle).
     private func updateRailHover() {
+        resetStaleRailDrags()
         let point = NSEvent.mouseLocation
         let canHide = pendingDrag == nil && pendingStageReorder == nil && !windowDragController.hasActiveDrag
         for (displayID, panel) in panels {
@@ -262,10 +222,59 @@ public final class RailController {
         }
     }
 
-    private func refreshStageLabelFade() {
-        panels.values.forEach { panel in
-            guard panel.isVisible else { return }
-            panel.refreshStageLabels()
+    /// Un bouton relache hors de nos fenetres peut ne jamais produire de mouse-up : sans cette remise a zero,
+    /// `pendingDrag` resterait actif et bloquerait le masquage automatique du rail.
+    /// Le bouton doit etre observe relache pendant 0,4 s : un mouse-up normal est livre quelques ms apres le
+    /// relachement et ne doit pas etre perdu.
+    private func resetStaleRailDrags() {
+        let pressed = NSEvent.pressedMouseButtons
+        let leftStale = pendingDrag != nil && pressed & 1 == 0
+        let rightStale = pendingStageReorder != nil && pressed & 2 == 0
+        guard leftStale || rightStale else {
+            dragReleasedSince = nil
+            return
+        }
+        let since = dragReleasedSince ?? Date()
+        dragReleasedSince = since
+        guard Date().timeIntervalSince(since) > 0.4 else { return }
+        if leftStale {
+            pendingDrag = nil
+            dropPreview.endDrag()
+        }
+        if rightStale {
+            pendingStageReorder = nil
+        }
+        dragGhost?.hide()
+        dragReleasedSince = nil
+    }
+
+    private func cancelRailDrags() {
+        pendingDrag = nil
+        pendingStageReorder = nil
+        dragGhost?.hide()
+        dropPreview.endDrag()
+    }
+
+    /// Redessine les etiquettes de stage seulement pendant leur fondu (SPEC-016 FR-024).
+    /// Avant la fin de la visibilite et apres la fin du fondu, l'opacite est constante : aucun timer.
+    private func scheduleStageLabelFade(_ label: RailStageLabelConfig) {
+        stageLabelTimer?.invalidate()
+        stageLabelTimer = nil
+        guard label.enabled, label.visibilitySeconds > 0, let visibleUntil = label.visibleUntil else { return }
+        let fadeEnd = visibleUntil + max(label.fadeSeconds, 0)
+        guard Date().timeIntervalSince1970 < fadeEnd else { return }
+        let timer = Timer(fire: Date(timeIntervalSince1970: visibleUntil), interval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickStageLabelFade(until: fadeEnd) }
+        }
+        stageLabelTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func tickStageLabelFade(until fadeEnd: TimeInterval) {
+        panels.values.filter(\.isVisible).forEach { $0.refreshStageLabels() }
+        if Date().timeIntervalSince1970 >= fadeEnd {
+            stageLabelTimer?.invalidate()
+            stageLabelTimer = nil
         }
     }
 
@@ -273,10 +282,10 @@ public final class RailController {
         type == .rightMouseDown || type == .rightMouseDragged || type == .rightMouseUp
     }
 
-    private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) {
+    private func handleMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
         switch type {
         case .leftMouseDown:
-            handleMouseDown(at: screenPoint)
+            handleMouseDown(at: screenPoint, fromGlobalMonitor: fromGlobalMonitor)
         case .leftMouseDragged:
             handleMouseDragged(to: screenPoint)
         case .leftMouseUp:
@@ -286,11 +295,15 @@ public final class RailController {
         }
     }
 
-    private func handleMouseDown(at screenPoint: CGPoint) {
+    private func handleMouseDown(at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) {
+        // Un nouveau clic invalide tout drag precedent reste en suspens.
+        pendingDrag = nil
         dragGhost?.hide()
-        dropPreview.hide()
+        dropPreview.endDrag()
         for (displayID, panel) in panels {
             guard panel.isVisible, panel.frame.contains(screenPoint) else { continue }
+            // Evenement global sur un panneau = le panneau laissait passer le clic : la fenetre dessous l'a recu.
+            if fromGlobalMonitor, panel.ignoresMouseEvents { continue }
             if panel.revealIfCollapsed() {
                 return
             }
@@ -328,13 +341,14 @@ public final class RailController {
         windowDragController.handleMouseDown(at: screenPoint)
     }
 
-    private func handleRightMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint) -> Bool {
+    private func handleRightMouse(_ type: NSEvent.EventType, at screenPoint: CGPoint, fromGlobalMonitor: Bool = false) -> Bool {
         switch type {
         case .rightMouseDown:
             dragGhost?.hide()
             for (displayID, panel) in panels {
                 guard panel.isVisible,
                       panel.frame.contains(screenPoint),
+                      !(fromGlobalMonitor && panel.ignoresMouseEvents),
                       let payload = panel.stageDragPayload(at: screenPoint)
                 else { continue }
                 pendingStageReorder = PendingStageReorder(
@@ -391,7 +405,7 @@ public final class RailController {
         guard panel.isVisible, panel.frame.contains(screenPoint) else { return }
         guard panel.stageID(at: screenPoint) == stageID else { return }
 
-        let snapshot = snapshotService.snapshot()
+        let snapshot = snapshotService.sharedSnapshot()
         let targets = Self.stageDisplayMoveTargets(sourceDisplayID: displayID, in: snapshot)
         let currentName = stageName(stageID: stageID, displayID: displayID)
 
@@ -537,7 +551,8 @@ public final class RailController {
     }
 
     private func promptRenameStage(stageID: StageID, displayID: DisplayID, currentName: String) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
+        // `ignoringOtherApps` est ignore depuis macOS 14 : l'activation cooperative suffit pour l'alerte.
+        NSApplication.shared.activate()
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
         input.stringValue = currentName
         input.selectText(nil)
@@ -703,6 +718,8 @@ public final class RailController {
                     dragGhost = RailDragGhostWindow()
                 }
                 dragGhost?.show(image: thumbnails.cachedImage(for: drag.windowID), at: screenPoint, grabUnit: drag.grabUnit)
+                // Un seul snapshot pour tout le drag (SPEC-016 FR-025).
+                dropPreview.beginDrag()
             } else {
                 dragGhost?.move(to: screenPoint, grabUnit: drag.grabUnit)
             }
@@ -727,7 +744,7 @@ public final class RailController {
         }
         pendingDrag = nil
         dragGhost?.hide()
-        defer { dropPreview.hide() }
+        defer { dropPreview.endDrag() }
 
         guard drag.didDrag else {
             perform(drag.clickAction ?? .switchStage(drag.sourceStageID), displayID: drag.displayID)
@@ -737,7 +754,7 @@ public final class RailController {
 
         let targetDisplayID = displayID(at: screenPoint) ?? drag.displayID
         guard let panel = panels[targetDisplayID] ?? panels[drag.displayID] else { return }
-        guard let target = panel.windowDropTarget(at: screenPoint, safeEmptyClick: false) else {
+        guard let target = panel.windowDropTarget(at: screenPoint) else {
             guard displayID(at: screenPoint) != nil else { return }
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
@@ -762,7 +779,7 @@ public final class RailController {
         }
         for (displayID, panel) in panels {
             guard panel.isVisible,
-                  let target = panel.windowDropTarget(at: screenPoint, safeEmptyClick: true)
+                  let target = panel.windowDropTarget(at: screenPoint)
             else { continue }
             windowDragController.cancelPendingDrag()
             print("rail external drag window \(windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
@@ -774,56 +791,104 @@ public final class RailController {
         return false
     }
 
+    /// Cycle de rafraichissement du rail. Le snapshot partage est lu a chaque appel (le timer tourne chaque seconde),
+    /// mais les vues ne sont reconstruites que si le contenu visible a change (SPEC-016 FR-024) :
+    /// stages, membres, etats de presentation, ecrans masques, configuration, vignettes.
+    // Complexite : O(d * (s + n)) - d = ecrans, s = stages, n = fenetres du snapshot.
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
         let startedAt = Date()
         let latencyMs = requestedAt.map { startedAt.timeIntervalSince($0) * 1000 }
-        let snapshot = snapshotService.snapshot()
+        let snapshot = snapshotService.sharedSnapshot()
         let snapshotMs = Date().timeIntervalSince(startedAt) * 1000
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
         lastStageStoreRailSignature = railSignature ?? Self.railSignature(for: state)
-        var config = RailVisualConfig.load()
-        config.stageLabel.visibleUntil = railRuntimeStateStore.load().stageLabelsVisibleUntil
+        let settings = RailSettings.load()
+        var config = RailVisualConfig.load(settings: settings)
+        let runtimeState = railRuntimeStateStore.load()
+        config.stageLabel.visibleUntil = runtimeState.stageLabelsVisibleUntil
         let recordConfig = snapshotService.effectiveConfig.experimental.targetRecord
         let recordingStatus = recordConfig.indicator.showsNavrail
             ? TargetRecordingStatusStore().activeStatus()
             : nil
         let recordingIndicatorBottomOffset = CGFloat(recordConfig.navrailBottomOffset)
         let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
-        let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
-        var thumbnailCaptureBudget = initialThumbnailCaptureBudget
-        thumbnails.prune(keeping: liveWindowIDs)
-        let screensByDisplayID = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
+        let protectedWindowIDs = Set(protectedBlurredWindows.keys)
+        // Deux ecrans peuvent partager un UUID (clones, docks) : on garde le premier au lieu de planter.
+        let screensByDisplayID = Dictionary(NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
-        })
+        }, uniquingKeysWith: { first, _ in first })
+        let hiddenDisplayIDs = Self.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: config.hideOnMaximized)
+        updateManagedWindowFrames(from: snapshot)
+
+        // Contenu visible de chaque ecran : sert a la signature, aux captures de vignettes et au rendu.
+        var contents: [DisplayID: RailDisplayContent] = [:]
+        var signatureParts = [
+            "hidden=\(hiddenDisplayIDs.map(\.rawValue).sorted().joined(separator: ","))",
+            "protected=\(protectedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","))",
+            "recording=\(recordingStatus?.name ?? "-"):\(recordingIndicatorBottomOffset)",
+            "pinned=\(runtimeState.isPinned)",
+            "labelUntil=\(runtimeState.stageLabelsVisibleUntil.map { String($0) } ?? "-")",
+            "thumbnails=\(thumbnails.version)",
+        ]
+        var visibleMembers: [PersistentStageMember] = []
+        var representedWindowIDs: Set<WindowID> = []
+        for displayID in screensByDisplayID.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
+            guard let screen = screensByDisplayID[displayID] else { continue }
+            let desktopID = state.currentDesktopID(for: displayID)
+            let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
+                ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
+            let content = RailDisplayContent(
+                scope: scope,
+                presentationStates: Self.railWindowPresentationStates(in: scope, snapshot: snapshot),
+                liveWindowIDs: liveWindowIDs
+            )
+            contents[displayID] = content
+            signatureParts.append("display=\(displayID.rawValue)|\(screen.frame)|\(screen.visibleFrame)|\(screen.localizedName)|\(content.signature)")
+            if !hiddenDisplayIDs.contains(displayID) {
+                visibleMembers.append(contentsOf: content.stages.flatMap(\.members))
+            }
+            representedWindowIDs.formUnion(content.stages.flatMap(\.members).map(\.windowID))
+        }
+        // Les membres encore representes (retenus 15 s) gardent leur vignette ; seuls les autres sont purges.
+        thumbnails.prune(keeping: representedWindowIDs)
+        let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
+        thumbnails.requestCaptures(
+            for: visibleMembers,
+            protectedWindowIDs: protectedWindowIDs,
+            displayWidth: config.previewWidth,
+            budget: initialThumbnailCaptureBudget
+        )
+        if Self.isInteractiveRefresh(reason) {
+            lastInteractiveRailRefreshAt = Date()
+        }
+
+        let signature = signatureParts.joined(separator: "\n")
+        guard signature != lastRenderSignature || settings != lastRenderedSettings else { return }
+        lastRenderSignature = signature
+        lastRenderedSettings = settings
 
         var renderedStages = 0
         for (displayID, screen) in screensByDisplayID {
             screenFrames[displayID] = screen.frame
-            let desktopID = state.currentDesktopID(for: displayID)
-            let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
-                ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
+            guard let content = contents[displayID] else { continue }
+            if hiddenDisplayIDs.contains(displayID) {
+                panels[displayID]?.orderOut(nil)
+                continue
+            }
             let panel = panels[displayID] ?? RailPanel()
             panel.onVisibleWidthChanged = { [weak self] displayID in
                 self?.relayoutAfterRailWidthChange(on: displayID)
             }
             panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
-            renderedStages += Self.railVisibleStageIDs(
-                in: scope,
-                liveWindowIDs: liveWindowIDs
-            ).count
+            renderedStages += content.stages.count
             panel.render(
-                scope: scope,
+                content: content,
                 displayName: screen.localizedName,
                 config: config,
                 thumbnails: thumbnails,
-                liveWindowIDs: liveWindowIDs,
-                retainMissingNormalMembers: false,
-                presentationStates: Self.railWindowPresentationStates(in: scope, snapshot: snapshot),
-                protectedWindowIDs: Set(protectedBlurredWindows.keys),
                 recordingStatus: recordingStatus,
-                recordingIndicatorBottomOffset: recordingIndicatorBottomOffset,
-                thumbnailCaptureBudget: &thumbnailCaptureBudget
+                recordingIndicatorBottomOffset: recordingIndicatorBottomOffset
             )
             if panels[displayID] == nil {
                 panels[displayID] = panel
@@ -839,10 +904,8 @@ public final class RailController {
             panels.removeValue(forKey: displayID)
             screenFrames.removeValue(forKey: displayID)
         }
+        scheduleStageLabelFade(config.stageLabel)
         let totalMs = Date().timeIntervalSince(startedAt) * 1000
-        if Self.isInteractiveRefresh(reason) {
-            lastInteractiveRailRefreshAt = Date()
-        }
         if reason != "timer" || totalMs >= 80 {
             var details = [
                 "reason": reason,
@@ -851,7 +914,6 @@ public final class RailController {
                 "displays": String(screensByDisplayID.count),
                 "stages": String(renderedStages),
                 "thumbnailCaptureBudget": String(initialThumbnailCaptureBudget),
-                "thumbnailCaptureUsed": String(initialThumbnailCaptureBudget - thumbnailCaptureBudget),
             ]
             if let latencyMs {
                 details["latencyMs"] = Self.formatMs(latencyMs)
@@ -864,6 +926,8 @@ public final class RailController {
         String(format: "%.1f", value)
     }
 
+    /// Nombre maximal de captures lancees par cycle. Juste apres une action de l'utilisateur, aucune :
+    /// le rail reste reactif, les vignettes se rafraichissent au cycle suivant.
     private func thumbnailCaptureBudget(for reason: String, now: Date) -> Int {
         switch reason {
         case "stage_store", "direct":
@@ -882,13 +946,34 @@ public final class RailController {
         reason == "stage_store" || reason == "direct"
     }
 
+    // Complexite : O(n) - un seul passage sur les fenetres du snapshot.
+    private func updateManagedWindowFrames(from snapshot: DaemonSnapshot) {
+        var displayByActiveScope: [StageScope: DisplayID] = [:]
+        for display in snapshot.displays {
+            if let scope = snapshot.state.activeScope(on: display.id) {
+                displayByActiveScope[scope] = display.id
+            }
+        }
+        var frames: [DisplayID: [CGRect]] = [:]
+        for entry in snapshot.windows where entry.window.isTileCandidate {
+            if let scope = entry.scope, let displayID = displayByActiveScope[scope] {
+                frames[displayID, default: []].append(entry.window.frame.cgRect)
+            }
+        }
+        managedWindowFrames = frames
+    }
+
+    // Le rail ne repositionne des fenetres que s'il reserve de l'espace (mode `resize`) : en mode `overlay`
+    // il flotte au-dessus du bureau et la disposition ne depend pas de sa largeur.
     // Complexite : O(c + w) au lieu de O(c * w) en construisant un index windowID -> displayID.
     private func relayoutAfterRailWidthChange(on displayID: DisplayID) {
+        guard RailSettings.load().layoutMode == "resize" else { return }
         let snapshot = snapshotService.snapshot()
-        let displayByWindow: [WindowID: DisplayID] = Dictionary(uniqueKeysWithValues:
+        let displayByWindow: [WindowID: DisplayID] = Dictionary(
             snapshot.windows.compactMap { entry in
                 entry.scope.map { (entry.window.id, $0.displayID) }
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
         let commands = snapshotService.applyPlan(from: snapshot).commands.filter { command in
             displayByWindow[command.window.id] == displayID
@@ -907,7 +992,7 @@ public final class RailController {
         guard let previous = focusedWindowID,
               previous != snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == previous }),
-              Self.isDRMSensitiveBundle(entry.window.bundleID)
+              RailThumbnailStore.isDRMSensitiveBundle(entry.window.bundleID)
         else { return }
 
         protectedBlurredWindows[previous] = now.addingTimeInterval(3)
@@ -917,19 +1002,10 @@ public final class RailController {
         screenFrames.first { _, frame in frame.contains(screenPoint) }?.key
     }
 
+    // Complexite : O(w) - w = fenetres gerees de l'ecran, lues dans les cadres du dernier cycle (0 snapshot).
     private func emptyRailClickHitsManagedWindow(at screenPoint: CGPoint, displayID: DisplayID) -> Bool {
-        let snapshot = snapshotService.snapshot()
-        guard let activeScope = snapshot.state.activeScope(on: displayID) else {
-            return false
-        }
-
         let axPoint = Self.nsToAX(screenPoint)
-        return snapshot.windows.contains { entry in
-            guard entry.scope == activeScope,
-                  entry.window.isTileCandidate
-            else { return false }
-            return entry.window.frame.cgRect.insetBy(dx: -2, dy: -2).contains(axPoint)
-        }
+        return managedWindowFrames[displayID, default: []].contains { $0.insetBy(dx: -2, dy: -2).contains(axPoint) }
     }
 
     private func railClickWouldHitManagedWindow(at screenPoint: CGPoint, displayID: DisplayID, panel: RailPanel) -> Bool {
@@ -951,40 +1027,31 @@ public final class RailController {
         return CGPoint(x: point.x, y: primary.frame.height - point.y)
     }
 
-    private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
-        [
-            "com.apple.Safari",
-            "com.google.Chrome",
-            "com.microsoft.edgemac",
-            "com.brave.Browser",
-            "com.operasoftware.Opera",
-            "org.mozilla.firefox",
-        ].contains(bundleID)
-    }
-
-    nonisolated public static func fullscreenDisplayIDs(in snapshot: DaemonSnapshot) -> Set<DisplayID> {
-        let focusedID = snapshot.focusedWindowID
-        return Set(snapshot.displays.compactMap { display in
-            if let focusedID,
-               let focused = snapshot.windows.first(where: {
-                   $0.window.id == focusedID
-                       && $0.scope?.displayID == display.id
-                       && $0.window.isTileCandidate
-               }),
-               isFullscreenLike(focused.window.frame.cgRect, on: display) {
-                return display.id
+    /// Ecrans devant lesquels le rail se masque (SPEC-016 FR-028) : une fenetre de la stage active, visible a
+    /// l'ecran, est en plein ecran natif ; avec `hideOnMaximized`, ou simplement agrandie (voir
+    /// `WindowPresentationStateResolver` : une fenetre tilee seule n'est jamais « agrandie »).
+    // Complexite : O(n) - n = fenetres du snapshot.
+    nonisolated public static func railHiddenDisplayIDs(in snapshot: DaemonSnapshot, hideOnMaximized: Bool) -> Set<DisplayID> {
+        var displayByActiveScope: [StageScope: DisplayID] = [:]
+        for display in snapshot.displays {
+            if let scope = snapshot.state.activeScope(on: display.id) {
+                displayByActiveScope[scope] = display.id
             }
-
-            guard let activeScope = snapshot.state.activeScope(on: display.id),
-                  snapshot.windows.contains(where: {
-                      $0.scope == activeScope
-                          && $0.window.isTileCandidate
-                          && $0.window.isOnScreen
-                          && isFullscreenLike($0.window.frame.cgRect, on: display)
-                  })
-            else { return nil }
-            return display.id
-        })
+        }
+        let states = WindowPresentationStateResolver().statesByWindowID(in: snapshot)
+        var hidden: Set<DisplayID> = []
+        for entry in snapshot.windows where entry.window.isTileCandidate && entry.window.isOnScreen {
+            guard let scope = entry.scope, let displayID = displayByActiveScope[scope] else { continue }
+            switch states[entry.window.id] {
+            case .nativeFullscreen:
+                hidden.insert(displayID)
+            case .maximized where hideOnMaximized:
+                hidden.insert(displayID)
+            default:
+                break
+            }
+        }
+        return hidden
     }
 
     nonisolated public static func stageDisplayMoveTargets(
@@ -999,18 +1066,12 @@ public final class RailController {
     nonisolated public static func railVisibleStageIDs(
         in scope: PersistentStageScope,
         liveWindowIDs: Set<WindowID>,
-        now: Date = Date(),
-        retainMissingNormalMembers: Bool = false
+        now: Date = Date()
     ) -> [StageID] {
         scope.stages
             .filter { stage in
                 stage.members.contains {
-                    isRailRepresentedMember(
-                        $0,
-                        liveWindowIDs: liveWindowIDs,
-                        now: now,
-                        retainMissingNormalMembers: retainMissingNormalMembers
-                    )
+                    isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now)
                 }
             }
             .map(\.id)
@@ -1019,16 +1080,10 @@ public final class RailController {
     nonisolated public static func railDisplayStage(
         _ stage: PersistentStage,
         liveWindowIDs: Set<WindowID>,
-        now: Date = Date(),
-        retainMissingNormalMembers: Bool = false
+        now: Date = Date()
     ) -> PersistentStage {
         let liveMembers = stage.members.filter {
-            isRailRepresentedMember(
-                $0,
-                liveWindowIDs: liveWindowIDs,
-                now: now,
-                retainMissingNormalMembers: retainMissingNormalMembers
-            )
+            isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now)
         }
         let liveMemberIDs = Set(liveMembers.map(\.windowID))
         let liveGroups = stage.groups.compactMap { group -> WindowGroup? in
@@ -1055,31 +1110,36 @@ public final class RailController {
         )
     }
 
+    /// Stages non parquees sans aucun membre represente : cibles du clic ou du depot sur le vide du rail.
+    nonisolated static func railEmptyStageIDs(
+        in scope: PersistentStageScope,
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date()
+    ) -> [StageID] {
+        scope.stages
+            .filter { stage in
+                stage.parkingState != .parked
+                    && !stage.members.contains { isRailRepresentedMember($0, liveWindowIDs: liveWindowIDs, now: now) }
+            }
+            .map(\.id)
+    }
+
+    // Un membre present dans le snapshot est toujours represente. Un membre absent (fenetre fermee, changement
+    // de stage, ou fenetre en plein ecran natif dans un autre Space) reste represente 15 s au plus apres
+    // `missingSince`, puis sa carte disparait (SPEC-016 FR-027). Aucun etat de presentation ne prolonge ce delai.
     nonisolated fileprivate static func isRailRepresentedMember(
         _ member: PersistentStageMember,
         liveWindowIDs: Set<WindowID>,
-        now: Date = Date(),
-        retainMissingNormalMembers: Bool = false
+        now: Date = Date()
     ) -> Bool {
         if liveWindowIDs.contains(member.windowID) {
             return true
         }
-
-        // Les fenetres fullscreen-like peuvent disparaitre temporairement du snapshot AX
-        // quand macOS change de Space. Elles restent representables, contrairement aux
-        // membres normaux missing qui produisent des stages cliquables mais vides.
-        if member.presentationState == .nativeFullscreen || member.presentationState == .maximized {
-            return true
-        }
-
-        if retainMissingNormalMembers {
-            return false
-        }
-
         guard let missingSince = member.missingSince else { return false }
         return now.timeIntervalSince(missingSince) <= transientMissingMemberRailGrace
     }
 
+    // Complexite : O(n + m) - n = fenetres du snapshot, m = membres du scope.
     nonisolated public static func railWindowPresentationStates(
         in scope: PersistentStageScope,
         snapshot: DaemonSnapshot
@@ -1091,14 +1151,18 @@ public final class RailController {
         for entry in snapshot.windows {
             windowsByID[entry.window.id] = entry.window
         }
+        let tiledCounts = WindowPresentationStateResolver.tiledWindowCounts(in: snapshot)
         var states: [WindowID: WindowPresentationState] = [:]
         for stage in scope.stages {
+            let stageScope = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
+            let isOnlyTiledWindowInStage = tiledCounts[stageScope, default: 0] <= 1
             for member in stage.members {
                 if let window = windowsByID[member.windowID] {
                     states[member.windowID] = WindowPresentationStateResolver.state(
                         for: window,
                         on: display,
-                        frameOverride: member.frame
+                        frameOverride: member.frame,
+                        isOnlyTiledWindowInScope: window.isTileCandidate && isOnlyTiledWindowInStage
                     )
                 } else if let presentationState = member.presentationState {
                     states[member.windowID] = presentationState
@@ -1106,10 +1170,6 @@ public final class RailController {
             }
         }
         return states
-    }
-
-    nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
-        WindowPresentationStateResolver.isMaximized(frame, on: display)
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -1121,7 +1181,38 @@ public final class RailController {
     }
 }
 
-private enum RailAction {
+/// Contenu visible du rail d'un ecran, calcule une fois par cycle : sert a la signature (reconstruction
+/// seulement si elle change) et au rendu, pour que les deux voient exactement les memes stages.
+struct RailDisplayContent {
+    let scope: PersistentStageScope
+    let presentationStates: [WindowID: WindowPresentationState]
+    /// Stages affichees (au moins un membre represente), dans l'ordre du scope, membres filtres.
+    let stages: [PersistentStage]
+    let emptyStageIDs: [StageID]
+    let signature: String
+
+    // Complexite : O(m) - m = membres du scope.
+    init(scope: PersistentStageScope, presentationStates: [WindowID: WindowPresentationState], liveWindowIDs: Set<WindowID>) {
+        let now = Date()
+        self.scope = scope
+        self.presentationStates = presentationStates
+        stages = scope.stages
+            .map { RailController.railDisplayStage($0, liveWindowIDs: liveWindowIDs, now: now) }
+            .filter { !$0.members.isEmpty }
+        emptyStageIDs = RailController.railEmptyStageIDs(in: scope, liveWindowIDs: liveWindowIDs, now: now)
+        var parts = ["desktop=\(scope.desktopID.rawValue)", "active=\(scope.activeStageID.rawValue)"]
+        for stage in stages {
+            let members = stage.members
+                .map { "\($0.windowID.rawValue):\($0.bundleID):\(presentationStates[$0.windowID].map(String.init(describing:)) ?? "normal")" }
+                .joined(separator: ",")
+            parts.append("stage=\(stage.id.rawValue):\(stage.name):\(stage.focusedWindowID.map { String($0.rawValue) } ?? "-"):\(members)")
+        }
+        parts.append("empty=\(emptyStageIDs.map(\.rawValue).joined(separator: ","))")
+        signature = parts.joined(separator: ";")
+    }
+}
+
+enum RailAction {
     case switchStage(StageID)
     case focusNativeFullscreen(WindowID, String, StageID)
     case summonWindow(WindowID)
@@ -1134,13 +1225,13 @@ private enum RailAction {
     case moveStageToDisplay(StageID, DisplayID)
 }
 
-private struct RailWindowDropTarget {
+struct RailWindowDropTarget {
     var stageID: StageID
     var insertionIndex: Int
 }
 
 @MainActor
-private final class RailMenuActionTarget: NSObject {
+final class RailMenuActionTarget: NSObject {
     private let handler: () -> Void
 
     init(handler: @escaping () -> Void) {
@@ -1153,7 +1244,7 @@ private final class RailMenuActionTarget: NSObject {
 }
 
 @MainActor
-private final class RailStageRenameMenuTarget: NSObject {
+final class RailStageRenameMenuTarget: NSObject {
     private let handler: () -> Void
 
     init(handler: @escaping () -> Void) {
@@ -1166,7 +1257,7 @@ private final class RailStageRenameMenuTarget: NSObject {
 }
 
 @MainActor
-private final class RailStageMoveMenuTarget: NSObject {
+final class RailStageMoveMenuTarget: NSObject {
     private let handler: (DisplayID) -> Void
 
     init(handler: @escaping (DisplayID) -> Void) {
@@ -1179,21 +1270,21 @@ private final class RailStageMoveMenuTarget: NSObject {
     }
 }
 
-private struct RailDragPayload {
+struct RailDragPayload {
     var windowID: WindowID
     var sourceStageID: StageID
     var clickAction: RailAction?
     var grabUnit: CGPoint
 }
 
-private struct RailStageDragPayload {
+struct RailStageDragPayload {
     var stageID: StageID
     var image: NSImage?
     var grabUnit: CGPoint
     var windowID: WindowID?
 }
 
-private struct PendingRailDrag {
+struct PendingRailDrag {
     var displayID: DisplayID
     var windowID: WindowID
     var sourceStageID: StageID
@@ -1203,7 +1294,7 @@ private struct PendingRailDrag {
     var didDrag: Bool
 }
 
-private struct PendingStageReorder {
+struct PendingStageReorder {
     var displayID: DisplayID
     var stageID: StageID
     var image: NSImage?
@@ -1211,2057 +1302,4 @@ private struct PendingStageReorder {
     var windowID: WindowID?
     var startPoint: CGPoint
     var didDrag: Bool
-}
-
-@MainActor
-private final class RailDragGhostWindow: NSPanel {
-    private let ghostView = RailDragGhostView()
-
-    init() {
-        super.init(
-            contentRect: CGRect(x: 0, y: 0, width: 150, height: 96),
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        isOpaque = false
-        backgroundColor = .clear
-        level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        ignoresMouseEvents = true
-        hasShadow = false
-        alphaValue = 0.86
-        contentView = ghostView
-    }
-
-    func show(image: NSImage?, at point: CGPoint, grabUnit: CGPoint, usesBackdrop: Bool = true) {
-        ghostView.image = image
-        ghostView.usesBackdrop = usesBackdrop
-        setContentSize(ghostView.preferredSize(for: image, usesBackdrop: usesBackdrop))
-        move(to: point, grabUnit: grabUnit)
-        orderFrontRegardless()
-        ghostView.needsDisplay = true
-    }
-
-    func move(to point: CGPoint, grabUnit: CGPoint) {
-        let contentInset = ghostView.contentInset
-        let contentWidth = max(1, frame.width - contentInset * 2)
-        let contentHeight = max(1, frame.height - contentInset * 2)
-        setFrameOrigin(CGPoint(
-            x: point.x - (contentInset + grabUnit.x * contentWidth),
-            y: point.y - (contentInset + grabUnit.y * contentHeight)
-        ))
-    }
-
-    func hide() {
-        orderOut(nil)
-    }
-}
-
-@MainActor
-private final class RailDragGhostView: NSView {
-    var image: NSImage?
-    var usesBackdrop = true
-
-    var contentInset: CGFloat {
-        usesBackdrop ? 5 : 0
-    }
-
-    func preferredSize(for image: NSImage?, usesBackdrop: Bool) -> CGSize {
-        guard let image, image.size.width > 0, image.size.height > 0 else {
-            return CGSize(width: 148, height: 92)
-        }
-        let maxSize = CGSize(width: 226, height: 170)
-        let scale = min(maxSize.width / image.size.width, maxSize.height / image.size.height, 1)
-        let inset = usesBackdrop ? 10.0 : 0.0
-        return CGSize(width: image.size.width * scale + inset, height: image.size.height * scale + inset)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let rect = bounds.insetBy(dx: contentInset, dy: contentInset)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-
-        if usesBackdrop {
-            NSGraphicsContext.saveGraphicsState()
-            let shadow = NSShadow()
-            shadow.shadowBlurRadius = 16
-            shadow.shadowOffset = .zero
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
-            shadow.set()
-            NSColor.black.withAlphaComponent(0.30).setFill()
-            path.fill()
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        if let image {
-            NSGraphicsContext.saveGraphicsState()
-            if usesBackdrop {
-                path.addClip()
-            }
-            image.draw(in: rect, from: aspectFitSourceRect(image.size, for: rect), operation: .sourceOver, fraction: 0.92)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            NSColor.systemGreen.withAlphaComponent(0.45).setFill()
-            path.fill()
-        }
-
-        if usesBackdrop {
-            NSColor.white.withAlphaComponent(0.42).setStroke()
-            path.lineWidth = 1
-            path.stroke()
-        }
-    }
-
-    private func aspectFitSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
-        CGRect(origin: .zero, size: imageSize)
-    }
-}
-
-@MainActor
-private final class RailPanel: NSPanel {
-    private let stack = RailStackView()
-    private let horizontalInset: CGFloat = 6
-    private var visibleStageIDs: [StageID] = []
-    private var emptyStageIDs: [StageID] = []
-    private var emptyClickHideActive = true
-    private var emptyClickSafetyMargin: CGFloat = 12
-    private var autoHide = false
-    private var edgeHitWidth: CGFloat = 8
-    private var edgeMagnetismWidth: CGFloat = 24
-    private var animationDuration: TimeInterval = 0.16
-    private var hideDelay: TimeInterval = 0.35
-    private var displayID: DisplayID?
-    private var runtimeStore: RailRuntimeStateStore?
-    var onVisibleWidthChanged: ((DisplayID) -> Void)?
-    private var expandedFrame = CGRect.zero
-    private var collapsedFrame = CGRect.zero
-    private var interactionFrame = CGRect.zero
-    private var isCollapsed = false
-    private var lastPersistedVisibleWidth: Double?
-    private var hideAfter: Date?
-    private var recordingIndicatorView: RecordingIndicatorView?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-
-    init() {
-        super.init(
-            contentRect: .zero,
-            styleMask: [.borderless, .nonactivatingPanel],
-            backing: .buffered,
-            defer: false
-        )
-        isOpaque = false
-        backgroundColor = .clear
-        level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        ignoresMouseEvents = false
-        hasShadow = false
-
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 13
-        stack.edgeInsets = NSEdgeInsets(top: 20, left: horizontalInset, bottom: 20, right: 18)
-        contentView = stack
-    }
-
-    func position(on screen: NSScreen, displayID: DisplayID, config: RailVisualConfig, runtimeStore: RailRuntimeStateStore) {
-        let frame = screen.frame
-        let wasAutoHide = autoHide
-        let runtimeState = runtimeStore.load()
-        self.displayID = displayID
-        self.runtimeStore = runtimeStore
-        autoHide = config.autoHide && !runtimeState.isPinned
-        edgeHitWidth = config.edgeHitWidth
-        edgeMagnetismWidth = config.edgeMagnetismWidth
-        animationDuration = config.animationDuration
-        hideDelay = config.hideDelay
-        expandedFrame = CGRect(x: frame.minX, y: frame.minY, width: config.railWidth, height: frame.height)
-        collapsedFrame = CGRect(x: frame.minX, y: frame.minY, width: edgeHitWidth, height: frame.height)
-        interactionFrame = expandedFrame.intersection(screen.visibleFrame)
-        if interactionFrame.isNull || interactionFrame.isEmpty {
-            interactionFrame = expandedFrame
-        }
-        if !autoHide {
-            isCollapsed = false
-        } else if !wasAutoHide {
-            isCollapsed = true
-        }
-        applyAutoHideFrame(animated: false)
-    }
-
-    func updateAutoHide(mouse: CGPoint, canHide: Bool) {
-        guard autoHide else { return }
-        if isCollapsed {
-            if revealFrame.contains(mouse) {
-                setCollapsed(false, animated: true)
-            }
-            return
-        }
-        if expandedFrame.contains(mouse) {
-            hideAfter = nil
-            return
-        }
-        guard canHide else { return }
-        if hideDelay <= 0 {
-            setCollapsed(true, animated: true)
-            return
-        }
-        let now = Date()
-        if hideAfter == nil {
-            hideAfter = now.addingTimeInterval(hideDelay)
-        }
-        if let hideAfter, now >= hideAfter {
-            setCollapsed(true, animated: true)
-        }
-    }
-
-    func revealIfCollapsed() -> Bool {
-        guard autoHide, isCollapsed else { return false }
-        setCollapsed(false, animated: true)
-        return true
-    }
-
-    func refreshStageLabels() {
-        for view in stack.arrangedSubviews {
-            (view as? StageCardView)?.needsDisplay = true
-        }
-    }
-
-    private func setCollapsed(_ collapsed: Bool, animated: Bool) {
-        guard autoHide else { return }
-        guard isCollapsed != collapsed else { return }
-        isCollapsed = collapsed
-        hideAfter = nil
-        applyAutoHideFrame(animated: animated)
-    }
-
-    private func applyAutoHideFrame(animated: Bool) {
-        let target = autoHide && isCollapsed ? collapsedFrame : expandedFrame
-        if !isCollapsed {
-            stack.isHidden = false
-        }
-        persistVisibleWidth()
-        guard animated, animationDuration > 0 else {
-            setFrame(target, display: true)
-            stack.isHidden = autoHide && isCollapsed
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = animationDuration
-            animator().setFrame(target, display: true)
-        } completionHandler: { [weak self] in
-            Task { @MainActor in
-                self?.finishAutoHideFrame()
-            }
-        }
-    }
-
-    private func finishAutoHideFrame() {
-        stack.isHidden = autoHide && isCollapsed
-    }
-
-    private func persistVisibleWidth() {
-        guard let displayID else { return }
-        let visibleWidth = autoHide && isCollapsed ? edgeHitWidth : expandedFrame.width
-        guard lastPersistedVisibleWidth != Double(visibleWidth) else { return }
-        lastPersistedVisibleWidth = Double(visibleWidth)
-        runtimeStore?.setVisibleWidth(Double(visibleWidth), for: displayID)
-        onVisibleWidthChanged?(displayID)
-    }
-
-    private var revealFrame: CGRect {
-        collapsedFrame.insetBy(dx: -edgeMagnetismWidth, dy: 0)
-    }
-
-    func render(
-        scope: PersistentStageScope,
-        displayName: String,
-        config: RailVisualConfig,
-        thumbnails: WindowThumbnailStore,
-        liveWindowIDs: Set<WindowID>,
-        retainMissingNormalMembers: Bool,
-        presentationStates: [WindowID: WindowPresentationState],
-        protectedWindowIDs: Set<WindowID>,
-        recordingStatus: TargetRecordingStatus?,
-        recordingIndicatorBottomOffset: CGFloat,
-        thumbnailCaptureBudget: inout Int
-    ) {
-        recordingIndicatorView?.removeFromSuperview()
-        recordingIndicatorView = nil
-        stack.arrangedSubviews.forEach { view in
-            stack.removeArrangedSubview(view)
-            view.removeFromSuperview()
-        }
-
-        if config.headerVisible, config.headerPosition == .top {
-            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
-        }
-        let ids = RailController.railVisibleStageIDs(
-            in: scope,
-            liveWindowIDs: liveWindowIDs,
-            retainMissingNormalMembers: retainMissingNormalMembers
-        )
-        visibleStageIDs = ids
-        emptyStageIDs = scope.stages
-            .filter { stage in
-                stage.parkingState != .parked
-                    && !stage.members.contains {
-                        RailController.isRailRepresentedMember(
-                            $0,
-                            liveWindowIDs: liveWindowIDs,
-                            retainMissingNormalMembers: retainMissingNormalMembers
-                        )
-                    }
-            }
-            .map(\.id)
-        stack.railBackgroundColor = config.backgroundColor
-        stack.railBackgroundOpacity = config.backgroundOpacity
-        emptyClickHideActive = config.emptyClickHideActive
-        emptyClickSafetyMargin = config.emptyClickSafetyMargin
-        positionContent(count: ids.count, config: config)
-        if let spacer = stageLeadingSpacer(count: ids.count, config: config) {
-            stack.addArrangedSubview(spacer)
-        }
-        for (index, id) in ids.enumerated() {
-            let persistedStage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
-            let stage = RailController.railDisplayStage(
-                persistedStage,
-                liveWindowIDs: liveWindowIDs,
-                retainMissingNormalMembers: retainMissingNormalMembers
-            )
-            let card = StageCardView(
-                stage: stage,
-                displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
-                isActive: id == scope.activeStageID,
-                accent: config.accent(for: id),
-                config: config,
-                presentationStates: presentationStates,
-                thumbnails: thumbnails.images(
-                    for: stage.members,
-                    protectedWindowIDs: protectedWindowIDs,
-                    captureBudget: &thumbnailCaptureBudget
-                )
-            )
-            stack.addArrangedSubview(card)
-        }
-        if config.headerVisible, config.headerPosition == .bottom {
-            stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
-        }
-        if let recordingStatus {
-            showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset)
-        }
-    }
-
-    private func showRecordingIndicator(_ status: TargetRecordingStatus, bottomOffset: CGFloat) {
-        let indicator = RecordingIndicatorView(status: status)
-        recordingIndicatorView = indicator
-        stack.addSubview(indicator)
-        NSLayoutConstraint.activate([
-            indicator.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: horizontalInset),
-            indicator.bottomAnchor.constraint(equalTo: stack.bottomAnchor, constant: -bottomOffset),
-        ])
-    }
-
-    private func positionContent(count: Int, config: RailVisualConfig) {
-        stack.spacing = config.layoutSpacing
-        let topInset: CGFloat
-        let bottomInset: CGFloat
-        if config.headerVisible, config.headerPosition == .top {
-            topInset = config.layoutTopPadding
-            bottomInset = max(20, config.layoutBottomPadding)
-        } else if config.headerVisible, config.headerPosition == .bottom {
-            topInset = max(20, config.layoutTopPadding)
-            bottomInset = config.layoutBottomPadding
-        } else {
-            topInset = max(20, config.layoutTopPadding)
-            bottomInset = max(20, config.layoutBottomPadding)
-        }
-        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
-    }
-
-    private func stageLeadingSpacer(count: Int, config: RailVisualConfig) -> NSView? {
-        guard count > 0 else { return nil }
-        let stageHeight = CGFloat(count) * StageCardView.height(for: config)
-            + CGFloat(max(0, count - 1)) * config.layoutSpacing
-        let centeredTop = max(20, floor((frame.height - stageHeight) / 2))
-        let currentTop: CGFloat
-        switch config.headerPosition {
-        case .top where config.headerVisible:
-            currentTop = config.layoutTopPadding + config.headerHeight + config.layoutSpacing * 2
-        case .bottom, .hidden:
-            currentTop = config.layoutTopPadding + config.layoutSpacing
-        case .top:
-            currentTop = config.layoutTopPadding + config.layoutSpacing
-        }
-
-        let targetTop: CGFloat
-        switch config.stagesPosition {
-        case .top:
-            targetTop = currentTop
-        case .center:
-            targetTop = centeredTop
-        case .bottom:
-            targetTop = max(currentTop, frame.height - stageHeight - config.layoutBottomPadding)
-        }
-        let height = max(0, targetTop - currentTop)
-        guard height > 0 else { return nil }
-        return FixedHeightSpacer(height: height)
-    }
-
-    func action(at screenPoint: CGPoint) -> RailAction? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                let local = card.convert(contentPoint, from: contentView)
-                return card.action(at: local)
-            }
-            view = current.superview
-        }
-        return nil
-    }
-
-    func stageID(at screenPoint: CGPoint) -> StageID? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                return card.stageID
-            }
-            view = current.superview
-        }
-        return nil
-    }
-
-    func stageReorderPosition(at screenPoint: CGPoint, sourceStageID: StageID) -> Int? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var cardsByID: [StageID: StageCardView] = [:]
-        for view in stack.arrangedSubviews {
-            guard let card = view as? StageCardView else { continue }
-            cardsByID[card.stageID] = card
-        }
-        let targetCards = visibleStageIDs
-            .filter { $0 != sourceStageID }
-            .compactMap { cardsByID[$0] }
-        guard !targetCards.isEmpty else { return nil }
-
-        var insertionPosition = 1
-        for card in targetCards {
-            let cardFrame = contentView.convert(card.frame, from: stack)
-            if contentPoint.y >= cardFrame.midY {
-                return insertionPosition
-            }
-            insertionPosition += 1
-        }
-        return insertionPosition
-    }
-
-    func dropStageID(at screenPoint: CGPoint) -> StageID? {
-        if let id = stageID(at: screenPoint) {
-            return id
-        }
-        guard acceptsRailInteraction(at: screenPoint) else { return nil }
-        return emptyStageID(at: screenPoint)
-    }
-
-    func windowDropStageID(at screenPoint: CGPoint) -> StageID? {
-        windowDropTarget(at: screenPoint, safeEmptyClick: true)?.stageID
-    }
-
-    func windowDropTarget(at screenPoint: CGPoint, safeEmptyClick: Bool) -> RailWindowDropTarget? {
-        if let (card, localPoint) = stageCard(at: screenPoint) {
-            return RailWindowDropTarget(
-                stageID: card.stageID,
-                insertionIndex: card.windowInsertionIndex(at: localPoint)
-            )
-        }
-        guard acceptsRailInteraction(at: screenPoint) else { return nil }
-        if safeEmptyClick, !isSafeEmptyClick(at: screenPoint) {
-            return nil
-        }
-        let stageID = safeEmptyClick ? (emptyStageIDs.first ?? nextGeneratedStageID()) : emptyStageID(at: screenPoint)
-        return stageID.map { RailWindowDropTarget(stageID: $0, insertionIndex: 0) }
-    }
-
-    func emptyStageID(at screenPoint: CGPoint) -> StageID? {
-        guard emptyClickHideActive, isSafeEmptyClick(at: screenPoint) else { return nil }
-        return emptyStageIDs.first ?? nextGeneratedStageID()
-    }
-
-    private func isSafeEmptyClick(at screenPoint: CGPoint) -> Bool {
-        guard acceptsRailInteraction(at: screenPoint) else { return false }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let localX = windowPoint.x
-        return localX >= emptyClickSafetyMargin
-            && localX <= frame.width - emptyClickSafetyMargin
-    }
-
-    func dragPayload(at screenPoint: CGPoint) -> RailDragPayload? {
-        guard let (card, local) = stageCard(at: screenPoint) else { return nil }
-        return card.dragPayload(at: local)
-    }
-
-    private func stageCard(at screenPoint: CGPoint) -> (StageCardView, CGPoint)? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                return (card, card.convert(contentPoint, from: contentView))
-            }
-            view = current.superview
-        }
-        return nil
-    }
-
-    func stageDragPayload(at screenPoint: CGPoint) -> RailStageDragPayload? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                let local = card.convert(contentPoint, from: contentView)
-                let width = max(1, card.bounds.width)
-                let height = max(1, card.bounds.height)
-                return RailStageDragPayload(
-                    stageID: card.stageID,
-                    image: card.snapshotImage(),
-                    grabUnit: CGPoint(
-                        x: min(max(local.x / width, 0), 1),
-                        y: min(max(local.y / height, 0), 1)
-                    ),
-                    windowID: card.windowID(at: local)
-                )
-            }
-            view = current.superview
-        }
-        return nil
-    }
-
-    func hasDirectRailInteraction(at screenPoint: CGPoint) -> Bool {
-        stageID(at: screenPoint) != nil
-    }
-
-    func shouldCaptureMouse(at screenPoint: CGPoint, allowEmptyRail: Bool) -> Bool {
-        guard acceptsRailInteraction(at: screenPoint) else { return false }
-        if hasDirectRailInteraction(at: screenPoint) {
-            return true
-        }
-        return allowEmptyRail && emptyStageID(at: screenPoint) != nil
-    }
-
-    func updateMousePassthrough(at screenPoint: CGPoint, allowEmptyRail: Bool) {
-        let shouldCapture = shouldCaptureMouse(at: screenPoint, allowEmptyRail: allowEmptyRail)
-        let shouldIgnore = !shouldCapture
-        if ignoresMouseEvents != shouldIgnore {
-            ignoresMouseEvents = shouldIgnore
-        }
-    }
-
-    func isInSafetyMargin(at screenPoint: CGPoint) -> Bool {
-        guard acceptsRailInteraction(at: screenPoint) else { return false }
-        return !isSafeEmptyClick(at: screenPoint)
-    }
-
-    private func acceptsRailInteraction(at screenPoint: CGPoint) -> Bool {
-        frame.contains(screenPoint) && interactionFrame.contains(screenPoint)
-    }
-
-    private func nextGeneratedStageID() -> StageID {
-        let used = Set((visibleStageIDs + emptyStageIDs).map(\.rawValue))
-        for index in 1...99 where !used.contains(String(index)) {
-            return StageID(rawValue: String(index))
-        }
-        return StageID(rawValue: UUID().uuidString)
-    }
-
-    private static func isCustomStageName(_ name: String, id: StageID) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && trimmed != "Stage \(id.rawValue)"
-    }
-
-    private static func stageDisplayLabel(_ stage: PersistentStage, position: Int) -> String {
-        let trimmed = stage.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        return isCustomStageName(trimmed, id: stage.id) ? trimmed : "Stage \(position)"
-    }
-}
-
-@MainActor
-private final class RailStackView: NSStackView {
-    var railBackgroundColor: NSColor = .clear {
-        didSet { needsDisplay = true }
-    }
-    var railBackgroundOpacity: CGFloat = 0 {
-        didSet { needsDisplay = true }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        guard railBackgroundOpacity > 0 else { return }
-        railBackgroundColor.withAlphaComponent(railBackgroundOpacity).setFill()
-        bounds.fill()
-    }
-}
-
-@MainActor
-private final class FixedHeightSpacer: NSView {
-    init(height: CGFloat) {
-        super.init(frame: CGRect(x: 0, y: 0, width: 1, height: height))
-        translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: height).isActive = true
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-}
-
-@MainActor
-private final class RecordingIndicatorView: NSView {
-    private let status: TargetRecordingStatus
-
-    init(status: TargetRecordingStatus) {
-        self.status = status
-        super.init(frame: CGRect(x: 0, y: 0, width: 118, height: 26))
-        translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 118).isActive = true
-        heightAnchor.constraint(equalToConstant: 26).isActive = true
-        toolTip = "Recording \(status.name)"
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: 118, height: 26)
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let rect = bounds.insetBy(dx: 2, dy: 3)
-        NSColor(calibratedWhite: 0.02, alpha: 0.42).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
-
-        let dotRect = CGRect(x: rect.minX + 8, y: rect.midY - 4, width: 8, height: 8)
-        NSColor.systemRed.setFill()
-        NSBezierPath(ovalIn: dotRect).fill()
-
-        let label = "record"
-        label.draw(in: CGRect(x: dotRect.maxX + 8, y: rect.minY + 4, width: rect.width - 28, height: rect.height - 6), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: NSColor.systemRed.withAlphaComponent(0.92),
-        ])
-    }
-}
-
-@MainActor
-private final class WindowThumbnailStore {
-    private var images: [WindowID: NSImage] = [:]
-    private var signatures: [WindowID: String] = [:]
-    private var capturedAt: [WindowID: Date] = [:]
-    private let drmRefreshInterval: TimeInterval = 2
-    private let refreshInterval: TimeInterval = 5
-
-    func images(
-        for members: [PersistentStageMember],
-        protectedWindowIDs: Set<WindowID>,
-        captureBudget: inout Int
-    ) -> [WindowID: NSImage] {
-        Dictionary(uniqueKeysWithValues: members.compactMap { member in
-            let canCapture = !protectedWindowIDs.contains(member.windowID)
-            guard let image = image(for: member, captureAllowed: canCapture, captureBudget: &captureBudget) else { return nil }
-            return (member.windowID, image)
-        })
-    }
-
-    func prune(keeping liveIDs: Set<WindowID>) {
-        images = images.filter { liveIDs.contains($0.key) }
-        signatures = signatures.filter { liveIDs.contains($0.key) }
-        capturedAt = capturedAt.filter { liveIDs.contains($0.key) }
-    }
-
-    func cachedImage(for windowID: WindowID) -> NSImage? {
-        images[windowID]
-    }
-
-    private func image(
-        for member: PersistentStageMember,
-        captureAllowed: Bool,
-        captureBudget: inout Int
-    ) -> NSImage? {
-        let now = Date()
-        let isDRMSensitive = Self.isDRMSensitiveBundle(member.bundleID)
-        // The title can change frequently while the underlying window is the same
-        // (terminal prompt, browser tab title, media progress). Invalidating the
-        // thumbnail on title churn makes the rail alternate between app icon and
-        // screenshot on fast refreshes.
-        let signature = member.bundleID
-        if signatures[member.windowID] != signature {
-            images.removeValue(forKey: member.windowID)
-            capturedAt.removeValue(forKey: member.windowID)
-            signatures[member.windowID] = signature
-        }
-        if let cached = images[member.windowID], !cached.looksBlank {
-            let age = now.timeIntervalSince(capturedAt[member.windowID] ?? .distantPast)
-            let interval = isDRMSensitive ? drmRefreshInterval : refreshInterval
-            guard age >= interval else {
-                return cached
-            }
-        }
-        if images[member.windowID]?.looksBlank == true {
-            images.removeValue(forKey: member.windowID)
-        }
-        guard captureAllowed else {
-            return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
-        }
-        guard captureBudget > 0 else {
-            return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
-        }
-
-        captureBudget -= 1
-        if let captured = capture(member.windowID) {
-            images[member.windowID] = captured
-            capturedAt[member.windowID] = now
-            return captured
-        }
-
-        return images[member.windowID] ?? fallbackImage(for: member, capturedAt: now)
-    }
-
-    private func capture(_ windowID: WindowID) -> NSImage? {
-        guard let cgImage = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            CGWindowID(windowID.rawValue),
-            [.boundsIgnoreFraming, .nominalResolution]
-        ),
-              !cgImage.looksBlank
-        else {
-            return nil
-        }
-        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-    }
-
-    private func appIcon(for member: PersistentStageMember) -> NSImage? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: member.bundleID) else {
-            return nil
-        }
-        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 128, height: 128)
-        let size = NSSize(width: 160, height: 104)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor(calibratedWhite: 0.08, alpha: 0.96).setFill()
-        NSBezierPath(roundedRect: CGRect(origin: .zero, size: size), xRadius: 10, yRadius: 10).fill()
-        NSColor.white.withAlphaComponent(0.08).setStroke()
-        let border = NSBezierPath(roundedRect: CGRect(x: 0.5, y: 0.5, width: size.width - 1, height: size.height - 1), xRadius: 10, yRadius: 10)
-        border.lineWidth = 1
-        border.stroke()
-        icon.draw(
-            in: CGRect(x: (size.width - 52) / 2, y: (size.height - 52) / 2, width: 52, height: 52),
-            from: CGRect(origin: .zero, size: icon.size),
-            operation: .sourceOver,
-            fraction: 1
-        )
-        image.unlockFocus()
-        return image
-    }
-
-    private func fallbackImage(for member: PersistentStageMember, capturedAt date: Date) -> NSImage? {
-        let image = appIcon(for: member)
-        if let image {
-            images[member.windowID] = image
-            capturedAt[member.windowID] = date
-        }
-        return image
-    }
-
-    private static func isDRMSensitiveBundle(_ bundleID: String) -> Bool {
-        [
-            "com.apple.Safari",
-            "com.google.Chrome",
-            "com.microsoft.edgemac",
-            "com.brave.Browser",
-            "com.operasoftware.Opera",
-            "org.mozilla.firefox",
-        ].contains(bundleID)
-    }
-}
-
-@MainActor
-private struct RailVisualConfig {
-    var mode: RailRenderMode = .stacked
-    var stageAccents: [StageID: NSColor] = [:]
-    var railWidth: CGFloat = 150
-    var backgroundColor: NSColor = .black
-    var backgroundOpacity: CGFloat = 0
-    var autoHide: Bool = false
-    var edgeHitWidth: CGFloat = 8
-    var edgeMagnetismWidth: CGFloat = 24
-    var animationDuration: TimeInterval = 0.16
-    var hideDelay: TimeInterval = 0.35
-    var emptyClickHideActive: Bool = true
-    var emptyClickSafetyMargin: CGFloat = 12
-    var previewWidth: CGFloat = 160
-    var previewHeight: CGFloat = 104
-    var leadingPadding: CGFloat = 8
-    var trailingPadding: CGFloat = 16
-    var verticalPadding: CGFloat = 20
-    var stackedOffsetX: CGFloat = 60
-    var stackedOffsetY: CGFloat = 80
-    var stackedScale: CGFloat = 0.05
-    var stackedOpacity: CGFloat = 0.08
-    var parallaxRotation: CGFloat = 35
-    var parallaxOffsetX: CGFloat = 25
-    var parallaxOffsetY: CGFloat = 18
-    var parallaxScale: CGFloat = 0.08
-    var parallaxOpacity: CGFloat = 0.20
-    var parallaxDarken: CGFloat = 0.15
-    var headerPosition: RailHeaderPosition = .top
-    var stagesPosition: RailStagesPosition = .center
-    var layoutSpacing: CGFloat = 13
-    var layoutTopPadding: CGFloat = 26
-    var layoutBottomPadding: CGFloat = 16
-    var headerHeight: CGFloat = 42
-    var headerWidth: CGFloat = 0
-    var displayLabel: RailLabelConfig = .displayDefault
-    var desktopLabel: RailLabelConfig = .desktopDefault
-    var stageLabel: RailStageLabelConfig = .default
-
-    var headerVisible: Bool {
-        headerPosition != .hidden && (displayLabel.enabled || desktopLabel.enabled)
-    }
-
-    func accent(for stageID: StageID) -> NSColor {
-        stageAccents[stageID] ?? NSColor.systemGreen
-    }
-
-    static func load() -> RailVisualConfig {
-        let settings = RailSettings.load()
-        let mode = RailRenderMode.load(renderer: settings.renderer)
-        let accents = settings.stageAccents.reduce(into: [StageID: NSColor]()) { result, item in
-            guard let color = NSColor(hex: item.value) else { return }
-            result[StageID(rawValue: item.key)] = color
-        }
-        let preview = settings.preview
-        let parallax = settings.parallax
-        let displayLabel = settings.displayLabel
-        let desktopLabel = settings.desktopLabel
-        let stageLabel = settings.stageLabel
-        let useParallaxGeometry = mode == .parallax
-        return RailVisualConfig(
-            mode: mode,
-            stageAccents: accents,
-            railWidth: CGFloat(settings.width),
-            backgroundColor: NSColor(hex: settings.backgroundColor) ?? .black,
-            backgroundOpacity: CGFloat(settings.backgroundOpacity),
-            autoHide: settings.autoHide,
-            edgeHitWidth: CGFloat(settings.edgeHitWidth),
-            edgeMagnetismWidth: CGFloat(settings.edgeMagnetismWidth),
-            animationDuration: settings.animationMS / 1000,
-            hideDelay: settings.hideDelayMS / 1000,
-            emptyClickHideActive: settings.emptyClickHideActive,
-            emptyClickSafetyMargin: CGFloat(settings.emptyClickSafetyMargin),
-            previewWidth: CGFloat(useParallaxGeometry ? parallax.width : preview.width),
-            previewHeight: CGFloat(useParallaxGeometry ? parallax.height : preview.height),
-            leadingPadding: CGFloat(useParallaxGeometry ? parallax.leadingPadding : preview.leadingPadding),
-            trailingPadding: CGFloat(useParallaxGeometry ? parallax.trailingPadding : preview.trailingPadding),
-            verticalPadding: CGFloat(useParallaxGeometry ? parallax.verticalPadding : preview.verticalPadding),
-            stackedOffsetX: CGFloat(settings.stacked.offsetX),
-            stackedOffsetY: CGFloat(settings.stacked.offsetY),
-            stackedScale: CGFloat(settings.stacked.scalePerLayer),
-            stackedOpacity: CGFloat(settings.stacked.opacityPerLayer),
-            parallaxRotation: CGFloat(parallax.rotation),
-            parallaxOffsetX: CGFloat(parallax.offsetX),
-            parallaxOffsetY: CGFloat(parallax.offsetY),
-            parallaxScale: CGFloat(parallax.scalePerLayer),
-            parallaxOpacity: CGFloat(parallax.opacityPerLayer),
-            parallaxDarken: CGFloat(parallax.darkenPerLayer),
-            headerPosition: RailHeaderPosition(rawValue: settings.layout.headerPosition) ?? .top,
-            stagesPosition: RailStagesPosition(rawValue: settings.stages.position) ?? RailStagesPosition(rawValue: settings.layout.stagesPosition) ?? .center,
-            layoutSpacing: CGFloat(settings.stages.gap > 0 ? settings.stages.gap : settings.layout.spacing),
-            layoutTopPadding: CGFloat(settings.layout.topPadding),
-            layoutBottomPadding: CGFloat(settings.layout.bottomPadding),
-            headerHeight: max(CGFloat(displayLabel.fontSize + desktopLabel.fontSize + 12), 1),
-            headerWidth: 0,
-            displayLabel: RailLabelConfig(settings: displayLabel, fallbackColor: .white.withAlphaComponent(0.86)),
-            desktopLabel: RailLabelConfig(settings: desktopLabel, fallbackColor: .white.withAlphaComponent(0.42)),
-            stageLabel: RailStageLabelConfig(settings: stageLabel)
-        )
-    }
-}
-
-@MainActor
-private enum RailHeaderPosition: String {
-    case top
-    case bottom
-    case hidden
-}
-
-@MainActor
-private enum RailStagesPosition: String {
-    case top
-    case center
-    case bottom
-}
-
-@MainActor
-private enum RailTextAlignment: String {
-    case left
-    case center
-    case right
-
-    var nsTextAlignment: NSTextAlignment {
-        switch self {
-        case .left:
-            return .left
-        case .center:
-            return .center
-        case .right:
-            return .right
-        }
-    }
-}
-
-@MainActor
-private enum RailStageLabelPlacement: String {
-    case above
-    case below
-}
-
-@MainActor
-private enum RailStageLabelZOrder: String {
-    case below
-    case above
-}
-
-@MainActor
-private struct RailLabelConfig {
-    var enabled: Bool
-    var template: String
-    var color: NSColor
-    var fontSize: CGFloat
-    var fontFamily: String
-    var weight: NSFont.Weight
-    var alignment: RailTextAlignment
-    var offsetX: CGFloat
-    var offsetY: CGFloat
-
-    static let displayDefault = RailLabelConfig(
-        enabled: true,
-        template: "{display}",
-        color: .white.withAlphaComponent(0.86),
-        fontSize: 13,
-        fontFamily: "system",
-        weight: .bold,
-        alignment: .center,
-        offsetX: 0,
-        offsetY: 0
-    )
-
-    static let desktopDefault = RailLabelConfig(
-        enabled: true,
-        template: "Desktop {desktop}",
-        color: .white.withAlphaComponent(0.42),
-        fontSize: 10,
-        fontFamily: "system",
-        weight: .medium,
-        alignment: .center,
-        offsetX: 0,
-        offsetY: 0
-    )
-
-    init(
-        enabled: Bool,
-        template: String,
-        color: NSColor,
-        fontSize: CGFloat,
-        fontFamily: String,
-        weight: NSFont.Weight,
-        alignment: RailTextAlignment,
-        offsetX: CGFloat,
-        offsetY: CGFloat
-    ) {
-        self.enabled = enabled
-        self.template = template
-        self.color = color
-        self.fontSize = fontSize
-        self.fontFamily = fontFamily
-        self.weight = weight
-        self.alignment = alignment
-        self.offsetX = offsetX
-        self.offsetY = offsetY
-    }
-
-    init(settings: RailSettings.Label, fallbackColor: NSColor) {
-        self.init(
-            enabled: settings.enabled,
-            template: settings.template,
-            color: (NSColor(hex: settings.color) ?? fallbackColor).withAlphaComponent(CGFloat(settings.opacity)),
-            fontSize: CGFloat(settings.fontSize),
-            fontFamily: settings.fontFamily,
-            weight: NSFont.Weight.toml(settings.weight),
-            alignment: RailTextAlignment(rawValue: settings.alignment) ?? .center,
-            offsetX: CGFloat(settings.offsetX),
-            offsetY: CGFloat(settings.offsetY)
-        )
-    }
-}
-
-@MainActor
-private struct RailStageLabelConfig {
-    var enabled: Bool
-    var color: NSColor?
-    var useStageAccent: Bool
-    var fontSize: CGFloat
-    var fontFamily: String
-    var weight: NSFont.Weight
-    var alignment: RailTextAlignment
-    var opacity: CGFloat
-    var offsetX: CGFloat
-    var offsetY: CGFloat
-    var placement: RailStageLabelPlacement
-    var zOrder: RailStageLabelZOrder
-    var visibilitySeconds: TimeInterval
-    var fadeSeconds: TimeInterval
-    var visibleUntil: TimeInterval?
-
-    static let `default` = RailStageLabelConfig(
-        enabled: true,
-        color: nil,
-        useStageAccent: true,
-        fontSize: 11,
-        fontFamily: "system",
-        weight: .semibold,
-        alignment: .center,
-        opacity: 0.72,
-        offsetX: 0,
-        offsetY: 0,
-        placement: .below,
-        zOrder: .below,
-        visibilitySeconds: 0,
-        fadeSeconds: 0.35,
-        visibleUntil: nil
-    )
-
-    init(
-        enabled: Bool,
-        color: NSColor?,
-        useStageAccent: Bool,
-        fontSize: CGFloat,
-        fontFamily: String,
-        weight: NSFont.Weight,
-        alignment: RailTextAlignment,
-        opacity: CGFloat,
-        offsetX: CGFloat,
-        offsetY: CGFloat,
-        placement: RailStageLabelPlacement,
-        zOrder: RailStageLabelZOrder,
-        visibilitySeconds: TimeInterval,
-        fadeSeconds: TimeInterval,
-        visibleUntil: TimeInterval? = nil
-    ) {
-        self.enabled = enabled
-        self.color = color
-        self.useStageAccent = useStageAccent
-        self.fontSize = fontSize
-        self.fontFamily = fontFamily
-        self.weight = weight
-        self.alignment = alignment
-        self.opacity = opacity
-        self.offsetX = offsetX
-        self.offsetY = offsetY
-        self.placement = placement
-        self.zOrder = zOrder
-        self.visibilitySeconds = visibilitySeconds
-        self.fadeSeconds = fadeSeconds
-        self.visibleUntil = visibleUntil
-    }
-
-    init(settings: RailSettings.StageLabel) {
-        let trimmedColor = settings.color.trimmingCharacters(in: .whitespacesAndNewlines)
-        let useStageAccent = trimmedColor.isEmpty || trimmedColor.lowercased() == "stage"
-        self.init(
-            enabled: settings.enabled,
-            color: useStageAccent ? nil : NSColor(hex: trimmedColor),
-            useStageAccent: useStageAccent,
-            fontSize: CGFloat(settings.fontSize),
-            fontFamily: settings.fontFamily,
-            weight: NSFont.Weight.toml(settings.weight),
-            alignment: RailTextAlignment(rawValue: settings.alignment) ?? .center,
-            opacity: CGFloat(settings.opacity),
-            offsetX: CGFloat(settings.offsetX),
-            offsetY: CGFloat(settings.offsetY),
-            placement: RailStageLabelPlacement(rawValue: settings.placement) ?? .below,
-            zOrder: RailStageLabelZOrder(rawValue: settings.zOrder) ?? .below,
-            visibilitySeconds: settings.visibilitySeconds,
-            fadeSeconds: settings.fadeSeconds
-        )
-    }
-
-    func opacityMultiplier(now: Date = Date()) -> CGFloat {
-        guard visibilitySeconds > 0 else { return 1 }
-        guard let visibleUntil else { return 0 }
-        let current = now.timeIntervalSince1970
-        guard current >= 0 else { return 0 }
-        if current <= visibleUntil {
-            return 1
-        }
-        guard fadeSeconds > 0 else { return 0 }
-        let fadeProgress = (current - visibleUntil) / fadeSeconds
-        return CGFloat(max(0, min(1, 1 - fadeProgress)))
-    }
-
-    func resolvedColor(stageAccent: NSColor, now: Date = Date()) -> NSColor {
-        (useStageAccent ? stageAccent : (color ?? stageAccent)).withAlphaComponent(opacity * opacityMultiplier(now: now))
-    }
-}
-
-@MainActor
-private enum RailRenderMode: String {
-    case stacked = "stacked-previews"
-    case mosaic
-    case parallax = "parallax-45"
-    case icons = "icons-only"
-
-    static func load(renderer: String) -> RailRenderMode {
-        switch renderer {
-        case "mosaic":
-            return .mosaic
-        case "parallax-45", "parallax":
-            return .parallax
-        case "icons-only", "icons":
-            return .icons
-        default:
-            return .stacked
-        }
-    }
-}
-
-@MainActor
-private final class RailHeaderView: NSView {
-    private let displayName: String
-    private let desktopID: DesktopID
-    private let config: RailVisualConfig
-
-    init(displayName: String, desktopID: DesktopID, config: RailVisualConfig) {
-        self.displayName = displayName
-        self.desktopID = desktopID
-        self.config = config
-        let width = config.headerWidth > 0 ? config.headerWidth : max(1, config.railWidth - 12)
-        super.init(frame: CGRect(x: 0, y: 0, width: width, height: config.headerHeight))
-        translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: width).isActive = true
-        heightAnchor.constraint(equalToConstant: config.headerHeight).isActive = true
-        wantsLayer = true
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let labels = [
-            (config.displayLabel, render(template: config.displayLabel.template)),
-            (config.desktopLabel, render(template: config.desktopLabel.template)),
-        ].filter { $0.0.enabled && !$0.1.isEmpty }
-        guard !labels.isEmpty else { return }
-        let lineHeights = labels.map { max($0.0.fontSize + 5, 1) }
-        let gap: CGFloat = labels.count > 1 ? 2 : 0
-        let blockHeight = lineHeights.reduce(0, +) + gap * CGFloat(max(0, labels.count - 1))
-        let top = max(0, (bounds.height - blockHeight) / 2)
-        var y = top + blockHeight
-        for (index, item) in labels.enumerated() {
-            let lineHeight = lineHeights[index]
-            y -= lineHeight
-            item.1.draw(in: CGRect(x: item.0.offsetX, y: y + item.0.offsetY, width: bounds.width, height: lineHeight), withAttributes: [
-                .foregroundColor: item.0.color,
-                .font: headerFont(label: item.0),
-                .paragraphStyle: paragraphStyle(for: item.0),
-            ])
-            y -= gap
-        }
-    }
-
-    private func render(template: String) -> String {
-        template
-            .replacingOccurrences(of: "{display}", with: displayName.isEmpty ? "Roadie" : displayName)
-            .replacingOccurrences(of: "{desktop}", with: String(desktopID.rawValue))
-    }
-
-    private func paragraphStyle(for label: RailLabelConfig) -> NSParagraphStyle {
-        let style = NSMutableParagraphStyle()
-        switch label.alignment {
-        case .left:
-            style.alignment = .left
-        case .center:
-            style.alignment = .center
-        case .right:
-            style.alignment = .right
-        }
-        style.lineBreakMode = .byTruncatingTail
-        return style
-    }
-
-    private func headerFont(label: RailLabelConfig) -> NSFont {
-        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !family.isEmpty, family.lowercased() != "system",
-           let font = NSFont(name: family, size: label.fontSize) {
-            return font
-        }
-        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
-    }
-}
-
-@MainActor
-private final class StageCardView: NSControl {
-    private static var appIconCache: [String: NSImage] = [:]
-
-    let stageID: StageID
-    private let stage: PersistentStage
-    private let displayLabel: String
-    private let isActive: Bool
-    private let accent: NSColor
-    private let config: RailVisualConfig
-    private let presentationStates: [WindowID: WindowPresentationState]
-    private let thumbnails: [WindowID: NSImage]
-    private let visualMembers: [PersistentStageMember]
-    private let contentInset: CGFloat = 4
-
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
-        true
-    }
-
-    init(
-        stage: PersistentStage,
-        displayLabel: String,
-        isActive: Bool,
-        accent: NSColor,
-        config: RailVisualConfig,
-        presentationStates: [WindowID: WindowPresentationState],
-        thumbnails: [WindowID: NSImage]
-    ) {
-        self.stage = stage
-        self.stageID = stage.id
-        self.displayLabel = displayLabel
-        self.isActive = isActive
-        self.accent = accent
-        self.config = config
-        self.presentationStates = presentationStates
-        self.thumbnails = thumbnails
-        self.visualMembers = Self.focusFirstMembers(stage)
-        super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
-        wantsLayer = true
-        translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: Self.height(for: config)).isActive = true
-        layer?.cornerRadius = 18
-        layer?.masksToBounds = false
-        layer?.backgroundColor = NSColor.clear.cgColor
-        layer?.borderWidth = 0
-        layer?.borderColor = NSColor.clear.cgColor
-        layer?.shadowColor = accent.cgColor
-        layer?.shadowOpacity = 0
-        layer?.shadowRadius = 0
-        layer?.shadowOffset = .zero
-    }
-
-    static func height(for config: RailVisualConfig) -> CGFloat {
-        config.mode == .icons ? 78 : max(150, config.previewHeight + 66)
-    }
-
-    private static func focusFirstMembers(_ stage: PersistentStage) -> [PersistentStageMember] {
-        guard let focusedWindowID = stage.focusedWindowID,
-              let index = stage.members.firstIndex(where: { $0.windowID == focusedWindowID })
-        else {
-            return stage.members
-        }
-        var members = stage.members
-        let focused = members.remove(at: index)
-        members.insert(focused, at: 0)
-        return members
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func action(at point: CGPoint) -> RailAction? {
-        if dragPayload(at: point) != nil {
-            return nil
-        }
-        if let member = visualMembers.first(where: { presentationState(for: $0) == .nativeFullscreen }) {
-            return nativeFullscreenFocusAction(for: member)
-        }
-        return .switchStage(stageID)
-    }
-
-    func snapshotImage() -> NSImage? {
-        guard bounds.width > 0, bounds.height > 0,
-              let representation = bitmapImageRepForCachingDisplay(in: bounds)
-        else { return nil }
-        cacheDisplay(in: bounds, to: representation)
-        let image = NSImage(size: bounds.size)
-        image.addRepresentation(representation)
-        return image
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        drawCard()
-    }
-
-    private func drawCard() {
-        let rect = bounds.insetBy(dx: contentInset, dy: 12)
-        let preview = previewArea(in: rect, visibleCount: visiblePreviewCount)
-        let previewBounds = visualPreviewBounds(in: rect, preview: preview)
-        if config.stageLabel.enabled, config.stageLabel.zOrder == .below {
-            drawStageLabel(in: rect, previewBounds: previewBounds)
-        }
-        drawStagePreview(in: rect, preview: preview)
-        if config.stageLabel.enabled, config.stageLabel.zOrder == .above {
-            drawStageLabel(in: rect, previewBounds: previewBounds)
-        }
-    }
-
-    private func drawStagePreview(in rect: CGRect, preview: CGRect) {
-        switch config.mode {
-        case .stacked:
-            drawStacked(in: preview)
-        case .mosaic:
-            drawMosaic(in: preview)
-        case .parallax:
-            drawParallax(in: preview)
-        case .icons:
-            drawIcons(in: rect.insetBy(dx: 8, dy: 18))
-        }
-    }
-
-    private func drawStageLabel(in rect: CGRect, previewBounds: CGRect) {
-        guard !displayLabel.isEmpty else { return }
-        let labelConfig = config.stageLabel
-        let now = Date()
-        guard labelConfig.opacityMultiplier(now: now) > 0 else { return }
-        let lineHeight = max(labelConfig.fontSize + 5, 1)
-        let baseY: CGFloat
-        switch labelConfig.placement {
-        case .above:
-            baseY = previewBounds.maxY - lineHeight
-        case .below:
-            baseY = previewBounds.minY - lineHeight * 0.66
-        }
-        let left = previewBounds.minX + labelConfig.offsetX
-        let maxWidth = max(64, rect.maxX - left - 8)
-        let labelRect = CGRect(
-            x: left,
-            y: baseY + labelConfig.offsetY,
-            width: maxWidth,
-            height: lineHeight
-        )
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineBreakMode = .byTruncatingTail
-        paragraph.alignment = labelConfig.alignment.nsTextAlignment
-        let label = displayLabel as NSString
-        label.draw(in: labelRect, withAttributes: [
-            .foregroundColor: labelConfig.resolvedColor(stageAccent: accent, now: now),
-            .font: stageLabelFont(),
-            .paragraphStyle: paragraph,
-        ])
-    }
-
-    private func visualPreviewBounds(in rect: CGRect, preview: CGRect) -> CGRect {
-        let frames: [CGRect]
-        switch config.mode {
-        case .stacked, .parallax:
-            frames = previewItems(in: preview, maxCount: 5).map(\.rect)
-        case .mosaic:
-            frames = mosaicPreviewFrames(in: preview)
-        case .icons:
-            frames = iconPreviewFrames(in: rect.insetBy(dx: 8, dy: 18))
-        }
-        guard let first = frames.first else { return preview }
-        return frames.dropFirst().reduce(first) { $0.union($1) }
-    }
-
-    private func stageLabelFont() -> NSFont {
-        let label = config.stageLabel
-        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !family.isEmpty, family.lowercased() != "system",
-           let font = NSFont(name: family, size: label.fontSize) {
-            return font
-        }
-        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
-    }
-
-    private func drawStacked(in rect: CGRect) {
-        guard !visualMembers.isEmpty else {
-            drawEmpty(in: rect)
-            return
-        }
-        let items = previewItems(in: rect, maxCount: 5)
-        drawActiveStageShadowBehind(items)
-        for item in items.reversed() {
-            drawPreview(item.rect, index: item.index)
-        }
-    }
-
-    private func drawMosaic(in rect: CGRect) {
-        guard !visualMembers.isEmpty else {
-            drawEmpty(in: rect)
-            return
-        }
-        for (index, frame) in mosaicPreviewFrames(in: rect).enumerated() {
-            drawPreview(frame, index: index)
-        }
-    }
-
-    private func drawParallax(in rect: CGRect) {
-        guard !visualMembers.isEmpty else {
-            drawEmpty(in: rect)
-            return
-        }
-        let items = previewItems(in: rect, maxCount: 5)
-        drawActiveStageShadowBehind(items)
-        for item in items.reversed() {
-            drawPreview(item.rect, index: item.index, skewed: true)
-        }
-    }
-
-    private func drawIcons(in rect: CGRect) {
-        guard !visualMembers.isEmpty else {
-            drawEmpty(in: rect)
-            return
-        }
-        let members = Array(visualMembers.prefix(6))
-        for (index, member) in members.enumerated() {
-            let r = iconFrame(in: rect, index: index)
-            rounded(r, radius: 7, color: color(for: member, index: index))
-            iconLetter(for: member).draw(in: r.insetBy(dx: 0, dy: 4), withAttributes: [
-                .foregroundColor: NSColor.white,
-                .font: NSFont.boldSystemFont(ofSize: 11),
-            ])
-            drawPresentationIndicator(in: r, state: presentationState(for: member), radius: 7)
-        }
-        if visualMembers.count > 6 {
-            "+\(visualMembers.count - 6)".draw(in: CGRect(x: rect.minX + 196, y: rect.midY - 8, width: 28, height: 18), withAttributes: [
-                .foregroundColor: NSColor.white.withAlphaComponent(0.65),
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            ])
-        }
-    }
-
-    private func drawEmpty(in rect: CGRect) {
-        let line = CGRect(x: rect.minX + 18, y: rect.midY - 3, width: rect.width - 36, height: 6)
-        rounded(line, radius: 3, color: NSColor.white.withAlphaComponent(0.10))
-    }
-
-    private var visiblePreviewCount: Int {
-        min(visualMembers.count, 5)
-    }
-
-    private func mosaicPreviewFrames(in rect: CGRect) -> [CGRect] {
-        let count = min(visualMembers.count, 6)
-        guard count > 0 else { return [] }
-        let cols = count <= 2 ? count : 2
-        let rows = Int(ceil(Double(count) / Double(cols)))
-        let gap: CGFloat = 6
-        let cellW = (rect.width - CGFloat(cols - 1) * gap) / CGFloat(cols)
-        let cellH = (rect.height - 34 - CGFloat(rows - 1) * gap) / CGFloat(rows)
-        return (0..<count).map { index in
-            let col = index % cols
-            let row = index / cols
-            return CGRect(
-                x: rect.minX + CGFloat(col) * (cellW + gap),
-                y: rect.minY + CGFloat(row) * (cellH + gap),
-                width: cellW,
-                height: cellH
-            )
-        }
-    }
-
-    private func iconPreviewFrames(in rect: CGRect) -> [CGRect] {
-        (0..<min(visualMembers.count, 6)).map { iconFrame(in: rect, index: $0) }
-    }
-
-    private func iconFrame(in rect: CGRect, index: Int) -> CGRect {
-        CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24)
-    }
-
-    private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {
-        let width = min(config.previewWidth, rect.width - config.leadingPadding - config.trailingPadding)
-        let height = min(config.previewHeight, rect.height - 60)
-        let leftCompensation: CGFloat
-        switch config.mode {
-        case .parallax:
-            let deepestOffset = CGFloat(max(visibleCount - 1, 0))
-            let deepestScale = max(0, 1 - deepestOffset * config.parallaxScale)
-            let scaledInset = width * (1 - deepestScale) / 2
-            leftCompensation = max(0, deepestOffset * config.parallaxOffsetX - scaledInset)
-        case .stacked:
-            leftCompensation = CGFloat(max(visibleCount - 1, 0)) * config.stackedOffsetX * 0.18
-        case .mosaic, .icons:
-            leftCompensation = 0
-        }
-        return CGRect(
-            x: rect.minX + config.leadingPadding + leftCompensation,
-            y: rect.midY - height / 2,
-            width: width,
-            height: height
-        )
-    }
-
-    private func previewRects(in rect: CGRect, maxCount: Int) -> [CGRect] {
-        let count = min(visualMembers.count, maxCount)
-        let base = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
-        return (0..<count).map { _ in base }
-    }
-
-    private func previewItems(in rect: CGRect, maxCount: Int) -> [(index: Int, rect: CGRect)] {
-        previewRects(in: rect, maxCount: maxCount).enumerated().map { item in
-            let index = item.offset
-            let preview = item.element
-            switch config.mode {
-            case .stacked:
-                let offset = CGFloat(index)
-                let scale = 1 - offset * config.stackedScale
-                let dx = -offset * config.stackedOffsetX * 0.18
-                let dy = offset * config.stackedOffsetY * 0.10
-                return (index, preview.scaled(by: scale).offsetBy(dx: dx, dy: dy))
-            case .parallax:
-                let offset = CGFloat(index)
-                let scale = 1 - offset * config.parallaxScale
-                return (index, preview.scaled(by: scale).offsetBy(dx: -offset * config.parallaxOffsetX, dy: offset * config.parallaxOffsetY))
-            case .mosaic, .icons:
-                return (index, preview)
-            }
-        }
-    }
-
-    private func drawPreview(_ rect: CGRect, index: Int, skewed: Bool = false) {
-        guard !rect.isEmpty else { return }
-        if skewed {
-            guard let context = NSGraphicsContext.current?.cgContext else { return }
-            context.saveGState()
-            applyParallaxTransform(for: rect, in: context)
-            drawPreviewBody(rect, index: index, darkened: true)
-            context.restoreGState()
-            return
-        }
-        drawPreviewBody(rect, index: index, darkened: false)
-    }
-
-    private func drawPreviewBody(_ rect: CGRect, index: Int, darkened: Bool) {
-        let path = NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6)
-        let member = visualMembers[safe: index]
-        if let image = member.flatMap({ thumbnails[$0.windowID] }) {
-            NSGraphicsContext.saveGraphicsState()
-            path.addClip()
-            let opacity = opacity(for: index)
-            image.draw(in: rect, from: aspectFillSourceRect(image.size, for: rect), operation: .sourceOver, fraction: opacity)
-            NSGraphicsContext.restoreGraphicsState()
-        } else {
-            color(for: member, index: index).withAlphaComponent(opacity(for: index)).setFill()
-            path.fill()
-        }
-        if let member {
-            drawAppIcon(for: member, in: rect, opacity: opacity(for: index))
-        }
-        NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
-        path.lineWidth = 1
-        path.stroke()
-        drawPresentationIndicator(in: rect, state: presentationState(for: member), radius: 6)
-        if darkened {
-            NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
-            NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
-        }
-    }
-
-    private func presentationState(for member: PersistentStageMember?) -> WindowPresentationState {
-        guard let member else { return .normal }
-        return presentationStates[member.windowID] ?? .normal
-    }
-
-    private func drawPresentationIndicator(in rect: CGRect, state: WindowPresentationState, radius: CGFloat) {
-        switch state {
-        case .normal:
-            return
-        case .maximized:
-            drawCornerIndicator(in: rect.insetBy(dx: 1.5, dy: 1.5))
-        case .nativeFullscreen:
-            drawFullIndicator(in: rect.insetBy(dx: 1.5, dy: 1.5), radius: radius)
-        }
-    }
-
-    private func drawFullIndicator(in rect: CGRect, radius: CGFloat) {
-        let shadow = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        NSColor.black.withAlphaComponent(0.70).setStroke()
-        shadow.lineWidth = 4
-        shadow.stroke()
-
-        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        presentationIndicatorColor.setStroke()
-        path.lineWidth = 2.2
-        path.stroke()
-    }
-
-    private func drawCornerIndicator(in rect: CGRect) {
-        let length = min(18, max(8, min(rect.width, rect.height) * 0.28))
-        let shadow = cornerPath(in: rect, length: length)
-        NSColor.black.withAlphaComponent(0.70).setStroke()
-        shadow.lineWidth = 4
-        shadow.stroke()
-
-        let path = cornerPath(in: rect, length: length)
-        presentationIndicatorColor.setStroke()
-        path.lineWidth = 2.2
-        path.stroke()
-    }
-
-    private func cornerPath(in rect: CGRect, length: CGFloat) -> NSBezierPath {
-        let path = NSBezierPath()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
-        path.line(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.line(to: CGPoint(x: rect.minX + length, y: rect.minY))
-
-        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.minY + length))
-
-        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
-        path.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
-
-        path.move(to: CGPoint(x: rect.minX + length, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.line(to: CGPoint(x: rect.minX, y: rect.maxY - length))
-        return path
-    }
-
-    private var presentationIndicatorColor: NSColor {
-        NSColor.white.withAlphaComponent(0.94)
-    }
-
-    private func drawAppIcon(for member: PersistentStageMember, in rect: CGRect, opacity: CGFloat) {
-        guard let icon = Self.appIcon(for: member.bundleID) else { return }
-        let iconSize = min(max(rect.height * 0.30, 18), 30)
-        let padding: CGFloat = 6
-        let iconRect = CGRect(
-            x: rect.minX + padding,
-            y: rect.minY + padding,
-            width: iconSize,
-            height: iconSize
-        )
-        icon.draw(
-            in: iconRect,
-            from: CGRect(origin: .zero, size: icon.size),
-            operation: .sourceOver,
-            fraction: min(1, 0.92 * opacity)
-        )
-    }
-
-    private static func appIcon(for bundleID: String) -> NSImage? {
-        if let cached = appIconCache[bundleID] {
-            return cached
-        }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return nil
-        }
-        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSWorkspace.shared.icon(forFile: url.path)
-        icon.size = NSSize(width: 64, height: 64)
-        let cleanedIcon = icon.removingEdgeWhiteBackground()
-        appIconCache[bundleID] = cleanedIcon
-        return cleanedIcon
-    }
-
-    private func drawActiveStageShadowBehind(_ items: [(index: Int, rect: CGRect)]) {
-        guard isActive, let first = items.first?.rect else { return }
-        let union = items.dropFirst().reduce(first) { $0.union($1.rect) }
-        let center = CGPoint(x: union.midX, y: union.midY)
-        guard let context = NSGraphicsContext.current?.cgContext,
-              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let gradient = CGGradient(
-                  colorsSpace: colorSpace,
-                  colors: [
-                      accent.withAlphaComponent(0.56).cgColor,
-                      accent.withAlphaComponent(0.38).cgColor,
-                      accent.withAlphaComponent(0.20).cgColor,
-                      accent.withAlphaComponent(0.075).cgColor,
-                      accent.withAlphaComponent(0).cgColor,
-                  ] as CFArray,
-                  locations: [0, 0.18, 0.44, 0.74, 1]
-        )
-        else { return }
-        let xScale: CGFloat = 1.12
-        let yScale: CGFloat = 0.86
-        let availableLeft = max(12, center.x - bounds.minX - 10)
-        let availableRight = max(12, bounds.maxX - center.x - 10)
-        let availableTop = max(12, bounds.maxY - center.y - 10)
-        let availableBottom = max(12, center.y - bounds.minY - 10)
-        let maxHorizontalRadius = min(availableLeft, availableRight) / xScale
-        let maxVerticalRadius = min(availableTop, availableBottom) / yScale
-        let desiredRadius = max(union.width, union.height) * 1.70
-        let radius = max(72, min(desiredRadius, maxHorizontalRadius, maxVerticalRadius))
-        context.saveGState()
-        context.translateBy(x: center.x, y: center.y)
-        context.scaleBy(x: xScale, y: yScale)
-        context.drawRadialGradient(
-            gradient,
-            startCenter: .zero,
-            startRadius: 0,
-            endCenter: .zero,
-            endRadius: radius,
-            options: [.drawsAfterEndLocation]
-        )
-        context.restoreGState()
-    }
-
-    private func applyParallaxTransform(for rect: CGRect, in context: CGContext) {
-        let angle = min(config.parallaxRotation, 75) * .pi / 180
-        let xScale = max(0.45, cos(angle))
-        let perspective = sin(angle) * 0.12
-        context.translateBy(x: rect.midX, y: rect.midY)
-        context.concatenate(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
-        context.translateBy(x: -rect.midX, y: -rect.midY)
-    }
-
-    private func opacity(for index: Int) -> CGFloat {
-        let perLayer = config.mode == .stacked ? config.stackedOpacity : config.parallaxOpacity
-        return max(0.25, (isActive ? 0.95 : 0.82) - CGFloat(index) * perLayer)
-    }
-
-    private func aspectFillSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
-        guard imageSize.width > 0, imageSize.height > 0, rect.width > 0, rect.height > 0 else { return .zero }
-        let sourceAspect = imageSize.width / imageSize.height
-        let targetAspect = rect.width / rect.height
-        if sourceAspect > targetAspect {
-            let width = imageSize.height * targetAspect
-            return CGRect(x: (imageSize.width - width) / 2, y: 0, width: width, height: imageSize.height)
-        }
-        let height = imageSize.width / targetAspect
-        return CGRect(
-            x: 0,
-            y: (imageSize.height - height) / 2,
-            width: imageSize.width,
-            height: height
-        )
-    }
-
-    func dragPayload(at point: CGPoint) -> RailDragPayload? {
-        guard let hit = hitPreview(at: point) else { return nil }
-        return RailDragPayload(
-            windowID: hit.member.windowID,
-            sourceStageID: stageID,
-            clickAction: presentationState(for: hit.member) == .nativeFullscreen
-                ? nativeFullscreenFocusAction(for: hit.member)
-                : nil,
-            grabUnit: CGPoint(
-                x: min(1, max(0, (point.x - hit.rect.minX) / max(1, hit.rect.width))),
-                y: min(1, max(0, (point.y - hit.rect.minY) / max(1, hit.rect.height)))
-            )
-        )
-    }
-
-    func windowID(at point: CGPoint) -> WindowID? {
-        hitPreview(at: point)?.member.windowID
-    }
-
-    func windowInsertionIndex(at point: CGPoint) -> Int {
-        let count = stage.members.count
-        guard count > 0 else { return 0 }
-        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
-        let preview = config.mode == .icons
-            ? cardRect.insetBy(dx: 8, dy: 18)
-            : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
-        let bounds = visualPreviewBounds(in: cardRect, preview: preview)
-        let clampedY = min(max(point.y, bounds.minY), bounds.maxY)
-        let unitFromTop = 1 - ((clampedY - bounds.minY) / max(1, bounds.height))
-        return min(max(Int((unitFromTop * CGFloat(count)).rounded()), 0), count)
-    }
-
-    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {
-        for item in hitPreviewItemsFrontToBack() {
-            guard item.rect.contains(point),
-                  let member = visualMembers[safe: item.index]
-            else { continue }
-            return (member, item.rect)
-        }
-        return nil
-    }
-
-    private func nativeFullscreenFocusAction(for member: PersistentStageMember) -> RailAction {
-        .focusNativeFullscreen(member.windowID, member.bundleID, stageID)
-    }
-
-    private func hitPreviewItemsFrontToBack() -> [(index: Int, rect: CGRect)] {
-        // Stacked/parallax previews are drawn back-to-front, so index 0 is visually on top.
-        hitPreviewItems()
-    }
-
-    private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
-        let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
-        let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
-        switch config.mode {
-        case .stacked, .parallax:
-            return previewItems(in: rect, maxCount: 5)
-        case .mosaic:
-            let count = min(visualMembers.count, 6)
-            let cols = count <= 2 ? count : 2
-            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))
-            let gap: CGFloat = 6
-            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))
-            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))
-            return (0..<count).map { index in
-                let col = index % cols
-                let row = index / cols
-                return (
-                    index,
-                    CGRect(
-                        x: rect.minX + CGFloat(col) * (cellW + gap),
-                        y: rect.minY + CGFloat(row) * (cellH + gap),
-                        width: cellW,
-                        height: cellH
-                    )
-                )
-            }
-        case .icons:
-            return Array(visualMembers.prefix(6)).enumerated().map { index, _ in
-                (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
-            }
-        }
-    }
-
-    private func rounded(_ rect: CGRect, radius: CGFloat, color: NSColor) {
-        color.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
-    }
-
-    private func color(for member: PersistentStageMember?, index: Int) -> NSColor {
-        let seed = Int(member?.windowID.rawValue ?? UInt32(index + 1))
-        let palette: [NSColor] = [
-            NSColor(calibratedRed: 0.15, green: 0.35, blue: 0.72, alpha: 0.96),
-            NSColor(calibratedRed: 0.43, green: 0.28, blue: 0.72, alpha: 0.96),
-            NSColor(calibratedRed: 0.12, green: 0.50, blue: 0.42, alpha: 0.96),
-            NSColor(calibratedRed: 0.64, green: 0.32, blue: 0.16, alpha: 0.96),
-        ]
-        return palette[abs(seed) % palette.count]
-    }
-
-    private func iconLetter(for member: PersistentStageMember) -> String {
-        let source = member.bundleID.split(separator: ".").last.map(String.init) ?? member.title
-        return String(source.prefix(1)).uppercased()
-    }
-}
-
-private extension CGImage {
-    var looksBlank: Bool {
-        guard width > 0, height > 0 else { return true }
-
-        let sampleWidth = 32
-        let sampleHeight = 32
-        let bytesPerPixel = 4
-        let bytesPerRow = sampleWidth * bytesPerPixel
-        var pixels = [UInt8](repeating: 0, count: sampleHeight * bytesPerRow)
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: &pixels,
-                  width: sampleWidth,
-                  height: sampleHeight,
-                  bitsPerComponent: 8,
-                  bytesPerRow: bytesPerRow,
-                  space: colorSpace,
-                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-              )
-        else { return true }
-
-        context.interpolationQuality = .low
-        context.draw(self, in: CGRect(x: 0, y: 0, width: sampleWidth, height: sampleHeight))
-
-        var darkSamples = 0
-        var brightSamples = 0
-        var totalSamples = 0
-        var previousLuma: Int?
-        var lumaChanges = 0
-        var index = 0
-        while index + 3 < pixels.count {
-            let r = Int(pixels[index])
-            let g = Int(pixels[index + 1])
-            let b = Int(pixels[index + 2])
-            let alpha = Int(pixels[index + 3])
-            if alpha > 8 {
-                let luma = (r * 299 + g * 587 + b * 114) / 1000
-                if luma < 10 { darkSamples += 1 }
-                if luma > 32 { brightSamples += 1 }
-                if let previousLuma, abs(previousLuma - luma) > 8 { lumaChanges += 1 }
-                previousLuma = luma
-            }
-            totalSamples += 1
-            index += bytesPerPixel
-        }
-        guard totalSamples > 0 else { return true }
-        return Double(darkSamples) / Double(totalSamples) > 0.96
-            && Double(brightSamples) / Double(totalSamples) < 0.01
-            && lumaChanges < 8
-    }
-}
-
-private extension NSImage {
-    func removingEdgeWhiteBackground() -> NSImage {
-        let pixelWidth = 64
-        let pixelHeight = 64
-        let bytesPerPixel = 4
-        let bytesPerRow = pixelWidth * bytesPerPixel
-        var pixels = [UInt8](repeating: 0, count: pixelHeight * bytesPerRow)
-        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(
-                  data: &pixels,
-                  width: pixelWidth,
-                  height: pixelHeight,
-                  bitsPerComponent: 8,
-                  bytesPerRow: bytesPerRow,
-                  space: colorSpace,
-                  bitmapInfo: CGBitmapInfo.byteOrder32Big.rawValue | CGImageAlphaInfo.premultipliedLast.rawValue
-              ),
-              let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else {
-            return self
-        }
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
-
-        func offset(_ x: Int, _ y: Int) -> Int {
-            y * bytesPerRow + x * bytesPerPixel
-        }
-
-        func isEdgeWhite(_ x: Int, _ y: Int) -> Bool {
-            let i = offset(x, y)
-            let red = pixels[i]
-            let green = pixels[i + 1]
-            let blue = pixels[i + 2]
-            let alpha = pixels[i + 3]
-            return alpha > 0 && red >= 238 && green >= 238 && blue >= 238
-        }
-
-        var visited = [Bool](repeating: false, count: pixelWidth * pixelHeight)
-        var queue: [(x: Int, y: Int)] = []
-
-        func enqueue(_ x: Int, _ y: Int) {
-            guard x >= 0, x < pixelWidth, y >= 0, y < pixelHeight else { return }
-            let index = y * pixelWidth + x
-            guard !visited[index], isEdgeWhite(x, y) else { return }
-            visited[index] = true
-            queue.append((x, y))
-        }
-
-        for x in 0..<pixelWidth {
-            enqueue(x, 0)
-            enqueue(x, pixelHeight - 1)
-        }
-        for y in 0..<pixelHeight {
-            enqueue(0, y)
-            enqueue(pixelWidth - 1, y)
-        }
-
-        var cursor = 0
-        while cursor < queue.count {
-            let point = queue[cursor]
-            cursor += 1
-            let i = offset(point.x, point.y)
-            pixels[i] = 0
-            pixels[i + 1] = 0
-            pixels[i + 2] = 0
-            pixels[i + 3] = 0
-            enqueue(point.x + 1, point.y)
-            enqueue(point.x - 1, point.y)
-            enqueue(point.x, point.y + 1)
-            enqueue(point.x, point.y - 1)
-        }
-
-        guard let cleaned = context.makeImage() else {
-            return self
-        }
-        return NSImage(cgImage: cleaned, size: NSSize(width: pixelWidth, height: pixelHeight))
-    }
-}
-
-private extension NSImage {
-    var looksBlank: Bool {
-        guard let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return true }
-        return cgImage.looksBlank
-    }
-}
-
-private extension NSColor {
-    convenience init?(hex: String) {
-        let clean = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
-        guard clean.count == 6 || clean.count == 8,
-              let value = UInt32(clean, radix: 16)
-        else { return nil }
-        let red: CGFloat
-        let green: CGFloat
-        let blue: CGFloat
-        let alpha: CGFloat
-        if clean.count == 8 {
-            red = CGFloat((value >> 24) & 0xff) / 255
-            green = CGFloat((value >> 16) & 0xff) / 255
-            blue = CGFloat((value >> 8) & 0xff) / 255
-            alpha = CGFloat(value & 0xff) / 255
-        } else {
-            red = CGFloat((value >> 16) & 0xff) / 255
-            green = CGFloat((value >> 8) & 0xff) / 255
-            blue = CGFloat(value & 0xff) / 255
-            alpha = 1
-        }
-        self.init(calibratedRed: red, green: green, blue: blue, alpha: alpha)
-    }
-}
-
-private extension NSFont.Weight {
-    static func toml(_ value: String) -> NSFont.Weight {
-        switch value.lowercased() {
-        case "regular":
-            return .regular
-        case "semibold":
-            return .semibold
-        case "bold":
-            return .bold
-        default:
-            return .medium
-        }
-    }
-}
-
-private extension CGRect {
-    func scaled(by rawScale: CGFloat) -> CGRect {
-        let scale = max(0.35, rawScale)
-        let newWidth = width * scale
-        let newHeight = height * scale
-        return CGRect(
-            x: midX - newWidth / 2,
-            y: midY - newHeight / 2,
-            width: newWidth,
-            height: newHeight
-        )
-    }
-}
-
-private extension Array {
-    subscript(safe index: Int) -> Element? {
-        indices.contains(index) ? self[index] : nil
-    }
 }

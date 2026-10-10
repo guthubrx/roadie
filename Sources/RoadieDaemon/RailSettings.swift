@@ -14,6 +14,9 @@ public struct RailSettings: Equatable, Sendable {
     public var dynamicLeftGap: Bool
     public var emptyClickHideActive: Bool
     public var emptyClickSafetyMargin: Double
+    /// `false` (défaut) : le rail ne se masque que devant une fenêtre en plein écran natif.
+    /// `true` : il se masque aussi devant une fenêtre agrandie (cadre qui couvre l'écran, fenêtre non seule dans sa stage).
+    public var hideOnMaximized: Bool
     public var preview: Preview
     public var stacked: Stacked
     public var parallax: Parallax
@@ -149,6 +152,7 @@ public struct RailSettings: Equatable, Sendable {
             dynamicLeftGap: bool(rail["dynamic_left_gap"], default: false),
             emptyClickHideActive: bool(rail["empty_click_hide_active"], default: false),
             emptyClickSafetyMargin: number(rail["empty_click_safety_margin"], default: 12, min: 0, max: 80),
+            hideOnMaximized: bool(rail["hide_on_maximized"], default: false),
             preview: Preview(
                 width: number(preview["width"], default: 160, min: 60, max: 240),
                 height: number(preview["height"], default: 104, min: 40, max: 180),
@@ -245,6 +249,7 @@ public struct RailSettings: Equatable, Sendable {
             "dynamic_left_gap=\(dynamicLeftGap)",
             "empty_click_hide_active=\(emptyClickHideActive)",
             "empty_click_safety_margin=\(emptyClickSafetyMargin)",
+            "hide_on_maximized=\(hideOnMaximized)",
             "preview.width=\(preview.width)",
             "preview.height=\(preview.height)",
             "preview.leading_padding=\(preview.leadingPadding)",
@@ -323,6 +328,7 @@ public struct RailSettings: Equatable, Sendable {
         dynamicLeftGap: false,
         emptyClickHideActive: false,
         emptyClickSafetyMargin: 12,
+        hideOnMaximized: false,
         preview: Preview(width: 160, height: 104, leadingPadding: 8, trailingPadding: 16, verticalPadding: 20),
         stacked: Stacked(offsetX: 60, offsetY: 80, scalePerLayer: 0.05, opacityPerLayer: 0.08),
         parallax: Parallax(

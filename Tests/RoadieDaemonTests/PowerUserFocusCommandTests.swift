@@ -208,46 +208,65 @@ struct PowerUserFocusCommandTests {
     }
 
     @Test
-    func railDetectsFocusedMaximizedWindowDisplayForDiagnostics() {
-        let display = powerDisplay()
-        let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
-        let regular = powerWindow(2, x: 40, y: 40, width: 420, height: 320)
-        let provider = PowerUserProvider(displays: [display], windows: [fullscreen, regular])
-        provider.focusedID = fullscreen.id
-        let store = StageStore(path: tempPath("rail-fullscreen-stages"))
-        let service = SnapshotService(provider: provider, stageStore: store)
-        let snapshot = service.snapshot()
-
-        #expect(RailController.fullscreenDisplayIDs(in: snapshot) == [display.id])
-    }
-
-    @Test
-    func railDetectsMaximizedDisplayWhenFocusMovesToAnotherDisplay() {
+    func railHidesOnDisplayWithNativeFullscreenWindowEvenWhenFocusIsElsewhere() {
         let first = powerDisplay("display-main", index: 1, x: 0)
         let second = powerDisplay("display-side", index: 2, x: 1000)
-        let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        var fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        fullscreen.furniture = WindowFurniture(
+            hasCloseButton: true,
+            hasFullscreenButton: true,
+            fullscreenButtonEnabled: true,
+            isNativeFullscreen: true
+        )
         let focusedOnOtherDisplay = powerWindow(2, x: 1040, y: 40, width: 420, height: 320)
         let provider = PowerUserProvider(displays: [first, second], windows: [fullscreen, focusedOnOtherDisplay])
         provider.focusedID = focusedOnOtherDisplay.id
-        let store = StageStore(path: tempPath("rail-fullscreen-other-display-focus"))
-        let service = SnapshotService(provider: provider, stageStore: store)
-        let snapshot = service.snapshot()
+        let store = StageStore(path: tempPath("rail-native-fullscreen-hides"))
+        let snapshot = SnapshotService(provider: provider, stageStore: store).snapshot()
 
-        #expect(RailController.fullscreenDisplayIDs(in: snapshot) == [first.id])
+        // Réglage par défaut et réglage `hide_on_maximized` : le plein écran natif masque toujours le rail.
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: false) == [first.id])
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true) == [first.id])
+    }
+
+    @Test
+    func railHidesBeforeMaximizedWindowOnlyWhenSettingIsEnabled() {
+        let display = powerDisplay()
+        let maximized = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let sibling = powerWindow(2, x: 40, y: 40, width: 420, height: 320)
+        let provider = PowerUserProvider(displays: [display], windows: [maximized, sibling])
+        let store = StageStore(path: tempPath("rail-maximized-hides-by-setting"))
+        let snapshot = SnapshotService(provider: provider, stageStore: store).snapshot()
+
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: false).isEmpty)
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true) == [display.id])
+    }
+
+    @Test
+    func railStaysVisibleBeforeSoleTiledWindowCoveringDisplay() {
+        let display = powerDisplay()
+        let sole = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(displays: [display], windows: [sole])
+        let store = StageStore(path: tempPath("rail-sole-window-stays-visible"))
+        let snapshot = SnapshotService(provider: provider, stageStore: store).snapshot()
+
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true).isEmpty)
     }
 
     @Test
     func railExposesMaximizedPresentationInsteadOfDroppingStageState() {
         let display = powerDisplay()
         let maximized = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
-        let provider = PowerUserProvider(displays: [display], windows: [maximized])
+        let sibling = powerWindow(2, x: 40, y: 40, width: 420, height: 320)
+        let provider = PowerUserProvider(displays: [display], windows: [maximized, sibling])
         provider.focusedID = maximized.id
         let store = StageStore(path: tempPath("rail-maximized-presentation-state"))
         let service = SnapshotService(provider: provider, stageStore: store)
         let snapshot = service.snapshot()
         let scope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
             PersistentStage(id: StageID(rawValue: "1"), members: [
-                PersistentStageMember(windowID: maximized.id, bundleID: maximized.bundleID, title: maximized.title, frame: maximized.frame)
+                PersistentStageMember(windowID: maximized.id, bundleID: maximized.bundleID, title: maximized.title, frame: maximized.frame),
+                PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame)
             ])
         ])
 
@@ -266,7 +285,7 @@ struct PowerUserFocusCommandTests {
         let service = SnapshotService(provider: provider, stageStore: store)
         let snapshot = service.snapshot()
 
-        #expect(RailController.fullscreenDisplayIDs(in: snapshot).isEmpty)
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true).isEmpty)
     }
 
     @Test
