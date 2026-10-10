@@ -100,9 +100,12 @@ public struct SnapshotService {
     /// cette env a "0" pour qu'aucun de ces process n'ecrase l'etat canonique
     /// maintenu par `tiler` (qui lui garde `persistStateChanges=true`).
     public static var defaultPersistStateChanges: Bool {
-        guard let raw = ProcessInfo.processInfo.environment["ROADIE_PERSIST_STATE_CHANGES"] else {
-            return true
-        }
+        persistStateChanges(environmentValue: ProcessInfo.processInfo.environment["ROADIE_PERSIST_STATE_CHANGES"])
+    }
+
+    /// Décision pure (testable sans `setenv`) à partir de `ROADIE_PERSIST_STATE_CHANGES`.
+    public static func persistStateChanges(environmentValue raw: String?) -> Bool {
+        guard let raw else { return true }
         switch raw.lowercased() {
         case "0", "false", "no", "off": return false
         default: return true

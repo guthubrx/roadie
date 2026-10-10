@@ -54,15 +54,11 @@ struct FileLockTests {
     }
 
     @Test
-    func snapshotServiceDoesNotPersistWhenReaderModeEnabled() throws {
-        // Test integratif minimal : on ne peut pas facilement injecter un mock
-        // StageStore depuis l'exterieur, mais on peut verifier que la decision
-        // de persistance respecte l'env var.
-        setenv("ROADIE_PERSIST_STATE_CHANGES", "0", 1)
-        #expect(SnapshotService.defaultPersistStateChanges == false)
-        setenv("ROADIE_PERSIST_STATE_CHANGES", "1", 1)
-        #expect(SnapshotService.defaultPersistStateChanges == true)
-        unsetenv("ROADIE_PERSIST_STATE_CHANGES")
-        #expect(SnapshotService.defaultPersistStateChanges == true) // default
+    func persistDecisionFollowsReaderModeEnvironmentValue() {
+        // Fonction pure : pas de setenv, donc pas d'effet de bord sur les suites parallèles.
+        #expect(SnapshotService.persistStateChanges(environmentValue: "0") == false)
+        #expect(SnapshotService.persistStateChanges(environmentValue: "off") == false)
+        #expect(SnapshotService.persistStateChanges(environmentValue: "1") == true)
+        #expect(SnapshotService.persistStateChanges(environmentValue: nil) == true)
     }
 }
