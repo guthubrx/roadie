@@ -364,6 +364,31 @@ struct ConfigTests {
         #expect(RailSettings.load(raw: "[fx.rail]\nhide_on_maximized = true").hideOnMaximized == true)
     }
 
+    /// FR-023 : la config du rail n'est relue que si le fichier change (audit PERF-001).
+    @Test
+    func railSettingsFileIsReparsedOnlyWhenItChanges() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rail-settings-\(UUID().uuidString).toml").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        try "[fx.rail]\nwidth = 200\n".write(toFile: path, atomically: true, encoding: .utf8)
+
+        // Illisible dès la première lecture : valeurs par défaut, sans les garder en cache.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: path)
+        let unreadable = RailSettings.load(path: path).width
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
+        #expect(unreadable == 150 || getuid() == 0)
+        #expect(RailSettings.load(path: path).width == 200)
+
+        // Fichier illisible mais signature inchangée (chmod ne touche ni mtime ni taille) :
+        // la valeur vient du cache, sans relecture.
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: path)
+        #expect(RailSettings.load(path: path).width == 200)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path)
+
+        try "[fx.rail]\nwidth = 250\n".write(toFile: path, atomically: true, encoding: .utf8)
+        #expect(RailSettings.load(path: path).width == 250)
+    }
+
     @Test
     func railRuntimeStateKeepsBackwardCompatiblePinnedDefault() throws {
         let data = #"{"visibleWidths":{"display-a":8}}"#.data(using: .utf8)!
@@ -812,15 +837,21 @@ struct ConfigTests {
         enabled = true
         hide_strategy = "corner"
         default_stage = "1"
+
+        [fx.rail.header]
+        enabled = true
+        height = 60
+        width = 200
         """)
 
         #expect(!report.hasErrors)
-        for path in ["desktops.count", "stage_manager.enabled", "stage_manager.hide_strategy"] {
+        for path in ["desktops.count", "stage_manager.enabled", "stage_manager.hide_strategy", "fx.rail.header.height", "fx.rail.header.width"] {
             let item = report.items.first { $0.path == path }
             #expect(item?.level == .warning)
             #expect(item?.message.hasPrefix("clé sans effet") == true)
         }
         #expect(report.items.contains { $0.path == "stage_manager.default_stage" } == false)
+        #expect(report.items.contains { $0.path == "fx.rail.header.enabled" } == false)
     }
 
     @Test

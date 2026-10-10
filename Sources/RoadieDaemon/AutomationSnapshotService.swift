@@ -111,8 +111,9 @@ public struct AutomationSnapshotService: Sendable {
             }
     }
 
+    // O(n) - n = nombre de fenêtres : états de présentation calculés en un seul passage.
     private func windowSnapshots(from snapshot: DaemonSnapshot) -> [AutomationWindowSnapshot] {
-        let resolver = WindowPresentationStateResolver()
+        let states = WindowPresentationStateResolver().statesByWindowID(in: snapshot)
         return snapshot.windows.map { scoped in
             AutomationWindowSnapshot(
                 id: String(scoped.window.id.rawValue),
@@ -124,7 +125,7 @@ public struct AutomationSnapshotService: Sendable {
                 frame: scoped.window.frame,
                 isFocused: scoped.window.id == snapshot.focusedWindowID,
                 isFloating: scoped.scope == nil,
-                presentationState: resolver.state(for: scoped, in: snapshot)
+                presentationState: states[scoped.window.id] ?? .normal
             )
         }
     }

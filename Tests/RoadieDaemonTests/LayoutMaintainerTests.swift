@@ -328,6 +328,21 @@ private final class FocusedSystemSnapshotProvider: SystemSnapshotProviding, @unc
     }
 }
 
+/// L'application refuse toute taille : chaque demande renvoie le même cadre (« clampé »).
+private final class AlwaysClampedWriter: WindowFrameWriting, @unchecked Sendable {
+    private let actual: Rect
+    private(set) var attempts = 0
+
+    init(actual: Rect) {
+        self.actual = actual
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        attempts += 1
+        return actual.cgRect
+    }
+}
+
 private final class ClampingWriter: WindowFrameWriting, @unchecked Sendable {
     private let firstActual: Rect
     private(set) var requestedFrames: [Rect] = []
@@ -3916,6 +3931,39 @@ extension LayoutMaintainerTests {
         #expect(first.failed == 1)
         #expect(retried.commands == 1)
         #expect(writer.attempts == 2)
+    }
+
+    /// FR-004 : un refus de TAILLE (cadre obtenu différent du cadre demandé) est mémorisé, puis
+    /// oublié après 30 s : le cadre est redemandé (audit TEST-002 ; l'échec complet est couvert
+    /// par `failedFrameIsRetriedAfterRefusalMemoryExpires`).
+    @Test
+    func clampedSizeRefusalIsRetriedAfterRefusalMemoryExpires() {
+        let display = lotCDisplay()
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let writer = AlwaysClampedWriter(actual: initial)
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[initial]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        let first = maintainer.tick()
+        let requestsAfterFirst = writer.attempts
+        currentTime = currentTime.addingTimeInterval(1)
+        _ = maintainer.tick()
+        let requestsWhileRemembered = writer.attempts
+        currentTime = currentTime.addingTimeInterval(31)
+        let retried = maintainer.tick()
+
+        // Le premier tick applique puis répare dans le même tick (2 demandes) ; le refus
+        // mémorisé bloque toute nouvelle demande, puis l'expiration relance la disposition.
+        #expect(first.clamped == 1)
+        #expect(requestsAfterFirst > 0)
+        #expect(requestsWhileRemembered == requestsAfterFirst)
+        #expect(retried.commands == 1)
+        #expect(writer.attempts > requestsWhileRemembered)
     }
 
     /// FR-010 : aucun plan n'est appliqué tant qu'un bouton de souris est enfoncé.

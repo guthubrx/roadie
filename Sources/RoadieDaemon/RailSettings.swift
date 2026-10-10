@@ -105,8 +105,6 @@ public struct RailSettings: Equatable, Sendable {
         public var alignment: String
         public var topPadding: Double
         public var bottomPadding: Double
-        public var height: Double
-        public var width: Double
         public var titleColor: String
         public var subtitleColor: String
         public var titleFontSize: Double
@@ -118,12 +116,23 @@ public struct RailSettings: Equatable, Sendable {
         public var subtitleTemplate: String
     }
 
+    /// Relu seulement si le fichier change (date de modification ou taille), comme
+    /// `ConfigReloadService.currentConfig()` : `outerGaps` l'appelle à chaque tick et par scope
+    /// (SPEC-016 FR-023). O(1) (un stat) si inchangé ; lecture et parsing hors verrou.
+    /// Seule une lecture réussie est mise en cache : un fichier absent ou illisible (droits)
+    /// est retenté à l'appel suivant, même si sa signature ne change pas.
     public static func load(path: String = "~/.config/roadies/roadies.toml") -> RailSettings {
         let expanded = NSString(string: path).expandingTildeInPath
+        let stamp = fileModificationStamp(expanded)
+        if let cached = RailSettingsCache.shared.settings(for: expanded, stamp: stamp) {
+            return cached
+        }
         guard let raw = try? String(contentsOfFile: expanded, encoding: .utf8) else {
             return defaults
         }
-        return load(raw: raw)
+        let settings = load(raw: raw)
+        RailSettingsCache.shared.store(settings, for: expanded, stamp: stamp)
+        return settings
     }
 
     public static func load(raw: String) -> RailSettings {
@@ -451,8 +460,6 @@ public struct RailSettings: Equatable, Sendable {
             alignment: normalizedChoice(header["alignment"], allowed: ["left", "center", "right"], default: "center"),
             topPadding: number(header["top_padding"], default: 50, min: 0, max: 240),
             bottomPadding: number(header["bottom_padding"], default: 16, min: 0, max: 240),
-            height: number(header["height"], default: 42, min: 0, max: 120),
-            width: number(header["width"], default: 0, min: 0, max: 320),
             titleColor: header["title_color"] ?? "#FFFFFFDB",
             subtitleColor: header["subtitle_color"] ?? "#FFFFFF6B",
             titleFontSize: number(header["title_font_size"], default: 13, min: 6, max: 40),
@@ -482,5 +489,22 @@ public struct RailSettings: Equatable, Sendable {
         guard let raw else { return fallback }
         let normalized = raw.lowercased()
         return allowed.contains(normalized) ? normalized : fallback
+    }
+}
+
+/// Dernier `RailSettings` chargé par chemin, avec la signature du fichier lu.
+/// `@unchecked Sendable` : `entries` n'est lu et modifié que sous `lock`.
+private final class RailSettingsCache: @unchecked Sendable {
+    static let shared = RailSettingsCache()
+
+    private let lock = NSLock()
+    private var entries: [String: (stamp: [Int64], settings: RailSettings)] = [:]
+
+    func settings(for path: String, stamp: [Int64]) -> RailSettings? {
+        lock.withLock { entries[path].flatMap { $0.stamp == stamp ? $0.settings : nil } }
+    }
+
+    func store(_ settings: RailSettings, for path: String, stamp: [Int64]) {
+        lock.withLock { entries[path] = (stamp, settings) }
     }
 }

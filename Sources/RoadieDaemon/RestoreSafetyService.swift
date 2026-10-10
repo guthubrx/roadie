@@ -224,11 +224,18 @@ public struct RestoreSafetyService {
     /// Si ce watcher restaure déjà (pid vivant dans le marqueur), le démarrage le laisse faire.
     public func startRun(pid: Int32) throws -> RestoreSafetyApplyResult? {
         let needsRecovery = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
-            let marker = runMarker()
-            let recovering = marker?.recoveryOwnerPID.map(ProcessLiveness.isAlive) ?? false
+            let markerResult = runMarkerResult()
             _ = try markRunStarted(pid: pid)
-            guard let marker else { return false }
-            return !marker.cleanExit && marker.pid != pid && !recovering
+            switch markerResult {
+            case .missing:
+                return false
+            case .corrupt:
+                // Arrêt précédent inconnu (marqueur illisible, copie conservée) : restaurer par prudence.
+                return true
+            case .loaded(let marker):
+                let recovering = marker.recoveryOwnerPID.map(ProcessLiveness.isAlive) ?? false
+                return !marker.cleanExit && marker.pid != pid && !recovering
+            }
         }
         return needsRecovery ? unhideAll() : nil
     }
@@ -440,11 +447,24 @@ public struct RestoreSafetyService {
     }
 
     public func runMarker() -> RestoreSafetyRunMarker? {
-        try? JSONPersistence.loadThrowing(
-            RestoreSafetyRunMarker.self,
-            from: URL(fileURLWithPath: markerPath)
-        ) { decoder in
-            decoder.dateDecodingStrategy = .iso8601
+        if case .loaded(let marker) = runMarkerResult() { return marker }
+        return nil
+    }
+
+    /// Marqueur absent, chargé ou illisible (FR-015), même schéma que `loadSnapshotResult` :
+    /// un marqueur illisible est copié en `.corrupt-<date>` et signalé, jamais pris pour absent.
+    private func runMarkerResult() -> JSONPersistence.LoadResult<RestoreSafetyRunMarker> {
+        let url = URL(fileURLWithPath: markerPath)
+        do {
+            return .loaded(try JSONPersistence.loadThrowing(RestoreSafetyRunMarker.self, from: url) { decoder in
+                decoder.dateDecodingStrategy = .iso8601
+            })
+        } catch {
+            guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+            if case .loaded(let legacy) = JSONPersistence.loadResult(RestoreSafetyRunMarker.self, from: url) {
+                return .loaded(legacy)
+            }
+            return .corrupt(error)
         }
     }
 

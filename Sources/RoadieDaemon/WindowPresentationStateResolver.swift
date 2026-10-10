@@ -10,17 +10,6 @@ import RoadieStages
 public struct WindowPresentationStateResolver: Sendable {
     public init() {}
 
-    public func state(for entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> WindowPresentationState {
-        guard let display = display(for: entry, in: snapshot) else {
-            return .normal
-        }
-        return Self.state(
-            for: entry.window,
-            on: display,
-            isOnlyTiledWindowInScope: Self.isOnlyTiledWindow(entry, tiledCounts: Self.tiledWindowCounts(in: snapshot))
-        )
-    }
-
     // O(n) - n = nombre de fenêtres du snapshot (un seul passage pour compter les fenêtres tilées par scope).
     public func statesByWindowID(in snapshot: DaemonSnapshot) -> [WindowID: WindowPresentationState] {
         let tiledCounts = Self.tiledWindowCounts(in: snapshot)

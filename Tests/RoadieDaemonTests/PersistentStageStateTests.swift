@@ -179,6 +179,45 @@ struct PersistentStageStateTests {
         #expect(index[WindowID(rawValue: 120)] == nil)
     }
 
+    /// FR-006 / R11 bis : deux candidats proches du membre (distance <= 360) mais trop proches
+    /// l'un de l'autre (écart de score < 120) ; seule la règle d'ambiguïté refuse (audit TEST-001).
+    @Test
+    func reconcileWindowIDsRefusesTwoNearCandidatesWithSmallScoreGap() {
+        let scope = PersistentStageScope(displayID: DisplayID(rawValue: "main"), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [member(10, title: "Default")]),
+        ])
+        var state = stateWith(scopes: [scope])
+
+        state.reconcileWindowIDs(with: [
+            window(110, title: "Default", x: 50),
+            window(120, title: "Default", x: 100),
+        ])
+
+        let index = state.stageScopeIndex()
+        #expect(index[WindowID(rawValue: 10)]?.stageID == StageID(rawValue: "1"))
+        #expect(index[WindowID(rawValue: 110)] == nil)
+        #expect(index[WindowID(rawValue: 120)] == nil)
+    }
+
+    /// Même situation avec un candidat nettement plus proche (écart >= 120) : il est rattaché.
+    @Test
+    func reconcileWindowIDsPicksClearlyClosestOfTwoNearCandidates() {
+        let scope = PersistentStageScope(displayID: DisplayID(rawValue: "main"), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [member(10, title: "Default")]),
+        ])
+        var state = stateWith(scopes: [scope])
+
+        state.reconcileWindowIDs(with: [
+            window(110, title: "Default", x: 10),
+            window(120, title: "Default", x: 300),
+        ])
+
+        let index = state.stageScopeIndex()
+        #expect(index[WindowID(rawValue: 110)]?.stageID == StageID(rawValue: "1"))
+        #expect(index[WindowID(rawValue: 10)] == nil)
+        #expect(index[WindowID(rawValue: 120)] == nil)
+    }
+
     @Test
     func missingWindowPinsDecodeAsEmptyList() throws {
         let data = #"{"scopes":[]}"#.data(using: .utf8)!

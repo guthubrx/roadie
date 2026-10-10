@@ -862,7 +862,7 @@ public final class CLICommandRouter {
             }
         case "close":
             out("roadie: window close is not implemented in this build")
-            return 0
+            return 1
         default:
             return usageError()
         }

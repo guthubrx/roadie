@@ -1228,7 +1228,9 @@ private enum ConfigValidationRules {
     /// Clés décodées mais lues nulle part dans le daemon (vérifié par recherche dans `Sources/`).
     private static let ineffectiveKeys: [String: Set<String>] = [
         "desktops": ["enabled", "count", "back_and_forth", "mode"],
-        "stage_manager": ["enabled", "hide_strategy"]
+        "stage_manager": ["enabled", "hide_strategy"],
+        // Anciennes clés d'en-tête du rail : sans effet, la hauteur dépend des tailles de police.
+        "fx.rail.header": ["height", "width"]
     ]
 
     static func validate(rawToml: String) -> [ConfigValidationItem] {

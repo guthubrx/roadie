@@ -163,6 +163,35 @@ struct RestoreSafetyLifecycleTests {
         #expect(try fixture.service.recoverAfterProcessExit(pid: 41) == nil)
     }
 
+    /// FR-015 / FR-037 : un marqueur illisible n'est pas pris pour « absent » ; il est copié
+    /// et le démarrage restaure par prudence (audit QUAL-008).
+    @Test
+    func startRunRecoversWhenRunMarkerIsUnreadable() throws {
+        let fixture = makeFixture()
+        let markerPath = fixture.paths[2]
+        let directory = (markerPath as NSString).deletingLastPathComponent
+        let markerName = (markerPath as NSString).lastPathComponent
+        let corruptCopies = {
+            ((try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? [])
+                .filter { $0.hasPrefix("\(markerName).corrupt-") }
+        }
+        defer {
+            cleanup(fixture)
+            for name in corruptCopies() {
+                try? FileManager.default.removeItem(atPath: (directory as NSString).appendingPathComponent(name))
+            }
+        }
+        try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        try Data("{not json".utf8).write(to: URL(fileURLWithPath: markerPath))
+
+        let recovery = try fixture.service.startRun(pid: 42)
+
+        #expect(recovery?.applied == 1)
+        #expect(fixture.writer.frames[WindowID(rawValue: 2)] == visibleFrame)
+        #expect(corruptCopies().count == 1)
+        #expect(fixture.service.runMarker()?.pid == 42)
+    }
+
     @Test
     func instanceLockRefusesSecondHolderEvenWithoutPidFile() throws {
         let component = "roadied-test-\(UUID().uuidString.prefix(8))"

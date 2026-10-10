@@ -55,6 +55,13 @@ struct CLICommandRouterTests {
         #expect(router().run(["stage", "--help"]).stdout == stage.stdout)
     }
 
+    /// Une commande annoncée « not implemented » échoue de la même façon partout (audit AI-001).
+    @Test
+    func unimplementedCommandsExitOne() {
+        #expect(router().run(["window", "close"]).exitCode == 1)
+        #expect(router().run(["toggle", "floating"]).exitCode == 1)
+    }
+
     @Test
     func versionPrintsSingleVersionConstant() {
         let response = router().run(["--version"])
