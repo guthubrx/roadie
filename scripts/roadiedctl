@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+label="com.roadie.roadied"
+domain="gui/$(id -u)"
+service="$domain/$label"
+plist="$HOME/Library/LaunchAgents/$label.plist"
+
+usage() {
+  cat <<USAGE
+Usage: $(basename "$0") start|stop|status
+
+  start   active et demarre roadied via launchctl
+          alias: active, enable, up, on
+  stop    kill proprement le PID roadied puis bootout le LaunchAgent
+          alias: kill, bootout, down, off
+  status  affiche l'etat launchctl
+USAGE
+}
+
+is_loaded() {
+  launchctl print "$service" >/dev/null 2>&1
+}
+
+service_pid() {
+  launchctl print "$service" 2>/dev/null | awk '/^[[:space:]]*pid = [0-9]+$/ { print $3; exit }'
+}
+
+show_status() {
+  if is_loaded; then
+    echo "$service loaded"
+    launchctl print "$service" | sed -n '1,80p'
+  else
+    echo "$service not loaded"
+    return 3
+  fi
+}
+
+start_roadied() {
+  if [[ ! -f "$plist" ]]; then
+    echo "plist introuvable: $plist" >&2
+    exit 1
+  fi
+
+  launchctl enable "$service"
+
+  if ! is_loaded; then
+    launchctl bootstrap "$domain" "$plist"
+  fi
+
+  launchctl kickstart -k "$service"
+  sleep 1
+
+  pid="$(service_pid)"
+  if [[ -z "${pid:-}" ]]; then
+    echo "roadied active, mais aucun PID visible; etat:" >&2
+    show_status >&2 || true
+    exit 1
+  fi
+
+  echo "roadied active et demarre"
+  echo "service: $service"
+  echo "pid: $pid"
+}
+
+stop_roadied() {
+  if ! is_loaded; then
+    echo "$service not loaded"
+    return 0
+  fi
+
+  pid="$(service_pid)"
+  if [[ -n "${pid:-}" ]]; then
+    command_line="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+    if [[ -z "$command_line" ]]; then
+      echo "PID $pid introuvable; bootout seulement"
+    elif [[ "$command_line" == *Firefox* || "$command_line" == *firefox* ]]; then
+      echo "refus de kill: le PID $pid ressemble a Firefox" >&2
+      echo "$command_line" >&2
+      exit 2
+    else
+      echo "kill PID $pid"
+      echo "$command_line"
+      kill "$pid"
+      sleep 3
+    fi
+  fi
+
+  launchctl bootout "$service" >/dev/null 2>&1 || launchctl bootout "$domain" "$plist"
+  echo "roadied kill et bootout"
+}
+
+case "${1:-}" in
+  start|active|activate|enable|up|on)
+    start_roadied
+    ;;
+  stop|down|off|kill|bootout)
+    stop_roadied
+    ;;
+  status)
+    show_status
+    ;;
+  -h|--help|help|"")
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 64
+    ;;
+esac
