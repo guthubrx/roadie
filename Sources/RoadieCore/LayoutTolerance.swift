@@ -14,6 +14,12 @@ public enum LayoutTolerance {
     public static let growthMinimum: CGFloat = 64
     /// Agrandissement minimal relatif avant de considérer une croissance comme refusée.
     public static let growthRatio: CGFloat = 0.35
+    /// Déplacement en deçà duquel une demande reprend la position d'une demande déjà refusée.
+    public static let clampedPositionDrift: CGFloat = 64
+    /// Côté minimal supposé d'une fenêtre tilée quand aucun refus n'a révélé son minimum.
+    public static let minimumTileSide: CGFloat = 120
+    /// Durée de mémoire d'un refus de taille ou d'un échec d'application, en secondes (FR-004).
+    public static let refusalMemorySeconds: Double = 30
 
     /// Tolérance sur l'écart entre deux fenêtres voisines, dérivée de la marge intérieure configurée.
     public static func innerGapTolerance(gapsInner: CGFloat) -> CGFloat {

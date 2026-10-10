@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import RoadieAX
 import RoadieCore
@@ -42,12 +43,18 @@ public final class LayoutMaintainer {
     private let store: StageStore
     private let dragActivity: WindowDragActivity
     private let commandActivity: LayoutCommandActivity
+    /// Vrai tant qu'un bouton de souris est enfoncé (FR-010). Injectable pour les tests.
+    private let mouseButtonsPressed: () -> Bool
     private var cachedRuleEngine: WindowRuleEngine?
     private var cachedRulesVersion: String?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
     private var lastObservedFrames: [UInt32: Rect]?
+    /// Fenêtres en plein écran (natif ou zoom de commande), relues au début de chaque tick.
+    private var tickFullscreen: [(entry: ScopedWindowSnapshot, display: DisplaySnapshot)] = []
+    /// Scopes exclus du tick en cours (R6) : plein écran, stabilisation, commande en cours.
+    private var tickExcludedScopes: Set<StageScope> = []
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
     private var manualResizeApplyAfter: Date?
@@ -73,6 +80,7 @@ public final class LayoutMaintainer {
         store: StageStore? = nil,
         dragActivity: WindowDragActivity = .shared,
         commandActivity: LayoutCommandActivity = .shared,
+        mouseButtonsPressed: (() -> Bool)? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
@@ -86,6 +94,9 @@ public final class LayoutMaintainer {
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
         self.commandActivity = commandActivity
+        // Sous les tests, la souris réelle de la machine ne doit pas suspendre les ticks.
+        self.mouseButtonsPressed = mouseButtonsPressed
+            ?? (Self.isRunningTests ? { false } : { NSEvent.pressedMouseButtons != 0 })
         self.now = now
     }
 
@@ -95,6 +106,10 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
+        forgetExpiredRefusals(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
+        // Plein écran lu une seule fois, avant tout calcul de plan (R5).
+        tickFullscreen = fullscreenEntries(in: snapshot)
+        tickExcludedScopes = []
         let observedFramesForChurn = scopedFrames(in: snapshot)
         let changedWindowIDsForChurn = changedWindows(in: observedFramesForChurn)
         let settlingLayoutScopes = activeTiledStageMembershipSettlingScopes(
@@ -136,9 +151,23 @@ public final class LayoutMaintainer {
             manualResizeApplyAfter = nil
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
+        if mouseButtonsPressed() {
+            // FR-010 : aucun plan tant qu'un bouton est enfoncé (resize par un bord, clic long).
+            // Référence d'observation et priorité conservées : le geste est traité au relâchement.
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        }
+
+        // Scopes exclus de ce tick : chaque garde exclut son scope au lieu d'arrêter tout le tick
+        // (R6, FR-040). Leur référence d'observation est mise à jour, celle des autres scopes non.
+        if !settlingLayoutScopes.isEmpty {
+            tickExcludedScopes.formUnion(settlingLayoutScopes)
+            observe(observedFramesForChurn, scopes: settlingLayoutScopes, in: snapshot)
+            appendStageMembershipSettlingEvent(scopes: settlingLayoutScopes)
+        }
         let missingMemberReclaimScopes = activeTiledScopesWithRecentMissingMembers(in: snapshot, now: tickNow)
         if let activeUntil = commandActivity.activeUntil(now: tickNow) {
             if missingMemberReclaimScopes.isEmpty {
+                // Commande en cours dans un autre processus, sans scope connu : tick suspendu.
                 priorityWindowIDs = []
                 manualResizeApplyAfter = nil
                 lastObservedFrames = scopedFrames(in: snapshot)
@@ -149,13 +178,16 @@ public final class LayoutMaintainer {
                     ]))
                 }
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            } else {
-                events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                    "activeUntil": String(activeUntil.timeIntervalSince1970),
-                    "bypassedForMissingReclaim": "true",
-                    "scopes": missingMemberReclaimScopes.map(\.description).sorted().joined(separator: ",")
-                ]))
             }
+            // Seuls les scopes qui ont perdu un membre sont repris ; les autres restent à la commande.
+            let commandScopes = activeScopes(in: snapshot).subtracting(missingMemberReclaimScopes)
+            tickExcludedScopes.formUnion(commandScopes)
+            observe(observedFramesForChurn, scopes: commandScopes, in: snapshot)
+            events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
+                "activeUntil": String(activeUntil.timeIntervalSince1970),
+                "bypassedForMissingReclaim": "true",
+                "scopes": missingMemberReclaimScopes.map(\.description).sorted().joined(separator: ",")
+            ]))
         }
         let rulePlacements = evaluateRules(in: snapshot)
         if rulePlacements > 0 {
@@ -170,38 +202,37 @@ public final class LayoutMaintainer {
 
         if let focusRestore = restoreFocusedActiveStageIfNeeded(
             in: snapshot,
-            settlingLayoutScopes: settlingLayoutScopes
+            observedFrames: observedFramesForChurn
         ) {
             return focusRestore
         }
 
-        let reanchoredFullscreenSized = reanchorScreenDominantFullscreenSizedWindows(in: snapshot)
-        if reanchoredFullscreenSized > 0 {
-            lastObservedFrames = scopedFrames(in: service.snapshot(followFocus: false))
+        let reanchoredZoomed = reanchorShiftedZoomedWindows(in: snapshot)
+        if reanchoredZoomed > 0 {
             events.append(RoadieEvent(type: "fullscreen_sized_windows_reanchored", details: [
-                "applied": String(reanchoredFullscreenSized)
+                "applied": String(reanchoredZoomed)
             ]))
-            return MaintenanceTick(commands: reanchoredFullscreenSized, applied: reanchoredFullscreenSized, clamped: 0, failed: 0)
+            return MaintenanceTick(commands: reanchoredZoomed, applied: reanchoredZoomed, clamped: 0, failed: 0)
         }
 
         let hiddenFullscreenSiblings = hideActiveStageSiblingsOfFullscreenWindows(in: snapshot)
         if hiddenFullscreenSiblings > 0 {
-            lastObservedFrames = scopedFrames(in: service.snapshot(followFocus: false))
             events.append(RoadieEvent(type: "fullscreen_stage_siblings_hidden", details: [
                 "applied": String(hiddenFullscreenSiblings)
             ]))
             return MaintenanceTick(commands: hiddenFullscreenSiblings, applied: hiddenFullscreenSiblings, clamped: 0, failed: 0)
         }
 
-        let activeProtectedFullscreenScopes = Set(fullscreenLikeEntries(in: snapshot, nativeOnly: true).compactMap { item -> StageScope? in
-            guard let scope = item.entry.scope,
-                  snapshot.state.activeScope(on: scope.displayID) == scope
-            else { return nil }
-            return scope
-        })
-        if !activeProtectedFullscreenScopes.isEmpty {
-            lastObservedFrames = scopedFrames(in: snapshot)
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        // Plein écran natif ou zoom de commande : seul son scope est exclu (FR-016).
+        let fullscreenScopes = Set(tickFullscreen.compactMap(\.entry.scope))
+        if !fullscreenScopes.isEmpty {
+            tickExcludedScopes.formUnion(fullscreenScopes)
+            observe(observedFramesForChurn, scopes: fullscreenScopes, in: snapshot)
+            handleFullscreenScopeChanges(
+                in: snapshot,
+                changedWindowIDs: changedWindowIDsForChurn,
+                fullscreenScopes: fullscreenScopes
+            )
         }
 
         let hiddenInactive = hideInactiveStageWindows(in: snapshot)
@@ -211,17 +242,20 @@ public final class LayoutMaintainer {
         }
 
         let observedFrames = observedFramesForChurn
-        let changedWindowIDs = changedWindowIDsForChurn
+        let changedWindowIDs = windowIDs(changedWindowIDsForChurn, outside: tickExcludedScopes, in: snapshot)
+        let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: tickExcludedScopes, in: snapshot)
+        if unexcludedPriorityWindowIDs != priorityWindowIDs {
+            priorityWindowIDs = unexcludedPriorityWindowIDs
+            if priorityWindowIDs.isEmpty {
+                manualResizeApplyAfter = nil
+            }
+        }
         let now = now()
         let cutoff = now.addingTimeInterval(-commandIntentHoldSeconds)
 
         if !changedWindowIDs.isEmpty {
             if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
                 lastObservedFrames = observedFrames
-                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            }
-
-            if suppressFullscreenLikeChanges(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
             }
 
@@ -232,23 +266,11 @@ public final class LayoutMaintainer {
                 return tick
             }
 
-            let settlingChangedScopes = activeTiledScopes(
-                for: changedWindowIDs,
-                in: snapshot
-            ).intersection(settlingLayoutScopes)
-            if !settlingChangedScopes.isEmpty {
-                priorityWindowIDs = []
-                manualResizeApplyAfter = nil
-                lastObservedFrames = observedFrames
-                appendStageMembershipSettlingEvent(scopes: settlingChangedScopes)
-                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            }
-
             let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)
             if !modeledScopes.isEmpty {
                 priorityWindowIDs = []
                 manualResizeApplyAfter = nil
-                let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: [])
+                let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: tickExcludedScopes)
                 events.append(RoadieEvent(type: "external_geometry_snapped_to_layout_model", details: [
                     "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
                     "scopes": modeledScopes.map(\.description).sorted().joined(separator: ","),
@@ -280,16 +302,8 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
         }
 
-        if let tick = reconcileStableVisibleDisplayDrift(in: snapshot) {
+        if let tick = reconcileStableVisibleDisplayDrift(in: snapshot, excluding: tickExcludedScopes) {
             return tick
-        }
-
-        if !settlingLayoutScopes.isEmpty {
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-            lastObservedFrames = observedFrames
-            appendStageMembershipSettlingEvent(scopes: settlingLayoutScopes)
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
 
         if let manualResizeApplyAfter, now < manualResizeApplyAfter {
@@ -301,7 +315,9 @@ public final class LayoutMaintainer {
         let commandProtectedScopes = priorityWindowIDs.isEmpty
             ? recentCommandScopes(in: snapshot, since: cutoff, now: now)
             : []
+        // Un scope exclu (plein écran, stabilisation) garde son intent : pas de contrôle de dérive.
         let strictCommandProtectedScopes = strictAuthoritativeScopes(commandProtectedScopes, in: snapshot)
+            .subtracting(tickExcludedScopes)
         if !strictCommandProtectedScopes.isEmpty {
             let driftedScopes = driftedCommandScopes(strictCommandProtectedScopes, frames: observedFrames)
             if !driftedScopes.isEmpty {
@@ -313,7 +329,7 @@ public final class LayoutMaintainer {
                 let tick = applyPlan(
                     from: snapshot,
                     observedFrames: observedFrames,
-                    excluding: remainingProtectedScopes.union(settlingLayoutScopes)
+                    excluding: remainingProtectedScopes.union(tickExcludedScopes)
                 )
                 events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
                     "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
@@ -328,7 +344,7 @@ public final class LayoutMaintainer {
             let tick = applyPlan(
                 from: snapshot,
                 observedFrames: observedFrames,
-                excluding: strictCommandProtectedScopes.union(settlingLayoutScopes),
+                excluding: strictCommandProtectedScopes.union(tickExcludedScopes),
                 updateBaselineWhenEmpty: false
             )
             events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
@@ -345,7 +361,7 @@ public final class LayoutMaintainer {
             let protectedScopes = strictAuthoritativeScopes(
                 recentCommandScopes(in: snapshot, since: cutoff, now: now),
                 in: snapshot
-            )
+            ).subtracting(tickExcludedScopes)
             let driftedScopes = driftedCommandScopes(protectedScopes, frames: observedFrames)
             if !driftedScopes.isEmpty {
                 for scope in driftedScopes {
@@ -356,7 +372,7 @@ public final class LayoutMaintainer {
                 let tick = applyPlan(
                     from: snapshot,
                     observedFrames: observedFrames,
-                    excluding: remainingProtectedScopes.union(settlingLayoutScopes)
+                    excluding: remainingProtectedScopes.union(tickExcludedScopes)
                 )
                 events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
                     "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
@@ -369,7 +385,7 @@ public final class LayoutMaintainer {
             return applyPlan(
                 from: snapshot,
                 observedFrames: observedFrames,
-                excluding: protectedScopes.union(settlingLayoutScopes),
+                excluding: protectedScopes.union(tickExcludedScopes),
                 updateBaselineWhenEmpty: false
             )
         }
@@ -381,13 +397,13 @@ public final class LayoutMaintainer {
         let planningSnapshot = snapshotExcludingGrowthClampedWindows(repairedPlanningSnapshot ?? snapshot)
         let planningObservedFrames = repairedPlanningSnapshot.map { scopedFrames(in: $0) } ?? observedFrames
         let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
+            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
             snapshot: planningSnapshot
         )
         let protectedMutableScopes = priorityWindowIDs.isEmpty
             ? stableVisibleMutableBspScopes(in: planningSnapshot)
             : []
-        let protectedLayoutScopes = protectedMutableScopes.union(settlingLayoutScopes)
+        let protectedLayoutScopes = protectedMutableScopes.union(tickExcludedScopes)
         lastObservedFrames = planningObservedFrames
         let windowsByID = Dictionary(uniqueKeysWithValues: planningSnapshot.windows.map { ($0.window.id, $0) })
         let filteredPlan = ApplyPlan(commands: plan.commands.filter { command in
@@ -400,54 +416,25 @@ public final class LayoutMaintainer {
                 suppressed: plan.commands.count - filteredPlan.commands.count
             )
         }
-        if !settlingLayoutScopes.isEmpty && filteredPlan.commands.count != plan.commands.count {
-            appendStageMembershipSettlingEvent(scopes: settlingLayoutScopes)
-        }
         guard !filteredPlan.commands.isEmpty else {
-            persistCurrentLayoutIntents(in: planningSnapshot)
+            persistCurrentLayoutIntents(in: planningSnapshot, excluding: tickExcludedScopes)
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
-        var result = service.apply(filteredPlan)
-        result = stabilizeClampedPositions(result, from: filteredPlan, in: planningSnapshot)
-        let repairPlan = clampedSiblingRepairPlan(from: result, in: planningSnapshot)
-        if !repairPlan.commands.isEmpty {
-            var repairResult = service.apply(repairPlan)
-            repairResult = stabilizeClampedPositions(repairResult, from: repairPlan, in: planningSnapshot)
-            result = result.merged(with: repairResult)
-            events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: [
-                "commands": String(repairPlan.commands.count),
-                "windowIDs": repairPlan.commands
-                    .map { String($0.window.id.rawValue) }
-                    .sorted()
-                    .joined(separator: ",")
-                ]))
+        let application = applyRepairingClamps(filteredPlan, in: planningSnapshot)
+        if application.result.clamped == 0 && application.result.failed == 0 {
+            persistLayoutIntent(in: planningSnapshot, result: application.result)
         }
-        let isolated = isolateFocusedWindowInInfeasibleClampedScopes(from: result, in: planningSnapshot)
-        if result.clamped == 0 && result.failed == 0 {
-            persistLayoutIntent(in: planningSnapshot, result: result)
-        }
-        if result.applied > 0 || result.clamped > 0 || result.failed > 0 {
-            lastMutableBspSuppressionSignature = nil
-        }
-        record(result, from: ApplyPlan(commands: filteredPlan.commands + repairPlan.commands))
         events.append(RoadieEvent(type: "layout_apply", details: [
-            "commands": String(filteredPlan.commands.count + repairPlan.commands.count + isolated),
-            "applied": String(result.applied + isolated),
-            "clamped": String(result.clamped),
-            "failed": String(result.failed),
+            "commands": String(application.commands),
+            "applied": String(application.result.applied),
+            "clamped": String(application.result.clamped),
+            "failed": String(application.result.failed),
             "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ",")
         ]))
-        appendItemEvents(result)
-        let appliedFrames = framesAfterApplying(result, fallback: planningObservedFrames)
         priorityWindowIDs = []
         manualResizeApplyAfter = nil
-        lastObservedFrames = appliedFrames
-        return MaintenanceTick(
-            commands: filteredPlan.commands.count + isolated,
-            applied: result.applied + isolated,
-            clamped: result.clamped,
-            failed: result.failed
-        )
+        lastObservedFrames = framesAfterApplying(application.result, fallback: planningObservedFrames)
+        return application.tick
     }
 
     private func applyPlan(
@@ -459,7 +446,7 @@ public final class LayoutMaintainer {
         let planningSnapshot = snapshotExcludingGrowthClampedWindows(snapshot)
         let windowsByID = Dictionary(uniqueKeysWithValues: planningSnapshot.windows.map { ($0.window.id, $0) })
         let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
+            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
             snapshot: planningSnapshot
         )
         let filtered = ApplyPlan(commands: plan.commands.filter { command in
@@ -472,35 +459,113 @@ public final class LayoutMaintainer {
             }
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
-        lastObservedFrames = observedFrames
-        var result = service.apply(filtered)
-        result = stabilizeClampedPositions(result, from: filtered, in: planningSnapshot)
-        let repairPlan = clampedSiblingRepairPlan(from: result, in: planningSnapshot)
+        let application = applyRepairingClamps(filtered, in: planningSnapshot)
+        if application.result.clamped == 0 && application.result.failed == 0 {
+            persistLayoutIntent(in: planningSnapshot, result: application.result)
+        }
+        lastObservedFrames = framesAfterApplying(application.result, fallback: observedFrames)
+        return application.tick
+    }
+
+    /// Résultat du bloc « appliquer, réparer, isoler, émettre ».
+    private struct PlanApplication {
+        var result: ApplyResult
+        /// Commandes envoyées : plan, réparation des voisines et résolution des scopes infaisables.
+        var commands: Int
+
+        var tick: MaintenanceTick {
+            MaintenanceTick(commands: commands, applied: result.applied, clamped: result.clamped, failed: result.failed)
+        }
+    }
+
+    /// Bloc unique « appliquer, réparer, isoler, émettre » (FR-040) : applique le plan, recale les
+    /// fenêtres clampées, replace leurs voisines, résout les scopes infaisables, mémorise les refus
+    /// et émet les événements par fenêtre.
+    private func applyRepairingClamps(
+        _ plan: ApplyPlan,
+        in snapshot: DaemonSnapshot,
+        source: String? = nil
+    ) -> PlanApplication {
+        var result = stabilizeClampedPositions(service.apply(plan), from: plan, in: snapshot)
+        let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot)
         if !repairPlan.commands.isEmpty {
-            var repairResult = service.apply(repairPlan)
-            repairResult = stabilizeClampedPositions(repairResult, from: repairPlan, in: planningSnapshot)
+            let repairResult = stabilizeClampedPositions(service.apply(repairPlan), from: repairPlan, in: snapshot)
             result = result.merged(with: repairResult)
-            events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: [
+            var details = [
                 "commands": String(repairPlan.commands.count),
                 "windowIDs": repairPlan.commands
                     .map { String($0.window.id.rawValue) }
                     .sorted()
                     .joined(separator: ",")
-                ]))
+            ]
+            if let source {
+                details["source"] = source
+            }
+            events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: details))
         }
-        let isolated = isolateFocusedWindowInInfeasibleClampedScopes(from: result, in: planningSnapshot)
-        if result.clamped == 0 && result.failed == 0 {
-            persistLayoutIntent(in: planningSnapshot, result: result)
-        }
-        record(result, from: ApplyPlan(commands: filtered.commands + repairPlan.commands))
+        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot)
+        result = result.merged(with: resolution.result)
+        let commands = plan.commands + repairPlan.commands + resolution.commands
+        record(result, from: ApplyPlan(commands: commands))
         appendItemEvents(result)
-        lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
-        return MaintenanceTick(
-            commands: filtered.commands.count + repairPlan.commands.count + isolated,
-            applied: result.applied + isolated,
-            clamped: result.clamped,
-            failed: result.failed
-        )
+        if result.applied > 0 || result.clamped > 0 || result.failed > 0 {
+            lastMutableBspSuppressionSignature = nil
+        }
+        result.applied += resolution.hidden
+        return PlanApplication(result: result, commands: commands.count + resolution.hidden)
+    }
+
+    /// Plan du service sans les écrans dont le scope actif est exclu du tick : le planificateur ne
+    /// touche ni les fenêtres ni les intents de ces scopes (R6). O(d + plan).
+    private func plannedCommands(
+        from snapshot: DaemonSnapshot,
+        priorityWindowIDs: Set<WindowID> = []
+    ) -> ApplyPlan {
+        var planning = snapshot
+        if !tickExcludedScopes.isEmpty {
+            planning.displays.removeAll { display in
+                snapshot.state.activeScope(on: display.id).map { tickExcludedScopes.contains($0) } ?? false
+            }
+        }
+        return service.applyPlan(from: planning, priorityWindowIDs: priorityWindowIDs)
+    }
+
+    /// Met à jour la référence d'observation pour les seules fenêtres des scopes donnés (R6).
+    /// Sans référence préalable, la référence complète est posée. O(n).
+    private func observe(_ frames: [UInt32: Rect], scopes: Set<StageScope>, in snapshot: DaemonSnapshot) {
+        guard var observed = lastObservedFrames else {
+            lastObservedFrames = frames
+            return
+        }
+        for entry in snapshot.windows {
+            guard let scope = entry.scope, scopes.contains(scope) else { continue }
+            observed[entry.window.id.rawValue] = frames[entry.window.id.rawValue]
+        }
+        lastObservedFrames = observed
+    }
+
+    /// Note dans la référence d'observation un cadre posé par Roadie, pour ne pas le prendre
+    /// au tick suivant pour un changement manuel.
+    private func recordObservedFrame(_ frame: CGRect, of windowID: WindowID) {
+        lastObservedFrames?[windowID.rawValue] = Rect(frame)
+    }
+
+    private func activeScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+        Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) })
+    }
+
+    /// Fenêtres de `windowIDs` dont le scope n'est pas exclu. O(n).
+    private func windowIDs(
+        _ windowIDs: Set<WindowID>,
+        outside excludedScopes: Set<StageScope>,
+        in snapshot: DaemonSnapshot
+    ) -> Set<WindowID> {
+        guard !windowIDs.isEmpty, !excludedScopes.isEmpty else { return windowIDs }
+        let excludedWindowIDs = Set(snapshot.windows.compactMap { entry -> WindowID? in
+            guard let scope = entry.scope, excludedScopes.contains(scope) else { return nil }
+            return entry.window.id
+        })
+        return windowIDs.subtracting(excludedWindowIDs)
     }
 
     public func run(maxTicks: Int? = nil, onTick: (MaintenanceTick) -> Void = { _ in }) {
@@ -513,8 +578,17 @@ public final class LayoutMaintainer {
         }
     }
 
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.processName.contains("xctest")
+            || ProcessInfo.processInfo.processName.contains("PackageTests")
+            || Bundle.main.bundlePath.contains(".xctest")
+            || CommandLine.arguments.contains { $0.contains(".xctest") || $0.contains("PackageTests") }
+    }
+
     public static func defaultRuleEngine() -> WindowRuleEngine? {
-        guard let config = try? RoadieConfigLoader.load(), !config.rules.isEmpty else {
+        let config = ConfigReloadService.shared.currentConfig()
+        guard !config.rules.isEmpty else {
             return nil
         }
         return WindowRuleEngine(rules: config.rules)
@@ -791,7 +865,7 @@ public final class LayoutMaintainer {
         if !destination.follow {
             let activeScope = state.activeScopeEquivalent(on: destination.scope.displayID)
             if activeScope != destination.scope {
-                _ = service.setFrame(hiddenFrame(for: entry.window.frame.cgRect, on: destination.display, among: snapshot.displays), of: entry.window)
+                _ = service.setFrame(HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: destination.display, among: snapshot.displays), of: entry.window)
             }
         }
 
@@ -871,7 +945,7 @@ public final class LayoutMaintainer {
 
         let updatedSnapshot = service.snapshot(followFocus: false)
         let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: Set(adopted.map(\.window.id))),
+            in: plannedCommands(from: updatedSnapshot, priorityWindowIDs: Set(adopted.map(\.window.id))),
             snapshot: updatedSnapshot
         )
         let result = service.apply(plan)
@@ -1020,33 +1094,42 @@ public final class LayoutMaintainer {
 
     private func suppressKnownUnmovableFrames(in plan: ApplyPlan, snapshot: DaemonSnapshot) -> ApplyPlan {
         let cutoff = now().addingTimeInterval(-max(3, intervalSeconds * 8))
-        let fullscreenItems = fullscreenLikeEntries(in: snapshot, nativeOnly: true)
-        let fullscreenWindowIDs = Set(fullscreenItems.map(\.entry.window.id))
-        let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
+        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
+        let fullscreenScopes = Set(tickFullscreen.compactMap(\.entry.scope))
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-        return ApplyPlan(commands: plan.commands.filter { command in
-            if fullscreenWindowIDs.contains(command.window.id) {
-                return false
+        return ApplyPlan(commands: plan.commands.compactMap { planned -> ApplyCommand? in
+            if fullscreenWindowIDs.contains(planned.window.id) {
+                return nil
             }
-            if let scope = windowsByID[command.window.id]?.scope,
+            if let scope = windowsByID[planned.window.id]?.scope,
                fullscreenScopes.contains(scope) {
-                return false
+                return nil
             }
-            if let known = clampedFrames[command.window.id.rawValue],
-               known.matches(command: command) {
-                return false
+            var command = planned
+            if let known = clampedFrames[command.window.id.rawValue] {
+                guard let adjusted = known.adjusted(command) else { return nil }
+                command = adjusted
             }
             if let known = failedFrames[command.window.id.rawValue],
                known.matches(command: command) {
-                return false
+                return nil
             }
             if let known = revertedAppliedFrames[command.window.id.rawValue],
                known.appliedAt >= cutoff,
                known.matches(command: command) {
-                return false
+                return nil
             }
-            return true
+            return command
         })
+    }
+
+    /// Oublie les refus de taille et les échecs de plus de 30 s, et ceux des fenêtres disparues
+    /// (FR-004). O(r) — r refus mémorisés.
+    private func forgetExpiredRefusals(liveWindowIDs: Set<UInt32>, now: Date) {
+        let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
+        clampedFrames = clampedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
     }
 
     private func snapshotExcludingGrowthClampedWindows(_ snapshot: DaemonSnapshot) -> DaemonSnapshot {
@@ -1076,65 +1159,65 @@ public final class LayoutMaintainer {
         return copy
     }
 
-    private func suppressFullscreenLikeChanges(
+    /// Changements observés dans un scope en plein écran : le scope est exclu, ils sont seulement
+    /// journalisés. Une entrée en plein écran natif invalide l'intent de son scope ; un zoom de
+    /// commande garde le sien, qui porte le marqueur `zoomedWindowID`.
+    private func handleFullscreenScopeChanges(
         in snapshot: DaemonSnapshot,
-        frames: [UInt32: Rect],
-        changedWindowIDs: Set<WindowID>
-    ) -> Bool {
-        let entries = fullscreenLikeEntries(in: snapshot, windowIDs: changedWindowIDs, nativeOnly: true)
-        if entries.isEmpty {
-            let protectedScopes = Set(fullscreenLikeEntries(in: snapshot, nativeOnly: true).compactMap(\.entry.scope))
-            guard !protectedScopes.isEmpty else { return false }
-            let changedProtectedScopeEntries = snapshot.windows.filter { entry in
-                guard changedWindowIDs.contains(entry.window.id),
-                      let scope = entry.scope
-                else { return false }
-                return protectedScopes.contains(scope)
-            }
-            guard !changedProtectedScopeEntries.isEmpty else { return false }
-
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-            lastObservedFrames = frames
-            events.append(RoadieEvent(type: "fullscreen_scope_change_suppressed", details: [
-                "windowIDs": changedProtectedScopeEntries
-                    .map { String($0.window.id.rawValue) }
-                    .sorted()
-                    .joined(separator: ","),
-                "scopes": protectedScopes
-                    .map(\.description)
-                    .sorted()
-                    .joined(separator: ",")
-            ]))
-            return true
+        changedWindowIDs: Set<WindowID>,
+        fullscreenScopes: Set<StageScope>
+    ) {
+        guard !changedWindowIDs.isEmpty else { return }
+        let changedFullscreen = tickFullscreen.filter { changedWindowIDs.contains($0.entry.window.id) }
+        let nativeWindowIDs = Set(changedFullscreen.compactMap { item -> WindowID? in
+            item.entry.window.furniture?.isNativeFullscreen == true ? item.entry.window.id : nil
+        })
+        if !nativeWindowIDs.isEmpty {
+            removeLayoutIntents(for: nativeWindowIDs, in: snapshot)
         }
-        removeLayoutIntents(for: Set(entries.map(\.entry.window.id)), in: snapshot)
-        priorityWindowIDs = []
-        manualResizeApplyAfter = nil
-        lastObservedFrames = frames
-        for item in entries {
+        for item in changedFullscreen {
             events.append(RoadieEvent(type: "fullscreen_layout_suppressed", scope: item.entry.scope, details: [
                 "windowID": String(item.entry.window.id.rawValue),
                 "app": item.entry.window.appName,
                 "displayID": item.display.id.rawValue
             ]))
         }
-        return true
+        let fullscreenWindowIDs = Set(changedFullscreen.map(\.entry.window.id))
+        let changedSiblingIDs = snapshot.windows.compactMap { entry -> String? in
+            guard changedWindowIDs.contains(entry.window.id),
+                  !fullscreenWindowIDs.contains(entry.window.id),
+                  let scope = entry.scope,
+                  fullscreenScopes.contains(scope)
+            else { return nil }
+            return String(entry.window.id.rawValue)
+        }
+        guard !changedSiblingIDs.isEmpty else { return }
+        events.append(RoadieEvent(type: "fullscreen_scope_change_suppressed", details: [
+            "windowIDs": changedSiblingIDs.sorted().joined(separator: ","),
+            "scopes": fullscreenScopes.map(\.description).sorted().joined(separator: ",")
+        ]))
     }
 
-    private func fullscreenLikeEntries(
-        in snapshot: DaemonSnapshot,
-        windowIDs: Set<WindowID>? = nil,
-        nativeOnly: Bool = false
-    ) -> [(entry: ScopedWindowSnapshot, display: DisplaySnapshot)] {
-        snapshot.windows.compactMap { entry in
+    /// Fenêtres en plein écran : plein écran natif signalé par macOS, ou fenêtre zoomée par une
+    /// commande Roadie (`LayoutIntent.zoomedWindowID` de l'intent de commande de son scope).
+    /// La taille seule ne compte jamais (FR-001, R5).
+    // O(n + s) — n fenêtres, s scopes (une lecture d'intent par scope).
+    private func fullscreenEntries(in snapshot: DaemonSnapshot) -> [(entry: ScopedWindowSnapshot, display: DisplaySnapshot)] {
+        var zoomedWindowIDs: [StageScope: WindowID] = [:]
+        var readScopes: Set<StageScope> = []
+        return snapshot.windows.compactMap { entry in
             guard entry.window.isTileCandidate,
                   entry.window.isOnScreen,
-                  windowIDs.map({ $0.contains(entry.window.id) }) ?? true,
-                  let display = display(for: entry, in: snapshot),
-                  isFullscreenLike(entry, on: display, nativeOnly: nativeOnly)
+                  let display = display(for: entry, in: snapshot)
             else { return nil }
-            return (entry, display)
+            if entry.window.furniture?.isNativeFullscreen == true {
+                return (entry, display)
+            }
+            guard let scope = entry.scope else { return nil }
+            if readScopes.insert(scope).inserted {
+                zoomedWindowIDs[scope] = service.commandLayoutIntent(scope: scope)?.zoomedWindowID
+            }
+            return zoomedWindowIDs[scope] == entry.window.id ? (entry, display) : nil
         }
     }
 
@@ -1147,61 +1230,11 @@ public final class LayoutMaintainer {
         return snapshot.displays.first { $0.frame.cgRect.contains(center) }
     }
 
-    private func isFullscreenLike(
-        _ entry: ScopedWindowSnapshot,
-        on display: DisplaySnapshot,
-        nativeOnly: Bool = false
-    ) -> Bool {
-        if entry.window.furniture?.isNativeFullscreen == true {
-            return true
-        }
-        guard !nativeOnly else {
-            return isCommandFullscreenLike(entry, on: display)
-        }
-        let frame = entry.window.frame.cgRect
-        if isMaximizedLike(frame, on: display) {
-            return true
-        }
-        guard let known = clampedFrames[entry.window.id.rawValue] else {
-            return isScreenDominantFullscreenSized(frame, on: display)
-        }
-        return clampedFrameIsFullscreenSized(known, current: frame, on: display)
-    }
-
-    private func isCommandFullscreenLike(_ entry: ScopedWindowSnapshot, on display: DisplaySnapshot) -> Bool {
-        guard let scope = entry.scope,
-              let intent = service.commandLayoutIntent(scope: scope),
-              intent.windowIDs.contains(entry.window.id)
-        else { return false }
-
-        let frame = entry.window.frame.cgRect
-        return frameSizeIsClose(frame, display.visibleFrame.cgRect, tolerance: 48)
-            || frameSizeIsClose(frame, display.frame.cgRect, tolerance: 48)
-    }
-
-    private func isMaximizedLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
-        framesAreClose(frame, display.visibleFrame.cgRect, tolerance: 48)
-            || framesAreClose(frame, display.frame.cgRect, tolerance: 48)
-    }
-
-    private func clampedFrameIsFullscreenSized(
-        _ known: ClampedFrame,
-        current: CGRect,
-        on display: DisplaySnapshot
-    ) -> Bool {
-        let actual = known.actual.cgRect
-        let currentStillMatchesClamp = abs(current.width - actual.width) <= 24
-            && abs(current.height - actual.height) <= 24
-        guard currentStillMatchesClamp else { return false }
-        return frameSizeIsClose(actual, display.visibleFrame.cgRect, tolerance: 48)
-            || frameSizeIsClose(actual, display.frame.cgRect, tolerance: 48)
-    }
-
     private func isScreenDominantFullscreenSized(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
         let visible = display.visibleFrame.cgRect
         let displayFrame = display.frame.cgRect
-        guard frameSizeIsClose(frame, visible, tolerance: 48)
-                || frameSizeIsClose(frame, displayFrame, tolerance: 48)
+        guard frameSizeIsClose(frame, visible, tolerance: LayoutTolerance.fullscreenFrame)
+                || frameSizeIsClose(frame, displayFrame, tolerance: LayoutTolerance.fullscreenFrame)
         else { return false }
 
         let overlap = frame.intersection(visible)
@@ -1211,11 +1244,15 @@ public final class LayoutMaintainer {
         return overlapArea / visibleArea >= 0.5
     }
 
+    /// Cible de recalage d'une fenêtre zoomée décalée : sa taille couvre encore l'écran mais son
+    /// origine a glissé. nil si elle est déjà en place, à la tolérance de cadre près.
     private func fullscreenSizedReanchorTarget(
         for frame: CGRect,
         on display: DisplaySnapshot
     ) -> CGRect? {
-        guard !isMaximizedLike(frame, on: display),
+        let tolerance = LayoutTolerance.fullscreenFrame
+        guard !framesAreClose(frame, display.visibleFrame.cgRect, tolerance: tolerance),
+              !framesAreClose(frame, display.frame.cgRect, tolerance: tolerance),
               isScreenDominantFullscreenSized(frame, on: display)
         else { return nil }
 
@@ -1229,9 +1266,9 @@ public final class LayoutMaintainer {
         let visible = display.visibleFrame.cgRect
         let displayFrame = display.frame.cgRect
         let target: CGRect
-        if frameSizeIsClose(frame, visible, tolerance: 48) {
+        if frameSizeIsClose(frame, visible, tolerance: LayoutTolerance.fullscreenFrame) {
             target = visible
-        } else if frameSizeIsClose(frame, displayFrame, tolerance: 48) {
+        } else if frameSizeIsClose(frame, displayFrame, tolerance: LayoutTolerance.fullscreenFrame) {
             target = displayFrame
         } else {
             return nil
@@ -1260,7 +1297,11 @@ public final class LayoutMaintainer {
             switch item.status {
             case .clamped:
                 if let actual = item.actual {
-                    clampedFrames[item.windowID.rawValue] = ClampedFrame(requested: item.requested, actual: actual)
+                    clampedFrames[item.windowID.rawValue] = ClampedFrame(
+                        requested: item.requested,
+                        actual: actual,
+                        recordedAt: now()
+                    )
                 }
                 revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
             case .applied:
@@ -1281,7 +1322,7 @@ public final class LayoutMaintainer {
                     failedFrames[item.windowID.rawValue] = FailedFrame(
                         requested: item.requested,
                         observedAtFailure: command.window.frame,
-                        failedAt: now()
+                        recordedAt: now()
                     )
                 }
                 revertedAppliedFrames.removeValue(forKey: item.windowID.rawValue)
@@ -1430,12 +1471,19 @@ public final class LayoutMaintainer {
         return ApplyPlan(commands: commands)
     }
 
-    private func isolateFocusedWindowInInfeasibleClampedScopes(
+    /// Scopes actifs où au moins deux fenêtres clampées se chevauchent ou débordent encore.
+    /// Replanifie avec les tailles minimales connues ; garde la fenêtre focalisée et cache les
+    /// autres seulement si aucune disposition n'existe (dernier recours journalisé, FR-003).
+    // O(s · n³) au pire — s scopes concernés, n fenêtres par scope (n petit).
+    private func resolveInfeasibleClampedScopes(
         from result: ApplyResult,
         in snapshot: DaemonSnapshot
-    ) -> Int {
+    ) -> (result: ApplyResult, commands: [ApplyCommand], hidden: Int) {
+        var resolution = ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: [])
+        var commands: [ApplyCommand] = []
+        var hidden = 0
         let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
-        guard clampedItems.count >= 2 else { return 0 }
+        guard clampedItems.count >= 2 else { return (resolution, commands, hidden) }
 
         let entriesByID = snapshot.windows.reduce(into: [WindowID: ScopedWindowSnapshot]()) { result, entry in
             result[entry.window.id] = entry
@@ -1443,8 +1491,12 @@ public final class LayoutMaintainer {
         let clampedScopes = Dictionary(grouping: clampedItems) { item in
             entriesByID[item.windowID]?.scope
         }
+        let frames = framesAfterApplying(result, fallback: scopedFrames(in: snapshot))
+        let requestedFrames = result.items.reduce(into: [WindowID: CGRect]()) { frames, item in
+            frames[item.windowID] = item.requested.cgRect
+        }
+        let innerGap = CGFloat(service.innerGap())
 
-        var applied = 0
         for (optionalScope, scopedClampedItems) in clampedScopes {
             guard let scope = optionalScope,
                   scopedClampedItems.count >= 2,
@@ -1460,28 +1512,77 @@ public final class LayoutMaintainer {
                     && entry.window.isOnScreen
                     && !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
             }
-            guard entries.count > 1 else { continue }
+            let entryIDs = Set(entries.map(\.window.id))
+            let orderedIDs = stage.windowIDs.filter { entryIDs.contains($0) }
+            guard orderedIDs.count > 1 else { continue }
 
-            let frames = framesAfterApplying(result, fallback: scopedFrames(in: snapshot))
-            let liveFrames = entries.reduce(into: [WindowID: CGRect]()) { result, entry in
-                if let frame = frames[entry.window.id.rawValue]?.cgRect {
-                    result[entry.window.id] = frame
-                } else {
-                    result[entry.window.id] = entry.window.frame.cgRect
+            var liveFrames = entries.reduce(into: [WindowID: CGRect]()) { result, entry in
+                result[entry.window.id] = frames[entry.window.id.rawValue]?.cgRect ?? entry.window.frame.cgRect
+            }
+            let visibleFrame = display.visibleFrame.cgRect
+            guard framesConflict(orderedIDs.compactMap { liveFrames[$0] }, in: visibleFrame) else { continue }
+
+            // Conteneur du plan : union des cadres demandés, marges extérieures déjà appliquées.
+            let container = orderedIDs
+                .compactMap { requestedFrames[$0] ?? liveFrames[$0] }
+                .reduce(CGRect.null) { $0.union($1) }
+                .intersection(visibleFrame)
+            var minimumSizes = orderedIDs.reduce(into: [WindowID: CGSize]()) { sizes, id in
+                sizes[id] = knownMinimumSize(of: id, in: result)
+            }
+            // Deux essais au plus : le premier peut révéler de nouveaux minimums.
+            var arranged = false
+            for _ in 0..<2 {
+                guard let targets = Self.minimumSizeArrangement(
+                    orderedIDs.map { minimumSizes[$0] ?? .zero },
+                    in: container,
+                    innerGap: innerGap
+                ) else { break }
+                let plan = ApplyPlan(commands: zip(orderedIDs, targets).compactMap { id, target -> ApplyCommand? in
+                    guard let window = entriesByID[id]?.window,
+                          let live = liveFrames[id],
+                          !Rect(live).isClose(to: Rect(target), positionTolerance: 2, sizeTolerance: 2)
+                    else { return nil }
+                    return ApplyCommand(window: window, frame: Rect(target))
+                })
+                guard !plan.commands.isEmpty else { break }
+                let attempt = service.apply(plan)
+                resolution = resolution.merged(with: attempt)
+                commands += plan.commands
+                for item in attempt.items where item.status != .failed {
+                    liveFrames[item.windowID] = (item.actual ?? item.requested).cgRect
+                    if item.status == .clamped, let actual = item.actual {
+                        minimumSizes[item.windowID] = Self.largest(
+                            minimumSizes[item.windowID] ?? .zero,
+                            Self.minimumSize(requested: item.requested, actual: actual)
+                        )
+                    }
+                }
+                if !framesConflict(orderedIDs.compactMap { liveFrames[$0] }, in: visibleFrame) {
+                    arranged = true
+                    break
                 }
             }
-            guard clampedFramesCannotShareContainer(
-                liveFrames.map(\.value),
-                visibleFrame: display.visibleFrame.cgRect,
-                innerGap: CGFloat(service.innerGap())
-            ) else { continue }
+
+            if arranged {
+                // L'intent garde la disposition trouvée : le plan suivant la rejoue au lieu de la défaire.
+                let placements = orderedIDs.reduce(into: [WindowID: Rect]()) { placements, id in
+                    placements[id] = liveFrames[id].map { Rect($0) }
+                }
+                service.saveLayoutIntent(scope: scope, windowIDs: orderedIDs, placements: placements)
+                events.append(RoadieEvent(type: "layout_clamped_scope_rearranged", scope: scope, details: [
+                    "windowIDs": orderedIDs.map { String($0.rawValue) }.joined(separator: ","),
+                    "reason": "known_minimums_fit_visible_frame"
+                ]))
+                continue
+            }
 
             let keepID = focusedWindowIDToKeep(in: entries, snapshot: snapshot)
             var hiddenIDs: [String] = []
             for entry in entries where entry.window.id != keepID {
-                let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+                let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
                 if service.setFrame(frame, of: entry.window) != nil {
-                    applied += 1
+                    hidden += 1
                     hiddenIDs.append(String(entry.window.id.rawValue))
                 }
             }
@@ -1493,20 +1594,156 @@ public final class LayoutMaintainer {
             ]))
         }
 
-        return applied
+        return (resolution, commands, hidden)
     }
 
-    private func clampedFramesCannotShareContainer(
-        _ frames: [CGRect],
-        visibleFrame: CGRect,
+    /// Taille minimale connue d'une fenêtre : refus de ce résultat et refus mémorisés. O(r).
+    private func knownMinimumSize(of windowID: WindowID, in result: ApplyResult) -> CGSize {
+        var size = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)
+        if let known = clampedFrames[windowID.rawValue] {
+            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))
+        }
+        for item in result.items where item.windowID == windowID && item.status == .clamped {
+            if let actual = item.actual {
+                size = Self.largest(size, Self.minimumSize(requested: item.requested, actual: actual))
+            }
+        }
+        return size
+    }
+
+    /// Vrai si des cadres se chevauchent ou débordent de la zone visible au-delà de la tolérance
+    /// d'observation. O(n²).
+    private func framesConflict(_ frames: [CGRect], in visibleFrame: CGRect) -> Bool {
+        let tolerance = LayoutTolerance.observedChange
+        let bounds = visibleFrame.insetBy(dx: -tolerance, dy: -tolerance)
+        guard frames.allSatisfy({ bounds.contains($0) }) else { return true }
+        for index in frames.indices {
+            for otherIndex in frames.indices where otherIndex > index {
+                let overlap = frames[index].intersection(frames[otherIndex])
+                if !overlap.isNull, overlap.width > tolerance, overlap.height > tolerance {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Taille minimale révélée par un refus : un axe que l'application a gardé plus grand que la
+    /// demande (rétrécissement refusé) fixe son minimum ; sinon le minimum de l'axe vaut
+    /// `LayoutTolerance.minimumTileSide`.
+    static func minimumSize(requested: Rect, actual: Rect) -> CGSize {
+        func axis(requested: Double, actual: Double) -> CGFloat {
+            actual > requested + LayoutTolerance.clampShrink ? CGFloat(actual) : LayoutTolerance.minimumTileSide
+        }
+        return CGSize(
+            width: axis(requested: requested.width, actual: actual.width),
+            height: axis(requested: requested.height, actual: actual.height)
+        )
+    }
+
+    /// Disposition qui respecte des tailles minimales dans `container` : colonnes de fenêtres
+    /// consécutives, puis rangées. Les fenêtres gardent leur ordre ; l'espace libre est partagé
+    /// pour égaliser les tailles. nil si aucune disposition de ce type n'existe : seul cas où
+    /// Roadie cache des fenêtres (FR-003). Implémentation unique, aussi pour les commandes de stage.
+    // O(n³) au pire — 2n découpages essayés, chacun en O(n²). n = nombre de fenêtres du scope.
+    static func minimumSizeArrangement(
+        _ minimumSizes: [CGSize],
+        in container: CGRect,
         innerGap: CGFloat
-    ) -> Bool {
-        guard frames.count > 1 else { return false }
-        let gapTotal = max(0, innerGap) * CGFloat(frames.count - 1)
-        let horizontalNeeded = frames.reduce(CGFloat(0)) { $0 + $1.width } + gapTotal
-        let verticalNeeded = frames.reduce(CGFloat(0)) { $0 + $1.height } + gapTotal
-        return horizontalNeeded > visibleFrame.width + 16
-            && verticalNeeded > visibleFrame.height + 16
+    ) -> [CGRect]? {
+        guard !minimumSizes.isEmpty else { return [] }
+        guard !container.isNull, container.width > 0, container.height > 0 else { return nil }
+        let gap = max(0, innerGap)
+        // Rejet immédiat : les surfaces minimales ne tiennent pas dans la surface disponible.
+        let minimumArea = minimumSizes.reduce(CGFloat(0)) { $0 + $1.width * $1.height }
+        guard minimumArea <= container.width * container.height else { return nil }
+        let count = minimumSizes.count
+        for groups in stride(from: count, through: 1, by: -1) {
+            if let frames = shelfArrangement(minimumSizes, groups: groups, in: container, gap: gap, transposed: false) {
+                return frames
+            }
+        }
+        for groups in stride(from: 2, to: count, by: 1) {
+            if let frames = shelfArrangement(minimumSizes, groups: groups, in: container, gap: gap, transposed: true) {
+                return frames
+            }
+        }
+        return nil
+    }
+
+    /// `groups` colonnes de fenêtres consécutives, empilées dans chaque colonne ; `transposed`
+    /// échange les axes pour obtenir des rangées. Les dernières colonnes reçoivent une fenêtre de
+    /// plus (maître à gauche, pile à droite). O(n²).
+    private static func shelfArrangement(
+        _ minimumSizes: [CGSize],
+        groups: Int,
+        in container: CGRect,
+        gap: CGFloat,
+        transposed: Bool
+    ) -> [CGRect]? {
+        func flipped(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minY, y: rect.minX, width: rect.height, height: rect.width)
+        }
+        let sizes = transposed ? minimumSizes.map { CGSize(width: $0.height, height: $0.width) } : minimumSizes
+        let box = transposed ? flipped(container) : container
+        let base = sizes.count / groups
+        let longer = sizes.count % groups
+        var columns: [Range<Int>] = []
+        var next = 0
+        for index in 0..<groups {
+            let length = base + (index >= groups - longer ? 1 : 0)
+            columns.append(next..<(next + length))
+            next += length
+        }
+        let columnMinimums = columns.map { column in column.map { sizes[$0].width }.max() ?? 0 }
+        guard let widths = shares(of: box.width - gap * CGFloat(groups - 1), minimums: columnMinimums) else {
+            return nil
+        }
+        var frames = Array(repeating: CGRect.zero, count: sizes.count)
+        var x = box.minX
+        for (columnIndex, column) in columns.enumerated() {
+            guard let heights = shares(
+                of: box.height - gap * CGFloat(column.count - 1),
+                minimums: column.map { sizes[$0].height }
+            ) else { return nil }
+            var y = box.minY
+            for (rowIndex, index) in column.enumerated() {
+                frames[index] = CGRect(x: x, y: y, width: widths[columnIndex], height: heights[rowIndex])
+                y += heights[rowIndex] + gap
+            }
+            x += widths[columnIndex] + gap
+        }
+        return transposed ? frames.map(flipped) : frames
+    }
+
+    /// Parts de `total` aussi égales que possible sans descendre sous les minimums, en points
+    /// entiers (la dernière part reçoit le reste de l'arrondi). nil si les minimums dépassent `total`. O(n²).
+    private static func shares(of total: CGFloat, minimums: [CGFloat]) -> [CGFloat]? {
+        guard !minimums.isEmpty, minimums.reduce(0, +) <= total else { return nil }
+        var shares = minimums
+        var free = Array(minimums.indices)
+        var remaining = total
+        while !free.isEmpty {
+            let equal = remaining / CGFloat(free.count)
+            let pinned = Set(free.filter { minimums[$0] > equal })
+            guard !pinned.isEmpty else {
+                for index in free {
+                    shares[index] = equal
+                }
+                break
+            }
+            for index in pinned {
+                remaining -= minimums[index]
+            }
+            free.removeAll { pinned.contains($0) }
+        }
+        var rounded = shares.map { $0.rounded(.down) }
+        rounded[rounded.count - 1] += max(0, total.rounded(.down) - rounded.reduce(0, +))
+        return rounded
+    }
+
+    private static func largest(_ lhs: CGSize, _ rhs: CGSize) -> CGSize {
+        CGSize(width: max(lhs.width, rhs.width), height: max(lhs.height, rhs.height))
     }
 
     private func focusedWindowIDToKeep(
@@ -1559,7 +1796,7 @@ public final class LayoutMaintainer {
             ))
         }
         return candidates
-            .filter { $0.width >= 120 && $0.height >= 120 }
+            .filter { $0.width >= LayoutTolerance.minimumTileSide && $0.height >= LayoutTolerance.minimumTileSide }
             .max { $0.area < $1.area }?
             .integral
     }
@@ -1578,7 +1815,7 @@ public final class LayoutMaintainer {
         let actualRect = actual.cgRect
         let bounds = fittingBounds(for: actualRect, visible: visible, displayFrame: displayFrame)
 
-        if frameSizeIsClose(actualRect, bounds, tolerance: 48) {
+        if frameSizeIsClose(actualRect, bounds, tolerance: LayoutTolerance.fullscreenFrame) {
             return Rect(x: bounds.minX, y: bounds.minY, width: actual.width, height: actual.height)
         }
 
@@ -1594,8 +1831,8 @@ public final class LayoutMaintainer {
         visible: CGRect,
         displayFrame: CGRect
     ) -> CGRect {
-        if actual.width <= visible.width + 48,
-           actual.height <= visible.height + 48 {
+        if actual.width <= visible.width + LayoutTolerance.fullscreenFrame,
+           actual.height <= visible.height + LayoutTolerance.fullscreenFrame {
             return visible
         }
         return displayFrame
@@ -1661,9 +1898,11 @@ public final class LayoutMaintainer {
         return repaired ? service.snapshot(followFocus: false) : nil
     }
 
-    private func persistCurrentLayoutIntents(in snapshot: DaemonSnapshot) {
+    private func persistCurrentLayoutIntents(in snapshot: DaemonSnapshot, excluding excludedScopes: Set<StageScope>) {
         for display in snapshot.displays {
-            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  !excludedScopes.contains(scope)
+            else { continue }
             guard !service.hasValidLayoutIntent(scope: scope, in: snapshot) else { continue }
             _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: snapshot)
         }
@@ -1710,11 +1949,10 @@ public final class LayoutMaintainer {
 
             let signature = stageMembershipSignature(stage)
             currentSignatures[scope] = signature
+            // Un scope qui vient de devenir actif (changement de stage) n'a pas de signature
+            // précédente : son activation n'est pas un changement de membres (FR-017).
             if let previous = lastActiveTiledStageMembershipSignatures[scope],
                previous != signature {
-                candidateScopes.insert(scope)
-            } else if !lastActiveTiledStageMembershipSignatures.isEmpty,
-                      lastActiveTiledStageMembershipSignatures[scope] == nil {
                 candidateScopes.insert(scope)
             }
 
@@ -1887,11 +2125,12 @@ public final class LayoutMaintainer {
     ) -> MaintenanceTick? {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
         let planned = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: snapshot, priorityWindowIDs: changedWindowIDs),
+            in: plannedCommands(from: snapshot, priorityWindowIDs: changedWindowIDs),
             snapshot: snapshot
         )
         let rawPlan = planByPreservingOrthogonalResizeAxis(
             planned,
+            in: snapshot,
             resizeAxes: resizeAxes,
             windowsByID: windowsByID,
             scopes: scopes
@@ -1950,18 +2189,18 @@ public final class LayoutMaintainer {
 
     private func planByPreservingOrthogonalResizeAxis(
         _ plan: ApplyPlan,
+        in snapshot: DaemonSnapshot,
         resizeAxes: [WindowID: MutableResizeAxes]?,
         windowsByID: [WindowID: ScopedWindowSnapshot],
         scopes: Set<StageScope>
     ) -> ApplyPlan {
-        guard let axis = resizeAxes?.values.first,
-              let previous = lastObservedFrames
-        else { return plan }
+        guard let axis = resizeAxes?.values.first else { return plan }
 
         return ApplyPlan(commands: plan.commands.map { command in
-            guard let scope = windowsByID[command.window.id]?.scope,
+            guard let entry = windowsByID[command.window.id],
+                  let scope = entry.scope,
                   scopes.contains(scope),
-                  let previousFrame = previous[command.window.id.rawValue]
+                  let previousFrame = visiblePreviousFrame(of: entry, in: snapshot)
             else { return command }
 
             var frame = command.frame
@@ -1994,49 +2233,52 @@ public final class LayoutMaintainer {
     }
 
     private func resizeAxesFor(
-        _ windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
-    ) -> [WindowID: MutableResizeAxes]? {
-        let pairs = windowIDs.compactMap { id -> (WindowID, MutableResizeAxes)? in
-            resizeAxesFor(id, in: snapshot).map { (id, $0) }
-        }
-        return pairs.isEmpty ? nil : Dictionary(uniqueKeysWithValues: pairs)
-    }
-
-    private func resizeAxesFor(
         _ windowID: WindowID,
         in snapshot: DaemonSnapshot
     ) -> MutableResizeAxes? {
-        guard let previous = lastObservedFrames?[windowID.rawValue],
-              let current = snapshot.windows.first(where: { $0.window.id == windowID })?.window.frame
+        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
+              let previous = visiblePreviousFrame(of: entry, in: snapshot)
         else { return nil }
 
+        let current = entry.window.frame
         let horizontalDelta = abs(current.x - previous.x) + abs(current.width - previous.width)
         let verticalDelta = abs(current.y - previous.y) + abs(current.height - previous.height)
-        let threshold = Double(16)
+        let threshold = LayoutTolerance.observedChange
 
         if horizontalDelta > threshold,
-           verticalDelta <= max(24, horizontalDelta * 0.35) {
+           verticalDelta <= max(LayoutTolerance.clampShrink, horizontalDelta * LayoutTolerance.growthRatio) {
             return .horizontal
         }
         if verticalDelta > threshold,
-           horizontalDelta <= max(24, verticalDelta * 0.35) {
+           horizontalDelta <= max(LayoutTolerance.clampShrink, verticalDelta * LayoutTolerance.growthRatio) {
             return .vertical
         }
         return nil
+    }
+
+    /// Cadre observé au tick précédent, seulement s'il était visible sur l'écran de la fenêtre.
+    /// Un cadre caché ou hors de `visibleFrame` ne sert pas de référence d'axe (moteur 15).
+    private func visiblePreviousFrame(of entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> Rect? {
+        guard let previous = lastObservedFrames?[entry.window.id.rawValue],
+              let display = display(for: entry, in: snapshot),
+              !isHiddenCorner(previous.cgRect, in: snapshot.displays)
+        else { return nil }
+        let tolerance = LayoutTolerance.observedChange
+        let bounds = display.visibleFrame.cgRect.insetBy(dx: -tolerance, dy: -tolerance)
+        return bounds.contains(previous.cgRect) ? previous : nil
     }
 
     private func snapshotByPreservingOrthogonalResizeAxis(
         in snapshot: DaemonSnapshot,
         resizeAxes: [WindowID: MutableResizeAxes]?
     ) -> DaemonSnapshot {
-        guard let resizeAxes, let previous = lastObservedFrames else { return snapshot }
+        guard let resizeAxes else { return snapshot }
         return DaemonSnapshot(
             permissions: snapshot.permissions,
             displays: snapshot.displays,
             windows: snapshot.windows.map { entry in
                 guard let axis = resizeAxes[entry.window.id],
-                      let previousFrame = previous[entry.window.id.rawValue]
+                      let previousFrame = visiblePreviousFrame(of: entry, in: snapshot)
                 else { return entry }
                 var window = entry.window
                 switch axis {
@@ -2066,7 +2308,10 @@ public final class LayoutMaintainer {
         }.joined(separator: ",")
     }
 
-    private func reconcileStableVisibleDisplayDrift(in snapshot: DaemonSnapshot) -> MaintenanceTick? {
+    private func reconcileStableVisibleDisplayDrift(
+        in snapshot: DaemonSnapshot,
+        excluding excludedScopes: Set<StageScope>
+    ) -> MaintenanceTick? {
         let tickNow = now()
         if let lastDisplayTopologyChangedAt,
            tickNow.timeIntervalSince(lastDisplayTopologyChangedAt) < displayDriftReconcileHoldSeconds
@@ -2080,6 +2325,7 @@ public final class LayoutMaintainer {
 
         for entry in snapshot.windows {
             guard let sourceScope = entry.scope,
+                  !excludedScopes.contains(sourceScope),
                   entry.pin == nil,
                   entry.window.isOnScreen,
                   entry.window.isTileCandidate,
@@ -2122,7 +2368,7 @@ public final class LayoutMaintainer {
 
         let updatedSnapshot = service.snapshot(followFocus: false)
         let plan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: updatedSnapshot, priorityWindowIDs: Set(reconciled.map(\.window.id))),
+            in: plannedCommands(from: updatedSnapshot, priorityWindowIDs: Set(reconciled.map(\.window.id))),
             snapshot: updatedSnapshot
         )
         let result = service.apply(plan)
@@ -2227,7 +2473,8 @@ public final class LayoutMaintainer {
 
     private func stableMutableBspFramesLookUsable(_ frames: [CGRect], on display: DisplaySnapshot) -> Bool {
         let container = display.visibleFrame.cgRect
-        guard frames.allSatisfy({ container.insetBy(dx: -24, dy: -24).contains($0) }) else {
+        let overflow = LayoutTolerance.clampShrink
+        guard frames.allSatisfy({ container.insetBy(dx: -overflow, dy: -overflow).contains($0) }) else {
             return false
         }
         guard frames.count > 1 else { return true }
@@ -2247,7 +2494,8 @@ public final class LayoutMaintainer {
         var result: Set<WindowID> = []
         for (id, frame) in frames {
             guard let previousFrame = previous[id] else { continue }
-            if !frame.isClose(to: previousFrame, positionTolerance: 16, sizeTolerance: 16) {
+            let tolerance = LayoutTolerance.observedChange
+            if !frame.isClose(to: previousFrame, positionTolerance: tolerance, sizeTolerance: tolerance) {
                 result.insert(WindowID(rawValue: id))
             }
         }
@@ -2337,16 +2585,17 @@ public final class LayoutMaintainer {
                 scope: scope,
                 frames: frames,
                 focusedWindowID: focusedWindowID,
-                positionTolerance: 16,
-                sizeTolerance: 16,
-                focusedPositionTolerance: 16,
-                focusedSizeTolerance: 16,
+                positionTolerance: LayoutTolerance.observedChange,
+                sizeTolerance: LayoutTolerance.observedChange,
+                focusedPositionTolerance: LayoutTolerance.observedChange,
+                focusedSizeTolerance: LayoutTolerance.observedChange,
                 allowFocusChromeDelta: false
             )
         })
     }
 
     private func hideInactiveStageWindows(in snapshot: DaemonSnapshot, onlyDisplayID: DisplayID? = nil) -> Int {
+        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         var applied = 0
         for entry in snapshot.windows {
             guard let scope = entry.scope,
@@ -2355,74 +2604,82 @@ public final class LayoutMaintainer {
                   scope != activeScope,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
                   !isPreferredHiddenCorner(entry.window.frame.cgRect, among: snapshot.displays),
-                  !isFullscreenLike(entry, on: display)
+                  !fullscreenWindowIDs.contains(entry.window.id)
             else { continue }
             if entry.pin?.visibility(in: activeScope).shouldBeVisible == true {
                 continue
             }
 
-            let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if service.setFrame(frame, of: entry.window) != nil {
+            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            if let actual = service.setFrame(frame, of: entry.window) {
+                recordObservedFrame(actual, of: entry.window.id)
                 applied += 1
             }
         }
         return applied
     }
 
+    /// Cache les voisines d'une fenêtre en plein écran dans son scope actif. La fenêtre qui a le
+    /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002).
     private func hideActiveStageSiblingsOfFullscreenWindows(in snapshot: DaemonSnapshot) -> Int {
-        let fullscreenItems = fullscreenLikeEntries(in: snapshot, nativeOnly: true)
-            .filter { item in
-                guard let scope = item.entry.scope else { return false }
-                return snapshot.state.activeScope(on: scope.displayID) == scope
-            }
+        let fullscreenItems = tickFullscreen.filter { item in
+            guard let scope = item.entry.scope else { return false }
+            return snapshot.state.activeScope(on: scope.displayID) == scope
+        }
         guard !fullscreenItems.isEmpty else { return 0 }
 
-        let fullscreenWindowIDs = Set(fullscreenItems.map(\.entry.window.id))
+        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
+        // Focus réel du système (pas le focus mémorisé de la stage).
+        let systemFocusedWindowID = service.focusedWindowID()
         var applied = 0
 
         for entry in snapshot.windows {
             guard let scope = entry.scope,
                   fullscreenScopes.contains(scope),
                   !fullscreenWindowIDs.contains(entry.window.id),
+                  entry.window.id != systemFocusedWindowID,
                   entry.window.isTileCandidate,
                   entry.window.isOnScreen,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
-                  !isFullscreenLike(entry, on: display, nativeOnly: true)
+                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
             else { continue }
 
-            let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if service.setFrame(frame, of: entry.window) != nil {
+            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            if let actual = service.setFrame(frame, of: entry.window) {
+                recordObservedFrame(actual, of: entry.window.id)
                 applied += 1
             }
         }
         return applied
     }
 
-    private func reanchorScreenDominantFullscreenSizedWindows(in snapshot: DaemonSnapshot) -> Int {
+    /// Recale une fenêtre zoomée par commande dont l'origine a glissé (redémarrage, changement
+    /// d'écran). Une fenêtre en plein écran natif appartient à macOS : jamais déplacée.
+    private func reanchorShiftedZoomedWindows(in snapshot: DaemonSnapshot) -> Int {
         var applied = 0
-        for entry in snapshot.windows {
+        for item in tickFullscreen {
+            let entry = item.entry
             guard let scope = entry.scope,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
-                  entry.window.isTileCandidate,
-                  entry.window.isOnScreen,
+                  entry.window.furniture?.isNativeFullscreen != true,
                   !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
-                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  isFullscreenLike(entry, on: display, nativeOnly: true),
-                  let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: display)
+                  let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display)
             else { continue }
 
-            if service.setFrame(target, of: entry.window) != nil {
+            if let actual = service.setFrame(target, of: entry.window) {
+                recordObservedFrame(actual, of: entry.window.id)
                 applied += 1
             }
         }
         return applied
     }
 
+    /// Rend visible la fenêtre focalisée quand elle est cachée dans le scope actif de son écran
+    /// (Cmd-Tab vers une fenêtre masquée). nil s'il n'y a rien à appliquer : le tick continue (FR-002).
     private func restoreFocusedActiveStageIfNeeded(
         in snapshot: DaemonSnapshot,
-        settlingLayoutScopes: Set<StageScope>
+        observedFrames: [UInt32: Rect]
     ) -> MaintenanceTick? {
         let startedAt = Date()
         guard let focusedWindowID = snapshot.focusedWindowID,
@@ -2430,41 +2687,35 @@ public final class LayoutMaintainer {
               let focusedScope = focusedEntry.scope,
               snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
               focusedEntry.window.isTileCandidate,
-              isHiddenCorner(focusedEntry.window.frame.cgRect, in: snapshot.displays)
+              isHiddenCorner(focusedEntry.window.frame.cgRect, in: snapshot.displays),
+              !tickExcludedScopes.contains(focusedScope),
+              let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
         else { return nil }
 
-        let activeHiddenEntries = snapshot.windows.filter { entry in
-            guard let scope = entry.scope,
-                  scope == focusedScope,
-                  entry.window.isTileCandidate,
-                  isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
-            else { return false }
-            return true
+        // Membre disparu récemment : scope exclu le temps que la composition se stabilise (R6).
+        if persistentStageHasRecentMissingMember(scope: focusedScope, in: store.state(), now: now()) {
+            tickExcludedScopes.insert(focusedScope)
+            observe(observedFrames, scopes: [focusedScope], in: snapshot)
+            appendStageMembershipSettlingEvent(scopes: [focusedScope])
+            return nil
         }
 
-        let activeHiddenScopes = Set(activeHiddenEntries.compactMap(\.scope))
+        let activeHiddenEntries = snapshot.windows.filter { entry in
+            entry.scope == focusedScope
+                && entry.window.isTileCandidate
+                && isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+        }
         let activeHiddenWindowIDs = Set(activeHiddenEntries.map(\.window.id))
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-        let observedFrames = scopedFrames(in: snapshot)
 
-        let settlingHiddenScopes = activeHiddenScopes.intersection(settlingLayoutScopes)
-        let recentMissingHiddenScopes = activeHiddenScopes.filter {
-            persistentStageHasRecentMissingMember(scope: $0, in: store.state(), now: now())
-        }
-        let protectedHiddenScopes = settlingHiddenScopes.union(recentMissingHiddenScopes)
-        if !protectedHiddenScopes.isEmpty {
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-            lastObservedFrames = observedFrames
-            appendStageMembershipSettlingEvent(scopes: protectedHiddenScopes)
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-        }
-
-        if let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID }),
-           isFullscreenLike(focusedEntry, on: display, nativeOnly: true),
+        if tickFullscreen.contains(where: { $0.entry.window.id == focusedWindowID }),
            let target = fullscreenSizedRestoreTarget(for: focusedEntry.window.frame.cgRect, on: display) {
             let restoreStartedAt = Date()
-            let restored = service.setFrame(target, of: focusedEntry.window) != nil ? 1 : 0
+            let restoredFrame = service.setFrame(target, of: focusedEntry.window)
+            let restored = restoredFrame == nil ? 0 : 1
+            if let restoredFrame {
+                recordObservedFrame(restoredFrame, of: focusedWindowID)
+            }
             let restoreMs = Date().timeIntervalSince(restoreStartedAt) * 1000
             let hideStartedAt = Date()
             let hiddenInactive = hideInactiveStageWindows(in: snapshot, onlyDisplayID: focusedScope.displayID)
@@ -2472,7 +2723,6 @@ public final class LayoutMaintainer {
 
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
-            lastObservedFrames = scopedFrames(in: service.snapshot(followFocus: false))
 
             events.append(RoadieEvent(type: "stage_focus_fullscreen_restore", details: [
                 "hiddenActive": String(activeHiddenEntries.count),
@@ -2494,42 +2744,32 @@ public final class LayoutMaintainer {
         }
 
         let planStartedAt = Date()
-        let rawPlan = suppressKnownUnmovableFrames(
-            in: service.applyPlan(from: snapshot, priorityWindowIDs: activeHiddenWindowIDs),
-            snapshot: snapshot
-        )
-        let plan = ApplyPlan(commands: rawPlan.commands.filter { command in
-            guard let scope = windowsByID[command.window.id]?.scope else { return false }
-            return activeHiddenScopes.contains(scope)
-        })
+        let rawPlan = ApplyPlan(commands: plannedCommands(from: snapshot, priorityWindowIDs: activeHiddenWindowIDs)
+            .commands
+            .filter { windowsByID[$0.window.id]?.scope == focusedScope })
+        var plan = suppressKnownUnmovableFrames(in: rawPlan, snapshot: snapshot)
+        // Le plan du scope peut être retenu (plein écran, refus connu) : la fenêtre focalisée
+        // redevient visible quand même, sinon le maintien resterait bloqué sur elle.
+        if !plan.commands.contains(where: { $0.window.id == focusedWindowID }) {
+            let planned = rawPlan.commands.first { $0.window.id == focusedWindowID }?.frame.cgRect
+            let target = planned.flatMap { isHiddenCorner($0, in: snapshot.displays) ? nil : $0 }
+                ?? centeredVisibleFrame(for: focusedEntry.window.frame.cgRect, on: display)
+            let command = ApplyCommand(window: focusedEntry.window, frame: Rect(target))
+            if failedFrames[focusedWindowID.rawValue]?.matches(command: command) != true {
+                plan.commands.append(command)
+            }
+        }
         let planMs = Date().timeIntervalSince(planStartedAt) * 1000
 
         let applyStartedAt = Date()
-        var result = ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: [])
-        var repairPlan = ApplyPlan(commands: [])
-        var isolated = 0
+        var application = PlanApplication(
+            result: ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: []),
+            commands: 0
+        )
         if !plan.commands.isEmpty {
-            result = service.apply(plan)
-            result = stabilizeClampedPositions(result, from: plan, in: snapshot)
-            repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot)
-            if !repairPlan.commands.isEmpty {
-                var repairResult = service.apply(repairPlan)
-                repairResult = stabilizeClampedPositions(repairResult, from: repairPlan, in: snapshot)
-                result = result.merged(with: repairResult)
-                events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: [
-                    "commands": String(repairPlan.commands.count),
-                    "windowIDs": repairPlan.commands
-                        .map { String($0.window.id.rawValue) }
-                        .sorted()
-                        .joined(separator: ","),
-                    "source": "stage_focus_restore"
-                ]))
-            }
-            isolated = isolateFocusedWindowInInfeasibleClampedScopes(from: result, in: snapshot)
-            record(result, from: ApplyPlan(commands: plan.commands + repairPlan.commands))
-            appendItemEvents(result)
-            if isolated > 0 {
-                result.applied += isolated
+            application = applyRepairingClamps(plan, in: snapshot, source: "stage_focus_restore")
+            for item in application.result.items where item.status != .failed {
+                recordObservedFrame((item.actual ?? item.requested).cgRect, of: item.windowID)
             }
         }
         let applyMs = Date().timeIntervalSince(applyStartedAt) * 1000
@@ -2537,24 +2777,18 @@ public final class LayoutMaintainer {
         let hideStartedAt = Date()
         let hiddenInactive = hideInactiveStageWindows(in: snapshot, onlyDisplayID: focusedScope.displayID)
         let hideMs = Date().timeIntervalSince(hideStartedAt) * 1000
+        guard application.commands > 0 || hiddenInactive > 0 else { return nil }
 
         priorityWindowIDs = []
         manualResizeApplyAfter = nil
-        let appliedFrames = framesAfterApplying(result, fallback: observedFrames)
-        lastObservedFrames = hiddenInactive > 0
-            ? scopedFrames(in: service.snapshot(followFocus: false))
-            : appliedFrames
 
         events.append(RoadieEvent(type: "stage_focus_restore", details: [
             "hiddenActive": String(activeHiddenEntries.count),
-            "scopes": activeHiddenScopes
-                .map { "\($0.displayID.rawValue)/\($0.desktopID.rawValue)/\($0.stageID.rawValue)" }
-                .sorted()
-                .joined(separator: ","),
-            "commands": String(plan.commands.count + repairPlan.commands.count + isolated),
-            "applied": String(result.applied),
-            "clamped": String(result.clamped),
-            "failed": String(result.failed),
+            "scopes": "\(focusedScope.displayID.rawValue)/\(focusedScope.desktopID.rawValue)/\(focusedScope.stageID.rawValue)",
+            "commands": String(application.commands),
+            "applied": String(application.result.applied),
+            "clamped": String(application.result.clamped),
+            "failed": String(application.result.failed),
             "hiddenInactive": String(hiddenInactive),
             "focusedWindowID": String(focusedWindowID.rawValue),
             "focusedDisplayID": focusedScope.displayID.rawValue,
@@ -2565,11 +2799,24 @@ public final class LayoutMaintainer {
         ]))
 
         return MaintenanceTick(
-            commands: plan.commands.count + repairPlan.commands.count + isolated + hiddenInactive,
-            applied: result.applied + hiddenInactive,
-            clamped: result.clamped,
-            failed: result.failed
+            commands: application.commands + hiddenInactive,
+            applied: application.result.applied + hiddenInactive,
+            clamped: application.result.clamped,
+            failed: application.result.failed
         )
+    }
+
+    /// Cadre visible de repli : même taille (bornée à la zone visible), centré sur l'écran.
+    private func centeredVisibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect {
+        let visible = display.visibleFrame.cgRect
+        let width = min(frame.width, visible.width)
+        let height = min(frame.height, visible.height)
+        return CGRect(
+            x: visible.midX - width / 2,
+            y: visible.midY - height / 2,
+            width: width,
+            height: height
+        ).integral
     }
 
     private func restoreVisiblePinnedWindows(in snapshot: DaemonSnapshot) -> Int {
@@ -2588,10 +2835,6 @@ public final class LayoutMaintainer {
         return applied
     }
 
-    private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
-    }
-
     private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
         HiddenWindowPlacement.isHidden(frame, in: displays)
     }
@@ -2607,9 +2850,12 @@ private struct RulePlacementDestination {
     var follow: Bool
 }
 
+/// Refus de taille mémorisé : l'application a gardé `actual` quand Roadie demandait `requested`.
+/// Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004).
 private struct ClampedFrame {
     var requested: Rect
     var actual: Rect
+    var recordedAt: Date
 
     func matches(command: ApplyCommand) -> Bool {
         if command.window.frame.isClose(to: actual, positionTolerance: 8, sizeTolerance: 8),
@@ -2619,10 +2865,12 @@ private struct ClampedFrame {
         if impossibleKnownMinimumIsStillRequested(by: command) {
             return true
         }
-        let currentLooksLikeClampedMinimum = abs(command.window.frame.width - actual.width) <= 24
-            && abs(command.window.frame.height - actual.height) <= 24
-        guard currentLooksLikeClampedMinimum,
-              requested.isClose(to: command.frame, positionTolerance: 64, sizeTolerance: 24)
+        guard currentStillMatchesClamp(command.window.frame),
+              requested.isClose(
+                  to: command.frame,
+                  positionTolerance: LayoutTolerance.clampedPositionDrift,
+                  sizeTolerance: LayoutTolerance.clampShrink
+              )
         else {
             return sameImpossibleAxisIsStillRequested(by: command)
         }
@@ -2630,19 +2878,35 @@ private struct ClampedFrame {
             && command.frame.height <= command.window.frame.height + 8
     }
 
+    /// Commande à envoyer malgré ce refus : inchangée si le refus ne la concerne pas ; nil si elle
+    /// reprend la position d'une demande déjà refusée ; sinon la nouvelle position est appliquée
+    /// avec la taille actuelle, seule la taille refusée est abandonnée (FR-004).
+    func adjusted(_ command: ApplyCommand) -> ApplyCommand? {
+        guard matches(command: command) else { return command }
+        let drift = LayoutTolerance.clampedPositionDrift
+        guard abs(command.frame.x - requested.x) > drift || abs(command.frame.y - requested.y) > drift else {
+            return nil
+        }
+        let current = command.window.frame
+        let moved = Rect(x: command.frame.x, y: command.frame.y, width: current.width, height: current.height)
+        guard !current.isClose(to: moved, positionTolerance: 2, sizeTolerance: 2) else { return nil }
+        return ApplyCommand(window: command.window, frame: moved)
+    }
+
     func shouldExcludeFromLayout(window: WindowSnapshot) -> Bool {
-        let currentStillMatchesClamp = abs(window.frame.width - actual.width) <= 24
-            && abs(window.frame.height - actual.height) <= 24
-        guard currentStillMatchesClamp else { return false }
+        guard currentStillMatchesClamp(window.frame) else { return false }
 
         return requestedGrowthWasRejected(requested: requested.width, actual: actual.width)
             || requestedGrowthWasRejected(requested: requested.height, actual: actual.height)
     }
 
+    private func currentStillMatchesClamp(_ frame: Rect) -> Bool {
+        abs(frame.width - actual.width) <= LayoutTolerance.clampShrink
+            && abs(frame.height - actual.height) <= LayoutTolerance.clampShrink
+    }
+
     private func sameImpossibleAxisIsStillRequested(by command: ApplyCommand) -> Bool {
-        let currentStillMatchesClamp = abs(command.window.frame.width - actual.width) <= 24
-            && abs(command.window.frame.height - actual.height) <= 24
-        guard currentStillMatchesClamp else { return false }
+        guard currentStillMatchesClamp(command.window.frame) else { return false }
 
         return axisStillImpossible(
             requested: requested.width,
@@ -2663,27 +2927,28 @@ private struct ClampedFrame {
     }
 
     private func impossibleKnownMinimumIsStillRequested(by command: ApplyCommand) -> Bool {
-        let widthMinimumStillRelevant = command.window.frame.width >= actual.width - 24
+        let widthMinimumStillRelevant = command.window.frame.width >= actual.width - LayoutTolerance.clampShrink
             && requestedShrinkWasRejected(requested: command.frame.width, actual: actual.width)
-        let heightMinimumStillRelevant = command.window.frame.height >= actual.height - 24
+        let heightMinimumStillRelevant = command.window.frame.height >= actual.height - LayoutTolerance.clampShrink
             && requestedShrinkWasRejected(requested: command.frame.height, actual: actual.height)
         return widthMinimumStillRelevant || heightMinimumStillRelevant
     }
 
     private func requestedGrowthWasRejected(requested: Double, actual: Double) -> Bool {
-        let tolerance = max(64, actual * 0.35)
+        let tolerance = max(LayoutTolerance.growthMinimum, actual * LayoutTolerance.growthRatio)
         return requested > actual + tolerance
     }
 
     private func requestedShrinkWasRejected(requested: Double, actual: Double) -> Bool {
-        requested < actual - 24
+        requested < actual - LayoutTolerance.clampShrink
     }
 }
 
+/// Échec d'application mémorisé. Expire après `LayoutTolerance.refusalMemorySeconds` (FR-004).
 private struct FailedFrame {
     var requested: Rect
     var observedAtFailure: Rect
-    var failedAt: Date
+    var recordedAt: Date
 
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame)

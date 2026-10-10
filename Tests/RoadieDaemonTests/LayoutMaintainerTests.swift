@@ -1756,6 +1756,14 @@ struct LayoutMaintainerTests {
         let maintainer = LayoutMaintainer(service: service)
 
         let initial = maintainer.tick()
+        // toggleFullscreen pose le marqueur de zoom (FR-001) : la taille seule ne suffit plus.
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [WindowID(rawValue: 1): fullscreen, WindowID(rawValue: 2): splitRight],
+            source: .command,
+            zoomedWindowID: WindowID(rawValue: 1)
+        ))
         let fullscreenTick = maintainer.tick()
 
         #expect(initial.commands == 0)
@@ -1785,7 +1793,8 @@ struct LayoutMaintainerTests {
             scope: scope,
             windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
             placements: [WindowID(rawValue: 1): fullscreen, WindowID(rawValue: 2): small],
-            source: .command
+            source: .command,
+            zoomedWindowID: WindowID(rawValue: 1)
         ))
         let service = SnapshotService(
             provider: SequenceProvider(
@@ -1855,7 +1864,8 @@ struct LayoutMaintainerTests {
             scope: scope,
             windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
             placements: [WindowID(rawValue: 1): shiftedFullscreenSized, WindowID(rawValue: 2): small],
-            source: .command
+            source: .command,
+            zoomedWindowID: WindowID(rawValue: 1)
         ))
         let service = SnapshotService(
             provider: SequenceProvider(display: display, windowFrames: [[shiftedFullscreenSized, small]]),
@@ -2013,7 +2023,8 @@ struct LayoutMaintainerTests {
             scope: scope,
             windowIDs: [terminal.id, horizon.id],
             placements: [terminal.id: terminal.frame, horizon.id: horizon.frame],
-            source: .command
+            source: .command,
+            zoomedWindowID: terminal.id
         ))
 
         let writer = RecordingWriter()
@@ -2099,7 +2110,8 @@ struct LayoutMaintainerTests {
                 fullscreen.id: Rect(x: 0, y: 0, width: 495, height: 500),
                 hiddenSibling.id: Rect(x: 505, y: 0, width: 495, height: 500),
             ],
-            source: .command
+            source: .command,
+            zoomedWindowID: fullscreen.id
         ))
 
         let writer = RecordingWriter()
@@ -2296,8 +2308,10 @@ struct LayoutMaintainerTests {
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
-        #expect(tick.commands == 2)
+        // Plan (2) + réparation de la voisine (1) : le compteur inclut la réparation (FR-040).
+        #expect(tick.commands == 3)
         #expect(tick.clamped == 1)
+        #expect(events.contains("\"type\":\"layout_clamped_scope_repaired\""))
         #expect(events.contains("\"type\":\"layout_apply\""))
         #expect(events.contains("\"type\":\"layout_clamped\""))
         #expect(intentStore.intent(for: StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))) == nil)
@@ -2489,7 +2503,9 @@ struct LayoutMaintainerTests {
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
-        #expect(tick.clamped == 2)
+        // Les deux essais de disposition aux tailles minimales (FR-003) clampent aussi avant le masquage.
+        #expect(tick.clamped >= 2)
+        #expect(events.contains("\"type\":\"layout_clamped_scope_rearranged\"") == false)
         #expect(tick.applied >= 1)
         #expect(writer.requestedFrames[WindowID(rawValue: 1)] != finderInitial)
         #expect(events.contains("\"type\":\"layout_infeasible_scope_isolated\""))
@@ -2824,7 +2840,9 @@ struct LayoutMaintainerTests {
             title: "fullscreen",
             frame: Rect(x: 0, y: 0, width: 1000, height: 500),
             isOnScreen: true,
-            isTileCandidate: true
+            isTileCandidate: true,
+            // FR-001 : seul le plein écran signalé par macOS (ou un zoom de commande) protège la fenêtre.
+            furniture: WindowFurniture(isNativeFullscreen: true)
         )
         let stagePath = FileManager.default.temporaryDirectory
             .appendingPathComponent("roadie-maintainer-fullscreen-hide-\(UUID().uuidString).json")
@@ -3027,7 +3045,8 @@ struct LayoutMaintainerTests {
             scope: scope,
             windowIDs: [focusedHidden.id, siblingHidden.id],
             placements: [focusedHidden.id: display.visibleFrame, siblingHidden.id: siblingHidden.frame],
-            source: .command
+            source: .command,
+            zoomedWindowID: focusedHidden.id
         ))
         let writer = RecordingWriter()
         let service = SnapshotService(
@@ -3350,3 +3369,315 @@ struct LayoutMaintainerTests {
         try? FileManager.default.removeItem(atPath: intentTemp.path)
     }
 }
+
+/// Fenêtres vivantes : le fournisseur renvoie les cadres posés par le moteur, l'écrivain impose
+/// des tailles minimales comme une application réelle (SPEC-016 lot C).
+private final class MinimumSizeWindows: SystemSnapshotProviding, WindowFrameWriting, @unchecked Sendable {
+    private let display: DisplaySnapshot
+    private let minimumSizes: [WindowID: CGSize]
+    private var frames: [WindowID: Rect]
+    private(set) var requestedFrames: [WindowID: Rect] = [:]
+
+    init(display: DisplaySnapshot, frames: [WindowID: Rect], minimumSizes: [WindowID: CGSize]) {
+        self.display = display
+        self.frames = frames
+        self.minimumSizes = minimumSizes
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot {
+        PermissionSnapshot(accessibilityTrusted: true)
+    }
+
+    func displays() -> [DisplaySnapshot] {
+        [display]
+    }
+
+    func windows() -> [WindowSnapshot] {
+        frames.keys.sorted().map { id in
+            WindowSnapshot(
+                id: id,
+                pid: Int32(id.rawValue + 10),
+                appName: "App\(id.rawValue)",
+                bundleID: "app.\(id.rawValue)",
+                title: "Window\(id.rawValue)",
+                frame: frames[id] ?? Rect(x: 0, y: 0, width: 0, height: 0),
+                isOnScreen: true,
+                isTileCandidate: true
+            )
+        }
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        requestedFrames[window.id] = Rect(frame)
+        let minimum = minimumSizes[window.id] ?? .zero
+        let actual = CGRect(
+            x: frame.minX,
+            y: frame.minY,
+            width: max(frame.width, minimum.width),
+            height: max(frame.height, minimum.height)
+        )
+        frames[window.id] = Rect(actual)
+        return actual
+    }
+}
+
+private func lotCDisplay(id: String = "display-a", x: Double = 0) -> DisplaySnapshot {
+    DisplaySnapshot(
+        id: DisplayID(rawValue: id),
+        index: 1,
+        name: id,
+        frame: Rect(x: x, y: 0, width: 1000, height: 500),
+        visibleFrame: Rect(x: x, y: 0, width: 1000, height: 500),
+        isMain: x == 0
+    )
+}
+
+private func lotCWindow(_ id: UInt32, _ frame: Rect, nativeFullscreen: Bool = false) -> WindowSnapshot {
+    WindowSnapshot(
+        id: WindowID(rawValue: id),
+        pid: Int32(id + 10),
+        appName: "App\(id)",
+        bundleID: "app.\(id)",
+        title: "Window\(id)",
+        frame: frame,
+        isOnScreen: true,
+        isTileCandidate: true,
+        furniture: nativeFullscreen ? WindowFurniture(isNativeFullscreen: true) : nil
+    )
+}
+
+private func frameIsVisible(_ frame: Rect?, on display: DisplaySnapshot) -> Bool {
+    guard let frame else { return false }
+    let visible = display.visibleFrame
+    return frame.x >= visible.x - 1
+        && frame.y >= visible.y - 1
+        && frame.x + frame.width <= visible.x + visible.width + 1
+        && frame.y + frame.height <= visible.y + visible.height + 1
+}
+
+extension LayoutMaintainerTests {
+    /// FR-001 : une fenêtre seule tilée (marges 8) remplit presque l'écran sans être en plein écran.
+    /// Une nouvelle fenêtre de la stage est tilée, pas cachée.
+    @Test
+    func singleTiledWindowStageTilesNewWindowInsteadOfHidingIt() {
+        let display = lotCDisplay()
+        let single = lotCWindow(1, Rect(x: 8, y: 8, width: 984, height: 484))
+        let newcomer = lotCWindow(2, Rect(x: 100, y: 100, width: 300, height: 200))
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let intentTemp = makeIntentStore()
+        let eventPath = tempPath("lot-c-single-window-new-window-events")
+        defer {
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [single.id],
+            placements: [single.id: single.frame],
+            createdAt: Date().addingTimeInterval(-60),
+            source: .command
+        ))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[single], [single, newcomer]]
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 8, gapsInner: 8)),
+            intentStore: intentTemp.store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        _ = maintainer.tick()
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.commands >= 1)
+        #expect(frameIsVisible(writer.requestedFrames[newcomer.id], on: display))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
+
+    /// FR-016 : le plein écran natif sur l'écran 1 n'empêche pas la disposition de l'écran 2.
+    @Test
+    func nativeFullscreenOnOneDisplayDoesNotStopOtherDisplay() {
+        let displayA = lotCDisplay(id: "display-a", x: 0)
+        let displayB = lotCDisplay(id: "display-b", x: 1000)
+        let fullscreen = lotCWindow(1, displayA.frame, nativeFullscreen: true)
+        let left = lotCWindow(2, Rect(x: 1100, y: 50, width: 300, height: 200))
+        let right = lotCWindow(3, Rect(x: 1500, y: 50, width: 300, height: 200))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [displayA, displayB],
+                windowSnapshots: [[fullscreen, left, right]]
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands >= 2)
+        #expect(writer.requestedFrames[fullscreen.id] == nil)
+        #expect(frameIsVisible(writer.requestedFrames[left.id], on: displayB))
+        #expect(frameIsVisible(writer.requestedFrames[right.id], on: displayB))
+    }
+
+    /// FR-002 : après un zoom de commande, Cmd-Tab vers une voisine cachée la rend visible ;
+    /// le tick suivant ne la recache pas et ne reste pas bloqué sur un plan vide.
+    @Test
+    func focusOnHiddenSiblingAfterZoomMakesItVisible() {
+        let display = lotCDisplay()
+        let zoomed = lotCWindow(1, display.visibleFrame)
+        let hiddenSibling = lotCWindow(2, Rect(x: 999, y: 0, width: 495, height: 500))
+        let restoredSibling = lotCWindow(2, Rect(x: 252, y: 0, width: 496, height: 500))
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: scope1)
+        let stagePath = tempPath("lot-c-zoom-focus-sibling")
+        let eventPath = tempPath("lot-c-zoom-focus-sibling-events")
+        let intentTemp = makeIntentStore()
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+        }
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: scope1, stages: [
+                PersistentStage(id: scope1, mode: .bsp, focusedWindowID: hiddenSibling.id, members: [
+                    PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame),
+                    PersistentStageMember(windowID: hiddenSibling.id, bundleID: hiddenSibling.bundleID, title: hiddenSibling.title, frame: hiddenSibling.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display.id))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [zoomed.id, hiddenSibling.id],
+            placements: [zoomed.id: zoomed.frame, hiddenSibling.id: hiddenSibling.frame],
+            source: .command,
+            zoomedWindowID: zoomed.id
+        ))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[zoomed, hiddenSibling], [zoomed, restoredSibling]],
+                focusedID: hiddenSibling.id
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+
+        let restore = maintainer.tick()
+        let restoredFrame = writer.requestedFrames[hiddenSibling.id]
+        let next = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(restore.commands >= 1)
+        #expect(frameIsVisible(restoredFrame, on: display))
+        #expect(writer.requestedFrames[zoomed.id] == nil)
+        #expect(events.contains("\"type\":\"stage_focus_restore\""))
+        #expect(next.commands == 0)
+        #expect(writer.requestedFrames[hiddenSibling.id] == restoredFrame)
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+        #expect(intentTemp.store.intent(for: scope)?.zoomedWindowID == zoomed.id)
+    }
+
+    /// FR-003 : une grille de trois fenêtres dont deux refusent de rétrécir est replanifiée aux
+    /// tailles minimales connues, sans masquage, et reste stable au tick suivant.
+    @Test
+    func gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden() {
+        let display = lotCDisplay()
+        let windows = MinimumSizeWindows(
+            display: display,
+            frames: [
+                WindowID(rawValue: 1): Rect(x: 0, y: 0, width: 200, height: 200),
+                WindowID(rawValue: 2): Rect(x: 300, y: 0, width: 200, height: 200),
+                WindowID(rawValue: 3): Rect(x: 600, y: 0, width: 200, height: 200),
+            ],
+            minimumSizes: [
+                WindowID(rawValue: 2): CGSize(width: 200, height: 300),
+                WindowID(rawValue: 3): CGSize(width: 200, height: 300),
+            ]
+        )
+        let eventPath = tempPath("lot-c-grid-two-clamped-events")
+        let intentTemp = makeIntentStore()
+        defer {
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+        }
+        let service = SnapshotService(
+            provider: windows,
+            frameWriter: windows,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .masterStack, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let first = maintainer.tick()
+        let second = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        let finalFrames = windows.windows().map(\.frame)
+
+        #expect(first.clamped >= 2)
+        #expect(events.contains("\"type\":\"layout_clamped_scope_rearranged\""))
+        #expect(!events.contains("\"type\":\"layout_infeasible_scope_isolated\""))
+        #expect(finalFrames.allSatisfy { frameIsVisible($0, on: display) })
+        #expect(second.commands == 0)
+    }
+
+    /// FR-004 : un échec mémorisé expire après 30 s ; la commande est retentée.
+    @Test
+    func failedFrameIsRetriedAfterRefusalMemoryExpires() {
+        let display = lotCDisplay()
+        let initial = Rect(x: 80, y: 80, width: 320, height: 240)
+        let writer = FailingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[initial]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 0))
+        )
+        var currentTime = Date(timeIntervalSince1970: 0)
+        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
+
+        let first = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(31)
+        let retried = maintainer.tick()
+
+        #expect(first.failed == 1)
+        #expect(retried.commands == 1)
+        #expect(writer.attempts == 2)
+    }
+
+    /// FR-010 : aucun plan n'est appliqué tant qu'un bouton de souris est enfoncé.
+    @Test
+    func pressedMouseButtonSuspendsLayoutApply() {
+        let display = lotCDisplay()
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[
+                Rect(x: 80, y: 80, width: 320, height: 240),
+                Rect(x: 500, y: 80, width: 320, height: 240),
+            ]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        var pressed = true
+        let maintainer = LayoutMaintainer(service: service, mouseButtonsPressed: { pressed })
+
+        let held = maintainer.tick()
+        let heldFrames = writer.requestedFrames
+        pressed = false
+        let released = maintainer.tick()
+
+        #expect(held.commands == 0)
+        #expect(heldFrames.isEmpty)
+        #expect(released.commands >= 1)
+    }
+}
+
+private let scope1 = StageID(rawValue: "1")
