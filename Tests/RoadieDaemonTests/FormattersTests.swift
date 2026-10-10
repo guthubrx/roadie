@@ -80,11 +80,31 @@ struct FormattersTests {
     }
 
     @Test
-    func permissionsFormatsBooleanFlag() {
-        let trusted = PermissionSnapshot(accessibilityTrusted: true)
-        #expect(TextFormatter.permissions(trusted) == "accessibilityTrusted=true")
-        let untrusted = PermissionSnapshot(accessibilityTrusted: false)
-        #expect(TextFormatter.permissions(untrusted) == "accessibilityTrusted=false")
+    func permissionsPreferDaemonStatusOverLocalProcess() {
+        let status = DaemonStatus(
+            pid: 42,
+            mode: "run",
+            startedAt: Date(),
+            updatedAt: Date(),
+            accessibilityTrusted: true,
+            screenRecordingGranted: false,
+            config: DaemonStatus.ConfigState(valid: true, path: "/tmp/roadies.toml", error: nil)
+        )
+        let running = DaemonStatusReading(status: status, state: "running")
+        #expect(TextFormatter.permissions(daemon: running, localAccessibility: false, localScreenRecording: true) == """
+        daemon=running
+        accessibilityTrusted=true
+        screenRecordingGranted=false
+        source=roadied pid=42
+        """)
+
+        let stopped = DaemonStatusReading(status: nil, state: "no_status")
+        #expect(TextFormatter.permissions(daemon: stopped, localAccessibility: false, localScreenRecording: true) == """
+        daemon=stopped reason=no_status
+        accessibilityTrusted=false
+        screenRecordingGranted=true
+        source=roadie-cli
+        """)
     }
 
     @Test

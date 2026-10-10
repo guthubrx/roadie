@@ -29,11 +29,16 @@ public enum TextFormatter {
         return lines.joined(separator: "\n")
     }
 
-    public static func currentDisplay(_ snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> String {
+    /// Écran actif : celui de l'état persistant, sinon celui de la fenêtre focalisée, sinon le premier.
+    public static func currentDisplaySnapshot(_ snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> DisplaySnapshot? {
         let activeDisplay = state?.activeDisplayID.flatMap { id in
             snapshot.displays.first { $0.id == id }
         }
-        guard let display = activeDisplay ?? displayContainingFocusedWindow(in: snapshot) ?? snapshot.displays.first else {
+        return activeDisplay ?? displayContainingFocusedWindow(in: snapshot) ?? snapshot.displays.first
+    }
+
+    public static func currentDisplay(_ snapshot: DaemonSnapshot, state: PersistentStageState? = nil) -> String {
+        guard let display = currentDisplaySnapshot(snapshot, state: state) else {
             return "No displays found."
         }
         let frame = "\(Int(display.frame.x)),\(Int(display.frame.y)) \(Int(display.frame.width))x\(Int(display.frame.height))"
@@ -43,8 +48,22 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
-    public static func permissions(_ permissions: PermissionSnapshot) -> String {
-        "accessibilityTrusted=\(permissions.accessibilityTrusted)"
+    /// Permissions du daemon s'il tourne (statut publié), sinon celles du processus `roadie`.
+    public static func permissions(daemon: DaemonStatusReading, localAccessibility: Bool, localScreenRecording: Bool) -> String {
+        if daemon.isRunning, let status = daemon.status {
+            return [
+                "daemon=running",
+                "accessibilityTrusted=\(status.accessibilityTrusted)",
+                "screenRecordingGranted=\(status.screenRecordingGranted)",
+                "source=roadied pid=\(status.pid)"
+            ].joined(separator: "\n")
+        }
+        return [
+            "daemon=stopped reason=\(daemon.state)",
+            "accessibilityTrusted=\(localAccessibility)",
+            "screenRecordingGranted=\(localScreenRecording)",
+            "source=roadie-cli"
+        ].joined(separator: "\n")
     }
 
     public static func focusStatus(_ snapshot: DaemonSnapshot) -> String {
@@ -174,7 +193,15 @@ public enum TextFormatter {
         ].joined(separator: "\n")
     }
 
-    public static func doctor(snapshot: DaemonSnapshot, plan: ApplyPlan, persistentState: PersistentStageState? = nil) -> String {
+    /// Diagnostic : état réel du daemon et de ses permissions (statut publié), validité
+    /// de la config, puis état courant des écrans, stages et fenêtres.
+    public static func doctor(
+        daemon: DaemonStatusReading,
+        config: ConfigValidationReport,
+        snapshot: DaemonSnapshot,
+        plan: ApplyPlan,
+        persistentState: PersistentStageState? = nil
+    ) -> String {
         let tileable = snapshot.windows.filter { $0.window.isTileCandidate && $0.scope != nil }
         let focused = snapshot.focusedWindowID.map(String.init(describing:)) ?? "-"
         let activeDisplayID = persistentState?.activeDisplayID ?? displayContainingFocusedWindow(in: snapshot)?.id
@@ -188,10 +215,24 @@ public enum TextFormatter {
                 .activeStageID
                 .rawValue
         }
-        let status = snapshot.permissions.accessibilityTrusted && !snapshot.displays.isEmpty ? "ok" : "needs-attention"
+        let status = daemon.status
+        let daemonLine = daemon.isRunning
+            ? "daemon=running pid=\(status?.pid ?? 0) mode=\(status?.mode ?? "-") version=\(status?.roadieVersion ?? "-")"
+            : "daemon=stopped reason=\(daemon.state)"
+        let accessibility = daemon.isRunning ? status.map { String($0.accessibilityTrusted) } ?? "unknown" : "unknown"
+        let screenRecording = daemon.isRunning ? status.map { String($0.screenRecordingGranted) } ?? "unknown" : "unknown"
+        let configError = config.items.first { $0.level == .error }
+        let configLine = configError.map { "config=error \($0.path): \($0.message)" } ?? "config=ok"
+        let healthy = daemon.isRunning
+            && status?.accessibilityTrusted == true
+            && !config.hasErrors
+            && !snapshot.displays.isEmpty
         return [
-            "status=\(status)",
-            "accessibilityTrusted=\(snapshot.permissions.accessibilityTrusted)",
+            "status=\(healthy ? "ok" : "needs-attention")",
+            daemonLine,
+            "accessibilityTrusted=\(accessibility)",
+            "screenRecordingGranted=\(screenRecording)",
+            configLine,
             "displays=\(snapshot.displays.count)",
             "activeDisplay=\(activeDisplay?.index.description ?? "-") \(activeDisplay?.name ?? "-")",
             "activeDesktop=\(activeDesktop.map(String.init) ?? "-")",
