@@ -90,6 +90,7 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "titlebar_context_menu.ignored",
         "titlebar_context_menu.action",
         "titlebar_context_menu.failed",
-        "state.snapshot"
+        "state.snapshot",
+        "state.load_failed"
     ]
 }

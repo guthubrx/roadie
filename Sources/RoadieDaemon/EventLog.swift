@@ -61,14 +61,6 @@ public struct EventLog: Sendable {
         return encoder
     }()
 
-    /// Verrou de fichier global. EventLog est instancie ~15x dans le daemon (un par
-    /// service) avec des `append` concurrents (Task @MainActor + workers). Sans verrou,
-    /// `seekToEnd + write + write(newline)` est non-atomique : deux events peuvent
-    /// s'entrelacer ou la rotation peut couper un event en deux. Un verrou statique
-    /// keye sur le path resoudrait des paths multiples ; pour l'instant, un seul fichier
-    /// d'event est utilise donc un verrou unique suffit.
-    private static let writeLock = NSLock()
-
     public init(
         path: String = Self.defaultPath(),
         maxBytes: Int = Self.defaultMaxBytes,
@@ -94,25 +86,29 @@ public struct EventLog: Sendable {
         write(event)
     }
 
+    /// Sûr entre processus et entre threads (SPEC-016 T017) : la vérification de taille, la
+    /// rotation et l'ajout se font sous `FileLock` exclusif (`events.jsonl.lock`, un descripteur
+    /// par prise, donc valable aussi entre threads), et la ligne complète part en un seul
+    /// `write(2)` sur un descripteur `O_APPEND` : aucune ligne coupée ni entrelacée.
     private func write<T: Encodable>(_ value: T) {
-        Self.writeLock.lock()
-        defer { Self.writeLock.unlock() }
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            let data = try Self.encoder.encode(value)
-            rotateIfNeededLocked(incomingBytes: data.count + Self.jsonNewline.count)
-            if FileManager.default.fileExists(atPath: url.path) {
-                let handle = try FileHandle(forWritingTo: url)
-                defer { try? handle.close() }
-                try handle.seekToEnd()
-                try handle.write(contentsOf: data)
-                try handle.write(contentsOf: Self.jsonNewline)
-            } else {
-                try (data + Self.jsonNewline).write(to: url, options: .atomic)
+            let line = try Self.encoder.encode(value) + Self.jsonNewline
+            try FileLock.withLock(path: FileLock.lockPath(for: url), mode: .exclusive) {
+                rotateIfNeededLocked(incomingBytes: line.count)
+                try appendLocked(line)
             }
         } catch {
             fputs("roadie: failed to write event log: \(error)\n", stderr)
         }
+    }
+
+    private func appendLocked(_ line: Data) throws {
+        let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd) }
+        let written = line.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+        guard written == line.count else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 
     public func tail(limit: Int = 20) -> [String] {
@@ -165,9 +161,13 @@ public struct EventLog: Sendable {
     }
 
     public func rotateIfNeeded(maxBytes: Int = Self.defaultMaxBytes, retainedBackups: Int = Self.defaultRetainedBackups) {
-        Self.writeLock.lock()
-        defer { Self.writeLock.unlock() }
-        rotateLocked(maxBytes: maxBytes, retainedBackups: retainedBackups, force: false)
+        do {
+            try FileLock.withLock(path: FileLock.lockPath(for: url), mode: .exclusive) {
+                rotateLocked(maxBytes: maxBytes, retainedBackups: retainedBackups, force: false)
+            }
+        } catch {
+            fputs("roadie: failed to rotate event log: \(error)\n", stderr)
+        }
     }
 
     private func rotateIfNeededLocked(incomingBytes: Int) {

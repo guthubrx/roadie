@@ -37,60 +37,54 @@ public struct RailRuntimeStateStore: Sendable {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
     }
 
+    /// Lecture sans verrou (écriture atomique par rename, cf. `JSONPersistence.load`).
     public func load() -> RailRuntimeState {
-        guard let data = try? Data(contentsOf: url),
-              let state = try? JSONDecoder().decode(RailRuntimeState.self, from: data)
-        else {
-            return RailRuntimeState()
-        }
-        return state
+        JSONPersistence.load(RailRuntimeState.self, from: url, default: RailRuntimeState())
     }
 
     public func save(_ state: RailRuntimeState) {
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        if let data = try? JSONEncoder().encode(state) {
-            try? data.write(to: url, options: .atomic)
-        }
+        mutate { $0 = state }
     }
 
     public func setVisibleWidth(_ width: Double, for displayID: DisplayID) {
-        var state = load()
-        state.visibleWidths[displayID.rawValue] = width
-        save(state)
+        mutate { $0.visibleWidths[displayID.rawValue] = width }
     }
 
     @discardableResult
     public func setPinned(_ pinned: Bool) -> RailRuntimeState {
-        var state = load()
-        state.isPinned = pinned
-        save(state)
-        return state
+        mutate { state in
+            state.isPinned = pinned
+            return state
+        }
     }
 
     @discardableResult
     public func togglePinned() -> RailRuntimeState {
-        var state = load()
-        state.isPinned.toggle()
-        save(state)
-        return state
+        mutate { state in
+            state.isPinned.toggle()
+            return state
+        }
     }
 
     @discardableResult
     public func showStageLabels(for seconds: Double, now: Date = Date()) -> RailRuntimeState {
-        var state = load()
-        state.stageLabelsVisibleUntil = seconds > 0 ? now.addingTimeInterval(seconds).timeIntervalSince1970 : nil
-        save(state)
-        return state
+        mutate { state in
+            state.stageLabelsVisibleUntil = seconds > 0 ? now.addingTimeInterval(seconds).timeIntervalSince1970 : nil
+            return state
+        }
     }
 
     @discardableResult
     public func hideStageLabels() -> RailRuntimeState {
-        var state = load()
-        state.stageLabelsVisibleUntil = 0
-        save(state)
-        return state
+        mutate { state in
+            state.stageLabelsVisibleUntil = 0
+            return state
+        }
+    }
+
+    /// Transaction exclusive entre processus (rail, CLI, daemon) : SPEC-016 FR-013.
+    @discardableResult
+    private func mutate<R>(_ body: (inout RailRuntimeState) -> R) -> R {
+        JSONPersistence.mutate(RailRuntimeState.self, at: url, default: RailRuntimeState(), label: "rail runtime state", body)
     }
 }

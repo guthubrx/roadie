@@ -73,12 +73,19 @@ public struct EventSubscriptionService: Sendable {
         }
         defer { try? handle.close() }
         do {
-            try handle.seek(toOffset: cursor.offset)
+            // Fichier plus court que le curseur : il a tourné (rotation), on relit depuis 0.
+            let size = try handle.seekToEnd()
+            let offset = size < cursor.offset ? 0 : cursor.offset
+            try handle.seek(toOffset: offset)
             let data = try handle.readToEnd() ?? Data()
-            let newOffset = try handle.offset()
-            guard !data.isEmpty,
-                  let raw = String(data: data, encoding: .utf8)
-            else {
+            // On n'avance que jusqu'au dernier saut de ligne : une ligne en cours d'écriture
+            // sera lue entière au prochain appel.
+            guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else {
+                return ([], EventSubscriptionCursor(offset: offset))
+            }
+            let complete = data[data.startIndex..<lastNewline]
+            let newOffset = offset + UInt64(complete.count + 1)
+            guard let raw = String(data: complete, encoding: .utf8) else {
                 return ([], EventSubscriptionCursor(offset: newOffset))
             }
             let events = raw

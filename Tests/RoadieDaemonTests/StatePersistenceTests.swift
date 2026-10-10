@@ -1,0 +1,302 @@
+import Foundation
+import Testing
+import RoadieAX
+import RoadieCore
+import RoadieDaemon
+import RoadieStages
+
+/// Lot A SPEC-016 : transactions d'état, fichier illisible, écriture conditionnelle,
+/// réconciliation d'identité, grâce des épinglages, journal d'événements.
+@Suite
+struct StatePersistenceTests {
+    private let display = DisplayID(rawValue: "display-main")
+
+    private func window(_ raw: UInt32, pid: Int32 = 500, title: String = "Doc", x: Double = 0) -> WindowSnapshot {
+        WindowSnapshot(
+            id: WindowID(rawValue: raw),
+            pid: pid,
+            appName: "App",
+            bundleID: "com.test.app",
+            title: title,
+            frame: Rect(x: x, y: 0, width: 400, height: 300),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+    }
+
+    private func stateWithMember(pid: Int32?) -> PersistentStageState {
+        PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(
+                        windowID: WindowID(rawValue: 10),
+                        bundleID: "com.test.app",
+                        title: "Doc",
+                        frame: Rect(x: 0, y: 0, width: 400, height: 300),
+                        pid: pid
+                    ),
+                ]),
+            ]),
+        ])
+    }
+
+    private func fileNumber(_ path: String) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.systemFileNumber] as? Int
+    }
+
+    // MARK: - Transactions (FR-013)
+
+    @Test
+    func concurrentMutationsFromTwoStoresLoseNothing() {
+        let path = tempPath("state-concurrent")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        // Deux instances = deux "processus" ; chaque prise de verrou ouvre son propre descripteur.
+        let stores = [StageStore(path: path), StageStore(path: path)]
+
+        DispatchQueue.concurrentPerform(iterations: 100) { index in
+            stores[index % 2].mutate { state in
+                state.setLabel("L\(index)", displayID: display, desktopID: DesktopID(rawValue: index + 1))
+            }
+        }
+
+        #expect(StageStore(path: path).state().desktopLabels.count == 100)
+    }
+
+    // MARK: - Écriture conditionnelle (FR-014)
+
+    @Test
+    func saveWithIdenticalContentDoesNotRewriteFile() {
+        let path = tempPath("state-unchanged")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = StageStore(path: path)
+        let state = stateWithMember(pid: 1)
+        store.save(state)
+        let before = fileNumber(path)
+
+        store.save(state)
+        store.mutate { _ in }
+
+        #expect(before != nil)
+        // L'écriture atomique remplace l'inode : un inode identique prouve l'absence d'écriture.
+        #expect(fileNumber(path) == before)
+        store.mutate { $0.activeDisplayID = display }
+        #expect(fileNumber(path) != before)
+    }
+
+    @Test
+    func repeatedObservationOfUnchangedWindowsLeavesStateEqual() {
+        let live = window(10, pid: 1)
+        var state = stateWithMember(pid: 1)
+        state.setPin(window: live, homeScope: StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")), pinScope: .desktop)
+        func observe(_ state: inout PersistentStageState, at now: Date) {
+            state.pruneMissingWindows(keeping: [live.id], now: now)
+            state.pruneMissingPins(keeping: [live.id], now: now)
+            var scope = state.scopes[0]
+            scope.updateFrame(window: live)
+            state.update(scope)
+            state.updatePinFrame(window: live, now: now)
+        }
+        observe(&state, at: Date())
+        let settled = state
+
+        observe(&state, at: Date().addingTimeInterval(30))
+
+        #expect(state == settled)
+    }
+
+    @Test
+    func layoutIntentPruneKeepsAbsentDisplayForTenMinutesWithoutRewrite() {
+        let path = tempPath("intents-prune")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = LayoutIntentStore(path: path)
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(LayoutIntent(scope: scope, windowIDs: [], placements: [:]))
+        let now = Date()
+
+        store.prune(keepingDisplayIDs: [display], now: now)
+        let unchanged = fileNumber(path)
+        store.prune(keepingDisplayIDs: [display], now: now)
+        #expect(fileNumber(path) == unchanged)
+
+        store.prune(keepingDisplayIDs: [], now: now)
+        store.prune(keepingDisplayIDs: [], now: now.addingTimeInterval(599))
+        #expect(store.intent(for: scope) != nil)
+        store.prune(keepingDisplayIDs: [], now: now.addingTimeInterval(600))
+        #expect(store.intent(for: scope) == nil)
+    }
+
+    // MARK: - Fichier illisible (FR-015)
+
+    @Test
+    func unreadableStateIsBackedUpAndNeverOverwritten() throws {
+        let path = tempPath("state-corrupt")
+        let directory = (path as NSString).deletingLastPathComponent
+        let name = (path as NSString).lastPathComponent
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            for file in (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? [] where file.hasPrefix("\(name).corrupt-") {
+                try? FileManager.default.removeItem(atPath: "\(directory)/\(file)")
+            }
+        }
+        let garbage = "{\"scopes\": [ truncated"
+        try garbage.write(toFile: path, atomically: true, encoding: .utf8)
+        let store = StageStore(path: path)
+
+        #expect(store.state() == PersistentStageState())
+        #expect(store.loadFailure != nil)
+        store.save(stateWithMember(pid: 1))
+        store.mutate { $0.activeDisplayID = display }
+
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == garbage)
+        let backups = try FileManager.default.contentsOfDirectory(atPath: directory)
+            .filter { $0.hasPrefix("\(name).corrupt-") }
+        #expect(backups.count == 1)
+        if let backup = backups.first {
+            #expect(try String(contentsOfFile: "\(directory)/\(backup)", encoding: .utf8) == garbage)
+        }
+
+        // Fichier réparé (ici supprimé) : les écritures reprennent.
+        try FileManager.default.removeItem(atPath: path)
+        #expect(store.loadFailure == nil)
+        store.mutate { $0.activeDisplayID = display }
+        #expect(store.state().activeDisplayID == display)
+    }
+
+    // MARK: - Identité des fenêtres (FR-006)
+
+    @Test
+    func reconciliationRefusedWhileMemberProcessIsAlive() {
+        var state = stateWithMember(pid: 4242)
+
+        state.reconcileWindowIDs(with: [window(99, pid: 4242)], isProcessAlive: { _ in true })
+
+        #expect(state.stageScope(for: WindowID(rawValue: 10)) != nil)
+        #expect(state.stageScope(for: WindowID(rawValue: 99)) == nil)
+    }
+
+    @Test
+    func reconciliationAcceptedWhenMemberProcessIsGone() {
+        var state = stateWithMember(pid: 4242)
+
+        state.reconcileWindowIDs(with: [window(99, pid: 5000)], isProcessAlive: { _ in false })
+
+        #expect(state.stageScope(for: WindowID(rawValue: 99)) != nil)
+        #expect(state.scopes[0].stages[0].members[0].pid == 5000)
+    }
+
+    @Test
+    func reconciliationRequiresFrameProximityEvenForSingleCandidate() {
+        var state = stateWithMember(pid: nil)
+
+        state.reconcileWindowIDs(with: [window(99, x: 1_000)], isProcessAlive: { _ in false })
+
+        #expect(state.stageScope(for: WindowID(rawValue: 10)) != nil)
+        #expect(state.stageScope(for: WindowID(rawValue: 99)) == nil)
+    }
+
+    @Test
+    func memberRecordsPidAndKeepsPresentationStateWhenOmitted() {
+        var scope = PersistentStageScope(displayID: display)
+        scope.assign(window: window(10, pid: 777), to: StageID(rawValue: "1"), presentationState: .maximized)
+        scope.updateFrame(window: window(10, pid: 777, x: 20))
+        scope.assign(window: window(10, pid: 777), to: StageID(rawValue: "2"))
+
+        let member = scope.stages.flatMap(\.members).first { $0.windowID == WindowID(rawValue: 10) }
+        #expect(member?.pid == 777)
+        #expect(member?.presentationState == .maximized)
+    }
+
+    @Test
+    func legacyMemberWithoutPidDecodes() throws {
+        let json = #"{"windowID":10,"bundleID":"com.test.app","title":"Doc","frame":{"x":0,"y":0,"width":1,"height":1}}"#
+        let member = try JSONDecoder().decode(PersistentStageMember.self, from: Data(json.utf8))
+        #expect(member.pid == nil)
+    }
+
+    // MARK: - Épinglages (FR-007)
+
+    @Test
+    func pinsSurviveFortyFiveSecondsOfAbsence() {
+        let home = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        var state = PersistentStageState()
+        state.setPin(window: window(10), homeScope: home, pinScope: .desktop)
+        let start = Date()
+
+        #expect(state.pruneMissingPins(keeping: [], now: start).isEmpty)
+        #expect(state.pruneMissingPins(keeping: [], now: start.addingTimeInterval(44)).isEmpty)
+        // Retour de la fenêtre : la grâce repart de zéro.
+        #expect(state.pruneMissingPins(keeping: [WindowID(rawValue: 10)], now: start.addingTimeInterval(44)).isEmpty)
+        #expect(state.pruneMissingPins(keeping: [], now: start.addingTimeInterval(50)).isEmpty)
+        let pruned = state.pruneMissingPins(keeping: [], now: start.addingTimeInterval(95))
+
+        #expect(pruned.map(\.windowID) == [WindowID(rawValue: 10)])
+        #expect(state.windowPins.isEmpty)
+    }
+
+    // MARK: - Journal d'événements (T017)
+
+    @Test
+    func eventLogRotationUnderConcurrencyKeepsEveryLineWhole() throws {
+        let path = tempPath("events-rotation") + "l"
+        defer {
+            for suffix in ["", ".1", ".lock"] { try? FileManager.default.removeItem(atPath: path + suffix) }
+        }
+        let logs = [EventLog(path: path, maxBytes: 2_000, retainedBackups: 1), EventLog(path: path, maxBytes: 2_000, retainedBackups: 1)]
+
+        DispatchQueue.concurrentPerform(iterations: 200) { index in
+            logs[index % 2].append(RoadieEvent(type: "test.event", details: ["index": String(index)]))
+        }
+
+        let lines = [path, path + ".1"]
+            .compactMap { try? String(contentsOfFile: $0, encoding: .utf8) }
+            .flatMap { $0.split(separator: "\n") }
+        #expect(!lines.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: path + ".1"))
+        for line in lines {
+            #expect((try? JSONSerialization.jsonObject(with: Data(line.utf8))) != nil)
+        }
+    }
+
+    @Test
+    func subscriptionResetsAfterRotationAndSkipsPartialLine() throws {
+        let path = tempPath("events-subscription") + "l"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let log = EventLog(path: path)
+        let service = EventSubscriptionService(path: path)
+        log.append(RoadieEvent(type: "first"))
+        log.append(RoadieEvent(type: "second"))
+        let afterTwo = service.readAvailable(from: EventSubscriptionCursor()).cursor
+
+        // Rotation : le fichier repart plus court que le curseur.
+        try FileManager.default.removeItem(atPath: path)
+        log.append(RoadieEvent(type: "third"))
+        let afterRotation = service.readAvailable(from: afterTwo)
+        #expect(afterRotation.events.map(\.type) == ["third"])
+
+        // Ligne partielle : non consommée tant que le saut de ligne n'est pas écrit.
+        let handle = try #require(FileHandle(forWritingAtPath: path))
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(#"{"type":"partial""#.utf8))
+        try handle.close()
+        let partial = service.readAvailable(from: afterRotation.cursor)
+        #expect(partial.events.isEmpty)
+        #expect(partial.cursor == afterRotation.cursor)
+    }
+
+    // MARK: - Activité des commandes (LayoutCommandActivity)
+
+    @Test
+    func layoutCommandActivityKeepsLongestExpiryAcrossConcurrentWriters() {
+        let path = tempPath("layout-activity")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let activities = [LayoutCommandActivity(path: path), LayoutCommandActivity(path: path)]
+        let now = Date()
+
+        DispatchQueue.concurrentPerform(iterations: 50) { index in
+            activities[index % 2].markActive(reason: "t\(index)", now: now, holdSeconds: Double(index))
+        }
+
+        let expiry = activities[0].activeUntil(now: now)
+        #expect(expiry.map { abs($0.timeIntervalSince(now) - 49) < 0.01 } == true)
+    }
+}

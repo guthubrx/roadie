@@ -252,7 +252,10 @@ struct PersistentStageStateTests {
         state.setPin(window: window(20), homeScope: home, pinScope: .allDesktops)
 
         let removed = state.removePin(windowID: WindowID(rawValue: 10))
-        let pruned = state.pruneMissingPins(keeping: [WindowID(rawValue: 99)])
+        // SPEC-016 FR-007 : un épinglage absent n'est retiré qu'après 45 s de grâce.
+        let start = Date()
+        #expect(state.pruneMissingPins(keeping: [WindowID(rawValue: 99)], now: start).isEmpty)
+        let pruned = state.pruneMissingPins(keeping: [WindowID(rawValue: 99)], now: start.addingTimeInterval(45))
 
         #expect(removed?.windowID == WindowID(rawValue: 10))
         #expect(pruned.map(\.windowID) == [WindowID(rawValue: 20)])

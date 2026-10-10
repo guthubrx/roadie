@@ -159,29 +159,39 @@ public struct StageStore: Sendable {
         return "~/.roadies/stages.json"
     }
 
+    /// Lecture sans verrou. Si le fichier est illisible, renvoie un état vide (les appelants
+    /// restent fonctionnels) ; `loadFailure` le signale et les écritures sont refusées.
     public func state() -> PersistentStageState {
-        load()
-    }
-
-    public func save(_ state: PersistentStageState) {
-        write(state)
-    }
-
-    /// Modifie l'état en une transaction lecture-modification-écriture (SPEC-016 FR-013).
-    @discardableResult
-    public func mutate<R>(_ body: (inout PersistentStageState) throws -> R) rethrows -> R {
-        var state = load()
-        let result = try body(&state)
-        write(state)
-        return result
-    }
-
-    private func load() -> PersistentStageState {
         JSONPersistence.load(PersistentStageState.self, from: url, default: PersistentStageState())
     }
 
-    private func write(_ state: PersistentStageState) {
-        JSONPersistence.write(state, to: url, label: "stages")
+    /// Erreur de chargement si le fichier d'état existe mais est illisible (SPEC-016 FR-015).
+    /// Tant qu'elle est présente, `save` et `mutate` n'écrivent rien. nil si absent ou lisible.
+    public var loadFailure: Error? {
+        if case .corrupt(let error) = JSONPersistence.loadResult(PersistentStageState.self, from: url) {
+            return error
+        }
+        return nil
+    }
+
+    /// Remplace l'état complet (compatibilité). Passe par la transaction : pas d'écriture si
+    /// le contenu est identique, ni si le fichier existant est illisible.
+    /// Préférer `mutate` : `save` écrase les changements faits entre la lecture et l'appel.
+    public func save(_ state: PersistentStageState) {
+        mutate { $0 = state }
+    }
+
+    /// Modifie l'état en une transaction lecture-modification-écriture exclusive (SPEC-016 FR-013).
+    /// `body` ne doit pas rappeler `save`/`mutate` sur ce store (verrou non réentrant).
+    @discardableResult
+    public func mutate<R>(_ body: (inout PersistentStageState) throws -> R) rethrows -> R {
+        try JSONPersistence.mutate(
+            PersistentStageState.self,
+            at: url,
+            default: PersistentStageState(),
+            label: "stages",
+            body
+        )
     }
 }
 
@@ -418,14 +428,20 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     ) -> [PersistentWindowBookmark] {
         var pruned: [PersistentWindowBookmark] = []
         for index in windowBookmarks.indices {
+            // Seules les transitions (début et fin d'absence) modifient l'état : au repos, rien
+            // ne change et le fichier n'est pas réécrit (SPEC-016 FR-014).
             if liveWindowIDs.contains(windowBookmarks[index].windowID) {
-                windowBookmarks[index].lastSeenAt = now
-                windowBookmarks[index].missingSince = nil
+                if windowBookmarks[index].missingSince != nil {
+                    windowBookmarks[index].lastSeenAt = now
+                    windowBookmarks[index].missingSince = nil
+                }
             } else if let missingSince = windowBookmarks[index].missingSince {
                 if now.timeIntervalSince(missingSince) >= missingGrace {
                     pruned.append(windowBookmarks[index])
                 }
             } else {
+                // Vu pour la dernière fois au snapshot précédent : approximation au tick près.
+                windowBookmarks[index].lastSeenAt = now
                 windowBookmarks[index].missingSince = now
             }
         }
@@ -435,8 +451,16 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         return pruned
     }
 
+    /// Met à jour les signets de la fenêtre seulement si une donnée observée a changé (FR-014).
     public mutating func updateBookmarkObservation(window: WindowSnapshot, scope: StageScope, now: Date = Date()) {
         for index in windowBookmarks.indices where windowBookmarks[index].windowID == window.id {
+            let bookmark = windowBookmarks[index]
+            guard bookmark.scope != scope
+                || bookmark.bundleID != window.bundleID
+                || bookmark.title != window.title
+                || bookmark.frame != window.frame
+                || bookmark.missingSince != nil
+            else { continue }
             windowBookmarks[index].scope = scope
             windowBookmarks[index].bundleID = window.bundleID
             windowBookmarks[index].title = window.title
@@ -489,16 +513,40 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         return windowPins.remove(at: index)
     }
 
+    /// Retire les épinglages absents depuis `missingGrace` (45 s, SPEC-016 FR-007) : une
+    /// minimisation, un autre Space ou un plein écran natif ne perdent pas l'épinglage.
+    /// Seules les transitions modifient l'état (FR-014). O(n), n = nombre d'épinglages.
     @discardableResult
-    public mutating func pruneMissingPins(keeping liveWindowIDs: Set<WindowID>) -> [PersistentWindowPin] {
-        let pruned = windowPins.filter { !liveWindowIDs.contains($0.windowID) }
+    public mutating func pruneMissingPins(
+        keeping liveWindowIDs: Set<WindowID>,
+        missingGrace: TimeInterval = 45,
+        now: Date = Date()
+    ) -> [PersistentWindowPin] {
+        var pruned: [PersistentWindowPin] = []
+        for index in windowPins.indices {
+            if liveWindowIDs.contains(windowPins[index].windowID) {
+                windowPins[index].missingSince = nil
+            } else if let missingSince = windowPins[index].missingSince {
+                if now.timeIntervalSince(missingSince) >= missingGrace {
+                    pruned.append(windowPins[index])
+                }
+            } else {
+                windowPins[index].missingSince = now
+            }
+        }
         guard !pruned.isEmpty else { return [] }
-        windowPins.removeAll { !liveWindowIDs.contains($0.windowID) }
+        let prunedIDs = Set(pruned.map(\.windowID))
+        windowPins.removeAll { prunedIDs.contains($0.windowID) }
         return pruned
     }
 
+    /// Met à jour l'épinglage seulement si une donnée observée a changé (FR-014).
     public mutating func updatePinFrame(window: WindowSnapshot, now: Date = Date()) {
         guard let index = windowPins.firstIndex(where: { $0.windowID == window.id }) else { return }
+        let pin = windowPins[index]
+        guard pin.bundleID != window.bundleID || pin.title != window.title || pin.lastFrame != window.frame else {
+            return
+        }
         windowPins[index].bundleID = window.bundleID
         windowPins[index].title = window.title
         windowPins[index].lastFrame = window.frame
@@ -515,7 +563,20 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         return windowPins[index]
     }
 
-    public mutating func reconcileWindowIDs(with liveWindows: [WindowSnapshot]) {
+    /// Vrai si le processus existe encore (`kill(pid, 0)` ; EPERM = existe mais pas à nous).
+    public static func isProcessAlive(_ pid: Int32) -> Bool {
+        pid > 0 && (kill(pid, 0) == 0 || errno == EPERM)
+    }
+
+    /// Rattache un membre disparu à une fenêtre neuve de même application et même titre
+    /// (SPEC-016 FR-006, R11). Jamais si le pid connu du membre est encore vivant : la fenêtre
+    /// neuve est alors une autre fenêtre de la même application. Sans pid connu (anciens
+    /// fichiers) ou pid mort, il faut aussi la proximité de cadre (cf. `bestReplacement`).
+    /// O(M + W), M = membres, W = fenêtres vivantes.
+    public mutating func reconcileWindowIDs(
+        with liveWindows: [WindowSnapshot],
+        isProcessAlive: (Int32) -> Bool = PersistentStageState.isProcessAlive
+    ) {
         let tileableWindows = liveWindows.filter(\.isTileCandidate)
         let liveWindowIDs = Set(tileableWindows.map(\.id))
         var claimedWindowIDs = Set<WindowID>()
@@ -538,6 +599,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                 for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {
                     let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]
                     guard !liveWindowIDs.contains(member.windowID),
+                          member.pid.map(isProcessAlive) != true,
                           let replacement = bestReplacement(
                               for: member,
                               in: windowsBySignature[StableWindowSignature(member: member)] ?? [],
@@ -551,6 +613,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].bundleID = replacement.bundleID
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].title = replacement.title
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].frame = replacement.frame
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].pid = replacement.pid
                 }
             }
         }
@@ -760,6 +823,8 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
     public var lastFrame: Rect
     public var createdAt: Date
     public var updatedAt: Date
+    /// Début d'absence de la fenêtre ; l'épinglage est retiré après 45 s (SPEC-016 FR-007).
+    public var missingSince: Date?
 
     public init(
         windowID: WindowID,
@@ -769,7 +834,8 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
         title: String,
         lastFrame: Rect,
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        missingSince: Date? = nil
     ) {
         self.windowID = windowID
         self.homeScope = homeScope
@@ -779,6 +845,7 @@ public struct PersistentWindowPin: Equatable, Codable, Sendable {
         self.lastFrame = lastFrame
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.missingSince = missingSince
     }
 
     public func visibility(in activeScope: StageScope?) -> PinVisibilityDecision {
@@ -1067,6 +1134,11 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         presentationState: WindowPresentationState? = nil
     ) {
         ensureStage(stageID, mode: defaultMode)
+        // Paramètre omis (nil) : l'état de présentation connu est conservé (SPEC-016 T014).
+        let previousPresentationState = stages.lazy
+            .flatMap(\.members)
+            .first { $0.windowID == window.id }?
+            .presentationState
         for index in stages.indices {
             stages[index].members.removeAll { $0.windowID == window.id }
             stages[index].groups = stages[index].groups.compactMap { group in
@@ -1085,9 +1157,10 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             bundleID: window.bundleID,
             title: window.title,
             frame: window.frame,
-            presentationState: presentationState,
+            presentationState: presentationState ?? previousPresentationState,
             lastSeenAt: Date(),
-            missingSince: nil
+            missingSince: nil,
+            pid: window.pid
         )
         if let insertionIndex {
             let targetIndex = min(max(insertionIndex, 0), stages[index].members.count)
@@ -1149,6 +1222,9 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
 
     // Complexite : O(stages * members) au pire, O(stages) en moyenne avec exit precoce.
     // Une fenetre n'apparait que dans un stage en etat valide -> on sort des qu'elle est trouvee.
+    // `presentationState` omis (nil) : valeur connue conservée (SPEC-016 T014).
+    // Une présence inchangée ne modifie aucune date : seule la fin d'absence met à jour
+    // `lastSeenAt` (FR-014, pas de réécriture au repos).
     public mutating func updateFrame(
         window: WindowSnapshot,
         presentationState: WindowPresentationState? = nil
@@ -1157,12 +1233,19 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {
                 continue
             }
-            stages[stageIndex].members[memberIndex].frame = window.frame
-            stages[stageIndex].members[memberIndex].bundleID = window.bundleID
-            stages[stageIndex].members[memberIndex].title = window.title
-            stages[stageIndex].members[memberIndex].presentationState = presentationState
-            stages[stageIndex].members[memberIndex].lastSeenAt = Date()
-            stages[stageIndex].members[memberIndex].missingSince = nil
+            var member = stages[stageIndex].members[memberIndex]
+            member.frame = window.frame
+            member.bundleID = window.bundleID
+            member.title = window.title
+            member.pid = window.pid
+            if let presentationState {
+                member.presentationState = presentationState
+            }
+            if member.missingSince != nil {
+                member.missingSince = nil
+                member.lastSeenAt = Date()
+            }
+            stages[stageIndex].members[memberIndex] = member
             return
         }
     }
@@ -1178,17 +1261,21 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             var prunedWindowIDs: Set<WindowID> = []
             for memberIndex in stages[stageIndex].members.indices {
                 let windowID = stages[stageIndex].members[memberIndex].windowID
+                // Seules les transitions modifient l'état (FR-014, pas de réécriture au repos).
                 if liveWindowIDs.contains(windowID) {
                     if stages[stageIndex].members[memberIndex].missingSince != nil {
                         report.restoredWindowIDs.insert(windowID)
+                        stages[stageIndex].members[memberIndex].lastSeenAt = now
+                        stages[stageIndex].members[memberIndex].missingSince = nil
                     }
-                    stages[stageIndex].members[memberIndex].lastSeenAt = now
-                    stages[stageIndex].members[memberIndex].missingSince = nil
                 } else if let missingSince = stages[stageIndex].members[memberIndex].missingSince {
                     if now.timeIntervalSince(missingSince) >= missingGrace {
                         prunedWindowIDs.insert(windowID)
                     }
                 } else {
+                    // Vu pour la dernière fois au snapshot précédent : approximation au tick près,
+                    // suffisante pour classer les membres disparus par récence.
+                    stages[stageIndex].members[memberIndex].lastSeenAt = now
                     stages[stageIndex].members[memberIndex].missingSince = now
                     report.markedMissingWindowIDs.insert(windowID)
                 }
@@ -1346,6 +1433,8 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var presentationState: WindowPresentationState?
     public var lastSeenAt: Date?
     public var missingSince: Date?
+    /// pid observé du processus propriétaire (SPEC-016 FR-006). Optionnel : absent des anciens fichiers.
+    public var pid: Int32?
 
     public init(
         windowID: WindowID,
@@ -1354,7 +1443,8 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         frame: Rect,
         presentationState: WindowPresentationState? = nil,
         lastSeenAt: Date? = nil,
-        missingSince: Date? = nil
+        missingSince: Date? = nil,
+        pid: Int32? = nil
     ) {
         self.windowID = windowID
         self.bundleID = bundleID
@@ -1363,6 +1453,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         self.presentationState = presentationState
         self.lastSeenAt = lastSeenAt
         self.missingSince = missingSince
+        self.pid = pid
     }
 }
 
@@ -1395,11 +1486,8 @@ private func bestReplacement(
     let available = candidates.filter { !claimed.contains($0.id) }
     guard !available.isEmpty else { return nil }
 
-    if available.count == 1,
-       !member.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        return available[0]
-    }
-
+    // Proximité de cadre exigée même pour un candidat unique (SPEC-016 FR-006) : un titre
+    // identique ne suffit pas.
     let scored = available
         .map { window in (window: window, score: frameDistance(member.frame, window.frame)) }
         .sorted { lhs, rhs in lhs.score < rhs.score }
