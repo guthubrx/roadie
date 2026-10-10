@@ -48,7 +48,7 @@
 
 ## Phase 5 : Lot D - Commandes et tiler (Opus) [US1, US4]
 
-- [x] T040 [P] [US1] `toggleFullscreen` enregistre un intent cohérent avec `arguments["presentation"] = "fullscreen"` et les cadres réellement appliqués dans `Sources/RoadieDaemon/WindowCommands.swift`
+- [x] T040 [P] [US1] `toggleFullscreen` enregistre un intent cohérent portant `zoomedWindowID` (amendement R5 bis) et les cadres réellement appliqués dans `Sources/RoadieDaemon/WindowCommands.swift`
 - [x] T041 [P] [US1] Supprimer la détection plein écran par taille au changement de stage ; utiliser `isNativeFullscreen` ou l'intent marqué dans `Sources/RoadieDaemon/StageCommands.swift`
 - [x] T042 [P] [US1] Basculer vers une stage dont toutes les fenêtres ont disparu (application absente ou délai court) dans `StageCommands.swift`
 - [x] T043 [P] [US4] BSP : sur une feuille, un focus absent de l'arbre est traité comme `nil` dans `Sources/RoadieTiler/BSPTree.swift` ; `reconciled` ne double pas les ID ; doc d'`adoptingRatio` alignée sur le code
