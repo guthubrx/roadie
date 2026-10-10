@@ -35,7 +35,7 @@
 
 ## Phase 4 : Lot C - Moteur de disposition (Opus) [US1, US2, US4, US8]
 
-- [x] T030 [US1] Plein écran par commande uniquement si l'intent porte `arguments["presentation"] == "fullscreen"` ; supprimer la détection par taille (`isCommandFullscreenLike`, `isMaximizedLike`) dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
+- [x] T030 [US1] Plein écran par commande uniquement si `intent.zoomedWindowID` désigne la fenêtre (amendement R5 bis) ; supprimer la détection par taille (`isCommandFullscreenLike`, `isMaximizedLike`) dans `Sources/RoadieDaemon/LayoutMaintainer.swift`
 - [x] T031 [US2] Gardes par scope : plein écran natif, stabilisation et suppression liée à une commande excluent leur scope (`excluding:`) au lieu de `return` ; `lastObservedFrames` mis à jour seulement pour les scopes concernés ; activer un scope n'est plus un changement de membres dans `LayoutMaintainer.swift`
 - [x] T032 [US1] `restoreFocusedActiveStageIfNeeded` renvoie `nil` si rien n'est à appliquer et rend visible la fenêtre focalisée cachée dans `LayoutMaintainer.swift`
 - [x] T033 [US1] Faisabilité : remplacer la somme largeurs+hauteurs par une comparaison de surfaces minimales et une replanification avec tailles minimales ; masquage en dernier recours journalisé ; implémentation unique `clampedFramesCannotShareContainer` exposée pour D dans `LayoutMaintainer.swift`
@@ -61,7 +61,7 @@
 - [x] T050 [P] [US2] Étendre `ConfigReloadService` : instance partagée, `currentConfig()` avec contrôle de date de modification, dernière config valide gardée, erreur journalisée une fois dans `Sources/RoadieDaemon/ConfigReloadService.swift` ; protéger son état (supprimer l'`@unchecked Sendable` non protégé)
 - [x] T051 [US2] `SnapshotService` lit la config via `ConfigReloadService.shared` à chaque snapshot (rechargement à chaud) ; remplacer `(try? RoadieConfigLoader.load()) ?? RoadieConfig()` dans `DaemonSnapshot.swift`, `BorderController.swift`, `FocusFollowsMouseController.swift` (les autres fichiers sont traités par leur lot)
 - [x] T052 [US2] `snapshot()` : énumération AX hors verrou, réconciliation dans `StageStore.mutate` ; `intentStore.prune` seulement si `persistStateChanges` ; pas d'écriture si inchangé dans `Sources/RoadieDaemon/DaemonSnapshot.swift`
-- [x] T053 [US3] Mémo de snapshot récent (< 90 ms) partagé par les composants lecteurs du même processus dans `DaemonSnapshot.swift`
+- [x] T053 [US3] Mémo de snapshot récent (< 150 ms, amendement R7 bis) partagé par les composants lecteurs du même processus dans `DaemonSnapshot.swift`
 - [x] T054 [US4] Suivi du focus par la stage : ignorer un focus moins de 500 ms après la disparition d'un membre ou non stable sur deux snapshots dans `DaemonSnapshot.swift`
 - [x] T055 [US4] Hystérésis du classement tilable : garder le dernier classement si les attributs ne sont pas lisibles dans `DaemonSnapshot.swift`
 - [x] T056 [P] [US4] Focus-souris : agir seulement après un mouvement réel (> 2 px) et sans bouton enfoncé dans `Sources/RoadieDaemon/FocusFollowsMouseController.swift`
@@ -130,3 +130,20 @@
 - Lots A, B, C, E, F, G, H, I en parallèle (vague 1) ; D en parallèle sur T040-T044.
 - T045 après T033 et T010 ; T051-T052 après T010 et T050 ; T067 après T091 ; T094 après T066 ; T079 après T070-T078.
 - J après les lots concernés ; Polish en dernier.
+
+## Convergence
+
+Passage 1 (2026-10-10) : 6 manques relevés par Converge (T201-T206) et 7 défauts relevés par la contre-revue d'implémentation Codex, vérifiés puis retenus (T207-T212).
+
+- [ ] T201 [US4] FR-005 : point d'ancrage BSP = premier élément présent dans l'arbre de la stage parmi focus global, `stage.focusedWindowID`, `stage.previousFocusedWindowID`, sinon `nil`, dans `Sources/RoadieDaemon/DaemonSnapshot.swift` (`reconcileSpatialBSPTrees`, `reconciledBSPTree`) ; test dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift` (arbre de 3, nouvelle fenêtre voisine de la 2e feuille)
+- [ ] T202 [US2] FR-013 : convertir à `StageStore.mutate` les `save` restants (`LayoutMaintainer.swift:858, 925, 2367, 2378`, `DaemonHealth.swift:114, 139`, `StateAudit.swift:89`) ; `grep -rn "\.save(" Sources | grep -v -i intent` vide ; test dans `StatePersistenceTests.swift`
+- [ ] T203 [US2] FR-017 : test deux écrans dans `LayoutMaintainerTests.swift` (stabilisation écran 1 n'empêche pas l'écran 2 ; changement de stage sans `layout_stage_membership_settling`)
+- [ ] T204 [US8] FR-040 : `LayoutCommandActivity.markActive(reason:scopes:)` et exclusion des seuls scopes concernés dans `LayoutMaintainer.swift:166-179` ; test commande écran 1 / plan écran 2
+- [ ] T205 [US8] FR-041 : littéraux restants vers `LayoutTolerance` (`DaemonSnapshot.swift:1118-1121, 1435, 1447, 1702-1712, 1767`, `LayoutMaintainer.swift:2980`, `Sources/RoadieTiler/LayoutTypes.swift:99`)
+- [ ] T206 [US6] FR-033 : rotation `.1` des logs du service installé avant `launchctl kickstart` (`scripts/install`, `scripts/roadiedctl`, `Makefile` restart) ; `FileAdministration.swift:129-145` fait `rotate` au lieu de `delete`
+- [ ] T207 [US2] FR-013 : `WindowBookmarkCommands.swift:93` et `DesktopCommands.swift:291` calculent le scope à écrire hors verrou ; le retrouver et le modifier DANS le bloc `mutate`, renvoyer les infos nécessaires à l'AX après la transaction
+- [ ] T208 [US1] FR-002 : le focus sur une voisine cachée d'une fenêtre zoomée sort explicitement du zoom (retrait de `zoomedWindowID`) et relance la disposition du scope dans `LayoutMaintainer.swift` ; adapter `LayoutMaintainerTests.swift:3587` et ajouter un test de changement de géométrie après restauration
+- [ ] T209 [US1] FR-037 : `RestoreSafetyService.unhideAll` couvre les membres persistés introuvables dans le snapshot visible (recherche hors écran) et une fenêtre restée cachée ou hors écran après `apply` (résultat `.clamped`) compte comme échec ; l'arrêt n'est marqué propre que si aucune fenêtre connue ne reste cachée sans preuve de fermeture ; tests dans `RestoreSafetyServiceTests.swift`
+- [ ] T210 [US3] FR-021 : `AXWindowEventObserver.watchDestruction` reçoit le pid, traite le résultat et interrompt la boucle après mise de côté ; `noteResult` appliqué aux erreurs intégrées des valeurs multiples dans `SystemSnapshotProvider.swift` ; test dans `Tests/RoadieAXTests/`
+- [ ] T211 [US4] FR-009 : les snapshots des commandes CLI locales de lecture sont non persistants et sans suivi du focus (`CLICommandRouter.swift`) ; sans moniteur de saisie actif, le suivi du focus par la stage est refusé (comportement conservateur) dans `FocusFollowsMouseController.swift` `allowsFocusChange` ; tests
+- [ ] T212 [US3] FR-023 : le tiler publie son snapshot comme source partagée et les lecteurs le consomment dans le cycle (producteur unique par processus quand le tiler tourne) dans `DaemonSnapshot.swift` / `LayoutMaintainer.swift` ; test vérifiant qu'un lecteur ne rescanne pas après un tick du tiler
