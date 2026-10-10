@@ -138,7 +138,7 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
             return ratio.clamped(to: 0.1...0.9)
         }
 
-        if managedSplitLooksUsable(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal) {
+        if managedSplitLooksUsable(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal, innerGap: innerGap) {
             let edge = horizontal ? leftFrame.maxX - rect.minX : leftFrame.maxY - rect.minY
             return (edge / usableExtent).clamped(to: 0.1...0.9)
         }
@@ -210,23 +210,24 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
         max(0, min(lhs.upperBound, rhs.upperBound) - max(lhs.lowerBound, rhs.lowerBound))
     }
 
-    private func managedSplitLooksUsable(leftFrame: CGRect, rightFrame: CGRect, rect: CGRect, horizontal: Bool) -> Bool {
-        let tolerance = CGFloat(24)
+    // L'écart signé entre les deux côtés (négatif = chevauchement) doit rester proche de la
+    // marge intérieure configurée ; la tolérance en dérive (SPEC-016 FR-041).
+    private func managedSplitLooksUsable(
+        leftFrame: CGRect,
+        rightFrame: CGRect,
+        rect: CGRect,
+        horizontal: Bool,
+        innerGap: CGFloat
+    ) -> Bool {
+        let edgeTolerance = CGFloat(24)
+        let gapTolerance = LayoutTolerance.innerGapTolerance(gapsInner: innerGap)
         if horizontal {
-            let internalGap = rightFrame.minX >= leftFrame.maxX
-                ? rightFrame.minX - leftFrame.maxX
-                : leftFrame.minX - rightFrame.maxX
-            return leftFrame.minX.isClose(to: rect.minX, tolerance: tolerance)
-                && rightFrame.maxX.isClose(to: rect.maxX, tolerance: tolerance)
-                && leftFrame.maxX <= rightFrame.minX + tolerance
-                && internalGap <= tolerance
+            return leftFrame.minX.isClose(to: rect.minX, tolerance: edgeTolerance)
+                && rightFrame.maxX.isClose(to: rect.maxX, tolerance: edgeTolerance)
+                && abs(rightFrame.minX - leftFrame.maxX - innerGap) <= gapTolerance
         }
-        let internalGap = rightFrame.minY >= leftFrame.maxY
-            ? rightFrame.minY - leftFrame.maxY
-            : leftFrame.minY - rightFrame.maxY
-        return leftFrame.minY.isClose(to: rect.minY, tolerance: tolerance)
-            && rightFrame.maxY.isClose(to: rect.maxY, tolerance: tolerance)
-            && leftFrame.maxY <= rightFrame.minY + tolerance
-            && internalGap <= tolerance
+        return leftFrame.minY.isClose(to: rect.minY, tolerance: edgeTolerance)
+            && rightFrame.maxY.isClose(to: rect.maxY, tolerance: edgeTolerance)
+            && abs(rightFrame.minY - leftFrame.maxY - innerGap) <= gapTolerance
     }
 }

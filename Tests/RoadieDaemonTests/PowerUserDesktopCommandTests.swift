@@ -316,7 +316,7 @@ struct PowerUserDesktopCommandTests {
     }
 
     @Test
-    func stageSwitchDoesNotBlankCurrentStageWhenTargetHasOnlyMissingMembers() {
+    func stageSwitchToTargetWithOnlyStaleMissingMembersSwitchesAndRecallsApplication() {
         let display = DisplayID(rawValue: "display-main")
         let visible = powerWindow(1, x: 100)
         let missing = powerWindow(2, x: 300)
@@ -350,21 +350,24 @@ struct PowerUserDesktopCommandTests {
             events: EventLog(path: eventPath)
         ).switchTo("2", displayID: display)
 
+        // SPEC-016 T042 : une stage dont toutes les fenêtres ont disparu reste atteignable.
+        // La bascule a lieu, la stage courante est cachée, puis l'application est rappelée.
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
         #expect(result.changed)
-        #expect(writer.frames.isEmpty)
+        #expect(writer.frames[visible.id]?.x == 999)
+        #expect(writer.focusedApplicationWindows == [missing.id])
         #expect(writer.activatedBundleIDs == [missing.bundleID])
-        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
-        #expect(store.state().commandFocusProtection == nil)
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "2"))
+        #expect(store.state().commandFocusProtection != nil)
         #expect(events.contains("\"type\":\"stage_switch_pending_missing_target\""))
         #expect(events.contains("\"reason\":\"target_stage_members_missing_pending_focus\""))
-        #expect(events.contains("\"stateChanged\":\"false\""))
+        #expect(events.contains("\"stateChanged\":\"true\""))
         #expect(!events.contains("\"type\":\"stage_switch_blocked_empty_target\""))
         #expect(!events.contains("\"type\":\"stage_switch\""))
     }
 
     @Test
-    func stageSwitchToRecentlyMissingTargetArmsPendingRestoreWithoutBlankingCurrentStage() {
+    func stageSwitchToRecentlyMissingTargetSwitchesAndRecallsApplication() {
         let display = DisplayID(rawValue: "display-main")
         let visible = powerWindow(1, x: 100)
         let missing = powerWindow(2, x: 300)
@@ -398,12 +401,12 @@ struct PowerUserDesktopCommandTests {
             events: EventLog(path: eventPath)
         ).switchTo("2", displayID: display)
 
+        // SPEC-016 T042 : même une absence très courte ne bloque plus la bascule.
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
         #expect(result.changed)
-        #expect(writer.frames.isEmpty)
+        #expect(writer.frames[visible.id]?.x == 999)
         #expect(writer.activatedBundleIDs == [missing.bundleID])
-        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
-        #expect(store.state().commandFocusProtection == nil)
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "2"))
         #expect(events.contains("\"type\":\"stage_switch_pending_missing_target\""))
         #expect(events.contains("\"reason\":\"target_stage_members_missing_pending_focus\""))
         #expect(!events.contains("\"type\":\"stage_switch_blocked_empty_target\""))
@@ -595,6 +598,70 @@ struct PowerUserDesktopCommandTests {
         #expect(events.contains("\"focusedApplicationWindow\":\"true\""))
         #expect(events.contains("\"activatedApplication\":\"false\""))
         #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func toggleFullscreenRecordsZoomedIntentWithAppliedFrames() {
+        // SPEC-016 T040 : l'intent porte la fenêtre zoomée et les cadres réellement appliqués.
+        let left = powerWindow(1, x: 0, y: 0, width: 495, height: 800)
+        let right = powerWindow(2, x: 505, y: 0, width: 495, height: 800)
+        let provider = PowerUserProvider(windows: [left, right])
+        provider.focusedID = left.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-toggle-fullscreen-intent"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        guard let scope = service.snapshot().windows.first(where: { $0.window.id == left.id })?.scope else {
+            Issue.record("scope introuvable")
+            return
+        }
+        let commands = WindowCommandService(service: service, stageStore: store)
+
+        _ = commands.toggleFullscreen()
+        let intent = service.effectiveIntentStore.intent(for: scope)
+
+        #expect(intent?.source == .command)
+        #expect(intent?.zoomedWindowID == left.id)
+        #expect(intent?.placements[left.id] == Rect(x: 0, y: 0, width: 1000, height: 800))
+        #expect(intent?.placements[right.id] == writer.frames[right.id])
+        #expect(intent?.placements[right.id]?.x == 999)
+
+        _ = commands.toggleFullscreen()
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+    }
+
+    @Test
+    func stageSwitchDoesNotTreatScreenSizedWindowAsFullscreenWithoutZoomIntent() {
+        // SPEC-016 T041 : une fenêtre qui remplit la zone utile n'est pas un plein écran
+        // sans marqueur de zoom ni plein écran natif ; ses voisines ne sont pas cachées.
+        let display = powerDisplay()
+        let displayID = display.id
+        let current = powerWindow(1, x: 100, y: 100, width: 500, height: 400)
+        let big = powerWindow(2, x: 999, y: 799, width: 1000, height: 800)
+        let sibling = powerWindow(3, x: 999, y: 799, width: 300, height: 300)
+        let provider = PowerUserProvider(displays: [display], windows: [current, big, sibling])
+        provider.focusedID = current.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-stage-switch-no-size-fullscreen"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: current.id, members: [
+                    PersistentStageMember(windowID: current.id, bundleID: current.bundleID, title: current.title, frame: current.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: big.id, members: [
+                    PersistentStageMember(windowID: big.id, bundleID: big.bundleID, title: big.title, frame: Rect(x: 0, y: 0, width: 1000, height: 800)),
+                    PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: Rect(x: 100, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let eventPath = tempPath("power-stage-switch-no-size-fullscreen-events")
+
+        _ = StageCommandService(service: service, store: store, events: EventLog(path: eventPath))
+            .switchTo("2", displayID: displayID)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(events.contains("\"fullscreenProtected\":\"false\""))
+        #expect(writer.frameHistory[sibling.id]?.first == Rect(x: 100, y: 100, width: 300, height: 300))
     }
 
     @Test

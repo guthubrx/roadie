@@ -118,8 +118,9 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         case .empty:
             return .leaf(window)
         case .leaf(let id):
-            // Insère ici si c'est la feuille focus, ou si aucun focus précis n'est demandé.
-            guard focus == nil || focus == id else { return self }
+            // Une feuille n'est atteinte qu'avec son propre focus, nil, ou un focus absent de
+            // l'arbre (feuille racine) : ce dernier cas se traite comme nil, sinon la fenêtre
+            // serait perdue (ex. focus = la nouvelle fenêtre elle-même).
             let orientation: BSPOrientation = containerIsWide ? .vertical : .horizontal
             switch side {
             case .right:
@@ -165,8 +166,9 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         }
     }
 
-    /// Ajuste le ratio du split dont le `first` contient directement `window` (resize manuel).
-    /// Cherche le plus petit split englobant `window` et applique `ratio`.
+    /// Applique `newRatio` au split le plus HAUT (premier rencontré depuis la racine) dont le
+    /// côté choisi (`first` si `onFirstSide`, sinon `second`) contient `window`. Si ce côté ne
+    /// la contient pas, la recherche continue dans les deux enfants. Un seul split est modifié.
     public func adoptingRatio(_ newRatio: Double, forSplitContaining window: WindowID, onFirstSide: Bool) -> BSPTree {
         switch self {
         case .empty, .leaf:
@@ -289,9 +291,10 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             tree = tree.removing(id)
         }
         // 2. Insérer les fenêtres présentes mais absentes de l'arbre, dans l'ordre fourni.
-        let present = Set(tree.windowIDs)
+        //    `present` grandit à chaque insertion : un ID en double dans la liste n'est inséré qu'une fois.
+        var present = Set(tree.windowIDs)
         var currentFocus = focus
-        for id in liveWindowIDs where !present.contains(id) {
+        for id in liveWindowIDs where present.insert(id).inserted {
             tree = tree.inserting(id, nextTo: currentFocus, side: side, containerIsWide: containerIsWide)
             currentFocus = id // la fenêtre suivante se greffe à côté de la dernière insérée
         }

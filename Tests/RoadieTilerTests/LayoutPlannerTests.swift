@@ -301,6 +301,72 @@ struct LayoutPlannerTests {
     }
 
     @Test
+    func mutableBspPreservesManagedSplitWithLargeConfiguredInnerGap() {
+        // SPEC-016 T044 : la tolérance suit `gapsInner`. Un gap de 40 configuré et observé
+        // reste un split géré (ratio par le bord), au lieu du ratio des largeurs observées.
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 600, height: 500),
+                b: CGRect(x: 640, y: 0, width: 350, height: 500),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 40
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 600, height: 500))
+        #expect(plan.placements[b] == CGRect(x: 640, y: 0, width: 360, height: 500))
+    }
+
+    @Test
+    func mutableBspRejectsOverlappingFramesAsManagedSplit() {
+        // SPEC-016 T044 : un écart négatif (chevauchement) n'est plus accepté comme gap.
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 520, height: 500),
+                b: CGRect(x: 500, y: 0, width: 500, height: 500),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 10
+        ))
+
+        // Ratio des largeurs observées (520 / 1020) au lieu du bord gauche (520 / 990).
+        #expect(plan.placements[a]?.width == 504)
+    }
+
+    @Test
+    func bspInsertionWithFocusAbsentFromTreeKeepsNewWindow() {
+        // SPEC-016 T043 : sur une feuille, un focus étranger (ici la nouvelle fenêtre) vaut nil.
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let inserted = BSPTree.leaf(a).inserting(b, nextTo: b, side: .right, containerIsWide: true)
+        #expect(inserted.windowIDs == [a, b])
+
+        let reconciled = BSPTree.leaf(a).reconciled(liveWindowIDs: [a, b], focus: b, side: .right, containerIsWide: true)
+        #expect(reconciled.windowIDs == [a, b])
+    }
+
+    @Test
+    func bspReconcileDoesNotDuplicateRepeatedWindowIDs() {
+        // SPEC-016 T043 : un ID répété dans la liste vivante n'est inséré qu'une fois.
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let tree = BSPTree.leaf(a).reconciled(liveWindowIDs: [a, b, b], focus: a, side: .right, containerIsWide: true)
+        #expect(tree.windowIDs == [a, b])
+    }
+
+    @Test
     func mutableBspPreservesObservedVerticalSplitOnWideContainer() {
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)

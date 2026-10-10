@@ -159,7 +159,8 @@ public struct LayoutCommandService {
             scope: context.scope,
             windowIDs: [activeID],
             placements: [activeID: result.items.first?.actual ?? display.visibleFrame],
-            source: .command
+            source: .command,
+            zoomedWindowID: activeID
         )
         emit(command: "layout.zoom-parent", changed: result.failed < result.attempted)
         return LayoutCommandResult(

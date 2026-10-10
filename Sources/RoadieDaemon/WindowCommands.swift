@@ -106,12 +106,14 @@ public struct WindowCommandService {
     /// re-tile (retrait de l'intent). Persistance gérée par stageStore (flock + writer).
     /// Retourne true si l'arbre a changé.
     private func applyBSPTreeMutation(scope: StageScope, mutate: (BSPTree) -> BSPTree) -> Bool {
-        var state = stageStore.state()
-        guard let existing = state.bspTree(for: scope) else { return false }
-        let mutated = mutate(existing)
-        guard mutated != existing else { return false }
-        state.setBSPTree(mutated, for: scope)
-        stageStore.save(state)
+        let changed = stageStore.mutate { state -> Bool in
+            guard let existing = state.bspTree(for: scope) else { return false }
+            let mutated = mutate(existing)
+            guard mutated != existing else { return false }
+            state.setBSPTree(mutated, for: scope)
+            return true
+        }
+        guard changed else { return false }
         service.removeLayoutIntent(scope: scope)
         return true
     }
@@ -433,14 +435,20 @@ public struct WindowCommandService {
 
         let visible = display.visibleFrame.cgRect.integral
         let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
-        if framesAreClose(active.window.frame.cgRect, visible) {
+        // Sortie du zoom si l'intent de commande marque cette fenêtre comme zoomée. Le repli
+        // par taille ne sert qu'à choisir le sens du basculement (zoomer une fenêtre qui
+        // remplit déjà la zone ne changerait rien) ; il ne classe pas la fenêtre en plein écran.
+        let isZoomed = service.commandLayoutIntent(scope: scope)?.zoomedWindowID == active.window.id
+            || framesAreClose(active.window.frame.cgRect, visible)
+        if isZoomed {
+            // L'intent zoomé est retiré AVANT de calculer le plan, sinon le plan rejouerait le zoom.
+            service.removeLayoutIntent(scope: scope)
             let scopedWindows = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
             let fullPlan = service.applyPlan(from: snapshot)
             let plan = ApplyPlan(commands: fullPlan.commands.filter { command in
                 scopedWindows[command.window.id]?.scope == scope
             })
             let result = service.apply(plan)
-            service.removeLayoutIntent(scope: scope)
             _ = focusWindow(active.window)
             return WindowCommandResult(
                 message: "toggle fullscreen off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
@@ -448,31 +456,43 @@ public struct WindowCommandService {
             )
         }
 
-        let changed = service.setFrame(visible, of: active.window) != nil
-        if changed {
-            persistFrame(Rect(visible), for: active.window, in: scope)
-            let placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
-                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
-                return (entry.window.id, entry.window.frame)
-            })
-            service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
-            hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot)
+        guard let appliedFrame = service.setFrame(visible, of: active.window) else {
+            _ = focusWindow(active.window)
+            return WindowCommandResult(message: "toggle fullscreen on: changed=false", changed: false)
         }
+        let zoomedFrame = Rect(appliedFrame)
+        persistFrame(zoomedFrame, for: active.window, in: scope)
+        let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot)
+        // Placements = cadres réellement appliqués (FR-012) : fenêtre zoomée, voisines cachées,
+        // autres fenêtres tilables du scope à leur cadre observé.
+        var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+            guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
+            return (entry.window.id, entry.window.frame)
+        })
+        placements.merge(hiddenFrames) { _, hidden in hidden }
+        placements[active.window.id] = zoomedFrame
+        service.effectiveIntentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: ordered,
+            placements: placements,
+            source: .command,
+            zoomedWindowID: active.window.id
+        ))
         _ = focusWindow(active.window)
         return WindowCommandResult(
-            message: "toggle fullscreen on: changed=\(changed)",
-            changed: changed
+            message: "toggle fullscreen on: changed=true",
+            changed: true
         )
     }
 
     private func persistFrame(_ frame: Rect, for window: WindowSnapshot, in scopeID: StageScope) {
-        var state = stageStore.state()
-        var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
         var updated = window
         updated.frame = frame
-        scope.updateFrame(window: updated)
-        state.update(scope)
-        stageStore.save(state)
+        stageStore.mutate { state in
+            var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
+            scope.updateFrame(window: updated)
+            state.update(scope)
+        }
     }
 
     private func hideSiblings(
@@ -480,7 +500,8 @@ public struct WindowCommandService {
         in scope: StageScope,
         display: DisplaySnapshot,
         snapshot: DaemonSnapshot
-    ) {
+    ) -> [WindowID: Rect] {
+        var hidden: [WindowID: Rect] = [:]
         for entry in snapshot.windows {
             guard entry.scope == scope,
                   entry.window.id != fullscreenWindowID,
@@ -492,8 +513,11 @@ public struct WindowCommandService {
                 on: display,
                 among: snapshot.displays
             )
-            _ = service.setFrame(frame, of: entry.window)
+            if let applied = service.setFrame(frame, of: entry.window) {
+                hidden[entry.window.id] = Rect(applied)
+            }
         }
+        return hidden
     }
 
     public func toggleNativeFullscreen() -> WindowCommandResult {
@@ -583,11 +607,6 @@ public struct WindowCommandService {
             ))
         }
 
-        var state = stageStore.state()
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: active.window.id)
-        }
-        var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
         let transferredWindow = WindowSnapshot(
             id: active.window.id,
             pid: active.window.pid,
@@ -601,11 +620,17 @@ public struct WindowCommandService {
             role: active.window.role,
             furniture: active.window.furniture
         )
-        targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
-        state.update(targetScope)
-        let removedPin = state.removePin(windowID: active.window.id)
-        state.suppressRulePlacement(window: transferredWindow)
-        stageStore.save(state)
+        let removedPin = stageStore.mutate { state -> PersistentWindowPin? in
+            for scopeIndex in state.scopes.indices {
+                state.scopes[scopeIndex].remove(windowID: active.window.id)
+            }
+            var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
+            targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
+            state.update(targetScope)
+            let pin = state.removePin(windowID: active.window.id)
+            state.suppressRulePlacement(window: transferredWindow)
+            return pin
+        }
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
@@ -817,13 +842,13 @@ public struct WindowCommandService {
             return WindowCommandResult(message: result.message, changed: result.changed)
         }
 
-        var state = stageStore.state()
-        state.focusDisplay(targetDisplay.id)
-        if var scope = state.scopes.first(where: { $0.displayID == targetScope.displayID && $0.desktopID == targetScope.desktopID }) {
-            scope.setFocusedWindow(target.window.id, in: targetScope.stageID)
-            state.update(scope)
+        stageStore.mutate { state in
+            state.focusDisplay(targetDisplay.id)
+            if var scope = state.scopes.first(where: { $0.displayID == targetScope.displayID && $0.desktopID == targetScope.desktopID }) {
+                scope.setFocusedWindow(target.window.id, in: targetScope.stageID)
+                state.update(scope)
+            }
         }
-        stageStore.save(state)
 
         let ok = focusWindow(target.window)
         return WindowCommandResult(
@@ -843,13 +868,12 @@ public struct WindowCommandService {
     private func focusWindow(_ window: WindowSnapshot) -> Bool {
         let ok = service.focus(window)
         if ok {
-            var state = stageStore.state()
-            if let scope = state.stageScope(for: window.id) {
+            stageStore.mutate { state in
+                guard let scope = state.stageScope(for: window.id) else { return }
                 var persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
                 persistentScope.setFocusedWindow(window.id, in: scope.stageID)
                 state.update(persistentScope)
                 state.focusDisplay(scope.displayID)
-                stageStore.save(state)
             }
             mouseFollower.follow(window)
         }
