@@ -2,7 +2,7 @@ import Foundation
 import RoadieCore
 
 public final class WindowDragActivity: @unchecked Sendable {
-    public static let shared = WindowDragActivity(enabled: !WindowDragActivity.isRunningTests)
+    public static let shared = WindowDragActivity(enabled: !TestEnvironment.isRunningTests)
 
     private let lock = NSLock()
     private let url: URL
@@ -69,13 +69,5 @@ public final class WindowDragActivity: @unchecked Sendable {
               let timestamp = TimeInterval(firstLine)
         else { return nil }
         return Date(timeIntervalSince1970: timestamp)
-    }
-
-    private static var isRunningTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || ProcessInfo.processInfo.processName.contains("xctest")
-            || ProcessInfo.processInfo.processName.contains("PackageTests")
-            || Bundle.main.bundlePath.contains(".xctest")
-            || CommandLine.arguments.contains { $0.contains(".xctest") || $0.contains("PackageTests") }
     }
 }

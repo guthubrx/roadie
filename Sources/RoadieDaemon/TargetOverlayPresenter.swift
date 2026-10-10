@@ -79,21 +79,6 @@ public enum TargetOverlayPresenter {
         NSApplication.shared.run()
     }
 
-    public static func runInteractive(
-        _ state: TargetOverlayState,
-        duration: TimeInterval,
-        activate: @escaping @MainActor (String) -> TargetActionResult
-    ) -> TargetActionResult {
-        let session = TargetInteractiveSession(
-            state: state,
-            duration: duration,
-            controlsApplicationRunLoop: true,
-            activate: activate,
-            onFinish: nil
-        )
-        return session.run()
-    }
-
     @discardableResult
     public static func startInteractive(
         _ state: TargetOverlayState,
@@ -104,7 +89,6 @@ public enum TargetOverlayPresenter {
         let session = TargetInteractiveSession(
             state: state,
             duration: duration,
-            controlsApplicationRunLoop: false,
             activate: activate,
             onFinish: onFinish
         )
@@ -113,31 +97,6 @@ public enum TargetOverlayPresenter {
             return nil
         }
         return session
-    }
-
-    public static func runGridInteractive(
-        initialPath: String,
-        duration: TimeInterval,
-        config: TargetGridConfig,
-        displayIndex: Int? = nil,
-        stateProvider: @escaping @MainActor (Int?, String) -> TargetOverlayState,
-        activate: @escaping @MainActor (Int?, String) -> TargetActionResult,
-        focusAt: @escaping @MainActor (CGRect) -> Void = { _ in },
-        displayNeighbor: @escaping @MainActor (Int?, TargetGridArrowDirection) -> Int? = { _, _ in nil }
-    ) -> TargetActionResult {
-        let session = TargetGridInteractiveSession(
-            initialPath: initialPath,
-            initialDisplayIndex: displayIndex,
-            duration: duration,
-            config: config,
-            controlsApplicationRunLoop: true,
-            stateProvider: stateProvider,
-            activate: activate,
-            focusAt: focusAt,
-            displayNeighbor: displayNeighbor,
-            onFinish: nil
-        )
-        return session.run()
     }
 
     @discardableResult
@@ -157,7 +116,6 @@ public enum TargetOverlayPresenter {
             initialDisplayIndex: displayIndex,
             duration: duration,
             config: config,
-            controlsApplicationRunLoop: false,
             stateProvider: stateProvider,
             activate: activate,
             focusAt: focusAt,
@@ -192,84 +150,28 @@ public enum TargetOverlayPresenter {
     }
 }
 
+/// Session interactive pilotée par un tap clavier (CGEventTap) : installation et réactivation
+/// partagées par la session de cibles et la session de grille.
 @MainActor
-private final class TargetInteractiveSession: TargetOverlaySessionHandle {
-    private let state: TargetOverlayState
-    private let duration: TimeInterval
-    private let controlsApplicationRunLoop: Bool
-    private let activate: @MainActor (String) -> TargetActionResult
-    private let onFinish: (@MainActor (TargetActionResult) -> Void)?
-    private let labels: Set<String>
-    private var buffer = ""
-    private var lastInputAt: Date?
-    private var result = TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled")
-    private var pendingActivation: String?
-    private var finished = false
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var timer: Timer?
-    private var windows: [TargetOverlayWindow] = []
+private protocol KeyEventTapSession: AnyObject {
+    var eventTap: CFMachPort? { get set }
+    var runLoopSource: CFRunLoopSource? { get set }
+    var finished: Bool { get }
+    func handle(_ input: KeyInput)
+}
 
-    init(
-        state: TargetOverlayState,
-        duration: TimeInterval,
-        controlsApplicationRunLoop: Bool,
-        activate: @escaping @MainActor (String) -> TargetActionResult,
-        onFinish: (@MainActor (TargetActionResult) -> Void)?
-    ) {
-        self.state = state
-        self.duration = max(1, duration)
-        self.controlsApplicationRunLoop = controlsApplicationRunLoop
-        self.activate = activate
-        self.onFinish = onFinish
-        self.labels = Set(state.report.targets.map { $0.label.uppercased() }.filter { !$0.isEmpty })
-    }
-
-    func run() -> TargetActionResult {
-        if let immediate = start() {
-            return immediate
-        }
-        NSApplication.shared.run()
-        return result
-    }
-
-    func start() -> TargetActionResult? {
-        let badges = TargetOverlayBadge.badges(from: state)
-        guard !badges.isEmpty else {
-            return TargetActionResult(changed: false, message: "target_interactive: no visible targets", error: "no_targets")
-        }
-        guard installEventTap() else {
-            return TargetActionResult(changed: false, message: "target_interactive: event tap unavailable", error: "event_tap_unavailable")
-        }
-
-        NSApplication.shared.setActivationPolicy(.accessory)
-        windows = TargetOverlayPresenter.overlayWindows(for: badges)
-        windows.forEach { $0.orderFrontRegardless() }
-
-        let startedAt = Date()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick(startedAt: startedAt) }
-        }
-        if let timer {
-            RunLoop.main.add(timer, forMode: .common)
-        }
-        return nil
-    }
-
-    func cancel() {
-        finish(TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled"))
-    }
-
-    fileprivate func reenableEventTap() {
+extension KeyEventTapSession {
+    func reenableEventTap() {
         guard !finished, let eventTap else { return }
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
-    private func installEventTap() -> Bool {
+    func installEventTap() -> Bool {
         let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
-            guard let refcon else { return Unmanaged.passUnretained(event) }
-            let session = Unmanaged<TargetInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
+            guard let refcon,
+                  let session = Unmanaged<AnyObject>.fromOpaque(refcon).takeUnretainedValue() as? any KeyEventTapSession
+            else { return Unmanaged.passUnretained(event) }
             // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 Task { @MainActor in session.reenableEventTap() }
@@ -302,8 +204,66 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle {
         CGEvent.tapEnable(tap: tap, enable: true)
         return true
     }
+}
 
-    private func handle(_ input: KeyInput) {
+@MainActor
+private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEventTapSession {
+    private let state: TargetOverlayState
+    private let duration: TimeInterval
+    private let activate: @MainActor (String) -> TargetActionResult
+    private let onFinish: (@MainActor (TargetActionResult) -> Void)?
+    private let labels: Set<String>
+    private var buffer = ""
+    private var lastInputAt: Date?
+    private var result = TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled")
+    private var pendingActivation: String?
+    private(set) var finished = false
+    var eventTap: CFMachPort?
+    var runLoopSource: CFRunLoopSource?
+    private var timer: Timer?
+    private var windows: [TargetOverlayWindow] = []
+
+    init(
+        state: TargetOverlayState,
+        duration: TimeInterval,
+        activate: @escaping @MainActor (String) -> TargetActionResult,
+        onFinish: (@MainActor (TargetActionResult) -> Void)?
+    ) {
+        self.state = state
+        self.duration = max(1, duration)
+        self.activate = activate
+        self.onFinish = onFinish
+        self.labels = Set(state.report.targets.map { $0.label.uppercased() }.filter { !$0.isEmpty })
+    }
+
+    func start() -> TargetActionResult? {
+        let badges = TargetOverlayBadge.badges(from: state)
+        guard !badges.isEmpty else {
+            return TargetActionResult(changed: false, message: "target_interactive: no visible targets", error: "no_targets")
+        }
+        guard installEventTap() else {
+            return TargetActionResult(changed: false, message: "target_interactive: event tap unavailable", error: "event_tap_unavailable")
+        }
+
+        NSApplication.shared.setActivationPolicy(.accessory)
+        windows = TargetOverlayPresenter.overlayWindows(for: badges)
+        windows.forEach { $0.orderFrontRegardless() }
+
+        let startedAt = Date()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick(startedAt: startedAt) }
+        }
+        if let timer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+        return nil
+    }
+
+    func cancel() {
+        finish(TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled"))
+    }
+
+    func handle(_ input: KeyInput) {
         switch input.kind {
         case .escape:
             finish(TargetActionResult(changed: false, message: "target_interactive_cancelled", error: "cancelled"))
@@ -379,9 +339,6 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle {
             self.pendingActivation = nil
         }
         onFinish?(result)
-        if controlsApplicationRunLoop {
-            NSApplication.shared.stop(nil)
-        }
     }
 
     private func hideOverlayNow() {
@@ -411,11 +368,10 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle {
 }
 
 @MainActor
-private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
+private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, KeyEventTapSession {
     private let duration: TimeInterval
     private let config: TargetGridConfig
     private let style: TargetOverlayStyle
-    private let controlsApplicationRunLoop: Bool
     private let stateProvider: @MainActor (Int?, String) -> TargetOverlayState
     private let activate: @MainActor (Int?, String) -> TargetActionResult
     private let focusAt: @MainActor (CGRect) -> Void
@@ -427,9 +383,9 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
     private var currentTargets: [RoadieTarget] = []
     private var result = TargetActionResult(changed: false, message: "grid_interactive_cancelled", error: "cancelled")
     private var pendingActivation: String?
-    private var finished = false
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private(set) var finished = false
+    var eventTap: CFMachPort?
+    var runLoopSource: CFRunLoopSource?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
     private var lastActivityAt = Date()
@@ -439,7 +395,6 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
         initialDisplayIndex: Int?,
         duration: TimeInterval,
         config: TargetGridConfig,
-        controlsApplicationRunLoop: Bool,
         stateProvider: @escaping @MainActor (Int?, String) -> TargetOverlayState,
         activate: @escaping @MainActor (Int?, String) -> TargetActionResult,
         focusAt: @escaping @MainActor (CGRect) -> Void,
@@ -451,20 +406,11 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
         self.duration = max(1, duration)
         self.config = config
         self.style = TargetOverlayStyle.grid(config)
-        self.controlsApplicationRunLoop = controlsApplicationRunLoop
         self.stateProvider = stateProvider
         self.activate = activate
         self.focusAt = focusAt
         self.displayNeighbor = displayNeighbor
         self.onFinish = onFinish
-    }
-
-    func run() -> TargetActionResult {
-        if let immediate = start() {
-            return immediate
-        }
-        NSApplication.shared.run()
-        return result
     }
 
     func start() -> TargetActionResult? {
@@ -499,50 +445,7 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
         windows.forEach { $0.orderFrontRegardless() }
     }
 
-    fileprivate func reenableEventTap() {
-        guard !finished, let eventTap else { return }
-        CGEvent.tapEnable(tap: eventTap, enable: true)
-    }
-
-    private func installEventTap() -> Bool {
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
-        let callback: CGEventTapCallBack = { _, type, event, refcon in
-            guard let refcon else { return Unmanaged.passUnretained(event) }
-            let session = Unmanaged<TargetGridInteractiveSession>.fromOpaque(refcon).takeUnretainedValue()
-            // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
-            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                Task { @MainActor in session.reenableEventTap() }
-                return Unmanaged.passUnretained(event)
-            }
-            guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-            let input = KeyInput(event: event)
-            guard input.isRoadieHandled else {
-                return Unmanaged.passUnretained(event)
-            }
-            Task { @MainActor in
-                session.handle(input)
-            }
-            return nil
-        }
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: callback,
-            userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
-            return false
-        }
-        eventTap = tap
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        runLoopSource = source
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
-        return true
-    }
-
-    private func handle(_ input: KeyInput) {
+    func handle(_ input: KeyInput) {
         let key = input.normalizedName
         if key == config.exitKey {
             finish(TargetActionResult(changed: false, message: "grid_interactive_cancelled", error: "cancelled"))
@@ -758,9 +661,6 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle {
             self.pendingActivation = nil
         }
         onFinish?(result)
-        if controlsApplicationRunLoop {
-            NSApplication.shared.stop(nil)
-        }
     }
 
     private func hideOverlayNow() {
@@ -1045,12 +945,12 @@ private final class TargetOverlayView: NSView {
         guard rect.width > 2, rect.height > 2 else { return }
 
         let path = NSBezierPath(rect: rect)
-        color(hex: style.fillColor, fallback: .systemBlue)
+        (NSColor(hex: style.fillColor) ?? .systemBlue)
             .withAlphaComponent(CGFloat(style.fillOpacity))
             .setFill()
         path.fill()
 
-        color(hex: style.borderColor, fallback: .systemBlue)
+        (NSColor(hex: style.borderColor) ?? .systemBlue)
             .withAlphaComponent(CGFloat(style.borderOpacity))
             .setStroke()
         path.lineWidth = 1
@@ -1103,7 +1003,7 @@ private final class TargetOverlayView: NSView {
 
         var attributes = Self.textAttributes
         if badge.kind == .gridCell {
-            attributes[.foregroundColor] = color(hex: style.labelColor, fallback: .white)
+            attributes[.foregroundColor] = NSColor(hex: style.labelColor) ?? .white
         }
         label.draw(
             in: CGRect(
@@ -1138,21 +1038,5 @@ private final class TargetOverlayView: NSView {
         case .gridCell:
             return .systemYellow
         }
-    }
-
-    private func color(hex: String, fallback: NSColor) -> NSColor {
-        var value = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.hasPrefix("#") {
-            value.removeFirst()
-        }
-        guard value.count == 6, let intValue = Int(value, radix: 16) else {
-            return fallback
-        }
-        return NSColor(
-            calibratedRed: CGFloat((intValue >> 16) & 0xFF) / 255,
-            green: CGFloat((intValue >> 8) & 0xFF) / 255,
-            blue: CGFloat(intValue & 0xFF) / 255,
-            alpha: 1
-        )
     }
 }

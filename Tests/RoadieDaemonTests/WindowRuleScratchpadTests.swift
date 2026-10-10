@@ -23,7 +23,6 @@ struct WindowRuleScratchpadTests {
         #expect(application.scratchpad == "research")
         #expect(application.evaluations.first?.actionsApplied.contains("scratchpad") == true)
         #expect(engine.scratchpad(for: window.id) == "research")
-        #expect(engine.scratchpadMarkersSnapshot() == [window.id: "research"])
     }
 
     @Test

@@ -248,9 +248,9 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage list: no display", changed: false)
         }
-        let scope = store.mutate { state in
-            activeScope(displayID: display.id, in: &state)
-        }
+        // Lecture seule : pas de verrou exclusif ni d'écriture (FR-013).
+        var state = store.state()
+        let scope = activeScope(displayID: display.id, in: &state)
 
         var lines = ["ACTIVE\tID\tMODE\tWINDOWS\tNAME"]
         for stage in scope.stages where isSelectableStage(stage) {
@@ -788,7 +788,7 @@ public struct StageCommandService {
             if nativeFullscreenMember == nil {
                 let visibleTargetMemberIDs = targetMembers.compactMap { member -> WindowID? in
                     guard let window = windowsByID[member.windowID],
-                          !isHidden(window.frame.cgRect),
+                          !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: snapshot.displays),
                           display.frame.cgRect.intersects(window.frame.cgRect)
                     else { return nil }
                     return member.windowID
@@ -891,6 +891,11 @@ public struct StageCommandService {
         beginLayoutCommand("stage.switch", scopes: [switchScope])
         defer { finishLayoutCommand("stage.switch", scopes: [switchScope]) }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        // Préparé hors verrou : fenêtres visibles de l'écran. O(w * d), w = fenêtres, d = écrans.
+        let visibleWindows = windowsByID.values.filter {
+            display.frame.cgRect.contains($0.frame.center)
+                && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen($0.frame.cgRect, in: snapshot.displays)
+        }
 
         let persistStartedAt = Date()
         // Transaction : relit l'état frais, bascule la stage active et protège le focus.
@@ -901,7 +906,8 @@ public struct StageCommandService {
             let previousID = scope.activeStageID
             scope.ensureStage(stageID, mode: config.tiling.defaultStrategy)
             state.focusDisplay(display.id)
-            for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
+            // O(v * M), v = fenêtres visibles, M = membres de l'écran (recherche du membre par fenêtre).
+            for window in visibleWindows {
                 scope.updateFrame(window: window)
             }
 
@@ -1304,7 +1310,7 @@ public struct StageCommandService {
             scope != excludedScope && snapshot.state.activeScope(on: scope.displayID) == scope
         })
         guard !activeScopes.isEmpty else {
-            return (ApplyPlan(commands: []), ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: []))
+            return (ApplyPlan(commands: []), ApplyResult.empty)
         }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
@@ -1421,7 +1427,7 @@ public struct StageCommandService {
             entry.scope == scope
                 && entry.window.isTileCandidate
                 && entry.window.isOnScreen
-                && !isHidden(entry.window.frame.cgRect)
+                && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: snapshot.displays)
         }
         guard entries.count > 1 else { return 0 }
 
@@ -1492,10 +1498,6 @@ public struct StageCommandService {
             width: frame.width,
             height: frame.height
         ).integral
-    }
-
-    private func isHidden(_ frame: CGRect) -> Bool {
-        frame.maxX < -1000 || frame.minX < -10000
     }
 }
 

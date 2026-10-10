@@ -153,7 +153,7 @@ public struct StageStore: Sendable {
     }
 
     public static func defaultPath() -> String {
-        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+        if TestEnvironment.isRunningTests {
             return "\(NSTemporaryDirectory())roadie-test-stages-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString).json"
         }
         return "~/.roadies/stages.json"
@@ -375,12 +375,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     }
 
     @discardableResult
-    public mutating func removeRulePlacementOverride(windowID: WindowID) -> PersistentRulePlacementOverride? {
-        guard let index = rulePlacementOverrides.firstIndex(where: { $0.windowID == windowID }) else { return nil }
-        return rulePlacementOverrides.remove(at: index)
-    }
-
-    @discardableResult
     public mutating func setBookmark(
         name: String,
         window: WindowSnapshot,
@@ -411,13 +405,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         let normalized = PersistentWindowBookmark.normalizedName(name)
         guard let index = windowBookmarks.firstIndex(where: { $0.name == normalized }) else { return nil }
         return windowBookmarks.remove(at: index)
-    }
-
-    @discardableResult
-    public mutating func removeBookmarks(for windowID: WindowID) -> [PersistentWindowBookmark] {
-        let removed = windowBookmarks.filter { $0.windowID == windowID }
-        windowBookmarks.removeAll { $0.windowID == windowID }
-        return removed
     }
 
     @discardableResult
@@ -563,11 +550,6 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         return windowPins[index]
     }
 
-    /// Vrai si le processus existe encore (`kill(pid, 0)` ; EPERM = existe mais pas à nous).
-    public static func isProcessAlive(_ pid: Int32) -> Bool {
-        pid > 0 && (kill(pid, 0) == 0 || errno == EPERM)
-    }
-
     /// Rattache un membre disparu à une fenêtre neuve de même application et même titre
     /// (SPEC-016 FR-006, R11). Jamais si le pid connu du membre est encore vivant : la fenêtre
     /// neuve est alors une autre fenêtre de la même application. Sans pid connu (anciens
@@ -575,7 +557,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     /// O(M + W), M = membres, W = fenêtres vivantes.
     public mutating func reconcileWindowIDs(
         with liveWindows: [WindowSnapshot],
-        isProcessAlive: (Int32) -> Bool = PersistentStageState.isProcessAlive
+        isProcessAlive: (Int32) -> Bool = ProcessLiveness.isAlive
     ) {
         let tileableWindows = liveWindows.filter(\.isTileCandidate)
         let liveWindowIDs = Set(tileableWindows.map(\.id))
@@ -1134,6 +1116,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         presentationState: WindowPresentationState? = nil
     ) {
         ensureStage(stageID, mode: defaultMode)
+        let focusedBefore = stages.first { $0.id == stageID }?.focusedWindowID
         // Paramètre omis (nil) : l'état de présentation connu est conservé (SPEC-016 T014).
         let previousPresentationState = stages.lazy
             .flatMap(\.members)
@@ -1169,6 +1152,10 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             stages[index].members.append(member)
         }
         if focusWindow || stages[index].focusedWindowID == nil {
+            // Le focus change : l'ancien devient « précédent » (comme `setFocusedWindow`).
+            if let focusedBefore, focusedBefore != window.id {
+                stages[index].previousFocusedWindowID = focusedBefore
+            }
             stages[index].focusedWindowID = window.id
         }
     }
@@ -1299,27 +1286,6 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
 
     public func memberIDs(in stageID: StageID) -> [WindowID] {
         stages.first(where: { $0.id == stageID })?.members.map(\.windowID) ?? []
-    }
-
-    mutating func mergeDisconnectedScope(_ source: PersistentStageScope) {
-        if stages.allSatisfy(\.members.isEmpty) {
-            activeStageID = source.activeStageID
-        }
-        for sourceStage in source.stages {
-            ensureStage(sourceStage.id)
-            guard let targetIndex = stages.firstIndex(where: { $0.id == sourceStage.id }) else { continue }
-            if stages[targetIndex].members.isEmpty {
-                stages[targetIndex].mode = sourceStage.mode
-                stages[targetIndex].name = sourceStage.name
-            }
-            for member in sourceStage.members {
-                remove(windowID: member.windowID)
-                stages[targetIndex].members.append(member)
-            }
-            if let focusedWindowID = sourceStage.focusedWindowID {
-                stages[targetIndex].focusedWindowID = focusedWindowID
-            }
-        }
     }
 }
 

@@ -66,8 +66,13 @@ public struct WindowPresentationStateResolver: Sendable {
     /// Nombre de fenêtres tilables par scope (display, desktop, stage).
     // O(n) - n = nombre de fenêtres du snapshot.
     static func tiledWindowCounts(in snapshot: DaemonSnapshot) -> [StageScope: Int] {
+        tiledWindowCounts(in: snapshot.windows)
+    }
+
+    // O(n) - n = nombre de fenêtres de la liste.
+    static func tiledWindowCounts(in windows: [ScopedWindowSnapshot]) -> [StageScope: Int] {
         var counts: [StageScope: Int] = [:]
-        for entry in snapshot.windows where entry.window.isTileCandidate {
+        for entry in windows where entry.window.isTileCandidate {
             if let scope = entry.scope {
                 counts[scope, default: 0] += 1
             }

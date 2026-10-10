@@ -633,7 +633,7 @@ final class RestoreSafetyRuntimeController {
 @MainActor
 private func runRestoreWatcher(pid: Int32, pollMs: UInt32, graceMs: UInt32) -> Never {
     let restore = RestoreSafetyService(service: service)
-    while kill(pid, 0) == 0 || errno == EPERM {
+    while ProcessLiveness.isAlive(pid) {
         usleep(max(50, pollMs) * 1000)
     }
     usleep(graceMs * 1000)

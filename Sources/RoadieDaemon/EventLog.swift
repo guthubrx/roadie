@@ -72,7 +72,7 @@ public struct EventLog: Sendable {
     }
 
     public static func defaultPath() -> String {
-        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+        if TestEnvironment.isRunningTests {
             return "\(NSTemporaryDirectory())roadie-test-events-\(ProcessInfo.processInfo.processIdentifier).jsonl"
         }
         return "~/.roadies/events.jsonl"

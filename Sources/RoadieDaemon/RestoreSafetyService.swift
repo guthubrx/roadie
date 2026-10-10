@@ -153,7 +153,7 @@ public struct RestoreSafetyService {
                 if !Self.isVisible(live.frame, displays: displays) { addTarget(live) }
             } else if let pid = member.pid {
                 // pid mort : fenêtre fermée, rien à restaurer.
-                guard PersistentStageState.isProcessAlive(pid) else { continue }
+                guard ProcessLiveness.isAlive(pid) else { continue }
                 addTarget(WindowSnapshot(
                     id: member.windowID,
                     pid: pid,
@@ -214,8 +214,8 @@ public struct RestoreSafetyService {
     /// Si ce watcher restaure déjà (pid vivant dans le marqueur), le démarrage le laisse faire.
     public func startRun(pid: Int32) throws -> RestoreSafetyApplyResult? {
         let needsRecovery = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
-            let marker = loadMarker()
-            let recovering = marker?.recoveryOwnerPID.map(PersistentStageState.isProcessAlive) ?? false
+            let marker = runMarker()
+            let recovering = marker?.recoveryOwnerPID.map(ProcessLiveness.isAlive) ?? false
             _ = try markRunStarted(pid: pid)
             guard let marker else { return false }
             return !marker.cleanExit && marker.pid != pid && !recovering
@@ -245,8 +245,8 @@ public struct RestoreSafetyService {
     public func recoverAfterProcessExit(pid: Int32) throws -> RestoreSafetyApplyResult? {
         let owner = ProcessInfo.processInfo.processIdentifier
         let reserved = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
-            guard var marker = loadMarker(), marker.pid == pid, !marker.cleanExit else { return false }
-            if let other = marker.recoveryOwnerPID, other != owner, PersistentStageState.isProcessAlive(other) {
+            guard var marker = runMarker(), marker.pid == pid, !marker.cleanExit else { return false }
+            if let other = marker.recoveryOwnerPID, other != owner, ProcessLiveness.isAlive(other) {
                 return false
             }
             marker.recoveryOwnerPID = owner
@@ -256,7 +256,7 @@ public struct RestoreSafetyService {
         guard reserved else { return nil }
         let result = unhideAll()
         try FileLock.withLock(path: recoveryLockPath) {
-            guard var marker = loadMarker(), marker.pid == pid, marker.recoveryOwnerPID == owner else { return }
+            guard var marker = runMarker(), marker.pid == pid, marker.recoveryOwnerPID == owner else { return }
             marker.recoveryOwnerPID = nil
             if result.failed == 0 { marker.cleanExitAt = Date() }
             try writeMarker(marker)
@@ -276,7 +276,7 @@ public struct RestoreSafetyService {
     }
 
     public func markCleanExit(pid: Int32) throws -> RestoreSafetyRunMarker {
-        var marker = loadMarker() ?? RestoreSafetyRunMarker(
+        var marker = runMarker() ?? RestoreSafetyRunMarker(
             pid: pid,
             startedAt: Date(),
             cleanExitAt: nil,
@@ -297,12 +297,8 @@ public struct RestoreSafetyService {
         return marker
     }
 
-    public func runMarker() -> RestoreSafetyRunMarker? {
-        loadMarker()
-    }
-
     public func shouldRestoreAfterProcessExit(pid: Int32) -> Bool {
-        guard let marker = loadMarker(), marker.pid == pid else { return false }
+        guard let marker = runMarker(), marker.pid == pid else { return false }
         return !marker.cleanExit
     }
 
@@ -433,7 +429,7 @@ public struct RestoreSafetyService {
         }
     }
 
-    private func loadMarker() -> RestoreSafetyRunMarker? {
+    public func runMarker() -> RestoreSafetyRunMarker? {
         try? JSONPersistence.loadThrowing(
             RestoreSafetyRunMarker.self,
             from: URL(fileURLWithPath: markerPath)

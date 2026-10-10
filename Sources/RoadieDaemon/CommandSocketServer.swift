@@ -239,10 +239,9 @@ public enum CommandSocketClient {
     public static func isDaemonLockHeld(path: String = defaultLockPath) -> Bool {
         let pidPath = (path as NSString).deletingPathExtension + ".pid"
         guard let raw = try? String(contentsOfFile: pidPath, encoding: .utf8),
-              let pid = Int32(raw.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0
+              let pid = Int32(raw.trimmingCharacters(in: .whitespacesAndNewlines))
         else { return false }
-        // Même test que `ComponentLockFile.isAlive` : EPERM signifie aussi « vivant ».
-        return kill(pid, 0) == 0 || errno == EPERM
+        return ProcessLiveness.isAlive(pid)
     }
 
     /// Envoie une requête et attend la réponse (connexion 0,5 s, réponse 5 s).

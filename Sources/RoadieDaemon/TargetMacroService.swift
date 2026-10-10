@@ -115,7 +115,7 @@ public struct TargetRecordingStatusStore {
         guard let data = try? Data(contentsOf: url),
               let status = try? JSONDecoder.roadie.decode(TargetRecordingStatus.self, from: data)
         else { return nil }
-        guard kill(status.pid, 0) == 0 else {
+        guard ProcessLiveness.isAlive(status.pid) else {
             try? manager.removeItem(at: url)
             return nil
         }

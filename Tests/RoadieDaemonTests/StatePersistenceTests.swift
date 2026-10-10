@@ -207,6 +207,21 @@ struct StatePersistenceTests {
     }
 
     @Test
+    func assignRecordsPreviousFocusOnlyWhenFocusChanges() {
+        let stage = StageID(rawValue: "1")
+        var scope = PersistentStageScope(displayID: display)
+        scope.assign(window: window(10), to: stage)
+        scope.assign(window: window(11), to: stage)
+        #expect(scope.stages.first { $0.id == stage }?.focusedWindowID == WindowID(rawValue: 11))
+        #expect(scope.stages.first { $0.id == stage }?.previousFocusedWindowID == WindowID(rawValue: 10))
+
+        // Adoption sans prise de focus : focus et précédent inchangés.
+        scope.assign(window: window(12), to: stage, focusWindow: false)
+        #expect(scope.stages.first { $0.id == stage }?.focusedWindowID == WindowID(rawValue: 11))
+        #expect(scope.stages.first { $0.id == stage }?.previousFocusedWindowID == WindowID(rawValue: 10))
+    }
+
+    @Test
     func legacyMemberWithoutPidDecodes() throws {
         let json = #"{"windowID":10,"bundleID":"com.test.app","title":"Doc","frame":{"x":0,"y":0,"width":1,"height":1}}"#
         let member = try JSONDecoder().decode(PersistentStageMember.self, from: Data(json.utf8))

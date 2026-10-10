@@ -100,10 +100,6 @@ public final class WindowRuleEngine {
     public func scratchpad(for windowID: WindowID) -> String? {
         scratchpadMarkers[windowID]
     }
-
-    public func scratchpadMarkersSnapshot() -> [WindowID: String] {
-        scratchpadMarkers
-    }
 }
 
 private extension WindowRuleApplication {

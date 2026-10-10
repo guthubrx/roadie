@@ -258,7 +258,7 @@ public struct DesktopCommandService {
         let stageConfig = ConfigReloadService.shared.currentConfig().stageManager
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let visibleWindows = windowsByID.values.filter {
-            display.frame.cgRect.contains($0.frame.center) && !isHidden($0.frame.cgRect)
+            display.frame.cgRect.contains($0.frame.center) && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen($0.frame.cgRect, in: snapshot.displays)
         }
 
         // Scopes relus et modifiés sous verrou (FR-013) ; le bloc renvoie ce que l'AX fera ensuite.
@@ -374,11 +374,6 @@ public struct DesktopCommandService {
 
     private func displayID(containing point: CGPoint, in displays: [DisplaySnapshot]) -> DisplayID? {
         displays.first { $0.frame.cgRect.contains(point) }?.id
-    }
-
-
-    private func isHidden(_ frame: CGRect) -> Bool {
-        frame.maxX < -1000 || frame.minX < -10000
     }
 
     private func beginLayoutCommand(_ reason: String) {

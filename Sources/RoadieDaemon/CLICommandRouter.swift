@@ -1768,7 +1768,7 @@ public struct DaemonStatusReading: Equatable, Sendable {
     public static func read(
         path: String = DaemonStatus.defaultPath,
         now: Date = Date(),
-        isAlive: (Int32) -> Bool = { kill($0, 0) == 0 || errno == EPERM }
+        isAlive: (Int32) -> Bool = ProcessLiveness.isAlive
     ) -> DaemonStatusReading {
         guard let status = DaemonStatus.load(from: path) else {
             return DaemonStatusReading(status: nil, state: "no_status")

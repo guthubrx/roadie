@@ -50,10 +50,6 @@ public struct TitlebarContextMenuSettings: Equatable, Sendable {
             includeDisplayDestinations: config.includeDisplayDestinations
         )
     }
-
-    public var hasAnyDestinationFamily: Bool {
-        includeStageDestinations || includeDesktopDestinations || includeDisplayDestinations
-    }
 }
 
 public enum TitlebarHitTestReason: String, Equatable, Codable, Sendable {

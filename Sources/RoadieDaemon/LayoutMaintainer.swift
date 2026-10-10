@@ -96,7 +96,7 @@ public final class LayoutMaintainer {
         self.commandActivity = commandActivity
         // Sous les tests, la souris réelle de la machine ne doit pas suspendre les ticks.
         self.mouseButtonsPressed = mouseButtonsPressed
-            ?? (Self.isRunningTests ? { false } : { NSEvent.pressedMouseButtons != 0 })
+            ?? (TestEnvironment.isRunningTests ? { false } : { NSEvent.pressedMouseButtons != 0 })
         self.now = now
     }
 
@@ -594,14 +594,6 @@ public final class LayoutMaintainer {
         }
     }
 
-    private static var isRunningTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || ProcessInfo.processInfo.processName.contains("xctest")
-            || ProcessInfo.processInfo.processName.contains("PackageTests")
-            || Bundle.main.bundlePath.contains(".xctest")
-            || CommandLine.arguments.contains { $0.contains(".xctest") || $0.contains("PackageTests") }
-    }
-
     public static func defaultRuleEngine() -> WindowRuleEngine? {
         let config = ConfigReloadService.shared.currentConfig()
         guard !config.rules.isEmpty else {
@@ -932,7 +924,7 @@ public final class LayoutMaintainer {
                 guard let sourceScope = entry.scope,
                       entry.window.isOnScreen,
                       entry.window.isTileCandidate,
-                      !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                      !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
                       let targetDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
                       targetDisplay.id != sourceScope.displayID
                 else { continue }
@@ -1517,7 +1509,7 @@ public final class LayoutMaintainer {
         from result: ApplyResult,
         in snapshot: DaemonSnapshot
     ) -> (result: ApplyResult, commands: [ApplyCommand], hidden: Int) {
-        var resolution = ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: [])
+        var resolution = ApplyResult.empty
         var commands: [ApplyCommand] = []
         var hidden = 0
         let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
@@ -1548,7 +1540,7 @@ public final class LayoutMaintainer {
                 entry.scope == scope
                     && entry.window.isTileCandidate
                     && entry.window.isOnScreen
-                    && !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+                    && !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             }
             let entryIDs = Set(entries.map(\.window.id))
             let orderedIDs = stage.windowIDs.filter { entryIDs.contains($0) }
@@ -2094,7 +2086,7 @@ public final class LayoutMaintainer {
         Set(snapshot.windows.compactMap { entry -> WindowID? in
             guard windowIDs.contains(entry.window.id),
                   entry.window.isTileCandidate,
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
                   let scope = entry.scope,
                   let stage = snapshot.state.stage(scope: scope),
                   stage.mode == .mutableBsp,
@@ -2299,7 +2291,7 @@ public final class LayoutMaintainer {
     private func visiblePreviousFrame(of entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> Rect? {
         guard let previous = lastObservedFrames?[entry.window.id.rawValue],
               let display = display(for: entry, in: snapshot),
-              !isHiddenCorner(previous.cgRect, in: snapshot.displays)
+              !HiddenWindowPlacement.isHidden(previous.cgRect, in: snapshot.displays)
         else { return nil }
         let tolerance = LayoutTolerance.observedChange
         let bounds = display.visibleFrame.cgRect.insetBy(dx: -tolerance, dy: -tolerance)
@@ -2397,7 +2389,7 @@ public final class LayoutMaintainer {
                       entry.pin == nil,
                       entry.window.isOnScreen,
                       entry.window.isTileCandidate,
-                      !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                      !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
                       !state.suppressesRulePlacement(windowID: entry.window.id, ruleID: nil),
                       let physicalDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
                       physicalDisplay.id != sourceScope.displayID
@@ -2527,7 +2519,7 @@ public final class LayoutMaintainer {
             }
             guard entries.allSatisfy({ entry in
                 entry.window.isOnScreen
-                    && !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+                    && !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             }) else { return nil }
             guard stableMutableBspFramesLookUsable(entries.map(\.window.frame.cgRect), on: display) else {
                 return nil
@@ -2670,7 +2662,7 @@ public final class LayoutMaintainer {
                   let activeScope = snapshot.state.activeScope(on: scope.displayID),
                   scope != activeScope,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  !isPreferredHiddenCorner(entry.window.frame.cgRect, among: snapshot.displays),
+                  !HiddenWindowPlacement.isPreferred(entry.window.frame.cgRect, among: snapshot.displays),
                   !fullscreenWindowIDs.contains(entry.window.id)
             else { continue }
             if entry.pin?.visibility(in: activeScope).shouldBeVisible == true {
@@ -2709,7 +2701,7 @@ public final class LayoutMaintainer {
                   entry.window.isTileCandidate,
                   entry.window.isOnScreen,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { continue }
 
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
@@ -2730,7 +2722,7 @@ public final class LayoutMaintainer {
             guard let scope = entry.scope,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
                   entry.window.furniture?.isNativeFullscreen != true,
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
                   let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display)
             else { continue }
 
@@ -2754,7 +2746,7 @@ public final class LayoutMaintainer {
               let focusedScope = focusedEntry.scope,
               snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
               focusedEntry.window.isTileCandidate,
-              isHiddenCorner(focusedEntry.window.frame.cgRect, in: snapshot.displays),
+              HiddenWindowPlacement.isHidden(focusedEntry.window.frame.cgRect, in: snapshot.displays),
               !tickExcludedScopes.contains(focusedScope),
               let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
         else { return nil }
@@ -2783,7 +2775,7 @@ public final class LayoutMaintainer {
         let activeHiddenEntries = snapshot.windows.filter { entry in
             entry.scope == focusedScope
                 && entry.window.isTileCandidate
-                && isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+                && HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
         }
         let activeHiddenWindowIDs = Set(activeHiddenEntries.map(\.window.id))
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
@@ -2832,7 +2824,7 @@ public final class LayoutMaintainer {
         // redevient visible quand même, sinon le maintien resterait bloqué sur elle.
         if !plan.commands.contains(where: { $0.window.id == focusedWindowID }) {
             let planned = rawPlan.commands.first { $0.window.id == focusedWindowID }?.frame.cgRect
-            let target = planned.flatMap { isHiddenCorner($0, in: snapshot.displays) ? nil : $0 }
+            let target = planned.flatMap { HiddenWindowPlacement.isHidden($0, in: snapshot.displays) ? nil : $0 }
                 ?? centeredVisibleFrame(for: focusedEntry.window.frame.cgRect, on: display)
             let command = ApplyCommand(window: focusedEntry.window, frame: Rect(target))
             if failedFrames[focusedWindowID.rawValue]?.matches(command: command) != true {
@@ -2843,7 +2835,7 @@ public final class LayoutMaintainer {
 
         let applyStartedAt = Date()
         var application = PlanApplication(
-            result: ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: []),
+            result: ApplyResult.empty,
             commands: 0
         )
         if !plan.commands.isEmpty {
@@ -2905,7 +2897,7 @@ public final class LayoutMaintainer {
             guard let pin = entry.pin,
                   let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
                   pin.visibility(in: activeScope).shouldBeVisible,
-                  isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+                  HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { continue }
 
             if service.setFrame(pin.lastFrame.cgRect, of: entry.window) != nil {
@@ -2913,14 +2905,6 @@ public final class LayoutMaintainer {
             }
         }
         return applied
-    }
-
-    private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        HiddenWindowPlacement.isHidden(frame, in: displays)
-    }
-
-    private func isPreferredHiddenCorner(_ frame: CGRect, among displays: [DisplaySnapshot]) -> Bool {
-        HiddenWindowPlacement.isPreferred(frame, among: displays)
     }
 }
 

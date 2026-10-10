@@ -38,7 +38,7 @@ public final class ComponentLockFile: @unchecked Sendable {
     }
 
     private static func pidDirectory() -> String {
-        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+        if TestEnvironment.isRunningTests {
             return "\(NSTemporaryDirectory())roadie-test-locks-\(ProcessInfo.processInfo.processIdentifier)"
         }
         return NSString(string: "~/.roadies").expandingTildeInPath
@@ -104,7 +104,7 @@ public final class ComponentLockFile: @unchecked Sendable {
     }
 
     /// Inventaire des verrous actifs. Filtre les PID staling.
-    /// La vivacite est testee par `kill(pid, 0)` et non par une sonde `flock` : une sonde
+    /// La vivacite est testee par `ProcessLiveness.isAlive` et non par une sonde `flock` : une sonde
     /// pourrait faire echouer un demarrage concurrent.
     public static func registry() -> [(component: String, pid: Int32, startedAt: Date)] {
         let directory = pidDirectory()
@@ -116,7 +116,7 @@ public final class ComponentLockFile: @unchecked Sendable {
         for entry in entries where entry.hasSuffix(".pid") {
             let component = String(entry.dropLast(4))
             let fullPath = "\(directory)/\(entry)"
-            guard let pid = readPid(at: fullPath), isAlive(pid: pid) else { continue }
+            guard let pid = readPid(at: fullPath), ProcessLiveness.isAlive(pid) else { continue }
             let attrs = try? manager.attributesOfItem(atPath: fullPath)
             let startedAt = (attrs?[.modificationDate] as? Date) ?? Date()
             result.append((component: component, pid: pid, startedAt: startedAt))
@@ -128,13 +128,5 @@ public final class ComponentLockFile: @unchecked Sendable {
         guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return Int32(trimmed)
-    }
-
-    private static func isAlive(pid: Int32) -> Bool {
-        // kill(pid, 0) renvoie 0 si le process existe (et qu'on a la permission de
-        // signaler). EPERM aussi indique un process vivant. ESRCH = stale.
-        let result = kill(pid, 0)
-        if result == 0 { return true }
-        return errno != ESRCH
     }
 }

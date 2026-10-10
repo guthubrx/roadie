@@ -90,7 +90,7 @@ final class RailDragGhostView: NSView {
             if usesBackdrop {
                 path.addClip()
             }
-            image.draw(in: rect, from: aspectFitSourceRect(image.size, for: rect), operation: .sourceOver, fraction: 0.92)
+            image.draw(in: rect, from: CGRect(origin: .zero, size: image.size), operation: .sourceOver, fraction: 0.92)
             NSGraphicsContext.restoreGraphicsState()
         } else {
             NSColor.systemGreen.withAlphaComponent(0.45).setFill()
@@ -102,10 +102,6 @@ final class RailDragGhostView: NSView {
             path.lineWidth = 1
             path.stroke()
         }
-    }
-
-    private func aspectFitSourceRect(_ imageSize: NSSize, for rect: CGRect) -> CGRect {
-        CGRect(origin: .zero, size: imageSize)
     }
 }
 
@@ -294,7 +290,7 @@ final class RailPanel: NSPanel {
         stack.railBackgroundOpacity = config.backgroundOpacity
         emptyClickHideActive = config.emptyClickHideActive
         emptyClickSafetyMargin = config.emptyClickSafetyMargin
-        positionContent(count: content.stages.count, config: config)
+        positionContent(config: config)
         if let spacer = stageLeadingSpacer(count: content.stages.count, config: config) {
             stack.addArrangedSubview(spacer)
         }
@@ -328,7 +324,7 @@ final class RailPanel: NSPanel {
         ])
     }
 
-    private func positionContent(count: Int, config: RailVisualConfig) {
+    private func positionContent(config: RailVisualConfig) {
         stack.spacing = config.layoutSpacing
         let topInset: CGFloat
         let bottomInset: CGFloat

@@ -41,7 +41,7 @@ public final class BorderController {
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               entry.window.isTileCandidate,
               entry.scope != nil,
-              !isHidden(entry.window.frame.cgRect, in: snapshot.displays),
+              !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: snapshot.displays),
               !Self.isWindowVisiblyOccluded(entry, in: snapshot)
         else {
             hidePanel()
@@ -96,7 +96,7 @@ public final class BorderController {
             }
             guard entry.window.isOnScreen else { continue }
             let frame = entry.window.frame.cgRect
-            guard !isObviouslyHidden(frame, in: snapshot.displays) else { continue }
+            guard !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(frame, in: snapshot.displays) else { continue }
             let intersection = frame.intersection(targetFrame)
             guard !intersection.isNull,
                   intersection.width >= 24,
@@ -106,23 +106,6 @@ public final class BorderController {
             return true
         }
         return false
-    }
-
-    private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        Self.isObviouslyHidden(frame, in: displays)
-    }
-
-    nonisolated private static func isObviouslyHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        if frame.maxX < -1000 || frame.minX < -10000 {
-            return true
-        }
-        return displays.contains { display in
-            let visible = display.visibleFrame.cgRect
-            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
-            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
-            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
-            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
-        }
     }
 
     private static func axToNS(_ rect: CGRect) -> CGRect {

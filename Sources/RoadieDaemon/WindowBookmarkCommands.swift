@@ -68,7 +68,7 @@ public struct WindowBookmarkCommandService {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         // Préparé hors verrou : fenêtres visibles de l'écran (aucune E/S ni AX dans `mutate`).
         let visibleWindows = windowsByID.values.filter {
-            display.frame.cgRect.contains($0.frame.center) && !isHidden($0.frame.cgRect)
+            display.frame.cgRect.contains($0.frame.center) && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen($0.frame.cgRect, in: snapshot.displays)
         }
 
         // Scopes relus et modifiés sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
@@ -189,11 +189,6 @@ public struct WindowBookmarkCommandService {
             }
         }
         return snapshot.windows.first { $0.window.isTileCandidate && $0.scope != nil }
-    }
-
-
-    private func isHidden(_ frame: CGRect) -> Bool {
-        frame.origin.x > 9_000 || frame.origin.y > 9_000
     }
 
     private func eventDetails(_ bookmark: PersistentWindowBookmark) -> [String: String] {

@@ -3943,6 +3943,28 @@ struct SnapshotStabilizationTests {
         #expect(!FileManager.default.fileExists(atPath: intentPath))
     }
 
+    /// FR-037 : après disparition de l'écran de droite, la fenêtre est reportée hors de tout écran
+    /// présent ; ce cadre n'écrase pas la dernière position visible du membre.
+    @Test
+    func frameOutsideEveryDisplayDoesNotOverwriteMemberFrame() {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let movedOffscreen = powerWindow(1, x: 2_500)
+        let movedVisible = powerWindow(2, x: 600)
+
+        _ = service(
+            windows: [movedOffscreen, movedVisible],
+            focusedID: a.id,
+            store: store,
+            clock: StabilizationClock()
+        ).snapshot()
+
+        let members = store.state().scopes.flatMap(\.stages).flatMap(\.members)
+        #expect(members.first { $0.windowID == a.id }?.frame == a.frame)
+        #expect(members.first { $0.windowID == b.id }?.frame == movedVisible.frame)
+    }
+
     @Test
     func writerSnapshotDoesNotRewriteUnchangedState() throws {
         let a = powerWindow(1, x: 0)

@@ -7,7 +7,7 @@ import RoadieCore
 /// processus. Les lectures restent sans verrou (écriture atomique par rename).
 /// Aucun état mutable en mémoire : la classe est `Sendable` sans `@unchecked`.
 public final class LayoutCommandActivity: Sendable {
-    public static let shared = LayoutCommandActivity(enabled: !LayoutCommandActivity.isRunningTests)
+    public static let shared = LayoutCommandActivity(enabled: !TestEnvironment.isRunningTests)
 
     private let url: URL
     private let enabled: Bool
@@ -154,13 +154,5 @@ public final class LayoutCommandActivity: Sendable {
             }
             return lines.joined(separator: "\n") + "\n"
         }
-    }
-
-    private static var isRunningTests: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
-            || ProcessInfo.processInfo.processName.contains("xctest")
-            || ProcessInfo.processInfo.processName.contains("PackageTests")
-            || Bundle.main.bundlePath.contains(".xctest")
-            || CommandLine.arguments.contains { $0.contains(".xctest") || $0.contains("PackageTests") }
     }
 }

@@ -65,7 +65,7 @@ public struct LayoutIntentStore: Sendable {
     }
 
     public static func defaultPath() -> String {
-        if ProcessInfo.processInfo.processName.lowercased().contains("test") {
+        if TestEnvironment.isRunningTests {
             return "\(NSTemporaryDirectory())roadie-test-layout-intents-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString).json"
         }
         return "~/.roadies/layout-intents.json"

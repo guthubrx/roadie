@@ -418,7 +418,10 @@ public struct SnapshotService {
                     desktopID: persistentScope.desktopID,
                     stageID: persistentScope.activeStageID
                 )
-            } else if !isHidden(window.frame.cgRect, in: displays) {
+            } else if !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays),
+                      // FR-037 : un cadre hors de tout écran présent (écran débranché) n'écrase pas la
+                      // dernière position visible du membre. O(d), d = nombre d'écrans.
+                      displays.contains(where: { $0.frame.cgRect.intersects(window.frame.cgRect) }) {
                 var persistentScope = persistedStages.scope(
                     displayID: displayID,
                     desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
@@ -521,14 +524,11 @@ public struct SnapshotService {
         displays: [DisplaySnapshot],
         config: RoadieConfig
     ) {
-        var tiledCounts: [StageScope: Int] = [:]
-        for entry in scopedWindows where entry.window.isTileCandidate {
-            if let scope = entry.scope { tiledCounts[scope, default: 0] += 1 }
-        }
+        let tiledCounts = WindowPresentationStateResolver.tiledWindowCounts(in: scopedWindows)
         for entry in scopedWindows where entry.window.isTileCandidate {
             guard let scope = entry.scope,
                   tiledCounts[scope] == 1,
-                  !isHidden(entry.window.frame.cgRect, in: displays),
+                  !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: displays),
                   presentationState(for: entry.window, displayID: scope.displayID, displays: displays) == .maximized,
                   let display = displays.first(where: { $0.id == scope.displayID })
             else { continue }
@@ -571,7 +571,7 @@ public struct SnapshotService {
         guard !missingWindows.markedMissingWindowIDs.isEmpty,
               let previousActiveDisplayID,
               previousActiveDisplayID != scope.displayID,
-              isHidden(entry.window.frame.cgRect, in: displays)
+              HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: displays)
         else { return false }
 
         events.append(RoadieEvent(type: "focus.hidden_cross_display_after_missing_suppressed", scope: scope, details: [
@@ -842,13 +842,6 @@ public struct SnapshotService {
         return displays.first(where: \.isMain)?.id ?? displays.first?.id
     }
 
-    private func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        if frame.maxX < -1000 || frame.minX < -10000 {
-            return true
-        }
-        return HiddenWindowPlacement.isHidden(frame, in: displays)
-    }
-
     private func presentationState(
         for window: WindowSnapshot,
         displayID: DisplayID,
@@ -866,7 +859,7 @@ public struct SnapshotService {
         persistedStages: PersistentStageState,
         displays: [DisplaySnapshot]
     ) -> Bool {
-        if !isHidden(entry.window.frame.cgRect, in: displays) {
+        if !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: displays) {
             return true
         }
 
@@ -955,6 +948,9 @@ public struct ApplyResult: Equatable, Codable, Sendable {
         self.failed = failed
         self.items = items
     }
+
+    /// Résultat d'une application qui n'a rien tenté.
+    public static let empty = ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: [])
 }
 
 public struct ApplyResultItem: Equatable, Codable, Sendable {
@@ -1022,7 +1018,7 @@ public extension SnapshotService {
         guard !scopedWindows.isEmpty else { return true }
 
         return scopedWindows.contains { entry in
-            !entry.window.isOnScreen || isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays)
+            !entry.window.isOnScreen || HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
         }
     }
 
@@ -1581,10 +1577,6 @@ public extension SnapshotService {
         let dw = abs(observed.width - baseline.width)
         let dh = abs(observed.height - baseline.height)
         return dx <= 8 && (dy <= 12 || dh <= 12) && (dw <= 2 && dh <= 80)
-    }
-
-    private func isHiddenCorner(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        HiddenWindowPlacement.isHidden(frame, in: displays)
     }
 
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {

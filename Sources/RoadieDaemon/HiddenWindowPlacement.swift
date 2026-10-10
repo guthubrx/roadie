@@ -31,6 +31,12 @@ enum HiddenWindowPlacement {
         isPreferred(frame, among: displays) || isLegacyBottomCorner(frame, in: displays)
     }
 
+    /// `isHidden` plus l'ancienne position de masquage très loin à gauche (versions précédentes).
+    /// Test unique pour tous les appelants qui filtrent les fenêtres réellement visibles.
+    static func isHiddenOrLegacyOffscreen(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
+        frame.maxX < -1000 || frame.minX < -10000 || isHidden(frame, in: displays)
+    }
+
     static func isPreferred(_ frame: CGRect, among displays: [DisplaySnapshot]) -> Bool {
         guard let virtualMaxX = displays.map({ $0.visibleFrame.cgRect.maxX }).max() else {
             return false
