@@ -10,7 +10,7 @@ import RoadieCore
 @Suite(.serialized)
 struct CLICommandRouterTests {
     private func router() -> CLICommandRouter {
-        CLICommandRouter(makeService: {
+        CLICommandRouter(makeService: { _ in
             let provider = PowerUserProvider(windows: [powerWindow(1, x: 0)])
             return SnapshotService(
                 provider: provider,
@@ -114,6 +114,36 @@ struct CLICommandRouterTests {
         #expect(!CLICommandRouter.isDaemonRouted([]))
     }
 
+    /// T211 : une commande de lecture reçoit un service non persistant ; une action, le service normal.
+    @Test
+    func readCommandsGetReadOnlyService() {
+        #expect(CLICommandRouter.isReadOnly(["windows", "list"]))
+        #expect(CLICommandRouter.isReadOnly(["state", "dump"]))
+        #expect(CLICommandRouter.isReadOnly(["query", "state"]))
+        #expect(CLICommandRouter.isReadOnly(["stage", "list"]))
+        #expect(!CLICommandRouter.isReadOnly(["state", "heal"]))
+        #expect(!CLICommandRouter.isReadOnly(["stage", "switch", "2"]))
+        #expect(!CLICommandRouter.isReadOnly(["focus", "left"]))
+
+        var requested: [Bool] = []
+        let router = CLICommandRouter(makeService: { readOnly in
+            requested.append(readOnly)
+            let provider = PowerUserProvider(windows: [powerWindow(1, x: 0)])
+            return SnapshotService(
+                provider: provider,
+                frameWriter: PowerUserWriter(provider: provider),
+                config: RoadieConfig(),
+                intentStore: LayoutIntentStore(path: tempPath("cli-ro-intents")),
+                stageStore: StageStore(path: tempPath("cli-ro-stages")),
+                events: EventLog(path: tempPath("cli-ro-events")),
+                persistStateChanges: !readOnly
+            )
+        })
+        _ = router.run(["windows", "list"])
+        _ = router.run(["focus", "left"])
+        #expect(requested == [true, false])
+    }
+
     @Test
     func relativeConfigPathIsResolvedFromClientDirectory() {
         let argv = CommandSocketServer.resolvingPaths(["rules", "list", "--config", "conf/r.toml"], cwd: "/Users/x")
@@ -195,16 +225,29 @@ struct CLICommandRouterTests {
         #expect(freeLock.stdout == "local\n")
         #expect(localRuns == 2)
 
-        // Verrou tenu (daemon présent) sans socket : erreur 69, jamais de réexécution locale.
-        let holder = open(lockPath, O_RDWR)
-        defer { close(holder) }
-        #expect(flock(holder, LOCK_EX | LOCK_NB) == 0)
+        // Pid d'un process mort à côté du verrou : daemon absent, exécution locale.
+        let pidPath = (lockPath as NSString).deletingPathExtension + ".pid"
+        try? "999999\n".write(toFile: pidPath, atomically: true, encoding: .utf8)
+        let stalePid = CommandSocketClient.execute(
+            argv: ["focus", "left"], cwd: nil,
+            socketPath: missingSocket, lockPath: lockPath, local: local
+        )
+        #expect(stalePid.stdout == "local\n")
+        #expect(localRuns == 3)
+
+        // Daemon vivant (pid du fichier) sans socket : erreur 69, jamais de réexécution locale.
+        // T217 : la sonde ne prend aucun flock, le verrou reste disponible pour un démarrage.
+        try? "\(getpid())\n".write(toFile: pidPath, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: pidPath) }
         let held = CommandSocketClient.execute(
             argv: ["focus", "left"], cwd: nil,
             socketPath: missingSocket, lockPath: lockPath, local: local
         )
         #expect(held.exitCode == 69)
-        #expect(localRuns == 2)
+        #expect(localRuns == 3)
+        let starter = open(lockPath, O_RDWR)
+        defer { close(starter) }
+        #expect(flock(starter, LOCK_EX | LOCK_NB) == 0)
 
         // Commande hors liste : toujours locale, même daemon présent.
         let notRouted = CommandSocketClient.execute(
@@ -212,7 +255,7 @@ struct CLICommandRouterTests {
             socketPath: missingSocket, lockPath: lockPath, local: local
         )
         #expect(notRouted.stdout == "local\n")
-        #expect(localRuns == 3)
+        #expect(localRuns == 4)
     }
 
     @Test

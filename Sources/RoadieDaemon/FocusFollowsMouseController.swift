@@ -58,8 +58,9 @@ public final class FocusFollowsMouseController {
 
 /// Dernière saisie utilisateur (clic, touche, modificateur) vue par le processus (SPEC-016 FR-009).
 /// La stage ne suit un changement de focus que si une saisie a eu lieu dans la seconde qui précède,
-/// après la dernière disparition de fenêtre. Sans moniteur actif (tests, CLI), seule l'exclusion
-/// de 500 ms après une disparition s'applique.
+/// après la dernière disparition de fenêtre. Sans moniteur actif (CLI, processus qui ne l'a pas
+/// démarré), aucune saisie n'est prouvée : le suivi est refusé (comportement conservateur, T211).
+/// Le tiler, le rail, la bordure et le focus-souris démarrent le moniteur.
 public final class UserInputActivity: @unchecked Sendable {
     public static let shared = UserInputActivity()
 
@@ -102,7 +103,7 @@ public final class UserInputActivity: @unchecked Sendable {
                now.timeIntervalSince(lastDisappearanceAt) < Self.disappearanceExclusion {
                 return false
             }
-            guard monitoring else { return true }
+            guard monitoring else { return false }
             guard let lastInputAt,
                   now.timeIntervalSince(lastInputAt) <= Self.inputWindow
             else { return false }

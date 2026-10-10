@@ -5,6 +5,7 @@ import RoadieAX
 import RoadieCore
 import RoadieDaemon
 import RoadieStages
+import RoadieTiler
 
 private struct FakeProvider: SystemSnapshotProviding {
     var permissionSnapshot = PermissionSnapshot(accessibilityTrusted: true)
@@ -18,6 +19,14 @@ private struct FakeProvider: SystemSnapshotProviding {
     func windows() -> [WindowSnapshot] { windowSnapshots }
     func focusedWindowID() -> WindowID? { focusedID }
     func mouseLocation() -> CGPoint? { mousePoint }
+}
+
+/// Saisie utilisateur toute récente, moniteur actif : autorise le suivi du focus par la stage
+/// (FR-009). Sans moniteur, ce suivi est refusé (T211).
+private func recentUserInput() -> UserInputActivity {
+    let input = UserInputActivity(monitoring: true)
+    input.recordInput()
+    return input
 }
 
 @Suite
@@ -1059,7 +1068,8 @@ struct SnapshotServiceTests {
                 windowSnapshots: [active, hidden],
                 focusedID: hidden.id
             ),
-            stageStore: stageStore
+            stageStore: stageStore,
+            userInput: recentUserInput()
         )
 
         let snapshot = service.snapshot()
@@ -1262,7 +1272,8 @@ struct SnapshotServiceTests {
                 windowSnapshots: [activeLeft, hiddenRight],
                 focusedID: hiddenRight.id
             ),
-            stageStore: stageStore
+            stageStore: stageStore,
+            userInput: recentUserInput()
         )
 
         let snapshot = service.snapshot()
@@ -3977,15 +3988,84 @@ struct SnapshotStabilizationTests {
         let c = powerWindow(3, x: 800)
         let store = twoStageStore(a: a, b: b, c: c)
         let clock = StabilizationClock()
-        _ = service(windows: [a, b, c], focusedID: a.id, store: store, clock: clock).snapshot()
+        let input = UserInputActivity(monitoring: true)
+        _ = service(windows: [a, b, c], focusedID: a.id, store: store, clock: clock, userInput: input).snapshot()
 
         clock.now += 0.1
-        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock).snapshot()
+        _ = service(windows: [a, b], focusedID: a.id, store: store, clock: clock, userInput: input).snapshot()
+
+        // Saisie postérieure à la disparition, mais moins de 500 ms après : focus ignoré.
+        clock.now += 0.3
+        input.recordInput(at: clock.now - 0.05)
+        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock, userInput: input).snapshot()
         #expect(activeStageID(store) == StageID(rawValue: "1"))
 
-        clock.now += 0.6
-        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock).snapshot()
+        clock.now += 0.3
+        input.recordInput(at: clock.now - 0.05)
+        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock, userInput: input).snapshot()
         #expect(activeStageID(store) == StageID(rawValue: "2"))
+    }
+
+    /// T211 : sans moniteur de saisie actif, aucune saisie n'est prouvée ; la stage ne suit pas.
+    @Test
+    func stageIgnoresFocusChangeWithoutInputMonitor() {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+
+        let snapshot = service(windows: [a, b], focusedID: b.id, store: store, clock: clock, userInput: UserInputActivity()).snapshot()
+
+        #expect(snapshot.state.activeScope(on: display.id)?.stageID == StageID(rawValue: "1"))
+        #expect(activeStageID(store) == StageID(rawValue: "1"))
+    }
+
+    /// T201 / FR-005 : la nouvelle fenêtre, focalisée dès son apparition, se greffe à côté du
+    /// dernier membre focalisé de la stage (son focus précédent), pas sur la première feuille.
+    @Test
+    func newBSPWindowIsInsertedNextToPreviouslyFocusedMember() throws {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let c = powerWindow(3, x: 800)
+        let newcomer = powerWindow(4, x: 1200)
+        let tree = BSPTree.split(
+            orientation: .vertical,
+            ratio: 0.5,
+            first: .leaf(a.id),
+            second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(b.id), second: .leaf(c.id))
+        )
+        let store = StageStore(path: tempPath("bsp-anchor-stages"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(
+                        id: StageID(rawValue: "1"),
+                        mode: .spatialBsp,
+                        focusedWindowID: b.id,
+                        members: [member(a), member(b), member(c)],
+                        bspTree: tree
+                    )
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let service = service(windows: [a, b, c, newcomer], focusedID: newcomer.id, store: store, clock: StabilizationClock())
+
+        let snapshot = service.snapshot()
+        let changed = service.reconcileSpatialBSPTrees(in: snapshot)
+
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        #expect(changed == [scope])
+        let reconciled = try #require(store.state().bspTree(for: scope))
+        #expect(Set(reconciled.windowIDs) == [a.id, b.id, c.id, newcomer.id])
+        #expect(Self.sibling(of: newcomer.id, in: reconciled) == .leaf(b.id))
+    }
+
+    private static func sibling(of id: WindowID, in tree: BSPTree) -> BSPTree? {
+        guard case .split(_, _, let first, let second) = tree else { return nil }
+        if first == .leaf(id) { return second }
+        if second == .leaf(id) { return first }
+        return sibling(of: id, in: first) ?? sibling(of: id, in: second)
     }
 
     @Test
@@ -4048,6 +4128,44 @@ struct SnapshotStabilizationTests {
         #expect(provider.windowsCalls == 3)
 
         _ = service.sharedSnapshot(followFocus: false)
+        #expect(provider.windowsCalls == 4)
+    }
+
+    /// T212 / FR-023 : un lecteur du processus consomme le snapshot du tick du tiler pendant tout
+    /// son cycle (intervalle + marge, borné à 600 ms) au lieu de rescanner après 150 ms.
+    @Test
+    func readerConsumesTilerSnapshotDuringItsCycle() {
+        let provider = SnapshotCallCountingProvider(display: display, windows: [powerWindow(1, x: 0)])
+        let clock = StabilizationClock()
+        let statePath = tempPath("producer-snapshot-stages")
+        func make(persist: Bool) -> SnapshotService {
+            SnapshotService(
+                provider: provider,
+                frameWriter: RecordingWriter(),
+                config: RoadieConfig(),
+                intentStore: LayoutIntentStore(path: tempPath("producer-snapshot-intents")),
+                stageStore: StageStore(path: statePath),
+                events: EventLog(path: tempPath("producer-snapshot-events")),
+                persistStateChanges: persist,
+                clock: { clock.now }
+            )
+        }
+        let tiler = make(persist: true)
+        let reader = make(persist: false)
+
+        _ = tiler.producerSnapshot(cycle: 0.5)
+        clock.now += 0.4
+        _ = reader.sharedSnapshot()
+        #expect(provider.windowsCalls == 1)
+
+        clock.now += 0.3
+        _ = reader.sharedSnapshot()
+        #expect(provider.windowsCalls == 2)
+
+        // Borne de 600 ms même pour un tiler lent.
+        _ = tiler.producerSnapshot(cycle: 2)
+        clock.now += 0.65
+        _ = reader.sharedSnapshot()
         #expect(provider.windowsCalls == 4)
     }
 

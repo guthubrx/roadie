@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RoadieAX
 import RoadieCore
 import RoadieStages
@@ -86,8 +87,8 @@ public struct SnapshotService {
     /// Active pour les sous-commandes "lecteurs" (rail, border, focus-mouse, etc.) en mode
     /// SPEC-011 atomique, pour eviter qu'ils ne s'ecrasent mutuellement l'etat canonique
     /// maintenu par `tiler` ou `run`. Les commandes utilisateur explicites (StageCommands,
-    /// WindowCommands, etc.) continuent a ecrire via leurs propres `stageStore.save(...)`
-    /// proteges par flock POSIX (FileLock).
+    /// WindowCommands, etc.) continuent a ecrire via leurs propres transactions
+    /// `stageStore.mutate { ... }` (verrou flock POSIX, FR-013).
     private let persistStateChanges: Bool
     private let userInput: UserInputActivity
     private let clock: @Sendable () -> Date
@@ -158,9 +159,9 @@ public struct SnapshotService {
     }
 
     /// Snapshot pour les composants lecteurs (bordure, focus-souris, rail) : réutilise le
-    /// dernier snapshot publié dans le processus pour ce fichier d'état s'il a moins de 150 ms
-    /// et que ni l'état persisté ni la config n'ont changé ; sinon en produit un (FR-023).
-    /// Le tiler, qui écrit, appelle toujours `snapshot()`.
+    /// dernier snapshot publié dans le processus pour ce fichier d'état s'il est encore valide
+    /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
+    /// persisté ni la config n'ont changé ; sinon en produit un (FR-023).
     public func sharedSnapshot(followFocus: Bool = true) -> DaemonSnapshot {
         if let recent = processState.recentSnapshot(
             followFocus: followFocus,
@@ -179,6 +180,17 @@ public struct SnapshotService {
     }
 
     public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
+        snapshot(promptForPermissions: promptForPermissions, followFocus: followFocus, sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge)
+    }
+
+    /// Snapshot du tick du tiler, producteur unique du processus quand il tourne (FR-023) : publié
+    /// comme source partagée valable tout le cycle (`cycle` + marge, borné à 600 ms). Les lecteurs
+    /// du processus le consomment au lieu de rescanner ; ailleurs la règle des 150 ms s'applique.
+    public func producerSnapshot(cycle: TimeInterval) -> DaemonSnapshot {
+        snapshot(promptForPermissions: false, followFocus: true, sharedMaxAge: SnapshotProcessState.producerMaxAge(cycle: cycle))
+    }
+
+    private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval) -> DaemonSnapshot {
         let config = self.config
         let now = clock()
         // Énumération Accessibility HORS verrou (R1) : seule la réconciliation, fonction pure
@@ -241,6 +253,7 @@ public struct SnapshotService {
         processState.publish(
             snapshot,
             followFocus: followFocus,
+            maxAge: sharedMaxAge,
             at: now,
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config
@@ -372,7 +385,8 @@ public struct SnapshotService {
                 displays: displays,
                 persistedStages: persistedStages,
                 mouseLocation: mouseLocation,
-                fallbackDisplayID: fallbackDisplayID
+                fallbackDisplayID: fallbackDisplayID,
+                newAppsTarget: config.windowPlacement.newAppsTarget
             ) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
                 continue
@@ -388,9 +402,13 @@ public struct SnapshotService {
                     defaultMode: config.tiling.defaultStrategy
                 )
                 let presentationState = presentationState(for: window, displayID: displayID, displays: displays)
+                // `focusWindow: false` : une fenêtre adoptée ne devient le focus de la stage que si
+                // elle a réellement le focus (suivi plus bas, via `setFocusedWindow`, qui garde le
+                // focus précédent). Sinon l'historique servant d'ancrage BSP serait perdu (FR-005).
                 persistentScope.assign(
                     window: window,
                     to: persistentScope.activeStageID,
+                    focusWindow: false,
                     defaultMode: config.tiling.defaultStrategy,
                     presentationState: presentationState
                 )
@@ -439,7 +457,6 @@ public struct SnapshotService {
                 desktopID: scope.desktopID
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
-            try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             if window.isTileCandidate, pin == nil {
                 try? state.assignWindow(window.id, to: scope)
             }
@@ -775,14 +792,17 @@ public struct SnapshotService {
         displays.first { $0.frame.cgRect.contains(point) }?.id
     }
 
+    /// Appelée sous le verrou des stages : la cible vient de la config de l'entrée, jamais de
+    /// `self.config` qui relirait le fichier de config (T213).
     private func newWindowDisplayID(
         for window: WindowSnapshot,
         displays: [DisplaySnapshot],
         persistedStages: PersistentStageState,
         mouseLocation: CGPoint?,
-        fallbackDisplayID: DisplayID?
+        fallbackDisplayID: DisplayID?,
+        newAppsTarget: String
     ) -> DisplayID? {
-        switch config.windowPlacement.newAppsTarget {
+        switch newAppsTarget {
         case "mouse":
             if let mouseLocation,
                let displayID = displayID(containing: mouseLocation, in: displays) {
@@ -1115,10 +1135,10 @@ public extension SnapshotService {
             scope: scope,
             frames: frames,
             focusedWindowID: snapshot.focusedWindowID,
-            positionTolerance: 16,
-            sizeTolerance: 16,
-            focusedPositionTolerance: 16,
-            focusedSizeTolerance: 16,
+            positionTolerance: LayoutTolerance.observedChange,
+            sizeTolerance: LayoutTolerance.observedChange,
+            focusedPositionTolerance: LayoutTolerance.observedChange,
+            focusedSizeTolerance: LayoutTolerance.observedChange,
             allowFocusChromeDelta: false
         )
     }
@@ -1312,7 +1332,18 @@ public extension SnapshotService {
             guard !ordered.isEmpty else { continue }
             let wide = display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
             let reconcile = { (existing: BSPTree) in
-                existing.reconciled(liveWindowIDs: ordered, focus: snapshot.focusedWindowID, side: side, containerIsWide: wide)
+                existing.reconciled(
+                    liveWindowIDs: ordered,
+                    focus: Self.bspInsertionAnchor(
+                        tree: existing,
+                        liveWindowIDs: ordered,
+                        globalFocus: snapshot.focusedWindowID,
+                        scope: scope,
+                        state: currentState
+                    ),
+                    side: side,
+                    containerIsWide: wide
+                )
             }
             // Pré-contrôle sans verrou : au repos, aucun verrou ni écriture.
             let existing = currentState.bspTree(for: scope) ?? .empty
@@ -1333,12 +1364,19 @@ public extension SnapshotService {
         focus: WindowID?,
         containerIsWide: Bool
     ) -> BSPTree {
-        let existing = stageStore.state().bspTree(for: scope) ?? .empty
+        let state = stageStore.state()
+        let existing = state.bspTree(for: scope) ?? .empty
         let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
         let reconcile = { (tree: BSPTree) in
             tree.reconciled(
                 liveWindowIDs: liveOrderedWindowIDs,
-                focus: focus,
+                focus: Self.bspInsertionAnchor(
+                    tree: tree,
+                    liveWindowIDs: liveOrderedWindowIDs,
+                    globalFocus: focus,
+                    scope: scope,
+                    state: state
+                ),
                 side: side,
                 containerIsWide: containerIsWide
             )
@@ -1348,6 +1386,29 @@ public extension SnapshotService {
             persistBSPTree(for: scope, reconcile)
         }
         return reconciled
+    }
+
+    /// FR-005 : point d'ancrage BSP d'une nouvelle fenêtre = premier candidat déjà feuille vivante
+    /// de l'arbre parmi le focus global, le focus de la stage et son focus précédent ; `nil` sinon
+    /// (insertion sur la première feuille). Le focus global seul ne suffit pas : c'est souvent la
+    /// nouvelle fenêtre elle-même, et la stage l'a déjà adoptée comme focus (le précédent reste).
+    // O(n) - n = feuilles de l'arbre + fenêtres vivantes.
+    fileprivate static func bspInsertionAnchor(
+        tree: BSPTree,
+        liveWindowIDs: [WindowID],
+        globalFocus: WindowID?,
+        scope: StageScope,
+        state: PersistentStageState
+    ) -> WindowID? {
+        let stage = state.scopes
+            .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
+            .stages
+            .first { $0.id == scope.stageID }
+        let anchors = Set(tree.windowIDs).intersection(liveWindowIDs)
+        return [globalFocus, stage?.focusedWindowID, stage?.previousFocusedWindowID]
+            .lazy
+            .compactMap { $0 }
+            .first { anchors.contains($0) }
     }
 
     /// Recalcule l'arbre sur l'état relu sous verrou et l'écrit s'il change (FR-013).
@@ -1432,7 +1493,7 @@ public extension SnapshotService {
 
     private func framesHaveReasonableTileSizes(_ frames: [CGRect], in container: CGRect) -> Bool {
         guard frames.count > 1 else { return true }
-        let minimumSide = max(120, min(container.width, container.height) * 0.18)
+        let minimumSide = max(LayoutTolerance.minimumTileSide, min(container.width, container.height) * LayoutTolerance.minimumTileSideRatio)
         return frames.allSatisfy { frame in
             frame.width >= minimumSide && frame.height >= minimumSide
         }
@@ -1444,7 +1505,7 @@ public extension SnapshotService {
         allowedGap: CGFloat
     ) -> Bool {
         guard frames.count > 1 else { return false }
-        let tolerance = max(24, allowedGap)
+        let tolerance = max(LayoutTolerance.untiledCell, allowedGap)
         let xEdges = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })
         let yEdges = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })
 
@@ -1483,35 +1544,6 @@ public extension SnapshotService {
                 result.append(value)
             }
         }
-    }
-
-    private func hasCommandIntentShape(
-        for intent: LayoutIntent,
-        snapshot: DaemonSnapshot,
-        scope: StageScope
-    ) -> Bool {
-        let tolerance: Double = 32
-        let scopedFrames = snapshot.windows.compactMap { entry -> (WindowID, CGRect)? in
-            guard entry.scope == scope,
-                  intent.placements[entry.window.id] != nil
-            else { return nil }
-            return (entry.window.id, entry.window.frame.cgRect)
-        }
-        for (id, observed) in scopedFrames {
-            guard let target = intent.placements[id]?.cgRect,
-                  abs(observed.minX - target.minX) <= tolerance,
-                  abs(observed.minY - target.minY) <= tolerance,
-                  abs(observed.width - target.width) <= tolerance,
-                  abs(observed.height - target.height) <= tolerance
-            else { return false }
-        }
-        return true
-    }
-
-    private func isRecentCommandIntent(_ intent: LayoutIntent) -> Bool {
-        let now = Date()
-        let freshness = TimeInterval(5)
-        return now.timeIntervalSince(intent.createdAt) <= freshness
     }
 
     private func canonicalTiledArea(for intent: LayoutIntent, display: DisplaySnapshot) -> CGFloat {
@@ -1595,7 +1627,11 @@ public extension SnapshotService {
             let actualRect = Rect(actual)
             items.append(ApplyResultItem(
                 windowID: command.window.id,
-                status: actualRect.isClose(to: command.frame) ? .applied : .clamped,
+                status: actualRect.isClose(
+                    to: command.frame,
+                    positionTolerance: LayoutTolerance.appliedFrame,
+                    sizeTolerance: LayoutTolerance.appliedFrame
+                ) ? .applied : .clamped,
                 requested: command.frame,
                 actual: actualRect
             ))
@@ -1699,17 +1735,17 @@ private extension SnapshotService {
             return lhs < rhs
         }
         if horizontal {
-            if abs(lhsFrame.midX - rhsFrame.midX) > 48 {
+            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
                 return lhsFrame.midX < rhsFrame.midX
             }
-            if abs(lhsFrame.midY - rhsFrame.midY) > 48 {
+            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
                 return lhsFrame.midY < rhsFrame.midY
             }
         } else {
-            if abs(lhsFrame.midY - rhsFrame.midY) > 48 {
+            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
                 return lhsFrame.midY < rhsFrame.midY
             }
-            if abs(lhsFrame.midX - rhsFrame.midX) > 48 {
+            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
                 return lhsFrame.midX < rhsFrame.midX
             }
         }
@@ -1764,7 +1800,7 @@ private extension SnapshotService {
 }
 
 private extension Rect {
-    func isClose(to other: Rect, positionTolerance: Double = 48, sizeTolerance: Double = 48) -> Bool {
+    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {
         abs(x - other.x) <= positionTolerance
             && abs(y - other.y) <= positionTolerance
             && abs(width - other.width) <= sizeTolerance
@@ -1857,12 +1893,20 @@ public enum SnapshotEncoding {
 final class SnapshotProcessState: @unchecked Sendable {
     /// Validité du snapshot partagé : couvre la bordure (120 ms) et le focus-souris (100 ms).
     static let sharedSnapshotMaxAge: TimeInterval = 0.15
+    /// Marge ajoutée à l'intervalle du tiler pour qu'un tick en retard ne force pas de rescan.
+    static let producerMargin: TimeInterval = 0.1
+    /// Validité maximale d'un snapshot du tiler, quel que soit son intervalle.
+    static let producerMaxAgeCap: TimeInterval = 0.6
 
-    private static let registryLock = NSLock()
-    nonisolated(unsafe) private static var registry: [String: SnapshotProcessState] = [:]
+    static func producerMaxAge(cycle: TimeInterval) -> TimeInterval {
+        min(max(cycle, 0) + producerMargin, producerMaxAgeCap)
+    }
+
+    /// Registre protégé par un seul verrou (T218).
+    private static let registry = OSAllocatedUnfairLock<[String: SnapshotProcessState]>(initialState: [:])
 
     static func forStatePath(_ path: String) -> SnapshotProcessState {
-        registryLock.withLock {
+        registry.withLock { registry in
             if let existing = registry[path] { return existing }
             let created = SnapshotProcessState()
             registry[path] = created
@@ -1872,6 +1916,7 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     private struct Published {
         let snapshot: DaemonSnapshot
+        let maxAge: TimeInterval
         let at: Date
         let stateStamp: [Int64]
         let config: RoadieConfig
@@ -1884,9 +1929,9 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var lastDisappearanceAt: Date?
     private var tileClassification: [WindowID: Bool] = [:]
 
-    func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
+    func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
         lock.withLock {
-            published[followFocus] = Published(snapshot: snapshot, at: date, stateStamp: stateStamp, config: config)
+            published[followFocus] = Published(snapshot: snapshot, maxAge: maxAge, at: date, stateStamp: stateStamp, config: config)
         }
     }
 
@@ -1895,7 +1940,7 @@ final class SnapshotProcessState: @unchecked Sendable {
         lock.withLock {
             guard let entry = published[followFocus] else { return nil }
             let age = now.timeIntervalSince(entry.at)
-            guard age >= 0, age < Self.sharedSnapshotMaxAge,
+            guard age >= 0, age < entry.maxAge,
                   entry.stateStamp == stateStamp,
                   entry.config == config
             else { return nil }

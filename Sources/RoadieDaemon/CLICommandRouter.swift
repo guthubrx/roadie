@@ -38,7 +38,7 @@ struct CLICommandSpec {
 /// ou par le daemon via `CommandSocketServer`. N'appelle jamais `exit` ni `print`.
 @MainActor
 public final class CLICommandRouter {
-    private let makeService: () -> SnapshotService
+    private let makeService: (_ readOnly: Bool) -> SnapshotService
     private let streamSink: ((String) -> Void)?
     private var cachedService: SnapshotService?
     private var stdoutBuffer = ""
@@ -46,20 +46,56 @@ public final class CLICommandRouter {
     /// Commande en cours, pour limiter l'aide d'une erreur d'usage à cette commande.
     private var currentCommand: String?
 
+    /// Commande en cours de lecture seule (`isReadOnly`).
+    private var currentIsReadOnly = false
+
+    /// `makeService(readOnly)` : `readOnly` vaut `true` pour une commande de lecture (`isReadOnly`).
     /// `streamSink` : sortie directe des commandes en flux continu (`events subscribe`),
     /// fourni seulement en exécution locale.
     public init(
-        makeService: @escaping () -> SnapshotService = { SnapshotService(config: ConfigReloadService.shared.currentConfig()) },
+        makeService: @escaping (_ readOnly: Bool) -> SnapshotService = CLICommandRouter.defaultService,
         streamSink: ((String) -> Void)? = nil
     ) {
         self.makeService = makeService
         self.streamSink = streamSink
     }
 
+    /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
+    /// stage (FR-009) : `UserInputActivity` sans moniteur refuse ce suivi.
+    nonisolated public static func defaultService(readOnly: Bool) -> SnapshotService {
+        let config = ConfigReloadService.shared.currentConfig()
+        guard readOnly else { return SnapshotService(config: config) }
+        return SnapshotService(config: config, persistStateChanges: false, userInput: UserInputActivity())
+    }
+
+    /// Commandes de lecture : leur snapshot n'écrit rien et ne change pas la stage active (T211).
+    // O(1).
+    nonisolated public static func isReadOnly(_ args: [String]) -> Bool {
+        let verb = args.dropFirst().first ?? ""
+        switch args.first {
+        case "windows", "tree", "query", "metrics", "doctor":
+            return true
+        case "display", "desktop":
+            return verb == "list" || verb == "current"
+        case "state":
+            return verb == "dump" || verb == "audit"
+        case "layout":
+            return verb == "plan"
+        case "focus":
+            return verb == "status"
+        case "stage", "bookmark", "targets":
+            return verb == "list"
+        case "daemon":
+            return verb == "health"
+        default:
+            return false
+        }
+    }
+
     /// Service créé à la demande, une fois par commande (config à jour, pas de scan inutile).
     private var service: SnapshotService {
         if let cachedService { return cachedService }
-        let created = makeService()
+        let created = makeService(currentIsReadOnly)
         cachedService = created
         return created
     }
@@ -69,6 +105,7 @@ public final class CLICommandRouter {
         stderrBuffer = ""
         cachedService = nil
         currentCommand = args.first
+        currentIsReadOnly = Self.isReadOnly(args)
         let code: Int32
         do {
             if let help = helpRequest(args) {

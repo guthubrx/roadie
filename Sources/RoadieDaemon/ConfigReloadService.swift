@@ -109,43 +109,56 @@ public final class ConfigReloadService: @unchecked Sendable {
     /// Une config invalide (même validation que `reload`) garde la dernière config valide et
     /// n'est journalisée qu'une fois. Au premier chargement, sans config précédente, la config
     /// décodée est appliquée malgré des erreurs de validation (comportement historique du démarrage).
+    /// Lecture, validation et journal se font hors du verrou (T213) : le verrou ne protège que
+    /// la comparaison de signature et la publication, pour ne pas bloquer les autres composants.
     // O(1) (un stat par fichier) si inchangé ; O(taille du fichier) au rechargement.
     public func currentConfig() -> RoadieConfig {
-        lock.lock()
-        defer { lock.unlock() }
-        let path = storedState.activePath ?? RoadieConfigLoader.defaultConfigPath()
+        let path = lock.withLock { storedState.activePath } ?? RoadieConfigLoader.defaultConfigPath()
         let stamp = Self.stamp(for: path)
-        guard stamp != loadedStamp else { return storedConfig }
-        let isFirstLoad = loadedStamp == nil
-        loadedStamp = stamp
+        if let unchanged = lock.withLock({ stamp == loadedStamp ? storedConfig : nil }) {
+            return unchanged
+        }
         let attemptAt = now()
-        storedState.lastAttemptAt = attemptAt
         let validationError = Self.validationError(path: path)
-        if let validationError, !isFirstLoad {
-            recordFailure(path: path, message: validationError)
+        let loaded = Result { try RoadieConfigLoader.load(from: path) }
+        let version = Self.version(for: path)
+
+        var pendingEvents: [RoadieEvent] = []
+        let config: RoadieConfig = lock.withLock {
+            // Un autre appel a déjà publié cette version : ni double application ni double journal.
+            guard stamp != loadedStamp else { return storedConfig }
+            let isFirstLoad = loadedStamp == nil
+            loadedStamp = stamp
+            storedState.lastAttemptAt = attemptAt
+            if let validationError, !isFirstLoad {
+                pendingEvents = recordFailure(path: path, message: validationError)
+                return storedConfig
+            }
+            switch loaded {
+            case .success(let config):
+                storedConfig = config
+                storedState.activeVersion = version
+                storedState.lastAppliedAt = attemptAt
+                if let validationError {
+                    pendingEvents = recordFailure(path: path, message: validationError)
+                } else {
+                    storedState.lastValidation = .success
+                    storedState.lastError = nil
+                    if !isFirstLoad {
+                        pendingEvents = [RoadieEvent(
+                            type: "config.reload_applied",
+                            details: appliedDetails(path: path),
+                            timestamp: attemptAt
+                        )]
+                    }
+                }
+            case .failure(let error):
+                pendingEvents = recordFailure(path: path, message: "config decode failed: \(error)")
+            }
             return storedConfig
         }
-        do {
-            storedConfig = try RoadieConfigLoader.load(from: path)
-            storedState.activeVersion = Self.version(for: path)
-            storedState.lastAppliedAt = attemptAt
-            if let validationError {
-                recordFailure(path: path, message: validationError)
-            } else {
-                storedState.lastValidation = .success
-                storedState.lastError = nil
-                if !isFirstLoad {
-                    eventLog.append(RoadieEvent(
-                        type: "config.reload_applied",
-                        details: appliedDetails(path: path),
-                        timestamp: attemptAt
-                    ))
-                }
-            }
-        } catch {
-            recordFailure(path: path, message: "config decode failed: \(error)")
-        }
-        return storedConfig
+        pendingEvents.forEach { eventLog.append($0) }
+        return config
     }
 
     public func reload(path: String = RoadieConfigLoader.defaultConfigPath()) -> ConfigReloadResult {
@@ -161,7 +174,7 @@ public final class ConfigReloadService: @unchecked Sendable {
         ))
 
         if let message = Self.validationError(path: path) {
-            recordFailure(path: path, message: message)
+            recordFailure(path: path, message: message).forEach { eventLog.append($0) }
             return ConfigReloadResult(
                 status: .failedKeepingPrevious,
                 path: path,
@@ -190,7 +203,7 @@ public final class ConfigReloadService: @unchecked Sendable {
             return ConfigReloadResult(status: .applied, path: path, version: version, appliedAt: appliedAt)
         } catch {
             let message = "config decode failed: \(error)"
-            recordFailure(path: path, message: message)
+            recordFailure(path: path, message: message).forEach { eventLog.append($0) }
             return ConfigReloadResult(
                 status: .failedKeepingPrevious,
                 path: path,
@@ -223,21 +236,23 @@ public final class ConfigReloadService: @unchecked Sendable {
         fileModificationStamp(path) + fileModificationStamp(RoadieConfigLoader.generatedRulesPath(for: path))
     }
 
-    /// À appeler sous `lock`.
-    private func recordFailure(path: String, message: String) {
+    /// À appeler sous `lock` : met à jour l'état et renvoie les événements à journaliser.
+    private func recordFailure(path: String, message: String) -> [RoadieEvent] {
         storedState.pendingPath = nil
         storedState.lastValidation = .failed
         storedState.lastError = message
-        eventLog.append(RoadieEvent(
-            type: "config.reload_failed",
-            details: ["path": path, "error": message],
-            timestamp: now()
-        ))
-        eventLog.append(RoadieEvent(
-            type: "config.active_preserved",
-            details: preservedDetails(path: storedState.activePath ?? path),
-            timestamp: now()
-        ))
+        return [
+            RoadieEvent(
+                type: "config.reload_failed",
+                details: ["path": path, "error": message],
+                timestamp: now()
+            ),
+            RoadieEvent(
+                type: "config.active_preserved",
+                details: preservedDetails(path: storedState.activePath ?? path),
+                timestamp: now()
+            )
+        ]
     }
 
     private func appliedDetails(path: String) -> [String: String] {

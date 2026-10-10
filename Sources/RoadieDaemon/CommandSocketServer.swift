@@ -148,7 +148,16 @@ public final class CommandSocketServer: @unchecked Sendable {
         case .failed:
             return
         }
-        guard let encoded = try? JSONEncoder().encode(response) else { return }
+        let encoded: Data
+        do {
+            encoded = try JSONEncoder().encode(response)
+        } catch {
+            // FR-015 : jamais d'échec muet ; le client reçoit une erreur minimale.
+            fputs("roadied: failed to encode command response: \(error)\n", stderr)
+            let fallback = CommandSocketResponse(exitCode: 70, stderr: "roadie: roadied failed to encode its response\n")
+            guard let data = try? JSONEncoder().encode(fallback) else { return }
+            encoded = data
+        }
         _ = CommandSocketIO.writeAll(client, encoded + Data([0x0A]), deadline: Date().addingTimeInterval(Self.ioTimeout))
     }
 
@@ -222,16 +231,18 @@ public enum CommandSocketClient {
         }
     }
 
-    /// Vrai si un daemon tient `roadied.lock` : un verrou partagé non bloquant est refusé.
+    /// Vrai si un daemon tient le verrou `roadied.lock` : son fichier pid voisin (`roadied.pid`,
+    /// écrit par `ComponentLockFile` après l'acquisition) désigne un process vivant.
+    /// Pas de sonde `flock` (T217) : le daemon prend le verrou en `LOCK_EX|LOCK_NB`, donc un
+    /// `LOCK_SH` tenu même brièvement par la CLI ferait échouer un démarrage concurrent
+    /// (« already running »). Un pid recyclé donne au pire l'erreur 69, jamais une double exécution.
     public static func isDaemonLockHeld(path: String = defaultLockPath) -> Bool {
-        let fd = open(path, O_RDONLY | O_CLOEXEC)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
-        if flock(fd, LOCK_SH | LOCK_NB) == 0 {
-            flock(fd, LOCK_UN)
-            return false
-        }
-        return errno == EWOULDBLOCK
+        let pidPath = (path as NSString).deletingPathExtension + ".pid"
+        guard let raw = try? String(contentsOfFile: pidPath, encoding: .utf8),
+              let pid = Int32(raw.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0
+        else { return false }
+        // Même test que `ComponentLockFile.isAlive` : EPERM signifie aussi « vivant ».
+        return kill(pid, 0) == 0 || errno == EPERM
     }
 
     /// Envoie une requête et attend la réponse (connexion 0,5 s, réponse 5 s).
