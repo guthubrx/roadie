@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Construit Roadie.app (sans signature) autour d'un binaire roadied déjà compilé.
+# Usage : scripts/build-app-bundle <binaire-roadied> <chemin/Roadie.app> <version>
+# Partagé par `make install` et `make dmg`. Une application avec identifiant et icône
+# apparaît sous le nom « Roadie » dans les réglages de confidentialité de macOS.
+set -euo pipefail
+
+if [[ $# -ne 3 ]]; then
+  echo "Usage : $0 <binaire-roadied> <chemin/Roadie.app> <version>" >&2
+  exit 64
+fi
+roadied_binary="$1"
+app_bundle="$2"
+app_version="$3"
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+icon_path="$script_dir/../docs/assets/roadie-logo.png"
+
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/roadie-app.XXXXXX")"
+trap 'rm -rf "$tmp_dir"' EXIT
+iconset="$tmp_dir/Roadie.iconset"
+
+rm -rf "$app_bundle"
+mkdir -p "$app_bundle/Contents/MacOS" "$app_bundle/Contents/Resources" "$iconset"
+
+cp "$roadied_binary" "$app_bundle/Contents/MacOS/roadied"
+chmod +x "$app_bundle/Contents/MacOS/roadied"
+
+for size in 16 32 64 128 256 512; do
+  sips -z "$size" "$size" "$icon_path" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+  if [[ "$size" != "512" ]]; then
+    double=$((size * 2))
+    sips -z "$double" "$double" "$icon_path" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+  fi
+done
+cp "$iconset/icon_512x512.png" "$iconset/icon_512x512@2x.png"
+iconutil -c icns "$iconset" -o "$app_bundle/Contents/Resources/Roadie.icns"
+
+cat > "$app_bundle/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>roadied</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.roadie.roadied</string>
+  <key>CFBundleName</key>
+  <string>Roadie</string>
+  <key>CFBundleDisplayName</key>
+  <string>Roadie</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$app_version</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundleIconFile</key>
+  <string>Roadie</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+PLIST

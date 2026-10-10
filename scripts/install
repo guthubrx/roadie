@@ -7,6 +7,10 @@ plist="$HOME/Library/LaunchAgents/$label.plist"
 log_dir="$HOME/.roadies"
 # Les binaires installés vivent hors du dépôt : le LaunchAgent ne dépend pas du dossier source.
 local_bin_dir="$HOME/.local/bin"
+# Le daemon tourne depuis Roadie.app : macOS l'affiche alors sous le nom « Roadie » avec son
+# icône dans Accessibilité, au lieu d'un binaire nu présenté comme un terminal.
+app_bundle="$HOME/Applications/Roadie.app"
+app_roadied="$app_bundle/Contents/MacOS/roadied"
 
 # Identité de signature stable (ex. "Apple Development: Nom (ID)"). macOS lie la permission
 # Accessibility à la signature : avec la signature ad hoc, elle est perdue à chaque installation.
@@ -23,7 +27,7 @@ else
   echo "  Définissez ROADIE_CODESIGN_IDENTITY pour une signature stable." >&2
 fi
 
-mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$local_bin_dir"
+mkdir -p "$log_dir" "$HOME/Library/LaunchAgents" "$local_bin_dir" "$HOME/Applications"
 
 echo "Building Roadie release binaries..."
 "$script_dir/with-xcode" swift build --configuration release --product roadied
@@ -58,10 +62,29 @@ install_binary() {
   mv "$tmp" "$target"
 }
 
+# Construit et signe l'application à côté, puis remplace l'ancienne d'un coup. Le daemon en cours
+# garde l'ancien exécutable ouvert jusqu'à `make restart`.
+install_app() {
+  local tmp_bundle="$app_bundle.tmp"
+  local version
+  version="$(sed -n 's/.*static let current = "\(.*\)".*/\1/p' "$script_dir/../Sources/RoadieDaemon/DaemonHealth.swift")"
+  "$script_dir/build-app-bundle" "$build_roadied" "$tmp_bundle" "${version:-0.0.0}"
+  if [[ -n "$codesign_identity" ]]; then
+    codesign --force --sign "$codesign_identity" "$tmp_bundle"
+  else
+    codesign --force --sign - "$tmp_bundle" >/dev/null 2>&1 || echo "ATTENTION : signature ad hoc impossible pour $app_bundle" >&2
+  fi
+  rm -rf "$app_bundle"
+  mv "$tmp_bundle" "$app_bundle"
+}
+
 echo "Installing binaries..."
-install_binary "$build_roadied" "$local_roadied"
+install_app
+# Compatibilité : ~/.local/bin/roadied reste utilisable en ligne de commande.
+ln -sfn "$app_roadied" "$local_roadied"
 install_binary "$build_roadie" "$local_roadie"
 
+previous_plist="$(cat "$plist" 2>/dev/null || true)"
 cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -72,7 +95,7 @@ cat > "$plist" <<PLIST
   <string>$label</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$local_roadied</string>
+    <string>$app_roadied</string>
     <string>run</string>
     <string>--yes</string>
   </array>
@@ -91,7 +114,8 @@ cat > "$plist" <<PLIST
 PLIST
 
 echo "Installed:"
-echo "  $local_roadied"
+echo "  $app_bundle"
+echo "  $local_roadied -> $app_roadied"
 echo "  $local_roadie"
 echo "LaunchAgent:"
 echo "  $plist"
@@ -102,7 +126,12 @@ elif command -v tmux >/dev/null 2>&1 && tmux has-session -t roadied 2>/dev/null;
   echo "Start skipped: a development session (make dev-start) is running."
   echo "Run 'make stop', then 'make restart' (one launcher at a time)."
 elif launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
-  echo "$label is already loaded. Run 'make restart' when you want to reload the installed binaries."
+  if [[ "$(cat "$plist")" != "$previous_plist" ]]; then
+    # kickstart relance le programme sans relire le plist : il faut décharger puis recharger.
+    echo "$label is already loaded with an older LaunchAgent. Run 'make stop && make restart' to apply it."
+  else
+    echo "$label is already loaded. Run 'make restart' when you want to reload the installed binaries."
+  fi
 else
   echo "Starting $label..."
   if launchctl bootstrap "gui/$(id -u)" "$plist" >/dev/null 2>&1; then

@@ -221,9 +221,10 @@ make install
 This hides the usual macOS service setup:
 
 - builds `roadie` and `roadied` in release mode;
-- installs them in `~/.local/bin`, outside the repository, so the service keeps working if you move or delete the source folder;
-- signs both binaries (see below);
-- creates `~/Library/LaunchAgents/com.roadie.roadied.plist`, which starts `~/.local/bin/roadied`;
+- installs the daemon as an app, `~/Applications/Roadie.app`, so macOS lists it as "Roadie" with its icon in the privacy settings;
+- installs the `roadie` command in `~/.local/bin`, with a `~/.local/bin/roadied` link to the daemon inside the app. Both live outside the repository, so the service keeps working if you move or delete the source folder;
+- signs the app and the command (see below);
+- creates `~/Library/LaunchAgents/com.roadie.roadied.plist`, which starts the daemon from `Roadie.app`;
 - starts the LaunchAgent when it is not already loaded.
 
 Add `~/.local/bin` to your `PATH` so that you can type `roadie` in a terminal.
@@ -234,11 +235,11 @@ If Roadie is already running, `make install` does not stop it. Run this when you
 make restart
 ```
 
-`make restart` restarts the installed service with `launchctl kickstart -k`. It does not build anything. If the service is not loaded, it loads it first.
+`make restart` restarts the installed service with `launchctl kickstart -k`. It does not build anything. If the service is not loaded, it loads it first. When `make install` changes the LaunchAgent itself, it says so: run `make stop && make restart` to apply it.
 
 ### Code signing and permissions
 
-macOS ties the Accessibility permission to the code signature of `roadied`. By default, `make install` uses an ad hoc signature, which changes at each install. macOS may then forget the permission, and you must grant it again. The script prints a warning in this case.
+Grant Accessibility to **Roadie** in System Settings > Privacy & Security > Accessibility. macOS ties this permission to the code signature of the app. By default, `make install` uses an ad hoc signature, which changes at each install. macOS may then forget the permission, and you must grant it again. The script prints a warning in this case.
 
 To keep the permission between installs, sign with a stable identity:
 

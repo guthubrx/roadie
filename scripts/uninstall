@@ -35,7 +35,8 @@ fi
 
 # 3. Supprimer le LaunchAgent et les binaires installés.
 rm -f "$plist" "$local_bin_dir/roadied" "$local_bin_dir/roadie"
-echo "Supprimés : $plist, $local_bin_dir/roadied, $local_bin_dir/roadie"
+rm -rf "$HOME/Applications/Roadie.app"
+echo "Supprimés : $plist, $HOME/Applications/Roadie.app, $local_bin_dir/roadied, $local_bin_dir/roadie"
 
 # 4. Proposer de conserver l'état (stages, historique, logs). Sans terminal, on le conserve.
 existing_state=()
