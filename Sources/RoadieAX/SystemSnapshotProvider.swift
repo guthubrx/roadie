@@ -358,6 +358,19 @@ enum AXReadValue {
         error == .attributeUnsupported || error == .noValue
     }
 
+    /// Passe chaque erreur portée par une valeur du résultat par le registre : un
+    /// `.cannotComplete` intégré met l'application de côté comme un échec de l'appel entier.
+    /// Retourne vrai si l'application est mise de côté. O(n), n = nombre de valeurs.
+    static func noteEmbeddedErrors(
+        in values: [AnyObject], pid: pid_t, registry: AXUnresponsiveApps
+    ) -> Bool {
+        var aside = false
+        for raw in values {
+            if let error = embeddedError(raw), registry.noteResult(error, pid: pid) { aside = true }
+        }
+        return aside
+    }
+
     /// Booléen lu : nil si illisible, false si absent.
     static func flag(_ raw: AnyObject) -> Bool? {
         if let error = embeddedError(raw) { return meansAbsent(error) ? false : nil }
@@ -618,6 +631,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
         )
         if AXUnresponsiveApps.shared.noteResult(error, pid: pid) { return nil }
         let values = error == .success ? (raw as? [AnyObject]) ?? [] : []
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: AXUnresponsiveApps.shared) { return nil }
         func flag(_ index: Int) -> Bool? {
             index < values.count ? AXReadValue.flag(values[index]) : nil
         }
@@ -641,6 +655,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
         guard error == .success, let values = raw as? [AnyObject], values.count == stableAttributeNames.count else {
             return nil
         }
+        if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
         var unreadable = false
         func value(_ index: Int) -> AnyObject? {
             let raw = values[index]

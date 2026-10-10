@@ -147,7 +147,8 @@ public final class AXWindowEventObserver: @unchecked Sendable {
 
         if !registry.isQuarantined(pid), let windows = AXApplicationWindows(pid: pid) {
             for entry in windows.entries {
-                watchDestruction(of: entry.element, observer: observer)
+                // Application mise de côté : inutile d'attendre un délai par fenêtre restante.
+                if watchDestruction(of: entry.element, observer: observer, pid: pid) { break }
             }
         }
         if needsRetry {
@@ -165,9 +166,11 @@ public final class AXWindowEventObserver: @unchecked Sendable {
 
     /// Pose kAXUIElementDestroyedNotification sur une fenetre : au niveau application, la
     /// notification n'arrive pas pour les fenetres de toutes les apps. Un doublon est sans effet.
-    private func watchDestruction(of window: AXUIElement, observer: AXObserver) {
+    /// Retourne vrai si l'application ne repond plus (mise de cote) : l'appelant interrompt la boucle.
+    private func watchDestruction(of window: AXUIElement, observer: AXObserver, pid: pid_t) -> Bool {
         let context = Unmanaged.passUnretained(self).toOpaque()
-        _ = AXObserverAddNotification(observer, window, kAXUIElementDestroyedNotification as CFString, context)
+        let error = AXObserverAddNotification(observer, window, kAXUIElementDestroyedNotification as CFString, context)
+        return AXUnresponsiveApps.shared.noteResult(error, pid: pid)
     }
 
     private func unsubscribe(pid: pid_t) {

@@ -147,3 +147,13 @@ Passage 1 (2026-10-10) : 6 manques relevés par Converge (T201-T206) et 7 défau
 - [ ] T210 [US3] FR-021 : `AXWindowEventObserver.watchDestruction` reçoit le pid, traite le résultat et interrompt la boucle après mise de côté ; `noteResult` appliqué aux erreurs intégrées des valeurs multiples dans `SystemSnapshotProvider.swift` ; test dans `Tests/RoadieAXTests/`
 - [ ] T211 [US4] FR-009 : les snapshots des commandes CLI locales de lecture sont non persistants et sans suivi du focus (`CLICommandRouter.swift`) ; sans moniteur de saisie actif, le suivi du focus par la stage est refusé (comportement conservateur) dans `FocusFollowsMouseController.swift` `allowsFocusChange` ; tests
 - [ ] T212 [US3] FR-023 : le tiler publie son snapshot comme source partagée et les lecteurs le consomment dans le cycle (producteur unique par processus quand le tiler tourne) dans `DaemonSnapshot.swift` / `LayoutMaintainer.swift` ; test vérifiant qu'un lecteur ne rescanne pas après un tick du tiler
+
+Ajouts du passage 1 issus de la relecture croisée T111 (rattachés à une exigence existante) :
+
+- [ ] T213 [US2] FR-013 : pas d'E/S sous le verrou des stages (`DaemonSnapshot.swift` : `newWindowDisplayID` reçoit la config en paramètre) ni sous le verrou de config (`ConfigReloadService.currentConfig` charge hors verrou, publie sous verrou, journalise après)
+- [ ] T214 [US1] FR-037 : `RestoreSafetyService` n'appelle pas l'AX sous le verrou de reprise (lire le marqueur sous verrou, restaurer hors verrou, revérifier) ; `restore.json` illisible conservé en `.corrupt-<date>` et jamais écrasé (FR-015)
+- [ ] T215 [US2] FR-015 : `try?` qui avalent une écriture d'état sans log remplacés par `do/catch` + stderr (`LayoutCommandActivity.swift:30,51`, `CommandSocketServer.swift:151`)
+- [ ] T216 [US8] FR-041 : tolérances littérales restantes de `LayoutMaintainer.swift` (pixels et secondes), `MutableBSPLayoutStrategy.swift:178,222`, `StageCommands.swift:1459-1460` vers `LayoutTolerance` ; défaut 48 de `Rect.isClose` remplacé par un paramètre explicite
+- [ ] T217 [US2] FR-019 : sonde du verrou d'instance côté client (`CommandSocketServer.isDaemonLockHeld`) sans risque de faire échouer un démarrage concurrent (cohérente avec `ComponentLockFile`)
+- [ ] T218 [US8] Swift 6 : `@unchecked Sendable` sans garde (`ComponentLockFile`, `AXWindowEventObserver` → `@MainActor`, `LiveSystemSnapshotProvider` → retirer `@unchecked`) ; `nonisolated(unsafe)` redondant dans `DaemonSnapshot.swift:1862`
+- [ ] T219 [US6] FR-035 : `DaemonHealth.swift:211` traite `EPERM` comme vivant ; un seul test de vivacité de pid partagé (`ProcessLiveness`) utilisé par les 6 sites
