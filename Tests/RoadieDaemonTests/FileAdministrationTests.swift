@@ -18,6 +18,9 @@ struct FileAdministrationTests {
 
         try Data(repeating: 1, count: 32).write(to: roadies.appendingPathComponent("events.jsonl"))
         try Data(repeating: 1, count: 32).write(to: roadies.appendingPathComponent("events.jsonl.1"))
+        try Data(repeating: 2, count: 32).write(to: roadies.appendingPathComponent("roadied.stdout.log"))
+        try Data(repeating: 3, count: 32).write(to: roadies.appendingPathComponent("roadied.stdout.log.1"))
+        try Data(repeating: 4, count: 3).write(to: roadies.appendingPathComponent("roadied.stderr.log"))
         for index in 0..<5 {
             let archive = config.appendingPathComponent("stages.v1.bak.archived-\(index)")
             try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
@@ -46,7 +49,16 @@ struct FileAdministrationTests {
         #expect(dryRun.candidateCount > 0)
         #expect(FileManager.default.fileExists(atPath: roadies.appendingPathComponent("events.jsonl").path))
 
+        let rotations = dryRun.actions.filter { $0.path.hasSuffix(".log") }
+        #expect(rotations.map(\.kind) == [.rotate])
+        #expect(FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stdout.log").path))
+
         let applied = service.run(dryRun: false)
+        // Rotation : le log courant passe en .1 (ancien .1 écrasé), rien n'est supprimé.
+        let stdoutBackup = try Data(contentsOf: roadies.appendingPathComponent("roadied.stdout.log.1"))
+        #expect(stdoutBackup == Data(repeating: 2, count: 32))
+        #expect(!FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stdout.log").path))
+        #expect(FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stderr.log").path))
         #expect(applied.actions.contains { $0.applied })
         #expect(!FileManager.default.fileExists(atPath: roadies.appendingPathComponent("events.jsonl.1").path))
         #expect(!FileManager.default.fileExists(atPath: roadies.appendingPathComponent("events.jsonl.2").path))

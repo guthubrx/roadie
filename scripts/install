@@ -106,6 +106,10 @@ elif launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
 else
   echo "Starting $label..."
   if launchctl bootstrap "gui/$(id -u)" "$plist" >/dev/null 2>&1; then
+    # Le log precedent reste lisible en .1 (l'ancien .1 est ecrase).
+    for f in "$log_dir/roadied.stdout.log" "$log_dir/roadied.stderr.log"; do
+      if [[ -s "$f" ]]; then mv -f "$f" "$f.1"; fi
+    done
     launchctl kickstart -k "gui/$(id -u)/$label" >/dev/null 2>&1 || true
     echo "$label started."
   else

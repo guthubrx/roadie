@@ -484,18 +484,13 @@ struct AXApplicationWindows {
 
 // MARK: - Provider
 
-public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
+public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
     /// TTL des attributs stables en cache. Au-dela on relit AX (filet de securite si une
     /// notification AX a manque). Le cache lui-meme est `AXAttributeCache.shared`.
     private let cacheTTL: TimeInterval
 
     public init(cacheTTL: TimeInterval = 600) {
         self.cacheTTL = cacheTTL
-    }
-
-    /// Vide le cache des attributs stables. Appele aussi par `AXWindowEventObserver`.
-    public func invalidateCache() {
-        AXAttributeCache.shared.invalidate()
     }
 
     public func permissions(prompt: Bool) -> PermissionSnapshot {
@@ -987,10 +982,6 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
             guard error == .success else { return nil }
         }
         return self.frame(of: element, pid: pid)
-    }
-
-    public func frame(of element: AXUIElement) -> CGRect? {
-        frame(of: element, pid: nil)
     }
 
     /// Lit le cadre AX. Avec un pid, un delai depasse met l'application de cote et arrete la lecture.

@@ -126,19 +126,21 @@ public struct FileAdministrationService: @unchecked Sendable {
         return actions
     }
 
+    /// Logs du service launchd : renommés en `.1` (l'ancien `.1` est écrasé), jamais supprimés.
     private func daemonLogActions(dryRun: Bool) -> [FileAdminAction] {
-        ["daemon.log", "daemon.log.1"].compactMap { name in
-            let url = localStateURL.appendingPathComponent(name)
+        ["roadied.stdout.log", "roadied.stderr.log"].compactMap { name in
+            let url = roadiesURL.appendingPathComponent(name)
             guard fileSize(url) > Int64(policy.maxLogBytes) else { return nil }
             var action = FileAdminAction(
-                kind: .delete,
+                kind: .rotate,
                 path: url.path,
                 reason: "daemon log exceeds \(policy.maxLogBytes) bytes",
                 sizeBytes: fileSize(url)
             )
             if !dryRun {
-                try? manager.removeItem(at: url)
-                action.applied = true
+                let backup = URL(fileURLWithPath: "\(url.path).1")
+                try? manager.removeItem(at: backup)
+                action.applied = (try? manager.moveItem(at: url, to: backup)) != nil
             }
             return action
         }

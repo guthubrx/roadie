@@ -64,6 +64,9 @@ restart:
 		exit 1; \
 	fi
 	@if launchctl print gui/$$(id -u)/com.roadie.roadied >/dev/null 2>&1; then \
+		for f in $$HOME/.roadies/roadied.stdout.log $$HOME/.roadies/roadied.stderr.log; do \
+			if [ -s "$$f" ]; then mv -f "$$f" "$$f.1"; fi; \
+		done; \
 		launchctl kickstart -k gui/$$(id -u)/com.roadie.roadied; \
 	else \
 		./scripts/roadiedctl start; \

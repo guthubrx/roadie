@@ -48,6 +48,10 @@ start_roadied() {
     launchctl bootstrap "$domain" "$plist"
   fi
 
+  # Le log precedent reste lisible en .1 (l'ancien .1 est ecrase).
+  for f in "$HOME/.roadies/roadied.stdout.log" "$HOME/.roadies/roadied.stderr.log"; do
+    if [[ -s "$f" ]]; then mv -f "$f" "$f.1"; fi
+  done
   launchctl kickstart -k "$service"
   sleep 1
 

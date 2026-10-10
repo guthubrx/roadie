@@ -156,4 +156,22 @@ struct AXVolatileReadingTests {
         #expect(AXReadValue.flag(errorValue(.failure)) == nil)
         #expect(AXReadValue.embeddedError("AXWindow" as NSString) == nil)
     }
+
+    @Test
+    func embeddedCannotCompleteSetsAppAside() {
+        func errorValue(_ error: AXError) -> AnyObject {
+            var error = error
+            return AXValueCreate(.axError, &error)!
+        }
+        let registry = AXUnresponsiveApps()
+        // Absent, illisible ou valeur normale : pas de mise de côté.
+        let harmless: [AnyObject] = [kCFBooleanTrue, errorValue(.noValue), errorValue(.failure)]
+        #expect(!AXReadValue.noteEmbeddedErrors(in: harmless, pid: 7, registry: registry))
+        #expect(!registry.isQuarantined(7))
+        // Un .cannotComplete intégré met l'application de côté.
+        let frozen: [AnyObject] = [kCFBooleanTrue, errorValue(.cannotComplete)]
+        #expect(AXReadValue.noteEmbeddedErrors(in: frozen, pid: 7, registry: registry))
+        #expect(registry.isQuarantined(7))
+        #expect(!registry.isQuarantined(8))
+    }
 }

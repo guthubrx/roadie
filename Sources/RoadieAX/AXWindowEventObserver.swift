@@ -9,7 +9,10 @@ import Foundation
 /// Inspire de yabai/event_loop.c et aerospace AxApplication. La callback est appelee sur
 /// la main thread (les sources AX sont ajoutees a CFRunLoopGetMain). La callback doit etre
 /// idempotente : elle peut etre invoquee plusieurs fois en rafale.
-public final class AXWindowEventObserver: @unchecked Sendable {
+/// Isole sur le MainActor : l'etat (`observers`, `registered`, `isStarted`) n'est touche
+/// que depuis la main thread, le compilateur le verifie.
+@MainActor
+public final class AXWindowEventObserver {
     public typealias Callback = (_ notification: String) -> Void
 
     private let callback: Callback
@@ -67,7 +70,7 @@ public final class AXWindowEventObserver: @unchecked Sendable {
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.activationPolicy == .regular
             else { return }
-            self?.subscribe(pid: app.processIdentifier)
+            MainActor.assumeIsolated { self?.subscribe(pid: app.processIdentifier) }
         }
         let didTerminate = center.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
@@ -76,7 +79,7 @@ public final class AXWindowEventObserver: @unchecked Sendable {
         ) { [weak self] note in
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             else { return }
-            self?.unsubscribe(pid: app.processIdentifier)
+            MainActor.assumeIsolated { self?.unsubscribe(pid: app.processIdentifier) }
         }
         workspaceTokens = [didLaunch, didTerminate]
     }
@@ -96,7 +99,10 @@ public final class AXWindowEventObserver: @unchecked Sendable {
     fileprivate func handleEvent(observer: AXObserver, element: AXUIElement, notification: CFString) {
         let name = notification as String
         if name == kAXWindowCreatedNotification as String {
-            watchDestruction(of: element, observer: observer)
+            var pid: pid_t = 0
+            if AXUIElementGetPid(element, &pid) == .success {
+                watchDestruction(of: element, observer: observer, pid: pid)
+            }
         }
         if Self.cacheInvalidatingNotifications.contains(name) {
             AXAttributeCache.shared.invalidate()
@@ -167,6 +173,7 @@ public final class AXWindowEventObserver: @unchecked Sendable {
     /// Pose kAXUIElementDestroyedNotification sur une fenetre : au niveau application, la
     /// notification n'arrive pas pour les fenetres de toutes les apps. Un doublon est sans effet.
     /// Retourne vrai si l'application ne repond plus (mise de cote) : l'appelant interrompt la boucle.
+    @discardableResult
     private func watchDestruction(of window: AXUIElement, observer: AXObserver, pid: pid_t) -> Bool {
         let context = Unmanaged.passUnretained(self).toOpaque()
         let error = AXObserverAddNotification(observer, window, kAXUIElementDestroyedNotification as CFString, context)
@@ -193,5 +200,10 @@ private func axObserverCallback(
 ) {
     guard let context else { return }
     let observerInstance = Unmanaged<AXWindowEventObserver>.fromOpaque(context).takeUnretainedValue()
-    observerInstance.handleEvent(observer: observer, element: element, notification: notification)
+    // Les sources AX sont posees sur le run loop principal : la callback arrive sur la main thread.
+    // Les references CF ne quittent pas la main thread : le controle de transfert ne s'applique pas.
+    nonisolated(unsafe) let (observer, element, notification) = (observer, element, notification)
+    MainActor.assumeIsolated {
+        observerInstance.handleEvent(observer: observer, element: element, notification: notification)
+    }
 }
