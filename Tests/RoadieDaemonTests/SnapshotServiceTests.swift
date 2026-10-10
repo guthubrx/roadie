@@ -111,7 +111,9 @@ struct WindowPinSnapshotTests {
                     pinScope: .desktop,
                     bundleID: "app.missing",
                     title: "Missing",
-                    lastFrame: Rect(x: 0, y: 0, width: 100, height: 100)
+                    lastFrame: Rect(x: 0, y: 0, width: 100, height: 100),
+                    // SPEC-016 FR-007 : absent depuis plus que la grâce de 45 s.
+                    missingSince: Date().addingTimeInterval(-60)
                 )
             ],
             activeDisplayID: display.id
@@ -2925,7 +2927,10 @@ struct SnapshotServiceTests {
             .path
         let intentStore = LayoutIntentStore(path: intentPath)
         intentStore.save(LayoutIntent(scope: liveScope, windowIDs: [WindowID(rawValue: 1)], placements: [:]))
-        intentStore.save(LayoutIntent(scope: staleScope, windowIDs: [WindowID(rawValue: 2)], placements: [:]))
+        var staleIntent = LayoutIntent(scope: staleScope, windowIDs: [WindowID(rawValue: 2)], placements: [:])
+        // SPEC-016 T015 : l'intent n'est purgé qu'après 10 min d'absence du display.
+        staleIntent.displayMissingSince = Date().addingTimeInterval(-601)
+        intentStore.save(staleIntent)
         let service = SnapshotService(
             provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: []),
             frameWriter: RecordingWriter(),
@@ -3826,5 +3831,300 @@ struct SnapshotServiceTests {
         #expect(events.contains("\"initialMoveAttempts\":\"2\""))
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: eventPath)
+    }
+}
+
+// MARK: - SPEC-016 lot E : snapshot transactionnel, suivi du focus, hystérésis, config à chaud
+
+private final class StabilizationClock: @unchecked Sendable {
+    var now = Date(timeIntervalSince1970: 1_800_000_000)
+}
+
+private final class SnapshotCallCountingProvider: SystemSnapshotProviding, @unchecked Sendable {
+    let display: DisplaySnapshot
+    let windowList: [WindowSnapshot]
+    private(set) var windowsCalls = 0
+
+    init(display: DisplaySnapshot, windows: [WindowSnapshot]) {
+        self.display = display
+        self.windowList = windows
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+    func displays() -> [DisplaySnapshot] { [display] }
+    func windows() -> [WindowSnapshot] {
+        windowsCalls += 1
+        return windowList
+    }
+    func focusedWindowID() -> WindowID? { nil }
+    func mouseLocation() -> CGPoint? { nil }
+}
+
+@Suite
+struct SnapshotStabilizationTests {
+    private let display = powerDisplay("display-main", index: 1, x: 0)
+
+    private func member(_ window: WindowSnapshot) -> PersistentStageMember {
+        PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame)
+    }
+
+    /// Stage 1 active (A et C), stage 2 inactive mais visible (B).
+    private func twoStageStore(a: WindowSnapshot, b: WindowSnapshot, c: WindowSnapshot? = nil) -> StageStore {
+        let store = StageStore(path: tempPath("stabilization-stages"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: a.id, members: [member(a)] + (c.map { [member($0)] } ?? [])),
+                    PersistentStage(id: StageID(rawValue: "2"), members: [member(b)])
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        return store
+    }
+
+    private func service(
+        windows: [WindowSnapshot],
+        focusedID: WindowID? = nil,
+        store: StageStore,
+        clock: StabilizationClock,
+        userInput: UserInputActivity = UserInputActivity(),
+        persist: Bool = true,
+        intentStore: LayoutIntentStore = LayoutIntentStore(path: tempPath("stabilization-intents"))
+    ) -> SnapshotService {
+        SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: windows, focusedID: focusedID),
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            intentStore: intentStore,
+            stageStore: store,
+            events: EventLog(path: tempPath("stabilization-events")),
+            persistStateChanges: persist,
+            userInput: userInput,
+            clock: { clock.now }
+        )
+    }
+
+    private func activeStageID(_ store: StageStore) -> StageID? {
+        store.state().scopes.first { $0.displayID == display.id }?.activeStageID
+    }
+
+    @Test
+    func readerSnapshotWritesNoStateFile() throws {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let newcomer = powerWindow(3, x: 800)
+        let store = twoStageStore(a: a, b: b)
+        let before = try Data(contentsOf: store.fileURL)
+        let intentPath = tempPath("reader-intents")
+
+        let snapshot = service(
+            windows: [a, b, newcomer],
+            focusedID: newcomer.id,
+            store: store,
+            clock: StabilizationClock(),
+            persist: false,
+            intentStore: LayoutIntentStore(path: intentPath)
+        ).snapshot()
+
+        #expect(snapshot.windows.contains { $0.window.id == newcomer.id && $0.scope != nil })
+        #expect(try Data(contentsOf: store.fileURL) == before)
+        #expect(!FileManager.default.fileExists(atPath: intentPath))
+    }
+
+    @Test
+    func writerSnapshotDoesNotRewriteUnchangedState() throws {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        _ = service(windows: [a, b], focusedID: a.id, store: store, clock: clock).snapshot()
+        let first = try FileManager.default.attributesOfItem(atPath: store.fileURL.path)[.modificationDate] as? Date
+
+        clock.now += 1
+        _ = service(windows: [a, b], focusedID: a.id, store: store, clock: clock).snapshot()
+        let second = try FileManager.default.attributesOfItem(atPath: store.fileURL.path)[.modificationDate] as? Date
+
+        #expect(first != nil)
+        #expect(first == second)
+    }
+
+    @Test
+    func stageIgnoresFocusChangeWithoutRecentUserInput() {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let input = UserInputActivity(monitoring: true)
+
+        let ignored = service(windows: [a, b], focusedID: b.id, store: store, clock: clock, userInput: input).snapshot()
+
+        #expect(ignored.state.activeScope(on: display.id)?.stageID == StageID(rawValue: "1"))
+        #expect(activeStageID(store) == StageID(rawValue: "1"))
+
+        clock.now += 2
+        input.recordInput(at: clock.now - 0.2)
+        let followed = service(windows: [a, b], focusedID: b.id, store: store, clock: clock, userInput: input).snapshot()
+
+        #expect(followed.state.activeScope(on: display.id)?.stageID == StageID(rawValue: "2"))
+        #expect(activeStageID(store) == StageID(rawValue: "2"))
+    }
+
+    @Test
+    func stageIgnoresFocusRightAfterWindowDisappearance() {
+        let a = powerWindow(1, x: 0)
+        let b = powerWindow(2, x: 400)
+        let c = powerWindow(3, x: 800)
+        let store = twoStageStore(a: a, b: b, c: c)
+        let clock = StabilizationClock()
+        _ = service(windows: [a, b, c], focusedID: a.id, store: store, clock: clock).snapshot()
+
+        clock.now += 0.1
+        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock).snapshot()
+        #expect(activeStageID(store) == StageID(rawValue: "1"))
+
+        clock.now += 0.6
+        _ = service(windows: [a, b], focusedID: b.id, store: store, clock: clock).snapshot()
+        #expect(activeStageID(store) == StageID(rawValue: "2"))
+    }
+
+    @Test
+    func tileClassificationSurvivesUnreadableAttributes() {
+        let store = StageStore(path: tempPath("hysteresis-stages"))
+        let clock = StabilizationClock()
+        let furniture = WindowFurniture(
+            hasCloseButton: true,
+            hasFullscreenButton: true,
+            fullscreenButtonEnabled: true,
+            hasMinimizeButton: true,
+            hasZoomButton: true
+        )
+        var readable = powerWindow(7, x: 100, width: 400, height: 300)
+        readable.title = ""
+        readable.role = "AXWindow"
+        readable.subrole = "AXStandardWindow"
+        readable.furniture = furniture
+        var unreadable = readable
+        unreadable.role = nil
+        unreadable.subrole = nil
+        unreadable.furniture = nil
+        var unknown = unreadable
+        unknown.id = WindowID(rawValue: 8)
+
+        let first = service(windows: [readable], store: store, clock: clock, persist: false).snapshot(followFocus: false)
+        clock.now += 0.5
+        let second = service(windows: [unreadable, unknown], store: store, clock: clock, persist: false).snapshot(followFocus: false)
+
+        #expect(first.windows.first { $0.window.id == readable.id }?.window.isTileCandidate == true)
+        #expect(second.windows.first { $0.window.id == readable.id }?.window.isTileCandidate == true)
+        #expect(second.windows.first { $0.window.id == unknown.id }?.window.isTileCandidate == false)
+    }
+
+    @Test
+    func sharedSnapshotReusesRecentSnapshotUntilExpiredOrInvalidated() {
+        let provider = SnapshotCallCountingProvider(display: display, windows: [powerWindow(1, x: 0)])
+        let clock = StabilizationClock()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("shared-snapshot-stages")),
+            events: EventLog(path: tempPath("shared-snapshot-events")),
+            persistStateChanges: false,
+            clock: { clock.now }
+        )
+
+        _ = service.snapshot()
+        clock.now += 0.1
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 1)
+
+        clock.now += 0.1
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 2)
+
+        service.invalidateSharedSnapshot()
+        _ = service.sharedSnapshot()
+        #expect(provider.windowsCalls == 3)
+
+        _ = service.sharedSnapshot(followFocus: false)
+        #expect(provider.windowsCalls == 4)
+    }
+
+    @Test
+    func soloTiledWindowIsNotPersistedAsMaximized() {
+        let visible = display.visibleFrame
+        let solo = powerWindow(4, x: visible.x, y: visible.y, width: visible.width, height: visible.height)
+        let store = StageStore(path: tempPath("solo-maximized-stages"))
+
+        _ = service(windows: [solo], store: store, clock: StabilizationClock()).snapshot(followFocus: false)
+
+        let member = store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == solo.id }
+        #expect(member != nil)
+        #expect(member?.presentationState != .maximized)
+    }
+
+    @Test
+    func zoomIntentStaysValidWhileZoomedWindowRemainsInScope() {
+        let a = powerWindow(1, x: 0, width: 600)
+        let b = powerWindow(2, x: 0, width: 600)
+        let store = twoStageStore(a: a, b: powerWindow(9, x: 900))
+        store.mutate { state in
+            guard var scope = state.scopes.first else { return }
+            scope.assign(window: b, to: StageID(rawValue: "1"))
+            state.update(scope)
+        }
+        let intents = LayoutIntentStore(path: tempPath("zoom-intents"))
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intents.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [a.id, b.id],
+            placements: [a.id: display.visibleFrame, b.id: display.visibleFrame],
+            source: .command,
+            zoomedWindowID: a.id
+        ))
+        let clock = StabilizationClock()
+
+        let zoomed = service(windows: [a, b], store: store, clock: clock, intentStore: intents)
+        #expect(zoomed.hasValidLayoutIntent(scope: scope, in: zoomed.snapshot(followFocus: false)))
+
+        let withoutZoomed = service(windows: [b], store: store, clock: clock, intentStore: intents)
+        #expect(!withoutZoomed.hasValidLayoutIntent(scope: scope, in: withoutZoomed.snapshot(followFocus: false)))
+    }
+}
+
+@Suite
+struct ConfigHotReloadTests {
+    private func write(_ text: String, to url: URL) throws {
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    @Test
+    func currentConfigReloadsChangedFileAndKeepsLastValidConfig() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-hot-reload-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let eventPath = tempPath("config-hot-reload-events")
+        try write("[tiling]\ngaps_inner = 10\n", to: url)
+        let service = ConfigReloadService(activePath: url.path, eventLog: EventLog(path: eventPath))
+
+        #expect(service.currentConfig().tiling.gapsInner == 10)
+
+        try write("[tiling]\ngaps_inner = 140\n", to: url)
+        #expect(service.currentConfig().tiling.gapsInner == 140)
+
+        try write("[tiling]\ngaps_inner = \"not-a-number\"\n", to: url)
+        #expect(service.currentConfig().tiling.gapsInner == 140)
+        #expect(service.currentConfig().tiling.gapsInner == 140)
+        #expect(service.state.lastValidation == .failed)
+
+        let failures = (try String(contentsOfFile: eventPath, encoding: .utf8))
+            .split(separator: "\n")
+            .filter { $0.contains("\"config.reload_failed\"") }
+        #expect(failures.count == 1)
+
+        try write("[tiling]\ngaps_inner = 12\n", to: url)
+        #expect(service.currentConfig().tiling.gapsInner == 12)
+        #expect(service.state.lastValidation == .success)
     }
 }

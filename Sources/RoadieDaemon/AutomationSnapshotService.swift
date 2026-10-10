@@ -3,22 +3,23 @@ import RoadieCore
 import RoadieStages
 
 public struct AutomationSnapshotService: Sendable {
-    public init() {}
+    /// Règles injectées (tests) ; nil = règles de la config courante du processus.
+    private let rules: [WindowRule]?
+    private let stageStore: StageStore
+
+    public init(rules: [WindowRule]? = nil, stageStore: StageStore = StageStore()) {
+        self.rules = rules
+        self.stageStore = stageStore
+    }
 
     public func snapshot(from daemonSnapshot: DaemonSnapshot, generatedAt: Date = Date()) -> RoadieStateSnapshot {
-        let activeDisplayID = daemonSnapshot.state.displays.values
-            .first { display in
-                daemonSnapshot.state.activeScope(on: display.id) != nil
-            }?
-            .id
-            .rawValue
-        let activeScope = activeDisplayID
-            .map(DisplayID.init(rawValue:))
+        let activeScope = activeDisplayID(in: daemonSnapshot)
             .flatMap { daemonSnapshot.state.activeScope(on: $0) }
+        let rules = self.rules ?? ConfigReloadService.shared.currentConfig().rules
 
         return RoadieStateSnapshot(
             generatedAt: generatedAt,
-            activeDisplayId: activeScope?.displayID.rawValue ?? activeDisplayID,
+            activeDisplayId: activeScope?.displayID.rawValue,
             activeDesktopId: activeScope.map { String($0.desktopID.rawValue) },
             activeStageId: activeScope?.stageID.rawValue,
             focusedWindowId: daemonSnapshot.focusedWindowID.map { String($0.rawValue) },
@@ -27,8 +28,36 @@ public struct AutomationSnapshotService: Sendable {
             stages: stageSnapshots(from: daemonSnapshot.state),
             windows: windowSnapshots(from: daemonSnapshot),
             groups: groupSnapshots(from: daemonSnapshot.state),
-            rules: []
+            rules: Self.ruleSnapshots(rules)
         )
+    }
+
+    /// Vue automation des règles, format unique partagé avec `AutomationQueryService`. O(r).
+    static func ruleSnapshots(_ rules: [WindowRule]) -> [AutomationRuleSnapshot] {
+        rules.map {
+            AutomationRuleSnapshot(id: $0.id, enabled: $0.enabled, priority: $0.priority, description: $0.match.description)
+        }
+    }
+
+    /// Display actif déterministe : celui de la fenêtre focalisée, sinon le display actif
+    /// persisté, sinon le premier display (ordre du snapshot) qui a une stage active.
+    // O(d + w) — d displays (bornés, < 10), w fenêtres.
+    private func activeDisplayID(in snapshot: DaemonSnapshot) -> DisplayID? {
+        let snapshotDisplayIDs = snapshot.displays.map(\.id)
+        let stateOnlyDisplayIDs = snapshot.state.displays.values.map(\.id)
+            .filter { !snapshotDisplayIDs.contains($0) }
+            .sorted { $0.rawValue < $1.rawValue }
+        let candidates = (snapshotDisplayIDs + stateOnlyDisplayIDs)
+            .filter { snapshot.state.activeScope(on: $0) != nil }
+        if let focusedID = snapshot.focusedWindowID,
+           let displayID = snapshot.windows.first(where: { $0.window.id == focusedID })?.scope?.displayID,
+           candidates.contains(displayID) {
+            return displayID
+        }
+        if let persisted = stageStore.state().activeDisplayID, candidates.contains(persisted) {
+            return persisted
+        }
+        return candidates.first
     }
 
     private func displaySnapshots(from snapshot: DaemonSnapshot) -> [AutomationDisplaySnapshot] {
@@ -118,5 +147,19 @@ public struct AutomationSnapshotService: Sendable {
                 }
             }
             .sorted { $0.id < $1.id }
+    }
+}
+
+// Description lisible d'un filtre de règle (snapshot et requête automation).
+extension RuleMatch {
+    var description: String {
+        [
+            app.map { "app=\($0)" },
+            appRegex.map { "app_regex=\($0)" },
+            title.map { "title=\($0)" },
+            titleRegex.map { "title_regex=\($0)" },
+            role.map { "role=\($0)" },
+            stage.map { "stage=\($0)" }
+        ].compactMap(\.self).joined(separator: ",")
     }
 }

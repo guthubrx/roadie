@@ -30,9 +30,9 @@ public struct WindowBookmarkCommandService {
             return WindowCommandResult(message: "bookmark set \(name): no active tiled window", changed: false)
         }
 
-        var state = store.state()
-        let bookmark = state.setBookmark(name: name, window: active.window, scope: scope)
-        store.save(state)
+        let bookmark = store.mutate { state in
+            state.setBookmark(name: name, window: active.window, scope: scope)
+        }
         events.append(RoadieEvent(
             type: "window.bookmark_set",
             scope: scope,
@@ -49,8 +49,7 @@ public struct WindowBookmarkCommandService {
             return WindowCommandResult(message: "bookmark focus \(name): not found", changed: false)
         }
         guard let targetEntry = snapshot.windows.first(where: { $0.window.id == bookmark.windowID }) else {
-            let removed = state.removeBookmark(named: name)
-            store.save(state)
+            let removed = store.mutate { $0.removeBookmark(named: name) }
             if let removed {
                 events.append(RoadieEvent(
                     type: "window.bookmark_pruned",
@@ -77,28 +76,34 @@ public struct WindowBookmarkCommandService {
         let targetStage = targetPersistentScope.stages.first { $0.id == targetScope.stageID }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
 
+        var updatedPreviousScope: PersistentStageScope?
         for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
             if previousDesktopID == targetScope.desktopID {
                 targetPersistentScope.updateFrame(window: window)
             } else {
-                var previous = previousPersistentScope
+                var previous = updatedPreviousScope ?? previousPersistentScope
                 previous.updateFrame(window: window)
-                state.update(previous)
+                updatedPreviousScope = previous
             }
         }
 
         targetPersistentScope.activeStageID = targetScope.stageID
         targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
-        state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
-        state.focusDisplay(display.id)
-        state.update(targetPersistentScope)
-        store.save(state)
+        // Écrit sur l'état relu sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
+        store.mutate { state in
+            if let updatedPreviousScope {
+                state.update(updatedPreviousScope)
+            }
+            state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
+            state.focusDisplay(display.id)
+            state.update(targetPersistentScope)
+        }
 
         var applied = 0
         if previousScope != targetScope {
             for id in previousMembers.subtracting(targetMembers) {
                 guard let window = windowsByID[id] else { continue }
-                if service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
+                if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
                     applied += 1
                 }
             }
@@ -115,9 +120,7 @@ public struct WindowBookmarkCommandService {
         let ok = service.focus(targetEntry.window)
         if ok {
             mouseFollower.follow(targetEntry.window)
-            var updatedState = store.state()
-            updatedState.updateBookmarkObservation(window: targetEntry.window, scope: targetScope)
-            store.save(updatedState)
+            store.mutate { $0.updateBookmarkObservation(window: targetEntry.window, scope: targetScope) }
         }
         events.append(RoadieEvent(
             type: ok ? "window.bookmark_focused" : "window.bookmark_focus_failed",
@@ -137,11 +140,9 @@ public struct WindowBookmarkCommandService {
 
     public func clear(_ rawName: String) -> WindowCommandResult {
         let name = PersistentWindowBookmark.normalizedName(rawName)
-        var state = store.state()
-        guard let removed = state.removeBookmark(named: name) else {
+        guard let removed = store.mutate({ $0.removeBookmark(named: name) }) else {
             return WindowCommandResult(message: "bookmark clear \(name): not found", changed: false)
         }
-        store.save(state)
         events.append(RoadieEvent(
             type: "window.bookmark_removed",
             scope: removed.scope,
@@ -185,9 +186,6 @@ public struct WindowBookmarkCommandService {
         return snapshot.windows.first { $0.window.isTileCandidate && $0.scope != nil }
     }
 
-    private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
-    }
 
     private func isHidden(_ frame: CGRect) -> Bool {
         frame.origin.x > 9_000 || frame.origin.y > 9_000

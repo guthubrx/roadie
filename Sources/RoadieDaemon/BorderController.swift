@@ -11,7 +11,7 @@ public final class BorderController {
 
     public init(
         snapshotService: SnapshotService = SnapshotService(),
-        configLoader: @escaping () -> RoadieConfig = { (try? RoadieConfigLoader.load()) ?? RoadieConfig() }
+        configLoader: @escaping () -> RoadieConfig = { ConfigReloadService.shared.currentConfig() }
     ) {
         self.snapshotService = snapshotService
         self.configLoader = configLoader
@@ -19,6 +19,7 @@ public final class BorderController {
 
     public func start() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        UserInputActivity.shared.startMonitoring()
         refresh()
         refreshTimer?.invalidate()
         let newTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] _ in
@@ -31,11 +32,11 @@ public final class BorderController {
     private func refresh() {
         let config = configLoader().fx.borders
         guard config.enabled else {
-            panel.orderOut(nil)
+            hidePanel()
             return
         }
 
-        let snapshot = snapshotService.snapshot()
+        let snapshot = snapshotService.sharedSnapshot()
         guard let focusedWindowID = snapshot.focusedWindowID,
               let entry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               entry.window.isTileCandidate,
@@ -43,18 +44,21 @@ public final class BorderController {
               !isHidden(entry.window.frame.cgRect, in: snapshot.displays),
               !Self.isWindowVisiblyOccluded(entry, in: snapshot)
         else {
-            panel.orderOut(nil)
+            hidePanel()
             return
         }
 
         let color = entry.pin == nil ? activeColor(for: entry.scope?.stageID, config: config) : .systemRed
-        _ = groupIndicator(for: focusedWindowID, snapshot: snapshot)
         panel.render(
             frame: Self.axToNS(entry.window.frame.cgRect),
             color: color,
             thickness: CGFloat(max(1, config.thickness)),
             cornerRadius: CGFloat(max(0, config.cornerRadius))
         )
+    }
+
+    private func hidePanel() {
+        if panel.isVisible { panel.orderOut(nil) }
     }
 
     private func activeColor(for stageID: StageID?, config: BorderConfig) -> NSColor {
@@ -158,10 +162,17 @@ private final class BorderPanel: NSPanel {
 
     func render(frame: CGRect, color: NSColor, thickness: CGFloat, cornerRadius: CGFloat) {
         let expanded = frame.insetBy(dx: -thickness / 2, dy: -thickness / 2)
-        borderView.color = color
-        borderView.thickness = thickness
-        borderView.cornerRadius = cornerRadius
-        setFrame(expanded, display: true)
+        // FR-023 : aucun travail de fenêtre si rien n'a changé depuis le dernier rendu visible.
+        guard !isVisible
+            || expanded != self.frame
+            || color != borderView.color
+            || thickness != borderView.thickness
+            || cornerRadius != borderView.cornerRadius
+        else { return }
+        if color != borderView.color { borderView.color = color }
+        if thickness != borderView.thickness { borderView.thickness = thickness }
+        if cornerRadius != borderView.cornerRadius { borderView.cornerRadius = cornerRadius }
+        if expanded != self.frame { setFrame(expanded, display: true) }
         orderFrontRegardless()
     }
 }
@@ -184,34 +195,5 @@ private final class BorderView: NSView {
         path.lineWidth = thickness
         color.setStroke()
         path.stroke()
-    }
-}
-
-private extension NSColor {
-    convenience init?(hex: String) {
-        var raw = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-        if raw.hasPrefix("#") {
-            raw.removeFirst()
-        }
-        guard raw.count == 6 || raw.count == 8,
-              let value = UInt64(raw, radix: 16)
-        else { return nil }
-
-        let red: CGFloat
-        let green: CGFloat
-        let blue: CGFloat
-        let alpha: CGFloat
-        if raw.count == 8 {
-            red = CGFloat((value >> 24) & 0xff) / 255
-            green = CGFloat((value >> 16) & 0xff) / 255
-            blue = CGFloat((value >> 8) & 0xff) / 255
-            alpha = CGFloat(value & 0xff) / 255
-        } else {
-            red = CGFloat((value >> 16) & 0xff) / 255
-            green = CGFloat((value >> 8) & 0xff) / 255
-            blue = CGFloat(value & 0xff) / 255
-            alpha = 1
-        }
-        self.init(srgbRed: red, green: green, blue: blue, alpha: alpha)
     }
 }

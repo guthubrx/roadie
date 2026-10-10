@@ -83,10 +83,12 @@ struct AutomationSnapshotTests {
         let display = powerDisplay()
         let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
         let window = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        // Une fenêtre tilée seule n'est pas « agrandie » (SPEC-016 FR-027) : une voisine est nécessaire.
+        let sibling = powerWindow(2, x: 100, y: 100, width: 300, height: 300)
         let snapshot = DaemonSnapshot(
             permissions: PermissionSnapshot(accessibilityTrusted: true),
             displays: [display],
-            windows: [ScopedWindowSnapshot(window: window, scope: scope)],
+            windows: [ScopedWindowSnapshot(window: window, scope: scope), ScopedWindowSnapshot(window: sibling, scope: scope)],
             state: RoadieState(),
             focusedWindowID: window.id
         )
@@ -94,5 +96,35 @@ struct AutomationSnapshotTests {
         let automation = AutomationSnapshotService().snapshot(from: snapshot)
 
         #expect(automation.windows.first?.presentationState == .maximized)
+    }
+
+    @Test
+    func automationSnapshotUsesFocusedWindowDisplayAndConfiguredRules() {
+        let main = powerDisplay("display-main", index: 1, x: 0)
+        let side = powerDisplay("display-side", index: 2, x: 2000)
+        let desktop = DesktopID(rawValue: 1)
+        let stage = StageID(rawValue: "1")
+        var state = RoadieState()
+        for display in [main, side] {
+            state.ensureDisplay(display.id)
+        }
+        let window = powerWindow(5, x: 2100)
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [main, side],
+            windows: [ScopedWindowSnapshot(window: window, scope: StageScope(displayID: side.id, desktopID: desktop, stageID: stage))],
+            state: state,
+            focusedWindowID: window.id
+        )
+        let service = AutomationSnapshotService(
+            rules: [WindowRule(id: "terminal", match: RuleMatch(app: "Terminal"))],
+            stageStore: StageStore(path: tempPath("automation-active-display"))
+        )
+
+        let automation = service.snapshot(from: snapshot)
+
+        #expect(automation.activeDisplayId == side.id.rawValue)
+        #expect(automation.rules.map(\.id) == ["terminal"])
+        #expect(automation.rules.first?.description == "app=Terminal")
     }
 }

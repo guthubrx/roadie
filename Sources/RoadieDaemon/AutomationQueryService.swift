@@ -58,10 +58,10 @@ public struct AutomationQueryService {
         case "groups":
             return result(name, automation.groups)
         case "rules":
+            // Config courante (comme `state`), sauf fichier explicite.
+            guard let configPath else { return result(name, automation.rules) }
             let rules = (try? RoadieConfigLoader.load(from: configPath).rules) ?? []
-            return result(name, rules.map {
-                AutomationRuleSnapshot(id: $0.id, enabled: $0.enabled, priority: $0.priority, description: $0.match.description)
-            })
+            return result(name, AutomationSnapshotService.ruleSnapshots(rules))
         case "health":
             return result(name, DaemonHealthService(service: service).run())
         default:
@@ -93,18 +93,5 @@ public struct AutomationQueryService {
             return .null
         }
         return object
-    }
-}
-
-private extension RuleMatch {
-    var description: String {
-        [
-            app.map { "app=\($0)" },
-            appRegex.map { "app_regex=\($0)" },
-            title.map { "title=\($0)" },
-            titleRegex.map { "title_regex=\($0)" },
-            role.map { "role=\($0)" },
-            stage.map { "stage=\($0)" }
-        ].compactMap(\.self).joined(separator: ",")
     }
 }

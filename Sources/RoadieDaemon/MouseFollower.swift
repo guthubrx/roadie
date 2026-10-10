@@ -8,7 +8,7 @@ public struct MouseFollower: Sendable {
 
     public init(
         isEnabled: @escaping @Sendable () -> Bool = {
-            ((try? RoadieConfigLoader.load()) ?? RoadieConfig()).focus.mouseFollowsFocus
+            ConfigReloadService.shared.currentConfig().focus.mouseFollowsFocus
         },
         move: @escaping @Sendable (CGPoint) -> Void = { point in
             CGWarpMouseCursorPosition(point)

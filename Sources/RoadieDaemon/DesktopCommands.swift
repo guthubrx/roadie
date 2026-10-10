@@ -56,10 +56,11 @@ public struct DesktopCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "desktop label: no display", changed: false)
         }
-        var state = store.state()
-        _ = state.scope(displayID: display.id, desktopID: desktopID)
-        state.setLabel(label, displayID: display.id, desktopID: desktopID)
-        store.save(state)
+        let state = store.mutate { state in
+            _ = state.scope(displayID: display.id, desktopID: desktopID)
+            state.setLabel(label, displayID: display.id, desktopID: desktopID)
+            return state
+        }
         let visibleLabel = state.label(displayID: display.id, desktopID: desktopID) ?? "-"
         return StageCommandResult(message: "desktop label \(desktopID.rawValue) \(visibleLabel)", changed: true)
     }
@@ -77,11 +78,12 @@ public struct DesktopCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "desktop \(direction.rawValue): no display", changed: false)
         }
-        var state = store.state()
-        for id in (1...6).map({ DesktopID(rawValue: $0) }) {
-            _ = state.scope(displayID: display.id, desktopID: id)
+        let state = store.mutate { state in
+            for id in (1...6).map({ DesktopID(rawValue: $0) }) {
+                _ = state.scope(displayID: display.id, desktopID: id)
+            }
+            return state
         }
-        store.save(state)
         let ids = desktopIDs(for: display.id, in: state)
         let current = state.currentDesktopID(for: display.id)
         let index = ids.firstIndex(of: current) ?? 0
@@ -130,21 +132,23 @@ public struct DesktopCommandService {
             return StageCommandResult(message: "window desktop \(desktopID.rawValue): no active window", changed: false)
         }
 
-        var state = store.state()
         let sourceScope = active.scope
-        var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: active.window.id)
+        let stageManager = ConfigReloadService.shared.currentConfig().stageManager
+        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
+            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+            targetScope.applyConfiguredStages(stageManager)
+            for scopeIndex in state.scopes.indices {
+                state.scopes[scopeIndex].remove(windowID: active.window.id)
+            }
+            targetScope.assign(window: active.window, to: targetScope.activeStageID)
+            state.update(targetScope)
+            let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+            let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
+            if sourceScope != targetStageScope {
+                state.suppressRulePlacement(window: active.window)
+            }
+            return (targetStageScope, removedPin)
         }
-        targetScope.assign(window: active.window, to: targetScope.activeStageID)
-        state.update(targetScope)
-        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-        let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
-        if sourceScope != targetStageScope {
-            state.suppressRulePlacement(window: active.window)
-        }
-        store.save(state)
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
@@ -155,7 +159,7 @@ public struct DesktopCommandService {
             return switchDisplay(display, to: desktopID, snapshot: snapshot)
         }
 
-        let hidden = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
+        let hidden = service.setFrame(HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "window_desktop",
@@ -192,19 +196,21 @@ public struct DesktopCommandService {
             return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false)
         }
 
-        var state = store.state()
         let sourceScope = entry.scope
-        var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: entry.window.id)
+        let stageManager = ConfigReloadService.shared.currentConfig().stageManager
+        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
+            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+            targetScope.applyConfiguredStages(stageManager)
+            for scopeIndex in state.scopes.indices {
+                state.scopes[scopeIndex].remove(windowID: entry.window.id)
+            }
+            targetScope.assign(window: entry.window, to: targetScope.activeStageID)
+            state.update(targetScope)
+            let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+            let removedPin = state.removePin(windowID: entry.window.id)
+            state.suppressRulePlacement(window: entry.window)
+            return (targetStageScope, removedPin)
         }
-        targetScope.assign(window: entry.window, to: targetScope.activeStageID)
-        state.update(targetScope)
-        let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-        let removedPin = state.removePin(windowID: entry.window.id)
-        state.suppressRulePlacement(window: entry.window)
-        store.save(state)
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
@@ -215,7 +221,7 @@ public struct DesktopCommandService {
             return switchDisplay(display, to: desktopID, snapshot: snapshot)
         }
 
-        let hidden = service.setFrame(hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays), of: entry.window) != nil
+        let hidden = service.setFrame(HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays), of: entry.window) != nil
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         events.append(RoadieEvent(
             type: "window_desktop",
@@ -256,7 +262,7 @@ public struct DesktopCommandService {
 
         var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
         var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
-        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
+        targetScope.applyConfiguredStages(ConfigReloadService.shared.currentConfig().stageManager)
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
@@ -270,7 +276,7 @@ public struct DesktopCommandService {
 
         for id in previousWindowIDs.subtracting(targetWindowIDs) {
             guard let window = windowsByID[id] else { continue }
-            if service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
+            if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
                 applied += 1
             }
         }
@@ -281,17 +287,19 @@ public struct DesktopCommandService {
             }
         }
 
-        state.update(previousScope)
-        state.update(targetScope)
-        state.switchDesktop(displayID: display.id, to: desktopID)
-        state.protectCommandFocus(
-            displayID: display.id,
-            desktopID: desktopID,
-            stageID: targetScope.activeStageID,
-            windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
-            staleFocusedWindowID: snapshot.focusedWindowID.flatMap { previousWindowIDs.subtracting(targetWindowIDs).contains($0) ? $0 : nil }
-        )
-        store.save(state)
+        // Écrit sur l'état relu sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
+        store.mutate { state in
+            state.update(previousScope)
+            state.update(targetScope)
+            state.switchDesktop(displayID: display.id, to: desktopID)
+            state.protectCommandFocus(
+                displayID: display.id,
+                desktopID: desktopID,
+                stageID: targetScope.activeStageID,
+                windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+                staleFocusedWindowID: snapshot.focusedWindowID.flatMap { previousWindowIDs.subtracting(targetWindowIDs).contains($0) ? $0 : nil }
+            )
+        }
 
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         applied += result.applied + result.clamped
@@ -357,9 +365,6 @@ public struct DesktopCommandService {
         displays.first { $0.frame.cgRect.contains(point) }?.id
     }
 
-    private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
-    }
 
     private func isHidden(_ frame: CGRect) -> Bool {
         frame.maxX < -1000 || frame.minX < -10000

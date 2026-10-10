@@ -75,7 +75,8 @@ public struct SnapshotService {
 
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
-    private let config: RoadieConfig
+    /// Config figée injectée (tests, commandes) ; nil = config du processus rechargée à chaud.
+    private let fixedConfig: RoadieConfig?
     private let railSettings: RailSettings?
     private let railRuntimeStateStore: RailRuntimeStateStore
     private let intentStore: LayoutIntentStore
@@ -88,6 +89,10 @@ public struct SnapshotService {
     /// WindowCommands, etc.) continuent a ecrire via leurs propres `stageStore.save(...)`
     /// proteges par flock POSIX (FileLock).
     private let persistStateChanges: Bool
+    private let userInput: UserInputActivity
+    private let clock: @Sendable () -> Date
+    /// Mémoire de processus partagée par les services du même fichier d'état.
+    private let processState: SnapshotProcessState
 
     /// Detecte via la variable d'env `ROADIE_PERSIST_STATE_CHANGES` si le snapshot
     /// doit persister ses mutations dans `stages.json`. SPEC-011 atomique : le
@@ -107,23 +112,34 @@ public struct SnapshotService {
     public init(
         provider: any SystemSnapshotProviding = LiveSystemSnapshotProvider(),
         frameWriter: any WindowFrameWriting = AXWindowFrameWriter(),
-        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
+        config: RoadieConfig? = nil,
         railSettings: RailSettings? = nil,
         railRuntimeStateStore: RailRuntimeStateStore = RailRuntimeStateStore(),
         intentStore: LayoutIntentStore = LayoutIntentStore(),
         stageStore: StageStore = StageStore(),
         events: EventLog = EventLog(),
-        persistStateChanges: Bool = Self.defaultPersistStateChanges
+        persistStateChanges: Bool = Self.defaultPersistStateChanges,
+        userInput: UserInputActivity = .shared,
+        clock: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
-        self.config = config
+        self.fixedConfig = config
         self.railSettings = railSettings
         self.railRuntimeStateStore = railRuntimeStateStore
         self.intentStore = intentStore
         self.stageStore = stageStore
         self.events = events
         self.persistStateChanges = persistStateChanges
+        self.userInput = userInput
+        self.clock = clock
+        self.processState = SnapshotProcessState.forStatePath(stageStore.fileURL.path)
+    }
+
+    /// Config courante : relue à chaud via `ConfigReloadService.shared` (un stat par accès).
+    /// Les fonctions qui la lisent plusieurs fois en prennent une copie locale.
+    private var config: RoadieConfig {
+        fixedConfig ?? ConfigReloadService.shared.currentConfig()
     }
 
     public var effectiveConfig: RoadieConfig {
@@ -138,25 +154,150 @@ public struct SnapshotService {
         stageStore
     }
 
+    /// Snapshot pour les composants lecteurs (bordure, focus-souris, rail) : réutilise le
+    /// dernier snapshot publié dans le processus pour ce fichier d'état s'il a moins de 150 ms
+    /// et que ni l'état persisté ni la config n'ont changé ; sinon en produit un (FR-023).
+    /// Le tiler, qui écrit, appelle toujours `snapshot()`.
+    public func sharedSnapshot(followFocus: Bool = true) -> DaemonSnapshot {
+        if let recent = processState.recentSnapshot(
+            followFocus: followFocus,
+            now: clock(),
+            stateStamp: fileModificationStamp(stageStore.fileURL.path),
+            config: config
+        ) {
+            return recent
+        }
+        return snapshot(followFocus: followFocus)
+    }
+
+    /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
+    public func invalidateSharedSnapshot() {
+        processState.invalidatePublished()
+    }
+
     public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
+        let config = self.config
+        let now = clock()
+        // Énumération Accessibility HORS verrou (R1) : seule la réconciliation, fonction pure
+        // de (état, fenêtres vivantes), tourne sous le verrou de `StageStore.mutate`.
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
         let rawWindows = provider.windows()
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
         let policyContext = TilingPolicyContext(config: config)
-        let windows = rawWindows.map { window in
-            Self.applyTilingPolicy(to: window, config: config, context: policyContext)
-        }
+        let windows = processState.stabilizedClassification(rawWindows.map { window in
+            (raw: window, classified: Self.applyTilingPolicy(to: window, config: config, context: policyContext))
+        })
         let stageManagedWindowIDs = Set(windows.compactMap { window in
             window.isTileCandidate ? window.id : nil
         })
         let providerFocusedID = provider.focusedWindowID()
-        var persistedStages = stageStore.state()
-        let now = Date()
-        persistedStages.pruneExpiredCommandFocusProtection(now: now)
+        let mouseLocation = provider.mouseLocation()
         let liveDisplayIDs = Set(displays.map(\.id))
-        intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
+        // FR-009 : un changement de stage par le focus exige une saisie utilisateur récente,
+        // postérieure à la dernière disparition de fenêtre et hors des 500 ms qui la suivent.
+        let lastDisappearanceAt = processState.recordLiveWindows(stageManagedWindowIDs, now: now)
+        let focusChangeAllowed = userInput.allowsFocusChange(now: now, lastDisappearanceAt: lastDisappearanceAt)
+        let input = ReconciliationInput(
+            config: config,
+            displays: displays,
+            windows: windows,
+            stageManagedWindowIDs: stageManagedWindowIDs,
+            liveDisplayIDs: liveDisplayIDs,
+            providerFocusedID: providerFocusedID,
+            mouseLocation: mouseLocation,
+            followFocus: followFocus,
+            focusChangeAllowed: focusChangeAllowed,
+            now: now
+        )
+
+        let result: Reconciliation
+        if persistStateChanges {
+            intentStore.prune(keepingDisplayIDs: liveDisplayIDs)
+            result = stageStore.mutate { persistedStages in
+                reconcile(&persistedStages, input: input)
+            }
+            // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode
+            // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent
+            // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont
+            // dupliques N fois (un par composant) dans events.jsonl.
+            appendReconciliationEvents(result)
+        } else {
+            var persistedStages = stageStore.state()
+            result = reconcile(&persistedStages, input: input)
+        }
+
+        let snapshot = DaemonSnapshot(
+            permissions: permissions,
+            displays: displays,
+            windows: result.scopedWindows,
+            state: result.state,
+            focusedWindowID: result.focusedWindowID
+        )
+        processState.publish(
+            snapshot,
+            followFocus: followFocus,
+            at: now,
+            stateStamp: fileModificationStamp(stageStore.fileURL.path),
+            config: config
+        )
+        return snapshot
+    }
+
+    /// Entrées de la réconciliation, lues hors verrou.
+    private struct ReconciliationInput {
+        let config: RoadieConfig
+        let displays: [DisplaySnapshot]
+        let windows: [WindowSnapshot]
+        let stageManagedWindowIDs: Set<WindowID>
+        let liveDisplayIDs: Set<DisplayID>
+        let providerFocusedID: WindowID?
+        let mouseLocation: CGPoint?
+        let followFocus: Bool
+        let focusChangeAllowed: Bool
+        let now: Date
+    }
+
+    private struct Reconciliation {
+        var state: RoadieState
+        var scopedWindows: [ScopedWindowSnapshot]
+        var focusedWindowID: WindowID?
+        var missingWindows: MissingWindowReconciliationReport
+        var prunedPins: [PersistentWindowPin]
+        var prunedBookmarks: [PersistentWindowBookmark]
+    }
+
+    private func appendReconciliationEvents(_ result: Reconciliation) {
+        appendMissingWindowReconciliationEvent(result.missingWindows)
+        for pin in result.prunedPins {
+            events.append(RoadieEvent(
+                type: "window.pin_pruned",
+                scope: pin.homeScope,
+                details: pinEventDetails(pin)
+            ))
+        }
+        for bookmark in result.prunedBookmarks {
+            events.append(RoadieEvent(
+                type: "window.bookmark_pruned",
+                scope: bookmark.scope,
+                details: bookmarkEventDetails(bookmark)
+            ))
+        }
+    }
+
+    /// Réconcilie l'état persisté avec les fenêtres vivantes et construit l'état runtime.
+    /// Fonction de (état, entrées) : appelée sous le verrou de `StageStore.mutate` en mode writer.
+    // O(w + m) — w fenêtres vivantes, m membres persistés (index inverse pré-calculé).
+    private func reconcile(_ persistedStages: inout PersistentStageState, input: ReconciliationInput) -> Reconciliation {
+        let config = input.config
+        let displays = input.displays
+        let windows = input.windows
+        let stageManagedWindowIDs = input.stageManagedWindowIDs
+        let liveDisplayIDs = input.liveDisplayIDs
+        let providerFocusedID = input.providerFocusedID
+        let now = input.now
+        persistedStages.pruneExpiredCommandFocusProtection(now: now)
         if let activeDisplayID = persistedStages.activeDisplayID,
            !liveDisplayIDs.contains(activeDisplayID) {
             persistedStages.activeDisplayID = fallbackDisplayID(
@@ -168,7 +309,7 @@ public struct SnapshotService {
         }
         let activeDisplayIDBeforeMissingReconciliation = persistedStages.activeDisplayID
         let liveWindowIDs = stageManagedWindowIDs
-        let mouseLocation = provider.mouseLocation()
+        let mouseLocation = input.mouseLocation
         persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })
         let missingWindows = persistedStages.pruneMissingWindows(
             keeping: liveWindowIDs,
@@ -176,36 +317,10 @@ public struct SnapshotService {
             missingGrace: Self.stageMembershipMissingGrace,
             now: now
         )
-        // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode
-        // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent
-        // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont
-        // dupliques N fois (un par composant) dans events.jsonl.
-        if persistStateChanges {
-            appendMissingWindowReconciliationEvent(missingWindows)
-        }
-        let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs)
-        if persistStateChanges {
-            for pin in prunedPins {
-                events.append(RoadieEvent(
-                    type: "window.pin_pruned",
-                    scope: pin.homeScope,
-                    details: pinEventDetails(pin)
-                ))
-            }
-        }
+        let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs, now: now)
         let prunedBookmarks = persistedStages.pruneMissingBookmarks(keeping: liveWindowIDs, now: now)
-        if persistStateChanges {
-            for bookmark in prunedBookmarks {
-                events.append(RoadieEvent(
-                    type: "window.bookmark_pruned",
-                    scope: bookmark.scope,
-                    details: bookmarkEventDetails(bookmark)
-                ))
-            }
-        }
         var state = RoadieState()
         var scopedWindows: [ScopedWindowSnapshot] = []
-
         for display in displays {
             state.ensureDisplay(display.id)
             let currentDesktopID = persistedStages.currentDesktopID(for: display.id)
@@ -333,8 +448,9 @@ public struct SnapshotService {
                 isNewlyScoped: isNewlyScoped
             ))
         }
+        correctSoloMaximizedStates(in: &persistedStages, scopedWindows: scopedWindows, displays: displays, config: config)
         var focusedID: WindowID?
-        if followFocus,
+        if input.followFocus,
            let providerFocusedID,
            let focusedEntry = scopedWindows.first(where: { $0.window.id == providerFocusedID }),
            let focusedScope = focusedEntry.scope,
@@ -347,6 +463,7 @@ public struct SnapshotService {
            ),
            shouldFollowFocus(entry: focusedEntry, scope: focusedScope, persistedStages: persistedStages, displays: displays),
            !persistedStages.commandFocusProtectionBlocks(focusedScope: focusedScope, focusedWindowID: providerFocusedID, now: now),
+           input.focusChangeAllowed || !focusChangesActiveScope(focusedScope, state: state, persistedStages: persistedStages),
            config.focus.stageFollowsFocus || state.activeScope(on: focusedScope.displayID) == focusedScope {
             var persistentScope = persistedStages.scope(
                 displayID: focusedScope.displayID,
@@ -365,17 +482,63 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
-        if persistStateChanges {
-            stageStore.save(persistedStages)
-        }
-
-        return DaemonSnapshot(
-            permissions: permissions,
-            displays: displays,
-            windows: scopedWindows,
+        return Reconciliation(
             state: state,
-            focusedWindowID: focusedID
+            scopedWindows: scopedWindows,
+            focusedWindowID: focusedID,
+            missingWindows: missingWindows,
+            prunedPins: prunedPins,
+            prunedBookmarks: prunedBookmarks
         )
+    }
+
+    /// FR-027 : une fenêtre tilée seule dans son scope remplit l'écran par construction et n'est
+    /// pas « agrandie ». Le nombre de fenêtres par scope n'est connu qu'après la boucle d'affectation,
+    /// d'où cette correction a posteriori des états persistés. O(w).
+    private func correctSoloMaximizedStates(
+        in persistedStages: inout PersistentStageState,
+        scopedWindows: [ScopedWindowSnapshot],
+        displays: [DisplaySnapshot],
+        config: RoadieConfig
+    ) {
+        var tiledCounts: [StageScope: Int] = [:]
+        for entry in scopedWindows where entry.window.isTileCandidate {
+            if let scope = entry.scope { tiledCounts[scope, default: 0] += 1 }
+        }
+        for entry in scopedWindows where entry.window.isTileCandidate {
+            guard let scope = entry.scope,
+                  tiledCounts[scope] == 1,
+                  !isHidden(entry.window.frame.cgRect, in: displays),
+                  presentationState(for: entry.window, displayID: scope.displayID, displays: displays) == .maximized,
+                  let display = displays.first(where: { $0.id == scope.displayID })
+            else { continue }
+            var persistentScope = persistedStages.scope(
+                displayID: scope.displayID,
+                desktopID: scope.desktopID,
+                defaultMode: config.tiling.defaultStrategy
+            )
+            persistentScope.updateFrame(
+                window: entry.window,
+                presentationState: WindowPresentationStateResolver.state(
+                    for: entry.window,
+                    on: display,
+                    isOnlyTiledWindowInScope: true
+                )
+            )
+            persistedStages.update(persistentScope)
+        }
+    }
+
+    /// `true` si suivre ce focus changerait la stage, le desktop ou le display actif.
+    /// Mettre à jour le membre focalisé de la stage déjà active n'est pas un changement.
+    private func focusChangesActiveScope(
+        _ scope: StageScope,
+        state: RoadieState,
+        persistedStages: PersistentStageState
+    ) -> Bool {
+        if state.activeScope(on: scope.displayID) != scope { return true }
+        guard let activeDisplayID = persistedStages.activeDisplayID else { return false }
+        return activeDisplayID != scope.displayID
     }
 
     private func shouldSuppressHiddenCrossDisplayFocusAfterMissing(
@@ -872,9 +1035,16 @@ public extension SnapshotService {
         scope: StageScope,
         windowIDs: [WindowID],
         placements: [WindowID: Rect],
-        source: LayoutIntent.Source
+        source: LayoutIntent.Source,
+        zoomedWindowID: WindowID? = nil
     ) {
-        intentStore.save(LayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: source))
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: windowIDs,
+            placements: placements,
+            source: source,
+            zoomedWindowID: zoomedWindowID
+        ))
     }
 
     func removeLayoutIntent(scope: StageScope) {
@@ -991,7 +1161,7 @@ public extension SnapshotService {
         reason: String
     ) -> Bool {
         guard !scopes.isEmpty else { return false }
-        var state = stageStore.state()
+        let state = stageStore.state()
         var repaired: [(scope: StageScope, old: [WindowID], new: [WindowID])] = []
 
         for scope in scopes {
@@ -1009,17 +1179,24 @@ public extension SnapshotService {
             let ordered = spatiallyOrdered(liveStageWindowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
             guard ordered != liveStageWindowIDs,
                   Set(ordered) == Set(liveStageWindowIDs),
-                  var persistentScope = state.scopes.first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })
+                  state.scopes.contains(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })
             else { continue }
 
-            persistentScope.orderMembers(ordered, in: scope.stageID)
-            state.update(persistentScope)
             repaired.append((scope, stage.windowIDs, ordered))
             intentStore.remove(scope: scope)
         }
 
         guard !repaired.isEmpty else { return false }
-        stageStore.save(state)
+        // Réordonne sur l'état relu sous verrou (FR-013) pour ne pas écraser une écriture concurrente.
+        stageStore.mutate { state in
+            for item in repaired {
+                guard var persistentScope = state.scopes.first(where: {
+                    $0.displayID == item.scope.displayID && $0.desktopID == item.scope.desktopID
+                }) else { continue }
+                persistentScope.orderMembers(item.new, in: item.scope.stageID)
+                state.update(persistentScope)
+            }
+        }
         for item in repaired {
             events.append(RoadieEvent(type: "mutable_bsp_order_repaired", scope: item.scope, details: [
                 "reason": reason,
@@ -1069,6 +1246,7 @@ public extension SnapshotService {
               let display = snapshot.displays.first(where: { $0.id == scope.displayID })
         else { return LayoutPlan(placements: [:]) }
 
+        let config = self.config
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let liveOrderedWindowIDs = orderedWindowIDs.filter { windowsByID[$0] != nil }
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
@@ -1120,6 +1298,8 @@ public extension SnapshotService {
         guard persistStateChanges else { return [] }
         var changedScopes: Set<StageScope> = []
         let scopes = Set(snapshot.windows.compactMap(\.scope))
+        let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
+        let currentState = stageStore.state()
         for scope in scopes {
             guard !excludedScopes.contains(scope) else { continue }
             guard let stage = snapshot.state.stage(scope: scope), stage.mode == .spatialBsp,
@@ -1128,13 +1308,13 @@ public extension SnapshotService {
             let ordered = orderedWindowIDs(in: scope, from: snapshot)
             guard !ordered.isEmpty else { continue }
             let wide = display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
-            var state = stageStore.state()
-            let existing = state.bspTree(for: scope) ?? .empty
-            let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
-            let reconciled = existing.reconciled(liveWindowIDs: ordered, focus: snapshot.focusedWindowID, side: side, containerIsWide: wide)
-            if reconciled != existing {
-                state.setBSPTree(reconciled, for: scope)
-                stageStore.save(state)
+            let reconcile = { (existing: BSPTree) in
+                existing.reconciled(liveWindowIDs: ordered, focus: snapshot.focusedWindowID, side: side, containerIsWide: wide)
+            }
+            // Pré-contrôle sans verrou : au repos, aucun verrou ni écriture.
+            let existing = currentState.bspTree(for: scope) ?? .empty
+            guard reconcile(existing) != existing else { continue }
+            if persistBSPTree(for: scope, reconcile) {
                 changedScopes.insert(scope)
             }
         }
@@ -1150,20 +1330,33 @@ public extension SnapshotService {
         focus: WindowID?,
         containerIsWide: Bool
     ) -> BSPTree {
-        var state = stageStore.state()
-        let existing = state.bspTree(for: scope) ?? .empty
+        let existing = stageStore.state().bspTree(for: scope) ?? .empty
         let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
-        let reconciled = existing.reconciled(
-            liveWindowIDs: liveOrderedWindowIDs,
-            focus: focus,
-            side: side,
-            containerIsWide: containerIsWide
-        )
+        let reconcile = { (tree: BSPTree) in
+            tree.reconciled(
+                liveWindowIDs: liveOrderedWindowIDs,
+                focus: focus,
+                side: side,
+                containerIsWide: containerIsWide
+            )
+        }
+        let reconciled = reconcile(existing)
         if persistStateChanges, reconciled != existing {
-            state.setBSPTree(reconciled, for: scope)
-            stageStore.save(state)
+            persistBSPTree(for: scope, reconcile)
         }
         return reconciled
+    }
+
+    /// Recalcule l'arbre sur l'état relu sous verrou et l'écrit s'il change (FR-013).
+    @discardableResult
+    private func persistBSPTree(for scope: StageScope, _ reconcile: (BSPTree) -> BSPTree) -> Bool {
+        stageStore.mutate { state in
+            let existing = state.bspTree(for: scope) ?? .empty
+            let reconciled = reconcile(existing)
+            guard reconciled != existing else { return false }
+            state.setBSPTree(reconciled, for: scope)
+            return true
+        }
     }
 
     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
@@ -1171,8 +1364,18 @@ public extension SnapshotService {
         let scopedIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
         })
+        // Intent de zoom (FR-001, FR-012) : fenêtre zoomée et voisines cachées se chevauchent
+        // ou sortent du conteneur par construction. Seule la présence de la fenêtre zoomée
+        // dans le scope le valide.
+        if let zoomedWindowID = intent.zoomedWindowID {
+            guard scopedIDs.contains(zoomedWindowID), intent.placements[zoomedWindowID] != nil else {
+                removeInvalidIntent(scope: scope)
+                return nil
+            }
+            return intent
+        }
         guard scopedIDs == Set(intent.windowIDs) else {
-            intentStore.remove(scope: scope)
+            removeInvalidIntent(scope: scope)
             return nil
         }
         if intent.source == .command,
@@ -1180,10 +1383,17 @@ public extension SnapshotService {
             return intent
         }
         guard intentStillTilesCurrentContainer(intent, scope: scope, from: snapshot, requireReasonableTileSizes: true) else {
-            intentStore.remove(scope: scope)
+            removeInvalidIntent(scope: scope)
             return nil
         }
         return intent
+    }
+
+    /// Un processus lecteur ne retire pas d'intent (FR-014) : le writer s'en charge.
+    private func removeInvalidIntent(scope: StageScope) {
+        if persistStateChanges {
+            intentStore.remove(scope: scope)
+        }
     }
 
     private func intentStillTilesCurrentContainer(
@@ -1302,6 +1512,7 @@ public extension SnapshotService {
     }
 
     private func canonicalTiledArea(for intent: LayoutIntent, display: DisplaySnapshot) -> CGFloat {
+        let config = self.config
         let plan = LayoutPlanner.plan(LayoutRequest(
             scope: intent.scope,
             mode: config.tiling.defaultStrategy,
@@ -1361,6 +1572,7 @@ public extension SnapshotService {
     }
 
     func apply(_ plan: ApplyPlan) -> ApplyResult {
+        if !plan.commands.isEmpty { invalidateSharedSnapshot() }
         var items: [ApplyResultItem] = []
         let updates = plan.commands.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
@@ -1403,27 +1615,33 @@ public extension SnapshotService {
     }
 
     func focus(_ window: WindowSnapshot) -> Bool {
-        frameWriter.focus(window)
+        invalidateSharedSnapshot()
+        return frameWriter.focus(window)
     }
 
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
-        frameWriter.focusApplicationWindow(bundleID: bundleID, windowID: windowID, title: title, frame: frame)
+        invalidateSharedSnapshot()
+        return frameWriter.focusApplicationWindow(bundleID: bundleID, windowID: windowID, title: title, frame: frame)
     }
 
     func activateApplication(bundleID: String) -> Bool {
-        frameWriter.activateApplication(bundleID: bundleID)
+        invalidateSharedSnapshot()
+        return frameWriter.activateApplication(bundleID: bundleID)
     }
 
     func reset(_ window: WindowSnapshot) -> Bool {
-        frameWriter.reset(window)
+        invalidateSharedSnapshot()
+        return frameWriter.reset(window)
     }
 
     func toggleZoom(_ window: WindowSnapshot) -> Bool {
-        frameWriter.toggleZoom(window)
+        invalidateSharedSnapshot()
+        return frameWriter.toggleZoom(window)
     }
 
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {
-        frameWriter.toggleNativeFullscreen(window)
+        invalidateSharedSnapshot()
+        return frameWriter.toggleNativeFullscreen(window)
     }
 
     func focusedWindowID() -> WindowID? {
@@ -1431,7 +1649,8 @@ public extension SnapshotService {
     }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-        frameWriter.setFrame(frame, of: window)
+        invalidateSharedSnapshot()
+        return frameWriter.setFrame(frame, of: window)
     }
 }
 
@@ -1499,8 +1718,13 @@ private extension SnapshotService {
     }
 
     func outerGaps(windowCount: Int, display: DisplaySnapshot? = nil) -> Insets {
+        let config = self.config
         let railSettings = currentRailSettings()
-        let override = display.flatMap(displayOverride)
+        let override = display.flatMap { display in
+            config.tiling.displayOverrides.first { override in
+                override.displayID == display.id.rawValue || override.displayName == display.name
+            }
+        }
         let base = override?.gapsOuter ?? config.tiling.gapsOuter
         var top = override?.gapsOuterTop ?? override?.gapsOuter ?? config.tiling.gapsOuterTop ?? base
         var right = override?.gapsOuterRight ?? override?.gapsOuter ?? config.tiling.gapsOuterRight ?? base
@@ -1529,12 +1753,6 @@ private extension SnapshotService {
         }
 
         return Insets(top: top, right: right, bottom: bottom, left: left)
-    }
-
-    private func displayOverride(for display: DisplaySnapshot) -> DisplayTilingOverride? {
-        config.tiling.displayOverrides.first { override in
-            override.displayID == display.id.rawValue || override.displayName == display.name
-        }
     }
 
     private func currentRailSettings() -> RailSettings {
@@ -1626,5 +1844,100 @@ public enum SnapshotEncoding {
         encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
         let data = try encoder.encode(dump)
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+/// Mémoire de processus partagée par les `SnapshotService` d'un même fichier d'état (SPEC-016) :
+/// dernier snapshot publié (FR-023), fenêtres vivantes précédentes (FR-009) et dernier classement
+/// tilable lisible (FR-008). La clé est le chemin du fichier d'état : les tests, qui injectent
+/// chacun leur `StageStore`, restent isolés.
+final class SnapshotProcessState: @unchecked Sendable {
+    /// Validité du snapshot partagé : couvre la bordure (120 ms) et le focus-souris (100 ms).
+    static let sharedSnapshotMaxAge: TimeInterval = 0.15
+
+    private static let registryLock = NSLock()
+    nonisolated(unsafe) private static var registry: [String: SnapshotProcessState] = [:]
+
+    static func forStatePath(_ path: String) -> SnapshotProcessState {
+        registryLock.withLock {
+            if let existing = registry[path] { return existing }
+            let created = SnapshotProcessState()
+            registry[path] = created
+            return created
+        }
+    }
+
+    private struct Published {
+        let snapshot: DaemonSnapshot
+        let at: Date
+        let stateStamp: [Int64]
+        let config: RoadieConfig
+    }
+
+    private let lock = NSLock()
+    /// Clé : option `followFocus` du snapshot publié.
+    private var published: [Bool: Published] = [:]
+    private var liveWindowIDs: Set<WindowID>?
+    private var lastDisappearanceAt: Date?
+    private var tileClassification: [WindowID: Bool] = [:]
+
+    func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
+        lock.withLock {
+            published[followFocus] = Published(snapshot: snapshot, at: date, stateStamp: stateStamp, config: config)
+        }
+    }
+
+    /// Dernier snapshot publié s'il est récent et que ni l'état persisté ni la config n'ont changé.
+    func recentSnapshot(followFocus: Bool, now: Date, stateStamp: [Int64], config: RoadieConfig) -> DaemonSnapshot? {
+        lock.withLock {
+            guard let entry = published[followFocus] else { return nil }
+            let age = now.timeIntervalSince(entry.at)
+            guard age >= 0, age < Self.sharedSnapshotMaxAge,
+                  entry.stateStamp == stateStamp,
+                  entry.config == config
+            else { return nil }
+            return entry.snapshot
+        }
+    }
+
+    func invalidatePublished() {
+        lock.withLock { published.removeAll() }
+    }
+
+    /// Enregistre les fenêtres gérées vivantes ; renvoie la date de la dernière disparition vue.
+    // O(n)
+    func recordLiveWindows(_ ids: Set<WindowID>, now: Date) -> Date? {
+        lock.withLock {
+            if let previous = liveWindowIDs, !previous.isSubset(of: ids) {
+                lastDisappearanceAt = now
+            }
+            liveWindowIDs = ids
+            return lastDisappearanceAt
+        }
+    }
+
+    /// Hystérésis du classement tilable (FR-008) : une fenêtre dont les attributs AX sont tous
+    /// illisibles (application lente) garde son dernier classement obtenu avec des attributs lisibles.
+    /// Les critères CoreGraphics bruts (taille, layer) restent prioritaires.
+    // O(n)
+    func stabilizedClassification(_ windows: [(raw: WindowSnapshot, classified: WindowSnapshot)]) -> [WindowSnapshot] {
+        lock.withLock {
+            var next: [WindowID: Bool] = [:]
+            let result = windows.map { pair -> WindowSnapshot in
+                var window = pair.classified
+                let unreadable = pair.raw.role == nil && pair.raw.subrole == nil && pair.raw.furniture == nil
+                if !unreadable {
+                    next[window.id] = window.isTileCandidate
+                } else if let previous = tileClassification[window.id] {
+                    if pair.raw.isTileCandidate {
+                        window.isTileCandidate = previous
+                    }
+                    next[window.id] = previous
+                }
+                return window
+            }
+            tileClassification = next
+            return result
+        }
     }
 }

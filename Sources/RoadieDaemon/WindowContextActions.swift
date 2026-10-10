@@ -165,10 +165,10 @@ public struct WindowContextActions {
         pinScope: WindowPinScope,
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
-        var state = stageStore.state()
         let homeScope = snapshot.state.activeScope(on: sourceScope.displayID) ?? sourceScope
-        let mutation = state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
-        stageStore.save(state)
+        let mutation = stageStore.mutate { state in
+            state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+        }
 
         let eventType = mutation.created ? "window.pin_added" : (mutation.scopeChanged ? "window.pin_scope_changed" : "window.pin_added")
         eventLog.append(RoadieEvent(
@@ -186,21 +186,22 @@ public struct WindowContextActions {
         sourceScope: StageScope,
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
-        var state = stageStore.state()
-        guard let removed = state.removePin(windowID: window.id) else {
+        let removal = stageStore.mutate { state -> (pin: PersistentWindowPin, target: StageScope)? in
+            guard let removed = state.removePin(windowID: window.id) else { return nil }
+            let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
+            let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
+            for scopeIndex in state.scopes.indices {
+                state.scopes[scopeIndex].remove(windowID: window.id)
+            }
+            var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
+            persistentScope.ensureStage(target.stageID)
+            persistentScope.assign(window: window, to: target.stageID)
+            state.update(persistentScope)
+            return (removed, target)
+        }
+        guard let (removed, target) = removal else {
             return WindowContextActionResult(message: "window is not pinned", changed: false)
         }
-
-        let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
-        let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: window.id)
-        }
-        var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
-        persistentScope.ensureStage(target.stageID)
-        persistentScope.assign(window: window, to: target.stageID)
-        state.update(persistentScope)
-        stageStore.save(state)
 
         eventLog.append(RoadieEvent(
             type: "window.pin_removed",
@@ -331,29 +332,32 @@ public struct WindowContextActions {
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "desktop/stage assign: unknown display", changed: false)
         }
-        var state = stageStore.state()
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: windowID)
+            stageStore.mutate { state in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: windowID)
+                }
             }
-            stageStore.save(state)
             return StageCommandResult(message: "desktop/stage assign: stale window pruned", changed: true)
         }
 
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: windowID)
-        }
-        var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-        targetScope.applyConfiguredStages((try? RoadieConfigLoader.load())?.stageManager ?? StageManagerConfig())
-        targetScope.ensureStage(stageID)
-        targetScope.assign(window: window, to: stageID)
-        state.update(targetScope)
+        // Config lue hors transaction : le verrou d'état reste tenu le moins longtemps possible.
+        let stageManagerConfig = ConfigReloadService.shared.currentConfig().stageManager
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
-        state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
-        stageStore.save(state)
+        stageStore.mutate { state in
+            for scopeIndex in state.scopes.indices {
+                state.scopes[scopeIndex].remove(windowID: windowID)
+            }
+            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+            targetScope.applyConfiguredStages(stageManagerConfig)
+            targetScope.ensureStage(stageID)
+            targetScope.assign(window: window, to: stageID)
+            state.update(targetScope)
+            state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
+        }
 
         snapshotService.removeLayoutIntent(scope: targetStageScope)
-        _ = snapshotService.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+        _ = snapshotService.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
         let result = snapshotService.apply(snapshotService.applyPlan(from: snapshotService.snapshot()))
         eventLog.append(RoadieEvent(
             type: "stage_assign_window",
@@ -439,7 +443,4 @@ public struct WindowContextActions {
         return (DesktopID(rawValue: desktop), StageID(rawValue: parts[1]))
     }
 
-    private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
-    }
 }

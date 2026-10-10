@@ -20,7 +20,7 @@ public struct WidthAdjustmentService {
 
     public init(
         service: SnapshotService = SnapshotService(),
-        config: RoadieConfig = (try? RoadieConfigLoader.load()) ?? RoadieConfig(),
+        config: RoadieConfig = ConfigReloadService.shared.currentConfig(),
         events: EventLog = EventLog()
     ) {
         self.service = service

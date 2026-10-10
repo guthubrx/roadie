@@ -33,12 +33,13 @@ public struct DisplayCommandService {
     }
 
     private func focus(_ display: DisplaySnapshot, in snapshot: DaemonSnapshot, label: String) -> StageCommandResult {
-        var state = store.state()
-        state.focusDisplay(display.id)
-        let desktopID = state.currentDesktopID(for: display.id)
-        let scope = state.scope(displayID: display.id, desktopID: desktopID)
-        state.update(scope)
-        store.save(state)
+        let (desktopID, scope) = store.mutate { state in
+            state.focusDisplay(display.id)
+            let desktopID = state.currentDesktopID(for: display.id)
+            let scope = state.scope(displayID: display.id, desktopID: desktopID)
+            state.update(scope)
+            return (desktopID, scope)
+        }
 
         let activeScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: scope.activeStageID)
         let focusedID = scope.stages.first { $0.id == scope.activeStageID }?.focusedWindowID
