@@ -171,5 +171,7 @@ Passage 2 (suites de la relecture croisée T111 et des rapports K1-K3, Articles 
 
 Passage 3 (Converge passage 2, 2026-10-10) :
 
-- [ ] T301 [US1] FR-037 : `RestoreSafetyService.unhideAll` cible aussi toute fenêtre vivante candidate au tiling et rattachée à un scope dont le centre est hors de tout écran présent (voisines masquées par un zoom quand l'écran droit disparaît) ; test dans `RestoreSafetyServiceTests.swift` (restaurée sur l'écran principal, sinon arrêt non marqué propre)
-- [ ] T302 [US8] FR-041 : seuils restants de validation d'intent et de « chrome delta » (`DaemonSnapshot.swift:1475, 1480, 1487, 1566, 1579`) et grâce de 45 s (`StageStore.swift:413, 509, 639, 654, 1243`) vers `LayoutTolerance` ; `grep -nE "tolerance: 4|\+ 16$|\* 0.95|area > 16|dx <= 8|missingGrace: TimeInterval = 45" Sources` vide
+- [x] T301 [US1] FR-037 : `RestoreSafetyService.unhideAll` cible aussi toute fenêtre vivante candidate au tiling et rattachée à un scope dont le centre est hors de tout écran présent (voisines masquées par un zoom quand l'écran droit disparaît) ; test dans `RestoreSafetyServiceTests.swift` (restaurée sur l'écran principal, sinon arrêt non marqué propre)
+- [x] T302 [US8] FR-041 : seuils restants de validation d'intent et de « chrome delta » (`DaemonSnapshot.swift:1475, 1480, 1487, 1566, 1579`) et grâce de 45 s (`StageStore.swift:413, 509, 639, 654, 1243`) vers `LayoutTolerance` ; `grep -nE "tolerance: 4|\+ 16$|\* 0.95|area > 16|dx <= 8|missingGrace: TimeInterval = 45" Sources` vide
+
+Converge passage 3 (2026-10-10) : **CONVERGED**. T301 vérifié (`RestoreSafetyService.unhideAll`, tests `restoresActiveStageSiblingLeftOffAllDisplays` et `activeStageSiblingStillOffDisplaysBlocksCleanExit`, rouges avant correction) ; T302 vérifié (grep ciblé vide sur `DaemonSnapshot.swift` et `StageStore.swift`). Limite connue : `TargetModeRuntimeController.swift:293` (`area > 16`) relève du mode cible et non de la disposition (hors FR-041).
