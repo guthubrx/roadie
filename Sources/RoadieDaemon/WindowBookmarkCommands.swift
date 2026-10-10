@@ -44,7 +44,7 @@ public struct WindowBookmarkCommandService {
     public func focus(_ rawName: String) -> WindowCommandResult {
         let name = PersistentWindowBookmark.normalizedName(rawName)
         let snapshot = service.snapshot(followFocus: false)
-        var state = store.state()
+        let state = store.state()
         guard let bookmark = state.bookmark(named: name) else {
             return WindowCommandResult(message: "bookmark focus \(name): not found", changed: false)
         }
@@ -65,43 +65,48 @@ public struct WindowBookmarkCommandService {
             return WindowCommandResult(message: "bookmark focus \(name): display unavailable", changed: false)
         }
 
-        var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
-        targetPersistentScope.ensureStage(targetScope.stageID)
-        let previousDesktopID = state.currentDesktopID(for: display.id)
-        let previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
-        let previousStageID = previousPersistentScope.activeStageID
-        let previousScope = StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID)
-        let previousMembers = Set(previousPersistentScope.memberIDs(in: previousStageID))
-        let targetMembers = Set(targetPersistentScope.memberIDs(in: targetScope.stageID))
-        let targetStage = targetPersistentScope.stages.first { $0.id == targetScope.stageID }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-
-        var updatedPreviousScope: PersistentStageScope?
-        for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
-            if previousDesktopID == targetScope.desktopID {
-                targetPersistentScope.updateFrame(window: window)
-            } else {
-                var previous = updatedPreviousScope ?? previousPersistentScope
-                previous.updateFrame(window: window)
-                updatedPreviousScope = previous
-            }
+        // Préparé hors verrou : fenêtres visibles de l'écran (aucune E/S ni AX dans `mutate`).
+        let visibleWindows = windowsByID.values.filter {
+            display.frame.cgRect.contains($0.frame.center) && !isHidden($0.frame.cgRect)
         }
 
-        targetPersistentScope.activeStageID = targetScope.stageID
-        targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
-        // Écrit sur l'état relu sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
-        store.mutate { state in
-            if let updatedPreviousScope {
-                state.update(updatedPreviousScope)
+        // Scopes relus et modifiés sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
+        // Le bloc renvoie les membres utiles aux appels AX faits après la transaction.
+        let plan = store.mutate { state -> BookmarkFocusPlan in
+            var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
+            targetPersistentScope.ensureStage(targetScope.stageID)
+            let previousDesktopID = state.currentDesktopID(for: display.id)
+            var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
+            let previousStageID = previousPersistentScope.activeStageID
+            let result = BookmarkFocusPlan(
+                previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
+                previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
+                targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
+                // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
+                targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
+            )
+            for window in visibleWindows {
+                if previousDesktopID == targetScope.desktopID {
+                    targetPersistentScope.updateFrame(window: window)
+                } else {
+                    previousPersistentScope.updateFrame(window: window)
+                }
+            }
+            targetPersistentScope.activeStageID = targetScope.stageID
+            targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
+            if previousDesktopID != targetScope.desktopID {
+                state.update(previousPersistentScope)
             }
             state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
             state.focusDisplay(display.id)
             state.update(targetPersistentScope)
+            return result
         }
 
         var applied = 0
-        if previousScope != targetScope {
-            for id in previousMembers.subtracting(targetMembers) {
+        if plan.previousScope != targetScope {
+            for id in plan.previousMembers.subtracting(plan.targetMembers) {
                 guard let window = windowsByID[id] else { continue }
                 if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
                     applied += 1
@@ -109,7 +114,7 @@ public struct WindowBookmarkCommandService {
             }
         }
 
-        for member in targetStage?.members ?? [] {
+        for member in plan.targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
             if service.setFrame(member.frame.cgRect, of: window) != nil {
                 applied += 1
@@ -202,4 +207,12 @@ public struct WindowBookmarkCommandService {
             "stageID": bookmark.scope.stageID.rawValue
         ]
     }
+}
+
+/// Résultat de la transaction de focus d'un signet, utilisé par les appels AX qui suivent.
+private struct BookmarkFocusPlan {
+    var previousScope: StageScope
+    var previousMembers: Set<WindowID>
+    var targetMembers: Set<WindowID>
+    var targetStage: PersistentStage?
 }

@@ -254,27 +254,52 @@ public struct DesktopCommandService {
     ) -> StageCommandResult {
         beginLayoutCommand("desktop.switch")
         defer { finishLayoutCommand("desktop.switch") }
-        var state = store.state()
-        let previousDesktopID = state.currentDesktopID(for: display.id)
-        if previousDesktopID == desktopID {
+        // Préparé hors verrou : config et fenêtres visibles de l'écran (aucune E/S dans `mutate`).
+        let stageConfig = ConfigReloadService.shared.currentConfig().stageManager
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let visibleWindows = windowsByID.values.filter {
+            display.frame.cgRect.contains($0.frame.center) && !isHidden($0.frame.cgRect)
+        }
+
+        // Scopes relus et modifiés sous verrou (FR-013) ; le bloc renvoie ce que l'AX fera ensuite.
+        let plan = store.mutate { state -> DesktopSwitchPlan? in
+            let previousDesktopID = state.currentDesktopID(for: display.id)
+            guard previousDesktopID != desktopID else { return nil }
+            var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
+            var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
+            targetScope.applyConfiguredStages(stageConfig)
+            for window in visibleWindows {
+                previousScope.updateFrame(window: window)
+            }
+            let previousWindowIDs = Set(previousScope.stages.flatMap { $0.members.map(\.windowID) })
+            let targetStage = targetScope.stages.first { $0.id == targetScope.activeStageID }
+            let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
+            let hiddenIDs = previousWindowIDs.subtracting(targetWindowIDs)
+            state.update(previousScope)
+            state.update(targetScope)
+            state.switchDesktop(displayID: display.id, to: desktopID)
+            state.protectCommandFocus(
+                displayID: display.id,
+                desktopID: desktopID,
+                stageID: targetScope.activeStageID,
+                windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+                staleFocusedWindowID: snapshot.focusedWindowID.flatMap { hiddenIDs.contains($0) ? $0 : nil }
+            )
+            return DesktopSwitchPlan(
+                previousDesktopID: previousDesktopID,
+                targetStageID: targetScope.activeStageID,
+                hiddenIDs: hiddenIDs,
+                targetStage: targetStage
+            )
+        }
+        guard let plan else {
             return StageCommandResult(message: "desktop focus \(desktopID.rawValue): already active", changed: false)
         }
-
-        var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
-        var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
-        targetScope.applyConfiguredStages(ConfigReloadService.shared.currentConfig().stageManager)
-
-        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-        for window in windowsByID.values where display.frame.cgRect.contains(window.frame.center) && !isHidden(window.frame.cgRect) {
-            previousScope.updateFrame(window: window)
-        }
-
-        var applied = 0
-        let previousWindowIDs = Set(previousScope.stages.flatMap { $0.members.map(\.windowID) })
-        let targetStage = targetScope.stages.first { $0.id == targetScope.activeStageID }
+        let targetStage = plan.targetStage
         let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
 
-        for id in previousWindowIDs.subtracting(targetWindowIDs) {
+        var applied = 0
+        for id in plan.hiddenIDs {
             guard let window = windowsByID[id] else { continue }
             if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
                 applied += 1
@@ -287,20 +312,6 @@ public struct DesktopCommandService {
             }
         }
 
-        // Écrit sur l'état relu sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
-        store.mutate { state in
-            state.update(previousScope)
-            state.update(targetScope)
-            state.switchDesktop(displayID: display.id, to: desktopID)
-            state.protectCommandFocus(
-                displayID: display.id,
-                desktopID: desktopID,
-                stageID: targetScope.activeStageID,
-                windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
-                staleFocusedWindowID: snapshot.focusedWindowID.flatMap { previousWindowIDs.subtracting(targetWindowIDs).contains($0) ? $0 : nil }
-            )
-        }
-
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         applied += result.applied + result.clamped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
@@ -309,10 +320,10 @@ public struct DesktopCommandService {
         }
         events.append(RoadieEvent(
             type: "desktop_focus",
-            scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: targetScope.activeStageID),
+            scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: plan.targetStageID),
             details: [
-                "previousDesktopID": String(previousDesktopID.rawValue),
-                "hidden": String(previousWindowIDs.subtracting(targetWindowIDs).count),
+                "previousDesktopID": String(plan.previousDesktopID.rawValue),
+                "hidden": String(plan.hiddenIDs.count),
                 "shown": String(targetWindowIDs.count),
                 "applied": String(applied),
                 "layout": String(result.attempted)
@@ -320,7 +331,7 @@ public struct DesktopCommandService {
         ))
 
         return StageCommandResult(
-            message: "desktop focus \(desktopID.rawValue): hidden=\(previousWindowIDs.subtracting(targetWindowIDs).count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(result.attempted)",
+            message: "desktop focus \(desktopID.rawValue): hidden=\(plan.hiddenIDs.count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(result.attempted)",
             changed: true
         )
     }
@@ -377,4 +388,12 @@ public struct DesktopCommandService {
     private func finishLayoutCommand(_ reason: String) {
         commandActivity.finish(reason: reason)
     }
+}
+
+/// Résultat de la transaction de changement de bureau, utilisé par les appels AX qui suivent.
+private struct DesktopSwitchPlan {
+    var previousDesktopID: DesktopID
+    var targetStageID: StageID
+    var hiddenIDs: Set<WindowID>
+    var targetStage: PersistentStage?
 }

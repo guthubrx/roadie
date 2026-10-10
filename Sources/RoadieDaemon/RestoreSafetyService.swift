@@ -28,6 +28,8 @@ public struct RestoreSafetyApplyResult: Codable, Equatable, Sendable {
     public var path: String
     public var attempted: Int
     public var applied: Int
+    /// Pour `unhideAll` : fenêtres connues restées cachées (échec AX, cadre ajusté mais encore
+    /// caché ou hors écran, membre introuvable sans preuve de fermeture).
     public var failed: Int
     public var missing: Int
 }
@@ -37,6 +39,9 @@ public struct RestoreSafetyRunMarker: Codable, Equatable, Sendable {
     public var startedAt: Date
     public var cleanExitAt: Date?
     public var snapshotPath: String
+    /// pid du processus qui restaure hors verrou pour ce marqueur (watcher). Tant qu'il vit,
+    /// un nouveau démarrage ne relance pas la même restauration. Absent des anciens fichiers.
+    public var recoveryOwnerPID: Int32?
 
     public var cleanExit: Bool { cleanExitAt != nil }
 }
@@ -65,7 +70,12 @@ public struct RestoreSafetyService {
     // O(n + m), n = fenêtres live, m = membres de stage.
     public func writeSnapshot() throws -> RestoreSafetySnapshot {
         let snapshot = service.snapshot()
-        let previous = try? loadSnapshot()
+        let previous: RestoreSafetySnapshot?
+        switch loadSnapshotResult() {
+        case .loaded(let loaded): previous = loaded
+        case .missing: previous = nil
+        case .corrupt(let error): throw error // conservé en `.corrupt-<date>`, jamais écrasé (FR-015)
+        }
         let memberFrames = Self.visibleMemberFrames(service.effectiveStageStore.state(), displays: snapshot.displays)
         let previousFrames = Self.visibleFrames(of: previous, displays: snapshot.displays)
         let windows = snapshot.windows
@@ -112,26 +122,70 @@ public struct RestoreSafetyService {
     /// stage (prioritaires, plus récents) et du snapshot de restauration. Une fenêtre sans frame
     /// connue est centrée sur l'écran principal ; une frame dont l'écran a disparu est replacée
     /// sur l'écran principal. Utilisé à l'arrêt, après un crash et par `roadie restore unhide-all`.
+    ///
+    /// Fenêtres visées (FR-037) : celles détectées cachées par position, plus les membres des
+    /// stages non affichées (preuve de masquage qui ne dépend pas du bord, recalculé si l'écran
+    /// le plus à droite disparaît). Un membre absent du snapshot (le provider ne liste que les
+    /// fenêtres à l'écran) est cherché par l'écriture AX parmi toutes les fenêtres de son pid.
+    /// Un membre introuvable dont le processus n'est pas prouvé mort compte comme échec.
     // O(n + m), n = fenêtres live, m = membres de stage.
     public func unhideAll() -> RestoreSafetyApplyResult {
         let current = service.snapshot(followFocus: false)
         let displays = current.displays
-        let memberFrames = Self.visibleMemberFrames(service.effectiveStageStore.state(), displays: displays)
-        let savedFrames = Self.visibleFrames(of: try? loadSnapshot(), displays: displays)
+        let state = service.effectiveStageStore.state()
+        let memberFrames = Self.visibleMemberFrames(state, displays: displays)
+        var saved: RestoreSafetySnapshot?
+        if case .loaded(let loaded) = loadSnapshotResult() { saved = loaded }
+        let savedFrames = Self.visibleFrames(of: saved, displays: displays)
+
+        var targets: [WindowSnapshot] = []
+        var targetIDs = Set<UInt32>()
+        func addTarget(_ window: WindowSnapshot) {
+            if targetIDs.insert(window.id.rawValue).inserted { targets.append(window) }
+        }
+        let liveByID = Dictionary(current.windows.map { ($0.window.id.rawValue, $0.window) }, uniquingKeysWith: { first, _ in first })
+        for entry in current.windows where HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: displays) {
+            addTarget(entry.window)
+        }
+        var unreachable = 0
+        for member in Self.hiddenStageMembers(state) where !targetIDs.contains(member.windowID.rawValue) {
+            if let live = liveByID[member.windowID.rawValue] {
+                if !Self.isVisible(live.frame, displays: displays) { addTarget(live) }
+            } else if let pid = member.pid {
+                // pid mort : fenêtre fermée, rien à restaurer.
+                guard PersistentStageState.isProcessAlive(pid) else { continue }
+                addTarget(WindowSnapshot(
+                    id: member.windowID,
+                    pid: pid,
+                    appName: "",
+                    bundleID: member.bundleID,
+                    title: member.title,
+                    frame: member.frame,
+                    isOnScreen: false,
+                    isTileCandidate: true
+                ))
+            } else if targetIDs.insert(member.windowID.rawValue).inserted {
+                // Sans pid connu (ancien fichier), ni adressable ni prouvée fermée.
+                unreachable += 1
+            }
+        }
+
         var unknown = 0
-        let commands = current.windows.compactMap { entry -> ApplyCommand? in
-            let window = entry.window
-            guard HiddenWindowPlacement.isHidden(window.frame.cgRect, in: displays) else { return nil }
+        let commands = targets.map { window -> ApplyCommand in
             let known = memberFrames[window.id.rawValue] ?? savedFrames[window.id.rawValue]
             if known == nil { unknown += 1 }
             return ApplyCommand(window: window, frame: Self.onScreen(known ?? window.frame, displays: displays))
         }
         let result = service.apply(ApplyPlan(commands: commands))
+        // Un cadre ajusté par l'application compte comme succès s'il est visible, sinon échec.
+        let clampedHidden = result.items.filter { item in
+            item.status == .clamped && !(item.actual.map { Self.isVisible($0, displays: displays) } ?? false)
+        }.count
         let report = RestoreSafetyApplyResult(
             path: path,
-            attempted: result.attempted,
-            applied: result.applied,
-            failed: result.failed,
+            attempted: result.attempted + unreachable,
+            applied: result.applied + result.clamped - clampedHidden,
+            failed: result.failed + clampedHidden + unreachable,
             missing: unknown
         )
         eventLog.append(RoadieEventEnvelope(
@@ -144,6 +198,8 @@ public struct RestoreSafetyService {
                 "attempted": .int(report.attempted),
                 "applied": .int(report.applied),
                 "failed": .int(report.failed),
+                "clamped_hidden": .int(clampedHidden),
+                "unreachable": .int(unreachable),
                 "unknown_frame": .int(report.missing)
             ]
         ))
@@ -151,24 +207,26 @@ public struct RestoreSafetyService {
     }
 
     /// Démarrage d'une instance (sous son verrou d'instance, avant le tiler) : si l'exécution
-    /// précédente ne s'est pas arrêtée proprement, ses fenêtres masquées sont d'abord restaurées,
-    /// puis le marqueur passe à `pid`. Le verrou de reprise sérialise ce couple avec
-    /// `recoverAfterProcessExit` : un redémarrage rapide ne peut pas écraser le marqueur entre la
-    /// lecture et la restauration du watcher précédent, et la restauration n'est jamais perdue.
+    /// précédente ne s'est pas arrêtée proprement, ses fenêtres masquées sont restaurées.
+    /// Le marqueur passe à `pid` sous le verrou de reprise, AVANT la restauration faite hors
+    /// verrou : une application figée ne bloque ni ce démarrage ni le watcher, et le watcher
+    /// de l'instance précédente, qui trouve un marqueur repris, ne restaure pas une 2e fois.
+    /// Si ce watcher restaure déjà (pid vivant dans le marqueur), le démarrage le laisse faire.
     public func startRun(pid: Int32) throws -> RestoreSafetyApplyResult? {
-        try FileLock.withLock(path: recoveryLockPath) {
-            var recovery: RestoreSafetyApplyResult?
-            if let marker = loadMarker(), !marker.cleanExit, marker.pid != pid {
-                recovery = unhideAll()
-            }
+        let needsRecovery = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
+            let marker = loadMarker()
+            let recovering = marker?.recoveryOwnerPID.map(PersistentStageState.isProcessAlive) ?? false
             _ = try markRunStarted(pid: pid)
-            return recovery
+            guard let marker else { return false }
+            return !marker.cleanExit && marker.pid != pid && !recovering
         }
+        return needsRecovery ? unhideAll() : nil
     }
 
     /// Arrêt propre : restaure les fenêtres masquées puis marque l'arrêt propre, seulement si
-    /// la restauration a réussi. Sinon le marqueur reste « non propre » et le watcher (ou le
-    /// prochain démarrage) retente.
+    /// aucune fenêtre connue n'est restée cachée (`failed` couvre aussi les membres
+    /// introuvables sans preuve de fermeture). Sinon le marqueur reste « non propre » et le
+    /// watcher (ou le prochain démarrage) retente.
     public func finishRun(pid: Int32) -> RestoreSafetyApplyResult {
         let result = unhideAll()
         guard result.failed == 0 else { return result }
@@ -181,17 +239,29 @@ public struct RestoreSafetyService {
     }
 
     /// Watcher : restaure si `pid` a disparu sans arrêt propre. Renvoie nil si rien à faire
-    /// (arrêt propre, ou marqueur déjà repris par une nouvelle instance).
+    /// (arrêt propre, marqueur repris par une nouvelle instance, restauration déjà en cours).
+    /// Le marqueur est réservé sous verrou, la restauration (AX) a lieu hors verrou, puis le
+    /// marqueur est revérifié : il n'est marqué propre que s'il est toujours le nôtre.
     public func recoverAfterProcessExit(pid: Int32) throws -> RestoreSafetyApplyResult? {
-        try FileLock.withLock(path: recoveryLockPath) {
-            guard var marker = loadMarker(), marker.pid == pid, !marker.cleanExit else { return nil }
-            let result = unhideAll()
-            if result.failed == 0 {
-                marker.cleanExitAt = Date()
-                try writeMarker(marker)
+        let owner = ProcessInfo.processInfo.processIdentifier
+        let reserved = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
+            guard var marker = loadMarker(), marker.pid == pid, !marker.cleanExit else { return false }
+            if let other = marker.recoveryOwnerPID, other != owner, PersistentStageState.isProcessAlive(other) {
+                return false
             }
-            return result
+            marker.recoveryOwnerPID = owner
+            try writeMarker(marker)
+            return true
         }
+        guard reserved else { return nil }
+        let result = unhideAll()
+        try FileLock.withLock(path: recoveryLockPath) {
+            guard var marker = loadMarker(), marker.pid == pid, marker.recoveryOwnerPID == owner else { return }
+            marker.recoveryOwnerPID = nil
+            if result.failed == 0 { marker.cleanExitAt = Date() }
+            try writeMarker(marker)
+        }
+        return result
     }
 
     public func markRunStarted(pid: Int32) throws -> RestoreSafetyRunMarker {
@@ -295,13 +365,14 @@ public struct RestoreSafetyService {
     /// Verrou distinct de celui de `JSONPersistence` (`<marqueur>.lock`), non réentrant.
     private var recoveryLockPath: String { "\(markerPath).recovery.lock" }
 
-    /// Dernière frame visible de chaque membre de stage (toutes stages confondues). O(m).
+    /// Dernière frame visible de chaque membre de stage (toutes stages confondues). Une frame
+    /// masquée ou hors de tout écran présent (écran disparu) n'en est pas une. O(m).
     static func visibleMemberFrames(_ state: PersistentStageState, displays: [DisplaySnapshot]) -> [UInt32: Rect] {
         var frames: [UInt32: Rect] = [:]
         for scope in state.scopes {
             for stage in scope.stages {
                 for member in stage.members where frames[member.windowID.rawValue] == nil {
-                    guard !HiddenWindowPlacement.isHidden(member.frame.cgRect, in: displays) else { continue }
+                    guard isVisible(member.frame, displays: displays) else { continue }
                     frames[member.windowID.rawValue] = member.frame
                 }
             }
@@ -309,10 +380,29 @@ public struct RestoreSafetyService {
         return frames
     }
 
+    /// Membres des stages non affichées : stage inactive de son scope, ou scope d'un desktop
+    /// qui n'est pas le desktop courant de son écran. Preuve explicite de masquage. O(m).
+    static func hiddenStageMembers(_ state: PersistentStageState) -> [PersistentStageMember] {
+        state.scopes.flatMap { scope -> [PersistentStageMember] in
+            let desktopShown = state.currentDesktopID(for: scope.displayID) == scope.desktopID
+            return scope.stages
+                .filter { !desktopShown || $0.id != scope.activeStageID }
+                .flatMap(\.members)
+        }
+    }
+
+    /// Vrai si la frame n'est pas en position de masquage et que son centre tombe dans la zone
+    /// visible d'un écran présent. O(d), d = nombre d'écrans.
+    static func isVisible(_ frame: Rect, displays: [DisplaySnapshot]) -> Bool {
+        let center = CGPoint(x: frame.cgRect.midX, y: frame.cgRect.midY)
+        return !HiddenWindowPlacement.isHidden(frame.cgRect, in: displays)
+            && displays.contains { $0.visibleFrame.cgRect.contains(center) }
+    }
+
     private static func visibleFrames(of snapshot: RestoreSafetySnapshot?, displays: [DisplaySnapshot]) -> [UInt32: Rect] {
         var frames: [UInt32: Rect] = [:]
         for window in snapshot?.windows ?? [] where frames[window.windowID] == nil {
-            guard !HiddenWindowPlacement.isHidden(window.frame.cgRect, in: displays) else { continue }
+            guard isVisible(window.frame, displays: displays) else { continue }
             frames[window.windowID] = window.frame
         }
         return frames
@@ -349,6 +439,22 @@ public struct RestoreSafetyService {
             from: URL(fileURLWithPath: markerPath)
         ) { decoder in
             decoder.dateDecodingStrategy = .iso8601
+        }
+    }
+
+    /// Distingue snapshot absent, chargé ou illisible (FR-015). `JSONPersistence.loadResult`
+    /// décode sans iso8601 : il n'est appelé qu'après l'échec du décodage, pour réutiliser le
+    /// signalement commun (copie `.corrupt-<date>`, stderr, événement `state.load_failed`).
+    private func loadSnapshotResult() -> JSONPersistence.LoadResult<RestoreSafetySnapshot> {
+        let url = URL(fileURLWithPath: path)
+        do {
+            return .loaded(try loadSnapshot())
+        } catch {
+            guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+            if case .loaded(let legacy) = JSONPersistence.loadResult(RestoreSafetySnapshot.self, from: url) {
+                return .loaded(legacy)
+            }
+            return .corrupt(error)
         }
     }
 

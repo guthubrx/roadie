@@ -1047,3 +1047,108 @@ private final class StageSwitchOrderWriter: WindowFrameWriting, @unchecked Senda
     func toggleZoom(_ window: WindowSnapshot) -> Bool { true }
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { true }
 }
+
+/// SPEC-016 T207 : l'état est relu et modifié dans la transaction, avant les appels AX ; une
+/// modification concurrente faite pendant l'AX n'est pas écrasée par une copie périmée.
+@Suite
+struct CommandStateTransactionTests {
+    private let display = DisplayID(rawValue: "display-main")
+    private let stage1 = StageID(rawValue: "1")
+
+    private func renameStage(_ store: StageStore, desktop: Int, to name: String) {
+        store.mutate { state in
+            var scope = state.scope(displayID: display, desktopID: DesktopID(rawValue: desktop))
+            guard let index = scope.stages.firstIndex(where: { $0.id == stage1 }) else { return }
+            scope.stages[index].name = name
+            state.update(scope)
+        }
+    }
+
+    private func stageName(_ store: StageStore, desktop: Int) -> String? {
+        store.state().scopes
+            .first { $0.displayID == display && $0.desktopID == DesktopID(rawValue: desktop) }?
+            .stages.first { $0.id == stage1 }?.name
+    }
+
+    @Test
+    func desktopSwitchKeepsConcurrentChangeMadeDuringAX() {
+        let first = powerWindow(1, x: 100)
+        var second = powerWindow(2, x: 999)
+        second.frame = Rect(x: 999, y: 100, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [first, second])
+        let writer = ScriptedFrameWriter(provider: provider)
+        let store = StageStore(path: tempPath("transaction-desktop"))
+        defer { try? FileManager.default.removeItem(at: store.fileURL) }
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stages: [
+                PersistentStage(id: stage1, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), stages: [
+                PersistentStage(id: stage1, members: [
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: Rect(x: 400, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+        ], activeDisplayID: display))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        var fired = false
+        writer.beforeSetFrame = { _ in
+            guard !fired else { return }
+            fired = true
+            renameStage(store, desktop: 1, to: "renamed-during-ax")
+        }
+
+        let result = DesktopCommandService(service: service, store: store).focus(DesktopID(rawValue: 2))
+
+        #expect(result.changed)
+        #expect(fired)
+        #expect(store.state().currentDesktopID(for: display) == DesktopID(rawValue: 2))
+        #expect(stageName(store, desktop: 1) == "renamed-during-ax")
+    }
+
+    @Test
+    func bookmarkFocusKeepsConcurrentChangeMadeDuringAX() {
+        let first = powerWindow(1, x: 100)
+        var second = powerWindow(2, x: 999)
+        second.frame = Rect(x: 999, y: 100, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [first, second])
+        let writer = ScriptedFrameWriter(provider: provider)
+        let store = StageStore(path: tempPath("transaction-bookmark"))
+        defer { try? FileManager.default.removeItem(at: store.fileURL) }
+        let stage2 = StageID(rawValue: "2")
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: stage1, stages: [
+                PersistentStage(id: stage1, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                ]),
+                PersistentStage(id: stage2, members: [
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: Rect(x: 400, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+        ], windowBookmarks: [
+            PersistentWindowBookmark(
+                name: "work",
+                windowID: second.id,
+                scope: StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: stage2),
+                bundleID: second.bundleID,
+                title: second.title,
+                frame: second.frame
+            ),
+        ], activeDisplayID: display))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        var fired = false
+        writer.beforeSetFrame = { _ in
+            guard !fired else { return }
+            fired = true
+            renameStage(store, desktop: 1, to: "renamed-during-ax")
+        }
+
+        let result = WindowBookmarkCommandService(service: service, store: store).focus("work")
+
+        #expect(result.changed)
+        #expect(fired)
+        #expect(store.state().scopes.first { $0.displayID == display }?.activeStageID == stage2)
+        #expect(stageName(store, desktop: 1) == "renamed-during-ax")
+    }
+}

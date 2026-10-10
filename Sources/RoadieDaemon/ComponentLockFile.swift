@@ -16,10 +16,14 @@ public enum ComponentLockError: Error, Equatable {
 /// doit echouer tout de suite.
 ///
 /// En test (nom de process contenant "test"), le repertoire est isole dans NSTemporaryDirectory.
+///
+/// `@unchecked Sendable` : le seul etat mutable, `fileDescriptor`, n'est lu et modifie que
+/// sous `stateLock` (acquire, release, deinit).
 public final class ComponentLockFile: @unchecked Sendable {
     public let component: String
     private let path: String
     private let lockPath: String
+    private let stateLock = NSLock()
     private var fileDescriptor: Int32 = -1
 
     public init(component: String) {
@@ -43,6 +47,8 @@ public final class ComponentLockFile: @unchecked Sendable {
     /// Acquiert le verrou. Throw `alreadyRunning(pid:)` si un autre detenteur le tient deja
     /// (y compris un autre descripteur du meme process). Idempotent pour ce detenteur.
     public func acquire() throws {
+        stateLock.lock()
+        defer { stateLock.unlock() }
         guard fileDescriptor < 0 else { return }
         let directory = (path as NSString).deletingLastPathComponent
         do {
@@ -70,7 +76,7 @@ public final class ComponentLockFile: @unchecked Sendable {
         do {
             try "\(myPid)\n".write(toFile: path, atomically: true, encoding: .utf8)
         } catch {
-            release()
+            releaseLocked()
             throw ComponentLockError.ioFailure(path: path, underlying: "\(error)")
         }
     }
@@ -79,6 +85,11 @@ public final class ComponentLockFile: @unchecked Sendable {
     /// courant. Le fichier .lock reste en place : le supprimer ouvrirait une course avec un
     /// process qui l'a deja ouvert.
     public func release() {
+        stateLock.withLock { releaseLocked() }
+    }
+
+    /// Corps de `release`, `stateLock` deja tenu (NSLock non reentrant).
+    private func releaseLocked() {
         guard fileDescriptor >= 0 else { return }
         if Self.readPid(at: path) == ProcessInfo.processInfo.processIdentifier {
             try? FileManager.default.removeItem(atPath: path)
