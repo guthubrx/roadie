@@ -70,6 +70,17 @@
 ### Lot J - Tests (T110)
 - **Statut** : ✅ — commits `0ba7748` (tests décoratifs supprimés), `d31ae57` (test `setenv` remplacé par une fonction pure)
 
+### T111 - Relecture croisée (Sonnet)
+- **Statut** : ✅ (rapport ci-dessous ; corrections réparties en T202, T213-T219 puis T220-T227)
+- **Axe transactions** : 53 blocs `mutate` extraits automatiquement ; aucun n'appelle `save`/`mutate`/`snapshot()`/AX ni n'émet d'événement (pas de blocage par verrou non réentrant).
+- **Hautes** : 7 écritures hors transaction (→ T202) ; E/S sous le verrou des stages (→ T213).
+- **Moyennes** : AX sous verrou de reprise (→ T214) ; `restore.json` illisible écrasé (→ T214) ; `try?` sur écritures d'état (→ T215) ; littéraux de tolérance (→ T205, T216) ; sonde flock contradictoire (→ T217) ; verrou de config pendant les E/S (→ T213) ; `@unchecked Sendable` (→ T218) ; vivacité de pid ×6 (→ T219, T220) ; détection « en test » dupliquée (→ T222).
+- **Minimalisme (Article XIX)** : potentiel estimé à ~200 lignes suppressibles à comportement constant, dont ~110 de code mort antérieur (→ T221-T224, T227).
+- **Vertus LLM (Article XX)** : charge cognitive globalement en baisse (tolérances centralisées, transactions uniformes, CLI testable) ; points de hausse traités en passage 1 et 2.
+
+### Incident de commit
+- `4dd023a` (docs) a été créé avec `git commit -a` et a embarqué une partie des changements AX en cours du lot K4 ; complété par `5226feb`. Aucune perte ; message de `4dd023a` incomplet. Depuis, chaque commit nomme ses fichiers.
+
 ## Tests exécutés
 
 - `./scripts/with-xcode swift build` : OK.

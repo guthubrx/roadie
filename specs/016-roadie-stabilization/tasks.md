@@ -117,7 +117,7 @@
 ## Phase 11 : Lot J - Tests et revue (Haiku) [US8]
 
 - [x] T110 [P] [US8] Remplacer les tests décoratifs (`Tests/RoadieDaemonTests/RoadiedRunFlagsTests.swift`, `ComponentSubcommandTests.swift`, `FileLockTests.swift:57-66`) par des tests du vrai code ou les supprimer ; retirer le `setenv` en suite parallèle
-- [ ] T111 [US8] Relecture croisée de chaque lot (diff complet) : code mort, littéraux de tolérance restants, `try?` qui avalent une erreur d'état ; rapport dans `specs/016-roadie-stabilization/implementation.md`
+- [x] T111 [US8] Relecture croisée de chaque lot (diff complet) : code mort, littéraux de tolérance restants, `try?` qui avalent une erreur d'état ; rapport dans `specs/016-roadie-stabilization/implementation.md`
 
 ## Phase 12 : Polish
 
