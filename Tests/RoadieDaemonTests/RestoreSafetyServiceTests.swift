@@ -231,6 +231,7 @@ struct RestoreSafetyCoverageTests {
     private func makeFixture(
         displays: [DisplaySnapshot] = [powerDisplay()],
         liveWindows: [WindowSnapshot] = [],
+        activeMembers: [PersistentStageMember] = [],
         hiddenMember: PersistentStageMember
     ) -> Fixture {
         let display = displays[0]
@@ -245,7 +246,7 @@ struct RestoreSafetyCoverageTests {
             PersistentStageScope(displayID: display.id, activeStageID: stage1, stages: [
                 PersistentStage(id: stage1, members: [
                     PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window 1", frame: provider.snapshots[0].frame, pid: 1)
-                ]),
+                ] + activeMembers),
                 PersistentStage(id: stage2, members: [hiddenMember])
             ])
         ], activeDisplayID: display.id))
@@ -361,6 +362,44 @@ struct RestoreSafetyCoverageTests {
         // centrée sur l'écran restant, jamais à la position perdue.
         let requested = fixture.writer.requested[WindowID(rawValue: 2)]?.first
         #expect(requested.map { CGRect(x: 0, y: 0, width: 1000, height: 800).contains(CGPoint(x: $0.cgRect.midX, y: $0.cgRect.midY)) } == true)
+    }
+
+    /// T301 : voisine de la stage ACTIVE masquée par un zoom sur l'écran de droite, qui a disparu.
+    /// Ni `isHidden` (bord d'un écran absent) ni la liste des stages non affichées ne la voient.
+    private func zoomSiblingFixture() -> Fixture {
+        let stale = hiddenWindow(3, frame: Rect(x: 1999, y: 100, width: 300, height: 300))
+        return makeFixture(
+            liveWindows: [stale],
+            activeMembers: [member(3, pid: alivePID, frame: Rect(x: 600, y: 200, width: 300, height: 300))],
+            hiddenMember: member(2, pid: deadPID)
+        )
+    }
+
+    @Test
+    func restoresActiveStageSiblingLeftOffAllDisplays() throws {
+        let fixture = zoomSiblingFixture()
+        defer { cleanup(fixture) }
+        _ = try fixture.service.markRunStarted(pid: 42)
+
+        let result = fixture.service.finishRun(pid: 42)
+
+        #expect(result.applied == 1)
+        #expect(result.failed == 0)
+        #expect(fixture.writer.requested[WindowID(rawValue: 3)] == [Rect(x: 600, y: 200, width: 300, height: 300)])
+        #expect(!fixture.service.shouldRestoreAfterProcessExit(pid: 42))
+    }
+
+    @Test
+    func activeStageSiblingStillOffDisplaysBlocksCleanExit() throws {
+        let fixture = zoomSiblingFixture()
+        defer { cleanup(fixture) }
+        fixture.writer.actual[WindowID(rawValue: 3)] = Rect(x: 1999, y: 100, width: 300, height: 300)
+        _ = try fixture.service.markRunStarted(pid: 42)
+
+        let result = fixture.service.finishRun(pid: 42)
+
+        #expect(result.failed == 1)
+        #expect(fixture.service.shouldRestoreAfterProcessExit(pid: 42))
     }
 
     @Test

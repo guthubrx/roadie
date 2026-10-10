@@ -1472,19 +1472,19 @@ public extension SnapshotService {
         let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: intent.windowIDs.count, display: display))
         let frames = intent.windowIDs.compactMap { intent.placements[$0]?.cgRect }
         guard frames.count == intent.windowIDs.count else { return false }
-        guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
+        guard frames.allSatisfy({ container.contains($0, tolerance: LayoutTolerance.intentContainerSlack) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
         guard !framesLeaveLargeUntiledCells(
             frames,
             in: container,
-            allowedGap: CGFloat(config.tiling.gapsInner) + 16
+            allowedGap: CGFloat(config.tiling.gapsInner) + LayoutTolerance.intentUntiledGapSlack
         ) else { return false }
         if requireReasonableTileSizes {
             guard framesHaveReasonableTileSizes(frames, in: container) else { return false }
         }
 
         let intentArea = frames.reduce(CGFloat(0)) { $0 + $1.area }
-        return intentArea >= targetArea * 0.95
+        return intentArea >= targetArea * LayoutTolerance.intentMinimumAreaRatio
     }
 
     private func framesHaveReasonableTileSizes(_ frames: [CGRect], in container: CGRect) -> Bool {
@@ -1563,7 +1563,7 @@ public extension SnapshotService {
         guard frames.count > 1 else { return false }
         for index in frames.indices {
             for otherIndex in frames.index(after: index)..<frames.endIndex {
-                if frames[index].intersection(frames[otherIndex]).area > 16 {
+                if frames[index].intersection(frames[otherIndex]).area > LayoutTolerance.intentOverlapArea {
                     return true
                 }
             }
@@ -1576,7 +1576,9 @@ public extension SnapshotService {
         let dy = abs(observed.y - baseline.y)
         let dw = abs(observed.width - baseline.width)
         let dh = abs(observed.height - baseline.height)
-        return dx <= 8 && (dy <= 12 || dh <= 12) && (dw <= 2 && dh <= 80)
+        return dx <= LayoutTolerance.focusChromeDeltaX
+            && (dy <= LayoutTolerance.focusChromeDeltaY || dh <= LayoutTolerance.focusChromeDeltaY)
+            && (dw <= LayoutTolerance.focusChromeDeltaWidth && dh <= LayoutTolerance.focusChromeDeltaHeight)
     }
 
     private func applyPlan(from snapshot: DaemonSnapshot, intent: LayoutIntent) -> ApplyPlan {

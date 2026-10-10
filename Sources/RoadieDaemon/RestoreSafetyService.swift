@@ -123,7 +123,8 @@ public struct RestoreSafetyService {
     /// connue est centrée sur l'écran principal ; une frame dont l'écran a disparu est replacée
     /// sur l'écran principal. Utilisé à l'arrêt, après un crash et par `roadie restore unhide-all`.
     ///
-    /// Fenêtres visées (FR-037) : celles détectées cachées par position, plus les membres des
+    /// Fenêtres visées (FR-037) : celles détectées cachées par position, les fenêtres gérées
+    /// dont le centre est hors de tout écran présent, plus les membres des
     /// stages non affichées (preuve de masquage qui ne dépend pas du bord, recalculé si l'écran
     /// le plus à droite disparaît). Un membre absent du snapshot (le provider ne liste que les
     /// fenêtres à l'écran) est cherché par l'écriture AX parmi toutes les fenêtres de son pid.
@@ -144,8 +145,17 @@ public struct RestoreSafetyService {
             if targetIDs.insert(window.id.rawValue).inserted { targets.append(window) }
         }
         let liveByID = Dictionary(current.windows.map { ($0.window.id.rawValue, $0.window) }, uniquingKeysWith: { first, _ in first })
-        for entry in current.windows where HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: displays) {
-            addTarget(entry.window)
+        for entry in current.windows {
+            let frame = entry.window.frame.cgRect
+            let center = CGPoint(x: frame.midX, y: frame.midY)
+            // Fenêtre gérée dont le centre est hors de tout écran présent : voisine de la stage
+            // active masquée par un zoom quand l'écran le plus à droite disparaît (`isHidden`
+            // ne reconnaît plus ce bord). O(d), d = nombre d'écrans.
+            let offDisplays = entry.window.isTileCandidate && entry.scope != nil
+                && !displays.contains { $0.frame.cgRect.contains(center) }
+            if offDisplays || HiddenWindowPlacement.isHidden(frame, in: displays) {
+                addTarget(entry.window)
+            }
         }
         var unreachable = 0
         for member in Self.hiddenStageMembers(state) where !targetIDs.contains(member.windowID.rawValue) {

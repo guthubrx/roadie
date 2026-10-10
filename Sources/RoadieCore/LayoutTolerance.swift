@@ -82,4 +82,24 @@ public enum LayoutTolerance {
     public static let recentRefusal = TickDuration(minimum: 3, ticks: 8)
     /// Intervalle minimal entre deux événements répétitifs de suspension, en secondes.
     public static let repeatedEventInterval: Double = 1
+
+    // Validation d'un intent sauvegardé et écart de « chrome » d'une fenêtre focalisée (SPEC-016 T302).
+
+    /// Débord toléré d'une tuile d'intent hors du conteneur.
+    public static let intentContainerSlack: CGFloat = 4
+    /// Ajouté à la marge intérieure configurée : espace non couvert toléré entre tuiles d'intent.
+    public static let intentUntiledGapSlack: CGFloat = 16
+    /// Part minimale de l'aire canonique que les tuiles d'un intent doivent couvrir.
+    public static let intentMinimumAreaRatio: CGFloat = 0.95
+    /// Aire de chevauchement (points²) au-delà de laquelle deux tuiles d'intent se recouvrent.
+    public static let intentOverlapArea: CGFloat = 16
+    /// Écarts maximaux (x, y ou hauteur, largeur, hauteur) d'une fenêtre focalisée attribués à son
+    /// « chrome » (barre d'onglets, d'outils) plutôt qu'à un déplacement : aucune réapplication.
+    public static let focusChromeDeltaX: Double = 8
+    public static let focusChromeDeltaY: Double = 12
+    public static let focusChromeDeltaWidth: Double = 2
+    public static let focusChromeDeltaHeight: Double = 80
+
+    /// Grâce avant de retirer un membre ou un épinglage dont la fenêtre a disparu, en secondes (FR-007).
+    public static let missingWindowGraceSeconds: Double = 45
 }

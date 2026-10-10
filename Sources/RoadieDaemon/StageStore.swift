@@ -410,7 +410,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func pruneMissingBookmarks(
         keeping liveWindowIDs: Set<WindowID>,
-        missingGrace: TimeInterval = 45,
+        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
         now: Date = Date()
     ) -> [PersistentWindowBookmark] {
         var pruned: [PersistentWindowBookmark] = []
@@ -506,7 +506,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func pruneMissingPins(
         keeping liveWindowIDs: Set<WindowID>,
-        missingGrace: TimeInterval = 45,
+        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
         now: Date = Date()
     ) -> [PersistentWindowPin] {
         var pruned: [PersistentWindowPin] = []
@@ -636,7 +636,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func pruneMissingWindows(
         keeping liveWindowIDs: Set<WindowID>,
-        missingGrace: TimeInterval = 45,
+        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
         now: Date = Date()
     ) -> MissingWindowReconciliationReport {
         var report = MissingWindowReconciliationReport()
@@ -651,7 +651,7 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public mutating func pruneMissingWindows(
         keeping liveWindowIDs: Set<WindowID>,
         liveDisplayIDs: Set<DisplayID>,
-        missingGrace: TimeInterval = 45,
+        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
         now: Date = Date()
     ) -> MissingWindowReconciliationReport {
         var report = MissingWindowReconciliationReport()
@@ -1240,7 +1240,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     @discardableResult
     public mutating func pruneMissingWindows(
         keeping liveWindowIDs: Set<WindowID>,
-        missingGrace: TimeInterval = 45,
+        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
         now: Date = Date()
     ) -> MissingWindowReconciliationReport {
         var report = MissingWindowReconciliationReport()
