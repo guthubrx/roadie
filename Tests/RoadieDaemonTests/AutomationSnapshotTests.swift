@@ -1,6 +1,9 @@
 import Foundation
 import Testing
+import RoadieAX
 import RoadieCore
+import RoadieDaemon
+import RoadieStages
 
 @Suite
 struct AutomationSnapshotTests {
@@ -72,5 +75,24 @@ struct AutomationSnapshotTests {
         #expect(snapshot.activeDisplayId == "display-main")
         #expect(snapshot.windows.contains { $0.id == snapshot.focusedWindowId })
         #expect(snapshot.stages.contains { $0.id == snapshot.activeStageId })
+        #expect(snapshot.windows.allSatisfy { $0.presentationState == .normal })
+    }
+
+    @Test
+    func automationSnapshotExposesWindowPresentationState() {
+        let display = powerDisplay()
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let window = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let snapshot = DaemonSnapshot(
+            permissions: PermissionSnapshot(accessibilityTrusted: true),
+            displays: [display],
+            windows: [ScopedWindowSnapshot(window: window, scope: scope)],
+            state: RoadieState(),
+            focusedWindowID: window.id
+        )
+
+        let automation = AutomationSnapshotService().snapshot(from: snapshot)
+
+        #expect(automation.windows.first?.presentationState == .maximized)
     }
 }

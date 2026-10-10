@@ -48,10 +48,27 @@ public struct WindowCommandService {
     public func focus(_ direction: Direction) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction) else {
-            return focusAdjacentDisplayWindow(direction, from: snapshot)
+            let result = focusAdjacentDisplayWindow(direction, from: snapshot)
+            appendWindowCommandEvent(
+                verb: "focus",
+                direction: direction,
+                snapshot: snapshot,
+                active: activeWindow(in: snapshot),
+                result: result
+            )
+            return result
         }
         let ok = focusWindow(pair.neighbor.window)
-        return WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
+        let result = WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
+        appendWindowCommandEvent(
+            verb: "focus",
+            direction: direction,
+            snapshot: snapshot,
+            active: pair.active,
+            neighbor: pair.neighbor,
+            result: result
+        )
+        return result
     }
 
     public func focusBackAndForth() -> WindowCommandResult {
@@ -110,7 +127,15 @@ public struct WindowCommandService {
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
-            return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "move")
+            let result = sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "move")
+            appendWindowCommandEvent(
+                verb: "move",
+                direction: direction,
+                snapshot: snapshot,
+                active: activeWindow(in: snapshot),
+                result: result
+            )
+            return result
         }
         // Mode arbre persistant : échanger les deux feuilles dans l'arbre (yabai --swap).
         if isSpatialBSP(scope: scope, in: snapshot) {
@@ -118,7 +143,18 @@ public struct WindowCommandService {
                 $0.swapping(pair.active.window.id, pair.neighbor.window.id)
             }
             _ = focusWindow(pair.active.window)
-            return WindowCommandResult(message: "move \(direction.rawValue): bsp swap changed=\(changed)", changed: changed)
+            let result = WindowCommandResult(message: "move \(direction.rawValue): bsp swap changed=\(changed)", changed: changed)
+            appendWindowCommandEvent(
+                verb: "move",
+                direction: direction,
+                snapshot: snapshot,
+                active: pair.active,
+                neighbor: pair.neighbor,
+                scope: scope,
+                result: result,
+                extra: ["strategy": "spatial_bsp"]
+            )
+            return result
         }
         service.removeLayoutIntent(scope: scope)
         let ordered = swappedWindowIDs(
@@ -133,7 +169,7 @@ public struct WindowCommandService {
             orderedWindowIDs: ordered
         )
         let result = service.apply(plan)
-        if result.attempted > 0 && result.failed < result.attempted {
+        if shouldPersistCommandIntent(after: result) {
             persistIntentAfterCommand(
                 from: snapshot,
                 scope: scope,
@@ -143,10 +179,21 @@ public struct WindowCommandService {
             )
         }
         _ = focusWindow(pair.active.window)
-        return WindowCommandResult(
+        let commandResult = WindowCommandResult(
             message: "move \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
+        appendWindowCommandEvent(
+            verb: "move",
+            direction: direction,
+            snapshot: snapshot,
+            active: pair.active,
+            neighbor: pair.neighbor,
+            scope: scope,
+            result: commandResult,
+            applyResult: result
+        )
+        return commandResult
     }
 
     public func warp(_ direction: Direction) -> WindowCommandResult {
@@ -156,7 +203,15 @@ public struct WindowCommandService {
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
-            return sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "warp")
+            let result = sendActiveToAdjacentDisplay(direction, from: snapshot, verb: "warp")
+            appendWindowCommandEvent(
+                verb: "warp",
+                direction: direction,
+                snapshot: snapshot,
+                active: activeWindow(in: snapshot),
+                result: result
+            )
+            return result
         }
         // Mode arbre persistant : déplacer la fenêtre à côté de la voisine (yabai --warp).
         if isSpatialBSP(scope: scope, in: snapshot) {
@@ -167,7 +222,18 @@ public struct WindowCommandService {
                 $0.warping(pair.active.window.id, nextTo: pair.neighbor.window.id, side: side, containerIsWide: wide)
             }
             _ = focusWindow(pair.active.window)
-            return WindowCommandResult(message: "warp \(direction.rawValue): bsp warp changed=\(changed)", changed: changed)
+            let result = WindowCommandResult(message: "warp \(direction.rawValue): bsp warp changed=\(changed)", changed: changed)
+            appendWindowCommandEvent(
+                verb: "warp",
+                direction: direction,
+                snapshot: snapshot,
+                active: pair.active,
+                neighbor: pair.neighbor,
+                scope: scope,
+                result: result,
+                extra: ["strategy": "spatial_bsp"]
+            )
+            return result
         }
         service.removeLayoutIntent(scope: scope)
         guard let plan = structuralWarpPlan(
@@ -177,10 +243,20 @@ public struct WindowCommandService {
             neighbor: pair.neighbor.window,
             direction: direction
         ) else {
-            return WindowCommandResult(message: "warp \(direction.rawValue): no structural change", changed: false)
+            let result = WindowCommandResult(message: "warp \(direction.rawValue): no structural change", changed: false)
+            appendWindowCommandEvent(
+                verb: "warp",
+                direction: direction,
+                snapshot: snapshot,
+                active: pair.active,
+                neighbor: pair.neighbor,
+                scope: scope,
+                result: result
+            )
+            return result
         }
         let result = service.apply(plan)
-        if result.attempted > 0 && result.failed < result.attempted {
+        if shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
             persistIntentAfterCommand(
                 from: snapshot,
@@ -191,10 +267,21 @@ public struct WindowCommandService {
             )
         }
         _ = focusWindow(pair.active.window)
-        return WindowCommandResult(
+        let commandResult = WindowCommandResult(
             message: "warp \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
+        appendWindowCommandEvent(
+            verb: "warp",
+            direction: direction,
+            snapshot: snapshot,
+            active: pair.active,
+            neighbor: pair.neighbor,
+            scope: scope,
+            result: commandResult,
+            applyResult: result
+        )
+        return commandResult
     }
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
@@ -204,7 +291,15 @@ public struct WindowCommandService {
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
-            return WindowCommandResult(message: "no active window", changed: false)
+            let result = WindowCommandResult(message: "no active window", changed: false)
+            appendWindowCommandEvent(
+                verb: "resize",
+                direction: direction,
+                snapshot: snapshot,
+                active: nil,
+                result: result
+            )
+            return result
         }
         // Mode arbre persistant : ajuster le ratio du split concerné (resize qui persiste).
         if isSpatialBSP(scope: scope, in: snapshot) {
@@ -215,7 +310,17 @@ public struct WindowCommandService {
                 $0.resizing(window: active.window.id, orientation: orientation, delta: delta)
             }
             _ = focusWindow(active.window)
-            return WindowCommandResult(message: "resize \(direction.rawValue): bsp ratio changed=\(changed)", changed: changed)
+            let result = WindowCommandResult(message: "resize \(direction.rawValue): bsp ratio changed=\(changed)", changed: changed)
+            appendWindowCommandEvent(
+                verb: "resize",
+                direction: direction,
+                snapshot: snapshot,
+                active: active,
+                scope: scope,
+                result: result,
+                extra: ["strategy": "spatial_bsp"]
+            )
+            return result
         }
         let frame = resizedFrame(active.window.frame.cgRect, direction: direction)
         service.removeLayoutIntent(scope: scope)
@@ -224,17 +329,28 @@ public struct WindowCommandService {
         ]))
         guard resizeResult.attempted > 0 && resizeResult.failed < resizeResult.attempted else {
             _ = focusWindow(active.window)
-            return WindowCommandResult(
+            let result = WindowCommandResult(
                 message: "resize \(direction.rawValue): attempted=\(resizeResult.attempted) applied=\(resizeResult.applied) clamped=\(resizeResult.clamped) failed=\(resizeResult.failed)",
                 changed: false
             )
+            appendWindowCommandEvent(
+                verb: "resize",
+                direction: direction,
+                snapshot: snapshot,
+                active: active,
+                scope: scope,
+                result: result,
+                applyResult: resizeResult,
+                extra: ["phase": "direct"]
+            )
+            return result
         }
 
         let actualFrame = resizeResult.items.first(where: { $0.windowID == active.window.id })?.actual ?? Rect(frame)
         let updatedSnapshot = snapshotByUpdating(windowID: active.window.id, to: actualFrame, in: snapshot)
         let plan = service.applyPlan(from: updatedSnapshot, priorityWindowIDs: [active.window.id])
         let result = service.apply(plan)
-        if result.failed < result.attempted {
+        if shouldPersistCommandIntent(after: resizeResult), shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)
             persistIntentAfterCommand(
                 from: updatedSnapshot,
@@ -245,10 +361,26 @@ public struct WindowCommandService {
             )
         }
         _ = focusWindow(active.window)
-        return WindowCommandResult(
+        let commandResult = WindowCommandResult(
             message: "resize \(direction.rawValue): direct=\(resizeResult.applied + resizeResult.clamped) layout=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: true
         )
+        appendWindowCommandEvent(
+            verb: "resize",
+            direction: direction,
+            snapshot: snapshot,
+            active: active,
+            scope: scope,
+            result: commandResult,
+            applyResult: result,
+            extra: [
+                "directAttempted": String(resizeResult.attempted),
+                "directApplied": String(resizeResult.applied),
+                "directClamped": String(resizeResult.clamped),
+                "directFailed": String(resizeResult.failed)
+            ]
+        )
+        return commandResult
     }
 
     public func reset() -> WindowCommandResult {
@@ -301,10 +433,14 @@ public struct WindowCommandService {
 
         let visible = display.visibleFrame.cgRect.integral
         let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
-        service.removeLayoutIntent(scope: scope)
         if framesAreClose(active.window.frame.cgRect, visible) {
-            let plan = service.applyPlan(from: snapshot, scope: scope, orderedWindowIDs: ordered)
+            let scopedWindows = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+            let fullPlan = service.applyPlan(from: snapshot)
+            let plan = ApplyPlan(commands: fullPlan.commands.filter { command in
+                scopedWindows[command.window.id]?.scope == scope
+            })
             let result = service.apply(plan)
+            service.removeLayoutIntent(scope: scope)
             _ = focusWindow(active.window)
             return WindowCommandResult(
                 message: "toggle fullscreen off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
@@ -314,18 +450,50 @@ public struct WindowCommandService {
 
         let changed = service.setFrame(visible, of: active.window) != nil
         if changed {
-            var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+            persistFrame(Rect(visible), for: active.window, in: scope)
+            let placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
                 guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
                 return (entry.window.id, entry.window.frame)
             })
-            placements[active.window.id] = Rect(visible)
             service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
+            hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot)
         }
         _ = focusWindow(active.window)
         return WindowCommandResult(
             message: "toggle fullscreen on: changed=\(changed)",
             changed: changed
         )
+    }
+
+    private func persistFrame(_ frame: Rect, for window: WindowSnapshot, in scopeID: StageScope) {
+        var state = stageStore.state()
+        var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
+        var updated = window
+        updated.frame = frame
+        scope.updateFrame(window: updated)
+        state.update(scope)
+        stageStore.save(state)
+    }
+
+    private func hideSiblings(
+        of fullscreenWindowID: WindowID,
+        in scope: StageScope,
+        display: DisplaySnapshot,
+        snapshot: DaemonSnapshot
+    ) {
+        for entry in snapshot.windows {
+            guard entry.scope == scope,
+                  entry.window.id != fullscreenWindowID,
+                  entry.window.isTileCandidate,
+                  entry.window.isOnScreen
+            else { continue }
+            let frame = HiddenWindowPlacement.frame(
+                for: entry.window.frame.cgRect,
+                on: display,
+                among: snapshot.displays
+            )
+            _ = service.setFrame(frame, of: entry.window)
+        }
     }
 
     public func toggleNativeFullscreen() -> WindowCommandResult {
@@ -447,7 +615,7 @@ public struct WindowCommandService {
         let updatedSnapshot = service.snapshot()
         let plan = service.applyPlan(from: updatedSnapshot)
         let result = service.apply(plan)
-        if result.attempted > 0 && result.failed < result.attempted {
+        if shouldPersistCommandIntent(after: result) {
             persistIntentsAfterDisplayMove(
                 from: updatedSnapshot,
                 targetScope: targetScopeID,
@@ -494,6 +662,49 @@ public struct WindowCommandService {
 
     private func finishLayoutCommand(_ reason: String) {
         commandActivity.finish(reason: reason)
+    }
+
+    private func shouldPersistCommandIntent(after result: ApplyResult) -> Bool {
+        result.attempted > 0 && result.applied == result.attempted && result.clamped == 0 && result.failed == 0
+    }
+
+    private func appendWindowCommandEvent(
+        verb: String,
+        direction: Direction? = nil,
+        snapshot: DaemonSnapshot,
+        active: ScopedWindowSnapshot?,
+        neighbor: ScopedWindowSnapshot? = nil,
+        scope explicitScope: StageScope? = nil,
+        result: WindowCommandResult,
+        applyResult: ApplyResult? = nil,
+        extra: [String: String] = [:]
+    ) {
+        let scope = explicitScope ?? active?.scope
+        var details = extra
+        details["verb"] = verb
+        if let direction {
+            details["direction"] = direction.rawValue
+        }
+        details["changed"] = String(result.changed)
+        details["message"] = result.message
+        if let active {
+            details["activeWindowID"] = String(active.window.id.rawValue)
+            details["activeApp"] = active.window.appName
+        }
+        if let neighbor {
+            details["neighborWindowID"] = String(neighbor.window.id.rawValue)
+            details["neighborApp"] = neighbor.window.appName
+        }
+        if let focusedID = snapshot.focusedWindowID {
+            details["focusedWindowID"] = String(focusedID.rawValue)
+        }
+        if let applyResult {
+            details["attempted"] = String(applyResult.attempted)
+            details["applied"] = String(applyResult.applied)
+            details["clamped"] = String(applyResult.clamped)
+            details["failed"] = String(applyResult.failed)
+        }
+        events.append(RoadieEvent(type: "window.command", scope: scope, details: details))
     }
 
     private func persistIntentsAfterDisplayMove(

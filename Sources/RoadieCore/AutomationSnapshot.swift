@@ -97,6 +97,12 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+public enum WindowPresentationState: String, Codable, Equatable, Sendable {
+    case normal
+    case maximized
+    case nativeFullscreen
+}
+
 public struct AutomationWindowSnapshot: Codable, Equatable, Sendable {
     public var id: String
     public var app: String
@@ -107,6 +113,7 @@ public struct AutomationWindowSnapshot: Codable, Equatable, Sendable {
     public var frame: Rect?
     public var isFocused: Bool
     public var isFloating: Bool
+    public var presentationState: WindowPresentationState
 
     public init(
         id: String,
@@ -117,7 +124,8 @@ public struct AutomationWindowSnapshot: Codable, Equatable, Sendable {
         stageId: String? = nil,
         frame: Rect? = nil,
         isFocused: Bool = false,
-        isFloating: Bool = false
+        isFloating: Bool = false,
+        presentationState: WindowPresentationState = .normal
     ) {
         self.id = id
         self.app = app
@@ -128,6 +136,25 @@ public struct AutomationWindowSnapshot: Codable, Equatable, Sendable {
         self.frame = frame
         self.isFocused = isFocused
         self.isFloating = isFloating
+        self.presentationState = presentationState
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, app, title, displayId, desktopId, stageId, frame, isFocused, isFloating, presentationState
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.app = try c.decode(String.self, forKey: .app)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.displayId = try c.decodeIfPresent(String.self, forKey: .displayId)
+        self.desktopId = try c.decodeIfPresent(String.self, forKey: .desktopId)
+        self.stageId = try c.decodeIfPresent(String.self, forKey: .stageId)
+        self.frame = try c.decodeIfPresent(Rect.self, forKey: .frame)
+        self.isFocused = try c.decodeIfPresent(Bool.self, forKey: .isFocused) ?? false
+        self.isFloating = try c.decodeIfPresent(Bool.self, forKey: .isFloating) ?? false
+        self.presentationState = try c.decodeIfPresent(WindowPresentationState.self, forKey: .presentationState) ?? .normal
     }
 }
 

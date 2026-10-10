@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "id": "AUD-015-001",
+      "severity": "low",
+      "category": "robustness",
+      "status": "fixed",
+      "location": "Sources/RoadieDaemon/WindowPresentationStateResolver.swift",
+      "summary": "Construction de dictionnaire rendue tolerante aux doublons transitoires de window ID.",
+      "validation": "./scripts/test --filter WindowPresentationStateResolverTests --filter AutomationSnapshotTests --filter PowerUserFocusCommandTests"
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 1,
+    "info": 0,
+    "total": 1
+  }
+}

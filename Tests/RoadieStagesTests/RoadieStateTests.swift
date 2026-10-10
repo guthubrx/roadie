@@ -44,6 +44,16 @@ struct RoadieStateTests {
     }
 
     @Test
+    func creatingStageOnNewDesktopDoesNotCreatePhantomStageOne() throws {
+        var state = RoadieState()
+        try state.createStage(id: stage2, name: "Only", in: display, desktopID: desktop2)
+
+        let desktop = state.desktop(displayID: display, desktopID: desktop2)
+        #expect(desktop?.activeStageID == stage2)
+        #expect(desktop?.stages.keys.sorted() == [stage2])
+    }
+
+    @Test
     func modeChangesDoNotChangeMembership() throws {
         let window = WindowID(rawValue: 7)
         let scope = StageScope(displayID: display, desktopID: desktop1, stageID: stage1)

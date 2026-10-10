@@ -1054,7 +1054,8 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         to stageID: StageID,
         insertionIndex: Int? = nil,
         focusWindow: Bool = true,
-        defaultMode: WindowManagementMode = .bsp
+        defaultMode: WindowManagementMode = .bsp,
+        presentationState: WindowPresentationState? = nil
     ) {
         ensureStage(stageID, mode: defaultMode)
         for index in stages.indices {
@@ -1075,6 +1076,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             bundleID: window.bundleID,
             title: window.title,
             frame: window.frame,
+            presentationState: presentationState,
             lastSeenAt: Date(),
             missingSince: nil
         )
@@ -1138,7 +1140,10 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
 
     // Complexite : O(stages * members) au pire, O(stages) en moyenne avec exit precoce.
     // Une fenetre n'apparait que dans un stage en etat valide -> on sort des qu'elle est trouvee.
-    public mutating func updateFrame(window: WindowSnapshot) {
+    public mutating func updateFrame(
+        window: WindowSnapshot,
+        presentationState: WindowPresentationState? = nil
+    ) {
         for stageIndex in stages.indices {
             guard let memberIndex = stages[stageIndex].members.firstIndex(where: { $0.windowID == window.id }) else {
                 continue
@@ -1146,6 +1151,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             stages[stageIndex].members[memberIndex].frame = window.frame
             stages[stageIndex].members[memberIndex].bundleID = window.bundleID
             stages[stageIndex].members[memberIndex].title = window.title
+            stages[stageIndex].members[memberIndex].presentationState = presentationState
             stages[stageIndex].members[memberIndex].lastSeenAt = Date()
             stages[stageIndex].members[memberIndex].missingSince = nil
             return
@@ -1328,6 +1334,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var bundleID: String
     public var title: String
     public var frame: Rect
+    public var presentationState: WindowPresentationState?
     public var lastSeenAt: Date?
     public var missingSince: Date?
 
@@ -1336,6 +1343,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         bundleID: String,
         title: String,
         frame: Rect,
+        presentationState: WindowPresentationState? = nil,
         lastSeenAt: Date? = nil,
         missingSince: Date? = nil
     ) {
@@ -1343,6 +1351,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         self.bundleID = bundleID
         self.title = title
         self.frame = frame
+        self.presentationState = presentationState
         self.lastSeenAt = lastSeenAt
         self.missingSince = missingSince
     }

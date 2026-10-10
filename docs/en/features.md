@@ -124,10 +124,15 @@ Use cases:
 The nav rail is the per-display side panel that represents non-empty stages.
 An empty stage is not shown there, even when it has been renamed.
 
+Window thumbnails can also expose their presentation state. A `maximized`
+window stays in its normal stage and is marked with a four-corner border. A
+`nativeFullscreen` window is marked with a continuous border to show that macOS
+fullscreen semantics may apply.
+
 Main interactions:
 
 - click a stage to activate it;
-- click empty rail space to switch to an empty stage when `empty_click_hide_active` is enabled;
+- keep empty rail clicks inert by default, with an opt-in `empty_click_hide_active` setting for switching to an empty stage;
 - drag a thumbnail to another stage to move that window there;
 - drag a thumbnail into the active workspace to summon it;
 - drag an application window by its title bar onto a stage to move it there;

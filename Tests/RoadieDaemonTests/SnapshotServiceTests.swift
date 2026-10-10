@@ -1695,7 +1695,7 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func moveIntentPersistsAsCommandEvenWhenClamped() {
+    func moveIntentIsNotPersistedWhenFrameIsClamped() {
         let display = DisplayID(rawValue: "display-a")
         let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
@@ -1725,13 +1725,12 @@ struct SnapshotServiceTests {
 
         let intent = intentStore.intent(for: StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
         #expect(result.changed)
-        #expect(intent?.source == .command)
-        #expect(intent?.placements[left.id] == Rect(x: 505, y: 0, width: 495, height: 250))
+        #expect(intent == nil)
         try? FileManager.default.removeItem(atPath: intentPath)
     }
 
     @Test
-    func commandIntentPersistsOnPartialCommandFailure() {
+    func commandIntentIsNotPersistedOnPartialCommandFailure() {
         let display = DisplayID(rawValue: "display-a")
         let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
@@ -1760,8 +1759,77 @@ struct SnapshotServiceTests {
 
         let intent = intentStore.intent(for: StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
         #expect(result.changed)
-        #expect(intent?.source == .command)
-        #expect(intent?.windowIDs.count == 2)
+        #expect(intent == nil)
+        try? FileManager.default.removeItem(atPath: intentPath)
+    }
+
+    @Test
+    func windowCommandEventCapturesWarpDirectionAndClampOutcome() {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let eventPath = tempPath("window-command-warp-events")
+        let service = WindowCommandService(
+            service: SnapshotService(
+                provider: FakeProvider(
+                    displaySnapshots: [displaySnapshot],
+                    windowSnapshots: [left, right],
+                    focusedID: right.id
+                ),
+                frameWriter: DeterministicWriter(actualFrames: [
+                    left.id: Rect(x: 505, y: 0, width: 574, height: 500),
+                    right.id: Rect(x: 0, y: 0, width: 495, height: 500),
+                ]),
+                config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+            ),
+            events: EventLog(path: eventPath)
+        )
+
+        let result = service.warp(.left)
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(result.changed)
+        #expect(events.contains("\"type\":\"window.command\""))
+        #expect(events.contains("\"verb\":\"warp\""))
+        #expect(events.contains("\"direction\":\"left\""))
+        #expect(events.contains("\"clamped\":\"1\""))
+    }
+
+    @Test
+    func commandIntentWithLargeInternalGapIsInvalidated() {
+        let display = DisplayID(rawValue: "display-a")
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 480, height: 1000), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 520, y: 0, width: 480, height: 1000), isOnScreen: true, isTileCandidate: true)
+        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-command-gap-intent-\(UUID().uuidString).json")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [left.id, right.id],
+            placements: [
+                left.id: left.frame,
+                right.id: right.frame,
+            ],
+            source: .command
+        ))
+        let service = SnapshotService(
+            provider: FakeProvider(
+                displaySnapshots: [
+                    DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 1000), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 1000), isMain: true),
+                ],
+                windowSnapshots: [left, right]
+            ),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore
+        )
+
+        let plan = service.applyPlan(from: service.snapshot())
+
+        #expect(intentStore.intent(for: scope) == nil)
+        #expect(plan.commands.contains { $0.window.id == left.id || $0.window.id == right.id })
         try? FileManager.default.removeItem(atPath: intentPath)
     }
 
@@ -1895,16 +1963,70 @@ struct SnapshotServiceTests {
     }
 
     @Test
-    func stageAssignAndSwitchHideAndRestoreMembers() {
+    func stageAssignFollowsTargetStageImmediately() {
+        let display = DisplayID(rawValue: "display-a")
+        let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
+        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
+
+        for mode in WindowManagementMode.allCases {
+            let stagePath = FileManager.default.temporaryDirectory
+                .appendingPathComponent("roadie-stages-\(mode.rawValue)-\(UUID().uuidString).json")
+                .path
+            let stageStore = StageStore(path: stagePath)
+            stageStore.save(PersistentStageState(scopes: [
+                PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: mode, focusedWindowID: right.id, members: [
+                        PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                        PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
+                    ]),
+                    PersistentStage(id: StageID(rawValue: "2"), mode: mode),
+                ]),
+            ]))
+
+            let assignWriter = RecordingWriter()
+            let assignService = SnapshotService(
+                provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, right], focusedID: right.id),
+                frameWriter: assignWriter,
+                config: RoadieConfig(),
+                stageStore: stageStore
+            )
+            let assignResult = StageCommandService(service: assignService, store: stageStore).assign("2")
+            var state = stageStore.state()
+
+            #expect(assignResult.changed)
+            #expect(assignWriter.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
+            if mode != .float {
+                #expect(assignWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
+            }
+            #expect(assignWriter.focusedWindowIDs == [right.id])
+            #expect(state.activeDisplayID == display)
+            #expect(state.scope(displayID: display).activeStageID == StageID(rawValue: "2"))
+            try? FileManager.default.removeItem(atPath: stagePath)
+        }
+    }
+
+    @Test
+    func stageAssignWindowNoFollowBlocksDelayedHiddenFocusFollow() {
         let display = DisplayID(rawValue: "display-a")
         let displaySnapshot = DisplaySnapshot(id: display, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
         let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let stagePath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-stages-\(UUID().uuidString).json")
+            .appendingPathComponent("roadie-stages-no-follow-\(UUID().uuidString).json")
             .path
         let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: right.id, members: [
+                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),
+                    PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2")),
+            ]),
+        ]))
 
+        let hiddenRight = WindowSnapshot(id: right.id, pid: right.pid, appName: right.appName, bundleID: right.bundleID, title: right.title, frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
         let assignWriter = RecordingWriter()
         let assignService = SnapshotService(
             provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, right], focusedID: right.id),
@@ -1912,27 +2034,22 @@ struct SnapshotServiceTests {
             config: RoadieConfig(),
             stageStore: stageStore
         )
-        let assignResult = StageCommandService(service: assignService, store: stageStore).assign("2")
+        let assignResult = StageCommandService(service: assignService, store: stageStore)
+            .assign(windowID: right.id, to: "2", displayID: display, focusAssignedWindow: false)
+        var assignedState = stageStore.state()
 
         #expect(assignResult.changed)
         #expect(assignWriter.requestedFrames[right.id] == Rect(x: 999, y: 0, width: 495, height: 500))
+        #expect(assignedState.scope(displayID: display).activeStageID == StageID(rawValue: "1"))
 
-        let hiddenRight = WindowSnapshot(id: right.id, pid: right.pid, appName: right.appName, bundleID: right.bundleID, title: right.title, frame: Rect(x: 999, y: 499, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)
-        let switchWriter = RecordingWriter()
-        let switchService = SnapshotService(
-            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, hiddenRight], focusedID: left.id),
-            frameWriter: switchWriter,
+        let followService = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, hiddenRight], focusedID: right.id),
             config: RoadieConfig(),
             stageStore: stageStore
         )
-        let switchResult = StageCommandService(service: switchService, store: stageStore).switchTo("2")
-        let state = stageStore.state()
+        let stillActive = followService.snapshot()
 
-        #expect(switchResult.changed)
-        #expect(switchWriter.requestedFrames[left.id] == Rect(x: 999, y: 0, width: 495, height: 500))
-        #expect(switchWriter.requestedFrames[right.id] == Rect(x: 8, y: 8, width: 984, height: 484))
-        #expect(switchWriter.focusedWindowIDs == [right.id])
-        #expect(state.activeDisplayID == display)
+        #expect(stillActive.state.activeScope(on: display) == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")))
         try? FileManager.default.removeItem(atPath: stagePath)
     }
 

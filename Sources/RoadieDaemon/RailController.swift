@@ -7,6 +7,8 @@ import RoadieStages
 
 @MainActor
 public final class RailController {
+    nonisolated private static let transientMissingMemberRailGrace: TimeInterval = 15
+
     private let store: StageStore
     private let snapshotService: SnapshotService
     private let commandService: StageCommandService
@@ -301,6 +303,7 @@ public final class RailController {
                     displayID: displayID,
                     windowID: payload.windowID,
                     sourceStageID: payload.sourceStageID,
+                    clickAction: payload.clickAction,
                     grabUnit: payload.grabUnit,
                     startPoint: screenPoint,
                     didDrag: false
@@ -585,6 +588,21 @@ public final class RailController {
             fflush(stdout)
             events.append(RoadieEvent(type: "rail_stage_switch", details: ["displayID": displayID.rawValue, "stageID": stageID.rawValue]))
             _ = commandService.switchTo(stageID.rawValue, displayID: displayID)
+        case .focusNativeFullscreen(let windowID, let bundleID, let stageID):
+            print("rail focus native fullscreen \(windowID.rawValue)")
+            fflush(stdout)
+            events.append(RoadieEvent(type: "rail_native_fullscreen_focus", details: [
+                "displayID": displayID.rawValue,
+                "stageID": stageID.rawValue,
+                "windowID": String(windowID.rawValue),
+                "bundleID": bundleID
+            ]))
+            _ = commandService.focusNativeFullscreen(
+                windowID: windowID,
+                bundleID: bundleID,
+                stageID: stageID,
+                displayID: displayID
+            )
         case .summonWindow(let windowID):
             print("rail summon window \(windowID.rawValue)")
             fflush(stdout)
@@ -712,7 +730,7 @@ public final class RailController {
         defer { dropPreview.hide() }
 
         guard drag.didDrag else {
-            perform(.switchStage(drag.sourceStageID), displayID: drag.displayID)
+            perform(drag.clickAction ?? .switchStage(drag.sourceStageID), displayID: drag.displayID)
             rebuildPanels()
             return
         }
@@ -771,7 +789,6 @@ public final class RailController {
             ? TargetRecordingStatusStore().activeStatus()
             : nil
         let recordingIndicatorBottomOffset = CGFloat(recordConfig.navrailBottomOffset)
-        let fullscreenDisplayIDs = Self.fullscreenDisplayIDs(in: snapshot)
         let liveWindowIDs = Set(snapshot.windows.compactMap { $0.window.isTileCandidate ? $0.window.id : nil })
         let initialThumbnailCaptureBudget = thumbnailCaptureBudget(for: reason, now: startedAt)
         var thumbnailCaptureBudget = initialThumbnailCaptureBudget
@@ -783,10 +800,6 @@ public final class RailController {
         var renderedStages = 0
         for (displayID, screen) in screensByDisplayID {
             screenFrames[displayID] = screen.frame
-            if fullscreenDisplayIDs.contains(displayID) {
-                panels[displayID]?.orderOut(nil)
-                continue
-            }
             let desktopID = state.currentDesktopID(for: displayID)
             let scope = state.scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }
                 ?? PersistentStageScope(displayID: displayID, desktopID: desktopID)
@@ -795,13 +808,18 @@ public final class RailController {
                 self?.relayoutAfterRailWidthChange(on: displayID)
             }
             panel.position(on: screen, displayID: displayID, config: config, runtimeStore: railRuntimeStateStore)
-            renderedStages += Self.railVisibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs).count
+            renderedStages += Self.railVisibleStageIDs(
+                in: scope,
+                liveWindowIDs: liveWindowIDs
+            ).count
             panel.render(
                 scope: scope,
                 displayName: screen.localizedName,
                 config: config,
                 thumbnails: thumbnails,
                 liveWindowIDs: liveWindowIDs,
+                retainMissingNormalMembers: false,
+                presentationStates: Self.railWindowPresentationStates(in: scope, snapshot: snapshot),
                 protectedWindowIDs: Set(protectedBlurredWindows.keys),
                 recordingStatus: recordingStatus,
                 recordingIndicatorBottomOffset: recordingIndicatorBottomOffset,
@@ -980,20 +998,38 @@ public final class RailController {
 
     nonisolated public static func railVisibleStageIDs(
         in scope: PersistentStageScope,
-        liveWindowIDs: Set<WindowID>
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date(),
+        retainMissingNormalMembers: Bool = false
     ) -> [StageID] {
         scope.stages
             .filter { stage in
-                stage.members.contains { liveWindowIDs.contains($0.windowID) }
+                stage.members.contains {
+                    isRailRepresentedMember(
+                        $0,
+                        liveWindowIDs: liveWindowIDs,
+                        now: now,
+                        retainMissingNormalMembers: retainMissingNormalMembers
+                    )
+                }
             }
             .map(\.id)
     }
 
     nonisolated public static func railDisplayStage(
         _ stage: PersistentStage,
-        liveWindowIDs: Set<WindowID>
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date(),
+        retainMissingNormalMembers: Bool = false
     ) -> PersistentStage {
-        let liveMembers = stage.members.filter { liveWindowIDs.contains($0.windowID) }
+        let liveMembers = stage.members.filter {
+            isRailRepresentedMember(
+                $0,
+                liveWindowIDs: liveWindowIDs,
+                now: now,
+                retainMissingNormalMembers: retainMissingNormalMembers
+            )
+        }
         let liveMemberIDs = Set(liveMembers.map(\.windowID))
         let liveGroups = stage.groups.compactMap { group -> WindowGroup? in
             var updated = group
@@ -1019,16 +1055,61 @@ public final class RailController {
         )
     }
 
-    nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
-        framesAreClose(frame, display.visibleFrame.cgRect, tolerance: 48)
-            || framesAreClose(frame, display.frame.cgRect, tolerance: 48)
+    nonisolated fileprivate static func isRailRepresentedMember(
+        _ member: PersistentStageMember,
+        liveWindowIDs: Set<WindowID>,
+        now: Date = Date(),
+        retainMissingNormalMembers: Bool = false
+    ) -> Bool {
+        if liveWindowIDs.contains(member.windowID) {
+            return true
+        }
+
+        // Les fenetres fullscreen-like peuvent disparaitre temporairement du snapshot AX
+        // quand macOS change de Space. Elles restent representables, contrairement aux
+        // membres normaux missing qui produisent des stages cliquables mais vides.
+        if member.presentationState == .nativeFullscreen || member.presentationState == .maximized {
+            return true
+        }
+
+        if retainMissingNormalMembers {
+            return false
+        }
+
+        guard let missingSince = member.missingSince else { return false }
+        return now.timeIntervalSince(missingSince) <= transientMissingMemberRailGrace
     }
 
-    nonisolated private static func framesAreClose(_ lhs: CGRect, _ rhs: CGRect, tolerance: CGFloat) -> Bool {
-        abs(lhs.minX - rhs.minX) <= tolerance
-            && abs(lhs.minY - rhs.minY) <= tolerance
-            && abs(lhs.width - rhs.width) <= tolerance
-            && abs(lhs.height - rhs.height) <= tolerance
+    nonisolated public static func railWindowPresentationStates(
+        in scope: PersistentStageScope,
+        snapshot: DaemonSnapshot
+    ) -> [WindowID: WindowPresentationState] {
+        guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else {
+            return [:]
+        }
+        var windowsByID: [WindowID: WindowSnapshot] = [:]
+        for entry in snapshot.windows {
+            windowsByID[entry.window.id] = entry.window
+        }
+        var states: [WindowID: WindowPresentationState] = [:]
+        for stage in scope.stages {
+            for member in stage.members {
+                if let window = windowsByID[member.windowID] {
+                    states[member.windowID] = WindowPresentationStateResolver.state(
+                        for: window,
+                        on: display,
+                        frameOverride: member.frame
+                    )
+                } else if let presentationState = member.presentationState {
+                    states[member.windowID] = presentationState
+                }
+            }
+        }
+        return states
+    }
+
+    nonisolated private static func isFullscreenLike(_ frame: CGRect, on display: DisplaySnapshot) -> Bool {
+        WindowPresentationStateResolver.isMaximized(frame, on: display)
     }
 
     private static func displayID(for screen: NSScreen) -> DisplayID? {
@@ -1042,6 +1123,7 @@ public final class RailController {
 
 private enum RailAction {
     case switchStage(StageID)
+    case focusNativeFullscreen(WindowID, String, StageID)
     case summonWindow(WindowID)
     case moveWindow(WindowID, StageID, Int?, Bool)
     case moveWindowToDesktop(WindowID, DesktopID)
@@ -1100,6 +1182,7 @@ private final class RailStageMoveMenuTarget: NSObject {
 private struct RailDragPayload {
     var windowID: WindowID
     var sourceStageID: StageID
+    var clickAction: RailAction?
     var grabUnit: CGPoint
 }
 
@@ -1114,6 +1197,7 @@ private struct PendingRailDrag {
     var displayID: DisplayID
     var windowID: WindowID
     var sourceStageID: StageID
+    var clickAction: RailAction?
     var grabUnit: CGPoint
     var startPoint: CGPoint
     var didDrag: Bool
@@ -1397,6 +1481,8 @@ private final class RailPanel: NSPanel {
         config: RailVisualConfig,
         thumbnails: WindowThumbnailStore,
         liveWindowIDs: Set<WindowID>,
+        retainMissingNormalMembers: Bool,
+        presentationStates: [WindowID: WindowPresentationState],
         protectedWindowIDs: Set<WindowID>,
         recordingStatus: TargetRecordingStatus?,
         recordingIndicatorBottomOffset: CGFloat,
@@ -1412,12 +1498,22 @@ private final class RailPanel: NSPanel {
         if config.headerVisible, config.headerPosition == .top {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
-        let ids = RailController.railVisibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs)
+        let ids = RailController.railVisibleStageIDs(
+            in: scope,
+            liveWindowIDs: liveWindowIDs,
+            retainMissingNormalMembers: retainMissingNormalMembers
+        )
         visibleStageIDs = ids
         emptyStageIDs = scope.stages
             .filter { stage in
                 stage.parkingState != .parked
-                    && !stage.members.contains { liveWindowIDs.contains($0.windowID) }
+                    && !stage.members.contains {
+                        RailController.isRailRepresentedMember(
+                            $0,
+                            liveWindowIDs: liveWindowIDs,
+                            retainMissingNormalMembers: retainMissingNormalMembers
+                        )
+                    }
             }
             .map(\.id)
         stack.railBackgroundColor = config.backgroundColor
@@ -1430,13 +1526,18 @@ private final class RailPanel: NSPanel {
         }
         for (index, id) in ids.enumerated() {
             let persistedStage = scope.stages.first { $0.id == id } ?? PersistentStage(id: id)
-            let stage = RailController.railDisplayStage(persistedStage, liveWindowIDs: liveWindowIDs)
+            let stage = RailController.railDisplayStage(
+                persistedStage,
+                liveWindowIDs: liveWindowIDs,
+                retainMissingNormalMembers: retainMissingNormalMembers
+            )
             let card = StageCardView(
                 stage: stage,
                 displayLabel: Self.stageDisplayLabel(stage, position: index + 1),
                 isActive: id == scope.activeStageID,
                 accent: config.accent(for: id),
                 config: config,
+                presentationStates: presentationStates,
                 thumbnails: thumbnails.images(
                     for: stage.members,
                     protectedWindowIDs: protectedWindowIDs,
@@ -2338,6 +2439,7 @@ private final class StageCardView: NSControl {
     private let isActive: Bool
     private let accent: NSColor
     private let config: RailVisualConfig
+    private let presentationStates: [WindowID: WindowPresentationState]
     private let thumbnails: [WindowID: NSImage]
     private let visualMembers: [PersistentStageMember]
     private let contentInset: CGFloat = 4
@@ -2352,6 +2454,7 @@ private final class StageCardView: NSControl {
         isActive: Bool,
         accent: NSColor,
         config: RailVisualConfig,
+        presentationStates: [WindowID: WindowPresentationState],
         thumbnails: [WindowID: NSImage]
     ) {
         self.stage = stage
@@ -2360,6 +2463,7 @@ private final class StageCardView: NSControl {
         self.isActive = isActive
         self.accent = accent
         self.config = config
+        self.presentationStates = presentationStates
         self.thumbnails = thumbnails
         self.visualMembers = Self.focusFirstMembers(stage)
         super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
@@ -2401,6 +2505,9 @@ private final class StageCardView: NSControl {
     func action(at point: CGPoint) -> RailAction? {
         if dragPayload(at: point) != nil {
             return nil
+        }
+        if let member = visualMembers.first(where: { presentationState(for: $0) == .nativeFullscreen }) {
+            return nativeFullscreenFocusAction(for: member)
         }
         return .switchStage(stageID)
     }
@@ -2549,6 +2656,7 @@ private final class StageCardView: NSControl {
                 .foregroundColor: NSColor.white,
                 .font: NSFont.boldSystemFont(ofSize: 11),
             ])
+            drawPresentationIndicator(in: r, state: presentationState(for: member), radius: 7)
         }
         if visualMembers.count > 6 {
             "+\(visualMembers.count - 6)".draw(in: CGRect(x: rect.minX + 196, y: rect.midY - 8, width: 28, height: 18), withAttributes: [
@@ -2677,10 +2785,76 @@ private final class StageCardView: NSControl {
         NSColor.white.withAlphaComponent(isActive ? 0.34 : 0.18).setStroke()
         path.lineWidth = 1
         path.stroke()
+        drawPresentationIndicator(in: rect, state: presentationState(for: member), radius: 6)
         if darkened {
             NSColor.black.withAlphaComponent(config.parallaxDarken * CGFloat(index)).setFill()
             NSBezierPath(roundedRect: rect.insetBy(dx: 12, dy: 10), xRadius: 4, yRadius: 4).fill()
         }
+    }
+
+    private func presentationState(for member: PersistentStageMember?) -> WindowPresentationState {
+        guard let member else { return .normal }
+        return presentationStates[member.windowID] ?? .normal
+    }
+
+    private func drawPresentationIndicator(in rect: CGRect, state: WindowPresentationState, radius: CGFloat) {
+        switch state {
+        case .normal:
+            return
+        case .maximized:
+            drawCornerIndicator(in: rect.insetBy(dx: 1.5, dy: 1.5))
+        case .nativeFullscreen:
+            drawFullIndicator(in: rect.insetBy(dx: 1.5, dy: 1.5), radius: radius)
+        }
+    }
+
+    private func drawFullIndicator(in rect: CGRect, radius: CGFloat) {
+        let shadow = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        NSColor.black.withAlphaComponent(0.70).setStroke()
+        shadow.lineWidth = 4
+        shadow.stroke()
+
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        presentationIndicatorColor.setStroke()
+        path.lineWidth = 2.2
+        path.stroke()
+    }
+
+    private func drawCornerIndicator(in rect: CGRect) {
+        let length = min(18, max(8, min(rect.width, rect.height) * 0.28))
+        let shadow = cornerPath(in: rect, length: length)
+        NSColor.black.withAlphaComponent(0.70).setStroke()
+        shadow.lineWidth = 4
+        shadow.stroke()
+
+        let path = cornerPath(in: rect, length: length)
+        presentationIndicatorColor.setStroke()
+        path.lineWidth = 2.2
+        path.stroke()
+    }
+
+    private func cornerPath(in rect: CGRect, length: CGFloat) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + length))
+        path.line(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.line(to: CGPoint(x: rect.minX + length, y: rect.minY))
+
+        path.move(to: CGPoint(x: rect.maxX - length, y: rect.minY))
+        path.line(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.line(to: CGPoint(x: rect.maxX, y: rect.minY + length))
+
+        path.move(to: CGPoint(x: rect.maxX, y: rect.maxY - length))
+        path.line(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.line(to: CGPoint(x: rect.maxX - length, y: rect.maxY))
+
+        path.move(to: CGPoint(x: rect.minX + length, y: rect.maxY))
+        path.line(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.line(to: CGPoint(x: rect.minX, y: rect.maxY - length))
+        return path
+    }
+
+    private var presentationIndicatorColor: NSColor {
+        NSColor.white.withAlphaComponent(0.94)
     }
 
     private func drawAppIcon(for member: PersistentStageMember, in rect: CGRect, opacity: CGFloat) {
@@ -2793,6 +2967,9 @@ private final class StageCardView: NSControl {
         return RailDragPayload(
             windowID: hit.member.windowID,
             sourceStageID: stageID,
+            clickAction: presentationState(for: hit.member) == .nativeFullscreen
+                ? nativeFullscreenFocusAction(for: hit.member)
+                : nil,
             grabUnit: CGPoint(
                 x: min(1, max(0, (point.x - hit.rect.minX) / max(1, hit.rect.width))),
                 y: min(1, max(0, (point.y - hit.rect.minY) / max(1, hit.rect.height)))
@@ -2825,6 +3002,10 @@ private final class StageCardView: NSControl {
             return (member, item.rect)
         }
         return nil
+    }
+
+    private func nativeFullscreenFocusAction(for member: PersistentStageMember) -> RailAction {
+        .focusNativeFullscreen(member.windowID, member.bundleID, stageID)
     }
 
     private func hitPreviewItemsFrontToBack() -> [(index: Int, rect: CGRect)] {

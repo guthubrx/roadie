@@ -26,8 +26,12 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     let provider: PowerUserProvider
     private(set) var focused: [WindowID] = []
     private(set) var frames: [WindowID: Rect] = [:]
+    private(set) var frameHistory: [WindowID: [Rect]] = [:]
     private(set) var zoomed: [WindowID] = []
     private(set) var nativeFullscreen: [WindowID] = []
+    var applicationWindowFocusResult = false
+    private(set) var focusedApplicationWindows: [WindowID] = []
+    private(set) var activatedBundleIDs: [String] = []
 
     init(provider: PowerUserProvider) {
         self.provider = provider
@@ -36,6 +40,7 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         let rect = Rect(frame)
         frames[window.id] = rect
+        frameHistory[window.id, default: []].append(rect)
         provider.snapshots = provider.snapshots.map {
             guard $0.id == window.id else { return $0 }
             var updated = $0
@@ -48,6 +53,19 @@ final class PowerUserWriter: WindowFrameWriting, @unchecked Sendable {
     func focus(_ window: WindowSnapshot) -> Bool {
         focused.append(window.id)
         provider.focusedID = window.id
+        return true
+    }
+
+    func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
+        focusedApplicationWindows.append(windowID)
+        if applicationWindowFocusResult {
+            provider.focusedID = windowID
+        }
+        return applicationWindowFocusResult
+    }
+
+    func activateApplication(bundleID: String) -> Bool {
+        activatedBundleIDs.append(bundleID)
         return true
     }
 
@@ -182,13 +200,15 @@ struct PowerUserFocusCommandTests {
         #expect(fullscreenOn.changed)
         #expect(fullscreenOff.changed)
         #expect(native.changed)
-        #expect(writer.frames[left.id] != nil)
+        #expect(writer.frameHistory[left.id]?.first == Rect(x: 0, y: 0, width: 1000, height: 800))
+        #expect(writer.frameHistory[right.id]?.first == Rect(x: 999, y: 0, width: 495, height: 800))
         #expect(writer.frames[left.id] != Rect(x: 0, y: 0, width: 1000, height: 800))
+        #expect(writer.frames[right.id] != Rect(x: 999, y: 0, width: 495, height: 800))
         #expect(writer.nativeFullscreen.map(\.rawValue) == [1])
     }
 
     @Test
-    func railHidesOnFocusedFullscreenWindowDisplay() {
+    func railDetectsFocusedMaximizedWindowDisplayForDiagnostics() {
         let display = powerDisplay()
         let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
         let regular = powerWindow(2, x: 40, y: 40, width: 420, height: 320)
@@ -202,7 +222,7 @@ struct PowerUserFocusCommandTests {
     }
 
     @Test
-    func railKeepsHidingFullscreenDisplayWhenFocusMovesToAnotherDisplay() {
+    func railDetectsMaximizedDisplayWhenFocusMovesToAnotherDisplay() {
         let first = powerDisplay("display-main", index: 1, x: 0)
         let second = powerDisplay("display-side", index: 2, x: 1000)
         let fullscreen = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
@@ -214,6 +234,26 @@ struct PowerUserFocusCommandTests {
         let snapshot = service.snapshot()
 
         #expect(RailController.fullscreenDisplayIDs(in: snapshot) == [first.id])
+    }
+
+    @Test
+    func railExposesMaximizedPresentationInsteadOfDroppingStageState() {
+        let display = powerDisplay()
+        let maximized = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(displays: [display], windows: [maximized])
+        provider.focusedID = maximized.id
+        let store = StageStore(path: tempPath("rail-maximized-presentation-state"))
+        let service = SnapshotService(provider: provider, stageStore: store)
+        let snapshot = service.snapshot()
+        let scope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
+            PersistentStage(id: StageID(rawValue: "1"), members: [
+                PersistentStageMember(windowID: maximized.id, bundleID: maximized.bundleID, title: maximized.title, frame: maximized.frame)
+            ])
+        ])
+
+        let states = RailController.railWindowPresentationStates(in: scope, snapshot: snapshot)
+
+        #expect(states[maximized.id] == .maximized)
     }
 
     @Test

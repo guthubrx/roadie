@@ -43,7 +43,9 @@ public struct RoadieState: Equatable, Codable, Sendable {
     public mutating func createStage(id stageID: StageID, name: String, mode: WindowManagementMode = .bsp, in displayID: DisplayID, desktopID: DesktopID) throws {
         ensureDisplay(displayID)
         if displays[displayID]?.desktops[desktopID] == nil {
-            displays[displayID]?.desktops[desktopID] = DesktopState(id: desktopID)
+            displays[displayID]?.desktops[desktopID] = DesktopState(id: desktopID, activeStageID: stageID)
+            displays[displayID]?.desktops[desktopID]?.stages[stageID] = StageState(id: stageID, name: name, mode: mode)
+            return
         }
         guard displays[displayID]?.desktops[desktopID]?.stages[stageID] == nil else {
             throw RoadieStateError.stageAlreadyExists(StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID))

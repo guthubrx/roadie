@@ -280,6 +280,27 @@ struct LayoutPlannerTests {
     }
 
     @Test
+    func mutableBspDoesNotPreserveLargeInternalGapAsManagedSplit() {
+        let a = WindowID(rawValue: 1)
+        let b = WindowID(rawValue: 2)
+        let plan = LayoutPlanner.plan(LayoutRequest(
+            scope: scope,
+            mode: .mutableBsp,
+            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
+            windowIDs: [a, b],
+            currentFrames: [
+                a: CGRect(x: 0, y: 0, width: 400, height: 500),
+                b: CGRect(x: 600, y: 0, width: 400, height: 500),
+            ],
+            splitPolicy: "balanced",
+            innerGap: 10
+        ))
+
+        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 495, height: 500))
+        #expect(plan.placements[b] == CGRect(x: 505, y: 0, width: 495, height: 500))
+    }
+
+    @Test
     func mutableBspPreservesObservedVerticalSplitOnWideContainer() {
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)

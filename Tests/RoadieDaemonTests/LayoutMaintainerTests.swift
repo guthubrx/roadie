@@ -4,15 +4,22 @@ import Testing
 import RoadieAX
 import RoadieCore
 import RoadieDaemon
+import RoadieTiler
 
 private final class SequenceProvider: SystemSnapshotProviding, @unchecked Sendable {
     private let display: DisplaySnapshot
     private let windowFrames: [[Rect]]
+    private let nativeFullscreenWindowIDs: Set<WindowID>
     private var index = 0
 
-    init(display: DisplaySnapshot, windowFrames: [[Rect]]) {
+    init(
+        display: DisplaySnapshot,
+        windowFrames: [[Rect]],
+        nativeFullscreenWindowIDs: Set<WindowID> = []
+    ) {
         self.display = display
         self.windowFrames = windowFrames
+        self.nativeFullscreenWindowIDs = nativeFullscreenWindowIDs
     }
 
     func permissions(prompt: Bool) -> PermissionSnapshot {
@@ -35,7 +42,10 @@ private final class SequenceProvider: SystemSnapshotProviding, @unchecked Sendab
                 title: "Window\(offset + 1)",
                 frame: frame,
                 isOnScreen: true,
-                isTileCandidate: true
+                isTileCandidate: true,
+                furniture: nativeFullscreenWindowIDs.contains(WindowID(rawValue: UInt32(offset + 1)))
+                    ? WindowFurniture(isNativeFullscreen: true)
+                    : nil
             )
         }
     }
@@ -272,6 +282,20 @@ private final class SequenceWriter: WindowFrameWriting, @unchecked Sendable {
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         actualFrames[window.id]?.cgRect ?? frame
+    }
+}
+
+private final class RecordingSequenceWriter: WindowFrameWriting, @unchecked Sendable {
+    private let actualFrames: [WindowID: Rect]
+    private(set) var requestedFrames: [WindowID: Rect] = [:]
+
+    init(actualFrames: [WindowID: Rect]) {
+        self.actualFrames = actualFrames
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        requestedFrames[window.id] = Rect(frame)
+        return actualFrames[window.id]?.cgRect ?? frame
     }
 }
 
@@ -776,6 +800,392 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func mutableBspHorizontalResizePreservesNestedVerticalSplit() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let store = StageStore(path: tempPath("mutable-bsp-horizontal-resize-axis"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: scope.stageID, stages: [
+                    PersistentStage(id: scope.stageID, mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window1", frame: Rect(x: 0, y: 0, width: 495, height: 500)),
+                        PersistentStageMember(windowID: WindowID(rawValue: 2), bundleID: "app.2", title: "Window2", frame: Rect(x: 505, y: 0, width: 495, height: 245)),
+                        PersistentStageMember(windowID: WindowID(rawValue: 3), bundleID: "app.3", title: "Window3", frame: Rect(x: 505, y: 255, width: 495, height: 245)),
+                    ])
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = SequenceProvider(display: display, windowFrames: [
+            [
+                Rect(x: 0, y: 0, width: 495, height: 500),
+                Rect(x: 505, y: 0, width: 495, height: 245),
+                Rect(x: 505, y: 255, width: 495, height: 245),
+            ],
+            [
+                Rect(x: 0, y: 0, width: 495, height: 500),
+                Rect(x: 650, y: 0, width: 350, height: 245),
+                Rect(x: 505, y: 255, width: 495, height: 245),
+            ],
+            [
+                Rect(x: 0, y: 0, width: 640, height: 500),
+                Rect(x: 650, y: 0, width: 350, height: 245),
+                Rect(x: 650, y: 255, width: 350, height: 245),
+            ],
+        ])
+        let writer = RecordingWriter()
+        let intentStore = LayoutIntentStore(path: tempPath("mutable-bsp-horizontal-resize-axis-intent"))
+        let eventPath = tempPath("mutable-bsp-horizontal-resize-axis-events")
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore,
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store)
+
+        let initial = maintainer.tick()
+        let resized = maintainer.tick()
+        let settled = maintainer.tick()
+
+        let stage = store.state().scopes[0].stages[0]
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(initial.commands == 0)
+        #expect(resized.manualResizeDetected)
+        #expect(resized.commands == 2)
+        #expect(settled.commands == 0)
+        #expect(stage.members.map(\.windowID) == [WindowID(rawValue: 1), WindowID(rawValue: 2), WindowID(rawValue: 3)])
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 640, height: 500))
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 3)] == Rect(x: 650, y: 255, width: 350, height: 245))
+        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 3)]?.height == 245)
+        #expect(events.contains("\"resizeAxes\":\"2:horizontal\""))
+    }
+
+    @Test
+    func tiledScopeMembershipChurnSettlesBeforeRelayout() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let first = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "App1",
+            bundleID: "app.1",
+            title: "Window1",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let second = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "App2",
+            bundleID: "app.2",
+            title: "Window2",
+            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let firstDuringChurn = WindowSnapshot(
+            id: first.id,
+            pid: first.pid,
+            appName: first.appName,
+            bundleID: first.bundleID,
+            title: first.title,
+            frame: Rect(x: 0, y: 0, width: 700, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [
+            [first, second],
+            [firstDuringChurn],
+            [firstDuringChurn],
+        ])
+        let writer = RecordingWriter()
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-membership-settle-events-\(UUID().uuidString).jsonl")
+            .path
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
+        )
+        var currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            now: { currentTime }
+        )
+
+        let initial = maintainer.tick()
+        let settling = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(3)
+        let settled = maintainer.tick()
+
+        #expect(initial.commands == 0)
+        #expect(settling.commands == 0)
+        #expect(settled.commands == 1)
+        #expect(writer.requestedFrames[first.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func focusedStageRestoreWaitsForRecentMissingMemberToSettle() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let focusedVisible = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "A",
+            bundleID: "a",
+            title: "focused",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let sibling = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 11,
+            appName: "B",
+            bundleID: "b",
+            title: "sibling",
+            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        var focusedHidden = focusedVisible
+        focusedHidden.frame = Rect(x: 999, y: 499, width: 495, height: 500)
+        let stagePath = tempPath("focused-restore-membership-settling")
+        let eventPath = tempPath("focused-restore-membership-settling-events")
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+        let stageStore = StageStore(path: stagePath)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[focusedVisible, sibling], [focusedHidden]],
+                focusedID: focusedVisible.id
+            ),
+            frameWriter: writer,
+            stageStore: stageStore
+        )
+        var currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            store: stageStore,
+            now: { currentTime }
+        )
+
+        _ = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(0.1)
+        let settling = maintainer.tick()
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(settling.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
+        #expect(!events.contains("\"type\":\"stage_focus_restore\""))
+    }
+
+    @Test
+    func mutableBspDoesNotAdoptGeometryDuringMembershipChurn() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let firstInitial = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "App1",
+            bundleID: "app.1",
+            title: "Window1",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let second = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "App2",
+            bundleID: "app.2",
+            title: "Window2",
+            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let firstDuringChurn = WindowSnapshot(
+            id: firstInitial.id,
+            pid: firstInitial.pid,
+            appName: firstInitial.appName,
+            bundleID: firstInitial.bundleID,
+            title: firstInitial.title,
+            frame: Rect(x: 0, y: 0, width: 700, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let intentPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-mutable-churn-intent-\(UUID().uuidString).json")
+            .path
+        let eventPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-mutable-churn-events-\(UUID().uuidString).jsonl")
+            .path
+        let intentStore = LayoutIntentStore(path: intentPath)
+        intentStore.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [firstInitial.id, second.id],
+            placements: [
+                firstInitial.id: firstInitial.frame,
+                second.id: second.frame,
+            ]
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [
+            [firstInitial, second],
+            [firstDuringChurn],
+        ])
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore
+        )
+        let currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            now: { currentTime }
+        )
+
+        _ = maintainer.tick()
+        let settling = maintainer.tick()
+
+        #expect(settling.commands == 0)
+        #expect(intentStore.intent(for: scope)?.windowIDs == [firstInitial.id, second.id])
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
+        #expect(!events.contains("\"type\":\"mutable_bsp_geometry_adopted\""))
+        try? FileManager.default.removeItem(atPath: intentPath)
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func spatialBspTreeIsNotReconciledDuringMembershipChurn() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let first = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "App1",
+            bundleID: "app.1",
+            title: "Window1",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let second = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "App2",
+            bundleID: "app.2",
+            title: "Window2",
+            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let firstDuringChurn = WindowSnapshot(
+            id: first.id,
+            pid: first.pid,
+            appName: first.appName,
+            bundleID: first.bundleID,
+            title: first.title,
+            frame: Rect(x: 0, y: 0, width: 700, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stageID = StageID(rawValue: "1")
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: stageID)
+        let tree = BSPTree.split(
+            orientation: .vertical,
+            ratio: 0.5,
+            first: .leaf(first.id),
+            second: .leaf(second.id)
+        )
+        let store = StageStore(path: tempPath("roadie-spatial-membership-settle"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: stageID, stages: [
+                    PersistentStage(id: stageID, mode: .spatialBsp, members: [
+                        PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                        PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+                    ], bspTree: tree)
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [
+            [first, second],
+            [firstDuringChurn],
+        ])
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: RecordingWriter(),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+        let currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            intervalSeconds: 0.1,
+            store: store,
+            now: { currentTime }
+        )
+
+        _ = maintainer.tick()
+        _ = maintainer.tick()
+
+        #expect(store.state().bspTree(for: scope) == tree)
+    }
+
+    @Test
     func mutableBspStableVisibleScopeIsNotAutomaticallyRelayouted() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -961,6 +1371,66 @@ struct LayoutMaintainerTests {
         #expect(tick.commands == 1)
         #expect(writer.requestedFrames[live.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
         #expect(store.state().scopes.first?.memberIDs(in: StageID(rawValue: "1")) == [live.id, closed])
+    }
+
+    @Test
+    func commandActivityDoesNotDelayReclaimAfterStageMemberDisappears() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let live = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "Live",
+            bundleID: "app.live",
+            title: "Live",
+            frame: Rect(x: 0, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let now = Date()
+        let closed = WindowID(rawValue: 2)
+        let store = StageStore(path: tempPath("mutable-bsp-closed-member-command-activity"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
+                        PersistentStageMember(
+                            windowID: closed,
+                            bundleID: "app.closed",
+                            title: "Closed",
+                            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+                            lastSeenAt: now.addingTimeInterval(-1),
+                            missingSince: now
+                        ),
+                    ])
+                ])
+            ],
+            activeDisplayID: display.id
+        ))
+        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[live]])
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+        let commandActivity = LayoutCommandActivity(path: tempPath("layout-command-activity-missing-reclaim"))
+        commandActivity.markActive(reason: "test", now: now, holdSeconds: 5)
+        let maintainer = LayoutMaintainer(service: service, store: store, commandActivity: commandActivity, now: { now.addingTimeInterval(0.1) })
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[live.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
+        commandActivity.reset()
     }
 
     @Test
@@ -1265,13 +1735,23 @@ struct LayoutMaintainerTests {
         let splitRight = Rect(x: 505, y: 0, width: 495, height: 500)
         let fullscreen = Rect(x: 0, y: 0, width: 1000, height: 500)
         let writer = RecordingWriter()
+        let intentTemp = makeIntentStore()
+        defer { try? FileManager.default.removeItem(atPath: intentTemp.path) }
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [WindowID(rawValue: 1): splitLeft, WindowID(rawValue: 2): splitRight],
+            source: .command
+        ))
         let service = SnapshotService(
             provider: SequenceProvider(display: display, windowFrames: [
                 [splitLeft, splitRight],
                 [fullscreen, splitRight],
             ]),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store
         )
         let maintainer = LayoutMaintainer(service: service)
 
@@ -1279,13 +1759,14 @@ struct LayoutMaintainerTests {
         let fullscreenTick = maintainer.tick()
 
         #expect(initial.commands == 0)
-        #expect(fullscreenTick.commands == 0)
+        #expect(fullscreenTick.commands == 1)
         #expect(!fullscreenTick.manualResizeDetected)
-        #expect(writer.requestedFrames.isEmpty)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 999, y: 0, width: 495, height: 500))
     }
 
     @Test
-    func fullscreenLikeWindowIsNotResizedByMaintainerPlan() {
+    func fullscreenLikeWindowHidesActiveStageSiblings() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
             index: 1,
@@ -1297,10 +1778,23 @@ struct LayoutMaintainerTests {
         let fullscreen = Rect(x: 0, y: 0, width: 1000, height: 500)
         let small = Rect(x: 120, y: 0, width: 100, height: 500)
         let writer = RecordingWriter()
+        let intentTemp = makeIntentStore()
+        defer { try? FileManager.default.removeItem(atPath: intentTemp.path) }
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [WindowID(rawValue: 1): fullscreen, WindowID(rawValue: 2): small],
+            source: .command
+        ))
         let service = SnapshotService(
-            provider: SequenceProvider(display: display, windowFrames: [[fullscreen, small]]),
+            provider: SequenceProvider(
+                display: display,
+                windowFrames: [[fullscreen, small]]
+            ),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store
         )
         let maintainer = LayoutMaintainer(service: service)
 
@@ -1308,7 +1802,327 @@ struct LayoutMaintainerTests {
 
         #expect(tick.commands == 1)
         #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
-        #expect(writer.requestedFrames[WindowID(rawValue: 2)] != nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 999, y: 0, width: 100, height: 500))
+    }
+
+    @Test
+    func maximizedLikeWindowWithoutNativeSignalDoesNotHideActiveStageSiblings() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let fullscreenSized = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let small = Rect(x: 120, y: 0, width: 100, height: 500)
+        let writer = RecordingWriter()
+        let eventPath = tempPath("maximized-like-no-sibling-hide-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[fullscreenSized, small]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        _ = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] != Rect(x: 999, y: 0, width: 100, height: 500))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
+
+    @Test
+    func shiftedScreenDominantFullscreenSizedWindowIsReanchoredAfterRestart() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 1000, y: -500, width: 1200, height: 800),
+            visibleFrame: Rect(x: 1040, y: -460, width: 1100, height: 720),
+            isMain: false
+        )
+        let shiftedFullscreenSized = Rect(x: 1540, y: -460, width: 1100, height: 720)
+        let small = Rect(x: 1180, y: -460, width: 300, height: 720)
+        let writer = RecordingWriter()
+        let eventPath = tempPath("shifted-screen-dominant-reanchor-events")
+        let intentTemp = makeIntentStore()
+        defer { try? FileManager.default.removeItem(atPath: intentTemp.path) }
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [WindowID(rawValue: 1): shiftedFullscreenSized, WindowID(rawValue: 2): small],
+            source: .command
+        ))
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[shiftedFullscreenSized, small]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 1040, y: -460, width: 1100, height: 720))
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
+        #expect(events.contains("\"type\":\"fullscreen_sized_windows_reanchored\""))
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func parkedFullscreenSizedWindowIsNotTreatedAsActiveFullscreen() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 1000, y: -500, width: 1200, height: 800),
+            visibleFrame: Rect(x: 1040, y: -460, width: 1100, height: 720),
+            isMain: false
+        )
+        let parkedFullscreenSized = Rect(x: 2139, y: -460, width: 1100, height: 720)
+        let small = Rect(x: 1180, y: -460, width: 300, height: 720)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [[parkedFullscreenSized, small]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let tick = maintainer.tick()
+
+        #expect(tick.commands > 0)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] != nil)
+    }
+
+    @Test
+    func shiftedFullscreenSizedClampedWindowIsReanchoredBeforeSiblingHide() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 1000, y: -500, width: 1200, height: 800),
+            visibleFrame: Rect(x: 1040, y: -460, width: 1100, height: 720),
+            isMain: false
+        )
+        let smallLeft = Rect(x: 1100, y: -460, width: 300, height: 720)
+        let smallRight = Rect(x: 1500, y: -460, width: 300, height: 720)
+        let shiftedFullscreenSized = Rect(x: 1540, y: -460, width: 1100, height: 720)
+        let rightTarget = Rect(x: 1595, y: -460, width: 545, height: 720)
+        let eventPath = tempPath("shifted-fullscreen-clamped-events")
+        let intentTemp = makeIntentStore()
+        defer { try? FileManager.default.removeItem(atPath: intentTemp.path) }
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+            placements: [WindowID(rawValue: 1): smallLeft, WindowID(rawValue: 2): smallRight],
+            source: .command
+        ))
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [
+                [smallLeft, smallRight],
+                [shiftedFullscreenSized, rightTarget],
+            ]),
+            frameWriter: SequenceWriter(actualFrames: [
+                WindowID(rawValue: 1): shiftedFullscreenSized,
+                WindowID(rawValue: 2): rightTarget,
+            ]),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let clamped = maintainer.tick()
+        let reanchored = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(clamped.clamped == 0)
+        #expect(reanchored.commands == 0)
+        #expect(events.contains("\"type\":\"manual_resize_suppressed_by_command_intent\""))
+        #expect(!events.contains("\"type\":\"mutable_bsp_resize_propagated\""))
+        try? FileManager.default.removeItem(atPath: eventPath)
+    }
+
+    @Test
+    func fullscreenSiblingHideIsNotAdoptedAsMutableBspResize() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let terminal = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 10,
+            appName: "iTerm2",
+            bundleID: "com.googlecode.iterm2",
+            title: "Terminal",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let horizon = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 11,
+            appName: "Google Chrome",
+            bundleID: "com.google.Chrome",
+            title: "Horizon Studio",
+            frame: Rect(x: 505, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let hiddenHorizon = WindowSnapshot(
+            id: horizon.id,
+            pid: horizon.pid,
+            appName: horizon.appName,
+            bundleID: horizon.bundleID,
+            title: horizon.title,
+            frame: Rect(x: 999, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stagePath = tempPath("fullscreen-sibling-hide-no-mutable-adopt")
+        let eventPath = tempPath("fullscreen-sibling-hide-no-mutable-adopt-events")
+        let intentTemp = makeIntentStore()
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+        }
+
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, focusedWindowID: terminal.id, members: [
+                    PersistentStageMember(windowID: terminal.id, bundleID: terminal.bundleID, title: terminal.title, frame: terminal.frame),
+                    PersistentStageMember(windowID: horizon.id, bundleID: horizon.bundleID, title: horizon.title, frame: horizon.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display.id))
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [terminal.id, horizon.id],
+            placements: [terminal.id: terminal.frame, horizon.id: horizon.frame],
+            source: .command
+        ))
+
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[terminal, horizon], [terminal, hiddenHorizon], [terminal, hiddenHorizon]],
+                focusedID: terminal.id
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+
+        let hidden = maintainer.tick()
+        let stable = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(hidden.commands == 1)
+        #expect(writer.requestedFrames[horizon.id] == hiddenHorizon.frame)
+        #expect(stable.commands == 0)
+        #expect(!stable.manualResizeDetected)
+        #expect(events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+        #expect(!events.contains("\"type\":\"mutable_bsp_geometry_adopted\""))
+        #expect(!events.contains("\"type\":\"layout_clamped\""))
+    }
+
+    @Test
+    func fullscreenCommandRestoreIntentDoesNotRetileWhileFullscreenIsActive() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let fullscreen = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "Firefox",
+            bundleID: "org.mozilla.firefox",
+            title: "Fullscreen",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let hiddenSibling = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "Finder",
+            bundleID: "com.apple.finder",
+            title: "Downloads",
+            frame: Rect(x: 999, y: 0, width: 495, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stagePath = tempPath("fullscreen-command-restore-intent")
+        let eventPath = tempPath("fullscreen-command-restore-intent-events")
+        let intentTemp = makeIntentStore()
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+        }
+
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: scope.stageID, stages: [
+                PersistentStage(id: scope.stageID, mode: .mutableBsp, focusedWindowID: fullscreen.id, members: [
+                    PersistentStageMember(windowID: fullscreen.id, bundleID: fullscreen.bundleID, title: fullscreen.title, frame: fullscreen.frame),
+                    PersistentStageMember(windowID: hiddenSibling.id, bundleID: hiddenSibling.bundleID, title: hiddenSibling.title, frame: hiddenSibling.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display.id))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [fullscreen.id, hiddenSibling.id],
+            placements: [
+                fullscreen.id: Rect(x: 0, y: 0, width: 495, height: 500),
+                hiddenSibling.id: Rect(x: 505, y: 0, width: 495, height: 500),
+            ],
+            source: .command
+        ))
+
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[fullscreen, hiddenSibling]],
+                focusedID: fullscreen.id
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentTemp.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.commands == 0)
+        #expect(writer.requestedFrames.isEmpty)
+        #expect(intentTemp.store.intent(for: scope) != nil)
+        #expect(!events.contains("\"type\":\"layout_apply\""))
     }
 
     @Test
@@ -1571,6 +2385,115 @@ struct LayoutMaintainerTests {
 
         #expect(clamped.clamped == 1)
         #expect(suppressed.commands == 0)
+    }
+
+    @Test
+    func clampedMinimumSizeSuppressesLaterSmallerRequestsEvenAfterWindowGrows() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let firstInitial = Rect(x: 0, y: 0, width: 100, height: 500)
+        let secondInitial = Rect(x: 120, y: 0, width: 100, height: 500)
+        let firstTarget = Rect(x: 0, y: 0, width: 495, height: 500)
+        let secondReportedActual = Rect(x: 505, y: 0, width: 600, height: 500)
+        let secondGrownByRepair = Rect(x: 300, y: 0, width: 700, height: 500)
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [
+                [firstInitial, secondInitial],
+                [firstTarget, secondGrownByRepair],
+            ]),
+            frameWriter: SequenceWriter(actualFrames: [
+                WindowID(rawValue: 1): firstTarget,
+                WindowID(rawValue: 2): secondReportedActual,
+            ]),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service)
+
+        let clamped = maintainer.tick()
+        let suppressed = maintainer.tick()
+
+        #expect(clamped.clamped == 1)
+        #expect(suppressed.commands == 0)
+    }
+
+    @Test
+    func shrinkClampedWideWindowRepairsSiblingIntoRemainingSpace() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 150, y: 38, width: 1898, height: 1234),
+            isMain: true
+        )
+        let finder = Rect(x: 150, y: 38, width: 557, height: 1234)
+        let firefoxInitial = Rect(x: 707, y: 38, width: 1341, height: 1234)
+        let firefoxActual = Rect(x: 569, y: 38, width: 1479, height: 1234)
+        let writer = RecordingSequenceWriter(actualFrames: [
+            WindowID(rawValue: 2): firefoxActual,
+        ])
+        let eventPath = tempPath("shrink-clamped-wide-window-repair-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [
+                [finder, firefoxInitial],
+            ]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.clamped == 1)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 150, y: 38, width: 409, height: 1234))
+        #expect(events.contains("\"type\":\"layout_clamped_scope_repaired\""))
+    }
+
+    @Test
+    func mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 150, y: 38, width: 1898, height: 1234),
+            isMain: true
+        )
+        let finderInitial = Rect(x: 150, y: 38, width: 557, height: 1234)
+        let firefoxInitial = Rect(x: 707, y: 38, width: 1341, height: 1234)
+        let finderActual = Rect(x: 150, y: 38, width: 557, height: 1234)
+        let firefoxActual = Rect(x: 536, y: 30, width: 1512, height: 1235)
+        let writer = RecordingSequenceWriter(actualFrames: [
+            WindowID(rawValue: 1): finderActual,
+            WindowID(rawValue: 2): firefoxActual,
+        ])
+        let eventPath = tempPath("mutually-clamped-oversized-isolate-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let service = SnapshotService(
+            provider: SequenceProvider(display: display, windowFrames: [
+                [finderInitial, firefoxInitial],
+            ]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.clamped == 2)
+        #expect(tick.applied >= 1)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] != finderInitial)
+        #expect(events.contains("\"type\":\"layout_infeasible_scope_isolated\""))
+        #expect(events.contains("\"keptWindowID\":\"2\""))
     }
 
     @Test
@@ -2052,6 +2975,85 @@ struct LayoutMaintainerTests {
     }
 
     @Test
+    func focusedHiddenFullscreenSizedWindowRestoresWithoutBspRelayout() {
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let focusedHidden = WindowSnapshot(
+            id: WindowID(rawValue: 1),
+            pid: 11,
+            appName: "Firefox",
+            bundleID: "org.mozilla.firefox",
+            title: "Fullscreen",
+            frame: Rect(x: 999, y: 0, width: 1000, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let siblingHidden = WindowSnapshot(
+            id: WindowID(rawValue: 2),
+            pid: 12,
+            appName: "Finder",
+            bundleID: "com.apple.finder",
+            title: "Downloads",
+            frame: Rect(x: 999, y: 0, width: 300, height: 500),
+            isOnScreen: true,
+            isTileCandidate: true
+        )
+        let stagePath = tempPath("focused-fullscreen-restore-no-bsp")
+        let eventPath = tempPath("focused-fullscreen-restore-no-bsp-events")
+        let intentTemp = makeIntentStore()
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+            try? FileManager.default.removeItem(atPath: intentTemp.path)
+        }
+
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let stageStore = StageStore(path: stagePath)
+        stageStore.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, focusedWindowID: focusedHidden.id, members: [
+                    PersistentStageMember(windowID: focusedHidden.id, bundleID: focusedHidden.bundleID, title: focusedHidden.title, frame: focusedHidden.frame),
+                    PersistentStageMember(windowID: siblingHidden.id, bundleID: siblingHidden.bundleID, title: siblingHidden.title, frame: siblingHidden.frame),
+                ]),
+            ]),
+        ], activeDisplayID: display.id))
+        intentTemp.store.save(LayoutIntent(
+            scope: scope,
+            windowIDs: [focusedHidden.id, siblingHidden.id],
+            placements: [focusedHidden.id: display.visibleFrame, siblingHidden.id: siblingHidden.frame],
+            source: .command
+        ))
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(
+                displaySnapshots: [display],
+                windowSnapshots: [[focusedHidden, siblingHidden]],
+                focusedID: focusedHidden.id
+            ),
+            frameWriter: writer,
+            intentStore: intentTemp.store,
+            stageStore: stageStore
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(tick.commands == 1)
+        #expect(writer.requestedFrames[focusedHidden.id] == display.visibleFrame)
+        #expect(writer.requestedFrames[siblingHidden.id] == nil)
+        #expect(events.contains("\"type\":\"stage_focus_fullscreen_restore\""))
+        #expect(!events.contains("\"type\":\"stage_focus_restore\""))
+        #expect(!events.contains("\"type\":\"layout_clamped\""))
+    }
+
+    @Test
     func commandIntentBlocksImmediateReflow() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(
@@ -2189,6 +3191,54 @@ struct LayoutMaintainerTests {
         #expect(result.commands == 2)
         #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 100, height: 500))
         #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 110, y: 0, width: 890, height: 500))
+        try? FileManager.default.removeItem(atPath: intentTemp.path)
+    }
+
+    @Test
+    func clampedCommandIntentIsStabilizedInsideDisplayBounds() {
+        let intentTemp = makeIntentStore()
+        let display = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-a"),
+            index: 1,
+            name: "A",
+            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+            isMain: true
+        )
+        let intentScope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let writer = ClampingWriter(firstActual: Rect(x: 900, y: 0, width: 1000, height: 500))
+        let intentStore = intentTemp.store
+        intentStore.save(
+            LayoutIntent(
+                scope: intentScope,
+                windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
+                placements: [
+                    WindowID(rawValue: 1): Rect(x: 900, y: 0, width: 100, height: 500),
+                    WindowID(rawValue: 2): Rect(x: 0, y: 0, width: 890, height: 500),
+                ],
+                createdAt: Date().addingTimeInterval(-30),
+                source: .command
+            )
+        )
+
+        let service = SnapshotService(
+            provider: SequenceProvider(
+                display: display,
+                windowFrames: [
+                    [Rect(x: 0, y: 0, width: 495, height: 500), Rect(x: 505, y: 0, width: 495, height: 500)],
+                ]
+            ),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: intentStore
+        )
+
+        let maintainer = LayoutMaintainer(service: service, intervalSeconds: 0.1)
+        let result = maintainer.tick()
+
+        #expect(result.clamped == 1)
+        #expect(writer.requestedFrames.first == Rect(x: 900, y: 0, width: 100, height: 500))
+        #expect(writer.requestedFrames.last == Rect(x: 0, y: 0, width: 1000, height: 500))
         try? FileManager.default.removeItem(atPath: intentTemp.path)
     }
 

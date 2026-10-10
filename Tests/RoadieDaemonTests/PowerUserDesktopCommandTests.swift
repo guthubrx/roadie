@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
@@ -204,6 +205,551 @@ struct PowerUserDesktopCommandTests {
         #expect(result.changed)
         #expect(commandActivity.isActive())
         commandActivity.reset()
+    }
+
+    @Test
+    func stageSwitchToAlreadyActiveStageDoesNotReapplyLayout() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        let provider = PowerUserProvider(windows: [visible])
+        provider.focusedID = visible.id
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-noop-events")
+        let store = StageStore(path: tempPath("power-stage-switch-noop"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("1", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(!result.changed)
+        #expect(writer.frames.isEmpty)
+        #expect(writer.focused.isEmpty)
+        #expect(events.contains("\"type\":\"stage_switch_noop\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func repeatedStageSwitchToAlreadyActiveHiddenStageRestoresMembers() {
+        let display = DisplayID(rawValue: "display-main")
+        var hidden = powerWindow(1, x: -20000)
+        hidden.frame = Rect(x: -20000, y: 120, width: 400, height: 300)
+        let targetFrame = Rect(x: 120, y: 80, width: 500, height: 360)
+        let provider = PowerUserProvider(windows: [hidden])
+        provider.focusedID = nil
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-reconcile-hidden-active-events")
+        let store = StageStore(path: tempPath("power-stage-switch-reconcile-hidden-active"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: hidden.id, members: [
+                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: targetFrame),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("1", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames[hidden.id] == targetFrame)
+        #expect(writer.focused == [hidden.id])
+        #expect(events.contains("\"type\":\"stage_switch_reconcile\""))
+        #expect(events.contains("\"reason\":\"active_stage_members_not_visible\""))
+        #expect(!events.contains("\"type\":\"stage_switch_noop\""))
+    }
+
+    @Test
+    func repeatedStageSwitchToAlreadyActiveMissingStageFocusesApplicationWindow() {
+        let display = DisplayID(rawValue: "display-main")
+        let missing = powerWindow(1, x: 120)
+        let provider = PowerUserProvider(windows: [])
+        provider.focusedID = nil
+        let writer = PowerUserWriter(provider: provider)
+        writer.applicationWindowFocusResult = true
+        let eventPath = tempPath("power-stage-switch-reconcile-missing-active-events")
+        let store = StageStore(path: tempPath("power-stage-switch-reconcile-missing-active"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: missing.id, members: [
+                    PersistentStageMember(
+                        windowID: missing.id,
+                        bundleID: missing.bundleID,
+                        title: missing.title,
+                        frame: missing.frame,
+                        missingSince: Date(timeIntervalSinceNow: -5)
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("1", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames.isEmpty)
+        #expect(writer.focusedApplicationWindows == [missing.id])
+        #expect(writer.activatedBundleIDs.isEmpty)
+        #expect(events.contains("\"type\":\"stage_switch_reconcile\""))
+        #expect(events.contains("\"focusedApplicationWindow\":\"true\""))
+        #expect(!events.contains("\"type\":\"stage_switch_noop\""))
+    }
+
+    @Test
+    func stageSwitchDoesNotBlankCurrentStageWhenTargetHasOnlyMissingMembers() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        let missing = powerWindow(2, x: 300)
+        let provider = PowerUserProvider(windows: [visible])
+        provider.focusedID = visible.id
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-pending-stale-missing-target-events")
+        let store = StageStore(path: tempPath("power-stage-switch-pending-stale-missing-target"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: visible.id, members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: missing.id, members: [
+                    PersistentStageMember(
+                        windowID: missing.id,
+                        bundleID: missing.bundleID,
+                        title: missing.title,
+                        frame: missing.frame,
+                        lastSeenAt: Date(timeIntervalSinceNow: -25),
+                        missingSince: Date(timeIntervalSinceNow: -25)
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("2", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames.isEmpty)
+        #expect(writer.activatedBundleIDs == [missing.bundleID])
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
+        #expect(store.state().commandFocusProtection == nil)
+        #expect(events.contains("\"type\":\"stage_switch_pending_missing_target\""))
+        #expect(events.contains("\"reason\":\"target_stage_members_missing_pending_focus\""))
+        #expect(events.contains("\"stateChanged\":\"false\""))
+        #expect(!events.contains("\"type\":\"stage_switch_blocked_empty_target\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func stageSwitchToRecentlyMissingTargetArmsPendingRestoreWithoutBlankingCurrentStage() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        let missing = powerWindow(2, x: 300)
+        let provider = PowerUserProvider(windows: [visible])
+        provider.focusedID = visible.id
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-pending-missing-target-events")
+        let store = StageStore(path: tempPath("power-stage-switch-pending-missing-target"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: visible.id, members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: missing.id, members: [
+                    PersistentStageMember(
+                        windowID: missing.id,
+                        bundleID: missing.bundleID,
+                        title: missing.title,
+                        frame: missing.frame,
+                        lastSeenAt: Date(),
+                        missingSince: Date()
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("2", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames.isEmpty)
+        #expect(writer.activatedBundleIDs == [missing.bundleID])
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
+        #expect(store.state().commandFocusProtection == nil)
+        #expect(events.contains("\"type\":\"stage_switch_pending_missing_target\""))
+        #expect(events.contains("\"reason\":\"target_stage_members_missing_pending_focus\""))
+        #expect(!events.contains("\"type\":\"stage_switch_blocked_empty_target\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func stageSwitchToMissingNativeFullscreenTargetActivatesApplication() {
+        let display = DisplayID(rawValue: "display-main")
+        let visible = powerWindow(1, x: 100)
+        var fullscreen = powerWindow(2, x: 0, y: 0, width: 1000, height: 800)
+        fullscreen.bundleID = "org.mozilla.firefox"
+        fullscreen.title = "Netflix"
+        let provider = PowerUserProvider(windows: [visible])
+        provider.focusedID = visible.id
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-missing-native-fullscreen-events")
+        let store = StageStore(path: tempPath("power-stage-switch-missing-native-fullscreen"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: visible.id, members: [
+                    PersistentStageMember(windowID: visible.id, bundleID: visible.bundleID, title: visible.title, frame: visible.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: fullscreen.id, members: [
+                    PersistentStageMember(
+                        windowID: fullscreen.id,
+                        bundleID: fullscreen.bundleID,
+                        title: fullscreen.title,
+                        frame: fullscreen.frame,
+                        presentationState: .nativeFullscreen,
+                        lastSeenAt: Date(timeIntervalSinceNow: -10),
+                        missingSince: Date(timeIntervalSinceNow: -10)
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("2", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames.isEmpty)
+        #expect(writer.activatedBundleIDs == ["org.mozilla.firefox"])
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "2"))
+        #expect(events.contains("\"type\":\"stage_switch_pending_missing_target\""))
+        #expect(events.contains("\"nativeFullscreenActivation\":\"true\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func repeatedStageSwitchToAlreadyActiveMissingNativeFullscreenRetriesActivation() {
+        let display = DisplayID(rawValue: "display-main")
+        var fullscreen = powerWindow(2, x: 0, y: 0, width: 1000, height: 800)
+        fullscreen.bundleID = "org.mozilla.firefox"
+        fullscreen.title = "Netflix"
+        let provider = PowerUserProvider(windows: [])
+        provider.focusedID = nil
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-noop-missing-native-fullscreen-events")
+        let store = StageStore(path: tempPath("power-stage-switch-noop-missing-native-fullscreen"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "2"), stages: [
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: fullscreen.id, members: [
+                    PersistentStageMember(
+                        windowID: fullscreen.id,
+                        bundleID: fullscreen.bundleID,
+                        title: fullscreen.title,
+                        frame: fullscreen.frame,
+                        presentationState: .nativeFullscreen,
+                        lastSeenAt: Date(timeIntervalSinceNow: -10),
+                        missingSince: Date(timeIntervalSinceNow: -10)
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("2", displayID: display)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.activatedBundleIDs == ["org.mozilla.firefox"])
+        #expect(events.contains("\"type\":\"stage_switch_noop\""))
+        #expect(events.contains("\"nativeFullscreenActivation\":\"true\""))
+        #expect(!events.contains("\"type\":\"stage_switch_pending_missing_target\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func nativeFullscreenFocusActivatesApplicationWithoutSwitchingStage() {
+        let display = DisplayID(rawValue: "display-main")
+        var fullscreen = powerWindow(2, x: 0, y: 0, width: 1000, height: 800)
+        fullscreen.bundleID = "org.mozilla.firefox"
+        fullscreen.title = "Netflix"
+        let provider = PowerUserProvider(windows: [])
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-native-fullscreen-focus-events")
+        let store = StageStore(path: tempPath("power-native-fullscreen-focus"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: []),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: fullscreen.id, members: [
+                    PersistentStageMember(
+                        windowID: fullscreen.id,
+                        bundleID: fullscreen.bundleID,
+                        title: fullscreen.title,
+                        frame: fullscreen.frame,
+                        presentationState: .nativeFullscreen,
+                        missingSince: Date()
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).focusNativeFullscreen(
+            windowID: fullscreen.id,
+            bundleID: fullscreen.bundleID,
+            stageID: StageID(rawValue: "2"),
+            displayID: display
+        )
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.activatedBundleIDs == ["org.mozilla.firefox"])
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
+        #expect(events.contains("\"type\":\"stage_native_fullscreen_focus\""))
+        #expect(events.contains("\"activatedApplication\":\"true\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func nativeFullscreenFocusPrefersExactApplicationWindowOverBundleActivation() {
+        let display = DisplayID(rawValue: "display-main")
+        var fullscreen = powerWindow(2, x: 0, y: 0, width: 1000, height: 800)
+        fullscreen.bundleID = "org.mozilla.firefox"
+        fullscreen.title = "Netflix"
+        let provider = PowerUserProvider(windows: [])
+        let writer = PowerUserWriter(provider: provider)
+        writer.applicationWindowFocusResult = true
+        let eventPath = tempPath("power-native-fullscreen-exact-focus-events")
+        let store = StageStore(path: tempPath("power-native-fullscreen-exact-focus"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: []),
+                PersistentStage(id: StageID(rawValue: "2"), focusedWindowID: fullscreen.id, members: [
+                    PersistentStageMember(
+                        windowID: fullscreen.id,
+                        bundleID: fullscreen.bundleID,
+                        title: fullscreen.title,
+                        frame: fullscreen.frame,
+                        presentationState: .nativeFullscreen,
+                        missingSince: Date()
+                    ),
+                ]),
+            ]),
+        ]))
+        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).focusNativeFullscreen(
+            windowID: fullscreen.id,
+            bundleID: fullscreen.bundleID,
+            stageID: StageID(rawValue: "2"),
+            displayID: display
+        )
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.focusedApplicationWindows == [fullscreen.id])
+        #expect(writer.activatedBundleIDs == [])
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "1"))
+        #expect(events.contains("\"focusedApplicationWindow\":\"true\""))
+        #expect(events.contains("\"activatedApplication\":\"false\""))
+        #expect(!events.contains("\"type\":\"stage_switch\""))
+    }
+
+    @Test
+    func stageSwitchPreservesMaximizedWindowAndKeepsSiblingsHidden() {
+        let display = powerDisplay()
+        let displayID = display.id
+        let maximizedFrame = Rect(x: 0, y: 0, width: 1000, height: 800)
+        let maximized = powerWindow(1, x: 0, y: 0, width: 495, height: 800)
+        let sibling = powerWindow(2, x: 505, y: 0, width: 495, height: 800)
+        let otherHidden = powerWindow(3, x: 999, y: 799, width: 300, height: 300)
+        let provider = PowerUserProvider(displays: [display], windows: [maximized, sibling, otherHidden])
+        provider.focusedID = maximized.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-stage-switch-preserves-maximized"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, focusedWindowID: maximized.id, members: [
+                    PersistentStageMember(windowID: maximized.id, bundleID: maximized.bundleID, title: maximized.title, frame: maximized.frame),
+                    PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), mode: .mutableBsp, focusedWindowID: otherHidden.id, members: [
+                    PersistentStageMember(windowID: otherHidden.id, bundleID: otherHidden.bundleID, title: otherHidden.title, frame: Rect(x: 100, y: 100, width: 300, height: 300)),
+                ]),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+        let eventPath = tempPath("power-stage-switch-preserves-maximized-events")
+        let commands = StageCommandService(service: service, store: store, events: EventLog(path: eventPath))
+
+        _ = WindowCommandService(service: service, stageStore: store).toggleFullscreen()
+        #expect(store.state().scopes.first?.stages.first(where: { $0.id == StageID(rawValue: "1") })?.members.first(where: { $0.windowID == maximized.id })?.frame == maximizedFrame)
+        _ = commands.switchTo("2", displayID: displayID)
+        #expect(store.state().scopes.first?.stages.first(where: { $0.id == StageID(rawValue: "1") })?.members.first(where: { $0.windowID == maximized.id })?.frame == maximizedFrame)
+        _ = commands.switchTo("1", displayID: displayID)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(events.contains("\"fullscreenProtected\":\"true\""))
+        #expect(writer.frameHistory[maximized.id]?.last == maximizedFrame)
+        #expect(writer.frameHistory[sibling.id]?.last?.x == 999)
+        #expect(writer.frameHistory[sibling.id]?.last?.width == sibling.frame.width)
+    }
+
+    @Test
+    func stageSwitchIgnoresMissingMaximizedMemberWhenRestoringLiveStageMembers() {
+        let display = powerDisplay()
+        let displayID = display.id
+        let current = powerWindow(1, x: 100, y: 100, width: 500, height: 400)
+        let first = powerWindow(2, x: 999, y: 799, width: 300, height: 300)
+        let second = powerWindow(3, x: 999, y: 799, width: 300, height: 300)
+        let staleMaximized = powerWindow(4, x: 0, y: 0, width: 1000, height: 800)
+        let firstTarget = Rect(x: 0, y: 0, width: 495, height: 800)
+        let secondTarget = Rect(x: 505, y: 0, width: 495, height: 800)
+        let provider = PowerUserProvider(displays: [display], windows: [current, first, second])
+        provider.focusedID = current.id
+        let writer = PowerUserWriter(provider: provider)
+        let eventPath = tempPath("power-stage-switch-ignores-missing-maximized-events")
+        let store = StageStore(path: tempPath("power-stage-switch-ignores-missing-maximized"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, focusedWindowID: current.id, members: [
+                    PersistentStageMember(windowID: current.id, bundleID: current.bundleID, title: current.title, frame: current.frame),
+                ]),
+                PersistentStage(id: StageID(rawValue: "2"), mode: .mutableBsp, focusedWindowID: first.id, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: firstTarget),
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: secondTarget),
+                    PersistentStageMember(
+                        windowID: staleMaximized.id,
+                        bundleID: staleMaximized.bundleID,
+                        title: staleMaximized.title,
+                        frame: staleMaximized.frame,
+                        presentationState: .maximized,
+                        lastSeenAt: Date(timeIntervalSinceNow: -30),
+                        missingSince: Date(timeIntervalSinceNow: -30)
+                    ),
+                ]),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            stageStore: store
+        )
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).switchTo("2", displayID: displayID)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frameHistory[first.id]?.first == firstTarget)
+        #expect(writer.frameHistory[second.id]?.first == secondTarget)
+        #expect(writer.frameHistory[first.id]?.first?.x != 999)
+        #expect(writer.frameHistory[second.id]?.first?.x != 999)
+        #expect(events.contains("\"type\":\"stage_switch\""))
+        #expect(events.contains("\"fullscreenProtected\":\"false\""))
+    }
+
+    @Test
+    func placingWindowOnAnotherDisplayRelayoutsVisibleSourceStageImmediately() {
+        let sourceDisplay = powerDisplay("display-main", index: 1, x: 0)
+        let targetDisplay = powerDisplay("display-side", index: 2, x: 1000)
+        let remaining = powerWindow(1, x: 0, y: 0, width: 495, height: 800)
+        let moved = powerWindow(2, x: 505, y: 0, width: 495, height: 800)
+        let target = powerWindow(3, x: 1000, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(displays: [sourceDisplay, targetDisplay], windows: [remaining, moved, target])
+        provider.focusedID = moved.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("power-stage-place-relayout-source"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: sourceDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: remaining.id, bundleID: remaining.bundleID, title: remaining.title, frame: remaining.frame),
+                        PersistentStageMember(windowID: moved.id, bundleID: moved.bundleID, title: moved.title, frame: moved.frame),
+                    ])
+                ]),
+                PersistentStageScope(displayID: targetDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                        PersistentStageMember(windowID: target.id, bundleID: target.bundleID, title: target.title, frame: target.frame),
+                    ])
+                ])
+            ],
+            activeDisplayID: targetDisplay.id
+        ))
+        let eventPath = tempPath("power-stage-place-relayout-source-events")
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: writer,
+            config: RoadieConfig(),
+            stageStore: store
+        )
+
+        let result = StageCommandService(
+            service: service,
+            store: store,
+            events: EventLog(path: eventPath)
+        ).place(
+            windowID: moved.id,
+            displayID: targetDisplay.id,
+            orderedWindowIDs: [target.id, moved.id]
+        )
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(writer.frames[remaining.id] == Rect(x: 8, y: 8, width: 984, height: 784))
+        #expect(events.contains("\"sourceCommands\":\"1\""))
+        #expect(events.contains("\"sourceApplied\":\"1\""))
     }
 
     @Test

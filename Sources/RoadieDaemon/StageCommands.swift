@@ -50,8 +50,6 @@ public struct StageCommandService {
     }
 
     public func assign(_ rawStageID: String) -> StageCommandResult {
-        beginLayoutCommand("stage.assign")
-        defer { finishLayoutCommand("stage.assign") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
@@ -59,34 +57,14 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage assign: no active window", changed: false)
         }
 
-        let stageID = StageID(rawValue: rawStageID)
-        var state = store.state()
-        var scope = activeScope(displayID: displayID, in: &state)
-        let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
-        let removedPin = active.scope == targetScope ? nil : state.removePin(windowID: active.window.id)
-        if active.scope != targetScope {
-            state.suppressRulePlacement(window: active.window)
-        }
-        scope.assign(window: active.window, to: stageID, defaultMode: config.tiling.defaultStrategy)
-        state.update(scope)
-        store.save(state)
-
-        if scope.activeStageID != stageID {
-            guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
-                return StageCommandResult(message: "stage assign: unknown display", changed: false)
-            }
-            _ = service.setFrame(hiddenFrame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window)
-        }
-        events.append(RoadieEvent(
-            type: "stage_assign",
-            scope: targetScope,
-            details: [
-                "windowID": String(active.window.id.rawValue),
-                "unpinned": String(removedPin != nil),
-            ]
-        ))
-        appendManualPinRemovalEvent(removedPin, targetScope: targetScope)
-        return StageCommandResult(message: "stage assign \(stageID.rawValue): \(active.window.id)", changed: true)
+        return assign(
+            windowID: active.window.id,
+            to: rawStageID,
+            displayID: displayID,
+            focusAssignedWindow: true,
+            eventType: "stage_assign",
+            commandReason: "stage.assign"
+        )
     }
 
     public func assignPosition(_ position: Int) -> StageCommandResult {
@@ -129,8 +107,28 @@ public struct StageCommandService {
         insertionIndex: Int? = nil,
         focusAssignedWindow: Bool = true
     ) -> StageCommandResult {
-        beginLayoutCommand("stage.assign_window")
-        defer { finishLayoutCommand("stage.assign_window") }
+        assign(
+            windowID: windowID,
+            to: rawStageID,
+            displayID: displayID,
+            insertionIndex: insertionIndex,
+            focusAssignedWindow: focusAssignedWindow,
+            eventType: "stage_assign_window",
+            commandReason: "stage.assign_window"
+        )
+    }
+
+    private func assign(
+        windowID: WindowID,
+        to rawStageID: String,
+        displayID: DisplayID,
+        insertionIndex: Int? = nil,
+        focusAssignedWindow: Bool,
+        eventType: String,
+        commandReason: String
+    ) -> StageCommandResult {
+        beginLayoutCommand(commandReason)
+        defer { finishLayoutCommand(commandReason) }
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
@@ -167,7 +165,40 @@ public struct StageCommandService {
         store.save(state)
 
         var visibilityRepairFrame: CGRect?
-        if scope.activeStageID != stageID {
+        if scope.activeStageID != stageID, focusAssignedWindow {
+            let switchResult = switchDisplay(
+                display,
+                to: stageID,
+                snapshot: service.snapshot(followFocus: false)
+            )
+            var details = [
+                "stageID": stageID.rawValue,
+                "windowID": String(windowID.rawValue),
+                "layout": "0",
+                "focusAssignedWindow": String(focusAssignedWindow),
+                "focusFollowed": "true",
+                "switchChanged": String(switchResult.changed),
+                "unpinned": String(removedPin != nil),
+            ]
+            if let insertionIndex {
+                details["insertionIndex"] = String(insertionIndex)
+            }
+            events.append(RoadieEvent(type: eventType, scope: targetScope, details: details))
+            appendManualPinRemovalEvent(removedPin, targetScope: targetScope)
+            return StageCommandResult(
+                message: "stage assign \(stageID.rawValue): window=\(windowID.rawValue) followed=true",
+                changed: true
+            )
+        } else if scope.activeStageID != stageID {
+            state.protectCommandFocus(
+                displayID: displayID,
+                desktopID: scope.desktopID,
+                stageID: scope.activeStageID,
+                windowID: scope.stages.first(where: { $0.id == scope.activeStageID })?.focusedWindowID,
+                staleFocusedWindowID: windowID,
+                duration: 3.0
+            )
+            store.save(state)
             _ = service.setFrame(hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
         } else if let frame = visibleFrame(for: window.frame.cgRect, on: display) {
             visibilityRepairFrame = frame
@@ -193,7 +224,7 @@ public struct StageCommandService {
         if let insertionIndex {
             details["insertionIndex"] = String(insertionIndex)
         }
-        events.append(RoadieEvent(type: "stage_assign_window", scope: activeScope, details: details))
+        events.append(RoadieEvent(type: eventType, scope: activeScope, details: details))
         appendManualPinRemovalEvent(removedPin, targetScope: targetScope)
         return StageCommandResult(
             message: "stage assign \(stageID.rawValue): window=\(windowID.rawValue) layout=\(layoutResult.attempted)",
@@ -335,6 +366,49 @@ public struct StageCommandService {
         var state = store.state()
         let scope = activeScope(displayID: displayID, in: &state)
         return assign(windowID: windowID, to: scope.activeStageID.rawValue, displayID: displayID)
+    }
+
+    public func focusNativeFullscreen(
+        windowID: WindowID,
+        bundleID: String,
+        stageID: StageID,
+        displayID: DisplayID
+    ) -> StageCommandResult {
+        let startedAt = Date()
+        let snapshot = service.snapshot(followFocus: false)
+        let focusedLiveWindow = snapshot.windows
+            .first { $0.window.id == windowID }
+            .map { service.focus($0.window) } ?? false
+        var state = store.state()
+        let member = state
+            .scope(displayID: displayID)
+            .stages
+            .first { $0.id == stageID }?
+            .members
+            .first { $0.windowID == windowID }
+        let focusedApplicationWindow = focusedLiveWindow ? false : service.focusApplicationWindow(
+            bundleID: bundleID,
+            windowID: windowID,
+            title: member?.title ?? "",
+            frame: member?.frame ?? Rect(x: 0, y: 0, width: 0, height: 0)
+        )
+        let activatedApplication = (focusedLiveWindow || focusedApplicationWindow) ? false : service.activateApplication(bundleID: bundleID)
+        events.append(RoadieEvent(type: "stage_native_fullscreen_focus", scope: StageScope(
+            displayID: displayID,
+            desktopID: store.state().currentDesktopID(for: displayID),
+            stageID: stageID
+        ), details: [
+            "windowID": String(windowID.rawValue),
+            "bundleID": bundleID,
+            "focusedLiveWindow": String(focusedLiveWindow),
+            "focusedApplicationWindow": String(focusedApplicationWindow),
+            "activatedApplication": String(activatedApplication),
+            "durationMs": formatMs(elapsedMs(since: startedAt))
+        ]))
+        return StageCommandResult(
+            message: "native fullscreen focus: window=\(windowID.rawValue) focused=\(focusedLiveWindow || focusedApplicationWindow) activated=\(activatedApplication)",
+            changed: focusedLiveWindow || focusedApplicationWindow || activatedApplication
+        )
     }
 
     public func moveActiveStageToDisplay(index displayIndex: Int, followFocus: Bool? = nil) -> StageCommandResult {
@@ -520,9 +594,11 @@ public struct StageCommandService {
         beginLayoutCommand("stage.place_window")
         defer { finishLayoutCommand("stage.place_window") }
         let snapshot = service.snapshot()
-        guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
+        guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
         }
+        let window = sourceEntry.window
+        let sourceScope = sourceEntry.scope
 
         var state = store.state()
         for scopeIndex in state.scopes.indices {
@@ -537,11 +613,25 @@ public struct StageCommandService {
 
         let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
         service.removeLayoutIntent(scope: scope)
+        if let sourceScope, sourceScope != scope {
+            service.removeLayoutIntent(scope: sourceScope)
+        }
         let updated = service.snapshot(followFocus: false)
+        let sourceRelayout = relayoutActiveSourceScopes(
+            [sourceScope].compactMap { $0 },
+            excluding: scope,
+            from: updated
+        )
         let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
         let layout = layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
         let applyPlan = applyPlan(from: updated, scope: scope, ordered: ordered, layout: layout)
         let result = service.apply(applyPlan)
+        let isolated = isolateInfeasibleClampedScope(
+            scope,
+            result: result,
+            snapshot: updated,
+            keepWindowID: windowID
+        )
         persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
         _ = service.focus(window)
         events.append(RoadieEvent(
@@ -549,15 +639,21 @@ public struct StageCommandService {
             scope: scope,
             details: [
                 "windowID": String(windowID.rawValue),
-                "commands": String(applyPlan.commands.count),
-                "applied": String(result.applied),
+                "commands": String(applyPlan.commands.count + isolated),
+                "applied": String(result.applied + isolated),
                 "clamped": String(result.clamped),
-                "failed": String(result.failed)
+                "failed": String(result.failed),
+                "sourceCommands": String(sourceRelayout.plan.commands.count),
+                "sourceApplied": String(sourceRelayout.result.applied),
+                "sourceClamped": String(sourceRelayout.result.clamped),
+                "sourceFailed": String(sourceRelayout.result.failed)
             ]
         ))
         return StageCommandResult(
-            message: "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: result.failed < result.attempted || applyPlan.commands.isEmpty
+            message: "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count + sourceRelayout.plan.commands.count + isolated) applied=\(result.applied + sourceRelayout.result.applied + isolated) clamped=\(result.clamped + sourceRelayout.result.clamped) failed=\(result.failed + sourceRelayout.result.failed)",
+            changed: result.failed < result.attempted
+                || sourceRelayout.result.failed < sourceRelayout.result.attempted
+                || applyPlan.commands.isEmpty
         )
     }
 
@@ -640,12 +736,126 @@ public struct StageCommandService {
         to stageID: StageID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
-        beginLayoutCommand("stage.switch")
-        defer { finishLayoutCommand("stage.switch") }
         let startedAt = Date()
         var state = store.state()
         var scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
+        if previousID == stageID {
+            let activeDisplayChanged = state.activeDisplayID != display.id
+            state.focusDisplay(display.id)
+            let targetStage = scope.stages.first { $0.id == stageID }
+            let targetMembers = targetStage?.members ?? []
+            let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+            let liveWindowIDs = Set(windowsByID.keys)
+            let nativeFullscreenMember = targetMembers
+                .first { $0.presentationState == .nativeFullscreen && !liveWindowIDs.contains($0.windowID) }
+            let activatedNativeFullscreen = nativeFullscreenMember.map {
+                service.activateApplication(bundleID: $0.bundleID)
+            } ?? false
+            if nativeFullscreenMember == nil {
+                let visibleTargetMemberIDs = targetMembers.compactMap { member -> WindowID? in
+                    guard let window = windowsByID[member.windowID],
+                          !isHidden(window.frame.cgRect),
+                          display.frame.cgRect.intersects(window.frame.cgRect)
+                    else { return nil }
+                    return member.windowID
+                }
+                if !targetMembers.isEmpty && visibleTargetMemberIDs.isEmpty {
+                    beginLayoutCommand("stage.switch.reconcile")
+                    defer { finishLayoutCommand("stage.switch.reconcile") }
+
+                    let targetLiveMemberIDs = targetMembers.compactMap { member -> WindowID? in
+                        windowsByID[member.windowID] == nil ? nil : member.windowID
+                    }
+                    let targetFocusedWindowID = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
+                        ?? targetLiveMemberIDs.last
+                        ?? targetStage?.focusedWindowID
+                        ?? targetMembers.last?.windowID
+                    state.update(scope)
+                    state.protectCommandFocus(
+                        displayID: display.id,
+                        desktopID: scope.desktopID,
+                        stageID: stageID,
+                        windowID: targetFocusedWindowID,
+                        staleFocusedWindowID: snapshot.focusedWindowID,
+                        duration: 3.0
+                    )
+                    let persistStartedAt = Date()
+                    store.save(state)
+                    let persistMs = elapsedMs(since: persistStartedAt)
+
+                    var applied = 0
+                    for member in targetMembers {
+                        guard let window = windowsByID[member.windowID] else { continue }
+                        if service.setFrame(member.frame.cgRect, of: window) != nil {
+                            applied += 1
+                        }
+                    }
+                    var focusedWindow = false
+                    if let focusedID = targetFocusedWindowID,
+                       let window = windowsByID[focusedID] {
+                        focusedWindow = service.focus(window)
+                    }
+                    var focusedApplicationWindow = false
+                    var activatedApplication = false
+                    if !focusedWindow,
+                       let member = targetMembers.first(where: { $0.windowID == targetFocusedWindowID }) ?? targetMembers.last {
+                        focusedApplicationWindow = service.focusApplicationWindow(
+                            bundleID: member.bundleID,
+                            windowID: member.windowID,
+                            title: member.title,
+                            frame: member.frame
+                        )
+                        if !focusedApplicationWindow {
+                            activatedApplication = service.activateApplication(bundleID: member.bundleID)
+                        }
+                    }
+                    events.append(RoadieEvent(
+                        type: "stage_switch_reconcile",
+                        scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+                        details: [
+                            "previousStageID": previousID.rawValue,
+                            "reason": "active_stage_members_not_visible",
+                            "targetMembers": String(targetMembers.count),
+                            "liveTargetMembers": String(targetLiveMemberIDs.count),
+                            "visibleTargetMembers": String(visibleTargetMemberIDs.count),
+                            "applied": String(applied),
+                            "focusedWindow": String(focusedWindow),
+                            "focusedApplicationWindow": String(focusedApplicationWindow),
+                            "activatedApplication": String(activatedApplication),
+                            "activeDisplayChanged": String(activeDisplayChanged),
+                            "persistMs": formatMs(persistMs),
+                            "durationMs": formatMs(elapsedMs(since: startedAt))
+                        ]
+                    ))
+                    return StageCommandResult(
+                        message: "stage switch \(stageID.rawValue): reconciled active stage",
+                        changed: true
+                    )
+                }
+            }
+            if activeDisplayChanged {
+                store.save(state)
+            }
+            events.append(RoadieEvent(
+                type: "stage_switch_noop",
+                scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+                details: [
+                    "previousStageID": previousID.rawValue,
+                    "activeDisplayChanged": String(activeDisplayChanged),
+                    "nativeFullscreenActivation": String(activatedNativeFullscreen),
+                    "durationMs": formatMs(elapsedMs(since: startedAt))
+                ]
+            ))
+            return StageCommandResult(
+                message: "stage switch \(stageID.rawValue): already active",
+                changed: activeDisplayChanged || activatedNativeFullscreen
+            )
+        }
+
+        beginLayoutCommand("stage.switch")
+        defer { finishLayoutCommand("stage.switch") }
+        let activeDisplayChanged = state.activeDisplayID != display.id
         scope.ensureStage(stageID, mode: config.tiling.defaultStrategy)
         state.focusDisplay(display.id)
 
@@ -657,8 +867,90 @@ public struct StageCommandService {
         let previousMembers = Set(scope.memberIDs(in: previousID))
         let targetMembers = Set(scope.memberIDs(in: stageID))
         let targetStage = scope.stages.first(where: { $0.id == stageID })
+        let targetLiveMemberIDs = targetStage?.members.compactMap { member -> WindowID? in
+            windowsByID[member.windowID] == nil ? nil : member.windowID
+        } ?? []
+        let targetFocusedWindowID = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
+            ?? targetLiveMemberIDs.last
+            ?? targetStage?.focusedWindowID
+            ?? targetStage?.members.last?.windowID
         let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
-        let targetFocusedWindowID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID
+        if !targetMembers.isEmpty && targetLiveMemberIDs.isEmpty {
+            let nativeFullscreenMember = targetStage?.members.first { $0.presentationState == .nativeFullscreen }
+            if nativeFullscreenMember == nil {
+                let focusMember = preferredMissingFocusMember(in: targetStage)
+                let focusedApplicationWindow = focusMember.map {
+                    service.focusApplicationWindow(
+                        bundleID: $0.bundleID,
+                        windowID: $0.windowID,
+                        title: $0.title,
+                        frame: $0.frame
+                    )
+                } ?? false
+                let activatedApplication = (!focusedApplicationWindow ? focusMember.map {
+                    service.activateApplication(bundleID: $0.bundleID)
+                } : nil) ?? false
+                if activeDisplayChanged {
+                    state.update(scope)
+                    store.save(state)
+                }
+                events.append(RoadieEvent(
+                    type: "stage_switch_pending_missing_target",
+                    scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+                    details: [
+                        "previousStageID": previousID.rawValue,
+                        "targetMembers": targetMembers.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                        "reason": "target_stage_members_missing_pending_focus",
+                        "stateChanged": "false",
+                        "focusedApplicationWindow": String(focusedApplicationWindow),
+                        "activatedApplication": String(activatedApplication),
+                        "activeDisplayChanged": String(activeDisplayChanged),
+                        "durationMs": formatMs(elapsedMs(since: startedAt))
+                    ]
+                ))
+                return StageCommandResult(
+                    message: "stage switch \(stageID.rawValue): pending missing target focus",
+                    changed: activeDisplayChanged || focusedApplicationWindow || activatedApplication
+                )
+            }
+            scope.activeStageID = stageID
+            state.update(scope)
+            state.protectCommandFocus(
+                displayID: display.id,
+                desktopID: scope.desktopID,
+                stageID: stageID,
+                windowID: targetFocusedWindowID,
+                staleFocusedWindowID: nil,
+                duration: 3.0
+            )
+            let persistStartedAt = Date()
+            store.save(state)
+            let activatedNativeFullscreen = nativeFullscreenMember.map {
+                service.activateApplication(bundleID: $0.bundleID)
+            } ?? false
+            events.append(RoadieEvent(
+                type: "stage_switch_pending_missing_target",
+                scope: StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID),
+                details: [
+                    "previousStageID": previousID.rawValue,
+                    "targetMembers": targetMembers.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                    "reason": "target_stage_members_missing_pending_reconcile",
+                    "nativeFullscreenActivation": String(activatedNativeFullscreen),
+                    "persistMs": formatMs(elapsedMs(since: persistStartedAt)),
+                    "durationMs": formatMs(elapsedMs(since: startedAt))
+                ]
+            ))
+            return StageCommandResult(
+                message: "stage switch \(stageID.rawValue): pending missing target",
+                changed: true
+            )
+        }
+        let fullscreenMemberID = targetFullscreenMemberID(
+            in: targetStage,
+            display: display,
+            windowsByID: windowsByID,
+            preferredWindowID: targetFocusedWindowID
+        )
 
         scope.activeStageID = stageID
         state.update(scope)
@@ -688,14 +980,26 @@ public struct StageCommandService {
         let showStartedAt = Date()
         for member in targetStage?.members ?? [] {
             guard let window = windowsByID[member.windowID] else { continue }
-            if service.setFrame(member.frame.cgRect, of: window) != nil {
+            let frame = fullscreenMemberID == nil || member.windowID == fullscreenMemberID
+                ? member.frame.cgRect
+                : hiddenFrame(for: window.frame.cgRect, on: display, among: snapshot.displays)
+            if service.setFrame(frame, of: window) != nil {
                 applied += 1
             }
         }
         let showMs = elapsedMs(since: showStartedAt)
 
         let layoutStartedAt = Date()
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        let layoutSnapshot = service.snapshot(followFocus: false)
+        var layoutPlan = service.applyPlan(from: layoutSnapshot)
+        if fullscreenMemberID != nil {
+            layoutPlan = applyPlanExcluding(scope: StageScope(
+                displayID: display.id,
+                desktopID: scope.desktopID,
+                stageID: stageID
+            ), from: layoutPlan, snapshot: layoutSnapshot)
+        }
+        let layoutResult = service.apply(layoutPlan)
         let layoutMs = elapsedMs(since: layoutStartedAt)
         applied += layoutResult.applied + layoutResult.clamped
         let focusStartedAt = Date()
@@ -714,6 +1018,7 @@ public struct StageCommandService {
                 "shown": String(targetMembers.count),
                 "applied": String(applied),
                 "layout": String(layoutResult.attempted),
+                "fullscreenProtected": String(fullscreenMemberID != nil),
                 "durationMs": formatMs(totalMs),
                 "persistMs": formatMs(persistMs),
                 "hideMs": formatMs(hideMs),
@@ -727,6 +1032,54 @@ public struct StageCommandService {
             message: "stage switch \(stageID.rawValue): hidden=\(hiddenWindowIDs.count) shown=\(targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
             changed: previousID != stageID || applied > 0 || layoutResult.attempted > 0
         )
+    }
+
+    private func targetFullscreenMemberID(
+        in stage: PersistentStage?,
+        display: DisplaySnapshot,
+        windowsByID: [WindowID: WindowSnapshot],
+        preferredWindowID: WindowID?
+    ) -> WindowID? {
+        guard let stage else { return nil }
+        let fullscreenIDs = stage.members.compactMap { member -> WindowID? in
+            guard let window = windowsByID[member.windowID] else { return nil }
+            if WindowPresentationStateResolver.state(for: window, on: display, frameOverride: member.frame) != .normal {
+                return member.windowID
+            }
+            return nil
+        }
+        if let preferredWindowID, fullscreenIDs.contains(preferredWindowID) {
+            return preferredWindowID
+        }
+        return fullscreenIDs.first
+    }
+
+    private func preferredMissingFocusMember(in stage: PersistentStage?) -> PersistentStageMember? {
+        guard let stage else { return nil }
+        let candidates = stage.members.filter { member in
+            !member.bundleID.isEmpty && member.presentationState != .maximized
+        }
+        if let focusedWindowID = stage.focusedWindowID,
+           let member = candidates.first(where: { $0.windowID == focusedWindowID }) {
+            return member
+        }
+        return candidates.max { lhs, rhs in
+            (lhs.lastSeenAt ?? .distantPast) < (rhs.lastSeenAt ?? .distantPast)
+        }
+    }
+
+    private func applyPlanExcluding(
+        scope: StageScope,
+        from plan: ApplyPlan,
+        snapshot: DaemonSnapshot
+    ) -> ApplyPlan {
+        let scopesByWindowID = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, StageScope)? in
+            guard let scope = entry.scope else { return nil }
+            return (entry.window.id, scope)
+        })
+        return ApplyPlan(commands: plan.commands.filter { command in
+            scopesByWindowID[command.window.id] != scope
+        })
     }
 
     private func elapsedMs(since start: Date) -> Double {
@@ -899,6 +1252,33 @@ public struct StageCommandService {
         return ApplyPlan(commands: commands)
     }
 
+    private func relayoutActiveSourceScopes(
+        _ scopes: [StageScope],
+        excluding excludedScope: StageScope,
+        from snapshot: DaemonSnapshot
+    ) -> (plan: ApplyPlan, result: ApplyResult) {
+        let activeScopes = Set(scopes.filter { scope in
+            scope != excludedScope && snapshot.state.activeScope(on: scope.displayID) == scope
+        })
+        guard !activeScopes.isEmpty else {
+            return (ApplyPlan(commands: []), ApplyResult(attempted: 0, applied: 0, clamped: 0, failed: 0, items: []))
+        }
+
+        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let plan = ApplyPlan(commands: service.applyPlan(from: snapshot).commands.filter { command in
+            guard let scope = windowsByID[command.window.id]?.scope else { return false }
+            return activeScopes.contains(scope)
+        })
+        let result = service.apply(plan)
+        if result.failed == 0 && result.clamped == 0 {
+            let refreshed = service.snapshot(followFocus: false)
+            for scope in activeScopes {
+                _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: refreshed)
+            }
+        }
+        return (plan, result)
+    }
+
     private func activeScope(displayID: DisplayID, in state: inout PersistentStageState) -> PersistentStageScope {
         state.scope(
             displayID: displayID,
@@ -985,6 +1365,68 @@ public struct StageCommandService {
 
     private func hiddenFrame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
         HiddenWindowPlacement.frame(for: frame, on: display, among: displays)
+    }
+
+    private func isolateInfeasibleClampedScope(
+        _ scope: StageScope,
+        result: ApplyResult,
+        snapshot: DaemonSnapshot,
+        keepWindowID: WindowID
+    ) -> Int {
+        let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
+        guard clampedItems.count >= 2,
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else { return 0 }
+
+        let entries = snapshot.windows.filter { entry in
+            entry.scope == scope
+                && entry.window.isTileCandidate
+                && entry.window.isOnScreen
+                && !isHidden(entry.window.frame.cgRect)
+        }
+        guard entries.count > 1 else { return 0 }
+
+        var frames = Dictionary(uniqueKeysWithValues: entries.map { ($0.window.id, $0.window.frame.cgRect) })
+        for item in clampedItems {
+            if let actual = item.actual?.cgRect {
+                frames[item.windowID] = actual
+            }
+        }
+        guard clampedFramesCannotShareContainer(
+            frames.map(\.value),
+            visibleFrame: display.visibleFrame.cgRect,
+            innerGap: CGFloat(config.tiling.gapsInner)
+        ) else { return 0 }
+
+        var applied = 0
+        var hiddenIDs: [String] = []
+        for entry in entries where entry.window.id != keepWindowID {
+            let frame = hiddenFrame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            if service.setFrame(frame, of: entry.window) != nil {
+                applied += 1
+                hiddenIDs.append(String(entry.window.id.rawValue))
+            }
+        }
+        guard !hiddenIDs.isEmpty else { return 0 }
+        events.append(RoadieEvent(type: "layout_infeasible_scope_isolated", scope: scope, details: [
+            "keptWindowID": String(keepWindowID.rawValue),
+            "hiddenWindowIDs": hiddenIDs.sorted().joined(separator: ","),
+            "reason": "stage_command_clamped_minimums_exceed_visible_frame"
+        ]))
+        return applied
+    }
+
+    private func clampedFramesCannotShareContainer(
+        _ frames: [CGRect],
+        visibleFrame: CGRect,
+        innerGap: CGFloat
+    ) -> Bool {
+        guard frames.count > 1 else { return false }
+        let gapTotal = max(0, innerGap) * CGFloat(frames.count - 1)
+        let horizontalNeeded = frames.reduce(CGFloat(0)) { $0 + $1.width } + gapTotal
+        let verticalNeeded = frames.reduce(CGFloat(0)) { $0 + $1.height } + gapTotal
+        return horizontalNeeded > visibleFrame.width + 16
+            && verticalNeeded > visibleFrame.height + 16
     }
 
     private func visibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect? {

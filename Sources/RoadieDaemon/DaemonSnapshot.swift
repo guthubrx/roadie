@@ -269,7 +269,13 @@ public struct SnapshotService {
                     desktopID: persistedStages.currentDesktopID(for: displayID),
                     defaultMode: config.tiling.defaultStrategy
                 )
-                persistentScope.assign(window: window, to: persistentScope.activeStageID, defaultMode: config.tiling.defaultStrategy)
+                let presentationState = presentationState(for: window, displayID: displayID, displays: displays)
+                persistentScope.assign(
+                    window: window,
+                    to: persistentScope.activeStageID,
+                    defaultMode: config.tiling.defaultStrategy,
+                    presentationState: presentationState
+                )
                 persistedStages.update(persistentScope)
                 stageIndex[window.id] = StageScope(
                     displayID: persistentScope.displayID,
@@ -282,7 +288,10 @@ public struct SnapshotService {
                     desktopID: knownScope?.desktopID ?? persistedStages.currentDesktopID(for: displayID),
                     defaultMode: config.tiling.defaultStrategy
                 )
-                persistentScope.updateFrame(window: window)
+                persistentScope.updateFrame(
+                    window: window,
+                    presentationState: presentationState(for: window, displayID: displayID, displays: displays)
+                )
                 persistedStages.update(persistentScope)
                 persistedStages.updatePinFrame(window: window, now: now)
             }
@@ -651,13 +660,18 @@ public struct SnapshotService {
         if frame.maxX < -1000 || frame.minX < -10000 {
             return true
         }
-        return displays.contains { display in
-            let visible = display.visibleFrame.cgRect
-            let nearBottomEdge = abs(frame.minY - (visible.maxY - 1)) <= 64
-            let nearLeftEdge = abs(frame.maxX - (visible.minX + 1)) <= 4
-            let nearRightEdge = abs(frame.minX - (visible.maxX - 1)) <= 4
-            return nearBottomEdge && (nearLeftEdge || nearRightEdge)
+        return HiddenWindowPlacement.isHidden(frame, in: displays)
+    }
+
+    private func presentationState(
+        for window: WindowSnapshot,
+        displayID: DisplayID,
+        displays: [DisplaySnapshot]
+    ) -> WindowPresentationState {
+        guard let display = displays.first(where: { $0.id == displayID }) else {
+            return .normal
         }
+        return WindowPresentationStateResolver.state(for: window, on: display)
     }
 
     private func shouldFollowFocus(
@@ -904,6 +918,13 @@ public extension SnapshotService {
         return intent.source == .command && intent.createdAt >= date
     }
 
+    func commandLayoutIntent(scope: StageScope) -> LayoutIntent? {
+        guard let intent = intentStore.intent(for: scope),
+              intent.source == .command
+        else { return nil }
+        return intent
+    }
+
     func commandLayoutIntentNeedsApply(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
         guard let intent = validIntent(for: scope, from: snapshot),
               intent.source == .command
@@ -953,15 +974,11 @@ public extension SnapshotService {
             placements: placements,
             source: .auto
         )
-        if stage.mode == .mutableBsp {
-            intentStore.save(intent)
-            return true
-        }
         guard intentStillTilesCurrentContainer(
             intent,
             scope: scope,
             from: snapshot,
-            requireReasonableTileSizes: true
+            requireReasonableTileSizes: stage.mode != .mutableBsp
         ) else { return false }
         intentStore.save(intent)
         return true
@@ -1096,11 +1113,15 @@ public extension SnapshotService {
     /// Sans cela, l'arbre d'un stage n'était reconcilié que lors d'un re-tile explicite, donc
     /// une fenêtre ouverte/fermée n'était pas intégrée immédiatement (SPEC-013 fix).
     @discardableResult
-    func reconcileSpatialBSPTrees(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+    func reconcileSpatialBSPTrees(
+        in snapshot: DaemonSnapshot,
+        excluding excludedScopes: Set<StageScope> = []
+    ) -> Set<StageScope> {
         guard persistStateChanges else { return [] }
         var changedScopes: Set<StageScope> = []
         let scopes = Set(snapshot.windows.compactMap(\.scope))
         for scope in scopes {
+            guard !excludedScopes.contains(scope) else { continue }
             guard let stage = snapshot.state.stage(scope: scope), stage.mode == .spatialBsp,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID })
             else { continue }
@@ -1183,6 +1204,11 @@ public extension SnapshotService {
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: 4) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
+        guard !framesLeaveLargeUntiledCells(
+            frames,
+            in: container,
+            allowedGap: CGFloat(config.tiling.gapsInner) + 16
+        ) else { return false }
         if requireReasonableTileSizes {
             guard framesHaveReasonableTileSizes(frames, in: container) else { return false }
         }
@@ -1196,6 +1222,53 @@ public extension SnapshotService {
         let minimumSide = max(120, min(container.width, container.height) * 0.18)
         return frames.allSatisfy { frame in
             frame.width >= minimumSide && frame.height >= minimumSide
+        }
+    }
+
+    private func framesLeaveLargeUntiledCells(
+        _ frames: [CGRect],
+        in container: CGRect,
+        allowedGap: CGFloat
+    ) -> Bool {
+        guard frames.count > 1 else { return false }
+        let tolerance = max(24, allowedGap)
+        let xEdges = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })
+        let yEdges = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })
+
+        for xIndex in 0..<max(0, xEdges.count - 1) {
+            let minX = xEdges[xIndex]
+            let maxX = xEdges[xIndex + 1]
+            let width = maxX - minX
+            guard width > tolerance else { continue }
+            for yIndex in 0..<max(0, yEdges.count - 1) {
+                let minY = yEdges[yIndex]
+                let maxY = yEdges[yIndex + 1]
+                let height = maxY - minY
+                guard height > tolerance else { continue }
+                let cell = CGRect(x: minX, y: minY, width: width, height: height)
+                guard container.contains(cell, tolerance: 1),
+                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })
+                else { continue }
+                return true
+            }
+        }
+        return false
+    }
+
+    private func frameContainsCellCenter(_ frame: CGRect, cell: CGRect, tolerance: CGFloat) -> Bool {
+        let point = CGPoint(x: cell.midX, y: cell.midY)
+        return point.x >= frame.minX - tolerance
+            && point.y >= frame.minY - tolerance
+            && point.x <= frame.maxX + tolerance
+            && point.y <= frame.maxY + tolerance
+    }
+
+    private func sortedEdges(_ values: [CGFloat]) -> [CGFloat] {
+        let sorted = values.sorted()
+        return sorted.reduce(into: [CGFloat]()) { result, value in
+            if result.last.map({ abs($0 - value) > 1 }) ?? true {
+                result.append(value)
+            }
         }
     }
 
@@ -1331,6 +1404,14 @@ public extension SnapshotService {
 
     func focus(_ window: WindowSnapshot) -> Bool {
         frameWriter.focus(window)
+    }
+
+    func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
+        frameWriter.focusApplicationWindow(bundleID: bundleID, windowID: windowID, title: title, frame: frame)
+    }
+
+    func activateApplication(bundleID: String) -> Bool {
+        frameWriter.activateApplication(bundleID: bundleID)
     }
 
     func reset(_ window: WindowSnapshot) -> Bool {

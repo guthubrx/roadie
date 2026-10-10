@@ -83,7 +83,8 @@ public struct AutomationSnapshotService: Sendable {
     }
 
     private func windowSnapshots(from snapshot: DaemonSnapshot) -> [AutomationWindowSnapshot] {
-        snapshot.windows.map { scoped in
+        let resolver = WindowPresentationStateResolver()
+        return snapshot.windows.map { scoped in
             AutomationWindowSnapshot(
                 id: String(scoped.window.id.rawValue),
                 app: scoped.window.appName,
@@ -93,7 +94,8 @@ public struct AutomationSnapshotService: Sendable {
                 stageId: scoped.scope?.stageID.rawValue,
                 frame: scoped.window.frame,
                 isFocused: scoped.window.id == snapshot.focusedWindowID,
-                isFloating: scoped.scope == nil
+                isFloating: scoped.scope == nil,
+                presentationState: resolver.state(for: scoped, in: snapshot)
             )
         }
     }

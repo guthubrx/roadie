@@ -126,10 +126,15 @@ Cas d'usage :
 Le navrail est le panneau lateral par ecran qui represente les stages non vides.
 Une stage vide n'y est pas affichee, meme si elle a ete renommee.
 
+Les vignettes de fenetres peuvent aussi exposer leur etat de presentation. Une
+fenetre `maximized` reste dans sa stage normale et est marquee par une bordure a
+quatre coins. Une fenetre `nativeFullscreen` est marquee par une bordure continue
+pour signaler que la semantique fullscreen native de macOS peut s'appliquer.
+
 Interactions principales :
 
 - cliquer une stage pour l'activer;
-- cliquer une zone vide pour basculer vers une stage vide, si `empty_click_hide_active` est active;
+- garder les clics vides du navrail inertes par défaut, avec `empty_click_hide_active` en option pour basculer vers une stage vide;
 - tirer une miniature vers une autre stage pour y deplacer la fenetre;
 - tirer une miniature vers l'espace de travail actif pour y rappeler la fenetre;
 - tirer une fenetre d'application par sa barre de titre vers une stage pour l'y deplacer;

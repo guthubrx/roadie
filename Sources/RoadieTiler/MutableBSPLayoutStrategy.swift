@@ -213,12 +213,20 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
     private func managedSplitLooksUsable(leftFrame: CGRect, rightFrame: CGRect, rect: CGRect, horizontal: Bool) -> Bool {
         let tolerance = CGFloat(24)
         if horizontal {
+            let internalGap = rightFrame.minX >= leftFrame.maxX
+                ? rightFrame.minX - leftFrame.maxX
+                : leftFrame.minX - rightFrame.maxX
             return leftFrame.minX.isClose(to: rect.minX, tolerance: tolerance)
                 && rightFrame.maxX.isClose(to: rect.maxX, tolerance: tolerance)
                 && leftFrame.maxX <= rightFrame.minX + tolerance
+                && internalGap <= tolerance
         }
+        let internalGap = rightFrame.minY >= leftFrame.maxY
+            ? rightFrame.minY - leftFrame.maxY
+            : leftFrame.minY - rightFrame.maxY
         return leftFrame.minY.isClose(to: rect.minY, tolerance: tolerance)
             && rightFrame.maxY.isClose(to: rect.maxY, tolerance: tolerance)
             && leftFrame.maxY <= rightFrame.minY + tolerance
+            && internalGap <= tolerance
     }
 }

@@ -22,6 +22,8 @@ public protocol WindowFrameWriting: Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect?
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
     func focus(_ window: WindowSnapshot) -> Bool
+    func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool
+    func activateApplication(bundleID: String) -> Bool
     func reset(_ window: WindowSnapshot) -> Bool
     func toggleZoom(_ window: WindowSnapshot) -> Bool
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool
@@ -37,6 +39,8 @@ public extension WindowFrameWriting {
     }
 
     func focus(_ window: WindowSnapshot) -> Bool { false }
+    func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool { false }
+    func activateApplication(bundleID: String) -> Bool { false }
     func reset(_ window: WindowSnapshot) -> Bool { false }
     func toggleZoom(_ window: WindowSnapshot) -> Bool { reset(window) }
     func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool { false }
@@ -154,6 +158,8 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
     /// redimensionnables sont souvent des dialogs/progress panels meme si elles se
     /// declarent AXStandardWindow.
     public var isResizable: Bool
+    /// Vrai si AX expose explicitement l'etat fullscreen natif macOS.
+    public var isNativeFullscreen: Bool
 
     public init(
         hasCloseButton: Bool = false,
@@ -164,7 +170,8 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         isFocused: Bool = false,
         isMain: Bool = false,
         isModal: Bool = false,
-        isResizable: Bool = true
+        isResizable: Bool = true,
+        isNativeFullscreen: Bool = false
     ) {
         self.hasCloseButton = hasCloseButton
         self.hasFullscreenButton = hasFullscreenButton
@@ -175,11 +182,12 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         self.isMain = isMain
         self.isModal = isModal
         self.isResizable = isResizable
+        self.isNativeFullscreen = isNativeFullscreen
     }
 
     enum CodingKeys: String, CodingKey {
         case hasCloseButton, hasFullscreenButton, fullscreenButtonEnabled
-        case hasMinimizeButton, hasZoomButton, isFocused, isMain, isModal, isResizable
+        case hasMinimizeButton, hasZoomButton, isFocused, isMain, isModal, isResizable, isNativeFullscreen
     }
 
     public init(from decoder: Decoder) throws {
@@ -193,6 +201,7 @@ public struct WindowFurniture: Equatable, Codable, Sendable {
         self.isMain = try c.decodeIfPresent(Bool.self, forKey: .isMain) ?? false
         self.isModal = try c.decodeIfPresent(Bool.self, forKey: .isModal) ?? false
         self.isResizable = try c.decodeIfPresent(Bool.self, forKey: .isResizable) ?? true
+        self.isNativeFullscreen = try c.decodeIfPresent(Bool.self, forKey: .isNativeFullscreen) ?? false
     }
 
     /// Vrai si au moins un bouton ou flag d'etat indique une "vraie" fenetre.
@@ -384,7 +393,8 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding, @uncheck
                     isFocused: boolAttribute(axWindow, kAXFocusedAttribute),
                     isMain: boolAttribute(axWindow, kAXMainAttribute),
                     isModal: boolAttribute(axWindow, kAXModalAttribute),
-                    isResizable: isAttributeSettable(axWindow, kAXSizeAttribute)
+                    isResizable: isAttributeSettable(axWindow, kAXSizeAttribute),
+                    isNativeFullscreen: boolAttribute(axWindow, "AXFullScreen")
                 )
                 entries[cgID] = AXWindowAttributes(role: role, subrole: subrole, furniture: furniture)
             }
@@ -562,11 +572,28 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     public func focus(_ window: WindowSnapshot) -> Bool {
         guard let element = element(matching: window) else { return false }
-        NSRunningApplication(processIdentifier: window.pid)?.activate(options: [.activateIgnoringOtherApps])
-        let app = AXUIElementCreateApplication(window.pid)
-        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
-        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        focus(element, pid: window.pid)
         return true
+    }
+
+    public func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
+        for application in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
+            let pid = application.processIdentifier
+            guard let element = element(matchingWindowID: windowID, title: title, frame: frame, pid: pid) else {
+                continue
+            }
+            application.activate(options: [.activateIgnoringOtherApps])
+            focus(element, pid: pid)
+            return true
+        }
+        return false
+    }
+
+    public func activateApplication(bundleID: String) -> Bool {
+        guard let application = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
+            return false
+        }
+        return application.activate(options: [.activateIgnoringOtherApps])
     }
 
     public func reset(_ window: WindowSnapshot) -> Bool {
@@ -585,6 +612,13 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
               let fullscreenButton = elementAttribute(element, kAXFullScreenButtonAttribute)
         else { return false }
         return AXUIElementPerformAction(fullscreenButton, kAXPressAction as CFString) == .success
+    }
+
+    private func focus(_ element: AXUIElement, pid: pid_t) {
+        NSRunningApplication(processIdentifier: pid)?.activate(options: [.activateIgnoringOtherApps])
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
+        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
     }
 
     private func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
@@ -622,17 +656,45 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         return titleMatches.count == 1 ? titleMatches.first : nil
     }
 
+    private func element(matchingWindowID windowID: WindowID, title: String, frame: Rect, pid: pid_t) -> AXUIElement? {
+        let app = AXUIElementCreateApplication(pid)
+        var rawWindows: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &rawWindows) == .success,
+              let windows = rawWindows as? [AXUIElement]
+        else { return nil }
+
+        var frameMatch: AXUIElement?
+        var titleMatches: [AXUIElement] = []
+        for element in windows {
+            if self.windowID(of: element) == windowID.rawValue {
+                return element
+            }
+            if frameMatch == nil, matchesByFrame(element, expected: frame) {
+                frameMatch = element
+            }
+            if !title.isEmpty, self.title(of: element) == title {
+                titleMatches.append(element)
+            }
+        }
+        if let frameMatch { return frameMatch }
+        return titleMatches.count == 1 ? titleMatches.first : nil
+    }
+
     private func windowID(of element: AXUIElement) -> CGWindowID? {
         var id = CGWindowID()
         return AXUIElementGetWindowID(element, &id) == .success && id > 0 ? id : nil
     }
 
     private func matchesByFrame(_ element: AXUIElement, expected: WindowSnapshot) -> Bool {
+        matchesByFrame(element, expected: expected.frame)
+    }
+
+    private func matchesByFrame(_ element: AXUIElement, expected: Rect) -> Bool {
         if let frame = frame(of: element) {
-            return abs(frame.minX - expected.frame.x) < 48
-                && abs(frame.minY - expected.frame.y) < 48
-                && abs(frame.width - expected.frame.width) < 48
-                && abs(frame.height - expected.frame.height) < 48
+            return abs(frame.minX - expected.x) < 48
+                && abs(frame.minY - expected.y) < 48
+                && abs(frame.width - expected.width) < 48
+                && abs(frame.height - expected.height) < 48
         }
         return false
     }
