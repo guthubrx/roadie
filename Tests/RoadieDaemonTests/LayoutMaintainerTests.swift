@@ -266,9 +266,12 @@ private final class RecordingWriter: WindowFrameWriting, @unchecked Sendable {
 
 private final class FailingWriter: WindowFrameWriting, @unchecked Sendable {
     private(set) var attempts = 0
+    /// Exécuté à chaque tentative : simule une écriture concurrente pendant l'appel AX.
+    var onAttempt: (() -> Void)?
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         attempts += 1
+        onAttempt?()
         return nil
     }
 }
@@ -2629,6 +2632,52 @@ struct LayoutMaintainerTests {
         #expect(!events.contains("\"type\":\"window.scope_reconciled_to_physical_display\""))
     }
 
+    /// FR-013 : l'annulation d'une réconciliation d'écran échouée ne remet que le membre déplacé ;
+    /// une écriture faite par un autre acteur pendant l'application AX est conservée.
+    @Test
+    func failedStableVisibleDisplayDriftRevertKeepsConcurrentChanges() throws {
+        let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
+        let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
+        let window = powerWindow(9, x: 1200, y: 100, width: 300, height: 300, app: "Settings")
+        let stagePath = tempPath("layout-maintainer-physical-display-revert-concurrent")
+        let eventPath = tempPath("layout-maintainer-physical-display-revert-concurrent-events")
+        defer {
+            try? FileManager.default.removeItem(atPath: stagePath)
+            try? FileManager.default.removeItem(atPath: eventPath)
+        }
+
+        let store = StageStore(path: stagePath)
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: leftDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),
+                ]),
+            ]),
+            PersistentStageScope(displayID: rightDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1")),
+            ]),
+        ]))
+        let writer = FailingWriter()
+        writer.onAttempt = {
+            store.mutate { $0.setLabel("concurrent", displayID: rightDisplay.id, desktopID: DesktopID(rawValue: 1)) }
+        }
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [leftDisplay, rightDisplay], windowSnapshots: [[window]]),
+            frameWriter: writer,
+            stageStore: store
+        )
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store)
+
+        let tick = maintainer.tick()
+        var state = store.state()
+
+        #expect(tick.failed > 0)
+        #expect(writer.attempts > 0)
+        #expect(state.scope(displayID: leftDisplay.id).memberIDs(in: StageID(rawValue: "1")) == [window.id])
+        #expect(state.scope(displayID: rightDisplay.id).memberIDs(in: StageID(rawValue: "1")).isEmpty)
+        #expect(state.label(displayID: rightDisplay.id, desktopID: DesktopID(rawValue: 1)) == "concurrent")
+    }
+
     @Test
     func stableVisibleDisplayDriftIsIgnoredImmediatelyAfterTopologyChange() throws {
         let initialDisplay = powerDisplay("display-a", index: 1, x: 0)
@@ -3525,66 +3574,282 @@ extension LayoutMaintainerTests {
         #expect(frameIsVisible(writer.requestedFrames[right.id], on: displayB))
     }
 
-    /// FR-002 : après un zoom de commande, Cmd-Tab vers une voisine cachée la rend visible ;
-    /// le tick suivant ne la recache pas et ne reste pas bloqué sur un plan vide.
+    /// Scénario FR-002 : fenêtre 1 zoomée par commande (intent `zoomedWindowID`), fenêtre 2
+    /// cachée dans le coin et focalisée par le système (Cmd-Tab).
+    private struct ZoomSiblingScenario {
+        let display = lotCDisplay()
+        let zoomed: WindowSnapshot
+        let hiddenSibling: WindowSnapshot
+        let scope: StageScope
+        let writer = RecordingWriter()
+        let intentStore: LayoutIntentStore
+        let eventPath: String
+        let maintainer: LayoutMaintainer
+        let cleanupPaths: [String]
+
+        /// `laterFrames` : cadres (fenêtre 1, fenêtre 2) des snapshots suivant le premier.
+        init(name: String, laterFrames: [(Rect, Rect)]) {
+            zoomed = lotCWindow(1, display.visibleFrame)
+            hiddenSibling = lotCWindow(2, Rect(x: 999, y: 0, width: 495, height: 500))
+            scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: scope1)
+            let stagePath = tempPath(name)
+            eventPath = tempPath("\(name)-events")
+            let intentTemp = makeIntentStore()
+            intentStore = intentTemp.store
+            cleanupPaths = [stagePath, eventPath, intentTemp.path]
+            let stageStore = StageStore(path: stagePath)
+            stageStore.save(PersistentStageState(scopes: [
+                PersistentStageScope(displayID: display.id, activeStageID: scope1, stages: [
+                    PersistentStage(id: scope1, mode: .bsp, focusedWindowID: hiddenSibling.id, members: [
+                        PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame),
+                        PersistentStageMember(windowID: hiddenSibling.id, bundleID: hiddenSibling.bundleID, title: hiddenSibling.title, frame: hiddenSibling.frame),
+                    ]),
+                ]),
+            ], activeDisplayID: display.id))
+            intentStore.save(LayoutIntent(
+                scope: scope,
+                windowIDs: [zoomed.id, hiddenSibling.id],
+                placements: [zoomed.id: zoomed.frame, hiddenSibling.id: hiddenSibling.frame],
+                source: .command,
+                zoomedWindowID: zoomed.id
+            ))
+            let snapshots = [[zoomed, hiddenSibling]] + laterFrames.map { frames in
+                [lotCWindow(1, frames.0), lotCWindow(2, frames.1)]
+            }
+            let service = SnapshotService(
+                provider: MultiDisplaySequenceProvider(
+                    displaySnapshots: [display],
+                    windowSnapshots: snapshots,
+                    focusedID: hiddenSibling.id
+                ),
+                frameWriter: writer,
+                config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
+                intentStore: intentStore,
+                stageStore: stageStore
+            )
+            maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+        }
+
+        var events: String {
+            (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        }
+
+        func cleanup() {
+            for path in cleanupPaths {
+                try? FileManager.default.removeItem(atPath: path)
+            }
+        }
+    }
+
+    /// FR-002 : après un zoom de commande, Cmd-Tab vers une voisine cachée la rend visible et
+    /// sort explicitement du zoom (marqueur retiré) ; le scope est redisposé et la voisine n'est
+    /// plus recachée. Avant SPEC-016 T208, le marqueur était conservé et le scope restait exclu.
     @Test
     func focusOnHiddenSiblingAfterZoomMakesItVisible() {
-        let display = lotCDisplay()
-        let zoomed = lotCWindow(1, display.visibleFrame)
-        let hiddenSibling = lotCWindow(2, Rect(x: 999, y: 0, width: 495, height: 500))
-        let restoredSibling = lotCWindow(2, Rect(x: 252, y: 0, width: 496, height: 500))
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: scope1)
-        let stagePath = tempPath("lot-c-zoom-focus-sibling")
-        let eventPath = tempPath("lot-c-zoom-focus-sibling-events")
-        let intentTemp = makeIntentStore()
+        let scenario = ZoomSiblingScenario(
+            name: "lot-c-zoom-focus-sibling",
+            laterFrames: [(Rect(x: 0, y: 0, width: 1000, height: 500), Rect(x: 252, y: 0, width: 496, height: 500))]
+        )
+        defer { scenario.cleanup() }
+
+        let restore = scenario.maintainer.tick()
+        let restoredFrame = scenario.writer.requestedFrames[scenario.hiddenSibling.id]
+        _ = scenario.maintainer.tick()
+        let events = scenario.events
+
+        #expect(restore.commands >= 1)
+        #expect(frameIsVisible(restoredFrame, on: scenario.display))
+        #expect(events.contains("\"type\":\"stage_focus_restore\""))
+        #expect(events.contains("\"type\":\"layout_zoom_exited\""))
+        #expect(scenario.intentStore.intent(for: scenario.scope)?.zoomedWindowID == nil)
+        // La fenêtre zoomée reprend une tuile : elle ne couvre plus tout l'écran.
+        #expect((scenario.writer.requestedFrames[scenario.zoomed.id]?.width ?? .infinity) < scenario.display.visibleFrame.width)
+        #expect(frameIsVisible(scenario.writer.requestedFrames[scenario.hiddenSibling.id], on: scenario.display))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
+
+    /// FR-002 : après la sortie du zoom, un changement de géométrie dans le scope n'est plus
+    /// ignoré comme « plein écran » : une disposition est appliquée au tick suivant.
+    @Test
+    func geometryChangeAfterZoomExitIsLaidOut() {
+        let left = Rect(x: 0, y: 0, width: 495, height: 500)
+        let right = Rect(x: 505, y: 0, width: 495, height: 500)
+        let scenario = ZoomSiblingScenario(
+            name: "lot-c-zoom-exit-geometry",
+            laterFrames: [
+                (left, right),
+                // La fenêtre 2 est déplacée hors de sa tuile.
+                (left, Rect(x: 200, y: 50, width: 400, height: 300)),
+            ]
+        )
+        defer { scenario.cleanup() }
+
+        _ = scenario.maintainer.tick()
+        #expect(scenario.writer.requestedFrames[scenario.zoomed.id] == left)
+        _ = scenario.maintainer.tick()
+        let relayout = scenario.maintainer.tick()
+
+        #expect(relayout.commands >= 1)
+        #expect(scenario.writer.requestedFrames[scenario.zoomed.id] == left)
+        #expect(scenario.writer.requestedFrames[scenario.hiddenSibling.id] == right)
+        #expect(!scenario.events.contains("\"type\":\"fullscreen_scope_change_suppressed\""))
+    }
+
+    /// FR-017 : la stabilisation d'un changement de membres sur l'écran 1 n'exclut que son scope ;
+    /// l'écran 2 est toujours redisposé dans le même tick.
+    @Test
+    func membershipSettlingOnOneDisplayDoesNotStopOtherDisplay() {
+        let displayA = lotCDisplay()
+        let displayB = lotCDisplay(id: "display-b", x: 1000)
+        let bRight = Rect(x: 1505, y: 0, width: 495, height: 500)
+        let eventPath = tempPath("two-display-membership-settling-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [displayA, displayB], windowSnapshots: [
+                [
+                    lotCWindow(1, Rect(x: 0, y: 0, width: 495, height: 500)),
+                    lotCWindow(2, Rect(x: 505, y: 0, width: 495, height: 500)),
+                    lotCWindow(3, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                    lotCWindow(4, bRight),
+                ],
+                // Écran 1 : la fenêtre 2 disparaît et la 1 grandit (churn). Écran 2 : la 4 est déplacée.
+                [
+                    lotCWindow(1, Rect(x: 0, y: 0, width: 700, height: 500)),
+                    lotCWindow(3, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                    lotCWindow(4, Rect(x: 1200, y: 50, width: 400, height: 300)),
+                ],
+            ]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
+        )
+        var currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            now: { currentTime }
+        )
+
+        _ = maintainer.tick()
+        currentTime = currentTime.addingTimeInterval(0.1)
+        let tick = maintainer.tick()
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+
+        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
+        #expect(tick.commands >= 1)
+        #expect(writer.requestedFrames[WindowID(rawValue: 4)] == bRight)
+    }
+
+    /// FR-017 : activer une autre stage n'est pas un changement de membres : la nouvelle stage est
+    /// disposée tout de suite, sans période de stabilisation.
+    @Test
+    func stageSwitchIsNotTreatedAsMembershipChange() {
+        let displayA = lotCDisplay()
+        let displayB = lotCDisplay(id: "display-b", x: -1000)
+        let stage2 = StageID(rawValue: "2")
+        let stagePath = tempPath("two-display-stage-switch-no-settling")
+        let eventPath = tempPath("two-display-stage-switch-no-settling-events")
         defer {
             try? FileManager.default.removeItem(atPath: stagePath)
             try? FileManager.default.removeItem(atPath: eventPath)
-            try? FileManager.default.removeItem(atPath: intentTemp.path)
         }
+        // Coin bas-droit de l'écran 1, comme les autres tests de fenêtres cachées.
+        let hidden = { (id: UInt32) in lotCWindow(id, Rect(x: 999, y: 499, width: 495, height: 500)) }
+        let member = { (window: WindowSnapshot) in
+            PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame)
+        }
+        let a1 = lotCWindow(1, Rect(x: 0, y: 0, width: 495, height: 500))
+        let a2 = lotCWindow(2, Rect(x: 505, y: 0, width: 495, height: 500))
+        let b5 = lotCWindow(5, displayB.visibleFrame)
         let stageStore = StageStore(path: stagePath)
         stageStore.save(PersistentStageState(scopes: [
-            PersistentStageScope(displayID: display.id, activeStageID: scope1, stages: [
-                PersistentStage(id: scope1, mode: .bsp, focusedWindowID: hiddenSibling.id, members: [
-                    PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame),
-                    PersistentStageMember(windowID: hiddenSibling.id, bundleID: hiddenSibling.bundleID, title: hiddenSibling.title, frame: hiddenSibling.frame),
-                ]),
+            PersistentStageScope(displayID: displayA.id, activeStageID: scope1, stages: [
+                PersistentStage(id: scope1, mode: .bsp, members: [member(a1), member(a2)]),
+                PersistentStage(id: stage2, mode: .bsp, members: [member(hidden(3)), member(hidden(4))]),
             ]),
-        ], activeDisplayID: display.id))
-        intentTemp.store.save(LayoutIntent(
-            scope: scope,
-            windowIDs: [zoomed.id, hiddenSibling.id],
-            placements: [zoomed.id: zoomed.frame, hiddenSibling.id: hiddenSibling.frame],
-            source: .command,
-            zoomedWindowID: zoomed.id
-        ))
+            PersistentStageScope(displayID: displayB.id, activeStageID: scope1, stages: [
+                PersistentStage(id: scope1, mode: .bsp, members: [member(b5)]),
+            ]),
+        ], activeDisplayID: displayA.id))
         let writer = RecordingWriter()
         let service = SnapshotService(
-            provider: MultiDisplaySequenceProvider(
-                displaySnapshots: [display],
-                windowSnapshots: [[zoomed, hiddenSibling], [zoomed, restoredSibling]],
-                focusedID: hiddenSibling.id
-            ),
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [displayA, displayB], windowSnapshots: [
+                [a1, a2, hidden(3), hidden(4), b5],
+                // Après la bascule : la stage 1 est cachée, les fenêtres de la stage 2 réapparaissent
+                // à leurs propres cadres.
+                [hidden(1), hidden(2), lotCWindow(3, Rect(x: 100, y: 50, width: 300, height: 200)),
+                 lotCWindow(4, Rect(x: 500, y: 50, width: 300, height: 200)), b5],
+            ]),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentTemp.store,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             stageStore: stageStore
         )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: stageStore)
+        var currentTime = Date()
+        let maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath),
+            intervalSeconds: 0.1,
+            store: stageStore,
+            now: { currentTime }
+        )
 
-        let restore = maintainer.tick()
-        let restoredFrame = writer.requestedFrames[hiddenSibling.id]
-        let next = maintainer.tick()
+        _ = maintainer.tick()
+        stageStore.mutate { state in
+            var scope = state.scope(displayID: displayA.id)
+            scope.activeStageID = stage2
+            state.update(scope)
+        }
+        currentTime = currentTime.addingTimeInterval(0.1)
+        _ = maintainer.tick()
+        // Au-delà de l'anti-rebond des gestes (0,35 s) mais bien avant la fin d'une stabilisation
+        // de membres (2 s) : la nouvelle stage doit déjà être disposée.
+        currentTime = currentTime.addingTimeInterval(0.5)
+        let switched = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
-        #expect(restore.commands >= 1)
-        #expect(frameIsVisible(restoredFrame, on: display))
-        #expect(writer.requestedFrames[zoomed.id] == nil)
-        #expect(events.contains("\"type\":\"stage_focus_restore\""))
-        #expect(next.commands == 0)
-        #expect(writer.requestedFrames[hiddenSibling.id] == restoredFrame)
-        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
-        #expect(intentTemp.store.intent(for: scope)?.zoomedWindowID == zoomed.id)
+        #expect(!events.contains("\"type\":\"layout_stage_membership_settling\""))
+        #expect(switched.commands >= 2)
+        #expect(writer.requestedFrames[WindowID(rawValue: 3)] == Rect(x: 0, y: 0, width: 495, height: 500))
+        #expect(writer.requestedFrames[WindowID(rawValue: 4)] == Rect(x: 505, y: 0, width: 495, height: 500))
+    }
+
+    /// FR-040 : une commande limitée à l'écran 1 exclut seulement son scope ; le plan de l'écran 2
+    /// est appliqué. L'activité globale (sans scope) garde le comportement historique.
+    @Test
+    func scopedCommandActivityOnOneDisplayDoesNotStopOtherDisplay() {
+        let displayA = lotCDisplay()
+        let displayB = lotCDisplay(id: "display-b", x: 1000)
+        let commandScope = StageScope(displayID: displayA.id, desktopID: DesktopID(rawValue: 1), stageID: scope1)
+        let writer = RecordingWriter()
+        let service = SnapshotService(
+            provider: MultiDisplaySequenceProvider(displaySnapshots: [displayA, displayB], windowSnapshots: [[
+                lotCWindow(1, Rect(x: 100, y: 50, width: 300, height: 200)),
+                lotCWindow(2, Rect(x: 500, y: 50, width: 300, height: 200)),
+                lotCWindow(3, Rect(x: 1100, y: 50, width: 300, height: 200)),
+                lotCWindow(4, Rect(x: 1500, y: 50, width: 300, height: 200)),
+            ]]),
+            frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))
+        )
+        let now = Date()
+        let commandActivity = LayoutCommandActivity(path: tempPath("scoped-command-activity"), enabled: true)
+        commandActivity.reset()
+        defer { commandActivity.reset() }
+        commandActivity.markActive(reason: "test", scopes: [commandScope], now: now, holdSeconds: 5)
+        let activity = commandActivity.activity(now: now)
+        let maintainer = LayoutMaintainer(service: service, commandActivity: commandActivity, now: { now.addingTimeInterval(0.1) })
+
+        let tick = maintainer.tick()
+
+        #expect(activity?.isGlobal == false)
+        #expect(activity?.scopes == [commandScope])
+        #expect(tick.commands >= 2)
+        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
+        #expect(frameIsVisible(writer.requestedFrames[WindowID(rawValue: 3)], on: displayB))
+        #expect(frameIsVisible(writer.requestedFrames[WindowID(rawValue: 4)], on: displayB))
     }
 
     /// FR-003 : une grille de trois fenêtres dont deux refusent de rétrécir est replanifiée aux

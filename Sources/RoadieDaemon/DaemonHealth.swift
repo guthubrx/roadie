@@ -102,17 +102,7 @@ public struct DaemonHealthService {
     }
 
     public func heal() -> DaemonHealReport {
-        let preflightSnapshot = service.snapshot()
-        var parkingState = stageStore.state()
-        let initialParkingState = parkingState
-        let parkingReport = DisplayParkingService().transition(
-            state: &parkingState,
-            liveDisplays: preflightSnapshot.displays,
-            windows: preflightSnapshot.windows.map(\.window)
-        )
-        if parkingReport.kind != .noop || parkingState != initialParkingState {
-            stageStore.save(parkingState)
-        }
+        let parkingReport = applyParkingTransition(snapshot: service.snapshot())
         appendParkingEvent(parkingReport)
 
         let stateReport = StateAuditService(service: service, stageStore: stageStore).heal()
@@ -127,19 +117,21 @@ public struct DaemonHealthService {
     /// (`heal()`) prend plusieurs snapshots et purge les membres absents, ce qu'il faut éviter
     /// pendant qu'un écran se reconfigure (fenêtres transitoirement invisibles pour AX).
     public func healDisplayChange() -> DisplayParkingReport {
-        let snapshot = service.snapshot()
-        var state = stageStore.state()
-        let initialState = state
-        let report = DisplayParkingService().transition(
-            state: &state,
-            liveDisplays: snapshot.displays,
-            windows: snapshot.windows.map(\.window)
-        )
-        if state != initialState {
-            stageStore.save(state)
-        }
+        let report = applyParkingTransition(snapshot: service.snapshot())
         appendParkingEvent(report)
         return report
+    }
+
+    /// Transition de parking appliquée sur l'état relu sous verrou (SPEC-016 FR-013) ; le
+    /// snapshot (AX) est pris avant, hors verrou. `mutate` n'écrit rien si l'état est inchangé.
+    private func applyParkingTransition(snapshot: DaemonSnapshot) -> DisplayParkingReport {
+        stageStore.mutate { state in
+            DisplayParkingService().transition(
+                state: &state,
+                liveDisplays: snapshot.displays,
+                windows: snapshot.windows.map(\.window)
+            )
+        }
     }
 
     private func appendParkingEvent(_ report: DisplayParkingReport) {
@@ -208,7 +200,7 @@ public struct DaemonHealthService {
             return DaemonHealthCheck(level: .warn, name: "pidfile", message: "missing")
         }
 
-        let running = kill(pid, 0) == 0
+        let running = ProcessLiveness.isAlive(pid)
         return DaemonHealthCheck(
             level: running ? .ok : .fail,
             name: "process",
@@ -279,7 +271,7 @@ public struct DaemonStatus: Codable, Equatable, Sendable {
 
     /// Vrai si le process vit et que le battement a moins de 90 s.
     public func isAlive(now: Date = Date()) -> Bool {
-        let running = kill(pid, 0) == 0 || errno == EPERM
+        let running = ProcessLiveness.isAlive(pid)
         return running && now.timeIntervalSince(updatedAt) <= Self.staleAfter
     }
 

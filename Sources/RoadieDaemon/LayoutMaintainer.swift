@@ -86,10 +86,10 @@ public final class LayoutMaintainer {
         self.service = service
         self.events = events
         self.intervalSeconds = intervalSeconds
-        self.commandIntentHoldSeconds = max(4, intervalSeconds * 10)
-        self.manualResizeDebounceSeconds = max(0.35, intervalSeconds * 0.9)
-        self.displayDriftReconcileHoldSeconds = max(8, intervalSeconds * 16)
-        self.stageMembershipSettleSeconds = max(2, intervalSeconds * 4)
+        self.commandIntentHoldSeconds = LayoutTolerance.commandIntentHold.seconds(intervalSeconds: intervalSeconds)
+        self.manualResizeDebounceSeconds = LayoutTolerance.manualResizeDebounce.seconds(intervalSeconds: intervalSeconds)
+        self.displayDriftReconcileHoldSeconds = LayoutTolerance.displayDriftReconcileHold.seconds(intervalSeconds: intervalSeconds)
+        self.stageMembershipSettleSeconds = LayoutTolerance.stageMembershipSettle.seconds(intervalSeconds: intervalSeconds)
         self.staticRuleEngine = ruleEngine
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
@@ -101,7 +101,8 @@ public final class LayoutMaintainer {
     }
 
     public func tick() -> MaintenanceTick {
-        let snapshot = service.snapshot()
+        // Snapshot du tick publié comme source partagée du cycle (FR-023, T212).
+        let snapshot = service.producerSnapshot(cycle: intervalSeconds)
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
@@ -128,7 +129,9 @@ public final class LayoutMaintainer {
         if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
             self.lastDisplaySignature = currentDisplaySignature
             lastDisplayTopologyChangedAt = tickNow
-            displayTopologySettlesUntil = tickNow.addingTimeInterval(max(1.5, intervalSeconds * 4))
+            displayTopologySettlesUntil = tickNow.addingTimeInterval(
+                LayoutTolerance.displayTopologySettle.seconds(intervalSeconds: intervalSeconds)
+            )
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
             failedFrames.removeAll()
@@ -165,29 +168,42 @@ public final class LayoutMaintainer {
             appendStageMembershipSettlingEvent(scopes: settlingLayoutScopes)
         }
         let missingMemberReclaimScopes = activeTiledScopesWithRecentMissingMembers(in: snapshot, now: tickNow)
-        if let activeUntil = commandActivity.activeUntil(now: tickNow) {
-            if missingMemberReclaimScopes.isEmpty {
-                // Commande en cours dans un autre processus, sans scope connu : tick suspendu.
+        if let activity = commandActivity.activity(now: tickNow) {
+            let activeUntil = String(activity.activeUntil.timeIntervalSince1970)
+            if activity.isGlobal && missingMemberReclaimScopes.isEmpty {
+                // Commande sans scope connu (globale) : tick suspendu.
                 priorityWindowIDs = []
                 manualResizeApplyAfter = nil
                 lastObservedFrames = scopedFrames(in: snapshot)
-                if lastCommandActivitySuppressedAt.map({ tickNow.timeIntervalSince($0) > 1.0 }) ?? true {
+                if lastCommandActivitySuppressedAt.map({ tickNow.timeIntervalSince($0) > LayoutTolerance.repeatedEventInterval }) ?? true {
                     lastCommandActivitySuppressedAt = tickNow
                     events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                        "activeUntil": String(activeUntil.timeIntervalSince1970)
+                        "activeUntil": activeUntil
                     ]))
                 }
                 return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
             }
-            // Seuls les scopes qui ont perdu un membre sont repris ; les autres restent à la commande.
-            let commandScopes = activeScopes(in: snapshot).subtracting(missingMemberReclaimScopes)
+            // Seuls les scopes touchés par la commande sont exclus (tous si elle est globale), sauf
+            // ceux qui ont perdu un membre et doivent être repris (FR-040).
+            let commandScopes = activeScopes(in: snapshot)
+                .filter(activity.covers)
+                .subtracting(missingMemberReclaimScopes)
             tickExcludedScopes.formUnion(commandScopes)
             observe(observedFramesForChurn, scopes: commandScopes, in: snapshot)
-            events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                "activeUntil": String(activeUntil.timeIntervalSince1970),
-                "bypassedForMissingReclaim": "true",
-                "scopes": missingMemberReclaimScopes.map(\.description).sorted().joined(separator: ",")
-            ]))
+            if activity.isGlobal {
+                events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
+                    "activeUntil": activeUntil,
+                    "bypassedForMissingReclaim": "true",
+                    "scopes": missingMemberReclaimScopes.map(\.description).sorted().joined(separator: ",")
+                ]))
+            } else if !commandScopes.isEmpty,
+                      lastCommandActivitySuppressedAt.map({ tickNow.timeIntervalSince($0) > LayoutTolerance.repeatedEventInterval }) ?? true {
+                lastCommandActivitySuppressedAt = tickNow
+                events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
+                    "activeUntil": activeUntil,
+                    "commandScopes": commandScopes.map(\.description).sorted().joined(separator: ",")
+                ]))
+            }
         }
         let rulePlacements = evaluateRules(in: snapshot)
         if rulePlacements > 0 {
@@ -827,35 +843,56 @@ public final class LayoutMaintainer {
             return false
         }
 
-        var state = store.state()
-        if state.suppressesRulePlacement(windowID: entry.window.id, ruleID: application.matchedRuleID) {
-            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "manual placement override")
-            return false
+        // Décision et écriture dans une seule transaction sur l'état relu sous verrou (SPEC-016
+        // FR-013). Une copie de travail n'est conservée qu'en cas de placement : les branches de
+        // refus n'écrivent rien. Événements et AX après le bloc (verrou non réentrant).
+        enum PlacementDecision {
+            case skipped(String, StageScope?)
+            case deferred
+            case placed(RulePlacementDestination, activeScope: StageScope)
         }
-        guard let destination = resolvePlacementDestination(application, entry: entry, snapshot: snapshot, state: &state) else {
+        let decision: PlacementDecision = store.mutate { state in
+            var working = state
+            if working.suppressesRulePlacement(windowID: entry.window.id, ruleID: application.matchedRuleID) {
+                return .skipped("manual placement override", nil)
+            }
+            guard let destination = resolvePlacementDestination(application, entry: entry, snapshot: snapshot, state: &working) else {
+                return .deferred
+            }
+            if entry.scope == destination.scope {
+                return .skipped("already on target", destination.scope)
+            }
+            var targetScope = working.scope(displayID: destination.scope.displayID, desktopID: destination.scope.desktopID)
+            targetScope.ensureStage(destination.scope.stageID)
+            if destination.follow {
+                targetScope.activeStageID = destination.scope.stageID
+                working.switchDesktop(displayID: destination.scope.displayID, to: destination.scope.desktopID)
+                working.focusDisplay(destination.scope.displayID)
+            }
+            for scopeIndex in working.scopes.indices {
+                working.scopes[scopeIndex].remove(windowID: entry.window.id)
+            }
+            targetScope.assign(window: entry.window, to: destination.scope.stageID)
+            working.update(targetScope)
+            working.updatePinHomeScope(windowID: entry.window.id, to: destination.scope)
+            state = working
+            return .placed(destination, activeScope: working.activeScopeEquivalent(on: destination.scope.displayID))
+        }
+        let destination: RulePlacementDestination
+        let activeScope: StageScope
+        switch decision {
+        case .skipped(let reason, let target):
+            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: target, reason: reason)
+            return false
+        case .deferred:
             appendPlacementEvent("rule.placement_deferred", application: application, entry: entry, reason: "destination unavailable")
             return false
-        }
-        if entry.scope == destination.scope {
-            appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: destination.scope, reason: "already on target")
-            return false
+        case .placed(let placed, let active):
+            destination = placed
+            activeScope = active
         }
 
         let sourceScope = entry.scope
-        var targetScope = state.scope(displayID: destination.scope.displayID, desktopID: destination.scope.desktopID)
-        targetScope.ensureStage(destination.scope.stageID)
-        if destination.follow {
-            targetScope.activeStageID = destination.scope.stageID
-            state.switchDesktop(displayID: destination.scope.displayID, to: destination.scope.desktopID)
-            state.focusDisplay(destination.scope.displayID)
-        }
-        for scopeIndex in state.scopes.indices {
-            state.scopes[scopeIndex].remove(windowID: entry.window.id)
-        }
-        targetScope.assign(window: entry.window, to: destination.scope.stageID)
-        state.update(targetScope)
-        state.updatePinHomeScope(windowID: entry.window.id, to: destination.scope)
-        store.save(state)
 
         if let sourceScope {
             service.removeLayoutIntent(scope: sourceScope)
@@ -863,7 +900,6 @@ public final class LayoutMaintainer {
         service.removeLayoutIntent(scope: destination.scope)
 
         if !destination.follow {
-            let activeScope = state.activeScopeEquivalent(on: destination.scope.displayID)
             if activeScope != destination.scope {
                 _ = service.setFrame(HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: destination.display, among: snapshot.displays), of: entry.window)
             }
@@ -888,41 +924,43 @@ public final class LayoutMaintainer {
         in snapshot: DaemonSnapshot,
         changedWindowIDs: Set<WindowID>
     ) -> MaintenanceTick? {
-        var state = store.state()
-        var adopted: [(window: WindowSnapshot, source: StageScope, target: StageScope, removedPin: PersistentWindowPin?)] = []
+        // Adoption sur l'état relu sous verrou (SPEC-016 FR-013) ; événements après le bloc.
+        let adopted = store.mutate { state in
+            var adopted: [(window: WindowSnapshot, source: StageScope, target: StageScope, removedPin: PersistentWindowPin?)] = []
 
-        for entry in snapshot.windows where changedWindowIDs.contains(entry.window.id) {
-            guard let sourceScope = entry.scope,
-                  entry.window.isOnScreen,
-                  entry.window.isTileCandidate,
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
-                  let targetDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
-                  targetDisplay.id != sourceScope.displayID
-            else { continue }
+            for entry in snapshot.windows where changedWindowIDs.contains(entry.window.id) {
+                guard let sourceScope = entry.scope,
+                      entry.window.isOnScreen,
+                      entry.window.isTileCandidate,
+                      !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                      let targetDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+                      targetDisplay.id != sourceScope.displayID
+                else { continue }
 
-            let targetDesktopID = state.currentDesktopID(for: targetDisplay.id)
-            var targetScope = state.scope(displayID: targetDisplay.id, desktopID: targetDesktopID)
-            let targetStageID = targetScope.activeStageID
-            let targetStageScope = StageScope(
-                displayID: targetDisplay.id,
-                desktopID: targetDesktopID,
-                stageID: targetStageID
-            )
+                let targetDesktopID = state.currentDesktopID(for: targetDisplay.id)
+                var targetScope = state.scope(displayID: targetDisplay.id, desktopID: targetDesktopID)
+                let targetStageID = targetScope.activeStageID
+                let targetStageScope = StageScope(
+                    displayID: targetDisplay.id,
+                    desktopID: targetDesktopID,
+                    stageID: targetStageID
+                )
 
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: entry.window.id)
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: entry.window.id)
+                }
+                targetScope = state.scope(displayID: targetDisplay.id, desktopID: targetDesktopID)
+                targetScope.assign(window: entry.window, to: targetStageID)
+                state.update(targetScope)
+                state.focusDisplay(targetDisplay.id)
+                let removedPin = state.removePin(windowID: entry.window.id)
+                state.suppressRulePlacement(window: entry.window)
+                adopted.append((entry.window, sourceScope, targetStageScope, removedPin))
             }
-            targetScope = state.scope(displayID: targetDisplay.id, desktopID: targetDesktopID)
-            targetScope.assign(window: entry.window, to: targetStageID)
-            state.update(targetScope)
-            state.focusDisplay(targetDisplay.id)
-            let removedPin = state.removePin(windowID: entry.window.id)
-            state.suppressRulePlacement(window: entry.window)
-            adopted.append((entry.window, sourceScope, targetStageScope, removedPin))
+            return adopted
         }
 
         guard !adopted.isEmpty else { return nil }
-        store.save(state)
 
         for item in adopted {
             service.removeLayoutIntent(scope: item.source)
@@ -1093,7 +1131,7 @@ public final class LayoutMaintainer {
     }
 
     private func suppressKnownUnmovableFrames(in plan: ApplyPlan, snapshot: DaemonSnapshot) -> ApplyPlan {
-        let cutoff = now().addingTimeInterval(-max(3, intervalSeconds * 8))
+        let cutoff = now().addingTimeInterval(-LayoutTolerance.recentRefusal.seconds(intervalSeconds: intervalSeconds))
         let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         let fullscreenScopes = Set(tickFullscreen.compactMap(\.entry.scope))
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
@@ -1241,7 +1279,7 @@ public final class LayoutMaintainer {
         guard !overlap.isNull, !overlap.isEmpty else { return false }
         let visibleArea = max(1, visible.width * visible.height)
         let overlapArea = overlap.width * overlap.height
-        return overlapArea / visibleArea >= 0.5
+        return overlapArea / visibleArea >= LayoutTolerance.halfCoverage
     }
 
     /// Cible de recalage d'une fenêtre zoomée décalée : sa taille couvre encore l'écran mais son
@@ -1273,7 +1311,7 @@ public final class LayoutMaintainer {
         } else {
             return nil
         }
-        guard !framesAreClose(frame, target, tolerance: 8) else { return nil }
+        guard !framesAreClose(frame, target, tolerance: LayoutTolerance.frameNear) else { return nil }
         return target.integral
     }
 
@@ -1308,7 +1346,7 @@ public final class LayoutMaintainer {
                 clampedFrames.removeValue(forKey: item.windowID.rawValue)
                 failedFrames.removeValue(forKey: item.windowID.rawValue)
                 if let command = commandsByID[item.windowID],
-                   !command.window.frame.isClose(to: item.requested, positionTolerance: 1, sizeTolerance: 1) {
+                   !command.window.frame.isClose(to: item.requested, tolerance: LayoutTolerance.frameMatch) {
                     revertedAppliedFrames[item.windowID.rawValue] = RevertedAppliedFrame(
                         requested: item.requested,
                         observedBeforeApply: command.window.frame,
@@ -1381,7 +1419,7 @@ public final class LayoutMaintainer {
                 display = nil
             }
             let anchored = stabilizedClampedFrame(requested: item.requested, actual: actual, display: display)
-            guard !actual.isClose(to: anchored, positionTolerance: 2, sizeTolerance: 2),
+            guard !actual.isClose(to: anchored, tolerance: LayoutTolerance.frameMatch),
                   let stabilized = service.setFrame(anchored.cgRect, of: command.window)
             else { continue }
 
@@ -1462,7 +1500,7 @@ public final class LayoutMaintainer {
             for id in siblingIDs {
                 guard let window = windowsByID[id],
                       let target = plan.placements[id],
-                      !window.frame.isClose(to: Rect(target), positionTolerance: 2, sizeTolerance: 2)
+                      !window.frame.isClose(to: Rect(target), tolerance: LayoutTolerance.frameMatch)
                 else { continue }
                 commands.append(ApplyCommand(window: window, frame: Rect(target)))
             }
@@ -1541,7 +1579,7 @@ public final class LayoutMaintainer {
                 let plan = ApplyPlan(commands: zip(orderedIDs, targets).compactMap { id, target -> ApplyCommand? in
                     guard let window = entriesByID[id]?.window,
                           let live = liveFrames[id],
-                          !Rect(live).isClose(to: Rect(target), positionTolerance: 2, sizeTolerance: 2)
+                          !Rect(live).isClose(to: Rect(target), tolerance: LayoutTolerance.frameMatch)
                     else { return nil }
                     return ApplyCommand(window: window, frame: Rect(target))
                 })
@@ -1767,7 +1805,7 @@ public final class LayoutMaintainer {
         let blocker = blockers.reduce(blockers[0]) { $0.union($1) }
         let gap = max(0, innerGap)
         var candidates: [CGRect] = []
-        if blocker.height >= visibleFrame.height * 0.5 {
+        if blocker.height >= visibleFrame.height * LayoutTolerance.halfCoverage {
             candidates.append(CGRect(
                 x: visibleFrame.minX,
                 y: visibleFrame.minY,
@@ -1781,7 +1819,7 @@ public final class LayoutMaintainer {
                 height: visibleFrame.height
             ))
         }
-        if blocker.width >= visibleFrame.width * 0.5 {
+        if blocker.width >= visibleFrame.width * LayoutTolerance.halfCoverage {
             candidates.append(CGRect(
                 x: visibleFrame.minX,
                 y: visibleFrame.minY,
@@ -2301,6 +2339,35 @@ public final class LayoutMaintainer {
         )
     }
 
+    /// Annule seulement les déplacements de `reconcileStableVisibleDisplayDrift`, sur l'état relu
+    /// sous verrou (SPEC-016 FR-013) : les autres changements écrits entre-temps sont conservés.
+    /// Une fenêtre qui n'est plus dans sa stage cible a été déplacée par ailleurs : on la laisse.
+    // O(m · M) — m = fenêtres déplacées, M = membres de l'état.
+    private func revertReconciledDisplayMoves(_ moves: [ReconciledDisplayMove]) {
+        let defaultMode = service.effectiveConfig.tiling.defaultStrategy
+        store.mutate { state in
+            for move in moves where state.stageScope(for: move.window.id) == move.target {
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: move.window.id)
+                }
+                var source = state.scope(displayID: move.source.displayID, desktopID: move.source.desktopID, defaultMode: defaultMode)
+                source.ensureStage(move.source.stageID, mode: defaultMode)
+                if let origin = move.origin,
+                   let stageIndex = source.stages.firstIndex(where: { $0.id == move.source.stageID }) {
+                    let members = source.stages[stageIndex].members
+                    source.stages[stageIndex].members.insert(origin.member, at: min(origin.index, members.count))
+                    if origin.wasFocused {
+                        source.stages[stageIndex].focusedWindowID = move.window.id
+                        source.stages[stageIndex].previousFocusedWindowID = origin.previousFocusedWindowID
+                    }
+                } else {
+                    source.assign(window: move.window, to: move.source.stageID, focusWindow: false, defaultMode: defaultMode)
+                }
+                state.update(source)
+            }
+        }
+    }
+
     private func resizeAxesEventValue(_ axes: [WindowID: MutableResizeAxes]?) -> String {
         guard let axes, !axes.isEmpty else { return "" }
         return axes.keys.sorted().map { id in
@@ -2319,52 +2386,51 @@ public final class LayoutMaintainer {
             return nil
         }
 
-        let originalState = store.state()
-        var state = originalState
-        var reconciled: [(window: WindowSnapshot, source: StageScope, target: StageScope)] = []
+        // Déplacements calculés et écrits sur l'état relu sous verrou (SPEC-016 FR-013). La
+        // place d'origine de chaque membre est gardée pour pouvoir annuler ce seul déplacement.
+        let defaultMode = service.effectiveConfig.tiling.defaultStrategy
+        let reconciled: [ReconciledDisplayMove] = store.mutate { state in
+            var reconciled: [ReconciledDisplayMove] = []
+            for entry in snapshot.windows {
+                guard let sourceScope = entry.scope,
+                      !excludedScopes.contains(sourceScope),
+                      entry.pin == nil,
+                      entry.window.isOnScreen,
+                      entry.window.isTileCandidate,
+                      !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
+                      !state.suppressesRulePlacement(windowID: entry.window.id, ruleID: nil),
+                      let physicalDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
+                      physicalDisplay.id != sourceScope.displayID
+                else { continue }
 
-        for entry in snapshot.windows {
-            guard let sourceScope = entry.scope,
-                  !excludedScopes.contains(sourceScope),
-                  entry.pin == nil,
-                  entry.window.isOnScreen,
-                  entry.window.isTileCandidate,
-                  !isHiddenCorner(entry.window.frame.cgRect, in: snapshot.displays),
-                  !state.suppressesRulePlacement(windowID: entry.window.id, ruleID: nil),
-                  let physicalDisplay = snapshot.displays.first(where: { $0.frame.cgRect.contains(entry.window.frame.center) }),
-                  physicalDisplay.id != sourceScope.displayID
-            else { continue }
-
-            let targetDesktopID = state.currentDesktopID(for: physicalDisplay.id)
-            var targetScope = state.scope(
-                displayID: physicalDisplay.id,
-                desktopID: targetDesktopID,
-                defaultMode: service.effectiveConfig.tiling.defaultStrategy
-            )
-            let targetStageID = targetScope.activeStageID
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: entry.window.id)
+                let targetDesktopID = state.currentDesktopID(for: physicalDisplay.id)
+                let targetStageID = state.scope(
+                    displayID: physicalDisplay.id,
+                    desktopID: targetDesktopID,
+                    defaultMode: defaultMode
+                ).activeStageID
+                let origin = ReconciledDisplayMove.Origin(in: state, windowID: entry.window.id, scope: sourceScope)
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: entry.window.id)
+                }
+                var targetScope = state.scope(
+                    displayID: physicalDisplay.id,
+                    desktopID: targetDesktopID,
+                    defaultMode: defaultMode
+                )
+                targetScope.assign(window: entry.window, to: targetStageID, defaultMode: defaultMode)
+                state.update(targetScope)
+                reconciled.append(ReconciledDisplayMove(
+                    window: entry.window,
+                    source: sourceScope,
+                    target: StageScope(displayID: physicalDisplay.id, desktopID: targetDesktopID, stageID: targetStageID),
+                    origin: origin
+                ))
             }
-            targetScope = state.scope(
-                displayID: physicalDisplay.id,
-                desktopID: targetDesktopID,
-                defaultMode: service.effectiveConfig.tiling.defaultStrategy
-            )
-            targetScope.assign(
-                window: entry.window,
-                to: targetStageID,
-                defaultMode: service.effectiveConfig.tiling.defaultStrategy
-            )
-            state.update(targetScope)
-            reconciled.append((
-                entry.window,
-                sourceScope,
-                StageScope(displayID: physicalDisplay.id, desktopID: targetDesktopID, stageID: targetStageID)
-            ))
+            return reconciled
         }
 
         guard !reconciled.isEmpty else { return nil }
-        store.save(state)
 
         let updatedSnapshot = service.snapshot(followFocus: false)
         let plan = suppressKnownUnmovableFrames(
@@ -2375,7 +2441,7 @@ public final class LayoutMaintainer {
         record(result, from: plan)
         appendItemEvents(result)
         if result.failed > 0 {
-            store.save(originalState)
+            revertReconciledDisplayMoves(reconciled)
             lastObservedFrames = scopedFrames(in: snapshot)
             events.append(RoadieEvent(type: "window.scope_reconcile_failed", details: [
                 "windows": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
@@ -2480,8 +2546,10 @@ public final class LayoutMaintainer {
         guard frames.count > 1 else { return true }
         for index in frames.indices {
             for otherIndex in frames.index(after: index)..<frames.endIndex {
+                // Chevauchement réel seulement s'il dépasse le bruit d'application sur les deux axes
+                // (l'ancien seuil comparait une aire à une tolérance en points).
                 let intersection = frames[index].intersection(frames[otherIndex])
-                if max(0, intersection.width) * max(0, intersection.height) > 16 {
+                if intersection.width > LayoutTolerance.frameNear && intersection.height > LayoutTolerance.frameNear {
                     return false
                 }
             }
@@ -2494,8 +2562,7 @@ public final class LayoutMaintainer {
         var result: Set<WindowID> = []
         for (id, frame) in frames {
             guard let previousFrame = previous[id] else { continue }
-            let tolerance = LayoutTolerance.observedChange
-            if !frame.isClose(to: previousFrame, positionTolerance: tolerance, sizeTolerance: tolerance) {
+            if !frame.isClose(to: previousFrame, tolerance: LayoutTolerance.observedChange) {
                 result.insert(WindowID(rawValue: id))
             }
         }
@@ -2700,6 +2767,19 @@ public final class LayoutMaintainer {
             return nil
         }
 
+        // FR-002 : le focus sur une voisine cachée d'une fenêtre zoomée sort du zoom. L'intent de
+        // zoom (voisines aux cadres cachés) est retiré et la fenêtre zoomée quitte le plein écran
+        // du tick : le scope est redisposé normalement au lieu de rester exclu.
+        if let zoomedWindowID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID,
+           zoomedWindowID != focusedWindowID {
+            service.removeLayoutIntent(scope: focusedScope)
+            tickFullscreen.removeAll { $0.entry.window.id == zoomedWindowID }
+            events.append(RoadieEvent(type: "layout_zoom_exited", scope: focusedScope, details: [
+                "zoomedWindowID": String(zoomedWindowID.rawValue),
+                "focusedWindowID": String(focusedWindowID.rawValue)
+            ]))
+        }
+
         let activeHiddenEntries = snapshot.windows.filter { entry in
             entry.scope == focusedScope
                 && entry.window.isTileCandidate
@@ -2844,6 +2924,34 @@ public final class LayoutMaintainer {
     }
 }
 
+/// Déplacement d'une fenêtre vers la stage de son écran physique, avec sa place d'origine.
+private struct ReconciledDisplayMove {
+    struct Origin {
+        var member: PersistentStageMember
+        var index: Int
+        var wasFocused: Bool
+        var previousFocusedWindowID: WindowID?
+
+        /// Place du membre dans la stage `scope` de `state`, nil s'il n'y est pas.
+        init?(in state: PersistentStageState, windowID: WindowID, scope: StageScope) {
+            guard let stage = state.scopes
+                .first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+                .stages.first(where: { $0.id == scope.stageID }),
+                  let index = stage.members.firstIndex(where: { $0.windowID == windowID })
+            else { return nil }
+            self.member = stage.members[index]
+            self.index = index
+            self.wasFocused = stage.focusedWindowID == windowID
+            self.previousFocusedWindowID = stage.previousFocusedWindowID
+        }
+    }
+
+    var window: WindowSnapshot
+    var source: StageScope
+    var target: StageScope
+    var origin: Origin?
+}
+
 private struct RulePlacementDestination {
     var display: DisplaySnapshot
     var scope: StageScope
@@ -2858,8 +2966,8 @@ private struct ClampedFrame {
     var recordedAt: Date
 
     func matches(command: ApplyCommand) -> Bool {
-        if command.window.frame.isClose(to: actual, positionTolerance: 8, sizeTolerance: 8),
-           requested.isClose(to: command.frame) {
+        if command.window.frame.isClose(to: actual, tolerance: LayoutTolerance.frameNear),
+           requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest) {
             return true
         }
         if impossibleKnownMinimumIsStillRequested(by: command) {
@@ -2874,8 +2982,8 @@ private struct ClampedFrame {
         else {
             return sameImpossibleAxisIsStillRequested(by: command)
         }
-        return command.frame.width <= command.window.frame.width + 8
-            && command.frame.height <= command.window.frame.height + 8
+        return command.frame.width <= command.window.frame.width + LayoutTolerance.frameNear
+            && command.frame.height <= command.window.frame.height + LayoutTolerance.frameNear
     }
 
     /// Commande à envoyer malgré ce refus : inchangée si le refus ne la concerne pas ; nil si elle
@@ -2889,7 +2997,7 @@ private struct ClampedFrame {
         }
         let current = command.window.frame
         let moved = Rect(x: command.frame.x, y: command.frame.y, width: current.width, height: current.height)
-        guard !current.isClose(to: moved, positionTolerance: 2, sizeTolerance: 2) else { return nil }
+        guard !current.isClose(to: moved, tolerance: LayoutTolerance.frameMatch) else { return nil }
         return ApplyCommand(window: command.window, frame: moved)
     }
 
@@ -2951,8 +3059,8 @@ private struct FailedFrame {
     var recordedAt: Date
 
     func matches(command: ApplyCommand) -> Bool {
-        requested.isClose(to: command.frame)
-            && command.window.frame.isClose(to: observedAtFailure, positionTolerance: 4, sizeTolerance: 4)
+        requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)
+            && command.window.frame.isClose(to: observedAtFailure, tolerance: LayoutTolerance.unchangedSinceRefusal)
     }
 }
 
@@ -2962,8 +3070,8 @@ private struct RevertedAppliedFrame {
     var appliedAt: Date
 
     func matches(command: ApplyCommand) -> Bool {
-        requested.isClose(to: command.frame)
-            && command.window.frame.isClose(to: observedBeforeApply, positionTolerance: 4, sizeTolerance: 4)
+        requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)
+            && command.window.frame.isClose(to: observedBeforeApply, tolerance: LayoutTolerance.unchangedSinceRefusal)
     }
 }
 
@@ -2977,11 +3085,16 @@ private extension PersistentStageState {
 }
 
 private extension Rect {
-    func isClose(to other: Rect, positionTolerance: Double = 48, sizeTolerance: Double = 48) -> Bool {
+    /// Tolérances explicites (SPEC-016 FR-041) : plus de valeur par défaut implicite.
+    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {
         abs(x - other.x) <= positionTolerance
             && abs(y - other.y) <= positionTolerance
             && abs(width - other.width) <= sizeTolerance
             && abs(height - other.height) <= sizeTolerance
+    }
+
+    func isClose(to other: Rect, tolerance: Double) -> Bool {
+        isClose(to: other, positionTolerance: tolerance, sizeTolerance: tolerance)
     }
 }
 

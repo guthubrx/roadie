@@ -175,7 +175,7 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
             return rect.width >= rect.height
         }
 
-        let tolerance = CGFloat(24)
+        let tolerance = LayoutTolerance.edgeAlignment
         let xOverlap = overlap(
             leftFrame.minX...leftFrame.maxX,
             rightFrame.minX...rightFrame.maxX
@@ -219,7 +219,7 @@ public struct MutableBSPLayoutStrategy: LayoutStrategy {
         horizontal: Bool,
         innerGap: CGFloat
     ) -> Bool {
-        let edgeTolerance = CGFloat(24)
+        let edgeTolerance = LayoutTolerance.edgeAlignment
         let gapTolerance = LayoutTolerance.innerGapTolerance(gapsInner: innerGap)
         if horizontal {
             return leftFrame.minX.isClose(to: rect.minX, tolerance: edgeTolerance)

@@ -283,7 +283,92 @@ struct StatePersistenceTests {
         #expect(partial.cursor == afterRotation.cursor)
     }
 
+    // MARK: - Réparations sous transaction (FR-013, T202)
+
+    /// La réparation d'état part de l'état relu sous verrou : une écriture faite par un autre
+    /// acteur pendant le snapshot AX est conservée, et la réparation est bien appliquée.
+    @Test
+    func stateAuditHealKeepsChangesWrittenDuringSnapshot() {
+        let path = tempPath("state-audit-heal-concurrent")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = StageStore(path: path)
+        // Scope d'un écran absent dont la stage active n'existe pas : réparé par `heal`, pas par
+        // la réconciliation du snapshot.
+        let gone = DisplayID(rawValue: "display-gone")
+        var initial = stateWithMember(pid: 500)
+        initial.scopes.append(PersistentStageScope(
+            displayID: gone,
+            activeStageID: StageID(rawValue: "9"),
+            stages: [PersistentStage(id: StageID(rawValue: "1"))]
+        ))
+        store.save(initial)
+        let provider = ConcurrentWriteProvider(
+            display: DisplaySnapshot(
+                id: display,
+                index: 1,
+                name: "Main",
+                frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+                visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+                isMain: true
+            ),
+            windowList: [window(10)]
+        )
+        provider.onWindows = {
+            store.mutate { $0.setLabel("concurrent", displayID: display, desktopID: DesktopID(rawValue: 1)) }
+        }
+        let service = SnapshotService(provider: provider, frameWriter: provider, stageStore: store)
+
+        let report = StateAuditService(service: service, stageStore: store).heal()
+        let state = store.state()
+
+        #expect(report.repaired >= 1)
+        #expect(state.scopes.first { $0.displayID == gone }?.activeStageID == StageID(rawValue: "1"))
+        #expect(state.label(displayID: display, desktopID: DesktopID(rawValue: 1)) == "concurrent")
+    }
+
     // MARK: - Activité des commandes (LayoutCommandActivity)
+
+    /// Activité par scope (FR-040) : un scope marqué n'est pas une activité globale ; une activité
+    /// globale l'emporte ; une entrée expirée est retirée à l'écriture suivante.
+    @Test
+    func layoutCommandActivityTracksScopesSeparatelyFromGlobalActivity() {
+        let path = tempPath("layout-activity-scopes")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let activity = LayoutCommandActivity(path: path)
+        let now = Date()
+        let scopeA = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let otherStageOnA = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        let scopeB = StageScope(displayID: DisplayID(rawValue: "display-b"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+
+        activity.markActive(reason: "scoped", scopes: [scopeA], now: now, holdSeconds: 2)
+        let scoped = activity.activity(now: now)
+        activity.markActive(reason: "short", scopes: [scopeB], now: now, holdSeconds: 0.5)
+        activity.markActive(reason: "later", scopes: [scopeA], now: now.addingTimeInterval(1), holdSeconds: 2)
+        let afterExpiry = activity.activity(now: now.addingTimeInterval(1))
+        activity.markActive(reason: "global", now: now, holdSeconds: 2)
+        let global = activity.activity(now: now)
+
+        #expect(scoped?.isGlobal == false)
+        #expect(scoped?.covers(otherStageOnA) == true)
+        #expect(scoped?.covers(scopeB) == false)
+        #expect(afterExpiry?.scopes == [scopeA])
+        #expect(global?.isGlobal == true)
+        #expect(global?.covers(scopeB) == true)
+    }
+
+    /// Un fichier écrit par une version antérieure (délai puis raison) reste lu comme global.
+    @Test
+    func layoutCommandActivityReadsLegacyGlobalFile() throws {
+        let path = tempPath("layout-activity-legacy")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let now = Date()
+        try "\(now.addingTimeInterval(3).timeIntervalSince1970)\nlegacy\n".write(toFile: path, atomically: true, encoding: .utf8)
+
+        let activity = LayoutCommandActivity(path: path).activity(now: now)
+
+        #expect(activity?.isGlobal == true)
+        #expect(activity?.scopes.isEmpty == true)
+    }
 
     @Test
     func layoutCommandActivityKeepsLongestExpiryAcrossConcurrentWriters() {
@@ -299,4 +384,29 @@ struct StatePersistenceTests {
         let expiry = activities[0].activeUntil(now: now)
         #expect(expiry.map { abs($0.timeIntervalSince(now) - 49) < 0.01 } == true)
     }
+}
+
+/// Fournisseur AX factice : exécute `onWindows` une fois pendant l'énumération des fenêtres,
+/// comme un autre processus qui écrit l'état pendant le snapshot. N'écrit aucun cadre.
+private final class ConcurrentWriteProvider: SystemSnapshotProviding, WindowFrameWriting, @unchecked Sendable {
+    private let display: DisplaySnapshot
+    private let windowList: [WindowSnapshot]
+    var onWindows: (() -> Void)?
+
+    init(display: DisplaySnapshot, windowList: [WindowSnapshot]) {
+        self.display = display
+        self.windowList = windowList
+    }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+    func displays() -> [DisplaySnapshot] { [display] }
+
+    func windows() -> [WindowSnapshot] {
+        let action = onWindows
+        onWindows = nil
+        action?()
+        return windowList
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { nil }
 }

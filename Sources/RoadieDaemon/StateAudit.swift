@@ -72,21 +72,21 @@ public struct StateAuditService {
     }
 
     public func heal() -> StateHealReport {
+        // Snapshot (AX) hors verrou, réparation sur l'état relu sous verrou (SPEC-016 FR-013).
         let snapshot = service.snapshot()
-        var state = stageStore.state()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
         let liveManagedWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope == nil ? nil : entry.window.id
         })
-        var repaired = 0
-
-        if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
-            state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
-            repaired += state.activeDisplayID == nil ? 0 : 1
+        let repaired = stageStore.mutate { state -> Int in
+            var repaired = 0
+            if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
+                state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
+                repaired += state.activeDisplayID == nil ? 0 : 1
+            }
+            repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs)
+            return repaired
         }
-
-        repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs)
-        stageStore.save(state)
         return StateHealReport(repaired: repaired, audit: run())
     }
 

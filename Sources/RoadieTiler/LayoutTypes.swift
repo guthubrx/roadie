@@ -96,7 +96,8 @@ public enum LayoutDiff {
 }
 
 private extension CGRect {
-    func isClose(to other: CGRect, positionTolerance: CGFloat = 48, sizeTolerance: CGFloat = 48) -> Bool {
+    /// Tolérances explicites (SPEC-016 FR-041) : plus de valeur par défaut implicite.
+    func isClose(to other: CGRect, positionTolerance: CGFloat, sizeTolerance: CGFloat) -> Bool {
         abs(minX - other.minX) <= positionTolerance
             && abs(minY - other.minY) <= positionTolerance
             && abs(width - other.width) <= sizeTolerance

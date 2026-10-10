@@ -720,12 +720,14 @@ public struct StageCommandService {
     }
 
     public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
-        beginLayoutCommand("stage.mode")
-        defer { finishLayoutCommand("stage.mode") }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
         }
+        // Seul l'écran de la commande est soustrait au maintien (FR-040).
+        let commandScopes = Set([snapshot.state.activeScope(on: display.id)].compactMap { $0 })
+        beginLayoutCommand("stage.mode", scopes: commandScopes)
+        defer { finishLayoutCommand("stage.mode", scopes: commandScopes) }
         let modeScope = store.mutate { state -> StageScope in
             var scope = activeScope(displayID: display.id, in: &state)
             let stageID = scope.activeStageID
@@ -770,6 +772,8 @@ public struct StageCommandService {
         var state = store.state()
         let scope = activeScope(displayID: display.id, in: &state)
         let previousID = scope.activeStageID
+        // Écran et bureau de la bascule : seuls eux sont soustraits au maintien (FR-040).
+        let switchScope = StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
         if previousID == stageID {
             let activeDisplayChanged = state.activeDisplayID != display.id
             let targetStage = scope.stages.first { $0.id == stageID }
@@ -790,8 +794,8 @@ public struct StageCommandService {
                     return member.windowID
                 }
                 if !targetMembers.isEmpty && visibleTargetMemberIDs.isEmpty {
-                    beginLayoutCommand("stage.switch.reconcile")
-                    defer { finishLayoutCommand("stage.switch.reconcile") }
+                    beginLayoutCommand("stage.switch.reconcile", scopes: [switchScope])
+                    defer { finishLayoutCommand("stage.switch.reconcile", scopes: [switchScope]) }
 
                     let targetLiveMemberIDs = targetMembers.compactMap { member -> WindowID? in
                         windowsByID[member.windowID] == nil ? nil : member.windowID
@@ -884,8 +888,8 @@ public struct StageCommandService {
             )
         }
 
-        beginLayoutCommand("stage.switch")
-        defer { finishLayoutCommand("stage.switch") }
+        beginLayoutCommand("stage.switch", scopes: [switchScope])
+        defer { finishLayoutCommand("stage.switch", scopes: [switchScope]) }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
 
         let persistStartedAt = Date()
@@ -1124,12 +1128,13 @@ public struct StageCommandService {
         Date().timeIntervalSince(start) * 1000
     }
 
-    private func beginLayoutCommand(_ reason: String) {
-        commandActivity.markActive(reason: reason)
+    /// Sans `scopes`, la commande suspend tout le maintien ; avec, seulement ces scopes (FR-040).
+    private func beginLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {
+        commandActivity.markActive(reason: reason, scopes: scopes)
     }
 
-    private func finishLayoutCommand(_ reason: String) {
-        commandActivity.finish(reason: reason)
+    private func finishLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {
+        commandActivity.finish(reason: reason, scopes: scopes)
     }
 
     private func formatMs(_ value: Double) -> String {
@@ -1456,8 +1461,14 @@ public struct StageCommandService {
     private func visibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect? {
         let visible = display.visibleFrame.cgRect
         let overlap = frame.intersection(visible)
-        let minimumVisibleWidth = min(120, max(32, frame.width * 0.25))
-        let minimumVisibleHeight = min(80, max(32, frame.height * 0.25))
+        let minimumVisibleWidth = min(
+            LayoutTolerance.usableVisibleWidthMaximum,
+            max(LayoutTolerance.usableVisibleMinimum, frame.width * LayoutTolerance.usableVisibleFraction)
+        )
+        let minimumVisibleHeight = min(
+            LayoutTolerance.usableVisibleHeightMaximum,
+            max(LayoutTolerance.usableVisibleMinimum, frame.height * LayoutTolerance.usableVisibleFraction)
+        )
         let frameCenter = CGPoint(x: frame.midX, y: frame.midY)
         let isUsable = visible.contains(frameCenter)
             && overlap.width >= minimumVisibleWidth

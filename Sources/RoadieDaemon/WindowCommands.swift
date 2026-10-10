@@ -386,8 +386,6 @@ public struct WindowCommandService {
     }
 
     public func reset() -> WindowCommandResult {
-        beginLayoutCommand("window.reset")
-        defer { finishLayoutCommand("window.reset") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -395,6 +393,9 @@ public struct WindowCommandService {
         else {
             return WindowCommandResult(message: "window reset: no active window", changed: false)
         }
+        // La commande reste dans le scope de la fenêtre active : seul lui est soustrait au maintien.
+        beginLayoutCommand("window.reset", scopes: [scope])
+        defer { finishLayoutCommand("window.reset", scopes: [scope]) }
 
         service.removeLayoutIntent(scope: scope)
         let zoomed = service.reset(active.window)
@@ -423,8 +424,6 @@ public struct WindowCommandService {
     }
 
     public func toggleFullscreen() -> WindowCommandResult {
-        beginLayoutCommand("window.toggle_fullscreen")
-        defer { finishLayoutCommand("window.toggle_fullscreen") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -432,6 +431,9 @@ public struct WindowCommandService {
         else {
             return WindowCommandResult(message: "toggle fullscreen: no active window", changed: false)
         }
+        // La commande reste dans le scope de la fenêtre active : seul lui est soustrait au maintien.
+        beginLayoutCommand("window.toggle_fullscreen", scopes: [scope])
+        defer { finishLayoutCommand("window.toggle_fullscreen", scopes: [scope]) }
 
         let visible = display.visibleFrame.cgRect.integral
         let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
@@ -681,12 +683,13 @@ public struct WindowCommandService {
         events.append(RoadieEvent(type: "window.pin_removed", scope: targetScope, details: details))
     }
 
-    private func beginLayoutCommand(_ reason: String) {
-        commandActivity.markActive(reason: reason)
+    /// Sans `scopes`, la commande suspend tout le maintien ; avec, seulement ces scopes (FR-040).
+    private func beginLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {
+        commandActivity.markActive(reason: reason, scopes: scopes)
     }
 
-    private func finishLayoutCommand(_ reason: String) {
-        commandActivity.finish(reason: reason)
+    private func finishLayoutCommand(_ reason: String, scopes: Set<StageScope> = []) {
+        commandActivity.finish(reason: reason, scopes: scopes)
     }
 
     private func shouldPersistCommandIntent(after result: ApplyResult) -> Bool {
