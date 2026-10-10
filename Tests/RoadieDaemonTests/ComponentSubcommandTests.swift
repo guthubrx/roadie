@@ -2,16 +2,14 @@ import Foundation
 import Testing
 import RoadieDaemon
 
-/// Invariants sur la liste des composants SPEC-011. Le but est de detecter
-/// toute regression : si quelqu'un ajoute un composant a roadied/main.swift,
-/// il doit aussi l'ajouter ici, ce qui force la mise a jour de :
-/// - Scripts/start-modular (qui liste les composants a lancer)
-/// - Quickstart documentation
-/// - ComponentLockFile.registry() (qui scanne ~/.roadies/*.pid)
+/// Tests du verrou PID par composant (ComponentLockFile) avec les noms de composants
+/// utilises par les sous-commandes `roadied <composant>` (SPEC-011).
+///
+/// La liste ci-dessous est un jeu de noms de test. Elle n'est pas lue depuis le
+/// code de production : les noms reels sont dans Sources/roadied/main.swift, qui est
+/// un executable et ne peut pas etre importe par les tests.
 @Suite
 struct ComponentSubcommandTests {
-    /// Liste des noms de composants stables au sens du PID file et de la
-    /// sous-commande `roadied <name>`. Source de verite SPEC-011.
     static let canonicalComponentNames: [String] = [
         "tiler",
         "rail",
@@ -21,19 +19,6 @@ struct ComponentSubcommandTests {
         "target-mode",
         "restore-safety"
     ]
-
-    @Test
-    func canonicalNamesAreLowerKebabAndUnique() {
-        let names = Self.canonicalComponentNames
-        let set = Set(names)
-        #expect(names.count == set.count, "duplicate name in canonical list")
-        for name in names {
-            #expect(!name.isEmpty)
-            #expect(name == name.lowercased(), "expected lowercase kebab-case, got \(name)")
-            #expect(!name.contains("_"), "use kebab-case (-), not snake_case (_)")
-            #expect(!name.contains(" "), "no spaces allowed in component name")
-        }
-    }
 
     @Test
     func lockFilePathFollowsPattern() {

@@ -2,16 +2,29 @@ import CoreGraphics
 import RoadieAX
 
 enum HiddenWindowPlacement {
+    /// Frame de masquage : bord droit de l'écran le plus à droite, avec un y pris dans la plage
+    /// verticale de CET écran. Un y hors de sa plage laisserait la fenêtre hors de tout écran,
+    /// et macOS la replacerait de façon imprévisible. À égalité de bord droit (écrans empilés),
+    /// l'écran d'origine de la fenêtre est préféré. O(d), d = nombre d'écrans.
     static func frame(for frame: CGRect, on display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
-        let visible = display.visibleFrame.cgRect
-        let virtualMaxX = displays.map { $0.visibleFrame.cgRect.maxX }.max() ?? visible.maxX
-        let y = min(max(frame.minY, visible.minY), visible.maxY - 1)
+        let host = rightmostVisibleFrame(preferring: display, among: displays)
+        let y = min(max(frame.minY, host.minY), host.maxY - 1)
         return CGRect(
-            x: virtualMaxX - 1,
+            x: host.maxX - 1,
             y: y,
             width: frame.width,
             height: frame.height
         ).integral
+    }
+
+    private static func rightmostVisibleFrame(preferring display: DisplaySnapshot, among displays: [DisplaySnapshot]) -> CGRect {
+        let preferred = display.visibleFrame.cgRect
+        guard let virtualMaxX = displays.map({ $0.visibleFrame.cgRect.maxX }).max(),
+              virtualMaxX - preferred.maxX > 1
+        else { return preferred }
+        return displays
+            .map { $0.visibleFrame.cgRect }
+            .first { virtualMaxX - $0.maxX <= 1 } ?? preferred
     }
 
     static func isHidden(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {

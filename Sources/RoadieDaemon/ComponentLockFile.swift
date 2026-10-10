@@ -6,18 +6,26 @@ public enum ComponentLockError: Error, Equatable {
     case ioFailure(path: String, underlying: String)
 }
 
-/// Verrou PID par composant pour permettre de lancer chaque sous-commande roadied
-/// (rail, tiler, border, ...) en isolation tout en evitant les doublons.
+/// Verrou d'instance par composant (SPEC-016 R9). Le verrou est un `flock(LOCK_EX|LOCK_NB)`
+/// sur ~/.roadies/<component>.lock, tenu par le descripteur ouvert pendant toute la vie du
+/// process : le noyau le libere aussi en cas de crash, sans PID stale ni fenetre de course
+/// entre test et ecriture. Le fichier ~/.roadies/<component>.pid n'est qu'informatif
+/// (diagnostic, `registry()`).
 ///
-/// Le fichier est ~/.roadies/<component>.pid (~/.roadies/spec011-test-XXXX.pid
-/// pour les tests, isole par UUID pour ne pas perturber un daemon reel).
-public struct ComponentLockFile: Sendable {
+/// `FileLock` n'est pas reutilise : son `acquire` est bloquant, alors qu'un second demarrage
+/// doit echouer tout de suite.
+///
+/// En test (nom de process contenant "test"), le repertoire est isole dans NSTemporaryDirectory.
+public final class ComponentLockFile: @unchecked Sendable {
     public let component: String
     private let path: String
+    private let lockPath: String
+    private var fileDescriptor: Int32 = -1
 
     public init(component: String) {
         self.component = component
         self.path = Self.pidFilePath(for: component)
+        self.lockPath = "\(Self.pidDirectory())/\(component).lock"
     }
 
     public static func pidFilePath(for component: String) -> String {
@@ -32,39 +40,61 @@ public struct ComponentLockFile: Sendable {
         return NSString(string: "~/.roadies").expandingTildeInPath
     }
 
-    /// Acquiert le verrou. Throw `alreadyRunning(pid:)` si un autre process vivant
-    /// detient deja le lock. Ecrase un PID stale automatiquement.
+    /// Acquiert le verrou. Throw `alreadyRunning(pid:)` si un autre detenteur le tient deja
+    /// (y compris un autre descripteur du meme process). Idempotent pour ce detenteur.
     public func acquire() throws {
-        let manager = FileManager.default
+        guard fileDescriptor < 0 else { return }
         let directory = (path as NSString).deletingLastPathComponent
         do {
-            try manager.createDirectory(atPath: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         } catch {
             throw ComponentLockError.ioFailure(path: directory, underlying: "\(error)")
         }
 
-        if let existingPid = Self.readPid(at: path), Self.isAlive(pid: existingPid) {
-            throw ComponentLockError.alreadyRunning(pid: existingPid)
+        // O_CLOEXEC : un process enfant (restore-watch) ne doit pas heriter du verrou.
+        let fd = open(lockPath, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard fd >= 0 else {
+            throw ComponentLockError.ioFailure(path: lockPath, underlying: String(cString: strerror(errno)))
         }
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            let err = errno
+            close(fd)
+            if err == EWOULDBLOCK {
+                throw ComponentLockError.alreadyRunning(pid: Self.readPid(at: path) ?? 0)
+            }
+            throw ComponentLockError.ioFailure(path: lockPath, underlying: String(cString: strerror(err)))
+        }
+        fileDescriptor = fd
 
         let myPid = ProcessInfo.processInfo.processIdentifier
         do {
             try "\(myPid)\n".write(toFile: path, atomically: true, encoding: .utf8)
         } catch {
+            release()
             throw ComponentLockError.ioFailure(path: path, underlying: "\(error)")
         }
     }
 
-    /// Libere le verrou. Idempotent — supprime le fichier s'il existe et contient
-    /// le PID courant. Ne supprime pas un fichier qui appartient a un autre process
-    /// (anti-corruption en cas d'appel apres acquire echoue).
+    /// Libere le verrou. Idempotent. Supprime le fichier PID seulement s'il contient le PID
+    /// courant. Le fichier .lock reste en place : le supprimer ouvrirait une course avec un
+    /// process qui l'a deja ouvert.
     public func release() {
-        guard let pid = Self.readPid(at: path) else { return }
-        guard pid == ProcessInfo.processInfo.processIdentifier else { return }
-        try? FileManager.default.removeItem(atPath: path)
+        guard fileDescriptor >= 0 else { return }
+        if Self.readPid(at: path) == ProcessInfo.processInfo.processIdentifier {
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        _ = flock(fileDescriptor, LOCK_UN)
+        close(fileDescriptor)
+        fileDescriptor = -1
+    }
+
+    deinit {
+        release()
     }
 
     /// Inventaire des verrous actifs. Filtre les PID staling.
+    /// La vivacite est testee par `kill(pid, 0)` et non par une sonde `flock` : une sonde
+    /// pourrait faire echouer un demarrage concurrent.
     public static func registry() -> [(component: String, pid: Int32, startedAt: Date)] {
         let directory = pidDirectory()
         let manager = FileManager.default
