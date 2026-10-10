@@ -58,6 +58,10 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "RoadieAXTests",
+            dependencies: ["RoadieAX"]
+        ),
+        .testTarget(
             name: "RoadieStagesTests",
             dependencies: ["RoadieStages"]
         ),
