@@ -83,3 +83,16 @@ Chaque décision répond à une inconnue du plan. Format : Décision, Justificat
 ## R15. API dépréciées (FR-043)
 
 - **Décision** : remplacer `CGWindowListCreateImage` par `SCScreenshotManager.captureImage` ; remplacer `activate(options: .activateIgnoringOtherApps)` par `activate()` + `kAXFrontmostAttribute` sur l'élément application avant `AXRaise`.
+
+## Amendements après contre-revue adverse (Codex GPT-6.1-Sol, 2026-10-10)
+
+Voir [adversarial-review-codex.md](./adversarial-review-codex.md). Ces amendements priment sur les sections ci-dessus.
+
+- **R1 bis** : `mutate` ne rouvre jamais le verrou qu'il tient (flock est lié au descripteur ; une seconde prise dans le même processus bloquerait). Pas de transaction imbriquée ; événements émis après la sortie du verrou. Signature `rethrows` conservée : les erreurs d'I/O internes sont journalisées et n'écrivent rien. Les dates de présence (`lastSeenAt`, observations de pins et signets) ne sont plus réécrites quand rien n'a changé, condition nécessaire à SC-004. Fichiers supplémentaires convertis à `mutate` : `WindowContextActions`, `WindowGroupCommands`, `LayoutCommandActivity` (lot A), `DesktopCommands`, `DisplayCommands`, `WindowBookmarkCommands` (lot E).
+- **R3 bis** : chaque chemin AX abandonne au premier échec pour un pid mis de côté ; lecture illisible ≠ valeur fausse ; budget visé ~1 s par commande.
+- **R5 bis** : le marqueur de plein écran par commande est `LayoutIntent.zoomedWindowID: WindowID?` (et non `arguments`, qui n'existe que dans `LayoutCommandIntent`). `validIntent` accepte un intent zoomé sans exiger l'absence de chevauchement ; l'intent devient invalide si la fenêtre zoomée disparaît.
+- **R7 bis** : un producteur de snapshot par processus ; les lecteurs consomment le dernier snapshot publié s'il a moins de 150 ms ; invalidation après commande ou changement de config ; mémo séparé par instance de service.
+- **R8 bis** : seules des commandes finies sont routées vers le daemon ; `events subscribe` et le mode cible interactif restent locaux. E/S socket hors du fil principal, exécution sur le fil principal. Repli local seulement si le verrou d'instance n'est pas tenu ; sinon erreur explicite, jamais de réexécution locale. Délais : connexion 0,5 s, réponse 5 s.
+- **R9 bis** : restauration depuis l'union du snapshot et des membres persistés ; récupération d'un arrêt incomplet au démarrage sous le verrou d'instance ; arrêt propre marqué après restauration réussie ; écran principal en repli si l'écran d'origine a disparu.
+- **R10 bis** : la stage suit le focus seulement si une saisie utilisateur (clic ou touche) précède le changement de focus de moins d'1 s.
+- **R11 bis** : aucune exception au démarrage ; un membre dont le pid est vivant n'est jamais rattaché ; un ancien membre sans pid exige distance ≤ 360 px et un écart ≥ 120 avec le deuxième candidat.
