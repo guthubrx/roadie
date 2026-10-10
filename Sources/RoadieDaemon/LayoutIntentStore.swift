@@ -81,6 +81,15 @@ public struct LayoutIntentStore: Sendable {
         write(intents)
     }
 
+    /// Modifie les intents en une transaction lecture-modification-écriture (SPEC-016 FR-013).
+    @discardableResult
+    public func mutate<R>(_ body: (inout [String: LayoutIntent]) throws -> R) rethrows -> R {
+        var intents = load()
+        let result = try body(&intents)
+        write(intents)
+        return result
+    }
+
     private func load() -> [String: LayoutIntent] {
         JSONPersistence.load([String: LayoutIntent].self, from: url, default: [:])
     }

@@ -167,6 +167,15 @@ public struct StageStore: Sendable {
         write(state)
     }
 
+    /// Modifie l'état en une transaction lecture-modification-écriture (SPEC-016 FR-013).
+    @discardableResult
+    public func mutate<R>(_ body: (inout PersistentStageState) throws -> R) rethrows -> R {
+        var state = load()
+        let result = try body(&state)
+        write(state)
+        return result
+    }
+
     private func load() -> PersistentStageState {
         JSONPersistence.load(PersistentStageState.self, from: url, default: PersistentStageState())
     }
