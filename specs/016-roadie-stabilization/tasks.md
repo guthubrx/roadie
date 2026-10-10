@@ -168,3 +168,8 @@ Passage 2 (suites de la relecture croisée T111 et des rapports K1-K3, Articles 
 - [x] T225 [US4] `StageStore.assign` renseigne `previousFocusedWindowID` quand le focus change ; `correctSoloMaximizedStates` réutilise `WindowPresentationStateResolver.tiledWindowCounts` (variante pour `[ScopedWindowSnapshot]`)
 - [x] T226 [US1] FR-037 : `DaemonSnapshot` ne recopie pas dans un membre de stage un cadre hors de tout écran présent (dernière position visible préservée après disparition d'un écran) ; test
 - [x] T227 [US8] `stage list` lit sans verrou exclusif ; la boucle `scope.updateFrame` de `StageCommands.swift` (~900) précalcule les cadres hors transaction (annotation de complexité)
+
+Passage 3 (Converge passage 2, 2026-10-10) :
+
+- [ ] T301 [US1] FR-037 : `RestoreSafetyService.unhideAll` cible aussi toute fenêtre vivante candidate au tiling et rattachée à un scope dont le centre est hors de tout écran présent (voisines masquées par un zoom quand l'écran droit disparaît) ; test dans `RestoreSafetyServiceTests.swift` (restaurée sur l'écran principal, sinon arrêt non marqué propre)
+- [ ] T302 [US8] FR-041 : seuils restants de validation d'intent et de « chrome delta » (`DaemonSnapshot.swift:1475, 1480, 1487, 1566, 1579`) et grâce de 45 s (`StageStore.swift:413, 509, 639, 654, 1243`) vers `LayoutTolerance` ; `grep -nE "tolerance: 4|\+ 16$|\* 0.95|area > 16|dx <= 8|missingGrace: TimeInterval = 45" Sources` vide
