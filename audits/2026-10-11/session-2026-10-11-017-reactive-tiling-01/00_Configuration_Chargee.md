@@ -1,0 +1,26 @@
+# Configuration Audit v14.0
+- AUDIT_ROOT_PATH     : /path/to/roadie
+- AUDIT_SCOPE         : SPEC-017 (specs/017-reactive-tiling) - fichiers de Sources/, Tests/, scripts/ modifiés entre 27cb244 et HEAD (548e80f)
+- SCOPE_MODE          : diff (DIFF_BASE = 27cb244, imposé par l'appelant ; 61 fichiers dont 1 supprimé, liste dans diff_files.txt)
+- AUDIT_MODE          : fix
+- AUDIT_GRID          : pre-merge
+- MODULES_ACTIFS      : [00,01,02,04,05,06,07,09,10,11,12]
+- MAX_CYCLES          : 1 (+ cycle-scoring en lecture seule)
+- MAX_FIXES_PER_CYCLE : 10
+- MAX_RETRY_PER_FINDING : 2
+- AUTO_COMMIT         : false (imposé par l'orchestrateur appelant : aucun git add/commit/stash/checkout/reset ; il commitera lui-même)
+- SKIP_HOOKS          : false
+- BASELINE_PATH       : /path/to/roadie/audits/baseline.json (absent = baseline vide)
+- SESSION_DIR         : /path/to/roadie/audits/2026-10-11/session-2026-10-11-017-reactive-tiling-01/
+- SAMPLING_THRESHOLD  : 500 (non atteint : pas d'échantillonnage)
+- MODE_PARALLELISME   : agents
+- MODELE_SUBAGENTS    : sonnet (checklists) ; contre-audit par agents séparés (modèle hérité)
+- MAX_FINDINGS_PER_DOMAIN : 50
+- SEVERITY_DEFAULTS   : CRITICAL/HIGH block_release=true ; MEDIUM/LOW false
+- DUPLICATION_THRESHOLDS : warn 5 % / crit 10 % ; blocs 100 / 200 lignes
+- COMPLEXITY_THRESHOLDS  : warn 15 / crit 25 / 50 lignes par fonction
+- EXCLUDE_PATHS       : défauts v14 (.build/**, audits/**, .worktrees/**, dist/**, __pycache__/**, ...)
+- Contraintes appelant : ne pas lancer le daemon roadied réel, aucun kill ; tests `./scripts/test --scratch-path /tmp/roadie-build-audit` (suite complète verte) et `python3 -I -B -m unittest discover scripts/tests` (sans __pycache__) après chaque correction.
+- Sélection des corrections : CRITICAL/HIGH confirmés en Phase 2bis, et MEDIUM simples et sûrs ; disjoncteur à 2 échecs par finding ; corrections ciblées (Article XIX).
+- Contexte de revue antérieure : contre-revues Codex (rounds 1-3) et convergence passes 1-2 (T201-T225) ; points déjà tracés non re-signalés sauf s'ils restent présents dans le code.
+- Stack               : Swift 6 / macOS 14+, pas de front web (Core Web Vitals ignorés ; module 08 hors grille).

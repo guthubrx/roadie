@@ -1,0 +1,80 @@
+{
+  "grade": "A-",
+  "date": "2026-10-11",
+  "spec": "017",
+  "scope": "SPEC-017 reactive-tiling : diff 27cb244..HEAD (Sources, Tests, scripts ; 61 fichiers), grille pre-merge, mode fix 1 cycle + scoring",
+  "coverage_percent": 100,
+  "justification": "Aucun CRITICAL ni HIGH : les 2 HIGH du cycle 1 ont été réfutés par le contre-audit et rétrogradés en MEDIUM. 4 défauts MEDIUM ont été corrigés et testés pendant l'audit, sans commit. La note globale est A- (87,9/100, moyenne pondérée sur les 75 findings dédoublonnés). Les tests (B, 79) et la qualité (B, 78) pèsent le plus : câblage de production peu exercé (registre et génération .shared, main.swift), fonctions et classe très longues (tick, LayoutMaintainer, switchDisplay), budget d'écriture compté à plusieurs endroits.",
+  "metrics": {
+    "reliability": {
+      "grade": "A",
+      "numeric": 92,
+      "findings_count": 6
+    },
+    "tests": {
+      "grade": "B",
+      "numeric": 79,
+      "findings_count": 13
+    },
+    "complexity": {
+      "grade": "A",
+      "numeric": 90,
+      "findings_count": 10
+    },
+    "quality": {
+      "grade": "B",
+      "numeric": 78,
+      "findings_count": 14
+    },
+    "architecture": {
+      "grade": "A-",
+      "numeric": 86,
+      "findings_count": 8
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 96,
+      "findings_count": 4
+    },
+    "duplication": {
+      "grade": "A-",
+      "numeric": 88,
+      "findings_count": 8
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 90,
+      "findings_count": 8
+    },
+    "observability": {
+      "grade": "A",
+      "numeric": 96,
+      "findings_count": 4
+    },
+    "security": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "llm_security": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "supply_chain": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "performance": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    },
+    "ux": {
+      "grade": "N/A",
+      "numeric": null,
+      "findings_count": 0
+    }
+  }
+}

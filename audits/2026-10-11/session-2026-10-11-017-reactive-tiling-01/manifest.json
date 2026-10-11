@@ -1,0 +1,136 @@
+{
+  "audit_meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-11T02:59:26Z",
+    "scope": "/path/to/roadie (SPEC-017, diff 27cb244..HEAD sur Sources Tests scripts)",
+    "scope_mode": "diff",
+    "diff": {
+      "base": "27cb244",
+      "head": "548e80f",
+      "files_count": 61,
+      "files_deleted": [
+        "Sources/RoadieTiler/MutableBSPLayoutStrategy.swift"
+      ]
+    },
+    "mode": "LIGHT",
+    "grid": "pre-merge"
+  },
+  "repo": {
+    "files_count": 162,
+    "languages": [
+      "swift",
+      "python",
+      "bash"
+    ],
+    "frameworks": [
+      "AppKit",
+      "ApplicationServices (AX)",
+      "CoreGraphics",
+      "SkyLight privé en lecture (CGSCopyManagedDisplaySpaces, ADR 010)",
+      "TOMLKit",
+      "swift-testing",
+      "unittest (Python)"
+    ],
+    "type": "macos-daemon-cli",
+    "has_ui": true,
+    "has_llm_integration": false,
+    "db_type": "json-files (~/.roadies, flock + rename atomique, cache fstat revalidé sous verrou)",
+    "ci_system": null,
+    "container": false
+  },
+  "sampling": null,
+  "hot_paths": [
+    {
+      "type": "daemon_tick",
+      "path": "Sources/RoadieDaemon/LayoutMaintainer.swift:170",
+      "trigger": "tick(cause:) : passe unique en 5 étapes, déclenchée par notification AX, échéance ou filet de 2 s"
+    },
+    {
+      "type": "scheduler",
+      "path": "Sources/RoadieDaemon/TickScheduler.swift:139",
+      "trigger": "fire() : échéances réelles, plancher 15 ms, regroupement des notifications"
+    },
+    {
+      "type": "deadline",
+      "path": "Sources/RoadieDaemon/LayoutMaintainer.swift:420",
+      "trigger": "nextDeadline(now:) : rafale, garde de bureau, refus, stabilité"
+    },
+    {
+      "type": "command_apply",
+      "path": "Sources/RoadieDaemon/DaemonSnapshot.swift:1081",
+      "trigger": "applyTreeScope : chaque commande sur l'arbre"
+    },
+    {
+      "type": "ax_write",
+      "path": "Sources/RoadieAX/SystemSnapshotProvider.swift:921",
+      "trigger": "point commun d'écriture, budget par génération (WrittenFrameRegistry)"
+    },
+    {
+      "type": "echo_registry",
+      "path": "Sources/RoadieAX/WrittenFrameRegistry.swift:28",
+      "trigger": "classement écho / refus / externe à chaque notification"
+    },
+    {
+      "type": "ax_observer",
+      "path": "Sources/RoadieAX/AXWindowEventObserver.swift",
+      "trigger": "callbacks AX déplacé, redimensionné, créé, détruit"
+    },
+    {
+      "type": "state_cache",
+      "path": "Sources/RoadieDaemon/JSONPersistence.swift",
+      "trigger": "lecture d'état par passe, cache fstat"
+    },
+    {
+      "type": "lifecycle",
+      "path": "Sources/roadied/main.swift",
+      "trigger": "câblage ordonnanceur, observateurs, moniteurs de souris, migration au démarrage"
+    }
+  ],
+  "threat_model": {
+    "assets": [
+      "Positions et visibilité des fenêtres de l'utilisateur",
+      "Fichiers d'état ~/.roadies (stages.json, sauvegarde stages.json.pre-017)",
+      "Permissions TCC Accessibility du binaire signé"
+    ],
+    "attackers": {
+      "anonymous_external": "bas (aucun port réseau)",
+      "local_same_user": "moyen (socket 0600, fichiers ~/.roadies)",
+      "local_other_user": "bas",
+      "supply_chain": "bas (TOMLKit seule dépendance ; symboles privés SkyLight résolus par dlsym en lecture)"
+    },
+    "surface": [
+      "1 socket Unix local -> CLICommandRouter",
+      "Fichier TOML rechargé à chaud",
+      "Fichiers JSON d'état multi-processus",
+      "API privée CGSCopyManagedDisplaySpaces en lecture (repli public)"
+    ],
+    "sensitive_hot_paths": [
+      "boucle d'échéances -> passes répétées (CPU, écritures AX)",
+      "budget d'écriture -> fenêtre non rangée si refus à tort",
+      "migration mutableBsp -> perte de stages"
+    ]
+  },
+  "slos": {
+    "defined": true,
+    "source": "specs/017-reactive-tiling/spec.md SC-001 (< 150 ms p90, 1 passe 95 %), SC-002 (< 300 ms après plein écran), SC-003 (0 placement au repos 60 s), SC-005 (<= 2 écritures par fenêtre et par version), SC-007 (0 relecture d'état par passe)"
+  },
+  "modules_actifs": [
+    "00",
+    "01",
+    "02",
+    "04",
+    "05",
+    "06",
+    "07",
+    "09",
+    "10",
+    "11",
+    "12"
+  ],
+  "warnings": [
+    "Module 03 (sécurité) et 08 (performance) hors grille pre-merge ; surface socket décrite au threat model sans audit OWASP dédié",
+    "Core Web Vitals non applicables (Swift/AppKit)",
+    "Pas de CI détectée (.github absent)",
+    "Validation sur macOS réel (gestes souris, sonde de bureau, applications Electron) hors portée de l'audit statique (cf. quickstart.md, T106 ouverte)"
+  ]
+}

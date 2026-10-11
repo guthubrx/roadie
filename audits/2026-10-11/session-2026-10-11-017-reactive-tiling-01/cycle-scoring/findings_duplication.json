@@ -1,0 +1,293 @@
+{
+ "module": "07",
+ "part": "duplication",
+ "findings": [
+  {
+   "id": "DUP-001",
+   "subcategory": "type2-plan-transition",
+   "severity": "MEDIUM",
+   "file": "Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+   "line": 110,
+   "title": "Plan masquer + restaurer recopié dans 5 commandes (Type 2)",
+   "description": "Les commandes bookmark.focus, desktop.switch, stage.assign, stage.switch et window.assign construisent chacune leur CommandPlacement avec la même boucle : boucle sur les ids, garde windowsByID, puis placement.hiding[id] = HiddenWindowPlacement.frame(...). Le bloc `si le mode n'utilise pas l'arbre, restaurer les frames des membres` est copié à l'identique dans WindowBookmarkCommands (l.118-122) et DesktopCommands (l.337-341), avec une variante dans StageCommands (l.1183-1190). Un helper privé hiddenFrames existe déjà (StageCommands.swift:1270) mais il est utilisé une seule fois. Ces blocs ont été écrits ensemble par T212/T223 (plan unique) et évoluent ensemble.",
+   "evidence": "        var placement = CommandPlacement(layoutScopes: [targetScope])\n        if plan.previousScope != targetScope {\n            for id in plan.previousMembers.subtracting(plan.targetMembers) {\n                guard let window = windowsByID[id] else { continue }\n                placement.hiding[id] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)\n            }\n        }\n        // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.\n        if plan.targetStage?.mode.usesTreeEngine != true {\n            for member in plan.targetStage?.members ?? [] where windowsByID[member.windowID] != nil {\n                placement.restoring[member.windowID] = member.frame.cgRect",
+   "duplication_type": "RENAMED",
+   "duplication_lines": 13,
+   "occurrences_count": 5,
+   "all_locations": [
+    "Sources/RoadieDaemon/WindowBookmarkCommands.swift:110-122",
+    "Sources/RoadieDaemon/DesktopCommands.swift:331-341",
+    "Sources/RoadieDaemon/StageCommands.swift:1179-1190",
+    "Sources/RoadieDaemon/StageCommands.swift:228-236",
+    "Sources/RoadieDaemon/WindowContextActions.swift:366-369"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Une correction de la règle de masquage ou de restauration (ex. exclusion d'une fenêtre plein écran, déjà traitée seulement dans stage.switch) doit être répétée dans 5 fichiers. Risque de dérive entre commandes, déjà visible : seule stage.switch gère le membre plein écran protégé.",
+   "path_type": "hot",
+   "remediation": "Déplacer la construction dans CommandPlacement (LayoutCommandService.swift:326) : `mutating func hide(_:windowsByID:on:among:)` et `mutating func restoreMembers(of:windowsByID:)`. Garder le test `usesTreeEngine` chez l'appelant, pour ne pas introduire de branche dans le helper. 4 paramètres au plus, même couche (RoadieDaemon). Ne pas toucher la variante plein écran de stage.switch.",
+   "remediation_code": "extension CommandPlacement {\n    /// Masque les fenêtres `ids` vivantes sur l'écran de la commande. O(k).\n    mutating func hide(_ ids: some Sequence<WindowID>, windowsByID: [WindowID: WindowSnapshot], on display: DisplaySnapshot, among displays: [DisplaySnapshot]) {\n        for id in ids {\n            guard let window = windowsByID[id] else { continue }\n            hiding[id] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: displays)\n        }\n    }\n\n    /// Restaure les frames mémorisées des membres vivants. O(m).\n    mutating func restoreMembers(of stage: RoadieStages.StageState?, windowsByID: [WindowID: WindowSnapshot]) {\n        for member in stage?.members ?? [] where windowsByID[member.windowID] != nil {\n            restoring[member.windowID] = member.frame.cgRect\n        }\n    }\n}",
+   "verification": "Après refactor : `swift test --filter CommandSinglePlanTests` doit rester vert (expectSinglePlan inchangé) et jscpd --min-lines 8 ne doit plus signaler le bloc DesktopCommands:331-341 / WindowBookmarkCommands:110-122.",
+   "effort": "S",
+   "regression_risk": "LOW",
+   "references": [
+    "FR-012",
+    "T212",
+    "T223",
+    "A15"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-002",
+   "subcategory": "type2-parallel-commands",
+   "severity": "MEDIUM",
+   "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+   "line": 124,
+   "title": "assignActiveWindow et assign : deux corps quasi identiques (Type 2)",
+   "description": "assignActiveWindow (l.124) et assign(windowID:...) (l.191) répètent la même transaction : mutation du store (stages configurées, retrait des autres scopes, assign, suppression du pin), removeLayoutIntent, branche follow, applyCommandPlacement avec masquage, événement window_desktop, puis résultat. Seuls la résolution de la fenêtre et le message changent. jscpd mesure un bloc de 16 lignes identique (l.151-166 / l.223-238) dont 5 lignes ajoutées par le diff dans chaque copie (T212/T223). La dérive existe déjà : assign refuse une cible déjà atteinte (`already on target desktop`), pas assignActiveWindow.",
+   "evidence": "        if let sourceScope {\n            service.removeLayoutIntent(scope: sourceScope)\n        }\n        service.removeLayoutIntent(scope: targetStageScope)\n\n        if follow {\n            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)\n        }\n\n        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.\n        let (_, result) = service.applyCommandPlacement(",
+   "duplication_type": "RENAMED",
+   "duplication_lines": 16,
+   "occurrences_count": 2,
+   "all_locations": [
+    "Sources/RoadieDaemon/DesktopCommands.swift:151-166",
+    "Sources/RoadieDaemon/DesktopCommands.swift:223-238"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Chaque changement du plan de déplacement vers un bureau (ordre des étapes, champs de l'événement window_desktop) doit être fait deux fois. T212 et T223 ont déjà dû modifier les deux copies à l'identique.",
+   "path_type": "hot",
+   "remediation": "Faire résoudre la fenêtre active par assignActiveWindow, puis déléguer à assign(windowID:to:displayID:follow:). Décider explicitement du garde `already on target desktop` pour la commande sur fenêtre active (aujourd'hui absent) : conserver le comportement actuel avec un paramètre serait une branche, donc préférer aligner les deux sur le garde de assign et le noter dans la spec. Si l'alignement n'est pas voulu, extraire seulement la fin commune (de removeLayoutIntent à l'événement) dans une fonction privée à 5 paramètres au plus.",
+   "remediation_code": "public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {\n    let snapshot = service.snapshot()\n    guard let active = activeWindow(in: snapshot),\n          let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)\n    else {\n        return StageCommandResult(message: \"window desktop \\(desktopID.rawValue): no active window\", changed: false)\n    }\n    return assign(windowID: active.window.id, to: desktopID, displayID: displayID, follow: follow)\n}",
+   "verification": "Test swift-testing `assignActiveWindowMatchesAssignByID` dans PowerUserDesktopCommandTests : même snapshot, mêmes écritures (writer.frameHistory identique) et même événement window_desktop pour les deux entrées. Attendu : égalité. Ajouter un cas `active window already on target desktop` pour figer le choix.",
+   "effort": "S",
+   "regression_risk": "MEDIUM",
+   "references": [
+    "FR-012",
+    "T212",
+    "T223"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-003",
+   "subcategory": "type2-frame-conversion",
+   "severity": "LOW",
+   "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+   "line": 1556,
+   "title": "Calcul de frame centrée écrit 3 fois, avec deux comportements différents",
+   "description": "centeredVisibleFrame (LayoutMaintainer, déplacée par le diff), centeredFrame de WindowCommands (l.1261) et centeredFrame de StageCommands (l.1644) calculent le même centrage. Les deux premières bornent la taille au conteneur (min), pas la troisième. jscpd signale 9 lignes communes entre LayoutMaintainer.swift:1555-1563 et StageCommands.swift:1634-1642. Avec la version non bornée, une fenêtre plus grande que l'écran cible (déplacement de stage entre écrans) garde sa taille et déborde.",
+   "evidence": "    private func centeredVisibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect {\n        let visible = display.visibleFrame.cgRect\n        let width = min(frame.width, visible.width)\n        let height = min(frame.height, visible.height)\n        return CGRect(\n            x: visible.midX - width / 2,\n            y: visible.midY - height / 2,\n            width: width,\n            height: height\n        ).integral",
+   "duplication_type": "NEAR_MISS",
+   "duplication_lines": 9,
+   "occurrences_count": 3,
+   "all_locations": [
+    "Sources/RoadieDaemon/LayoutMaintainer.swift:1553-1563",
+    "Sources/RoadieDaemon/WindowCommands.swift:1261-1269",
+    "Sources/RoadieDaemon/StageCommands.swift:1644-1651"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Trois copies à garder cohérentes pour une règle géométrique unique ; la copie de StageCommands (stage.move_display, l.590) a déjà divergé.",
+   "path_type": "hot",
+   "remediation": "Une seule extension `CGRect.centered(in:)` bornée au conteneur dans RoadieCore, utilisée par les trois sites. Vérifier avant que le non-bornage de StageCommands n'est pas voulu (aucun commentaire ne le dit).",
+   "remediation_code": "",
+   "verification": "Test `centeredFrameClampsOversizedWindowToContainer` : fenêtre 2000x1500 dans un conteneur 1000x800 donne une frame 1000x800 centrée, pour stage.move_display comme pour window.display.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "T212"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-004",
+   "subcategory": "type4-isolation-infaisable",
+   "severity": "LOW",
+   "file": "Sources/RoadieDaemon/StageCommands.swift",
+   "line": 1602,
+   "title": "Boucle d'isolement d'une fenêtre gardée recopiée dans StageCommands et LayoutMaintainer",
+   "description": "isolateInfeasibleClampedScope (StageCommands) et resolveInfeasibleClampedScopes (LayoutMaintainer) appliquent la même politique : quand les tailles minimales dépassent la zone visible, masquer toutes les fenêtres sauf une et émettre layout_infeasible_scope_isolated. La boucle de masquage (HiddenWindowPlacement.frame, setFrame, collecte des ids, même événement) est identique en structure ; la génération diffère (paramètre contre PlacementGeneration.outsideBudget) et les tests de faisabilité diffèrent aussi. Le diff ne touche que quelques lignes de chaque fonction.",
+   "evidence": "        for entry in entries where entry.window.id != keepWindowID {\n            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)\n            if service.setFrame(frame, of: entry.window, generation: generation) != nil {\n                applied += 1\n                hiddenIDs.append(String(entry.window.id.rawValue))\n            }\n        }",
+   "duplication_type": "SEMANTIC",
+   "duplication_lines": 7,
+   "occurrences_count": 2,
+   "all_locations": [
+    "Sources/RoadieDaemon/StageCommands.swift:1601-1607",
+    "Sources/RoadieDaemon/LayoutMaintainer.swift:2619-2625"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Deux implémentations de la même règle d'isolement dans deux couches ; une évolution de la règle (ex. exclure les fenêtres épinglées) peut n'atteindre qu'un chemin.",
+   "path_type": "hot",
+   "remediation": "EVALUER, ne pas factoriser maintenant : les deux chemins ont des critères de faisabilité et des budgets de génération différents. Si une troisième copie apparaît, extraire seulement `isolate(entries:keeping:generation:)` dans SnapshotService.",
+   "remediation_code": "",
+   "verification": "N/A (pas de refactor recommandé).",
+   "effort": "S",
+   "regression_risk": "MEDIUM",
+   "references": [
+    "FR-040"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-005",
+   "subcategory": "type1-test-support",
+   "severity": "LOW",
+   "file": "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+   "line": 4704,
+   "title": "Minuterie manuelle de test copiée à l'identique (TreeTimer et ManualTimer)",
+   "description": "TreeTimer (LayoutMaintainerTests) et ManualTimer (TickSchedulerTests) ont le même corps : file d'actions (id, échéance, action), schedule avec annulation et advance(by:). Seul le type d'horloge varie, car chaque fichier définit son propre TestClock privé. jscpd mesure 19 lignes identiques, toutes ajoutées par le diff. Code de test, donc chemin froid.",
+   "evidence": "    func schedule(_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> () -> Void {\n        let id = nextID\n        nextID += 1\n        items.append((id, clock.now.addingTimeInterval(delay), action))\n        return { [weak self] in self?.items.removeAll { $0.id == id } }\n    }\n\n    func advance(by seconds: TimeInterval) {\n        let target = clock.now.addingTimeInterval(seconds)\n        while let next = items.filter({ $0.due <= target }).min(by: { $0.due < $1.due }) {",
+   "duplication_type": "STRICT",
+   "duplication_lines": 19,
+   "occurrences_count": 2,
+   "all_locations": [
+    "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:4689-4707",
+    "Tests/RoadieDaemonTests/TickSchedulerTests.swift:25-43"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Un défaut de la minuterie (ordre des échéances, annulation) fausse les tests de délai dans deux fichiers et doit être corrigé deux fois.",
+   "path_type": "cold",
+   "remediation": "Un fichier d'aide Tests/RoadieDaemonTests/TestTimer.swift avec un TestClock Sendable partagé et un ManualTimer unique. Deux TestClock privés existent déjà dans LayoutMaintainerTests et TickSchedulerTests : les fusionner en une seule classe (verrou, comme dans TickSchedulerTests).",
+   "remediation_code": "",
+   "verification": "Après refactor : TickSchedulerTests et les tests tree-guard de LayoutMaintainerTests restent verts ; jscpd ne signale plus ce bloc.",
+   "effort": "S",
+   "regression_risk": "LOW",
+   "references": [
+    "T205",
+    "T215"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-006",
+   "subcategory": "type1-test-support",
+   "severity": "LOW",
+   "file": "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+   "line": 1322,
+   "title": "Assertion « une seule écriture par fenêtre » écrite 2 fois (Type 1) et service de test recopié",
+   "description": "expectFinalTreeFrames (PowerUserDesktopCommandTests) et TreeFixture.expectOneWrite (PowerUserLayoutCommandTests) contiennent la même double boucle d'assertions, avec le même message. La configuration SnapshotService de treeService (PowerUserDesktopCommandTests:1308) est aussi la même que celle de TreeFixture.init. Les deux fichiers sont dans la même cible de test.",
+   "evidence": "    for (id, frame) in expected {\n        #expect(writer.frameHistory[id] == [frame], \"fenêtre \\(id.rawValue)\", sourceLocation: sourceLocation)\n    }\n    for (id, history) in writer.frameHistory {\n        #expect(history.count <= 1, \"fenêtre \\(id.rawValue) : \\(history)\", sourceLocation: sourceLocation)\n    }",
+   "duplication_type": "STRICT",
+   "duplication_lines": 10,
+   "occurrences_count": 2,
+   "all_locations": [
+    "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift:1322-1333",
+    "Tests/RoadieDaemonTests/PowerUserLayoutCommandTests.swift:327-335"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Si le critère FR-012 (une écriture par fenêtre) change, deux assertions doivent évoluer ensemble.",
+   "path_type": "cold",
+   "remediation": "Faire de expectFinalTreeFrames une fonction interne partagée (fichier d'aide), et la faire appeler par TreeFixture.expectOneWrite.",
+   "remediation_code": "",
+   "verification": "Les tests PowerUserDesktopCommandTests et PowerUserLayoutCommandTests restent verts.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "FR-012",
+    "T204"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-007",
+   "subcategory": "type2-test-scaffolding",
+   "severity": "LOW",
+   "file": "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift",
+   "line": 307,
+   "title": "Mise en place identique dans deux tests de focus directionnel et deux tests de stage/bookmark",
+   "description": "treeDirectionalFocusUsesProjectedTreeFrames (l.273) et physicalDirectionalFocusKeepsPhysicalFramesOutsideTreeModes (l.293) partagent 10 lignes : même arbre à trois feuilles et même glissement de la fenêtre w2 hors de sa feuille. Seul le mode du TreeFixture change. Les tests switchTo (l.127-135) et bookmark focus (l.202-210) terminent par le même expectSinglePlan avec les mêmes frames. Les tests de lecture restent clairs ainsi : EVALUER plutôt que factoriser.",
+   "evidence": "        let fixture = TreeFixture(\"single-plan-focus\", tree: .split(\n            orientation: .vertical, ratio: 0.5, first: .leaf(TreeFixture.w1),\n            second: .split(orientation: .horizontal, ratio: 0.3, first: .leaf(TreeFixture.w2), second: .leaf(TreeFixture.w3))\n        ))\n        fixture.provider.snapshots = fixture.provider.snapshots.map {\n            guard $0.id == TreeFixture.w2 else { return $0 }\n            var overflowing = $0\n            overflowing.frame = Rect(x: 500, y: 0, width: 500, height: 800)\n            return overflowing\n        }",
+   "duplication_type": "RENAMED",
+   "duplication_lines": 10,
+   "occurrences_count": 2,
+   "all_locations": [
+    "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift:274-283",
+    "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift:294-303",
+    "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift:127-135",
+    "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift:202-210"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Faible : les deux tests sont écrits pour être lus côte à côte (arbre contre physique).",
+   "path_type": "cold",
+   "remediation": "Option simple : une fonction `overflowingFocusFixture(name:mode:)` dans le fichier. Rester à 2 usages = sous le seuil de 3 de l'article XIX ; ne rien faire est acceptable.",
+   "remediation_code": "",
+   "verification": "N/A.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "T204"
+   ],
+   "category": "duplication",
+   "status": "open"
+  },
+  {
+   "id": "DUP-008",
+   "subcategory": "type2-test-scaffolding",
+   "severity": "LOW",
+   "file": "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+   "line": 3987,
+   "title": "Scénario « démarrage, destruction, création » répété dans 3 tests tree-guard",
+   "description": "Les tests tree-guard-user-space, tree-guard-fallback et tree-guard-unreadable déroulent la même séquence de 7 lignes (ticks et avances d'horloge) avant leurs assertions propres ; tree-guard-timeout n'en partage que les 2 premières lignes. jscpd mesure 10 lignes identiques entre les copies (l.3984-3993, l.4058-4067, l.4486-4495, suites différentes), toutes ajoutées par le diff. La séquence décrit le scénario de la spec et reste lisible en ligne ; un helper n'est utile que si le scénario change.",
+   "evidence": "        _ = harness.maintainer.tick(cause: \"command:startup\")\n        harness.clock.advance(5)\n        world.frames[treeW2] = nil\n        _ = harness.maintainer.tick(cause: \"ax:AXUIElementDestroyed\")\n        harness.clock.advance(5)\n        world.frames[treeW2] = Rect(x: 0, y: 0, width: 1000, height: 500)\n        let guarded = harness.maintainer.tick(cause: \"ax:AXWindowCreated\")",
+   "duplication_type": "RENAMED",
+   "duplication_lines": 10,
+   "occurrences_count": 3,
+   "all_locations": [
+    "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:3987-3993",
+    "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:4061-4067",
+    "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:4490-4494"
+   ],
+   "exploitability": "N/A",
+   "exploitation_scenario": "",
+   "impact": "Faible : un changement du déclencheur de garde demande de modifier 3 tests.",
+   "path_type": "cold",
+   "remediation": "Si un 5e test apparaît, extraire `harness.simulateDestroyThenCreate(world:window:)`. Sinon garder.",
+   "remediation_code": "",
+   "verification": "N/A.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "T215"
+   ],
+   "category": "duplication",
+   "status": "open"
+  }
+ ],
+ "positive_findings": [
+  "Sources/RoadieDaemon/StageCommands.swift:1270 : le helper hiddenFrames factorise déjà la construction des frames de masquage dans stage.switch (reste à le généraliser, voir DUP-001).",
+  "Sources/RoadieDaemon/LayoutCommandService.swift:215 : treeCommand regroupe la mutation d'arbre et applyTreeScope pour balance, flatten, split et toggle-split (une seule copie au lieu de quatre).",
+  "Sources/RoadieDaemon/LayoutCommandService.swift:326 : CommandPlacement concentre le plan unique de T212, ce qui rend DUP-001 facile à factoriser sans traverser de couche."
+ ],
+ "warnings": [
+  "jscpd 5.3.0, --min-lines 8, format swift, rapports sous /tmp/jscpd-017 (aucun fichier dans le dépôt). Sources : 36062 lignes, 34 clones, 398 lignes dupliquées, 1,10 % (mesuré). Tests : 23380 lignes, 203 clones, 2276 lignes dupliquées, 9,73 % (mesuré). Ces pourcentages couvrent tout le dossier, pas seulement le diff.",
+  "Seuils du module 07 : Sources 1,10 % sous le seuil de 5 %. Tests 9,73 % au-dessus de 5 %, mais 0 des gros clones de LayoutMaintainerTests (l.372-381, 491-502, 936-1021, 1548-1558, 2447-2476, 30 lignes) n'est touché par le diff (blame 27cb244..HEAD : 0 ligne ajoutée). Aucun finding global émis pour les tests (code de test préexistant, chemin froid).",
+  "Filtrage diff : sur 34 clones Sources, 2 contiennent des lignes ajoutées (DesktopCommands 151-166 / 223-238 et LayoutMaintainer 1555-1563). Sur 203 clones Tests, 29 en contiennent. Les 32 autres clones Sources ne touchent aucune ligne du diff et sont exclus, dont DropPreviewController 415-452 / WindowCommands 1102-1139 (38 lignes, bloc max, 0 ligne ajoutée) et beginLayoutCommand/finishLayoutCommand en 3 copies (DesktopCommands, StageCommands, WindowCommands, 0 ligne ajoutée).",
+  "Type 3 écartés volontairement (False DRY ou sous le seuil de 3 usages) : bloc `mutate de l'arbre persisté + guard mutated != existing + setBSPTree` entre WindowCommands.swift:182 et LayoutCommandService.swift:227 (2 usages, 6 lignes, évolutions indépendantes) ; retrait de feuille du scope source dans StageCommands.swift:177 et :742 (2 usages) ; message `applied=… clamped=… failed=…` dans LayoutCommandService (5 usages, 1 ligne, déjà préexistant) ; `let generation = PlacementGeneration.shared.next()` (29 lignes ajoutées, 1 ligne chacune, ouverture explicite voulue par T223).",
+  "Aucun commentaire DUPLICATION INTENTIONNELLE, False DRY ou do not factor trouvé dans Sources et Tests (grep).",
+  "max_block_lines = 38 est le plus grand clone du dossier Sources (hors diff). Le plus grand clone touchant le diff fait 16 lignes dans Sources et 30 lignes dans Tests (LayoutMaintainerTests 2447-2476 / 2493-2522, 1 ligne ajoutée seulement).",
+  "Les pourcentages sont calculés par jscpd sur les lignes Swift uniquement. Les scripts Python (scripts/tests) n'ont pas été analysés."
+ ],
+ "duplicated_code": {
+  "jscpd_percentage_sources": 1.1,
+  "jscpd_percentage_tests": 9.73,
+  "max_block_lines": 38,
+  "duplicated_lines_sources": 398,
+  "duplicated_lines_tests": 2276,
+  "clones_sources": 34,
+  "clones_tests": 203,
+  "clones_touching_diff_sources": 2,
+  "clones_touching_diff_tests": 29
+ }
+}
