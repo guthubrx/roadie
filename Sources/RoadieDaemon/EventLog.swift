@@ -1,4 +1,5 @@
 import Foundation
+import os
 import RoadieCore
 
 public struct RoadieEvent: Codable, Equatable, Sendable {
@@ -6,18 +7,100 @@ public struct RoadieEvent: Codable, Equatable, Sendable {
     public var type: String
     public var scope: StageScope?
     public var details: [String: String]
+    /// Epoch en millisecondes, dérivé de `timestamp` (le format ISO du journal est à la seconde).
+    /// Optionnel : les anciennes lignes ne l'ont pas.
+    public var tsMs: Int64?
+    /// Épisode de la cause en cours (`ep_<epoch ms>`), voir `EpisodeContext`. Optionnel.
+    public var episodeId: String?
 
     public init(
         type: String,
         scope: StageScope? = nil,
         details: [String: String] = [:],
-        timestamp: Date = Date()
+        timestamp: Date = Date(),
+        episodeId: String? = nil
     ) {
         self.timestamp = timestamp
         self.type = type
         self.scope = scope
         self.details = details
+        self.tsMs = timestamp.epochMilliseconds
+        self.episodeId = episodeId
     }
+}
+
+/// Épisode de mesure (SPEC-017 A12) : une cause externe (notification AX, commande, glisser,
+/// échéance) ouvre un épisode. Ses échos et les échéances qu'il arme le prolongent
+/// (`continue()`). Il se ferme après `closeAfter` secondes sans `begin` ni `continue`.
+/// Global au processus (`shared`) ; l'horloge est injectable pour les tests.
+public final class EpisodeContext: Sendable {
+    public static let shared = EpisodeContext()
+    public static let defaultCloseAfter: TimeInterval = 1
+
+    private struct State {
+        var id: String?
+        var cause: String?
+        var lastActivity = Date.distantPast
+        var lastIdMs: Int64 = 0
+    }
+
+    private let now: @Sendable () -> Date
+    private let closeAfter: TimeInterval
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    public init(closeAfter: TimeInterval = EpisodeContext.defaultCloseAfter, now: @escaping @Sendable () -> Date = { Date() }) {
+        self.closeAfter = closeAfter
+        self.now = now
+    }
+
+    /// Ouvre un nouvel épisode pour une cause externe et retourne son identifiant. O(1).
+    @discardableResult
+    public func begin(cause: String) -> String {
+        let date = now()
+        return state.withLock { state in
+            // Deux causes dans la même milliseconde gardent des identifiants distincts.
+            let ms = max(date.epochMilliseconds, state.lastIdMs + 1)
+            let id = "ep_\(ms)"
+            state.lastIdMs = ms
+            state.id = id
+            state.cause = cause
+            state.lastActivity = date
+            return id
+        }
+    }
+
+    /// Épisode ouvert, sans le prolonger. nil s'il est fermé.
+    public var current: String? {
+        let date = now()
+        return state.withLock { isOpen($0, at: date) ? $0.id : nil }
+    }
+
+    /// Cause qui a ouvert l'épisode courant. nil s'il est fermé.
+    public var currentCause: String? {
+        let date = now()
+        return state.withLock { isOpen($0, at: date) ? $0.cause : nil }
+    }
+
+    /// Prolonge l'épisode courant (écho, échéance armée) et retourne son identifiant. nil s'il est fermé.
+    @discardableResult
+    public func `continue`() -> String? {
+        let date = now()
+        return state.withLock { state in
+            guard isOpen(state, at: date) else { return nil }
+            state.lastActivity = date
+            return state.id
+        }
+    }
+
+    private func isOpen(_ state: State, at date: Date) -> Bool {
+        state.id != nil && date.timeIntervalSince(state.lastActivity) <= closeAfter
+    }
+
+    @discardableResult
+    public static func begin(cause: String) -> String { shared.begin(cause: cause) }
+    public static var current: String? { shared.current }
+    @discardableResult
+    public static func `continue`() -> String? { shared.continue() }
 }
 
 public extension RoadieEventEnvelope {
@@ -25,7 +108,7 @@ public extension RoadieEventEnvelope {
         let sanitizedType = event.type
             .replacingOccurrences(of: " ", with: "_")
             .replacingOccurrences(of: "/", with: "_")
-        let milliseconds = Int(event.timestamp.timeIntervalSince1970 * 1000)
+        let milliseconds = event.timestamp.epochMilliseconds
         let payload = event.details.mapValues { AutomationPayload.string($0) }
         let subject = event.scope.map {
             AutomationSubject(kind: "stage", id: $0.description)
@@ -41,6 +124,7 @@ public extension RoadieEventEnvelope {
             cause: .system,
             payload: payload
         )
+        self.tsMs = event.tsMs ?? self.tsMs
     }
 }
 
@@ -48,6 +132,7 @@ public struct EventLog: Sendable {
     private let url: URL
     private let maxBytes: Int
     private let retainedBackups: Int
+    private let episodes: EpisodeContext
     private static let jsonNewline = Data("\n".utf8)
     public static let defaultMaxBytes = 10 * 1024 * 1024
     public static let defaultRetainedBackups = 2
@@ -64,8 +149,10 @@ public struct EventLog: Sendable {
     public init(
         path: String = Self.defaultPath(),
         maxBytes: Int = Self.defaultMaxBytes,
-        retainedBackups: Int = Self.defaultRetainedBackups
+        retainedBackups: Int = Self.defaultRetainedBackups,
+        episodes: EpisodeContext = .shared
     ) {
+        self.episodes = episodes
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
         self.maxBytes = max(1, maxBytes)
         self.retainedBackups = max(0, retainedBackups)
@@ -78,7 +165,10 @@ public struct EventLog: Sendable {
         return "~/.roadies/events.jsonl"
     }
 
+    /// Pose l'épisode courant sur l'événement s'il n'en porte pas (sans prolonger l'épisode).
     public func append(_ event: RoadieEvent) {
+        var event = event
+        if event.episodeId == nil { event.episodeId = episodes.current }
         write(event)
     }
 

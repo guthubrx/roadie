@@ -1,12 +1,17 @@
 public struct AutomationEventCatalog: Equatable, Sendable {
     public var eventTypes: [String]
 
-    public init(eventTypes: [String] = Self.minimumEventTypes) {
+    public init(eventTypes: [String] = Self.minimumEventTypes + Self.layoutEventTypes + Self.obsoleteEventTypes) {
         self.eventTypes = eventTypes
     }
 
     public func contains(_ eventType: String) -> Bool {
         eventTypes.contains(eventType)
+    }
+
+    /// Vrai pour un type qui n'est plus émis mais reste lisible dans les anciens journaux.
+    public func isObsolete(_ eventType: String) -> Bool {
+        Self.obsoleteEventTypes.contains(eventType)
     }
 
     public func eventTypes(in scope: AutomationScope) -> [String] {
@@ -92,5 +97,24 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "titlebar_context_menu.failed",
         "state.snapshot",
         "state.load_failed"
+    ]
+
+    /// Événements de placement de la SPEC-017 (contrat `layout-events.md`). Noms plats, comme `layout_apply`.
+    public static let layoutEventTypes: [String] = [
+        "layout_echo_ignored",
+        "layout_app_response_accepted",
+        "layout_external_change_reverted",
+        "layout_manual_gesture",
+        "space_transition_guard",
+        "space_did_change",
+        "state_migrated"
+    ]
+
+    /// OBSOLÈTES depuis la SPEC-017 : ne sont plus émis (suppression de `mutableBsp`), conservés pour
+    /// que `roadie events subscribe --type` et la lecture des anciens journaux continuent de fonctionner.
+    public static let obsoleteEventTypes: [String] = [
+        "mutable_bsp_geometry_adopted",
+        "mutable_bsp_order_repaired",
+        "mutable_bsp_resize_propagated"
     ]
 }

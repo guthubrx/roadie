@@ -7,10 +7,16 @@ changement (membership, bascule de stage, glisser de fenêtre...).
 
 Lecture seule. Stdlib uniquement. Aucune dépendance au daemon.
 
-LIMITE IMPORTANTE : les `timestamp` du journal ont une précision d'UNE seconde
-(ISO8601 sans fraction, cf. EventLog.swift). Toute durée calculée ici est donc
-connue à +-1 s. Seuls les champs `details.*Ms` (live_tick, stage_switch...) sont
-en millisecondes.
+PRÉCISION : le `timestamp` ISO8601 du journal est à la SECONDE. Les lignes écrites
+depuis la SPEC-017 portent en plus `tsMs` (epoch en millisecondes) et `episodeId`
+(`ep_<epoch ms>`). Le script utilise `tsMs` quand il existe (durées au ms) et
+retombe sur `timestamp` (+-1 s) pour les anciennes lignes. Les champs `details.*Ms`
+(live_tick, stage_switch...) restent en millisecondes.
+
+Deux modes de découpage, combinés dans le même rapport
+  - Épisode identifié : les événements de layout portant le même `episodeId` forment
+    un épisode (pas de coupure par silence, l'identifiant fait foi).
+  - Épisode ancien : les autres événements sont découpés par silence (GAP), comme avant.
 
 Définition d'un épisode
   - Début : premier événement déclencheur :
@@ -20,7 +26,17 @@ Définition d'un épisode
   - Activité : layout_apply, mutable_bsp_*, layout_clamped.
   - Fin : aucun déclencheur ni aucune activité pendant GAP secondes (2 s).
     Un déclencheur qui arrive pendant l'épisode le prolonge (il remet l'horloge à zéro).
-  - Durée (« temps jusqu'à stabilité ») : du début au DERNIER layout_apply.
+  - Trois instants, tous mesurés depuis le début de l'épisode :
+      fin d'écriture      = dernier layout_apply (`time_to_write_end_s`) ;
+      stabilité observée  = dernier événement de placement de l'épisode : layout_apply,
+                            écho ignoré, réponse d'application acceptée, changement externe
+                            ramené, geste manuel (`time_to_stable_s`). Sur les anciennes
+                            lignes (sans ces événements) elle vaut la fin d'écriture ;
+      fin de garde de bureau = événement space_transition_guard (`time_to_guard_end_s`),
+                            avec sa durée `heldMs` et sa cause de fermeture `closedBy`.
+  - Compteurs : `scans` et `axWrites` (sommes des layout_apply), écritures par fenêtre
+    (clé `windowWrites` d'un layout_apply, format `windowID:n,windowID:n`) ; on rapporte
+    le maximum par fenêtre et le nombre de fenêtres au-delà du budget de 2 écritures.
   - Passes : nombre de layout_apply. Commandes : somme de details.commands.
   - Rétroaction : événements mutable_bsp_* + manual_resize_detected situés à
     moins de 1 s d'un layout_apply de l'épisode.
@@ -33,13 +49,19 @@ import statistics
 import sys
 from datetime import datetime, timezone
 
-GAP = 2.0           # secondes sans activité => fin d'épisode
+GAP = 2.0           # secondes sans activité => fin d'épisode (épisodes anciens, sans episodeId)
+WRITE_BUDGET = 2    # écritures AX par fenêtre et par version de disposition (SPEC-017 A2)
 FEEDBACK_WIN = 1.0  # fenêtre « à moins de 1 s d'un layout_apply »
 
 ACTIVITY_PREFIX = ("mutable_bsp_",)
 ACTIVITY_TYPES = {"layout_apply", "layout_clamped"}
 # Événements rattachés à l'épisode s'ils tombent dans sa plage (sans le prolonger)
 AUX_TYPES = {"layout_failed", "manual_resize_detected", "fullscreen_layout_suppressed"}
+# Événements de placement de la SPEC-017 : membres d'un épisode identifié par `episodeId`
+OBSERVED_TYPES = {"layout_apply", "layout_echo_ignored", "layout_app_response_accepted",
+                  "layout_external_change_reverted", "layout_manual_gesture"}
+GUARD_TYPE = "space_transition_guard"
+EPISODE_TYPES = OBSERVED_TYPES | {GUARD_TYPE, "space_did_change", "state_migrated", "layout_clamped"}
 
 
 def parse_ts(value):
@@ -79,7 +101,9 @@ def load_events(path, since, until):
             if not isinstance(obj, dict):
                 bad += 1
                 continue
-            ts = parse_ts(obj.get("timestamp"))
+            ts_ms = obj.get("tsMs")
+            precise = isinstance(ts_ms, int) and not isinstance(ts_ms, bool)
+            ts = ts_ms / 1000.0 if precise else parse_ts(obj.get("timestamp"))
             etype = obj.get("type")
             if ts is None or not isinstance(etype, str):
                 bad += 1
@@ -91,8 +115,10 @@ def load_events(path, since, until):
             details = obj.get("details")
             if not isinstance(details, dict):
                 details = {}
-            events.append({"ts": ts, "type": etype, "d": details})
-    events.sort(key=lambda e: e["ts"])  # tri stable : l'ordre du fichier départage la même seconde
+            episode = obj.get("episodeId")
+            events.append({"ts": ts, "type": etype, "d": details, "precise": precise,
+                           "episode": episode if isinstance(episode, str) and episode else None})
+    events.sort(key=lambda e: e["ts"])  # tri stable : l'ordre du fichier départage la même seconde/ms
     return events, bad
 
 
@@ -113,7 +139,28 @@ def is_activity(e):
 
 
 def build_episodes(events):
-    """Découpe en épisodes. Un seul passage sur les événements pertinents : O(n)."""
+    """Épisodes identifiés (episodeId) puis épisodes anciens (silence). O(n log n)."""
+    by_id, legacy = {}, []
+    for e in events:
+        if e["episode"] and (e["type"] in EPISODE_TYPES or is_trigger(e)):
+            by_id.setdefault(e["episode"], []).append(e)
+        else:
+            legacy.append(e)
+    identified = [{"id": k, "start": min(m[0]["ts"], id_epoch(k)), "clock": m[-1]["ts"], "members": m}
+                  for k, m in by_id.items()]
+    return sorted(identified + build_gap_episodes(legacy), key=lambda ep: ep["start"])
+
+
+def id_epoch(episode_id):
+    """`ep_<epoch ms>` -> secondes : instant de la cause (avant le premier événement). inf si illisible."""
+    try:
+        return int(episode_id.removeprefix("ep_")) / 1000.0
+    except ValueError:
+        return float("inf")
+
+
+def build_gap_episodes(events):
+    """Découpe par silence (anciennes lignes). Un seul passage sur les événements pertinents : O(n)."""
     episodes, cur = [], None
     for e in events:
         trig, act = is_trigger(e), is_activity(e)
@@ -125,7 +172,7 @@ def build_episodes(events):
         if cur is None:
             if not trig:
                 continue  # activité sans déclencheur : pas d'épisode (hors périmètre)
-            cur = {"start": e["ts"], "clock": e["ts"], "members": []}
+            cur = {"id": None, "start": e["ts"], "clock": e["ts"], "members": []}
         cur["members"].append(e)
         cur["clock"] = e["ts"]  # déclencheur ou activité : remet l'horloge à zéro
     if cur is not None:
@@ -149,7 +196,16 @@ def summarize(ep, events_by_ts):
             k = "live_tick:" + str(e["d"].get("notification", "?"))
         if k not in kinds:
             kinds.append(k)
+    if not kinds:  # épisode identifié sans déclencheur ancien : causes portées par layout_apply
+        kinds = list(dict.fromkeys(str(e["d"]["cause"]) for e in applies if e["d"].get("cause")))
     apply_ts = [e["ts"] for e in applies]
+    observed = [e["ts"] for e in members if e["type"] in OBSERVED_TYPES]
+    guards = [e for e in members if e["type"] == GUARD_TYPE]
+    guard = guards[-1] if guards else None
+    window_writes = {}
+    for e in applies:
+        for wid, n in parse_window_writes(e["d"].get("windowWrites")):
+            window_writes[wid] = window_writes.get(wid, 0) + n
     # Événements auxiliaires situés dans la plage de l'épisode (bisection non nécessaire : n petit)
     aux = [e for e in events_by_ts["aux"] if ep["start"] <= e["ts"] <= end]
     feedback_candidates = [e for e in members + aux
@@ -160,8 +216,18 @@ def summarize(ep, events_by_ts):
     return {
         "start": ep["start"],
         "end": end,
-        "time_to_stable_s": (apply_ts[-1] - ep["start"]) if apply_ts else None,
+        "episode_id": ep["id"],
+        "precise": all(e["precise"] for e in members),
+        "time_to_write_end_s": (apply_ts[-1] - ep["start"]) if apply_ts else None,
+        "time_to_stable_s": (observed[-1] - ep["start"]) if apply_ts else None,
+        "time_to_guard_end_s": (guard["ts"] - ep["start"]) if guard else None,
+        "guard_held_ms": num(guard["d"], "heldMs") if guard else None,
+        "guard_closed_by": guard["d"].get("closedBy") if guard else None,
         "span_s": end - ep["start"],
+        "scans": int(sum(num(e["d"], "scans") for e in applies)),
+        "ax_writes": int(sum(num(e["d"], "axWrites") for e in applies)),
+        "max_writes_per_window": max(window_writes.values()) if window_writes else None,
+        "windows_over_budget": sum(1 for n in window_writes.values() if n > WRITE_BUDGET),
         "passes": len(applies),
         "commands": int(sum(num(e["d"], "commands") for e in applies)),
         "clamped": int(sum(num(e["d"], "clamped") for e in applies)),
@@ -173,6 +239,21 @@ def summarize(ep, events_by_ts):
         "hold_seconds_max": max(holds) if holds else 0.0,
         "triggers": kinds,
     }
+
+
+def parse_window_writes(raw):
+    """`windowWrites` = « id:n,id:n » (ou id=n) -> [(id, n)]. Absent ou illisible -> []."""
+    out = []
+    if not isinstance(raw, str):
+        return out
+    for part in raw.split(","):
+        key, sep, val = part.strip().replace("=", ":").partition(":")
+        if sep and key:
+            try:
+                out.append((key, int(val)))
+            except ValueError:
+                pass
+    return out
 
 
 def percentile(values, p):
@@ -239,10 +320,20 @@ def main():
         "episodes_with_layout_apply": len(with_pass),
         "episodes_single_pass": sum(1 for r in with_pass if r["passes"] == 1),
         "episodes_with_settling_hold": sum(1 for r in rows if r["settling_hold"]),
+        "episodes_identified": sum(1 for r in rows if r["episode_id"]),
+        "time_to_write_end_s": stats([r["time_to_write_end_s"] for r in with_pass]),
         "time_to_stable_s": stats([r["time_to_stable_s"] for r in with_pass]),
+        "time_to_guard_end_s": stats([r["time_to_guard_end_s"] for r in with_pass if r["time_to_guard_end_s"] is not None]),
+        "guard_held_ms": stats([r["guard_held_ms"] for r in with_pass if r["guard_held_ms"] is not None]),
         "passes": stats([float(r["passes"]) for r in with_pass]),
         "commands": stats([float(r["commands"]) for r in with_pass]),
-        "timestamp_resolution_s": 1,
+        "scans": stats([float(r["scans"]) for r in with_pass]),
+        "ax_writes": stats([float(r["ax_writes"]) for r in with_pass]),
+        "max_writes_per_window": stats([float(r["max_writes_per_window"]) for r in with_pass
+                                        if r["max_writes_per_window"] is not None]),
+        "episodes_over_write_budget": sum(1 for r in with_pass if r["windows_over_budget"] > 0),
+        # 0.001 si tous les épisodes mesurés ont tsMs, sinon 1 (au moins un épisode à la seconde)
+        "timestamp_resolution_s": 0.001 if with_pass and all(r["precise"] for r in with_pass) else 1,
     }
     # Détail par premier déclencheur
     by_kind = {}
@@ -251,6 +342,7 @@ def main():
         by_kind.setdefault(k, []).append(r)
     summary["by_first_trigger"] = {
         k: {"n": len(v),
+            "time_to_write_end_s": stats([x["time_to_write_end_s"] for x in v]),
             "time_to_stable_s": stats([x["time_to_stable_s"] for x in v]),
             "passes": stats([float(x["passes"]) for x in v]),
             "single_pass": sum(1 for x in v if x["passes"] == 1)}
@@ -273,38 +365,55 @@ def main():
     if events:
         print(f"Plage   : {fmt_time(events[0]['ts'])} -> {fmt_time(events[-1]['ts'])} UTC "
               f"({len(events)} événements lus, {bad} ligne(s) invalide(s) ignorée(s))")
-    print("ATTENTION : timestamps du journal à la SECONDE. Toute durée est connue à +-1 s ;"
-          " une durée de 0 s signifie « moins d'une seconde ».")
-    print(f"Épisode : début = déclencheur, fin = {GAP:g} s sans activité. "
-          "Durée = début -> dernier layout_apply.\n")
-    head = f"{'#':>3} {'début (UTC)':<14} {'fin':<14} {'durée_s':>7} {'passes':>6} {'cmds':>5} " \
-           f"{'clamp':>5} {'fail':>5} {'retro':>5} {'hold':>4}  déclencheurs"
+    if summary["timestamp_resolution_s"] == 1:
+        print("ATTENTION : au moins un épisode n'a que le timestamp à la SECONDE (anciennes lignes sans tsMs). "
+              "Ses durées sont connues à +-1 s ; une durée de 0 s signifie « moins d'une seconde ».")
+    else:
+        print("Précision : tsMs présent sur tous les épisodes mesurés, durées à la milliseconde.")
+    print(f"Épisode : identifié par episodeId, sinon début = déclencheur et fin = {GAP:g} s sans activité.")
+    print("Instants depuis le début : écr = fin d'écriture (dernier layout_apply) ; stab = stabilité observée "
+          "(dernier événement de placement) ; garde = fin de garde de bureau (space_transition_guard).\n")
+    head = f"{'#':>3} {'début (UTC)':<14} {'écr_s':>7} {'stab_s':>7} {'garde_s':>7} {'passes':>6} {'cmds':>5} " \
+           f"{'scans':>5} {'axW':>4} {'w/fen':>5} {'clamp':>5} {'fail':>5} {'retro':>5} {'hold':>4}  déclencheurs"
     print(head)
     print("-" * len(head))
     for i, r in enumerate(rows, 1):
-        print(f"{i:>3} {fmt_time(r['start']):<14} {fmt_time(r['end'])[6:]:<14} "
-              f"{fmt(r['time_to_stable_s'], 0):>7} {r['passes']:>6} {r['commands']:>5} "
+        d = 3 if r["precise"] else 0
+        print(f"{i:>3} {fmt_time(r['start']):<14} "
+              f"{fmt(r['time_to_write_end_s'], d):>7} {fmt(r['time_to_stable_s'], d):>7} "
+              f"{fmt(r['time_to_guard_end_s'], d):>7} {r['passes']:>6} {r['commands']:>5} "
+              f"{r['scans']:>5} {r['ax_writes']:>4} {fmt(r['max_writes_per_window']):>5} "
               f"{r['clamped'] + r['clamped_events']:>5} {r['failed'] + r['failed_events']:>5} "
               f"{r['feedback']:>5} {'oui' if r['settling_hold'] else '-':>4}  {','.join(r['triggers'])}")
     print("\nclamp = clamped des layout_apply + événements layout_clamped ; "
-          "fail = failed des layout_apply + événements layout_failed ; retro = rétroaction.\n")
+          "fail = failed des layout_apply + événements layout_failed ; retro = rétroaction ; "
+          "w/fen = maximum d'écritures sur une même fenêtre dans l'épisode ; scans/axW = sommes des layout_apply.\n")
 
     def line(label, s, unit=""):
-        print(f"  {label:<26} n={s['n']:<4} médiane={fmt(s['median'])}{unit}  "
-              f"p90={fmt(s['p90'])}{unit}  max={fmt(s['max'])}{unit}")
+        d = 3 if unit == " s" else 1
+        print(f"  {label:<26} n={s['n']:<4} médiane={fmt(s['median'], d)}{unit}  "
+              f"p90={fmt(s['p90'], d)}{unit}  max={fmt(s['max'], d)}{unit}")
 
     print("RÉSUMÉ")
     print(f"  épisodes : {summary['episodes']} (dont {summary['episodes_with_layout_apply']} avec >=1 layout_apply ; "
-          f"{summary['episodes_with_settling_hold']} avec hold de settling)")
+          f"{summary['episodes_with_settling_hold']} avec hold de settling ; "
+          f"{summary['episodes_identified']} identifiés par episodeId)")
     print(f"  épisodes à 1 seule passe : {summary['episodes_single_pass']} / {summary['episodes_with_layout_apply']}")
-    line("temps jusqu'à stabilité", summary["time_to_stable_s"], " s")
+    line("fin d'écriture", summary["time_to_write_end_s"], " s")
+    line("stabilité observée", summary["time_to_stable_s"], " s")
+    line("fin de garde de bureau", summary["time_to_guard_end_s"], " s")
+    line("durée de garde (heldMs)", summary["guard_held_ms"], " ms")
     line("passes (layout_apply)", summary["passes"])
     line("commandes", summary["commands"])
+    line("scans par épisode", summary["scans"])
+    line("écritures AX par épisode", summary["ax_writes"])
+    line("max écritures / fenêtre", summary["max_writes_per_window"])
+    print(f"  épisodes avec une fenêtre au-delà de {WRITE_BUDGET} écritures : {summary['episodes_over_write_budget']}")
     if summary["by_first_trigger"]:
         print("\nPAR PREMIER DÉCLENCHEUR (épisodes avec >=1 layout_apply)")
         for k, v in summary["by_first_trigger"].items():
-            print(f"  {k:<14} n={v['n']:<4} stabilité médiane={fmt(v['time_to_stable_s']['median'])} s "
-                  f"p90={fmt(v['time_to_stable_s']['p90'])} s | passes médiane={fmt(v['passes']['median'])} "
+            print(f"  {k:<14} n={v['n']:<4} stabilité médiane={fmt(v['time_to_stable_s']['median'], 3)} s "
+                  f"p90={fmt(v['time_to_stable_s']['p90'], 3)} s | passes médiane={fmt(v['passes']['median'])} "
                   f"p90={fmt(v['passes']['p90'])} max={fmt(v['passes']['max'])} | 1 passe : {v['single_pass']}")
     print("\nMESURES NATIVES EN MILLISECONDES (précises, indépendantes de la seconde)")
     for k, s in summary["native_ms"].items():

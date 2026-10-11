@@ -1,5 +1,10 @@
 import Foundation
 
+public extension Date {
+    /// Epoch en millisecondes (arrondi vers le bas) : `tsMs` du journal d'événements.
+    var epochMilliseconds: Int64 { Int64((timeIntervalSince1970 * 1000).rounded(.down)) }
+}
+
 public struct AutomationScope: RawRepresentable, Codable, Equatable, Hashable, Sendable, CustomStringConvertible {
     public let rawValue: String
 
@@ -111,6 +116,8 @@ public struct RoadieEventEnvelope: Codable, Equatable, Sendable {
     public var schemaVersion: Int
     public var id: String
     public var timestamp: Date
+    /// Epoch en millisecondes, dérivé de `timestamp` (ISO à la seconde). Optionnel : absent des anciennes lignes.
+    public var tsMs: Int64?
     public var type: String
     public var scope: AutomationScope?
     public var subject: AutomationSubject?
@@ -135,6 +142,7 @@ public struct RoadieEventEnvelope: Codable, Equatable, Sendable {
         self.schemaVersion = schemaVersion
         self.id = id
         self.timestamp = timestamp
+        self.tsMs = timestamp.epochMilliseconds
         self.type = type
         self.scope = scope
         self.subject = subject

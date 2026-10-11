@@ -21,6 +21,7 @@ Ajouts **rétrocompatibles**. Les lecteurs existants ignorent les clés inconnue
 | `scans` | relevés complets faits pendant la passe |
 | `axWrites` | écritures AX faites pendant la passe |
 | `layoutVersion` | version de disposition appliquée (modes à arbre) |
+| `windowWrites` | écritures par fenêtre dans la passe, format `"windowID:n,windowID:n"` |
 
 ## Nouveaux types
 

@@ -15,14 +15,14 @@
 
 ### Lot L1 - Instrumentation (Sonnet) [US5]
 
-- [ ] T010 [P] [US5] Ajouter `tsMs` et `episodeId` à `RoadieEvent` (`Sources/RoadieDaemon/EventLog.swift`), et `tsMs` à l'enveloppe (`Sources/RoadieCore/AutomationEvent.swift`). Ajouter un contexte d'épisode global au processus, protégé par verrou : `EpisodeContext.begin(cause:)`, `current`, `continue()`. Un épisode reste ouvert à travers ses échos et ses échéances, et se ferme après 1 s sans cause externe nouvelle (A12). Les champs sont optionnels, et les anciennes lignes se décodent toujours.
-- [ ] T011 [P] [US5] Déclarer dans `Sources/RoadieCore/AutomationEventCatalog.swift` les types du contrat (`layout_echo_ignored`, `layout_app_response_accepted`, `layout_external_change_reverted`, `layout_manual_gesture`, `space_transition_guard`, `state_migrated`). Marquer les `mutable_bsp_*` comme obsolètes.
-- [ ] T012 [P] [US5] Adapter `scripts/measure-layout-reactivity` :
+- [x] T010 [P] [US5] Ajouter `tsMs` et `episodeId` à `RoadieEvent` (`Sources/RoadieDaemon/EventLog.swift`), et `tsMs` à l'enveloppe (`Sources/RoadieCore/AutomationEvent.swift`). Ajouter un contexte d'épisode global au processus, protégé par verrou : `EpisodeContext.begin(cause:)`, `current`, `continue()`. Un épisode reste ouvert à travers ses échos et ses échéances, et se ferme après 1 s sans cause externe nouvelle (A12). Les champs sont optionnels, et les anciennes lignes se décodent toujours.
+- [x] T011 [P] [US5] Déclarer dans `Sources/RoadieCore/AutomationEventCatalog.swift` les types du contrat (`layout_echo_ignored`, `layout_app_response_accepted`, `layout_external_change_reverted`, `layout_manual_gesture`, `space_transition_guard`, `state_migrated`). Marquer les `mutable_bsp_*` comme obsolètes.
+- [x] T012 [P] [US5] Adapter `scripts/measure-layout-reactivity` :
   - utiliser `tsMs` et `episodeId` quand ils sont présents ;
   - distinguer fin d'écriture, stabilité observée et fin de garde de bureau ;
   - compter les écritures par fenêtre, `scans` et `axWrites` ;
   - garder le découpage actuel pour les anciennes lignes.
-- [ ] T013 [US5] Tests EventLog :
+- [x] T013 [US5] Tests EventLog :
   - une ancienne ligne sans les nouveaux champs se décode ;
   - `tsMs` est cohérent avec `timestamp` ;
   - `episodeId` est posé par le contexte et reste stable à travers `continue()`.
