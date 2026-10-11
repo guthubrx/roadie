@@ -39,6 +39,10 @@ private final class BatchWriter: WindowFrameWriting, @unchecked Sendable {
         setFrames([WindowFrameUpdate(window: window, frame: frame)], generation: 0)[window.id] ?? nil
     }
 
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot, generation: UInt64) -> CGRect? {
+        setFrames([WindowFrameUpdate(window: window, frame: frame)], generation: generation)[window.id] ?? nil
+    }
+
     func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
         batches.append((updates, generation))
         var result: [WindowID: CGRect?] = [:]
@@ -95,6 +99,7 @@ struct TreeAuthorityTests {
         events: EventLog = EventLog(path: tempPath("tree-authority-events")),
         clock: TreeClock = TreeClock(),
         registry: WrittenFrameRegistry = WrittenFrameRegistry(),
+        applications: TreeScopeApplicationCenter = TreeScopeApplicationCenter(),
         persist: Bool = true
     ) -> SnapshotService {
         SnapshotService(
@@ -107,8 +112,19 @@ struct TreeAuthorityTests {
             persistStateChanges: persist,
             userInput: UserInputActivity(),
             clock: { clock.now },
-            frameRegistry: registry
+            frameRegistry: registry,
+            treeScopeApplications: applications
         )
+    }
+
+    /// Détails des événements d'un type, dans l'ordre du journal, avec leur `episodeId`.
+    private func details(_ events: EventLog, type: String) -> [(details: [String: String], episodeId: String?)] {
+        events.tail(limit: 200).compactMap { line in
+            guard let object = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  object["type"] as? String == type
+            else { return nil }
+            return ((object["details"] as? [String: String]) ?? [:], object["episodeId"] as? String)
+        }
     }
 
     private func targets(_ service: SnapshotService, _ snapshot: DaemonSnapshot) -> [WindowID: CGRect] {
@@ -425,11 +441,161 @@ struct TreeAuthorityTests {
         #expect(first.items.map(\.status) == [.clamped])
         #expect(service.applyPlan(from: service.snapshot()).commands.map(\.window.id) == [b.id])
 
-        // Frame acceptée pour cette même cible : réussie, et plus jamais redemandée.
+        // Frame acceptée pour cette même cible : réussie, et plus redemandée dans sa génération.
         registry.record(windowID: b.id.rawValue, requested: target, readBack: terminal, generation: 3, at: Date())
         registry.accept(windowID: b.id.rawValue, frame: terminal)
         let second = service.apply(ApplyPlan(commands: [ApplyCommand(window: placedB, frame: Rect(target))]), generation: 3)
         #expect(second.items.map(\.status) == [.applied])
-        #expect(service.applyPlan(from: service.snapshot()).commands.isEmpty)
+        #expect(service.applyPlan(from: service.snapshot(), generation: 3).commands.isEmpty)
     }
+
+    // MARK: - Convergence C2 (T201, T207, T213, T215, T219)
+
+    /// T201 : en mode `bsp`, « réussi » et « à refaire » suivent la même tolérance (2 pt).
+    @Test
+    func bspModeUsesTheSameToleranceForSuccessAndRewrite() throws {
+        let provider = TreeProvider(display: display, windows: [a, b])
+        let writer = BatchWriter()
+        let service = service(provider: provider, store: store(mode: .bsp, members: [a, b], tree: nil), writer: writer)
+        let plan = service.applyPlan(from: service.snapshot())
+        let command = try #require(plan.commands.first)
+        let target = command.frame.cgRect
+
+        // Relue à 1,5 pt : « réussi »...
+        let near = target.offsetBy(dx: 1.5, dy: 0)
+        writer.responses[command.window.id] = near
+        #expect(service.apply(ApplyPlan(commands: [command]), generation: 1).items.map(\.status) == [.applied])
+        // ... et pas redemandée à la passe suivante.
+        provider.windowList = provider.windowList.map { window in
+            var window = window
+            if window.id == command.window.id { window.frame = Rect(near) }
+            return window
+        }
+        #expect(!service.applyPlan(from: service.snapshot()).commands.map(\.window.id).contains(command.window.id))
+        // Au-delà de 2 pt : redemandée.
+        provider.windowList = provider.windowList.map { window in
+            var window = window
+            if window.id == command.window.id { window.frame = Rect(target.offsetBy(dx: 2.5, dy: 0)) }
+            return window
+        }
+        #expect(service.applyPlan(from: service.snapshot()).commands.map(\.window.id).contains(command.window.id))
+    }
+
+    /// T215 : une frame acceptée dans une génération antérieure ne retire pas la commande.
+    @Test
+    func acceptedFrameOnlySuppressesTheCommandOfItsOwnGeneration() {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let target = CGRect(x: 500, y: 0, width: 500, height: 800)
+        let terminal = CGRect(x: 500, y: 0, width: 490, height: 795)
+        var placedB = b
+        placedB.frame = Rect(terminal)
+        let placedA = powerWindow(1, x: 0, y: 0, width: 500, height: 800)
+        let registry = WrittenFrameRegistry()
+        let service = service(provider: TreeProvider(display: display, windows: [placedA, placedB]), store: store(members: [a, b], tree: tree), registry: registry)
+        registry.record(windowID: b.id.rawValue, requested: target, readBack: terminal, generation: 3, at: Date())
+        registry.accept(windowID: b.id.rawValue, frame: terminal)
+        let snapshot = service.snapshot()
+
+        #expect(service.applyPlan(from: snapshot, generation: 3).commands.isEmpty)
+        #expect(service.applyPlan(from: snapshot, generation: 4).commands.map(\.window.id) == [b.id])
+        #expect(service.applyPlan(from: snapshot, scope: scope, orderedWindowIDs: [a.id, b.id], generation: 4).commands.map(\.window.id) == [b.id])
+    }
+
+    /// T207 : une commande ouvre son épisode et son `layout_apply` porte les champs du contrat.
+    @Test
+    func commandApplicationOpensItsEpisodeAndReportsContractFields() throws {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let events = EventLog(path: tempPath("tree-command-episode-events"))
+        let service = service(provider: TreeProvider(display: display, windows: [a, b]), store: store(members: [a, b], tree: tree), events: events)
+
+        _ = service.applyTreeScope(scope, cause: "stage.switch", generation: 11)
+
+        let apply = try #require(details(events, type: "layout_apply").last)
+        #expect(apply.details["cause"] == "command:stage.switch")
+        #expect(apply.episodeId?.hasPrefix("ep_") == true)
+        #expect(apply.details["pass"] == "1")
+        #expect(apply.details["scans"] == "1")
+        #expect(apply.details["axWrites"] == "6")
+        #expect(apply.details["windowWrites"] == "1:1,2:1")
+        #expect(apply.details["layoutVersion"] == "11")
+        #expect(apply.details["durationMs"] != nil)
+    }
+
+    /// T207 : un épisode ouvert par la commande à son entrée est repris, passes numérotées.
+    @Test
+    func commandApplicationsReuseTheCallerEpisodeAndCountPasses() throws {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let events = EventLog(path: tempPath("tree-command-pass-events"))
+        let provider = TreeProvider(display: display, windows: [a, b])
+        let service = service(provider: provider, store: store(members: [a, b], tree: tree), events: events)
+
+        _ = service.applyTreeScope(scope, cause: "command:window.move", generation: 12, episodeID: "ep_caller")
+        // Snapshot partagé republié : la seconde passe ne refait pas de relevé.
+        _ = service.applyTreeScope(scope, cause: "command:window.move", generation: 12, episodeID: "ep_caller")
+
+        let applies = details(events, type: "layout_apply")
+        #expect(applies.map(\.episodeId) == ["ep_caller", "ep_caller"])
+        #expect(applies.map { $0.details["pass"] } == ["1", "2"])
+        #expect(applies.map { $0.details["scans"] } == ["1", "0"])
+        #expect(applies.map { $0.details["cause"] } == ["command:window.move", "command:window.move"])
+        #expect(provider.windowsCalls == 1)
+    }
+
+    /// T219 : le résultat de l'application est publié au maintainer après l'écriture.
+    @Test
+    func applyTreeScopePublishesItsApplication() throws {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let center = TreeScopeApplicationCenter()
+        let received = Received()
+        center.setHandler { received.append($0) }
+        let clock = TreeClock()
+        let writer = BatchWriter()
+        let service = service(provider: TreeProvider(display: display, windows: [a, b]), store: store(members: [a, b], tree: tree), writer: writer, clock: clock, applications: center)
+
+        _ = service.applyTreeScope(scope, cause: "command:test", generation: 21)
+
+        let application = try #require(received.values.first)
+        #expect(received.values.count == 1)
+        #expect(writer.batches.count == 1)
+        #expect(application == TreeScopeApplication(scope: scope, generation: 21, windowIDs: [a.id, b.id], appliedAt: clock.now))
+    }
+
+    /// T213 : budget épuisé pour une fenêtre et une génération : pas d'écriture, frame observée
+    /// acceptée et signalée ; l'écriture directe porte la génération de la commande.
+    @Test
+    func overBudgetWindowIsNotWrittenAndIsReported() throws {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id), second: .leaf(b.id))
+        let registry = WrittenFrameRegistry()
+        let events = EventLog(path: tempPath("tree-budget-events"))
+        let writer = BatchWriter()
+        let service = service(provider: TreeProvider(display: display, windows: [a, b]), store: store(members: [a, b], tree: tree), writer: writer, events: events, registry: registry)
+        let elsewhere = CGRect(x: 1, y: 1, width: 10, height: 10)
+        for _ in 0..<LayoutTolerance.writeBudgetPerGeneration {
+            registry.record(windowID: b.id.rawValue, requested: elsewhere, readBack: elsewhere, generation: 5, at: Date())
+        }
+
+        let tick = service.applyTreeScope(scope, cause: "command:test", generation: 5)
+
+        #expect(writer.batches.count == 1)
+        #expect(writer.batches.first?.updates.map(\.window.id) == [a.id])
+        #expect(tick.applied == 1)
+        #expect(registry.entry(for: b.id.rawValue)?.accepted == b.frame.cgRect)
+        let refusal = try #require(details(events, type: "layout_app_response_accepted").last)
+        #expect(refusal.details["reason"] == "write_budget_exhausted")
+        #expect(refusal.details["windowID"] == String(b.id.rawValue))
+
+        // Écriture directe : refusée au-delà du budget, transmise avec sa génération sinon.
+        #expect(service.setFrame(elsewhere, of: b, generation: 5) == nil)
+        #expect(writer.batches.count == 1)
+        #expect(service.setFrame(elsewhere, of: b, generation: 6) == elsewhere)
+        #expect(writer.batches.last?.generation == 6)
+    }
+}
+
+/// Collecte thread-safe des applications publiées.
+private final class Received: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [TreeScopeApplication] = []
+    var values: [TreeScopeApplication] { lock.withLock { stored } }
+    func append(_ value: TreeScopeApplication) { lock.withLock { stored.append(value) } }
 }

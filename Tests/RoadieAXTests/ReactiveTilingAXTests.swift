@@ -68,11 +68,13 @@ private struct WriterFixture {
     let cache = AXWindowIndexCache()
     let frames = WrittenFrameRegistry()
     let clock = ManualClock()
+    let generations = PlacementGeneration()
 
     var writer: AXWindowFrameWriter {
         let clock = clock
         return AXWindowFrameWriter(
-            io: io, windowIndex: cache, writtenFrames: frames, registry: AXUnresponsiveApps(), now: { clock.now }
+            io: io, windowIndex: cache, writtenFrames: frames, registry: AXUnresponsiveApps(),
+            generations: generations, now: { clock.now }
         )
     }
 }
@@ -111,7 +113,9 @@ struct AXWindowFrameWriterTests {
         ])
         #expect(fixture.io.calls.last == "set AXEnhancedUserInterface=true")
         #expect(result[WindowID(rawValue: 511)] == .some(nil))
-        #expect(fixture.frames.entry(for: 511) == nil)
+        // T213 : la tentative a atteint l'appel AX, elle est inscrite (sans relecture) et compte au budget.
+        #expect(fixture.frames.entry(for: 511)?.readBack == nil)
+        #expect(fixture.frames.entry(for: 511)?.writesInGeneration == 1)
     }
 
     @Test
@@ -153,23 +157,24 @@ struct AXWindowFrameWriterTests {
             WindowFrameUpdate(window: window($0, pid: 54), frame: CGRect(x: 0, y: 0, width: 200, height: 200))
         }
 
-        _ = fixture.writer.setFrames(updates)
+        // Une génération par lot : le budget A13 n'interfère pas avec la mesure des énumérations.
+        _ = fixture.writer.setFrames(updates, generation: 1)
         #expect(fixture.io.enumerations == 1)
 
         // Index en cache (posé par le snapshot ou le lot précédent) : aucune énumération.
-        _ = fixture.writer.setFrames(updates)
+        _ = fixture.writer.setFrames(updates, generation: 2)
         #expect(fixture.io.enumerations == 1)
 
         // Fenêtre plus récente que l'index : une seule nouvelle énumération pour ce pid.
         fixture.io.windows[54] = index(pid: 54, ids: [541, 542, 543])
         _ = fixture.writer.setFrames(updates + [
             WindowFrameUpdate(window: window(543, pid: 54), frame: CGRect(x: 0, y: 0, width: 200, height: 200)),
-        ])
+        ], generation: 3)
         #expect(fixture.io.enumerations == 2)
 
         // Élément devenu invalide : l'index du pid est vidé.
         fixture.io.setErrors[kAXSizeAttribute] = .invalidUIElement
-        _ = fixture.writer.setFrames(updates)
+        _ = fixture.writer.setFrames(updates, generation: 4)
         #expect(fixture.cache.windows(for: 54) == nil)
     }
 
@@ -191,6 +196,72 @@ struct AXWindowFrameWriterTests {
         #expect(entry?.generation == 7)
         #expect(entry?.writesInGeneration == 2)
         #expect(entry?.writtenAt == fixture.clock.now)
+    }
+
+    // MARK: - T213 : génération des écritures directes et budget au point commun
+
+    @Test
+    func directWritesCarryTheirGenerationAndDefaultToTheCurrentOne() {
+        let fixture = WriterFixture()
+        fixture.io.windows[57] = index(pid: 57, ids: [571])
+        let target = CGRect(x: 0, y: 0, width: 300, height: 200)
+        fixture.io.readBack = target
+        let writer: any WindowFrameWriting = fixture.writer
+
+        _ = writer.setFrame(target, of: window(571, pid: 57), generation: 41)
+        #expect(fixture.frames.entry(for: 571)?.generation == 41)
+
+        // Sans génération : la génération en cours, plus jamais 0.
+        fixture.generations.next()
+        let current = fixture.generations.next()
+        _ = writer.setFrame(target, of: window(571, pid: 57))
+        #expect(fixture.frames.entry(for: 571)?.generation == current)
+        _ = writer.setFrames([WindowFrameUpdate(window: window(571, pid: 57), frame: target)])
+        #expect(fixture.frames.entry(for: 571)?.generation == current)
+        #expect(fixture.frames.entry(for: 571)?.writesInGeneration == 2)
+    }
+
+    @Test
+    func writeBudgetIsEnforcedAtTheCommonWritePoint() {
+        let fixture = WriterFixture()
+        fixture.io.windows[58] = index(pid: 58, ids: [581])
+        let target = CGRect(x: 0, y: 0, width: 300, height: 200)
+        fixture.io.readBack = target
+        let writer: any WindowFrameWriting = fixture.writer
+
+        _ = writer.setFrames([WindowFrameUpdate(window: window(581, pid: 58), frame: target)], generation: 7)
+        _ = writer.setFrame(target, of: window(581, pid: 58), generation: 7)
+        let callsAtBudget = fixture.io.calls.count
+
+        // Troisième écriture de la génération 7 : refusée sans aucun appel AX, par les deux chemins.
+        #expect(writer.setFrame(target, of: window(581, pid: 58), generation: 7) == nil)
+        #expect(writer.setFrames([WindowFrameUpdate(window: window(581, pid: 58), frame: target)], generation: 7)[WindowID(rawValue: 581)] == .some(nil))
+        #expect(fixture.io.calls.count == callsAtBudget)
+        #expect(fixture.frames.entry(for: 581)?.writesInGeneration == 2)
+
+        // Nouvelle génération : nouveau budget.
+        #expect(writer.setFrame(target, of: window(581, pid: 58), generation: 8) == target)
+        #expect(fixture.frames.entry(for: 581)?.writesInGeneration == 1)
+    }
+
+    @Test
+    func failedAttemptsAfterTheAXCallCountTowardsTheBudget() {
+        let fixture = WriterFixture()
+        fixture.io.windows[59] = index(pid: 59, ids: [591])
+        // Position refusée (pas un délai dépassé, qui mettrait l'application en quarantaine).
+        fixture.io.setErrors[kAXPositionAttribute] = .failure
+        let target = CGRect(x: 0, y: 0, width: 300, height: 200)
+        let writer: any WindowFrameWriting = fixture.writer
+
+        #expect(writer.setFrame(target, of: window(591, pid: 59), generation: 9) == nil)
+        #expect(writer.setFrame(target, of: window(591, pid: 59), generation: 9) == nil)
+        #expect(fixture.frames.entry(for: 591)?.writesInGeneration == 2)
+        #expect(fixture.frames.entry(for: 591)?.readBack == nil)
+        #expect(fixture.frames.isOverBudget(windowID: 591, generation: 9))
+
+        let writesBefore = fixture.io.frameWrites.count
+        #expect(writer.setFrame(target, of: window(591, pid: 59), generation: 9) == nil)
+        #expect(fixture.io.frameWrites.count == writesBefore)
     }
 }
 

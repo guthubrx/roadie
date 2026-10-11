@@ -20,6 +20,9 @@ public extension SystemSnapshotProviding {
 
 public protocol WindowFrameWriting: Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect?
+    /// Écriture directe d'une fenêtre avec la génération de placement de l'appelant (A13, T213) :
+    /// elle compte au budget de cette génération comme une écriture groupée.
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot, generation: UInt64) -> CGRect?
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
     /// `generation` : génération de placement globale et monotone, transmise au registre des
     /// frames écrites (budget de 2 écritures par fenêtre et par génération, A2).
@@ -35,6 +38,11 @@ public protocol WindowFrameWriting: Sendable {
 }
 
 public extension WindowFrameWriting {
+    /// Écrivains sans registre (doubles de test) : la génération est ignorée.
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot, generation: UInt64) -> CGRect? {
+        setFrame(frame, of: window)
+    }
+
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
         var results: [WindowID: CGRect?] = [:]
         for update in updates {
@@ -882,6 +890,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     private let windowIndex: AXWindowIndexCache
     private let writtenFrames: WrittenFrameRegistry
     private let registry: AXUnresponsiveApps
+    /// Génération par défaut des appels sans génération : la génération en cours, jamais 0 implicite (T213).
+    private let generations: PlacementGeneration
     private let now: @Sendable () -> Date
 
     public init() {
@@ -893,26 +903,34 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         windowIndex: AXWindowIndexCache = .shared,
         writtenFrames: WrittenFrameRegistry = .shared,
         registry: AXUnresponsiveApps = .shared,
+        generations: PlacementGeneration = .shared,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.io = io
         self.windowIndex = windowIndex
         self.writtenFrames = writtenFrames
         self.registry = registry
+        self.generations = generations
         self.now = now
     }
 
     public func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-        setFrames([WindowFrameUpdate(window: window, frame: frame)])[window.id] ?? nil
+        setFrame(frame, of: window, generation: generations.current)
+    }
+
+    public func setFrame(_ frame: CGRect, of window: WindowSnapshot, generation: UInt64) -> CGRect? {
+        setFrames([WindowFrameUpdate(window: window, frame: frame)], generation: generation)[window.id] ?? nil
     }
 
     public func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
-        setFrames(updates, generation: 0)
+        setFrames(updates, generation: generations.current)
     }
 
     // O(n + Σm) : regroupement par pid, index AX du dernier snapshot (au plus une enumeration
     // kAXWindows de m elements par application et par lot), resolution par ID en O(1). Le repli
     // par cadre/titre, en O(m), reste l'exception.
+    // Point commun d'écriture : une fenêtre dont le budget A13 de `generation` est épuisé n'est pas
+    // écrite (résultat nil, aucun appel AX) ; l'appelant le signale (T213).
     public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
         var results: [WindowID: CGRect?] = [:]
         let reserved = Set(updates.map { $0.window.id.rawValue })
@@ -928,7 +946,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
             }
             for update in group {
                 var applied: CGRect?
-                if !registry.isQuarantined(pid),
+                if !writtenFrames.isOverBudget(windowID: update.window.id.rawValue, generation: generation),
+                   !registry.isQuarantined(pid),
                    let element = element(pid: pid, id: update.window.id, title: update.window.title,
                                          frame: update.window.frame, windows: &windows, reserved: reserved) {
                     if enhancedUI == nil {
@@ -1132,7 +1151,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// evite qu'une fenetre trop grande soit bornee par l'ecran a sa nouvelle position, la seconde
     /// corrige une taille bornee par l'ancien ecran. Une taille refusee (fenetre non
     /// redimensionnable) n'arrete pas l'ecriture ; une position refusee, une fenetre detruite ou
-    /// un delai depasse l'arretent. Puis une seule relecture, enregistree dans le registre.
+    /// un delai depasse l'arretent. Puis une seule relecture. Toute tentative qui a atteint l'appel
+    /// AX est enregistree dans le registre, meme en echec : elle compte au budget A13 (T213).
     private func write(_ update: WindowFrameUpdate, generation: UInt64, on element: AXUIElement, pid: pid_t) -> CGRect? {
         var position = update.frame.origin
         var size = update.frame.size
@@ -1142,14 +1162,18 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
         for (attribute, value) in [(kAXSizeAttribute, axSize), (kAXPositionAttribute, axPosition), (kAXSizeAttribute, axSize)] {
             let error = io.setValue(value, of: attribute, on: element)
-            if registry.noteResult(error, pid: pid) { return nil }
+            if registry.noteResult(error, pid: pid) { return record(update, readBack: nil, generation: generation) }
             if error == .invalidUIElement {
                 windowIndex.invalidate(pid: pid)
-                return nil
+                return record(update, readBack: nil, generation: generation)
             }
-            if error != .success, attribute == kAXPositionAttribute { return nil }
+            if error != .success, attribute == kAXPositionAttribute { return record(update, readBack: nil, generation: generation) }
         }
-        let readBack = frame(of: element, pid: pid)
+        return record(update, readBack: frame(of: element, pid: pid), generation: generation)
+    }
+
+    /// Inscrit une tentative d'ecriture au registre et rend sa frame relue (nil en echec). O(1).
+    private func record(_ update: WindowFrameUpdate, readBack: CGRect?, generation: UInt64) -> CGRect? {
         writtenFrames.record(
             windowID: update.window.id.rawValue, requested: update.frame, readBack: readBack,
             generation: generation, at: now()

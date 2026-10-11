@@ -82,11 +82,14 @@ public enum LayoutPlanner {
 }
 
 public enum LayoutDiff {
+    /// Frames à refaire : écart au-delà de `LayoutTolerance.frameMatch`, la même tolérance que
+    /// « réussi » dans l'application (SPEC-017 T201, FR-010), pour tous les modes. O(n log n).
     public static func commands(previous: LayoutPlan?, next: LayoutPlan) -> [LayoutCommand] {
-        next.placements.keys.sorted().compactMap { windowID in
+        let tolerance = LayoutTolerance.frameMatch
+        return next.placements.keys.sorted().compactMap { windowID in
             guard let nextFrame = next.placements[windowID] else { return nil }
             if let previousFrame = previous?.placements[windowID],
-               previousFrame.isClose(to: nextFrame, positionTolerance: 1, sizeTolerance: 1) {
+               previousFrame.isClose(to: nextFrame, positionTolerance: tolerance, sizeTolerance: tolerance) {
                 return nil
             }
             return LayoutCommand(windowID: windowID, frame: nextFrame)

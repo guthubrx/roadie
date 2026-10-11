@@ -3766,8 +3766,10 @@ struct SnapshotServiceTests {
         try? FileManager.default.removeItem(atPath: intentPath)
     }
 
+    /// T212 : `window display N` n'écrit plus de déplacement initial (ni ses relances) avant le plan
+    /// unique. Une écriture en échec n'est pas relancée par la commande : le maintainer la reprend.
     @Test
-    func sendToDisplayRetriesTransientInitialMoveFailure() throws {
+    func sendToDisplayWritesTheMovedWindowOnceWithoutIntermediateMove() throws {
         let displayA = DisplayID(rawValue: "display-a")
         let displayB = DisplayID(rawValue: "display-b")
         let sourceDisplay = DisplaySnapshot(id: displayA, index: 1, name: "A", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)
@@ -3801,9 +3803,9 @@ struct SnapshotServiceTests {
         let events = try String(contentsOfFile: eventPath, encoding: .utf8)
 
         #expect(result.changed)
-        #expect((writer.attempts[moving.id] ?? 0) >= 2)
-        #expect(events.contains("\"type\":\"window_display_initial_move_retried\""))
-        #expect(events.contains("\"initialMoveAttempts\":\"2\""))
+        #expect(writer.attempts[moving.id] == 1)
+        #expect(!events.contains("\"type\":\"window_display_initial_move_retried\""))
+        #expect(!events.contains("initialMoveAttempts"))
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: eventPath)
     }

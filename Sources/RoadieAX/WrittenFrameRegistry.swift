@@ -63,6 +63,13 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
         lock.withLock { entries[windowID] }
     }
 
+    /// Budget A13 épuisé : `writeBudgetPerGeneration` tentatives déjà inscrites pour cette fenêtre
+    /// dans `generation`. Contrôlé au point commun d'écriture (T213). O(1).
+    public func isOverBudget(windowID: UInt32, generation: UInt64) -> Bool {
+        guard let entry = entry(for: windowID), entry.generation == generation else { return false }
+        return entry.writesInGeneration >= LayoutTolerance.writeBudgetPerGeneration
+    }
+
     public func forget(windowID: UInt32) {
         lock.withLock { entries[windowID] = nil }
     }

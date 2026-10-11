@@ -96,6 +96,8 @@ public struct SnapshotService {
     private let clock: @Sendable () -> Date
     /// Mémoire de processus partagée par les services du même fichier d'état.
     private let processState: SnapshotProcessState
+    /// Destination des applications d'arbre par commande (T219) ; injectable pour les tests.
+    private let treeScopeApplications: TreeScopeApplicationCenter
 
     /// Detecte via la variable d'env `ROADIE_PERSIST_STATE_CHANGES` si le snapshot
     /// doit persister ses mutations dans `stages.json`. SPEC-011 atomique : le
@@ -127,8 +129,10 @@ public struct SnapshotService {
         persistStateChanges: Bool = Self.defaultPersistStateChanges,
         userInput: UserInputActivity = .shared,
         clock: @escaping @Sendable () -> Date = { Date() },
-        frameRegistry: WrittenFrameRegistry = .shared
+        frameRegistry: WrittenFrameRegistry = .shared,
+        treeScopeApplications: TreeScopeApplicationCenter = .shared
     ) {
+        self.treeScopeApplications = treeScopeApplications
         self.provider = provider
         self.frameWriter = frameWriter
         self.frameRegistry = frameRegistry
@@ -167,15 +171,20 @@ public struct SnapshotService {
     /// (150 ms, ou le cycle courant du tiler s'il vient de `producerSnapshot`) et que ni l'état
     /// persisté ni la config n'ont changé ; sinon en produit un (FR-023).
     public func sharedSnapshot(followFocus: Bool = true) -> DaemonSnapshot {
+        sharedSnapshotCountingScan(followFocus: followFocus).snapshot
+    }
+
+    /// `sharedSnapshot`, avec `scanned` vrai si un relevé complet a été fait (compteur `scans`, A12).
+    private func sharedSnapshotCountingScan(followFocus: Bool) -> (snapshot: DaemonSnapshot, scanned: Bool) {
         if let recent = processState.recentSnapshot(
             followFocus: followFocus,
             now: clock(),
             stateStamp: fileModificationStamp(stageStore.fileURL.path),
             config: config
         ) {
-            return recent
+            return (recent, false)
         }
-        return snapshot(followFocus: followFocus)
+        return (snapshot(followFocus: followFocus), true)
     }
 
     /// Oublie le snapshot partagé (après une commande qui change fenêtres ou focus).
@@ -1065,10 +1074,18 @@ extension SnapshotService {
     /// est une intention de l'utilisateur : elle s'applique même si le scope est en rafale ou en
     /// garde, et clôt cette attente (`treeScopeAppliedAt`). Sans effet hors mode à arbre ou si le
     /// scope n'est pas la stage active de son écran.
+    /// Épisode (A12, T207) : `episodeID` est celui que la commande a ouvert à son entrée ; nil = la
+    /// commande en ouvre un ici (`command:<nom>`). Le `layout_apply` porte les champs du contrat, et
+    /// le résultat est publié au maintainer (T219).
     // O(n log n) - n = fenêtres du scope.
-    public func applyTreeScope(_ scope: StageScope, cause: String, generation: UInt64) -> MaintenanceTick {
+    public func applyTreeScope(
+        _ scope: StageScope,
+        cause: String,
+        generation: UInt64,
+        episodeID: String? = nil
+    ) -> MaintenanceTick {
         let startedAt = clock()
-        let snapshot = sharedSnapshot()
+        let (snapshot, scanned) = sharedSnapshotCountingScan(followFocus: true)
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
@@ -1076,19 +1093,29 @@ extension SnapshotService {
               stage.mode.usesTreeEngine,
               snapshot.state.activeScope(on: scope.displayID) == scope
         else { return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0) }
+        let commandCause = cause.hasPrefix("command:") ? cause : "command:\(cause)"
+        let episode = episodeID ?? EpisodeContext.shared.begin(cause: commandCause)
         processState.noteTreeScopeApplied(scope, at: startedAt)
-        let plan = treeApplyPlan(for: scope, in: snapshot, mode: stage.mode)
+        let plan = treeApplyPlan(for: scope, in: snapshot, mode: stage.mode, generation: generation)
         let result = apply(plan, generation: generation)
+        let writesByWindow = result.items.reduce(into: [UInt32: Int]()) { $0[$1.windowID.rawValue, default: 0] += 1 }
         events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
-            "cause": cause,
-            "durationMs": String(max(0, Int((clock().timeIntervalSince(startedAt) * 1000).rounded()))),
+            "cause": commandCause,
+            "durationMs": String(format: "%.1f", clock().timeIntervalSince(startedAt) * 1000),
+            "pass": String(processState.nextCommandPass(episode: episode)),
+            "scans": scanned ? "1" : "0",
+            // Écriture façon yabai : taille, position, taille (R8), comme le maintainer.
+            "axWrites": String(result.items.count * 3),
             "layoutVersion": String(generation),
             "commands": String(plan.commands.count),
             "applied": String(result.applied),
             "clamped": String(result.clamped),
             "failed": String(result.failed),
-            "windowWrites": plan.commands.map { "\($0.window.id.rawValue):1" }.joined(separator: ",")
-        ]))
+            "windowWrites": writesByWindow.keys.sorted().map { "\($0):\(writesByWindow[$0] ?? 0)" }.joined(separator: ",")
+        ], episodeId: episode))
+        treeScopeApplications.publish(TreeScopeApplication(
+            scope: scope, generation: generation, windowIDs: result.items.map(\.windowID), appliedAt: clock()
+        ))
         return MaintenanceTick(commands: plan.commands.count, applied: result.applied, clamped: result.clamped, failed: result.failed)
     }
 }
@@ -1133,10 +1160,13 @@ public struct ApplyResultItem: Equatable, Codable, Sendable {
 }
 
 public extension SnapshotService {
+    /// `generation` : génération du plan ; une frame acceptée d'une autre génération ne retire pas
+    /// une commande d'arbre (T215).
     func applyPlan(
         from snapshot: DaemonSnapshot,
         mode: WindowManagementMode? = nil,
-        priorityWindowIDs: Set<WindowID> = []
+        priorityWindowIDs: Set<WindowID> = [],
+        generation: UInt64 = PlacementGeneration.shared.current
     ) -> ApplyPlan {
         var commands: [ApplyCommand] = []
         for display in snapshot.displays {
@@ -1145,7 +1175,7 @@ public extension SnapshotService {
             guard let stage = snapshot.state.stage(scope: scope) else { continue }
             let effectiveMode = mode ?? stage.mode
             if effectiveMode.usesTreeEngine {
-                commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode).commands)
+                commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode, generation: generation).commands)
             } else if effectiveMode.isTiled,
                let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
@@ -1167,7 +1197,12 @@ public extension SnapshotService {
     /// de zoom d'un intent (`zoomedWindowID`) remplace les frames de l'arbre de ses fenêtres (A15).
     /// Aucun autre intent, automatique ou de commande, n'entre dans le calcul.
     // O(n log n) - n = fenêtres du scope (tri des commandes).
-    private func treeApplyPlan(for scope: StageScope, in snapshot: DaemonSnapshot, mode: WindowManagementMode) -> ApplyPlan {
+    private func treeApplyPlan(
+        for scope: StageScope,
+        in snapshot: DaemonSnapshot,
+        mode: WindowManagementMode,
+        generation: UInt64
+    ) -> ApplyPlan {
         var targets = layoutPlan(
             from: snapshot,
             scope: scope,
@@ -1178,21 +1213,22 @@ public extension SnapshotService {
            let zoom = validIntent(for: scope, from: snapshot) {
             for (id, frame) in zoom.placements { targets[id] = frame.cgRect }
         }
-        return treeCommands(targets: targets, in: snapshot)
+        return treeCommands(targets: targets, in: snapshot, generation: generation)
     }
 
     /// Commandes vers les cibles de l'arbre, avec la tolérance unique (R9, FR-010) : une fenêtre est
     /// laissée si sa frame est à `frameMatch` de sa cible, ou si elle est la frame acceptée par le
-    /// registre pour cette même cible (refus de taille confirmé, arrondi de terminal).
+    /// registre pour cette même cible **et pour la génération du plan** (refus de taille confirmé,
+    /// arrondi de terminal). Une acceptation d'une génération antérieure ne retire rien (T215).
     // O(n log n) - n = cibles.
-    private func treeCommands(targets: [WindowID: CGRect], in snapshot: DaemonSnapshot) -> ApplyPlan {
+    private func treeCommands(targets: [WindowID: CGRect], in snapshot: DaemonSnapshot, generation: UInt64) -> ApplyPlan {
         let windowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
         return ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in
             guard let window = windowsByID[id], let target = targets[id] else { return nil }
             let observed = window.frame.cgRect
             if observed.matchesFrame(target) { return nil }
-            if let entry = frameRegistry.entry(for: id.rawValue), let accepted = entry.accepted,
-               entry.requested.matchesFrame(target), accepted.matchesFrame(observed) {
+            if let entry = frameRegistry.entry(for: id.rawValue), entry.generation == generation,
+               let accepted = entry.accepted, entry.requested.matchesFrame(target), accepted.matchesFrame(observed) {
                 return nil
             }
             return ApplyCommand(window: window, frame: Rect(target))
@@ -1383,7 +1419,8 @@ public extension SnapshotService {
         scope: StageScope,
         orderedWindowIDs: [WindowID],
         mode: WindowManagementMode? = nil,
-        priorityWindowIDs: Set<WindowID> = []
+        priorityWindowIDs: Set<WindowID> = [],
+        generation: UInt64 = PlacementGeneration.shared.current
     ) -> ApplyPlan {
         let plan = layoutPlan(
             from: snapshot,
@@ -1394,7 +1431,7 @@ public extension SnapshotService {
         )
         guard let stage = snapshot.state.stage(scope: scope) else { return ApplyPlan(commands: []) }
         if (mode ?? stage.mode).usesTreeEngine {
-            return treeCommands(targets: plan.placements, in: snapshot)
+            return treeCommands(targets: plan.placements, in: snapshot, generation: generation)
         }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
@@ -1652,9 +1689,8 @@ public extension SnapshotService {
                isLikelyFocusWindowChromeDelta(window.frame, baseline: target) {
                 return nil
             }
-            guard !window.frame.isClose(to: target, positionTolerance: 1, sizeTolerance: 1) else {
-                return nil
-            }
+            // Tolérance unique (T201, R9) : à refaire seulement au-delà de `frameMatch`.
+            guard !window.frame.cgRect.matchesFrame(target.cgRect) else { return nil }
             return ApplyCommand(window: window, frame: target)
         }
         return ApplyPlan(commands: commands)
@@ -1664,15 +1700,23 @@ public extension SnapshotService {
     /// cours). « Réussi » suit la tolérance unique (R9) : frame relue à `frameMatch` de la demande,
     /// ou frame acceptée par le registre pour cette demande ; sinon « clamped ». Le snapshot partagé
     /// est ensuite republié avec les frames relues au lieu d'être invalidé (R11, A12).
+    /// Budget A13 épuisé pour une fenêtre dans `generation` : pas d'écriture (l'écrivain AX la
+    /// refuserait aussi), la frame observée est acceptée et signalée ; la fenêtre est absente des
+    /// `items` et de `attempted` (T213).
     // O(n) - n = commandes.
     func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current) -> ApplyResult {
         var items: [ApplyResultItem] = []
-        let updates = plan.commands.map { command in
+        let commands = plan.commands.filter { command in
+            guard frameRegistry.isOverBudget(windowID: command.window.id.rawValue, generation: generation) else { return true }
+            acceptOverBudget(command.window, requested: command.frame, generation: generation)
+            return false
+        }
+        let updates = commands.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
         }
         let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation)
 
-        for command in plan.commands {
+        for command in commands {
             guard let rawActual = actualFrames[command.window.id], let actual = rawActual else {
                 items.append(ApplyResultItem(
                     windowID: command.window.id,
@@ -1702,7 +1746,7 @@ public extension SnapshotService {
             }
         }
         return ApplyResult(
-            attempted: plan.commands.count,
+            attempted: commands.count,
             applied: applied,
             clamped: clamped,
             failed: failed,
@@ -1744,8 +1788,18 @@ public extension SnapshotService {
         provider.focusedWindowID()
     }
 
-    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-        let actual = frameWriter.setFrame(frame, of: window)
+    /// Écriture directe d'une fenêtre (T213) : `generation` est celle de la commande, par défaut la
+    /// génération en cours. Budget A13 épuisé : nil sans écriture, frame observée acceptée et signalée.
+    func setFrame(
+        _ frame: CGRect,
+        of window: WindowSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.current
+    ) -> CGRect? {
+        if frameRegistry.isOverBudget(windowID: window.id.rawValue, generation: generation) {
+            acceptOverBudget(window, requested: Rect(frame), generation: generation)
+            return nil
+        }
+        let actual = frameWriter.setFrame(frame, of: window, generation: generation)
         republishSharedSnapshot(after: [ApplyResultItem(
             windowID: window.id,
             status: actual == nil ? .failed : .applied,
@@ -1753,6 +1807,20 @@ public extension SnapshotService {
             actual: actual.map { Rect($0) }
         )])
         return actual
+    }
+
+    /// Budget épuisé (A13) : la frame observée est acceptée, comme dans le maintainer. O(1).
+    private func acceptOverBudget(_ window: WindowSnapshot, requested: Rect, generation: UInt64) {
+        frameRegistry.accept(windowID: window.id.rawValue, frame: window.frame.cgRect)
+        // Même format que les événements du maintainer : « x,y lxh ».
+        let describe = { (frame: Rect) in "\(Int(frame.x)),\(Int(frame.y)) \(Int(frame.width))x\(Int(frame.height))" }
+        events.append(RoadieEvent(type: "layout_app_response_accepted", details: [
+            "windowID": String(window.id.rawValue),
+            "requested": describe(requested),
+            "actual": describe(window.frame),
+            "reason": "write_budget_exhausted",
+            "layoutVersion": String(generation)
+        ]))
     }
 
     /// Lecture AX fraîche du cadre d'une fenêtre (seconde observation d'un refus, A14). nil si illisible.
@@ -2024,6 +2092,8 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var destroyed: Set<WindowID> = []
     private var treeAppliedAt: [StageScope: Date] = [:]
     private var legacyTreeMigrationClaimed = false
+    /// Rang de la dernière passe de commande dans son épisode (`pass` de `layout_apply`, A12).
+    private var commandPass: (episode: String, pass: Int)?
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
         lock.withLock {
@@ -2082,6 +2152,15 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func treeScopeAppliedAt(_ scope: StageScope) -> Date? {
         lock.withLock { treeAppliedAt[scope] }
+    }
+
+    /// Rang de la prochaine passe de commande dans `episode` : 1 pour un nouvel épisode. O(1).
+    func nextCommandPass(episode: String) -> Int {
+        lock.withLock {
+            let pass = commandPass?.episode == episode ? (commandPass?.pass ?? 0) + 1 : 1
+            commandPass = (episode, pass)
+            return pass
+        }
     }
 
     /// Vrai au premier appel seulement : la migration des modes hérités est tentée une fois.

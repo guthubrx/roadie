@@ -370,6 +370,19 @@ struct LayoutPlannerTests {
         #expect(LayoutDiff.commands(previous: previous, next: next).map(\.windowID) == [a])
     }
 
+    /// T201 : « à refaire » suit la tolérance unique `frameMatch` (2 pt), comme « réussi ».
+    @Test
+    func diffUsesTheSingleFrameMatchTolerance() {
+        let a = WindowID(rawValue: 1)
+        let target = CGRect(x: 100, y: 100, width: 500, height: 500)
+        let within = LayoutPlan(placements: [a: target.offsetBy(dx: 1.5, dy: -1.5)])
+        let beyond = LayoutPlan(placements: [a: target.insetBy(dx: 0, dy: 1.25)])
+
+        #expect(LayoutTolerance.frameMatch == 2)
+        #expect(LayoutDiff.commands(previous: within, next: LayoutPlan(placements: [a: target])).isEmpty)
+        #expect(LayoutDiff.commands(previous: beyond, next: LayoutPlan(placements: [a: target])).map(\.windowID) == [a])
+    }
+
     @Test
     func diffProducesCommandsForChangedFramesInStableOrder() {
         let a = WindowID(rawValue: 2)
