@@ -5,7 +5,7 @@
 - **Spec** : 017-reactive-tiling
 - **Branche** : `017-reactive-tiling` (créée depuis `016-roadie-stabilization`, non fusionnée)
 - **Démarré** : 2026-10-11 02:16 (CEST)
-- **Terminé** : en cours (Converge, contre-revue de l'implémentation et audit à suivre)
+- **Terminé** : 2026-10-11 05:50 (CEST). Validation manuelle en attente
 
 ## Méthode
 
@@ -48,8 +48,12 @@ Installation le 2026-10-11 à 03:47 : `ROADIE_CODESIGN_IDENTITY="roadied-cert" m
 |---|---|---|
 | Placement au repos (60 s) | une passe à chaque dérive de géométrie | 0 |
 | Durée d'une passe, médiane | 35,6 ms | 5,3 ms |
-| Temps jusqu'à stabilité, p90 | 6 s | à mesurer à l'usage (quickstart.md) |
-| Passes par épisode, p90 | 6 | à mesurer à l'usage |
+| Temps jusqu'à stabilité, médiane / p90 | 1 s / 6 s | 0,39 s / 2,9 s (6 épisodes réels, 04:27-05:50) |
+| Passes par épisode, médiane / p90 | 1 / 6 | 1 / 2 |
+| Écritures max par fenêtre | non mesuré | 2 (aucun dépassement du budget) |
+| Latence avant passe, médiane | 15,9 ms (16 % des ticks) | 72,7 ms (attente sur la file principale, `dueLagMs` ≈ 60 ms) |
+
+Lecture : l'échantillon réel est petit (6 épisodes). Le p90 de 2,9 s vient d'un épisode avec une garde `member_return` fermée par `timeout` (1 642 ms) : la sonde lisait un bureau plein écran (type 4) sur l'écran. SC-001 (p90 < 150 ms) n'est donc pas encore démontré sur l'usage réel. À confirmer par la campagne de `quickstart.md`.
 
 ## Ce qui reste à valider à la main
 
@@ -67,3 +71,14 @@ Points non vérifiés par les tests automatiques :
 - `BSPTree.inserting(_:nextTo:side:containerIsWide:)`, `removing` et `swapping` sont conservés : le dépôt impose le sens de coupe par le bord visé.
 - `window desktop N`, `window display N` et `toggle native-fullscreen` gardent l'attente globale de commande. L'insertion dans l'arbre cible passe par la réconciliation.
 - Bilan de lignes de la 017 dans `Sources` : 4107 ajoutées, 2567 supprimées.
+
+## Audit de code v14 (2026-10-11)
+
+Session : `audits/2026-10-11/session-2026-10-11-017-reactive-tiling-01/` (mode fix, 1 cycle et un cycle de scoring). Aucun CRITICAL ni HIGH après le contre-audit. Quatre corrections MEDIUM, non commitées. Chacune est prouvée par un test rouge sans la correction :
+
+- **REL-002** : une relecture de refus qui ne tranche pas est retentée `spaceGuardPoll` plus tard. Avant, l'échéance passée relançait une passe au plancher de 15 ms jusqu'à `echoWindow`. Fichier : `LayoutMaintainer.swift`. Test : `inconclusiveRefusalReadIsDelayed`.
+- **QUAL-101** : `layout <verbe>` ne relève plus les fenêtres avant le verbe. Seuls `plan` et `apply` relèvent. Fichier : `CLICommandRouter.swift`. Test : `layoutVerbDoesNotScanBeforeItsCommand`.
+- **TEST-003** (avec ARCH-101 en partie) : `applyCommandPlacement` publie au centre du service et lit son horloge. Avant, il publiait à `TreeScopeApplicationCenter.shared` et lisait `Date()`. Fichiers : `LayoutCommandService.swift`, `DaemonSnapshot.swift`. Test : `treeStageSwitchPublishesItsApplicationToTheServiceCenter`.
+- **MIN-001** : `commandLayoutIntentNeedsApply` est supprimée (FR-018), car elle n'avait plus d'appelant. Cela retire 25 lignes.
+
+Tests : `./scripts/test` donne 773 tests verts (770 avant). `python3 -I -B -m unittest discover scripts/tests` donne 7 tests verts.

@@ -227,7 +227,7 @@
 - [x] T103 [P] Mettre à jour `README.md` et `examples/roadies.toml` : `mutableBsp` devient un alias, sens des commandes, nouveaux événements.
 - [x] T104 Vérifier par `rg` l'absence dans `Sources/` de `MutableBSPLayoutStrategy`, `TickDuration`, `pendingLiveTick`, `revertedAppliedFrames` et `mutable_bsp_` (hors catalogue obsolète). Mesurer les lignes supprimées (`git diff --stat`).
 - [x] T105 Installer (`ROADIE_CODESIGN_IDENTITY="roadied-cert" make install && make stop && make restart`), vérifier `roadie doctor` et la migration (`stages.json.pre-017`), puis mesurer au repos 60 s (SC-003).
-- [ ] T106 Consigner dans `implementation.md` les mesures avant et après, et ce qui reste à valider à la main (`quickstart.md`, avec la campagne multi-applications et l'application lente).
+- [x] T106 Consigner dans `implementation.md` les mesures avant et après, et ce qui reste à valider à la main (`quickstart.md`, avec la campagne multi-applications et l'application lente).
 
 ## Convergence
 

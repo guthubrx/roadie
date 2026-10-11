@@ -2,7 +2,7 @@
 
 **Feature Branch**: `017-reactive-tiling`
 **Created**: 2026-10-11
-**Status**: Draft
+**Status**: Implemented (validation manuelle en attente)
 **Dependencies**: SPEC-013-persistent-bsp-tree, SPEC-014-bsp-tree-manipulation, SPEC-016-roadie-stabilization (branche de base, non fusionnée)
 **Input**: User description: "Je veux que tu fasses le plus propre possible pour avoir un comportement et une réactivité comme yabai."
 
