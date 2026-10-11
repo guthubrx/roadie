@@ -273,9 +273,42 @@ struct BSPTreeEngineTests {
     }
 
     @Test
+    func minimumSizeCorrectionAfterAsymmetricSwapBorrowsOnlyRequiredOuterSpace() {
+        let screen = CGRect(x: 150, y: 38, width: 1890, height: 1234)
+        let t3 = win(53417), terminal = win(64771), neighbour = win(64539)
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.657, first: .leaf(t3),
+            second: .split(
+                orientation: .horizontal, ratio: 0.5, first: .leaf(win(54112)),
+                second: .split(orientation: .vertical, ratio: 0.5,
+                               first: .leaf(terminal), second: .leaf(neighbour))))
+            .swapping(terminal, t3)
+        let before = tree.place(in: screen, innerGap: 10)
+        #expect(before[terminal]?.width == 1235)
+        #expect(before[t3]?.width == 317)
+
+        let corrected = tree.correctingForMinimumSize(
+            of: t3, minimum: CGSize(width: 840, height: 120), in: screen, innerGap: 10,
+            knownMinimums: [neighbour: CGSize(width: 120, height: 0)])
+        let after = corrected?.place(in: screen, innerGap: 10)
+        #expect((after?[t3]?.width ?? 0) >= 840)
+        #expect((after?[neighbour]?.width ?? 0) >= 120)
+        #expect((after?[terminal]?.width ?? 0) >= 910)
+        #expect(corrected?.windowIDs == tree.windowIDs)
+
+        let unknown = tree.correctingForMinimumSize(
+            of: t3, minimum: CGSize(width: 840, height: 120), in: screen, innerGap: 10)
+        let unknownFrames = unknown?.place(in: screen, innerGap: 10)
+        #expect((unknownFrames?[t3]?.width ?? 0) >= 840)
+        #expect((unknownFrames?[terminal]?.width ?? 0) >= 985)
+        // L'API n'invente pas de minimum pour la voisine : seule la borne de ratio la protège.
+        #expect(unknownFrames?[neighbour]?.width == 45)
+    }
+
+    @Test
     func minimumSizeCorrectionClimbsToHigherAncestorWhenNearestIsInfeasible() {
         // [w1 | [w2 | w3]] : w3 exige 450 de large. Le split le plus proche donnerait 50 à w2,
-        // sous son minimum connu de 200 : seul le split racine rend la correction faisable.
+        // sous son minimum connu de 200 : les deux splits partagent l'effort, w1 garde 350.
         let tree = BSPTree.split(
             orientation: .vertical, ratio: 0.5,
             first: .leaf(win(1)),
@@ -288,12 +321,157 @@ struct BSPTreeEngineTests {
         let frames = corrected?.place(in: container, innerGap: 0)
         #expect((frames?[win(3)]?.width ?? 0) >= 450)
         #expect((frames?[win(2)]?.width ?? 0) >= 200)
-        #expect(corrected.flatMap { children($0)?.1 }.flatMap(ratio) == 0.5) // split proche inchangé
-        #expect(corrected.flatMap(ratio).map { $0 < 0.5 } == true)          // racine ajustée
+        #expect((frames?[win(1)]?.width ?? 0) >= 350)
+        #expect(corrected.flatMap(ratio).map { $0 < 0.5 } == true)
 
         // Sans minimum connu pour w2, le split le plus proche suffit.
         let nearest = tree.correctingForMinimumSize(of: win(3), minimum: CGSize(width: 450, height: 0), in: container)
         #expect(nearest.flatMap(ratio) == 0.5)
+    }
+
+    @Test
+    func minimumSizeCorrectionDistributesOnMirroredPath() {
+        let screen = CGRect(x: 150, y: 38, width: 1890, height: 1234)
+        let t3 = win(1), terminal = win(3), neighbour = win(4)
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.343,
+            first: .split(
+                orientation: .horizontal, ratio: 0.5, first: .leaf(win(2)),
+                second: .split(orientation: .vertical, ratio: 0.5,
+                               first: .leaf(neighbour), second: .leaf(terminal))),
+            second: .leaf(t3)).swapping(t3, terminal)
+        let corrected = tree.correctingForMinimumSize(
+            of: t3, minimum: CGSize(width: 840, height: 120), in: screen, innerGap: 10,
+            knownMinimums: [neighbour: CGSize(width: 120, height: 0)])
+        let frames = corrected?.place(in: screen, innerGap: 10)
+        #expect((frames?[t3]?.width ?? 0) >= 840)
+        #expect((frames?[terminal]?.width ?? 0) >= 910)
+        #expect((frames?[neighbour]?.width ?? 0) >= 120)
+        #expect(corrected?.windowIDs == tree.windowIDs)
+        #expect(corrected.flatMap(leftChild).flatMap(ratio) == 0.5) // axe orthogonal inchangé
+    }
+
+    @Test
+    func minimumSizeCorrectionDistributesHeightAndKeepsTitleBarSeams() {
+        let tree = BSPTree.split(
+            orientation: .horizontal, ratio: 0.5, first: .leaf(win(1)),
+            second: .split(orientation: .horizontal, ratio: 0.5,
+                           first: .leaf(win(2)), second: .leaf(win(3))))
+        let corrected = tree.correctingForMinimumSize(
+            of: win(3), minimum: CGSize(width: 0, height: 400), in: container, innerGap: 0,
+            knownMinimums: [win(2): CGSize(width: 0, height: 120)])
+        let frames = corrected?.place(in: container, innerGap: 0)
+        guard let top = frames?[win(1)], let middle = frames?[win(2)], let bottom = frames?[win(3)] else {
+            Issue.record("correction verticale impossible"); return
+        }
+        #expect(bottom.height >= 400)
+        #expect(middle.height >= 120)
+        #expect(top.height >= 78)
+        #expect(middle.minY - top.maxY == 1)
+        #expect(bottom.minY - middle.maxY == 1)
+    }
+
+    @Test
+    func minimumSizeCorrectionDistributesAcrossThreeAncestorsAndDetectsImpossibleMinimums() {
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.5, first: .leaf(win(1)),
+            second: .split(
+                orientation: .vertical, ratio: 0.5, first: .leaf(win(2)),
+                second: .split(orientation: .vertical, ratio: 0.5,
+                               first: .leaf(win(3)), second: .leaf(win(4)))))
+        var known = [win(1): CGSize(width: 200, height: 0), win(2): CGSize(width: 150, height: 0),
+                     win(3): CGSize(width: 100, height: 0)]
+        let corrected = tree.correctingForMinimumSize(
+            of: win(4), minimum: CGSize(width: 450, height: 0), in: container, innerGap: 10,
+            knownMinimums: known)
+        let frames = corrected?.place(in: container, innerGap: 10)
+        #expect((frames?[win(1)]?.width ?? 0) >= 270)
+        #expect((frames?[win(2)]?.width ?? 0) >= 150)
+        #expect((frames?[win(3)]?.width ?? 0) >= 100)
+        #expect((frames?[win(4)]?.width ?? 0) >= 450)
+        #expect(corrected?.windowIDs == tree.windowIDs)
+
+        known[win(1)] = CGSize(width: 300, height: 0)
+        #expect(tree.correctingForMinimumSize(
+            of: win(4), minimum: CGSize(width: 450, height: 0), in: container, innerGap: 10,
+            knownMinimums: known) == nil)
+    }
+
+    @Test
+    func minimumSizeCorrectionRespectsFixedNeighbourSubtreeAndAlreadyUndersizedNeighbours() {
+        let neighbour = BSPTree.split(orientation: .vertical, ratio: 0.25,
+                                      first: .leaf(win(1)), second: .leaf(win(2)))
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.5, first: neighbour,
+            second: .split(orientation: .vertical, ratio: 0.5,
+                           first: .leaf(win(3)), second: .leaf(win(4))))
+        var known = [win(1): CGSize(width: 100, height: 0), win(2): CGSize(width: 200, height: 0),
+                     win(3): CGSize(width: 120, height: 0)]
+        let corrected = tree.correctingForMinimumSize(
+            of: win(4), minimum: CGSize(width: 450, height: 0), in: container, innerGap: 10,
+            knownMinimums: known)
+        let frames = corrected?.place(in: container, innerGap: 10)
+        #expect((frames?[win(1)]?.width ?? 0) >= 100)
+        #expect((frames?[win(2)]?.width ?? 0) >= 200)
+        #expect((frames?[win(3)]?.width ?? 0) >= 120)
+        #expect((frames?[win(4)]?.width ?? 0) >= 450)
+        #expect(corrected.flatMap(leftChild) == neighbour)
+        #expect(tree.correctingForMinimumSize(
+            of: win(4), minimum: CGSize(width: 460, height: 0), in: container, innerGap: 10,
+            knownMinimums: known) == nil)
+
+        // w2 fait 364, sous le minimum connu de 400. Elle peut rester intacte lors d'un resize local.
+        known[win(2)] = CGSize(width: 400, height: 0)
+        let local = tree.correctingForMinimumSize(
+            of: win(4), minimum: CGSize(width: 300, height: 0), in: container, innerGap: 10,
+            knownMinimums: known)
+        #expect(local.flatMap(leftChild) == neighbour)
+        #expect(local.flatMap(ratio) == 0.5)
+        #expect((local?.place(in: container, innerGap: 10)[win(4)]?.width ?? 0) >= 300)
+    }
+
+    @Test
+    func minimumSizeCorrectionUsesIntegralPlacementAndFractionalGaps() {
+        let pair = BSPTree.split(orientation: .vertical, ratio: 0.5,
+                                 first: .leaf(win(1)), second: .leaf(win(2)))
+        let shifted = CGRect(x: 0.5, y: 0, width: 1000, height: 600)
+        let bounded = pair.correctingForMinimumSize(of: win(1), minimum: CGSize(width: 951, height: 0), in: shifted)
+        #expect(bounded.flatMap(ratio) == 0.95)
+        #expect(bounded?.place(in: shifted, innerGap: 0)[win(1)]?.width == 951)
+
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.5, first: .leaf(win(1)),
+            second: .split(orientation: .vertical, ratio: 0.5,
+                           first: .leaf(win(2)), second: .leaf(win(3))))
+        let screen = CGRect(x: 0.5, y: 0, width: 1000.25, height: 600)
+        let corrected = tree.correctingForMinimumSize(
+            of: win(3), minimum: CGSize(width: 450, height: 0), in: screen, innerGap: 10.25,
+            knownMinimums: [win(2): CGSize(width: 120, height: 0)])
+        let frames = corrected?.place(in: screen, innerGap: 10.25)
+        #expect((frames?[win(3)]?.width ?? 0) >= 450)
+        #expect((frames?[win(2)]?.width ?? 0) >= 120)
+        #expect((frames?[win(1)]?.width ?? 0) >= 410)
+    }
+
+    @Test
+    func minimumSizeCorrectionPreservesFoldedAbsentSplitDuringDistributedCorrection() {
+        let folded = BSPTree.split(orientation: .horizontal, ratio: 0.3,
+                                   first: .leaf(win(3)), second: .leaf(win(5)))
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.657, first: .leaf(win(1)),
+            second: .split(
+                orientation: .horizontal, ratio: 0.5, first: .leaf(win(2)),
+                second: .split(orientation: .vertical, ratio: 0.5, first: folded, second: .leaf(win(4)))))
+        let screen = CGRect(x: 150, y: 38, width: 1890, height: 1234)
+        let corrected = tree.correctingForMinimumSize(
+            of: win(3), minimum: CGSize(width: 840, height: 120), in: screen, innerGap: 10,
+            excluding: [win(5)], knownMinimums: [win(4): CGSize(width: 120, height: 0),
+                                               win(5): CGSize(width: 5000, height: 5000)])
+        let frames = corrected?.projected(excluding: [win(5)]).place(in: screen, innerGap: 10)
+        #expect((frames?[win(1)]?.width ?? 0) >= 910)
+        #expect((frames?[win(3)]?.width ?? 0) >= 840)
+        #expect(corrected?.windowIDs == tree.windowIDs)
+        #expect(corrected.flatMap(rightChild).flatMap(rightChild).flatMap(leftChild) == folded)
     }
 
     @Test

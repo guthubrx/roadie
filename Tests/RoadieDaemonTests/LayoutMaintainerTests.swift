@@ -3505,6 +3505,7 @@ private struct TreeHarness {
         world: TreeWorld,
         store: StageStore,
         strategy: WindowManagementMode = .spatialBsp,
+        gapsInner: Double = 0,
         clock: TestClock = TestClock(),
         spaceProbe: ((String) -> Bool?)? = nil,
         takeGesture: (() -> GestureSession?)? = nil,
@@ -3526,7 +3527,7 @@ private struct TreeHarness {
         service = SnapshotService(
             provider: scan,
             frameWriter: world,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: strategy, gapsOuter: 0, gapsInner: 0)),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: strategy, gapsOuter: 0, gapsInner: gapsInner)),
             intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
             stageStore: store,
             clock: { clock.now },
@@ -3871,6 +3872,61 @@ struct TreeLayoutMaintainerTests {
         for id in [treeW1, treeW2] {
             #expect((harness.registry.entry(for: id.rawValue)?.writesInGeneration ?? 0) <= LayoutTolerance.writeBudgetPerGeneration)
         }
+    }
+
+    /// T228 : un échange asymétrique ajuste les splits imbriqués sans reprendre toute la grande
+    /// case au terminal. Le plan corrigé reste dans le budget et atteint la stabilité.
+    @Test(arguments: [0.0, 120.0])
+    func nestedSwapMinimumCorrectionKeepsWriteBudgetAndReachesStability(neighbourMinimum: Double) {
+        let terminal = treeW3
+        let fourth = WindowID(rawValue: 4)
+        let container = CGRect(x: 150, y: 38, width: 1890, height: 1234)
+        let display = DisplaySnapshot(
+            id: treeScope.displayID, index: 1, name: "nested-swap",
+            frame: Rect(container), visibleFrame: Rect(container), isMain: true
+        )
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.657, first: .leaf(treeW1),
+            second: .split(
+                orientation: .horizontal, ratio: 0.5, first: .leaf(treeW2),
+                second: .split(orientation: .vertical, ratio: 0.5, first: .leaf(terminal), second: .leaf(fourth))
+            )
+        )
+        let world = TreeWorld(displays: [display], frames: tree.place(in: container, innerGap: 10).mapValues(Rect.init))
+        world.minimumSizes[treeW1] = CGSize(width: 840, height: 120)
+        world.minimumSizes[fourth] = CGSize(width: neighbourMinimum, height: 0)
+        let store = treeStore("tree-nested-swap", display: display, tree: tree, frames: world.frames)
+        let harness = TreeHarness("tree-nested-swap", world: world, store: store, gapsInner: 10)
+
+        #expect(harness.maintainer.tick(cause: "command:startup").commands == 0)
+        harness.clock.advance(5)
+        let command = harness.command("swap") { $0.swapping(terminal, treeW1) }
+        let generation = harness.generations.current
+        #expect(command.commands == 2)
+        #expect(harness.registry.entry(for: treeW1.rawValue)?.hasRefusal == true)
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let corrected = harness.maintainer.tick(cause: "deadline")
+
+        #expect(corrected.commands > 0)
+        #expect((world.frames[treeW1]?.width ?? 0) >= 840)
+        #expect((world.frames[terminal]?.width ?? 0) >= 840)
+        let finalTree = store.state().bspTree(for: treeScope)
+        #expect(finalTree?.windowIDs == tree.swapping(terminal, treeW1).windowIDs)
+        for (id, target) in finalTree?.place(in: container, innerGap: 10) ?? [:] {
+            #expect(world.frames[id] == Rect(target))
+            #expect((world.writes[id]?.count ?? 0) <= LayoutTolerance.writeBudgetPerGeneration)
+            #expect((harness.registry.entry(for: id.rawValue)?.writesInGeneration ?? 0) <= LayoutTolerance.writeBudgetPerGeneration)
+        }
+        #expect(harness.generations.current == generation)
+        #expect(harness.count("layout_clamped_scope_repaired") == 1)
+        harness.clock.advance(0.1)
+        #expect(harness.maintainer.tick(cause: "deadline").commands == 0)
+        #expect(harness.count("layout_stable") == 1)
+        for _ in 0..<3 {
+            harness.clock.advance(1)
+            #expect(harness.maintainer.tick(cause: "safety").commands == 0)
+        }
+        #expect(harness.generations.current == generation)
     }
 
     /// T225, A20 : après la correction d'un refus, la stabilité vise les cibles du plan corrigé.

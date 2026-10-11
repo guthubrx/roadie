@@ -97,3 +97,16 @@ Cause vérifiée : l’ouverture de Roadie.app sans arguments lance le daemon. L
 - **Validation utilisateur** : l’utilisateur confirme que le tiling et le navrail sont tous deux revenus.
 
 Pour contrôler le daemon, utiliser `roadie query health`. Les commandes locales `doctor` et `daemon health` peuvent relever des fenêtres avec les permissions propres au terminal. Leur relevé local vide ne prouve pas que le daemon n’a aucune fenêtre.
+
+## Correction de validation : échange asymétrique (T228)
+
+Le dépôt du terminal 64771 sur T3 53417 est retrouvé le 2026-10-11 à 06:39:26 UTC. L’échange donne d’abord la grande case au terminal. La réparation du minimum de T3 conserve ensuite le ratio imbriqué de 0,5. Elle exige une colonne droite de 1690 pixels et réduit le terminal à 190 pixels. Le calcul reproduit exactement la frame de T3 dans le journal : `350,660 840x612`.
+
+- **Correction** : calculer les besoins des sous-arbres, choisir l’ancêtre faisable le plus proche et ajuster les splits nécessaires du chemin. Les orientations, les autres ratios et les feuilles absentes restent conservés. Le contrôle final utilise le placement réel, avec ses marges et arrondis.
+- **Résultat reproduit** : avec un minimum voisin de 120, le terminal garde `910x1234`, T3 reçoit `840x612` et sa voisine reçoit `120x612`.
+- **Minima inconnus** : le maintainer fournit le côté minimal supposé existant de 120 pour les voisines sans minimum appris. Sans cette valeur, l’API brute peut demander 45 à une voisine qui refuse sous 120 ; le test montre alors une nouvelle passe et une stabilité non atteinte. Les placements ordinaires et la signature de l’API sont inchangés.
+- **Preuves rouges** : le test du moteur et le test d’intégration échouent sur la largeur de 190 avec l’ancien calcul. La variante d’intégration avec un minimum voisin encore inconnu prouve aussi le besoin de fournir le côté minimal supposé.
+- **Tests** : les 30 tests du moteur passent. La suite complète donne 781 tests verts dans 85 suites. Le test d’intégration vérifie les deux variantes, les frames réelles du plan corrigé, au plus deux écritures par fenêtre, une génération conservée, puis `layout_stable` et aucune réécriture ultérieure.
+- **Vérification indépendante** : le calcul concorde avec l’énumération des coupes sur 12 613 cas. Aucun défaut bloquant n’est trouvé pour des dimensions utilisables. Un cas dégénéré avec des feuilles brutes de largeur nulle reste hors de cette validation.
+- **Installation réelle** : `make install`, sans identité de signature explicite, puis `make restart` réussissent. Les deux produits compilent en release. La signature stricte passe et conserve le certificat existant. Le nouveau daemon PID 28301 répond avec tous les contrôles `ok`, dont l’accessibilité et la validité de la configuration.
+- **Validation manuelle** : le même glisser-déposer reste à confirmer après cette installation. Le résultat à 910 pixels est celui du scénario reproduit par les tests.

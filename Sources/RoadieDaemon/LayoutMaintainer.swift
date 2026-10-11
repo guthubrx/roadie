@@ -1021,8 +1021,8 @@ public final class LayoutMaintainer {
         }
     }
 
-    /// Refus confirmé (A2, A16) : la taille minimale révélée est respectée en ajustant une seule
-    /// fois l'ancêtre de l'axe contraint, dans la génération en cours. Correction infaisable :
+    /// Refus confirmé (A2, A16) : la taille minimale révélée est respectée par une mutation des
+    /// splits nécessaires sur l'axe contraint, dans la génération en cours. Correction infaisable :
     /// la frame obtenue est acceptée (chevauchement, comme yabai). O(r · n).
     private func correctConfirmedRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, generation: UInt64) {
         for entry in snapshot.windows {
@@ -1039,9 +1039,17 @@ public final class LayoutMaintainer {
             var reason = "minimum_size_infeasible"
             if let tree = store.state().bspTree(for: scope),
                let geometry = treeGeometry(of: scope, in: snapshot) {
+                var knownMinimums = treeMinimums.filter { $0.key != entry.window.id }
+                // Le côté minimal supposé évite de créer un nouveau refus chez une voisine
+                // dont l'application n'a pas encore révélé sa contrainte (T228).
+                for neighbour in tree.windowIDs where neighbour != entry.window.id && knownMinimums[neighbour] == nil {
+                    knownMinimums[neighbour] = CGSize(
+                        width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide
+                    )
+                }
                 let corrected = tree.correctingForMinimumSize(
                     of: entry.window.id, minimum: minimum, in: geometry.container, innerGap: geometry.innerGap,
-                    excluding: geometry.absent, knownMinimums: treeMinimums.filter { $0.key != entry.window.id }
+                    excluding: geometry.absent, knownMinimums: knownMinimums
                 )
                 if let corrected, corrected != tree {
                     store.mutate { $0.setBSPTree(corrected, for: scope) }

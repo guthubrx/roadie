@@ -296,3 +296,7 @@ Passe 2 (2026-10-11), sur `e77f498`. T201 à T221 sont réalisées et testées (
 
 - [x] T226 Arrêter l’instance de Roadie ouverte sans arguments, retrouver son PID dans le statut si nécessaire, conserver tout PID vivant non reconnu et recharger le service lors de `make restart`. Confirmer que le PID de launchd est vivant et détient le verrou avant d’annoncer le démarrage. Vérifier ces cas avec des commandes simulées.
 - [x] T227 Conserver l’identité de signature lors de `make install` sans variable d’environnement. Reprendre l’empreinte exacte du certificat feuille quand la signature l’indique. Vérifier sa disponibilité avant le remplacement des fichiers. Tester le choix automatique, la priorité du choix explicite et le refus d’une identité disparue, même si un autre certificat porte le même nom.
+
+### Correction de validation : échange de cases de largeurs différentes
+
+- [x] T228 Après un échange entre une grande case et une petite case imbriquée, ajuster ensemble les splits nécessaires pour respecter une taille minimale. Emprunter seulement l’espace nécessaire aux voisines extérieures. Conserver la correction locale quand elle suffit, les minima connus, les bornes de ratio, les marges et les feuilles absentes. Lors de la réparation, fournir le côté minimal supposé existant pour les voisines dont le minimum est inconnu. Reproduire le cas réel à quatre fenêtres : T3 exige 840 pixels ; l’ancienne réparation réduit le terminal de 1235 à 190 pixels. Vérifier aussi le budget d’écriture et la stabilité finale.

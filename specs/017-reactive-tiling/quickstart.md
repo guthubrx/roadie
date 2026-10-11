@@ -15,7 +15,7 @@
 | 2 | Fermer une fenêtre (Cmd-W) | Sa voisine directe prend la place, en un mouvement |
 | 3 | Mettre une fenêtre en plein écran natif (Ctrl-Cmd-F), attendre 5 s, en sortir | La fenêtre reprend sa place juste après l'animation, sans attente ni correction |
 | 4 | Changer de stage 5 fois avec le raccourci | Fenêtres à leur place en un mouvement, sans correction après coup |
-| 5 | Glisser une fenêtre au centre d'une autre, puis sur le bord gauche d'une autre | Échange au centre, insertion à gauche sur le bord |
+| 5 | Glisser une fenêtre au centre d'une autre, puis sur le bord gauche d'une autre. Refaire l’échange entre un petit terminal et un grand T3 avec quatre fenêtres | Échange au centre, insertion à gauche sur le bord. Le terminal occupe la grande case ; si T3 impose sa largeur minimale dans la petite case, seules les largeurs nécessaires sont redistribuées |
 | 6 | Redimensionner une fenêtre à la souris et relâcher | La voisine s'ajuste une fois ; rien ne bouge ensuite |
 | 7 | Ne rien faire pendant 60 s | Aucun placement dans le journal |
 | 8 | `roadie move left`, `roadie warp right`, `roadie resize left`, `roadie balance`, `roadie layout toggle-split` | Effet immédiat, en une passe |

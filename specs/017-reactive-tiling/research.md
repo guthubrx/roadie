@@ -224,7 +224,7 @@ Ces amendements **priment** sur les sections R1 à R15 ci-dessus en cas de contr
 - Chaque calcul de l'arbre porte une **version de disposition** (compteur incrémenté à chaque mutation de l'arbre ou du conteneur).
 - Budget par version et par fenêtre : **2 écritures au plus**, l'écriture initiale et une correction. Toutes les écritures comptent, y compris l'ancrage de position, le masquage et l'isolement.
 - Un refus n'est confirmé que si deux observations concordent : la relecture immédiate, puis l'événement « redimensionné » ou le snapshot suivant. Une réponse transitoire (animation) ne fixe pas de taille minimale.
-- Après un refus confirmé, on cherche l'ancêtre le plus proche dont le split coupe **l'axe contraint**. On vérifie que la correction est faisable, puis on ajuste ce split une seule fois. Les voisines touchées reçoivent leur correction dans le même budget.
+- Après un refus confirmé, on cherche l'ancêtre le plus proche dont le split coupe **l'axe contraint**. Si la correction locale ne suffit pas, on ajuste ensemble les splits nécessaires du chemin vers la fenêtre. Le calcul emprunte seulement l’espace nécessaire aux voisines extérieures et respecte leurs minima connus. Cette mutation unique reçoit une seule application dans le même budget.
 - Si la correction est infaisable, l'arbre accepte le chevauchement, comme yabai. L'isolement des scopes infaisables ne s'applique plus aux modes à arbre. Il reste pour `masterStack` et `bsp`.
 - La spec FR-005 est reformulée en conséquence : une seule correction par version, et les voisines au plus une fois de plus.
 
@@ -359,10 +359,12 @@ Test combiné : une règle qui change la stage active, le masquage et la disposi
 `correctingForMinimumSize(of:minimum:in:excluding:knownMinimums:)` :
 - recalcule les frames candidates avec les mêmes marges, bornes de ratio (0,05 à 0,95) et arrondis que le placement ;
 - vérifie les minimums connus des fenêtres touchées ;
+- reçoit du maintainer le côté minimal supposé existant (`LayoutTolerance.minimumTileSide`) pour les voisines sans minimum appris, uniquement lors de cette réparation ;
 - remonte les ancêtres de l'axe contraint, du plus proche au plus haut, jusqu'au premier qui rend la correction faisable ;
+- permet d’ajuster les splits imbriqués du chemin avec cet ancêtre, au lieu de conserver un ratio qui impose une largeur excessive au sous-arbre ;
 - renvoie `nil` sinon.
 
-Tests : ratio hors bornes, voisine contrainte, correction possible seulement à un ancêtre supérieur.
+Tests : ratio hors bornes, voisine contrainte, correction possible seulement à un ancêtre supérieur, échange asymétrique avec une taille minimale dans une case imbriquée.
 
 ### A17 - Cycle de vie de la session de geste (précise A4)
 

@@ -38,7 +38,8 @@ public enum BSPEdge: String, Equatable, Sendable {
 /// Complexité (Article XVIII) : `place`, `windowIDs`, `contains`, `removing`, `projected` et
 /// `balanced` sont O(n) sur le nombre de feuilles. `inserting`, `togglingSplit`, `settingSplit`
 /// et `adjustingFence` sont O(n²) au pire (un `contains` par niveau pendant la descente),
-/// `correctingForMinimumSize` O(d·n) (d = profondeur). n = fenêtres d'un stage, BORNÉ par
+/// `correctingForMinimumSize` O(d·n + n·log L) (d = profondeur, L = étendue de l'écran en points).
+/// n = fenêtres d'un stage, BORNÉ par
 /// construction (typiquement < 20, plafond observé ~50) → au pire ~2500 opérations, hors hot
 /// path serré. Compromis accepté : la lisibilité d'un arbre immuable récursif prime sur une
 /// optimisation non nécessaire à cette échelle.
@@ -408,14 +409,14 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     }
 
     /// Corrige l'arbre pour que `window` obtienne au moins `minimum` (taille refusée par
-    /// l'application, A2). Pour chaque axe en déficit, essaie les splits ancêtres VISIBLES qui
-    /// coupent cet axe, du plus proche au plus haut, et retient le premier qui rend la correction
-    /// faisable. Faisable = ratio dans [0,05 ; 0,95] et, au placement réel (mêmes marges, bornes
-    /// et arrondis que `place`), `window` atteint `minimum` sans qu'aucune fenêtre rétrécie passe
-    /// sous son minimum connu (`knownMinimums`). Un seul split modifié par axe.
+    /// l'application, A2). Pour chaque axe en déficit, calcule les besoins des sous-arbres, puis
+    /// choisit l'ancêtre VISIBLE faisable le plus proche. Les splits du chemin peuvent partager
+    /// l'effort : chacun garde sa séparation actuelle tant qu'elle couvre les besoins calculés.
+    /// Les autres ratios restent fixes. Faisable = ratios dans [0,05 ; 0,95] et, au placement
+    /// réel, `window` atteint `minimum` sans qu'une voisine rétrécie passe sous son minimum connu.
     /// Rend `nil` si c'est infaisable (fenêtre absente ou non visible, aucun ancêtre faisable),
     /// l'arbre inchangé si aucun axe n'est en déficit.
-    // O(d·n) - d = profondeur de la fenêtre (un placement de contrôle par ancêtre candidat), n borné.
+    // O(d·n + n·log L) - recherches bornées sur les points de l'écran, n = feuilles, d = profondeur.
     public func correctingForMinimumSize(
         of window: WindowID,
         minimum: CGSize,
@@ -433,32 +434,113 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                 guard let current = before[window] else { return nil }
                 guard extent(current) < need else { continue }
                 let chain = tree.ancestors(of: window, in: container, innerGap: innerGap)
-                var corrected: BSPTree?
-                // `required` = étendue que le côté de la fenêtre doit avoir sous l'ancêtre examiné.
-                var required = need
-                for split in chain.reversed() where split.orientation == axis {
-                    let usable = Self.usableExtent(of: split.rect, orientation: axis, innerGap: innerGap)
-                    // `place` arrondit le côté `first` à l'entier inférieur : +0,5 garantit `required`.
-                    let ratio = Double(split.windowInFirst ? (required + 0.5) / usable : (usable - required) / usable)
-                    if usable > 0, Self.ratioBounds.contains(ratio) {
-                        let candidate = tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
-                        let after = candidate.place(in: container, innerGap: innerGap)
-                        let respectsMinimums = knownMinimums.allSatisfy { id, known in
-                            guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
-                            return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
-                        }
-                        if let reached = after[window], extent(reached) >= need, respectsMinimums {
-                            corrected = candidate
-                            break
+                var requirements: [[Bool]: CGFloat] = [:]
+
+                func withExtent(_ value: CGFloat, in rect: CGRect) -> CGRect {
+                    var result = rect
+                    if axis == .vertical { result.size.width = value }
+                    else { result.size.height = value }
+                    return result
+                }
+
+                // Les coupes first sont entières. Les fractions des origines et étendues de
+                // chaque sous-arbre restent donc fixes quand les ratios changent, même avec
+                // un gap fractionnaire. Sur ces points successifs, les tailles sont monotones.
+                func minimumExtent(in rect: CGRect, fits: (CGRect) -> Bool) -> CGFloat? {
+                    let fraction = extent(rect) - floor(extent(rect))
+                    var low = 0
+                    var high = Int(max(0, floor(extent(container) - fraction)))
+                    guard fits(withExtent(CGFloat(high) + fraction, in: rect)) else { return nil }
+                    while low < high {
+                        let middle = low + (high - low) / 2
+                        if fits(withExtent(CGFloat(middle) + fraction, in: rect)) { high = middle }
+                        else { low = middle + 1 }
+                    }
+                    return CGFloat(low) + fraction
+                }
+
+                // Intervalle des étendues entières first compatibles avec les deux besoins
+                // et les bornes du ratio. second reçoit exactement usable - first, comme place.
+                func firstExtentRange(usable: CGFloat, first: CGFloat, second: CGFloat) -> ClosedRange<CGFloat>? {
+                    let lower = max(ceil(first), floor(usable * Self.ratioBounds.lowerBound))
+                    let upper = min(floor(usable - second), floor(usable * Self.ratioBounds.upperBound))
+                    return lower <= upper ? lower...upper : nil
+                }
+
+                func requiredExtent(of node: BSPTree, in rect: CGRect, path: [Bool]) -> CGFloat? {
+                    let required: CGFloat?
+                    switch node {
+                    case .empty:
+                        required = 0
+                    case .leaf(let id):
+                        let known = knownMinimums[id].map { ceil(axis == .vertical ? $0.width : $0.height) } ?? 0
+                        // Une voisine déjà sous son minimum peut rester identique, mais pas rétrécir.
+                        let leafNeed = id == window ? need : min(known, before[id].map(extent) ?? 0)
+                        required = minimumExtent(in: rect) { extent($0.integral) >= leafNeed }
+                    case .split(let orientation, let ratio, let first, let second):
+                        let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                        guard let a = requiredExtent(of: first, in: rects.first, path: path + [true]),
+                              let b = requiredExtent(of: second, in: rects.second, path: path + [false])
+                        else { return nil }
+                        if orientation != axis {
+                            required = max(a, b)
+                        } else if node.contains(window) {
+                            required = minimumExtent(in: rect) {
+                                firstExtentRange(usable: Self.usableExtent(of: $0, orientation: axis, innerGap: innerGap),
+                                                 first: a, second: b) != nil
+                            }
+                        } else {
+                            // Les sous-arbres voisins gardent leurs ratios, donc aussi leurs coupes internes.
+                            required = minimumExtent(in: rect) {
+                                let children = Self.childRects(of: $0, orientation: orientation, ratio: ratio, innerGap: innerGap)
+                                return extent(children.first) >= a && extent(children.second) >= b
+                            }
                         }
                     }
-                    // Remonter : le côté de la fenêtre sous cet ancêtre doit couvrir `required`
-                    // une fois partagé par ce split au ratio actuel (borné).
-                    let share = min(max(split.ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
-                    let side = split.windowInFirst ? share : 1 - share
-                    required = ceil(required / CGFloat(side)) + Self.gap(for: axis, innerGap: innerGap)
+                    if let required { requirements[path] = required }
+                    return required
                 }
-                guard let corrected else { return nil }
+
+                guard requiredExtent(of: tree, in: container, path: []) != nil,
+                      let anchor = chain.reversed().first(where: {
+                          $0.orientation == axis && extent($0.rect) >= (requirements[$0.path] ?? .infinity)
+                      })
+                else { return nil }
+
+                func correcting(_ node: BSPTree, in rect: CGRect, path: [Bool]) -> BSPTree? {
+                    guard case .split(let orientation, let ratio, let first, let second) = node else { return node }
+                    let inFirst = first.contains(window)
+                    var newRatio = ratio
+                    if orientation == axis, path.count >= anchor.path.count {
+                        let usable = Self.usableExtent(of: rect, orientation: axis, innerGap: innerGap)
+                        guard usable > 0,
+                              let a = requirements[path + [true]], let b = requirements[path + [false]],
+                              let allowed = firstExtentRange(usable: usable, first: a, second: b)
+                        else { return nil }
+                        let oldExtent = floor(usable * min(max(ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound))
+                        let newExtent = min(max(oldExtent, allowed.lowerBound), allowed.upperBound)
+                        if newExtent != oldExtent {
+                            // Le milieu de l'intervalle qui produit cet entier évite les erreurs d'arrondi.
+                            newRatio = min(max(Double((newExtent + 0.5) / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
+                        }
+                    }
+                    let rects = Self.childRects(of: rect, orientation: orientation, ratio: newRatio, innerGap: innerGap)
+                    if inFirst {
+                        guard let child = correcting(first, in: rects.first, path: path + [true]) else { return nil }
+                        return .split(orientation: orientation, ratio: newRatio, first: child, second: second)
+                    }
+                    guard let child = correcting(second, in: rects.second, path: path + [false]) else { return nil }
+                    return .split(orientation: orientation, ratio: newRatio, first: first, second: child)
+                }
+
+                guard let corrected = correcting(tree, in: container, path: []) else { return nil }
+                let after = corrected.place(in: container, innerGap: innerGap)
+                guard let reached = after[window], extent(reached) >= need,
+                      knownMinimums.allSatisfy({ id, known in
+                          guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
+                          return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
+                      })
+                else { return nil }
                 tree = corrected
             }
             return tree
