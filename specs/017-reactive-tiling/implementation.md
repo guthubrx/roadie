@@ -82,3 +82,18 @@ Session : `audits/2026-10-11/session-2026-10-11-017-reactive-tiling-01/` (mode f
 - **MIN-001** : `commandLayoutIntentNeedsApply` est supprimée (FR-018), car elle n'avait plus d'appelant. Cela retire 25 lignes.
 
 Tests : `./scripts/test` donne 773 tests verts (770 avant). `python3 -I -B -m unittest discover scripts/tests` donne 7 tests verts.
+
+## Correction de validation : installation et redémarrage (T226, T227)
+
+Le 2026-10-11, le tiling et le navrail disparaissent après une installation et un redémarrage. Une instance ouverte comme application reste vivante hors launchd. Son PID est 38756. Elle conserve le verrou, mais son pidfile a disparu. Le service a déjà tenté 43 démarrages et échoue avec `already running`.
+
+Cause vérifiée : l’ouverture de Roadie.app sans arguments lance le daemon. La commande visible dans `ps` ne contient pas `run --yes`. L’ancien script d’arrêt exigeait ces arguments. Il ignorait donc cette instance et supprimait tout de même son pidfile.
+
+- **T226** : l’arrêt vérifie le chemin de l’exécutable. Il récupère le PID dans le statut lorsque le pidfile manque. Il attend la fin du daemon et conserve tout PID vivant non reconnu. `make restart` arrête l’ancienne instance, puis recharge le service. Le démarrage exige un PID vivant identique dans launchd et le pidfile.
+- **T227** : l’installation reprend le certificat existant. Elle conserve son empreinte exacte lorsque la signature la fournit. Une identité absente bloque le remplacement, même si un autre certificat porte le même nom. Le choix explicite garde sa priorité.
+- **Tests** : 26 tests scripts passent, dont 19 nouveaux tests de cycle de vie. Les commandes système et les signaux sont simulés. La syntaxe Bash et `git diff --check` passent. La relecture a vérifié les deux corrections de certificat et de confirmation du démarrage.
+- **Essai réel** : `env -u ROADIE_CODESIGN_IDENTITY make install`, puis `make restart` réussissent. Les deux produits Swift compilent en release. `codesign --verify --strict` passe. L’exigence de signature conserve le certificat `SIGNING_CERTIFICATE_REDACTED`.
+- **Résultat** : le PID 12149 correspond à launchd, au pidfile et au statut. Accessibilité et Enregistrement d’écran sont autorisés. Les 7 fenêtres sont gérées. Le navrail réserve 150 pixels. `roadie query health` ne contient que des contrôles `ok`.
+- **Validation utilisateur** : l’utilisateur confirme que le tiling et le navrail sont tous deux revenus.
+
+Pour contrôler le daemon, utiliser `roadie query health`. Les commandes locales `doctor` et `daemon health` peuvent relever des fenêtres avec les permissions propres au terminal. Leur relevé local vide ne prouve pas que le daemon n’a aucune fenêtre.

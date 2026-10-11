@@ -222,9 +222,10 @@ make install
 Cette cible masque la mise en place macOS habituelle :
 
 - build `roadie` et `roadied` en mode release ;
-- les installe dans `~/.local/bin`, hors du dépôt : le service continue de marcher si tu déplaces ou supprimes le dossier source ;
-- signe les deux binaires (voir plus bas) ;
-- crée `~/Library/LaunchAgents/com.roadie.roadied.plist`, qui lance `~/.local/bin/roadied` ;
+- installe le daemon comme application Roadie, avec son nom et son icône dans les réglages de confidentialité ;
+- installe la commande et un lien vers le daemon hors du dépôt : le service continue de marcher si tu déplaces ou supprimes le dossier source ;
+- signe l’application et la commande (voir plus bas) ;
+- crée le LaunchAgent, qui lance le daemon depuis l’application ;
 - démarre le LaunchAgent s’il n’est pas déjà chargé.
 
 Ajoute `~/.local/bin` à ton `PATH` pour pouvoir taper `roadie` dans un terminal.
@@ -235,13 +236,13 @@ Si Roadie tourne déjà, `make install` ne l’arrête pas. Lance ceci quand tu 
 make restart
 ```
 
-`make restart` redémarre le service installé avec `launchctl kickstart -k`. Il ne compile rien. Si le service n’est pas chargé, il le charge d’abord.
+`make restart` arrête Roadie, puis recharge le service installé avec launchd. Il arrête aussi une instance ouverte directement comme application. Il ne compile rien. Le rechargement applique aussi les changements du LaunchAgent.
 
 ### Signature du code et permissions
 
-macOS lie la permission Accessibilité à la signature du code de `roadied`. Par défaut, `make install` utilise une signature ad hoc, qui change à chaque installation. macOS peut alors oublier la permission, et tu dois la redonner. Le script affiche un avertissement dans ce cas.
+macOS lie la permission Accessibilité à la signature de Roadie. `make install` reprend l’identité de signature de l’application installée. À la première installation, il utilise `roadied-cert` si cette identité existe dans le trousseau. Sinon, il utilise une signature ad hoc et affiche un avertissement : macOS peut oublier la permission après une nouvelle compilation.
 
-Pour garder la permission d’une installation à l’autre, signe avec une identité stable :
+Pour choisir une identité stable explicitement :
 
 ```bash
 security find-identity -v -p codesigning

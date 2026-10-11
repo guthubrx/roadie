@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$(cd "$script_dir/.." && pwd -P)"
 label="com.roadie.roadied"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 pidfile="$HOME/.roadies/roadied.pid"
+statusfile="$HOME/.roadies/daemon-status.json"
 
 if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   launchctl bootout "gui/$(id -u)/$label"
@@ -18,12 +21,50 @@ fi
 
 if [[ -f "$pidfile" ]]; then
   pid="$(cat "$pidfile")"
-  if ps -p "$pid" -o args= 2>/dev/null | grep -q 'roadied run --yes'; then
-    kill "$pid"
-    sleep 1
-    echo "roadied pid $pid stopped"
-  else
-    echo "stale pidfile removed: $pidfile"
+elif [[ -f "$statusfile" ]]; then
+  # Une ancienne commande stop a pu supprimer le pidfile d'un daemon encore vivant.
+  pid="$(plutil -extract pid raw -o - "$statusfile")" || {
+    echo "Impossible de lire le PID dans $statusfile" >&2
+    exit 1
+  }
+else
+  exit 0
+fi
+
+if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+  echo "PID roadied invalide : $pid" >&2
+  exit 1
+fi
+
+# L'ouverture de Roadie.app sans arguments lance aussi le daemon. Son exécutable suffit.
+executable="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+if [[ -n "$executable" ]]; then
+  case "$executable" in
+    "$HOME/Applications/Roadie.app/Contents/MacOS/roadied"|"$HOME/.local/bin/roadied"|\
+    "$repo_root/bin/roadied"|"$repo_root/.build/debug/roadied"|"$repo_root/.build/release/roadied"|\
+    "$repo_root"/.build/*/debug/roadied|"$repo_root"/.build/*/release/roadied)
+      ;;
+    *)
+      echo "Refus d'arrêter le PID $pid : exécutable non reconnu ($executable)." >&2
+      exit 1
+      ;;
+  esac
+
+  kill -TERM "$pid" || {
+    if ps -p "$pid" -o comm= >/dev/null 2>&1; then
+      echo "Impossible d'arrêter roadied PID $pid ; pidfile conservé." >&2
+      exit 1
+    fi
+  }
+  # Le daemon remet les fenêtres en place avant de libérer son verrou d'instance.
+  sleep 3
+  if ps -p "$pid" -o comm= >/dev/null 2>&1; then
+    echo "roadied PID $pid est encore vivant ; pidfile conservé." >&2
+    exit 1
   fi
+  echo "roadied pid $pid stopped"
+fi
+
+if [[ -f "$pidfile" ]] && [[ "$(cat "$pidfile")" == "$pid" ]]; then
   rm -f "$pidfile"
 fi

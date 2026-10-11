@@ -235,13 +235,13 @@ If Roadie is already running, `make install` does not stop it. Run this when you
 make restart
 ```
 
-`make restart` restarts the installed service with `launchctl kickstart -k`. It does not build anything. If the service is not loaded, it loads it first. When `make install` changes the LaunchAgent itself, it says so: run `make stop && make restart` to apply it.
+`make restart` stops Roadie, then reloads the installed service through launchd. It also stops an instance opened directly as an application. It does not build anything. Reloading the service applies changes to the LaunchAgent too.
 
 ### Code signing and permissions
 
-Grant Accessibility to **Roadie** in System Settings > Privacy & Security > Accessibility. macOS ties this permission to the code signature of the app. By default, `make install` uses an ad hoc signature, which changes at each install. macOS may then forget the permission, and you must grant it again. The script prints a warning in this case.
+Grant Accessibility to **Roadie** in System Settings > Privacy & Security > Accessibility. macOS ties this permission to the code signature of the app. `make install` reuses the signing identity of the installed app. For a first install, it uses `roadied-cert` if that identity is available. Otherwise, it uses an ad hoc signature and prints a warning: macOS may forget the permission after a new build.
 
-To keep the permission between installs, sign with a stable identity:
+To choose a stable identity explicitly, use:
 
 ```bash
 security find-identity -v -p codesigning

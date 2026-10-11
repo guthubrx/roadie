@@ -2,8 +2,8 @@
 
 ## Préparation
 
-1. Installer : `ROADIE_CODESIGN_IDENTITY="roadied-cert" make install && make restart`.
-2. Vérifier : `roadie doctor`. Il doit afficher `status=ok` et `accessibilityTrusted=true`.
+1. Installer : `make install && make restart`. L’installation conserve l’identité de signature existante. Le redémarrage arrête aussi une instance ouverte comme application.
+2. Vérifier : `roadie query health`. Tous les contrôles doivent afficher `level=ok`. Cette commande vérifie le daemon avec ses propres permissions. `roadie doctor` reste utile pour les permissions, mais son relevé local de fenêtres dépend aussi des permissions du terminal.
 3. Noter l'heure de départ : `START=$(date -u +%FT%TZ)`.
 4. Pendant les essais, n'ouvrir aucune autre application. Faire 5 essais par scénario, espacés d'au moins 10 s.
 

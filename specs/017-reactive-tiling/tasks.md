@@ -291,3 +291,8 @@ Passe 2 (2026-10-11), sur `e77f498`. T201 à T221 sont réalisées et testées (
   - Preuve (sonde) : dans le scénario de `confirmedRefusalIsCorrectedOnceWithinWriteBudget`, avec les échéances et 3 passes du filet de sécurité, aucun `layout_stable`. L'épisode suivant n'obtient le sien que si la fenêtre refusée est réécrite. Le `stableAfterMs` se compte alors depuis l'écriture non résolue la plus ancienne.
   - Attendu : après une correction, on vérifie les cibles du plan corrigé, ou la frame acceptée. Une vérification ne garde pas les cibles d'une vérification déjà échouée.
   - Résultat : refus corrigé sans réécriture de la fenêtre refusée, puis un `layout_stable` au moins 100 ms après l'écriture de correction. Un épisode suivant émet ensuite son propre `layout_stable`, avec un `stableAfterMs` compté depuis sa propre passe.
+
+### Corrections de validation : installation et redémarrage
+
+- [x] T226 Arrêter l’instance de Roadie ouverte sans arguments, retrouver son PID dans le statut si nécessaire, conserver tout PID vivant non reconnu et recharger le service lors de `make restart`. Confirmer que le PID de launchd est vivant et détient le verrou avant d’annoncer le démarrage. Vérifier ces cas avec des commandes simulées.
+- [x] T227 Conserver l’identité de signature lors de `make install` sans variable d’environnement. Reprendre l’empreinte exacte du certificat feuille quand la signature l’indique. Vérifier sa disponibilité avant le remplacement des fichiers. Tester le choix automatique, la priorité du choix explicite et le refus d’une identité disparue, même si un autre certificat porte le même nom.

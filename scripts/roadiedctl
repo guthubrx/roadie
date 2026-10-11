@@ -53,18 +53,24 @@ start_roadied() {
     if [[ -s "$f" ]]; then mv -f "$f" "$f.1"; fi
   done
   launchctl kickstart -k "$service"
-  sleep 1
 
-  pid="$(service_pid)"
-  if [[ -z "${pid:-}" ]]; then
-    echo "roadied active, mais aucun PID visible; etat:" >&2
-    show_status >&2 || true
-    exit 1
-  fi
+  # Le PID launchd peut être une instance refusée sur verrou occupé. Le propriétaire écrit son PID.
+  for _ in {1..30}; do
+    pid="$(service_pid)"
+    lock_pid="$(cat "$HOME/.roadies/roadied.pid" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[1-9][0-9]*$ ]] && [[ "$lock_pid" == "$pid" ]] && \
+       ps -p "$pid" -o comm= >/dev/null 2>&1; then
+      echo "roadied active et demarre"
+      echo "service: $service"
+      echo "pid: $pid"
+      return 0
+    fi
+    sleep 0.1
+  done
 
-  echo "roadied active et demarre"
-  echo "service: $service"
-  echo "pid: $pid"
+  echo "roadied chargé, mais aucun PID vivant ne possède le verrou après 3 s ; état :" >&2
+  show_status >&2 || true
+  exit 1
 }
 
 stop_roadied() {

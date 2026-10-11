@@ -15,14 +15,33 @@ app_roadied="$app_bundle/Contents/MacOS/roadied"
 # Identité de signature stable (ex. "Apple Development: Nom (ID)"). macOS lie la permission
 # Accessibility à la signature : avec la signature ad hoc, elle est perdue à chaque installation.
 codesign_identity="${ROADIE_CODESIGN_IDENTITY:-}"
+codesign_identities="$(security find-identity -v -p codesigning)"
+identity_available() {
+  awk -v identity="$1" '
+    toupper($2) == toupper(identity) || index($0, "\"" identity "\"") { found = 1 }
+    END { exit !found }
+  ' <<< "$codesign_identities"
+}
+
+if [[ -z "$codesign_identity" ]] && [[ -d "$app_bundle" ]]; then
+  previous_signature="$(codesign --display --verbose=4 -r- "$app_bundle" 2>&1 || true)"
+  # Un certificat recréé avec le même nom change aussi la permission macOS : garder son empreinte.
+  codesign_identity="$(sed -n 's/.*certificate leaf = H"\([[:xdigit:]]\{40\}\)".*/\1/p' <<< "$previous_signature")"
+  if [[ -z "$codesign_identity" ]]; then
+    codesign_identity="$(sed -n '/^Authority=/{s/^Authority=//;p;q;}' <<< "$previous_signature")"
+  fi
+fi
+
 if [[ -n "$codesign_identity" ]]; then
-  if ! security find-identity -v -p codesigning | grep -qF "$codesign_identity"; then
-    echo "ROADIE_CODESIGN_IDENTITY introuvable dans le trousseau : $codesign_identity" >&2
+  if ! identity_available "$codesign_identity"; then
+    echo "Identité de signature introuvable dans le trousseau : $codesign_identity" >&2
     echo "Liste des identités disponibles : security find-identity -v -p codesigning" >&2
     exit 1
   fi
+elif identity_available "roadied-cert"; then
+  codesign_identity="roadied-cert"
 else
-  echo "ATTENTION : ROADIE_CODESIGN_IDENTITY n'est pas défini, signature ad hoc." >&2
+  echo "ATTENTION : aucune identité de signature stable disponible, signature ad hoc." >&2
   echo "  macOS oubliera la permission Accessibility de roadied à chaque nouvelle installation." >&2
   echo "  Définissez ROADIE_CODESIGN_IDENTITY pour une signature stable." >&2
 fi
@@ -150,4 +169,4 @@ fi
 
 echo "Next checks:"
 echo "  make status"
-echo "  roadie daemon health"
+echo "  roadie query health"
