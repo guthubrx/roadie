@@ -115,10 +115,10 @@ Le mainteneur peut mesurer la latence et le nombre de passes, avant et après ch
 ### Functional Requirements
 
 - **FR-001**: Roadie MUST traiter un changement de fenêtre (création, destruction, déplacement, redimensionnement, minimisation, changement de focus, changement de bureau) dès sa notification, sans attendre un cycle périodique.
-- **FR-002**: Une passe MUST calculer la disposition complète des scopes touchés, puis poser chaque fenêtre au plus une fois. Les placements MUST NOT être répartis sur plusieurs passes.
+- **FR-002**: Une passe MUST rassembler tous les placements (règles, épinglages, focus, masquage, disposition) dans un seul plan, dédoublonné par fenêtre, puis l'appliquer une fois. Dans les modes à arbre, les placements MUST NOT être répartis sur plusieurs passes. Les modes `bsp` et `masterStack` gardent leur stratégie, mais profitent du plan unique et de la reconnaissance d'écho.
 - **FR-003**: La disposition des modes à arbre MUST être calculée depuis l'arbre en mémoire. La position observée des fenêtres MUST NOT modifier l'arbre, sauf geste manuel de l'utilisateur.
-- **FR-004**: Roadie MUST reconnaître l'écho de ses propres placements. Un changement observé proche de la dernière frame écrite MUST NOT être traité comme un geste manuel.
-- **FR-005**: Une fenêtre qui refuse sa taille MUST recevoir au plus une nouvelle tentative par changement de disposition. Roadie MUST ensuite accepter la taille obtenue sans déplacer les autres fenêtres une seconde fois.
+- **FR-004**: Roadie MUST reconnaître l'écho de ses propres placements. Un geste manuel MUST être reconnu par une session de souris (clic puis relâchement sur la fenêtre). Un changement hors session et hors écho MUST être traité comme un changement externe : une seule réécriture vers la disposition de l'arbre, sans modifier l'arbre.
+- **FR-005**: Pour une même version de disposition, chaque fenêtre MUST recevoir au plus 2 écritures : l'écriture initiale et une correction après un refus de taille confirmé. Les voisines touchées par cette correction MUST la recevoir dans le même budget. Roadie MUST ensuite accepter la taille obtenue.
 - **FR-006**: Roadie MUST NOT imposer d'attente fixe après un changement de membres. Il MUST attendre seulement tant qu'une transition de bureau est en cours, et au plus une durée bornée.
 - **FR-007**: Une fenêtre qui revient du plein écran MUST reprendre sa place dans l'arbre si elle y figure encore, sinon être insérée comme une nouvelle fenêtre.
 - **FR-008**: Une nouvelle fenêtre MUST diviser la fenêtre active à 50/50 selon la dimension dominante. Une fenêtre fermée MUST rendre sa place à sa voisine directe.
@@ -127,7 +127,7 @@ Le mainteneur peut mesurer la latence et le nombre de passes, avant et après ch
 - **FR-011**: Le daemon MUST NOT relire ni décoder l'état persisté plusieurs fois par passe. Il MUST voir les écritures faites par la CLI ou un autre processus avant la passe suivante.
 - **FR-012**: Les commandes existantes (focus, move, warp, resize, swap, balance, toggle-split, glisser-déposer par la souris et par le navrail, assignation de stage) MUST fonctionner sur l'arbre avec une seule passe par commande.
 - **FR-013**: Les stages en mode `mutableBsp` MUST être migrées sans perte de fenêtres, d'ordre ni de stage. Les configurations qui nomment `mutableBsp` MUST rester valides.
-- **FR-014**: Une stabilisation par scope reste due pour un vrai changement de membres en rafale (exigence FR-017 de la SPEC-016). Elle MUST se terminer dès que la rafale cesse, et MUST relancer immédiatement la passe à son expiration.
+- **FR-014**: Un changement de membres isolé MUST déclencher une passe immédiate. Une stabilisation par scope reste due pour une rafale (au moins 2 changements en moins de 300 ms, exigence FR-017 de la SPEC-016). Elle MUST se terminer après 100 ms de calme, plafonnée à 1 s, et MUST relancer immédiatement la passe à son expiration.
 - **FR-015**: Chaque passe de placement MUST être tracée avec un horodatage à la milliseconde et la cause qui l'a déclenchée.
 - **FR-016**: Un outil MUST calculer, depuis le journal, la durée jusqu'à disposition stable et le nombre de passes par épisode.
 - **FR-017**: Un cycle périodique lent MAY rester comme filet de sécurité. Il MUST NOT déplacer une fenêtre dont la frame correspond à l'arbre.
@@ -144,11 +144,11 @@ Le mainteneur peut mesurer la latence et le nombre de passes, avant et après ch
 
 ### Measurable Outcomes
 
-- **SC-001**: Ouverture, fermeture et changement de stage : la disposition est stable en moins de 150 ms au p90, en une passe dans au moins 95 % des épisodes. Référence actuelle : environ 2 à 6 s et 2 à 7 passes.
+- **SC-001**: Ouverture, fermeture et changement de stage, mesurés depuis le dernier événement d'une rafale : la disposition est stable en moins de 150 ms au p90, en une passe dans au moins 95 % des épisodes. Référence actuelle : environ 2 à 6 s et 2 à 7 passes.
 - **SC-002**: Sortie de plein écran natif : la disposition est stable en moins de 300 ms après la fin de l'animation macOS. Référence actuelle : environ 5 s.
 - **SC-003**: Stage rangée sans interaction pendant 60 s : zéro placement.
 - **SC-004**: Zéro événement « geste manuel » ou « propagation » dans la seconde qui suit un placement de Roadie sans action de l'utilisateur. Référence actuelle : 13 sur 33.
-- **SC-005**: Fenêtre qui refuse sa taille : au plus 2 écritures pour cette fenêtre par épisode.
+- **SC-005**: Fenêtre qui refuse sa taille : au plus 2 écritures pour cette fenêtre et pour chaque voisine par version de disposition.
 - **SC-006**: Les raccourcis actuels de l'utilisateur fonctionnent tous, et la suite de tests passe à 100 %.
 - **SC-007**: Le nombre de lectures de l'état persisté par passe tombe à 0 quand aucun autre processus n'a écrit.
 
@@ -159,4 +159,6 @@ Le mainteneur peut mesurer la latence et le nombre de passes, avant et après ch
 - Le thread principal reste le lieu des appels Accessibilité et AppKit, sauf preuve contraire au plan.
 - Les API privées de macOS (SkyLight) ne sont utilisées que si aucune API publique ne couvre le besoin. Ce choix est justifié par une ADR.
 - La mesure fine (milliseconde) exige d'enrichir le journal. Les mesures de référence actuelles ont une précision d'une seconde.
+- La garantie « une passe » vise les modes à arbre (`spatialBsp` et ses alias). Les modes `bsp`, `masterStack` et `float` ne sont pas réécrits (voir research.md, A3).
+- La garde de transition de bureau lit en lecture seule le type du bureau courant par une API privée (`CGSCopyManagedDisplaySpaces`), avec un repli public. Ce choix est justifié par l'ADR 010.
 - Les liserés JankyBorders sont déjà exclus du rangement (commit `8f64410`).

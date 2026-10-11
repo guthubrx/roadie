@@ -21,6 +21,11 @@
 | 8 | `roadie move left`, `roadie warp right`, `roadie resize left`, `roadie balance`, `roadie layout toggle-split` | Effet immédiat, en une passe |
 | 9 | Ouvrir un terminal dans une case trop petite pour sa taille minimale | Au plus 2 écritures pour cette fenêtre, puis plus rien |
 
+## Campagne de charge
+
+- Refaire les scénarios 1, 3 et 4 avec 6 applications ouvertes (navigateur, terminal, T3 Code, Finder, éditeur, lecteur).
+- Refaire le scénario 1 pendant qu'une application est lente : par exemple une application en train d'indexer, ou suspendue avec `kill -STOP` sur un processus de test, jamais Firefox, puis `kill -CONT`. Attendu : Roadie ne gèle pas, et la mise de côté de 5 s s'applique.
+
 ## Mesure
 
 ```bash

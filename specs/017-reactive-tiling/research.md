@@ -207,3 +207,119 @@ Prévu (FR-018) :
 - invalidation globale de `AXAttributeCache`.
 
 Les tests propres à `mutableBsp` (environ 45) sont réécrits pour l'arbre ou retirés, et chaque retrait est justifié.
+
+## Amendements après contre-revue adverse (Codex GPT-6.1-Sol, round 1, verdict BLOCKED)
+
+Ces amendements **priment** sur les sections R1 à R15 ci-dessus en cas de contradiction. Le détail des objections est dans `adversarial-review-codex.md`.
+
+### A1 - Une passe = un plan unifié (remplace les « ticks de suite » de R5)
+
+- Le tick ne quitte plus après chaque étape. Ces étapes produisent toutes des frames dans **un seul plan de passe**, dédoublonné par fenêtre, appliqué une fois : placements par règle, restauration des épinglages, restauration du focus, réancrage du zoom, masquage des voisines d'une fenêtre plein écran, masquage des stages inactives, disposition finale.
+- Ordre de priorité en cas de conflit sur une même fenêtre : masquage, puis épinglage, puis règle, puis disposition.
+- **Pas de tick de suite fondé sur « la passe a agi »** : `followUpPassLimit` est abandonné. Une nouvelle passe n'a lieu que sur un nouvel événement externe ou une échéance identifiée.
+- Les notifications AX déplacé ou redimensionné qui sont l'écho de nos propres écritures sont filtrées **dans le callback**, par le registre. Elles ne planifient aucun tick.
+
+### A2 - Budget d'écriture par version de disposition (précise R4 et FR-005)
+
+- Chaque calcul de l'arbre porte une **version de disposition** (compteur incrémenté à chaque mutation de l'arbre ou du conteneur).
+- Budget par version et par fenêtre : **2 écritures au plus**, l'écriture initiale et une correction. Toutes les écritures comptent, y compris l'ancrage de position, le masquage et l'isolement.
+- Un refus n'est confirmé que si deux observations concordent : la relecture immédiate, puis l'événement « redimensionné » ou le snapshot suivant. Une réponse transitoire (animation) ne fixe pas de taille minimale.
+- Après un refus confirmé, on cherche l'ancêtre le plus proche dont le split coupe **l'axe contraint**. On vérifie que la correction est faisable, puis on ajuste ce split une seule fois. Les voisines touchées reçoivent leur correction dans le même budget.
+- Si la correction est infaisable, l'arbre accepte le chevauchement, comme yabai. L'isolement des scopes infaisables ne s'applique plus aux modes à arbre. Il reste pour `masterStack` et `bsp`.
+- La spec FR-005 est reformulée en conséquence : une seule correction par version, et les voisines au plus une fois de plus.
+
+### A3 - Matrice par mode (portée de la garantie)
+
+| Mode | Source de la disposition | Geste manuel | Refus de taille | Garantie |
+|---|---|---|---|---|
+| `spatialBsp` (et alias `mutableBsp`, `yabai`) | arbre | frontière de l'arbre ajustée au relâchement | A2 | une passe, budget A2 |
+| `bsp`, `masterStack` | stratégie actuelle, ratios dérivés des frames | comportement actuel | réparation et isolement actuels | reconnaissance d'écho et plan unifié A1, sans garantie d'une passe |
+| `float` | frames courantes | n/a | n/a | aucun placement |
+
+La spec réduit explicitement la garantie « une passe » aux modes à arbre. Les autres modes profitent de l'écho et du plan unifié.
+
+### A4 - Session de geste (remplace le classement « clic après écriture » de R6)
+
+- Au `leftMouseDown`, une **session de geste** enregistre la fenêtre sous le curseur (dernier snapshot), sa frame et l'instant. Au `leftMouseUp`, si la frame de **cette** fenêtre a changé de plus de `frameMatch`, c'est un geste manuel sur cette fenêtre seulement.
+- Ordre de classement d'une frame observée :
+  1. fenêtre de la session de geste en cours : on attend le relâchement ;
+  2. écho de la **dernière** écriture (frame demandée ou relue de la version courante) ;
+  3. réponse de l'application, moins de `echoWindow` après l'écriture ;
+  4. **changement externe**.
+- **Changement externe** (application qui se redimensionne seule, outil clavier qui déplace une fenêtre) : en mode arbre, une seule réécriture vers la frame de l'arbre (comportement yabai, `event_loop.c:805-822`). Si l'application refuse, on applique A2. Ce n'est jamais un geste : l'arbre ne change pas.
+- Politique BetterTouchTool : les raccourcis de l'utilisateur appellent des commandes `roadie`, qui modifient l'arbre. Un déplacement direct par un outil tiers est un changement externe, ramené une fois à l'arbre.
+- Une frame acceptée est liée à la frame demandée et à la version de disposition. Une nouvelle commande, donc une nouvelle version, l'invalide.
+- Le repli local de la CLI (autre processus, registre non partagé) ne tourne que si le daemon ne tourne pas (verrou d'instance, ADR-007). Il ne peut donc pas entrer en conflit avec le registre.
+
+### A5 - Garde de transition de bureau par écran (précise R7)
+
+- Garde **par écran**, ouverte à la sortie du plein écran natif ou au retour d'un membre manquant sur cet écran.
+- Fermeture prouvée : le bureau courant de cet écran est un bureau utilisateur. On le lit par `CGSCopyManagedDisplaySpaces` (lecture seule, résolu par `dlsym`), comme `space_is_user` chez yabai (`window_manager.c:2258-2295`). Lecture toutes les 50 ms tant que la garde est ouverte.
+- Si le symbole est absent (`dlsym` renvoie nil), repli sur `activeSpaceDidChange` suivi d'une frame stable.
+- Au plafond de 1,5 s, la garde se ferme avec `closedBy=timeout`, distinct de `closedBy=userSpace`, et c'est journalisé.
+- Une ADR 010 justifie cette lecture privée : en lecture seule, sans désactiver SIP, avec repli public.
+- `activeSpaceDidChange` est journalisé avec `tsMs`, pour mesurer son moment réel d'envoi.
+
+### A6 - Pas de période calme pour les événements ordinaires (remplace la période calme de R7)
+
+- Un événement ordinaire (une fenêtre créée ou détruite, sans transition de bureau) déclenche une passe immédiate, après seulement les 15 ms de regroupement de l'ordonnanceur. Il n'y a pas d'attente de stabilisation.
+- La stabilisation FR-017 (SPEC-016) ne s'ouvre que sur une **rafale** : au moins 2 changements de membres sur le même scope en moins de 300 ms. Elle se termine après 100 ms de calme, plafonnée à 1 s, et repart par `nextDeadline`.
+- L'activation d'un scope ne compte pas comme un changement de membres (inchangé).
+- SC-001 se mesure depuis le **dernier** événement d'une rafale.
+- Nouveaux tests : rafale de plusieurs changements ; plafond atteint ; deux écrans indépendants ; activation sans changement de membres ; aucun chemin d'écriture ne contourne l'exclusion du scope.
+
+### A7 - Contrat du cache d'état (précise R10)
+
+- `load`, sans verrou : ouvrir le fichier, `fstat` sur le descripteur, comparer à la signature en cache. Si elle est égale, rendre la valeur en cache. Sinon, lire les octets **depuis ce descripteur**, les décoder et les mettre en cache avec cette signature.
+- `mutate` :
+  1. prendre le verrou exclusif ;
+  2. ouvrir, `fstat` et comparer ;
+  3. relire depuis le descripteur si la signature diffère ;
+  4. muter ;
+  5. si la valeur a changé, écrire de façon atomique, puis faire `stat` du nouveau fichier et publier valeur et signature dans le cache, verrou encore tenu ;
+  6. libérer le verrou.
+- Les cas `.missing`, `.corrupt` et le refus d'écriture de la SPEC-016 sont inchangés. Pas de hash systématique.
+
+### A8 - Migration explicite et durable (remplace la traduction au décodage de R1)
+
+- Le cas `mutableBsp` **reste** dans `WindowManagementMode`, et le décodage est inchangé. Un accesseur `usesTreeEngine` vaut vrai pour `spatialBsp` et `mutableBsp`. La config traduit `mutableBsp` et `yabai` en `spatialBsp`, car elle n'a pas d'état.
+- `StageStore.migrateLegacyTreeModes(infer:)`, sous un seul verrou :
+  1. lire les octets bruts ;
+  2. si une stage est `mutableBsp`, copier les octets d'origine vers `stages.json.pre-017` (une fois, sans écraser une sauvegarde existante) ;
+  3. passer chaque stage en `spatialBsp` et construire l'arbre manquant par `infer` ;
+  4. écrire. L'écriture est forcée, car le mode décodé change.
+- Inférence : `BSPTree.inferred(from: [(WindowID, CGRect?)], in:)` reçoit les membres **dans leur ordre**. Si une frame manque ou est inutilisable (stage cachée, fenêtre hors écran, chevauchement), le repli déterministe insère tous les membres dans l'ordre. Aucun membre n'est perdu.
+- Les symboles `mutableBsp` (cas d'enum, stratégie) sont supprimés seulement en vague 3, après le portage de tous les appelants. Le cas d'enum reste pour le décodage des anciens fichiers.
+
+### A9 - Cycle de vie de la feuille et arbre projeté (précise R13)
+
+- La feuille d'un membre absent est gardée tant que le membre existe, avec la **grâce réelle de 30 min** (`DaemonSnapshot.swift:75`).
+- Une destruction confirmée (`kAXUIElementDestroyedNotification` pour cet identifiant) retire la feuille tout de suite.
+- **Arbre projeté** : copie de l'arbre où les feuilles absentes sont retirées et les splits devenus unaires sont repliés. Toutes les opérations géométriques utilisent cet arbre projeté : placement, voisins pour focus/warp, ancre d'insertion, frontière d'un geste ou d'un resize.
+- Chaque split visible dans la projection correspond à un seul split de l'arbre complet (même identité de nœud). Une mutation sur la projection s'applique donc au nœud correspondant de l'arbre complet. Un split replié n'a pas de frontière visible : il n'est pas ajustable.
+- Tests : retour après plus de 45 s ; redimensionnement pendant l'absence d'une voisine, puis retour de la voisine.
+
+### A10 - Vagues compilables
+
+- La vague 1 n'enlève aucun symbole utilisé ailleurs. `MutableBSPLayoutStrategy` et `LayoutStrategy.mutableBsp` restent jusqu'à la vague 3.
+- Avant la vague 2, l'orchestrateur pose des **stubs compilables** :
+  - `LayoutMaintainer.tick(cause:) -> MaintenanceTick`, avec `tick()` qui délègue ;
+  - `LayoutMaintainer.nextDeadline(now:) -> Date?` ;
+  - `SnapshotService.applyTreeScope(_:cause:) -> MaintenanceTick`, l'application immédiate utilisée par les commandes (L9) et fournie par L8.
+- L7 travaille par étapes séquentielles dans son fichier, avec un build vert entre chaque étape.
+
+### A11 - Glisser, bascules et restaurations
+
+- `WindowDragActivity` est confié à L6. À la fin d'un glisser, pas de grâce pour les modes à arbre : le relâchement déclenche la passe.
+- La bascule de stage (`StageCommands.swift:1029-1041`), la bascule de bureau (`DesktopCommands.swift:308`) et l'aller vers un signet (`WindowBookmarkCommands.swift:117`) posent directement les frames **finales** de l'arbre pour les modes à arbre. Ils ne restaurent plus les frames mémorisées avant de recalculer. Ces fichiers sont confiés à L9.
+- Le moniteur local du navrail (`RailController`) et tous les boutons de souris sont couverts par la suspension « bouton enfoncé ».
+
+### A12 - Mesure et épisodes
+
+- Les événements AX transmis portent le pid et l'identifiant de fenêtre (L3).
+- Après une écriture, le snapshot est republié avec les frames **relues**. Une écriture en échec invalide la fenêtre concernée.
+- Un épisode reste ouvert à travers ses échos et les échéances qu'il a armées. Il se ferme après 1 s sans cause externe nouvelle.
+- `layout_apply` porte aussi `scans` (relevés complets) et `axWrites` (écritures AX) de la passe, et un compteur d'écritures par fenêtre.
+- La mesure distingue trois instants : fin d'écriture, stabilité observée, fin de garde de bureau (animation macOS).
+- `quickstart.md` ajoute une campagne avec plusieurs applications actives et une application lente.
+- **Limite assumée** : les lecteurs du snapshot (bordure, focus qui suit la souris) gardent leur cadence actuelle, avec un rescan au plus toutes les 150 ms. Ce coût existe déjà. Le réduire est hors périmètre.

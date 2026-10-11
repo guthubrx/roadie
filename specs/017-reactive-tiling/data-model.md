@@ -7,18 +7,23 @@
 - **Change** :
   - fait foi pour les modes à arbre (R2) ;
   - le sens de coupe d'une insertion suit la feuille (R3) ;
-  - les feuilles des membres absents mais encore en grâce sont conservées, et ignorées au placement (R13).
+  - les feuilles des membres absents sont gardées pendant la grâce réelle du membre (30 min), et retirées sur destruction confirmée ;
+  - les opérations géométriques se font sur l'arbre projeté (A9).
 - **Invariant** : chaque feuille correspond à un membre de la stage (vivant, ou absent mais en grâce). Une fenêtre n'apparaît qu'une seule fois dans tous les arbres d'un écran et d'un bureau.
 
 ## Mode de stage (existant, `WindowManagementMode`)
 
 - Valeurs persistées acceptées en lecture : `bsp`, `mutableBsp`, `yabai`, `spatialBsp`, `masterStack`, `float`.
-- **Change** : `mutableBsp` et `yabai` sont lus comme `spatialBsp`, et l'écriture enregistre `spatialBsp` (R1).
-- **Migration** : la première fois qu'une stage migrée a des membres et un arbre vide ou périmé, elle reçoit `BSPTree.inferred(from:in:)`. Une copie `stages.json.pre-017` est faite avant la première écriture migrée.
+- **Change** : le décodage est inchangé. `usesTreeEngine` vaut vrai pour `spatialBsp` et `mutableBsp`. La config lit `mutableBsp` et `yabai` comme `spatialBsp` (A8).
+- **Migration** : `StageStore.migrateLegacyTreeModes`, sous un seul verrou :
+  1. sauvegarde des octets bruts dans `stages.json.pre-017`, une seule fois ;
+  2. passage en `spatialBsp` ;
+  3. arbre construit par `BSPTree.inferred`, avec les membres dans l'ordre et un repli ordonné ;
+  4. écriture forcée.
 
 ## Frame écrite (nouveau, en mémoire seulement)
 
-`WrittenFrame { requested, readBack?, accepted?, writtenAt }`, indexé par identifiant de fenêtre.
+`WrittenFrame { requested, readBack?, accepted?, writtenAt, layoutVersion, writesInVersion }`, indexé par identifiant de fenêtre.
 - Écrite par l'écrivain AX à chaque placement.
 - Lue par le maintainer, qui classe chaque frame observée en écho, réponse de l'application ou geste manuel (R6).
 - Oubliée à la destruction de la fenêtre.
@@ -38,4 +43,12 @@
 
 ## Garde de transition de bureau (nouveau, en mémoire)
 
-Par scope : `openedAt` et `reason` (sortie du plein écran natif, retour d'un membre manquant). Elle est fermée par `activeSpaceDidChange`, par une frame stable entre deux lectures, ou par le plafond de 1,5 s (R7).
+Par écran : `openedAt` et `reason` (sortie du plein écran natif, retour d'un membre manquant). Elle est fermée quand le type du bureau courant de cet écran est « utilisateur » (sonde privée en lecture seule), par repli sur `activeSpaceDidChange` suivi d'une frame stable, ou au plafond de 1,5 s avec `closedBy=timeout` (A5).
+
+## Version de disposition (nouveau, en mémoire)
+
+C'est un compteur par scope. Il augmente à chaque mutation de l'arbre ou du conteneur. Le budget de 2 écritures par fenêtre s'applique pour une même version (A2).
+
+## Session de geste (nouveau, en mémoire)
+
+`{ windowID, startFrame, button, startedAt }`. Elle est ouverte au clic et fermée au relâchement. Elle est tenue par `UserInputActivity` (A4).
