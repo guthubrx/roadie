@@ -11,7 +11,11 @@
 
 Roadie est écrit en Swift. Il regroupe les fenêtres dans des stages et organise le stage actif sur chaque écran. Un panneau latéral natif, le **nav rail**, permet de changer de stage et de déplacer les fenêtres avec des vignettes.
 
-**État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit les sources actuelles de `main`. Il inclut la stabilisation et le tiling réactif livrés en octobre 2026. La dernière version publiée documentée est [v0.3.0](docs/releases/v0.3.0.md). Ses notes décrivent cette version, pas tous les changements ultérieurs des sources.
+**État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit le projet actuel, avec les derniers correctifs du tiling réactif, du glisser-déposer entre écrans, du nav rail, du retour d’écran, de la signature et du redémarrage. Compile les sources de `main` pour utiliser ce code.
+
+<p align="center">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Bureau Roadie avec tiling, nav rail et commandes CLI" width="100%">
+</p>
 
 ## Pourquoi Roadie Existe
 
@@ -91,6 +95,8 @@ Guides principaux :
 - [Configuration et rules](docs/fr/configuration-rules.md)
 - [Evenements et Query API](docs/fr/events-query.md)
 - [Cas d'usage](docs/fr/use-cases.md)
+
+Anciennes notes : [archive v0.3.0](docs/releases/v0.3.0.md). Elles décrivent une version antérieure du projet.
 
 ## Prérequis
 
@@ -610,7 +616,7 @@ Roadie fonctionne localement. Les sources actuelles de l’application ne contie
 
 L’état local et les diagnostics peuvent contenir des titres de fenêtres, des noms d’applications, des identifiants d’écrans, des positions et l’historique des événements. Les macros peuvent garder un contexte de cible. Considère la configuration, les sauvegardes, les logs, les exports, les macros et les captures du bureau comme privés. Relis et anonymise ces fichiers avant de les partager ou de les ajouter à Git.
 
-Le dépôt contient les sources et des données d’exemple ou de test. Les dossiers d’exécution locaux, les fichiers d’environnement, les clés de signature et les métadonnées SpecKit propres à la machine sont exclus de Git. Les illustrations publiées doivent utiliser un contenu fictif. Ces contrôles ne retirent pas les données des anciens commits ni des copies déjà téléchargées.
+Le dépôt contient les sources et des données d’exemple ou de test. Les dossiers d’exécution locaux, les fichiers d’environnement, les clés de signature et les métadonnées SpecKit propres à la machine sont exclus de Git. Vérifie le contenu des captures avant publication. Ces contrôles ne retirent pas les données des anciens commits ni des copies déjà téléchargées.
 
 ## Organisation Du Dépôt
 

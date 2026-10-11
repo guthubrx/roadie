@@ -11,7 +11,11 @@ English | [Français](README.fr.md)
 
 Roadie is written in Swift. It groups windows into stages and tiles the active stage on each display. A native side panel, the **nav rail**, lets you switch stages and move windows with thumbnails.
 
-**Status:** active development. Commands and configuration can still change. This README describes the current `main` sources, including the stabilization and reactive tiling work completed in October 2026. The latest documented release is [v0.3.0](docs/releases/v0.3.0.md); its release notes describe that version, not every later source change.
+**Status:** active development. Commands and configuration can still change. This README describes the current project, including the latest fixes to reactive tiling, cross-display drag and drop, the nav rail, display recovery, signing, and restart. Build from `main` to use this code.
+
+<p align="center">
+  <img src="docs/assets/screenshot-multi-display.png" alt="Roadie desktop with tiling, nav rail, and CLI" width="100%">
+</p>
 
 ## Why Roadie Exists
 
@@ -91,6 +95,8 @@ Main guides:
 - [Configuration and rules](docs/en/configuration-rules.md)
 - [Events and Query API](docs/en/events-query.md)
 - [Use cases](docs/en/use-cases.md)
+
+Historical notes: [v0.3.0 archive](docs/releases/v0.3.0.md). These notes describe an earlier version of the project.
 
 ## Requirements
 
@@ -618,7 +624,7 @@ Roadie runs locally. The current application sources have no telemetry or remote
 
 Local state and diagnostic output can contain window titles, application names, display identifiers, window positions, and event history. Recorded macros can include target context. Treat configuration, state backups, logs, query exports, macros, and desktop screenshots as private. Review and redact them before sharing an issue or committing files.
 
-The repository contains source code and example/test data. Local runtime folders, environment files, signing keys, and machine-specific SpecKit metadata are excluded from Git. Published illustrations must use synthetic content. Repository checks cannot remove data from older commits or copies already downloaded.
+The repository contains source code and example/test data. Local runtime folders, environment files, signing keys, and machine-specific SpecKit metadata are excluded from Git. Review screenshots before publication. Repository checks cannot remove data from older commits or copies already downloaded.
 
 ## Repository Layout
 

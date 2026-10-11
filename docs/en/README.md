@@ -9,7 +9,7 @@ English guides for the current `main` sources. The [root README](../../README.md
 - [Configuration and rules](configuration-rules.md)
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)
-- [v0.3.0 release notes](../releases/v0.3.0.md) — historical release, before the latest source changes.
+- [v0.3.0 archive](../releases/v0.3.0.md) — historical release, before the latest source changes.
 
 ## Current Capabilities
 
