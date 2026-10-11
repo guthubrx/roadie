@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""Mesure de référence de la réactivité du layout Roadie (Article XXII).
+
+Lit le journal d'événements (~/.roadies/events.jsonl, un JSON par ligne) et le
+découpe en « épisodes » : une rafale d'activité de layout déclenchée par un
+changement (membership, bascule de stage, glisser de fenêtre...).
+
+Lecture seule. Stdlib uniquement. Aucune dépendance au daemon.
+
+LIMITE IMPORTANTE : les `timestamp` du journal ont une précision d'UNE seconde
+(ISO8601 sans fraction, cf. EventLog.swift). Toute durée calculée ici est donc
+connue à +-1 s. Seuls les champs `details.*Ms` (live_tick, stage_switch...) sont
+en millisecondes.
+
+Définition d'un épisode
+  - Début : premier événement déclencheur :
+      windows.missing_reconciled (restored>0 ou markedMissing>0), stage_switch,
+      window_drag_apply, layout_stage_membership_settling,
+      live_tick avec commands>0.
+  - Activité : layout_apply, mutable_bsp_*, layout_clamped.
+  - Fin : aucun déclencheur ni aucune activité pendant GAP secondes (2 s).
+    Un déclencheur qui arrive pendant l'épisode le prolonge (il remet l'horloge à zéro).
+  - Durée (« temps jusqu'à stabilité ») : du début au DERNIER layout_apply.
+  - Passes : nombre de layout_apply. Commandes : somme de details.commands.
+  - Rétroaction : événements mutable_bsp_* + manual_resize_detected situés à
+    moins de 1 s d'un layout_apply de l'épisode.
+"""
+
+import argparse
+import json
+import os
+import statistics
+import sys
+from datetime import datetime, timezone
+
+GAP = 2.0           # secondes sans activité => fin d'épisode
+FEEDBACK_WIN = 1.0  # fenêtre « à moins de 1 s d'un layout_apply »
+
+ACTIVITY_PREFIX = ("mutable_bsp_",)
+ACTIVITY_TYPES = {"layout_apply", "layout_clamped"}
+# Événements rattachés à l'épisode s'ils tombent dans sa plage (sans le prolonger)
+AUX_TYPES = {"layout_failed", "manual_resize_detected", "fullscreen_layout_suppressed"}
+
+
+def parse_ts(value):
+    """ISO8601 (avec ou sans fraction, Z ou offset) -> epoch secondes (float). None si invalide."""
+    if not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)  # sans fuseau : on suppose UTC
+    return dt.timestamp()
+
+
+def num(details, key):
+    """Valeur numérique d'un champ details (les valeurs sont des chaînes dans le journal)."""
+    try:
+        return float(details.get(key, 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def load_events(path, since, until):
+    """Retourne (liste d'événements triés, nb de lignes invalides). O(n log n)."""
+    events, bad = [], 0
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                bad += 1  # ligne partielle ou corrompue
+                continue
+            if not isinstance(obj, dict):
+                bad += 1
+                continue
+            ts = parse_ts(obj.get("timestamp"))
+            etype = obj.get("type")
+            if ts is None or not isinstance(etype, str):
+                bad += 1
+                continue
+            if since is not None and ts < since:
+                continue
+            if until is not None and ts > until:
+                continue
+            details = obj.get("details")
+            if not isinstance(details, dict):
+                details = {}
+            events.append({"ts": ts, "type": etype, "d": details})
+    events.sort(key=lambda e: e["ts"])  # tri stable : l'ordre du fichier départage la même seconde
+    return events, bad
+
+
+def is_trigger(e):
+    t, d = e["type"], e["d"]
+    if t in ("stage_switch", "window_drag_apply", "layout_stage_membership_settling"):
+        return True
+    if t == "windows.missing_reconciled":
+        return num(d, "restored") > 0 or num(d, "markedMissing") > 0
+    if t == "live_tick":
+        return num(d, "commands") > 0
+    return False
+
+
+def is_activity(e):
+    t = e["type"]
+    return t in ACTIVITY_TYPES or t.startswith(ACTIVITY_PREFIX)
+
+
+def build_episodes(events):
+    """Découpe en épisodes. Un seul passage sur les événements pertinents : O(n)."""
+    episodes, cur = [], None
+    for e in events:
+        trig, act = is_trigger(e), is_activity(e)
+        if not (trig or act):
+            continue
+        if cur is not None and e["ts"] - cur["clock"] > GAP:
+            episodes.append(cur)
+            cur = None
+        if cur is None:
+            if not trig:
+                continue  # activité sans déclencheur : pas d'épisode (hors périmètre)
+            cur = {"start": e["ts"], "clock": e["ts"], "members": []}
+        cur["members"].append(e)
+        cur["clock"] = e["ts"]  # déclencheur ou activité : remet l'horloge à zéro
+    if cur is not None:
+        episodes.append(cur)
+    return episodes
+
+
+def summarize(ep, events_by_ts):
+    members = ep["members"]
+    end = members[-1]["ts"]
+    applies = [e for e in members if e["type"] == "layout_apply"]
+    triggers = [e for e in members if is_trigger(e)]
+    kinds = []
+    for e in triggers:
+        k = e["type"]
+        if k == "windows.missing_reconciled":
+            k = "membership"
+        elif k == "layout_stage_membership_settling":
+            k = "settling"
+        elif k == "live_tick":
+            k = "live_tick:" + str(e["d"].get("notification", "?"))
+        if k not in kinds:
+            kinds.append(k)
+    apply_ts = [e["ts"] for e in applies]
+    # Événements auxiliaires situés dans la plage de l'épisode (bisection non nécessaire : n petit)
+    aux = [e for e in events_by_ts["aux"] if ep["start"] <= e["ts"] <= end]
+    feedback_candidates = [e for e in members + aux
+                           if e["type"].startswith("mutable_bsp_") or e["type"] == "manual_resize_detected"]
+    feedback = sum(1 for f in feedback_candidates
+                   if any(abs(f["ts"] - a) <= FEEDBACK_WIN for a in apply_ts))
+    holds = [num(e["d"], "holdSeconds") for e in members if e["type"] == "layout_stage_membership_settling"]
+    return {
+        "start": ep["start"],
+        "end": end,
+        "time_to_stable_s": (apply_ts[-1] - ep["start"]) if apply_ts else None,
+        "span_s": end - ep["start"],
+        "passes": len(applies),
+        "commands": int(sum(num(e["d"], "commands") for e in applies)),
+        "clamped": int(sum(num(e["d"], "clamped") for e in applies)),
+        "clamped_events": sum(1 for e in members if e["type"] == "layout_clamped"),
+        "failed": int(sum(num(e["d"], "failed") for e in applies)),
+        "failed_events": sum(1 for e in aux if e["type"] == "layout_failed"),
+        "feedback": feedback,
+        "settling_hold": bool(holds),
+        "hold_seconds_max": max(holds) if holds else 0.0,
+        "triggers": kinds,
+    }
+
+
+def percentile(values, p):
+    """Rang le plus proche (nearest-rank) : simple et reproductible."""
+    if not values:
+        return None
+    s = sorted(values)
+    k = max(0, min(len(s) - 1, int(-(-p * len(s) // 100)) - 1))
+    return s[k]
+
+
+def stats(values):
+    if not values:
+        return {"n": 0, "median": None, "p90": None, "max": None}
+    return {"n": len(values), "median": statistics.median(values),
+            "p90": percentile(values, 90), "max": max(values)}
+
+
+def fmt_time(ts):
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%m-%d %H:%M:%S")
+
+
+def fmt(v, digits=1):
+    if v is None:
+        return "-"
+    if not isinstance(v, float):
+        return str(v)
+    text = f"{v:.{digits}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def ms_stats(events, etype, key):
+    return stats([num(e["d"], key) for e in events if e["type"] == etype and key in e["d"]])
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Mesure de réactivité du layout Roadie à partir de events.jsonl")
+    ap.add_argument("journal", nargs="?", default="~/.roadies/events.jsonl")
+    ap.add_argument("--since", help="ISO8601, ex. 2026-10-10T23:49:30Z (UTC si pas de fuseau)")
+    ap.add_argument("--until", help="ISO8601")
+    ap.add_argument("--json", action="store_true", help="sortie JSON")
+    args = ap.parse_args()
+
+    path = os.path.expanduser(args.journal)
+    since = parse_ts(args.since) if args.since else None
+    until = parse_ts(args.until) if args.until else None
+    if (args.since and since is None) or (args.until and until is None):
+        sys.exit("measure-layout-reactivity: --since/--until doivent être au format ISO8601")
+    if not os.path.isfile(path):
+        sys.exit(f"measure-layout-reactivity: journal introuvable : {path}")
+
+    events, bad = load_events(path, since, until)
+    episodes = build_episodes(events)
+    aux = {"aux": [e for e in events if e["type"] in AUX_TYPES]}
+    rows = [summarize(ep, aux) for ep in episodes]
+    with_pass = [r for r in rows if r["passes"] > 0]
+
+    # Résumé global (épisodes avec au moins une passe : sinon durée/passes non définies)
+    summary = {
+        "events_read": len(events),
+        "invalid_lines": bad,
+        "window": {"first": events[0]["ts"] if events else None, "last": events[-1]["ts"] if events else None},
+        "episodes": len(rows),
+        "episodes_with_layout_apply": len(with_pass),
+        "episodes_single_pass": sum(1 for r in with_pass if r["passes"] == 1),
+        "episodes_with_settling_hold": sum(1 for r in rows if r["settling_hold"]),
+        "time_to_stable_s": stats([r["time_to_stable_s"] for r in with_pass]),
+        "passes": stats([float(r["passes"]) for r in with_pass]),
+        "commands": stats([float(r["commands"]) for r in with_pass]),
+        "timestamp_resolution_s": 1,
+    }
+    # Détail par premier déclencheur
+    by_kind = {}
+    for r in with_pass:
+        k = r["triggers"][0].split(":")[0] if r["triggers"] else "?"
+        by_kind.setdefault(k, []).append(r)
+    summary["by_first_trigger"] = {
+        k: {"n": len(v),
+            "time_to_stable_s": stats([x["time_to_stable_s"] for x in v]),
+            "passes": stats([float(x["passes"]) for x in v]),
+            "single_pass": sum(1 for x in v if x["passes"] == 1)}
+        for k, v in sorted(by_kind.items())
+    }
+    # Mesures fines natives (en millisecondes dans details)
+    summary["native_ms"] = {
+        "live_tick.latencyMs": ms_stats(events, "live_tick", "latencyMs"),
+        "live_tick.durationMs": ms_stats(events, "live_tick", "durationMs"),
+        "stage_switch.durationMs": ms_stats(events, "stage_switch", "durationMs"),
+    }
+
+    if args.json:
+        out = {"summary": summary, "episodes": rows}
+        json.dump(out, sys.stdout, indent=2, default=str)
+        print()
+        return
+
+    print(f"Journal : {path}")
+    if events:
+        print(f"Plage   : {fmt_time(events[0]['ts'])} -> {fmt_time(events[-1]['ts'])} UTC "
+              f"({len(events)} événements lus, {bad} ligne(s) invalide(s) ignorée(s))")
+    print("ATTENTION : timestamps du journal à la SECONDE. Toute durée est connue à +-1 s ;"
+          " une durée de 0 s signifie « moins d'une seconde ».")
+    print(f"Épisode : début = déclencheur, fin = {GAP:g} s sans activité. "
+          "Durée = début -> dernier layout_apply.\n")
+    head = f"{'#':>3} {'début (UTC)':<14} {'fin':<14} {'durée_s':>7} {'passes':>6} {'cmds':>5} " \
+           f"{'clamp':>5} {'fail':>5} {'retro':>5} {'hold':>4}  déclencheurs"
+    print(head)
+    print("-" * len(head))
+    for i, r in enumerate(rows, 1):
+        print(f"{i:>3} {fmt_time(r['start']):<14} {fmt_time(r['end'])[6:]:<14} "
+              f"{fmt(r['time_to_stable_s'], 0):>7} {r['passes']:>6} {r['commands']:>5} "
+              f"{r['clamped'] + r['clamped_events']:>5} {r['failed'] + r['failed_events']:>5} "
+              f"{r['feedback']:>5} {'oui' if r['settling_hold'] else '-':>4}  {','.join(r['triggers'])}")
+    print("\nclamp = clamped des layout_apply + événements layout_clamped ; "
+          "fail = failed des layout_apply + événements layout_failed ; retro = rétroaction.\n")
+
+    def line(label, s, unit=""):
+        print(f"  {label:<26} n={s['n']:<4} médiane={fmt(s['median'])}{unit}  "
+              f"p90={fmt(s['p90'])}{unit}  max={fmt(s['max'])}{unit}")
+
+    print("RÉSUMÉ")
+    print(f"  épisodes : {summary['episodes']} (dont {summary['episodes_with_layout_apply']} avec >=1 layout_apply ; "
+          f"{summary['episodes_with_settling_hold']} avec hold de settling)")
+    print(f"  épisodes à 1 seule passe : {summary['episodes_single_pass']} / {summary['episodes_with_layout_apply']}")
+    line("temps jusqu'à stabilité", summary["time_to_stable_s"], " s")
+    line("passes (layout_apply)", summary["passes"])
+    line("commandes", summary["commands"])
+    if summary["by_first_trigger"]:
+        print("\nPAR PREMIER DÉCLENCHEUR (épisodes avec >=1 layout_apply)")
+        for k, v in summary["by_first_trigger"].items():
+            print(f"  {k:<14} n={v['n']:<4} stabilité médiane={fmt(v['time_to_stable_s']['median'])} s "
+                  f"p90={fmt(v['time_to_stable_s']['p90'])} s | passes médiane={fmt(v['passes']['median'])} "
+                  f"p90={fmt(v['passes']['p90'])} max={fmt(v['passes']['max'])} | 1 passe : {v['single_pass']}")
+    print("\nMESURES NATIVES EN MILLISECONDES (précises, indépendantes de la seconde)")
+    for k, s in summary["native_ms"].items():
+        line(k, s, " ms")
+
+
+if __name__ == "__main__":
+    main()
