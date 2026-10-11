@@ -252,10 +252,16 @@ public struct DesktopCommandService {
         to desktopID: DesktopID,
         snapshot: DaemonSnapshot
     ) -> StageCommandResult {
-        beginLayoutCommand("desktop.switch")
-        defer { finishLayoutCommand("desktop.switch") }
         // Préparé hors verrou : config et fenêtres visibles de l'écran (aucune E/S dans `mutate`).
         let stageConfig = ConfigReloadService.shared.currentConfig().stageManager
+        // Stage active du bureau cible à arbre : application immédiate, sans l'attente globale de
+        // `LayoutCommandActivity` (R12). Mode lu sur une copie de l'état, comme la transaction le verra.
+        var preview = store.state()
+        var targetPreview = preview.scope(displayID: display.id, desktopID: desktopID)
+        targetPreview.applyConfiguredStages(stageConfig)
+        let targetUsesTree = targetPreview.stages.first { $0.id == targetPreview.activeStageID }?.mode.usesTreeEngine == true
+        if !targetUsesTree { beginLayoutCommand("desktop.switch") }
+        defer { if !targetUsesTree { finishLayoutCommand("desktop.switch") } }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let visibleWindows = windowsByID.values.filter {
             display.frame.cgRect.contains($0.frame.center) && !HiddenWindowPlacement.isHiddenOrLegacyOffscreen($0.frame.cgRect, in: snapshot.displays)
@@ -305,15 +311,28 @@ public struct DesktopCommandService {
                 applied += 1
             }
         }
-        for member in targetStage?.members ?? [] {
-            guard let window = windowsByID[member.windowID] else { continue }
-            if service.setFrame(member.frame.cgRect, of: window) != nil {
-                applied += 1
+        let layoutAttempted: Int
+        if targetStage?.mode.usesTreeEngine == true {
+            // Mode arbre (A11, T094) : frames finales de l'arbre en une application, dans une
+            // nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
+            let tick = service.applyTreeScope(
+                StageScope(displayID: display.id, desktopID: desktopID, stageID: plan.targetStageID),
+                cause: "desktop.switch",
+                generation: PlacementGeneration.shared.next()
+            )
+            layoutAttempted = tick.commands
+            applied += tick.applied + tick.clamped
+        } else {
+            for member in targetStage?.members ?? [] {
+                guard let window = windowsByID[member.windowID] else { continue }
+                if service.setFrame(member.frame.cgRect, of: window) != nil {
+                    applied += 1
+                }
             }
+            let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+            layoutAttempted = result.attempted
+            applied += result.applied + result.clamped
         }
-
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
-        applied += result.applied + result.clamped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focused = windowsByID[focusedID] {
             _ = service.focus(focused)
@@ -326,12 +345,12 @@ public struct DesktopCommandService {
                 "hidden": String(plan.hiddenIDs.count),
                 "shown": String(targetWindowIDs.count),
                 "applied": String(applied),
-                "layout": String(result.attempted)
+                "layout": String(layoutAttempted)
             ]
         ))
 
         return StageCommandResult(
-            message: "desktop focus \(desktopID.rawValue): hidden=\(plan.hiddenIDs.count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(result.attempted)",
+            message: "desktop focus \(desktopID.rawValue): hidden=\(plan.hiddenIDs.count) shown=\(targetWindowIDs.count) applied=\(applied) layout=\(layoutAttempted)",
             changed: true
         )
     }

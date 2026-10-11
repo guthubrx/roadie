@@ -102,30 +102,138 @@ public struct WindowCommandService {
         return WindowCommandResult(message: ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
     }
 
-    /// Applique une mutation sur l'arbre BSP persistant d'un stage `.spatialBsp` et force le
-    /// re-tile (retrait de l'intent). Persistance gérée par stageStore (flock + writer).
-    /// Retourne true si l'arbre a changé.
-    private func applyBSPTreeMutation(scope: StageScope, mutate: (BSPTree) -> BSPTree) -> Bool {
+    /// Fenêtre active et arbre de son scope, si ce scope utilise le moteur à arbre
+    /// (`usesTreeEngine` : `spatialBsp` et son alias `mutableBsp`). Arbre vide s'il n'est pas
+    /// encore construit. nil pour les autres modes.
+    private func activeTree(in snapshot: DaemonSnapshot) -> (active: ScopedWindowSnapshot, scope: StageScope, tree: BSPTree)? {
+        guard let active = activeWindow(in: snapshot),
+              let scope = active.scope,
+              snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+        else { return nil }
+        return (active, scope, stageStore.state().bspTree(for: scope) ?? .empty)
+    }
+
+    private enum TreeVerb: String {
+        case move
+        case warp
+        case resize
+    }
+
+    /// `move`, `warp` et `resize` en mode arbre (SPEC-017 R12, T090) : mutation de l'arbre persisté,
+    /// puis une seule application immédiate par `applyTreeScope`, dans une nouvelle génération, sans
+    /// l'attente globale de 2 s de `LayoutCommandActivity`. Voisines et frontières sont mesurées sur
+    /// l'arbre projeté (A9). `move` échange les feuilles (yabai --swap) ; `warp` retire la fenêtre et
+    /// la réinsère en coupant la voisine selon la forme de sa feuille (R3) ; `resize` pousse le bord
+    /// désigné vers l'extérieur, ou à défaut tire la frontière opposée vers l'intérieur.
+    // O(n²) au pire - n = feuilles de l'arbre, borné (voir BSPTree).
+    private func treeCommand(
+        _ verb: TreeVerb,
+        _ direction: Direction,
+        snapshot: DaemonSnapshot,
+        context: (active: ScopedWindowSnapshot, scope: StageScope, tree: BSPTree)
+    ) -> WindowCommandResult {
+        let (active, scope, tree) = context
+        let id = active.window.id
+        let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot)
+        let frames = geometry?.frames(of: tree) ?? [:]
+        let mutation: (BSPTree) -> BSPTree
+        var neighbor: ScopedWindowSnapshot?
+        switch verb {
+        case .resize:
+            guard let geometry, let frame = frames[id], let edge = BSPEdge(rawValue: direction.rawValue) else {
+                let result = WindowCommandResult(message: "resize \(direction.rawValue): window not in tree", changed: false)
+                appendWindowCommandEvent(verb: "resize", direction: direction, snapshot: snapshot, active: active, scope: scope, result: result, extra: ["strategy": "tree"])
+                return result
+            }
+            // Le même décalage déplace le bord désigné vers l'extérieur et le bord opposé vers
+            // l'intérieur : `adjustingFence` ne lit que le bord de la frontière visée.
+            let target: CGRect = switch direction {
+            case .left: frame.offsetBy(dx: -resizeStep, dy: 0)
+            case .right: frame.offsetBy(dx: resizeStep, dy: 0)
+            case .up: frame.offsetBy(dx: 0, dy: -resizeStep)
+            case .down: frame.offsetBy(dx: 0, dy: resizeStep)
+            }
+            mutation = { tree in
+                let pushed = tree.adjustingFence(of: id, edge: edge, to: target, in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
+                guard pushed == tree else { return pushed }
+                return tree.adjustingFence(of: id, edge: edge.opposite, to: target, in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
+            }
+        case .move, .warp:
+            guard let geometry,
+                  let neighborID = treeNeighbor(of: id, direction: direction, frames: frames),
+                  let found = snapshot.windows.first(where: { $0.window.id == neighborID })
+            else {
+                let result = sendActiveToAdjacentDisplay(direction, from: snapshot, verb: verb.rawValue)
+                appendWindowCommandEvent(verb: verb.rawValue, direction: direction, snapshot: snapshot, active: active, result: result)
+                return result
+            }
+            neighbor = found
+            if verb == .move {
+                mutation = { $0.swapping(id, neighborID) }
+            } else {
+                let side: BSPInsertionSide = (direction == .right || direction == .down) ? .right : .left
+                mutation = {
+                    $0.removing(id).inserting(id, at: neighborID, side: side, in: geometry.container, innerGap: geometry.innerGap, excluding: geometry.absent)
+                }
+            }
+        }
         let changed = stageStore.mutate { state -> Bool in
-            guard let existing = state.bspTree(for: scope) else { return false }
-            let mutated = mutate(existing)
+            let existing = state.bspTree(for: scope) ?? .empty
+            let mutated = mutation(existing)
             guard mutated != existing else { return false }
             state.setBSPTree(mutated, for: scope)
             return true
         }
-        guard changed else { return false }
-        service.removeLayoutIntent(scope: scope)
-        return true
+        var tick: MaintenanceTick?
+        if changed {
+            service.removeLayoutIntent(scope: scope)
+            tick = service.applyTreeScope(
+                scope,
+                cause: "window.\(verb.rawValue).\(direction.rawValue)",
+                generation: PlacementGeneration.shared.next()
+            )
+        }
+        _ = focusWindow(active.window)
+        let result = WindowCommandResult(
+            message: "\(verb.rawValue) \(direction.rawValue): tree changed=\(changed) applied=\(tick?.applied ?? 0) failed=\(tick?.failed ?? 0)",
+            changed: changed
+        )
+        appendWindowCommandEvent(
+            verb: verb.rawValue,
+            direction: direction,
+            snapshot: snapshot,
+            active: active,
+            neighbor: neighbor,
+            scope: scope,
+            result: result,
+            extra: [
+                "strategy": "tree",
+                "treeApplied": String(tick?.applied ?? 0),
+                "treeCommands": String(tick?.commands ?? 0)
+            ]
+        )
+        return result
     }
 
-    private func isSpatialBSP(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
-        snapshot.state.stage(scope: scope)?.mode == .spatialBsp
+    /// Voisine de `id` dans `direction`, mesurée sur les frames de l'arbre projeté (A9).
+    /// Égalité départagée par identifiant, pour un résultat déterministe. O(n).
+    private func treeNeighbor(of id: WindowID, direction: Direction, frames: [WindowID: CGRect]) -> WindowID? {
+        guard let origin = frames[id] else { return nil }
+        let best = frames
+            .filter { $0.key != id }
+            .map { (id: $0.key, score: neighborScore(from: origin, to: $0.value, direction: direction)) }
+            .min { $0.score != $1.score ? $0.score < $1.score : $0.id.rawValue < $1.id.rawValue }
+        guard let best, best.score.isFinite else { return nil }
+        return best.id
     }
 
     public func move(_ direction: Direction) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        if let context = activeTree(in: snapshot) {
+            return treeCommand(.move, direction, snapshot: snapshot, context: context)
+        }
         beginLayoutCommand("window.move.\(direction.rawValue)")
         defer { finishLayoutCommand("window.move.\(direction.rawValue)") }
-        let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
@@ -136,25 +244,6 @@ public struct WindowCommandService {
                 snapshot: snapshot,
                 active: activeWindow(in: snapshot),
                 result: result
-            )
-            return result
-        }
-        // Mode arbre persistant : échanger les deux feuilles dans l'arbre (yabai --swap).
-        if isSpatialBSP(scope: scope, in: snapshot) {
-            let changed = applyBSPTreeMutation(scope: scope) {
-                $0.swapping(pair.active.window.id, pair.neighbor.window.id)
-            }
-            _ = focusWindow(pair.active.window)
-            let result = WindowCommandResult(message: "move \(direction.rawValue): bsp swap changed=\(changed)", changed: changed)
-            appendWindowCommandEvent(
-                verb: "move",
-                direction: direction,
-                snapshot: snapshot,
-                active: pair.active,
-                neighbor: pair.neighbor,
-                scope: scope,
-                result: result,
-                extra: ["strategy": "spatial_bsp"]
             )
             return result
         }
@@ -199,9 +288,12 @@ public struct WindowCommandService {
     }
 
     public func warp(_ direction: Direction) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        if let context = activeTree(in: snapshot) {
+            return treeCommand(.warp, direction, snapshot: snapshot, context: context)
+        }
         beginLayoutCommand("window.warp.\(direction.rawValue)")
         defer { finishLayoutCommand("window.warp.\(direction.rawValue)") }
-        let snapshot = service.snapshot()
         guard let pair = activeAndNeighbor(in: snapshot, direction: direction),
               let scope = pair.active.scope
         else {
@@ -212,28 +304,6 @@ public struct WindowCommandService {
                 snapshot: snapshot,
                 active: activeWindow(in: snapshot),
                 result: result
-            )
-            return result
-        }
-        // Mode arbre persistant : déplacer la fenêtre à côté de la voisine (yabai --warp).
-        if isSpatialBSP(scope: scope, in: snapshot) {
-            let side: BSPInsertionSide = (direction == .right || direction == .down) ? .right : .left
-            let wide = snapshot.displays.first(where: { $0.id == scope.displayID })
-                .map { $0.visibleFrame.cgRect.width >= $0.visibleFrame.cgRect.height } ?? true
-            let changed = applyBSPTreeMutation(scope: scope) {
-                $0.warping(pair.active.window.id, nextTo: pair.neighbor.window.id, side: side, containerIsWide: wide)
-            }
-            _ = focusWindow(pair.active.window)
-            let result = WindowCommandResult(message: "warp \(direction.rawValue): bsp warp changed=\(changed)", changed: changed)
-            appendWindowCommandEvent(
-                verb: "warp",
-                direction: direction,
-                snapshot: snapshot,
-                active: pair.active,
-                neighbor: pair.neighbor,
-                scope: scope,
-                result: result,
-                extra: ["strategy": "spatial_bsp"]
             )
             return result
         }
@@ -287,9 +357,12 @@ public struct WindowCommandService {
     }
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
+        let snapshot = service.snapshot()
+        if let context = activeTree(in: snapshot) {
+            return treeCommand(.resize, direction, snapshot: snapshot, context: context)
+        }
         beginLayoutCommand("window.resize.\(direction.rawValue)")
         defer { finishLayoutCommand("window.resize.\(direction.rawValue)") }
-        let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
@@ -300,27 +373,6 @@ public struct WindowCommandService {
                 snapshot: snapshot,
                 active: nil,
                 result: result
-            )
-            return result
-        }
-        // Mode arbre persistant : ajuster le ratio du split concerné (resize qui persiste).
-        if isSpatialBSP(scope: scope, in: snapshot) {
-            let orientation: BSPOrientation = (direction == .left || direction == .right) ? .vertical : .horizontal
-            let step = 0.05
-            let delta = (direction == .right || direction == .down) ? step : -step
-            let changed = applyBSPTreeMutation(scope: scope) {
-                $0.resizing(window: active.window.id, orientation: orientation, delta: delta)
-            }
-            _ = focusWindow(active.window)
-            let result = WindowCommandResult(message: "resize \(direction.rawValue): bsp ratio changed=\(changed)", changed: changed)
-            appendWindowCommandEvent(
-                verb: "resize",
-                direction: direction,
-                snapshot: snapshot,
-                active: active,
-                scope: scope,
-                result: result,
-                extra: ["strategy": "spatial_bsp"]
             )
             return result
         }
@@ -937,16 +989,6 @@ public struct WindowCommandService {
                 )
             )
         }
-        if snapshot.state.stage(scope: scope)?.mode == .mutableBsp,
-           let plan = mutableBspNeighborWarpPlan(
-            active: active,
-            neighbor: neighbor,
-            direction: direction,
-            scopedWindows: scopedWindows
-           ) {
-            return plan
-        }
-
         let horizontal = direction == .left || direction == .right
         var targetGroup = scopedWindows
             .filter { isOnTargetSide($0.frame.cgRect, from: active.frame.cgRect, direction: direction) }
@@ -980,54 +1022,6 @@ public struct WindowCommandService {
         var placements: [WindowID: CGRect] = [:]
         placements.merge(planGroup(firstGroup, in: rects.first, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
         placements.merge(planGroup(secondGroup, in: rects.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
-
-        let windowsByID = Dictionary(uniqueKeysWithValues: scopedWindows.map { ($0.id, $0) })
-        let commands = placements.keys.sorted().compactMap { id -> ApplyCommand? in
-            guard let window = windowsByID[id], let frame = placements[id], !framesAreClose(window.frame.cgRect, frame) else { return nil }
-            return ApplyCommand(window: window, frame: Rect(frame.integral))
-        }
-        return commands.isEmpty ? nil : ApplyPlan(commands: commands)
-    }
-
-    private func mutableBspNeighborWarpPlan(
-        active: WindowSnapshot,
-        neighbor: WindowSnapshot,
-        direction: Direction,
-        scopedWindows: [WindowSnapshot]
-    ) -> ApplyPlan? {
-        let gap = CGFloat(service.innerGap())
-        let activeFrame = active.frame.cgRect
-        let neighborFrame = neighbor.frame.cgRect
-        let horizontal = direction == .left || direction == .right
-
-        let sourceSiblings: [WindowSnapshot]
-        let sourceRect: CGRect?
-        if horizontal {
-            sourceSiblings = scopedWindows.filter { window in
-                window.id != active.id
-                    && window.id != neighbor.id
-                    && rangesOverlap(window.frame.cgRect.minX...window.frame.cgRect.maxX, activeFrame.minX...activeFrame.maxX)
-            }.sorted { lhs, rhs in lhs.frame.cgRect.midY < rhs.frame.cgRect.midY }
-            sourceRect = union([activeFrame] + sourceSiblings.map { $0.frame.cgRect })
-        } else {
-            sourceSiblings = scopedWindows.filter { window in
-                window.id != active.id
-                    && window.id != neighbor.id
-                    && rangesOverlap(window.frame.cgRect.minY...window.frame.cgRect.maxY, activeFrame.minY...activeFrame.maxY)
-            }.sorted { lhs, rhs in lhs.frame.cgRect.midX < rhs.frame.cgRect.midX }
-            sourceRect = union([activeFrame] + sourceSiblings.map { $0.frame.cgRect })
-        }
-        guard !sourceSiblings.isEmpty, let sourceRect else { return nil }
-
-        let pairRects = split(neighborFrame, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
-        let activeFirst = direction == .left || direction == .up
-        var placements: [WindowID: CGRect] = [
-            active.id: (activeFirst ? pairRects.first : pairRects.second).integral,
-            neighbor.id: (activeFirst ? pairRects.second : pairRects.first).integral
-        ]
-
-        let sourceIDs = sourceSiblings.map(\.id)
-        placements.merge(planGroup(sourceIDs, in: sourceRect, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: scopedWindows.map { ($0.id, $0) })
         let commands = placements.keys.sorted().compactMap { id -> ApplyCommand? in
@@ -1150,14 +1144,6 @@ public struct WindowCommandService {
         var placements = [first: parts.first.integral]
         placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
         return placements
-    }
-
-    private func union(_ frames: [CGRect]) -> CGRect? {
-        guard var result = frames.first else { return nil }
-        for frame in frames.dropFirst() {
-            result = result.union(frame)
-        }
-        return result
     }
 
     private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
@@ -1291,4 +1277,48 @@ public struct WindowCommandService {
         ).integral
     }
 
+}
+
+private extension BSPEdge {
+    var opposite: BSPEdge {
+        switch self {
+        case .left: .right
+        case .right: .left
+        case .up: .down
+        case .down: .up
+        }
+    }
+}
+
+/// Géométrie de l'arbre d'un scope pour les commandes (SPEC-017 R12, A9) : conteneur, marge
+/// intérieure et feuilles absentes du snapshot (gardées pendant leur grâce, non affichées).
+struct CommandTreeGeometry {
+    var container: CGRect
+    var innerGap: CGFloat
+    var absent: Set<WindowID>
+
+    /// Frames de `tree` projeté sans les feuilles absentes. O(n).
+    func frames(of tree: BSPTree) -> [WindowID: CGRect] {
+        tree.projected(excluding: absent).place(in: container, innerGap: innerGap)
+    }
+}
+
+extension SnapshotService {
+    /// Géométrie de l'arbre de `scope`, en lecture seule (ni l'arbre ni l'état ne sont écrits).
+    /// Le conteneur est la zone couverte par la disposition `bsp` des mêmes fenêtres : même zone
+    /// visible, mêmes marges extérieures, même nombre de fenêtres que la disposition de l'arbre
+    /// (les marges ne sont pas exposées hors de `DaemonSnapshot.swift`). nil sans fenêtre placée.
+    // O(n log n) - n = fenêtres du scope.
+    func commandTreeGeometry(for scope: StageScope, tree: BSPTree, in snapshot: DaemonSnapshot) -> CommandTreeGeometry? {
+        let live = snapshot.windows.compactMap { entry in
+            entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
+        }
+        let placements = layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: live, mode: .bsp).placements.values
+        guard let first = placements.first else { return nil }
+        return CommandTreeGeometry(
+            container: placements.dropFirst().reduce(first) { $0.union($1) },
+            innerGap: CGFloat(innerGap()),
+            absent: Set(tree.windowIDs).subtracting(live)
+        )
+    }
 }

@@ -178,7 +178,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "focus back-and-forth|left|right|up|down"),
         CLICommandSpec(usage: "bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "move|warp|resize left|right|up|down"),
-        CLICommandSpec(usage: "mode bsp|mutableBsp|masterStack|float"),
+        CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|float"),
         CLICommandSpec(usage: "toggle fullscreen|native-fullscreen"),
         CLICommandSpec(usage: "toggle floating", implemented: false),
         CLICommandSpec(usage: "window display N"),
@@ -201,7 +201,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "stage assign-empty"),
         CLICommandSpec(usage: "stage summon WINDOW_ID"),
         CLICommandSpec(usage: "stage move-to-display N|left|right|up|down [--follow|--no-follow]"),
-        CLICommandSpec(usage: "stage mode bsp|mutableBsp|masterStack|float"),
+        CLICommandSpec(usage: "stage mode bsp|spatialBsp|masterStack|float"),
         CLICommandSpec(usage: "stage prev|next"),
         CLICommandSpec(usage: "balance"),
         CLICommandSpec(usage: "daemon health|heal [--json]"),
@@ -265,7 +265,7 @@ public final class CLICommandRouter {
     nonisolated public static func isDaemonRouted(_ args: [String]) -> Bool {
         guard let command = args.first, !args.contains("--help"), !args.contains("-h") else { return false }
         switch command {
-        case "focus", "move", "warp", "wrap", "resize", "stage", "desktop", "display", "window", "layout", "rules", "query":
+        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query":
             return true
         case "restore":
             return args.dropFirst().first == "unhide-all"
@@ -601,10 +601,8 @@ public final class CLICommandRouter {
         case "stage":
             return try runStageCommand(Array(args.dropFirst()))
         case "balance":
-            let snapshot = service.snapshot()
-            service.removeLayoutIntents(in: snapshot)
-            let result = service.apply(service.applyPlan(from: service.snapshot()))
-            out(TextFormatter.applyResult(result))
+            let result = LayoutCommandService(service: service).balance()
+            return finish(result.message, changed: result.changed)
         case "daemon":
             if args.dropFirst().first == "health" {
                 let report = DaemonHealthService(service: service).run()
@@ -1725,10 +1723,12 @@ public final class CLICommandRouter {
     }
 
     private func runModeCommand(_ rawMode: String?) throws -> Int32 {
-        guard let rawMode, let mode = WindowManagementMode(roadieValue: rawMode) else {
-            err("roadie: mode requires bsp|mutableBsp|masterStack|float")
+        guard let rawMode, let parsed = WindowManagementMode(roadieValue: rawMode) else {
+            err("roadie: mode requires bsp|spatialBsp|masterStack|float")
             return 64
         }
+        // `mutableBsp` (et `yabai`) reste accepté comme alias de l'arbre (SPEC-017 A8).
+        let mode: WindowManagementMode = parsed == .mutableBsp ? .spatialBsp : parsed
         let result = StageCommandService(service: service).setMode(mode)
         return finish(result.message, changed: result.changed)
     }

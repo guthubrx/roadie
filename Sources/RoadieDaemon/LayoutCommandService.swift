@@ -2,6 +2,7 @@ import Foundation
 import RoadieAX
 import RoadieCore
 import RoadieStages
+import RoadieTiler
 
 public struct LayoutCommandResult: Equatable, Sendable {
     public var message: String
@@ -22,9 +23,45 @@ public struct LayoutCommandService {
         self.events = events
     }
 
+    /// `roadie balance` (SPEC-017 R12, T091) : dans la stage active de chaque écran en mode arbre,
+    /// ratios remis à 0,5 et appliqués tout de suite ; les autres modes gardent la passe de
+    /// disposition globale, sans les scopes à arbre.
+    // O(w log w) - w = fenêtres du snapshot.
+    public func balance() -> LayoutCommandResult {
+        let snapshot = service.snapshot()
+        service.removeLayoutIntents(in: snapshot)
+        let treeScopes = snapshot.displays.compactMap { display -> StageScope? in
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+            else { return nil }
+            return scope
+        }
+        let treeResults = treeScopes.map { scope in
+            treeCommand("balance", label: "balance", scope: scope, snapshot: snapshot) { tree, _ in tree.balanced() }
+        }
+        let scopesByWindowID = Dictionary(
+            snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let plan = ApplyPlan(commands: service.applyPlan(from: service.snapshot()).commands.filter { command in
+            scopesByWindowID[command.window.id].map { !treeScopes.contains($0) } ?? true
+        })
+        let result = service.apply(plan)
+        return LayoutCommandResult(
+            message: "balance: trees=\(treeScopes.count) commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            changed: treeResults.contains { $0.changed } || result.failed < result.attempted || plan.commands.isEmpty
+        )
+    }
+
     public func flatten() -> LayoutCommandResult {
         guard let context = activeContext() else {
             return LayoutCommandResult(message: "layout flatten: no active scope", changed: false)
+        }
+        // Mode arbre : `layout flatten` équivaut à `balance` (R12).
+        if context.stage.mode.usesTreeEngine {
+            return treeCommand("layout.flatten", label: "layout flatten", scope: context.scope, snapshot: context.snapshot) { tree, _ in
+                tree.balanced()
+            }
         }
         service.removeLayoutIntent(scope: context.scope)
         let ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
@@ -43,6 +80,17 @@ public struct LayoutCommandService {
         }
         guard let context = activeContext() else {
             return LayoutCommandResult(message: "layout split: no active scope", changed: false)
+        }
+        // Mode arbre : impose le sens du split parent de la fenêtre active. Vocabulaire Roadie :
+        // `horizontal` = côte à côte (frontière verticale), `vertical` = empilées.
+        if context.stage.mode.usesTreeEngine {
+            guard let activeID = activeWindowID(in: context) else {
+                return LayoutCommandResult(message: "layout split: no active window", changed: false)
+            }
+            let orientation: BSPOrientation = axis == "horizontal" ? .vertical : .horizontal
+            return treeCommand("layout.split", label: "layout split \(axis)", scope: context.scope, snapshot: context.snapshot) { tree, absent in
+                tree.settingSplit(of: activeID, to: orientation, excluding: absent)
+            }
         }
         guard let display = context.snapshot.displays.first(where: { $0.id == context.scope.displayID }) else {
             return LayoutCommandResult(message: "layout split: no active display", changed: false)
@@ -73,59 +121,36 @@ public struct LayoutCommandService {
         )
     }
 
+    /// Inverse le sens du split parent de la fenêtre active (yabai --toggle split). Mode arbre
+    /// uniquement ; `direction` est accepté pour la compatibilité de la CLI et ignoré.
     public func toggleSplit(_ direction: Direction? = nil) -> LayoutCommandResult {
         guard let context = activeContext() else {
             return LayoutCommandResult(message: "layout toggle-split: no active scope", changed: false)
         }
-        guard context.stage.mode == .mutableBsp else {
-            return LayoutCommandResult(message: "layout toggle-split: requires mutableBsp", changed: false)
+        guard context.stage.mode.usesTreeEngine else {
+            return LayoutCommandResult(message: "layout toggle-split: requires spatialBsp", changed: false)
         }
-        guard let activeID = context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last,
-              let active = context.snapshot.windows.first(where: { $0.scope == context.scope && $0.window.id == activeID && $0.window.isTileCandidate })?.window
-        else {
+        guard let activeID = activeWindowID(in: context) else {
             return LayoutCommandResult(message: "layout toggle-split: no active window", changed: false)
         }
-
-        let scopedWindows = context.snapshot.windows
-            .filter { $0.scope == context.scope && $0.window.isTileCandidate }
-            .map(\.window)
-        guard let pair = toggleNeighbor(for: active, in: scopedWindows, direction: direction) else {
-            return LayoutCommandResult(message: "layout toggle-split: no neighbor", changed: false)
+        return treeCommand("layout.toggle_split", label: "layout toggle-split", scope: context.scope, snapshot: context.snapshot) { tree, absent in
+            tree.togglingSplit(of: activeID, excluding: absent)
         }
-
-        let pairFrame = active.frame.cgRect.union(pair.window.frame.cgRect)
-        let orderedPair = pair.currentHorizontal
-            ? [active, pair.window].sorted { $0.frame.cgRect.midX < $1.frame.cgRect.midX }
-            : [active, pair.window].sorted { $0.frame.cgRect.midY < $1.frame.cgRect.midY }
-        let targetHorizontal = !pair.currentHorizontal
-        let placements = linearPlacements(
-            orderedPair.map(\.id),
-            in: pairFrame,
-            horizontal: targetHorizontal,
-            gap: CGFloat(service.innerGap())
-        )
-        let commands = orderedPair.compactMap { window -> ApplyCommand? in
-            guard let frame = placements[window.id], !framesAreClose(window.frame.cgRect, frame) else { return nil }
-            return ApplyCommand(window: window, frame: Rect(frame.integral))
-        }
-        let plan = ApplyPlan(commands: commands)
-        service.removeLayoutIntent(scope: context.scope)
-        let result = service.apply(plan)
-        let ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
-        persist(scope: context.scope, ordered: ordered, snapshot: context.snapshot, result: result)
-        emit(command: "layout.toggle_split", changed: result.failed < result.attempted || plan.commands.isEmpty)
-        let axis = targetHorizontal ? "horizontal" : "vertical"
-        return LayoutCommandResult(
-            message: "layout toggle-split \(axis): commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: result.failed < result.attempted || plan.commands.isEmpty
-        )
     }
 
     public func insert(_ direction: Direction) -> LayoutCommandResult {
+        insert(direction, verb: "insert")
+    }
+
+    private func insert(_ direction: Direction, verb: String) -> LayoutCommandResult {
         guard let context = activeContext(),
               let activeID = context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
         else {
-            return LayoutCommandResult(message: "layout insert: no active window", changed: false)
+            return LayoutCommandResult(message: "layout \(verb): no active window", changed: false)
+        }
+        // Mode arbre : refus explicite (R12) ; « unavailable » donne un code de sortie non nul.
+        if context.stage.mode.usesTreeEngine {
+            return LayoutCommandResult(message: "layout \(verb): unavailable in tree mode (spatialBsp), use warp", changed: false)
         }
         var ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
         ordered.removeAll { $0 == activeID }
@@ -170,66 +195,41 @@ public struct LayoutCommandService {
     }
 
     public func join(with direction: Direction) -> LayoutCommandResult {
-        insert(direction)
+        insert(direction, verb: "join-with")
     }
 
-    private func toggleNeighbor(
-        for active: WindowSnapshot,
-        in windows: [WindowSnapshot],
-        direction: Direction?
-    ) -> (window: WindowSnapshot, currentHorizontal: Bool)? {
-        let activeFrame = active.frame.cgRect
-        let scored = windows.compactMap { candidate -> (window: WindowSnapshot, currentHorizontal: Bool, score: CGFloat)? in
-            guard candidate.id != active.id else { return nil }
-            let candidateFrame = candidate.frame.cgRect
-            if let direction, !isOnSide(candidateFrame, from: activeFrame, direction: direction) {
-                return nil
-            }
+    private func activeWindowID(in context: (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)) -> WindowID? {
+        context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
+    }
 
-            let horizontalOverlap = overlapLength(activeFrame.minY...activeFrame.maxY, candidateFrame.minY...candidateFrame.maxY)
-            let verticalOverlap = overlapLength(activeFrame.minX...activeFrame.maxX, candidateFrame.minX...candidateFrame.maxX)
-            let horizontalScore = horizontalOverlap > 1
-                ? rangeGap(activeFrame.minX...activeFrame.maxX, candidateFrame.minX...candidateFrame.maxX)
-                    + abs(activeFrame.midY - candidateFrame.midY) * 0.1
-                    - horizontalOverlap * 0.01
-                : CGFloat.infinity
-            let verticalScore = verticalOverlap > 1
-                ? rangeGap(activeFrame.minY...activeFrame.maxY, candidateFrame.minY...candidateFrame.maxY)
-                    + abs(activeFrame.midX - candidateFrame.midX) * 0.1
-                    - verticalOverlap * 0.01
-                : CGFloat.infinity
-
-            if horizontalScore <= verticalScore, horizontalScore.isFinite {
-                return (candidate, true, horizontalScore)
-            }
-            if verticalScore.isFinite {
-                return (candidate, false, verticalScore)
-            }
-            return nil
+    /// Commande sur l'arbre d'une stage (SPEC-017 R12, T091) : mutation de l'arbre persisté, puis
+    /// une seule application immédiate par `applyTreeScope`, dans une nouvelle génération.
+    /// `mutation` reçoit les feuilles absentes du snapshot (A9), à exclure de la géométrie.
+    // O(n²) au pire - n = feuilles de l'arbre, borné (voir BSPTree).
+    private func treeCommand(
+        _ command: String,
+        label: String,
+        scope: StageScope,
+        snapshot: DaemonSnapshot,
+        mutation: (BSPTree, Set<WindowID>) -> BSPTree
+    ) -> LayoutCommandResult {
+        let live = Set(snapshot.windows.compactMap { entry in
+            entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
+        })
+        let treeChanged = service.effectiveStageStore.mutate { state -> Bool in
+            let existing = state.bspTree(for: scope) ?? .empty
+            let mutated = mutation(existing, Set(existing.windowIDs).subtracting(live))
+            guard mutated != existing else { return false }
+            state.setBSPTree(mutated, for: scope)
+            return true
         }
-        return scored.min { lhs, rhs in
-            if abs(lhs.score - rhs.score) > 0.001 { return lhs.score < rhs.score }
-            return lhs.window.id.rawValue < rhs.window.id.rawValue
-        }.map { ($0.window, $0.currentHorizontal) }
-    }
-
-    private func isOnSide(_ candidate: CGRect, from active: CGRect, direction: Direction) -> Bool {
-        switch direction {
-        case .left: candidate.midX < active.midX
-        case .right: candidate.midX > active.midX
-        case .up: candidate.midY < active.midY
-        case .down: candidate.midY > active.midY
-        }
-    }
-
-    private func overlapLength(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {
-        max(0, min(lhs.upperBound, rhs.upperBound) - max(lhs.lowerBound, rhs.lowerBound))
-    }
-
-    private func rangeGap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {
-        if lhs.overlaps(rhs) { return 0 }
-        if lhs.upperBound < rhs.lowerBound { return rhs.lowerBound - lhs.upperBound }
-        return lhs.lowerBound - rhs.upperBound
+        let tick = service.applyTreeScope(scope, cause: command, generation: PlacementGeneration.shared.next())
+        let changed = treeChanged || tick.applied + tick.clamped > 0
+        emit(command: command, changed: changed || tick.failed == 0)
+        return LayoutCommandResult(
+            message: "\(label): tree changed=\(treeChanged) commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)",
+            changed: changed
+        )
     }
 
     private func activeContext() -> (snapshot: DaemonSnapshot, scope: StageScope, stage: RoadieStages.StageState)? {

@@ -663,14 +663,21 @@ public final class RailController {
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue), "targetDisplayID": targetDisplayID.rawValue]
             ))
             _ = commandService.summon(windowID: windowID, displayID: targetDisplayID)
-        case .placeWindow(let windowID, let orderedWindowIDs, let placements):
+        case .placeWindow(let candidate):
+            let windowID = candidate.sourceWindowID
             print("rail place window \(windowID.rawValue)")
             fflush(stdout)
             events.append(RoadieEvent(
                 type: "rail_window_place",
                 details: ["displayID": displayID.rawValue, "windowID": String(windowID.rawValue)]
             ))
-            _ = commandService.place(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, placements: placements)
+            _ = commandService.place(
+                windowID: windowID,
+                displayID: displayID,
+                orderedWindowIDs: candidate.orderedWindowIDs,
+                placements: candidate.placements,
+                treeMutation: candidate.treeMutation
+            )
         case .moveStage(let stageID, let position):
             print("rail reorder stage \(stageID.rawValue) -> \(position)")
             fflush(stdout)
@@ -759,7 +766,7 @@ public final class RailController {
             print("rail drag summon window \(drag.windowID.rawValue)")
             fflush(stdout)
             if let candidate = dropPreview.update(sourceWindowID: drag.windowID, at: screenPoint, displayID: targetDisplayID) {
-                perform(.placeWindow(candidate.sourceWindowID, candidate.orderedWindowIDs, candidate.placements), displayID: candidate.displayID)
+                perform(.placeWindow(candidate), displayID: candidate.displayID)
             } else {
                 perform(.summonWindow(drag.windowID), displayID: targetDisplayID)
             }
@@ -782,6 +789,8 @@ public final class RailController {
                   let target = panel.windowDropTarget(at: screenPoint)
             else { continue }
             windowDragController.cancelPendingDrag()
+            // Dépôt reconnu sur le navrail : il consomme la session de geste (A17).
+            _ = UserInputActivity.shared.takeGesture()
             print("rail external drag window \(windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
             fflush(stdout)
             perform(.moveWindow(windowID, target.stageID, target.insertionIndex, false), displayID: displayID)
@@ -1219,7 +1228,7 @@ enum RailAction {
     case moveWindow(WindowID, StageID, Int?, Bool)
     case moveWindowToDesktop(WindowID, DesktopID)
     case moveWindowToDisplay(WindowID, DisplayID)
-    case placeWindow(WindowID, [WindowID], [WindowID: Rect])
+    case placeWindow(DropPreviewCandidate)
     case moveStage(StageID, Int)
     case renameStage(StageID, String)
     case moveStageToDisplay(StageID, DisplayID)

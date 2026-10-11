@@ -121,6 +121,31 @@ struct CLICommandRouterTests {
         #expect(!CLICommandRouter.isDaemonRouted([]))
     }
 
+    /// SPEC-017 : `balance` passe par le daemon (registre des frames écrites partagé, A4) ;
+    /// `mode mutableBsp` reste accepté et sélectionne le moteur à arbre (A8).
+    @Test
+    func balanceIsDaemonRoutedAndMutableBspModeSelectsTree() {
+        #expect(CLICommandRouter.isDaemonRouted(["balance"]))
+        let store = StageStore(path: tempPath("cli-mode-alias"))
+        let router = CLICommandRouter(makeService: { _ in
+            let provider = PowerUserProvider(windows: [powerWindow(1, x: 0)])
+            return SnapshotService(
+                provider: provider,
+                frameWriter: PowerUserWriter(provider: provider),
+                config: RoadieConfig(),
+                intentStore: LayoutIntentStore(path: tempPath("cli-mode-alias-intents")),
+                stageStore: store,
+                events: EventLog(path: tempPath("cli-mode-alias-events")),
+                persistStateChanges: false
+            )
+        })
+
+        let response = router.run(["mode", "mutableBsp"])
+
+        #expect(response.exitCode == 0)
+        #expect(store.state().scopes.first?.stages.first?.mode == .spatialBsp)
+    }
+
     /// T211 : une commande de lecture reçoit un service non persistant ; une action, le service normal.
     @Test
     func readCommandsGetReadOnlyService() {

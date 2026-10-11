@@ -114,14 +114,22 @@ public struct WindowBookmarkCommandService {
             }
         }
 
-        for member in plan.targetStage?.members ?? [] {
-            guard let window = windowsByID[member.windowID] else { continue }
-            if service.setFrame(member.frame.cgRect, of: window) != nil {
-                applied += 1
+        let layoutAttempted: Int
+        if plan.targetStage?.mode.usesTreeEngine == true {
+            // Mode arbre (A11, T094) : frames finales de l'arbre en une application, dans une
+            // nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
+            let tick = service.applyTreeScope(targetScope, cause: "bookmark.focus", generation: PlacementGeneration.shared.next())
+            layoutAttempted = tick.commands
+            applied += tick.applied + tick.clamped
+        } else {
+            for member in plan.targetStage?.members ?? [] {
+                guard let window = windowsByID[member.windowID] else { continue }
+                if service.setFrame(member.frame.cgRect, of: window) != nil {
+                    applied += 1
+                }
             }
+            layoutAttempted = service.apply(service.applyPlan(from: service.snapshot(followFocus: false))).attempted
         }
-
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
         let ok = service.focus(targetEntry.window)
         if ok {
             mouseFollower.follow(targetEntry.window)
@@ -132,12 +140,12 @@ public struct WindowBookmarkCommandService {
             scope: targetScope,
             details: eventDetails(bookmark).merging([
                 "restored": String(applied),
-                "layout": String(layoutResult.attempted)
+                "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
         return WindowCommandResult(
             message: ok
-                ? "bookmark focus \(name): window=\(bookmark.windowID.rawValue) restored=\(applied) layout=\(layoutResult.attempted)"
+                ? "bookmark focus \(name): window=\(bookmark.windowID.rawValue) restored=\(applied) layout=\(layoutAttempted)"
                 : "bookmark focus \(name): focus failed",
             changed: ok
         )

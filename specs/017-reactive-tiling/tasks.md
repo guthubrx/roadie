@@ -202,17 +202,17 @@
 
 ### Lot L9 - Commandes, bascules et restaurations sur l'arbre (Opus) [US4]
 
-- [ ] T090 [P] [US4] Dans `Sources/RoadieDaemon/WindowCommands.swift`, `move`, `swap`, `warp` et `resize` sur l'arbre appliquent par `applyTreeScope`, sans l'attente globale de 2 s. Sens de `resize` : le bord désigné est poussé vers l'extérieur, sinon la frontière opposée est tirée vers l'intérieur.
-- [ ] T091 [P] [US4] Dans `LayoutCommandService.swift`, `CLICommandRouter.swift` et `WidthAdjustmentService.swift` :
+- [x] T090 [P] [US4] Dans `Sources/RoadieDaemon/WindowCommands.swift`, `move`, `swap`, `warp` et `resize` sur l'arbre appliquent par `applyTreeScope`, sans l'attente globale de 2 s. Sens de `resize` : le bord désigné est poussé vers l'extérieur, sinon la frontière opposée est tirée vers l'intérieur.
+- [x] T091 [P] [US4] Dans `LayoutCommandService.swift`, `CLICommandRouter.swift` et `WidthAdjustmentService.swift` :
   - `balance` utilise `balanced()` ;
   - `layout toggle-split` utilise `togglingSplit` ;
   - `layout split` utilise `settingSplit` ;
   - `layout flatten` équivaut à `balance` ;
   - `layout insert`, `join-with` et `width` renvoient un refus explicite en mode arbre (code de sortie non nul, message clair).
-- [ ] T092 [P] [US4] Dans `Sources/RoadieDaemon/DropPreviewController.swift`, construire l'aperçu et le dépôt sur l'arbre projeté : échange au centre, insertion du côté sur un bord. Supprimer le reflow `mutableBsp` et la persistance de l'arbre pendant l'aperçu.
-- [ ] T093 [P] [US4] `stage_place_window` (`StageCommands.swift`) et le dépôt par le navrail (`RailController.swift`) insèrent dans l'arbre de la stage cible, selon l'index demandé.
-- [ ] T094 [P] [US1] La bascule de stage (`StageCommands.swift:1029-1041`), la bascule de bureau (`DesktopCommands.swift:308`) et l'aller vers un signet (`WindowBookmarkCommands.swift:117`) posent directement les frames finales de l'arbre pour les modes à arbre, en une application (A11).
-- [ ] T095 [US4] Tests dans `PowerUserLayoutCommandTests.swift`, `PowerUserDesktopCommandTests.swift` et `DropPreviewEngineTests.swift` :
+- [x] T092 [P] [US4] Dans `Sources/RoadieDaemon/DropPreviewController.swift`, construire l'aperçu et le dépôt sur l'arbre projeté : échange au centre, insertion du côté sur un bord. Supprimer le reflow `mutableBsp` et la persistance de l'arbre pendant l'aperçu.
+- [x] T093 [P] [US4] `stage_place_window` (`StageCommands.swift`) et le dépôt par le navrail (`RailController.swift`) insèrent dans l'arbre de la stage cible, selon l'index demandé.
+- [x] T094 [P] [US1] La bascule de stage (`StageCommands.swift:1029-1041`), la bascule de bureau (`DesktopCommands.swift:308`) et l'aller vers un signet (`WindowBookmarkCommands.swift:117`) posent directement les frames finales de l'arbre pour les modes à arbre, en une application (A11).
+- [x] T095 [US4] Tests dans `PowerUserLayoutCommandTests.swift`, `PowerUserDesktopCommandTests.swift` et `DropPreviewEngineTests.swift` :
   - chaque commande des raccourcis BetterTouchTool de l'utilisateur agit en une application ;
   - `toggle-split` et `balance` sur l'arbre ;
   - refus explicite de `insert` et `width` ;

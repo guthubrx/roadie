@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import RoadieAX
 import RoadieCore
+import RoadieTiler
 
 @MainActor
 final class DropPreviewController {
@@ -38,14 +39,12 @@ final class DropPreviewController {
     func update(
         sourceWindowID: WindowID,
         at point: CGPoint,
-        displayID: DisplayID? = nil,
-        stableSourceFrame: CGRect? = nil
+        displayID: DisplayID? = nil
     ) -> DropPreviewCandidate? {
         guard let candidate = engine.candidate(
             sourceWindowID: sourceWindowID,
             at: point,
             displayID: displayID,
-            stableSourceFrame: stableSourceFrame,
             context: dragContext
         ) else {
             hide()
@@ -76,6 +75,16 @@ struct DropPreviewCandidate: Equatable {
     var placements: [WindowID: Rect]
     var frame: CGRect
     var operation: DropPreviewOperation
+    /// Fenêtre visée par le dépôt (nil : dépôt hors de toute fenêtre).
+    var targetWindowID: WindowID? = nil
+
+    /// Mutation de l'arbre de la stage cible pour ce dépôt (SPEC-017 R12), appliquée sur l'état
+    /// frais au moment du dépôt. nil sans fenêtre visée.
+    var treeMutation: ((BSPTree) -> BSPTree)? {
+        guard let targetWindowID else { return nil }
+        let (operation, source) = (self.operation, sourceWindowID)
+        return { operation.applied(to: $0, source: source, target: targetWindowID) }
+    }
 }
 
 enum DropPreviewOperation: String, Equatable {
@@ -85,6 +94,22 @@ enum DropPreviewOperation: String, Equatable {
     case insertUp
     case insertDown
     case swap
+
+    /// Dépôt sur l'arbre (SPEC-017 R12, T092) : échange des feuilles au centre ; sur un bord, la
+    /// fenêtre est retirée puis insérée du côté visé de la cible, la coupe suivant ce bord (bord
+    /// gauche ou droit : côte à côte, bord haut ou bas : empilées). O(n²) au pire, n borné.
+    func applied(to tree: BSPTree, source: WindowID, target: WindowID) -> BSPTree {
+        switch self {
+        case .swap:
+            return tree.swapping(source, target)
+        case .append:
+            return tree
+        case .insertLeft, .insertRight, .insertUp, .insertDown:
+            let side: BSPInsertionSide = (self == .insertLeft || self == .insertUp) ? .left : .right
+            let sideBySide = self == .insertLeft || self == .insertRight
+            return tree.removing(source).inserting(source, nextTo: target, side: side, containerIsWide: sideBySide)
+        }
+    }
 
     var tint: NSColor {
         switch self {
@@ -113,7 +138,6 @@ struct DropPreviewEngine {
         sourceWindowID: WindowID,
         at point: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        stableSourceFrame: CGRect? = nil,
         context: DropPreviewContext? = nil
     ) -> DropPreviewCandidate? {
         let axPoint = ScreenCoordinate.nsPointToAX(point)
@@ -121,7 +145,6 @@ struct DropPreviewEngine {
             sourceWindowID: sourceWindowID,
             atAXPoint: axPoint,
             displayID: forcedDisplayID,
-            stableSourceFrame: stableSourceFrame,
             context: context
         )
     }
@@ -130,11 +153,9 @@ struct DropPreviewEngine {
         sourceWindowID: WindowID,
         atAXPoint axPoint: CGPoint,
         displayID forcedDisplayID: DisplayID? = nil,
-        stableSourceFrame: CGRect? = nil,
         context: DropPreviewContext? = nil
     ) -> DropPreviewCandidate? {
         let context = context ?? makeContext()
-        let persistedStateBeforeSnapshot = context.persistedStateBeforeSnapshot
         let snapshot = context.snapshot
         guard let display = display(containing: axPoint, forcedDisplayID: forcedDisplayID, in: snapshot.displays),
               let scope = snapshot.state.activeScope(on: display.id),
@@ -146,6 +167,16 @@ struct DropPreviewEngine {
                       && WindowDragReorderEligibility.accepts($0.window)
               })
         else { return nil }
+        if stage.mode.usesTreeEngine {
+            return treeCandidate(
+                sourceWindowID: sourceWindowID,
+                atAXPoint: axPoint,
+                display: display,
+                scope: scope,
+                snapshot: snapshot,
+                tree: context.persistedStateBeforeSnapshot.bspTree(for: scope) ?? .empty
+            )
+        }
 
         let activeEntries = snapshot.windows.filter { entry in
             entry.scope == scope && entry.window.isTileCandidate
@@ -165,35 +196,13 @@ struct DropPreviewEngine {
         if let target {
             operation = dropOperation(at: axPoint, in: target.window.frame.cgRect, sourceIsActive: activeEntries.contains { $0.window.id == sourceWindowID })
             ordered = reordered(ordered, sourceID: sourceWindowID, targetID: target.window.id, operation: operation)
-            if stage.mode == .mutableBsp {
-                let persistedSourceFrame = stableSourceFrame
-                    ?? persistedFrame(for: sourceWindowID, in: scope, state: persistedStateBeforeSnapshot)
-                if operation == .swap {
-                    placements = swapPlacements(
-                        sourceID: sourceWindowID,
-                        target: target.window,
-                        activeEntries: activeEntries,
-                        persistedSourceFrame: persistedSourceFrame
-                    ) ?? [:]
-                } else {
-                    placements = reflowingTargetPlacements(
-                        sourceID: sourceWindowID,
-                        target: target.window,
-                        operation: operation,
-                        activeEntries: activeEntries,
-                        persistedSourceFrame: persistedSourceFrame,
-                        display: display
-                    ) ?? [:]
-                }
-            } else {
-                placements = structuralPlacements(
-                    sourceID: sourceWindowID,
-                    target: target.window,
-                    operation: operation,
-                    activeEntries: activeEntries,
-                    display: display
-                ) ?? [:]
-            }
+            placements = structuralPlacements(
+                sourceID: sourceWindowID,
+                target: target.window,
+                operation: operation,
+                activeEntries: activeEntries,
+                display: display
+            ) ?? [:]
         } else {
             operation = .append
             ordered = ordered.filter { $0 != sourceWindowID } + [sourceWindowID]
@@ -212,6 +221,40 @@ struct DropPreviewEngine {
             placements: Dictionary(uniqueKeysWithValues: placements.map { ($0.key, Rect($0.value.integral)) }),
             frame: frame.integral,
             operation: operation
+        )
+    }
+
+    /// Aperçu sur l'arbre projeté (SPEC-017 R12, T092), en lecture seule : cible et zone de dépôt
+    /// sont mesurées sur les frames de l'arbre (la frame transitoire de la fenêtre glissée ne compte
+    /// pas), puis l'arbre muté par le dépôt est placé. Rien n'est persisté pendant l'aperçu. Pas de
+    /// candidat hors de toute fenêtre : au relâchement, la fenêtre revient à sa place dans l'arbre.
+    // O(n²) au pire - n = feuilles de l'arbre, borné.
+    private func treeCandidate(
+        sourceWindowID: WindowID,
+        atAXPoint axPoint: CGPoint,
+        display: DisplaySnapshot,
+        scope: StageScope,
+        snapshot: DaemonSnapshot,
+        tree: BSPTree
+    ) -> DropPreviewCandidate? {
+        guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot),
+              let target = geometry.frames(of: tree)
+                .filter({ $0.key != sourceWindowID && $0.value.contains(axPoint) })
+                .min(by: { $0.value.area < $1.value.area })
+        else { return nil }
+        let operation = dropOperation(at: axPoint, in: target.value, sourceIsActive: true)
+        let mutated = operation.applied(to: tree, source: sourceWindowID, target: target.key)
+        let placements = geometry.frames(of: mutated)
+        guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
+        return DropPreviewCandidate(
+            sourceWindowID: sourceWindowID,
+            displayID: display.id,
+            scope: scope,
+            orderedWindowIDs: mutated.windowIDs,
+            placements: placements.mapValues { Rect($0.integral) },
+            frame: frame.integral,
+            operation: operation,
+            targetWindowID: target.key
         )
     }
 
@@ -256,20 +299,6 @@ struct DropPreviewEngine {
             insertionIndex = min(adjustedTargetIndex + 1, result.count)
         }
         result.insert(sourceID, at: insertionIndex)
-        return result
-    }
-
-    private func swapPlacements(
-        sourceID: WindowID,
-        target: WindowSnapshot,
-        activeEntries: [ScopedWindowSnapshot],
-        persistedSourceFrame: CGRect?
-    ) -> [WindowID: CGRect]? {
-        guard let source = activeEntries.first(where: { $0.window.id == sourceID })?.window else { return nil }
-        let sourceFrame = persistedSourceFrame ?? source.frame.cgRect
-        var result = Dictionary(uniqueKeysWithValues: activeEntries.map { ($0.window.id, $0.window.frame.cgRect) })
-        result[sourceID] = target.frame.cgRect
-        result[target.id] = sourceFrame
         return result
     }
 
@@ -324,117 +353,6 @@ struct DropPreviewEngine {
         result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
         result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
         return result
-    }
-
-    private func reflowingTargetPlacements(
-        sourceID: WindowID,
-        target: WindowSnapshot,
-        operation: DropPreviewOperation,
-        activeEntries: [ScopedWindowSnapshot],
-        persistedSourceFrame: CGRect?,
-        display: DisplaySnapshot
-    ) -> [WindowID: CGRect]? {
-        guard operation != .swap, operation != .append else { return nil }
-
-        let horizontal: Bool
-        let sourceFirst: Bool
-        switch operation {
-        case .insertLeft:
-            horizontal = true
-            sourceFirst = true
-        case .insertRight:
-            horizontal = true
-            sourceFirst = false
-        case .insertUp:
-            horizontal = false
-            sourceFirst = true
-        case .insertDown:
-            horizontal = false
-            sourceFirst = false
-        case .append, .swap:
-            return nil
-        }
-
-        let gap = CGFloat(service.innerGap())
-        let windows = activeEntries.map(\.window)
-        let peers = windows.filter { $0.id != sourceID }
-        guard peers.contains(where: { $0.id == target.id }) else { return nil }
-
-        // During a native titlebar drag, macOS continuously moves the source
-        // window frame under the cursor. Use the stable stage frame instead,
-        // otherwise the transient drag frame expands and distorts the layout.
-        let stableFrames = peers.map { $0.frame.cgRect } + [persistedSourceFrame].compactMap { $0 }
-        let container = union(stableFrames)
-            ?? display.visibleFrame.cgRect
-        let orderedGroups = spatiallySortedWindows(peers, in: container).map { window -> DropReflowGroup in
-            window.id == target.id
-                ? .pair(sourceID: sourceID, targetID: target.id, horizontal: horizontal, sourceFirst: sourceFirst, targetFrame: target.frame.cgRect)
-                : .single(id: window.id, frame: window.frame.cgRect)
-        }
-        let result = planReflowGroups(orderedGroups, in: container, gap: gap)
-        let expectedIDs = Set(windows.map(\.id))
-        guard Set(result.keys) == expectedIDs else { return nil }
-        return result
-    }
-
-    private func persistedFrame(for sourceID: WindowID, in scope: StageScope, state: PersistentStageState) -> CGRect? {
-        state
-            .scopes
-            .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
-            .stages
-            .first { $0.id == scope.stageID }?
-            .members
-            .first { $0.windowID == sourceID }?
-            .frame
-            .cgRect
-    }
-
-    private func planReflowGroups(_ groups: [DropReflowGroup], in rect: CGRect, gap: CGFloat) -> [WindowID: CGRect] {
-        guard let first = groups.first else { return [:] }
-        guard groups.count > 1 else {
-            return first.placements(in: rect.integral, gap: gap)
-        }
-
-        let leftCount = groups.count / 2
-        let left = Array(groups.prefix(leftCount))
-        let right = Array(groups.dropFirst(leftCount))
-        let horizontal = rect.width >= rect.height
-        let ratio = splitRatio(left: left, right: right, rect: rect, horizontal: horizontal, gap: gap)
-        let firstCount = max(1, Int((ratio * 100).rounded()))
-        let secondCount = max(1, 100 - firstCount)
-        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: firstCount, secondCount: secondCount)
-        var result = planReflowGroups(left, in: parts.first, gap: gap)
-        result.merge(planReflowGroups(right, in: parts.second, gap: gap)) { _, rhs in rhs }
-        return result
-    }
-
-    private func splitRatio(left: [DropReflowGroup], right: [DropReflowGroup], rect: CGRect, horizontal: Bool, gap: CGFloat) -> CGFloat {
-        guard let leftFrame = union(left.map(\.observedFrame)),
-              let rightFrame = union(right.map(\.observedFrame))
-        else { return 0.5 }
-        let usableExtent = horizontal ? rect.width - gap : rect.height - gap
-        guard usableExtent > 0 else { return 0.5 }
-        if managedSplitLooksUsable(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal) {
-            let edge = horizontal ? leftFrame.maxX - rect.minX : leftFrame.maxY - rect.minY
-            return (edge / usableExtent).clamped(to: 0.1...0.9)
-        }
-        let leftExtent = horizontal ? leftFrame.width : leftFrame.height
-        let rightExtent = horizontal ? rightFrame.width : rightFrame.height
-        let total = leftExtent + rightExtent
-        guard total > 0 else { return 0.5 }
-        return (leftExtent / total).clamped(to: 0.1...0.9)
-    }
-
-    private func managedSplitLooksUsable(leftFrame: CGRect, rightFrame: CGRect, rect: CGRect, horizontal: Bool) -> Bool {
-        let tolerance = CGFloat(24)
-        if horizontal {
-            return leftFrame.minX.isClose(to: rect.minX, tolerance: tolerance)
-                && rightFrame.maxX.isClose(to: rect.maxX, tolerance: tolerance)
-                && leftFrame.maxX <= rightFrame.minX + tolerance
-        }
-        return leftFrame.minY.isClose(to: rect.minY, tolerance: tolerance)
-            && rightFrame.maxY.isClose(to: rect.maxY, tolerance: tolerance)
-            && leftFrame.maxY <= rightFrame.minY + tolerance
     }
 
     private func orderedTargetGroup(sourceID: WindowID, targetID: WindowID, peers: [WindowID], operation: DropPreviewOperation) -> [WindowID] {
@@ -553,16 +471,19 @@ final class WindowDragReorderController {
     private let preview: DropPreviewController
     private let commandService: StageCommandService
     private let events: EventLog
+    private let userInput: UserInputActivity
     private var pending: PendingWindowDrag?
 
     init(
         preview: DropPreviewController,
         commandService: StageCommandService = StageCommandService(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        userInput: UserInputActivity = .shared
     ) {
         self.preview = preview
         self.commandService = commandService
         self.events = events
+        self.userInput = userInput
     }
 
     var hasActiveDrag: Bool {
@@ -591,7 +512,6 @@ final class WindowDragReorderController {
             windowID: source.window.id,
             displayID: source.scope.displayID,
             startPoint: point,
-            sourceFrame: source.window.frame.cgRect,
             didDrag: false,
             context: context
         )
@@ -606,7 +526,7 @@ final class WindowDragReorderController {
         }
         drag.didDrag = true
         WindowDragActivity.shared.markActive(windowID: drag.windowID)
-        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point, stableSourceFrame: drag.sourceFrame),
+        if let candidate = preview.update(sourceWindowID: drag.windowID, at: point),
            candidate != drag.lastCandidate {
             events.append(RoadieEvent(type: "window_drag_preview", scope: candidate.scope, details: [
                 "windowID": String(candidate.sourceWindowID.rawValue),
@@ -625,13 +545,17 @@ final class WindowDragReorderController {
             WindowDragActivity.shared.finish()
         }
         guard drag.didDrag,
-              let candidate = preview.update(sourceWindowID: drag.windowID, at: point, stableSourceFrame: drag.sourceFrame)
+              let candidate = preview.update(sourceWindowID: drag.windowID, at: point)
         else { return }
+        // Dépôt reconnu : il consomme la session de geste, le maintien n'ajuste donc aucune
+        // frontière pour ce relâchement (A17).
+        _ = userInput.takeGesture()
         let result = commandService.place(
             windowID: candidate.sourceWindowID,
             displayID: candidate.displayID,
             orderedWindowIDs: candidate.orderedWindowIDs,
-            placements: candidate.placements
+            placements: candidate.placements,
+            treeMutation: candidate.treeMutation
         )
         events.append(RoadieEvent(type: "window_drag_apply", scope: candidate.scope, details: [
             "windowID": String(candidate.sourceWindowID.rawValue),
@@ -662,7 +586,6 @@ private struct PendingWindowDrag {
     var windowID: WindowID
     var displayID: DisplayID
     var startPoint: CGPoint
-    var sourceFrame: CGRect
     var didDrag: Bool
     var lastCandidate: DropPreviewCandidate?
     var context: DropPreviewContext
@@ -726,72 +649,9 @@ private final class DropPreviewOverlayView: NSView {
     }
 }
 
-private enum DropReflowGroup {
-    case single(id: WindowID, frame: CGRect)
-    case pair(
-        sourceID: WindowID,
-        targetID: WindowID,
-        horizontal: Bool,
-        sourceFirst: Bool,
-        targetFrame: CGRect
-    )
-
-    var observedFrame: CGRect {
-        switch self {
-        case .single(_, let frame):
-            return frame
-        case .pair(_, _, _, _, let targetFrame):
-            return targetFrame
-        }
-    }
-
-    func placements(in rect: CGRect, gap: CGFloat) -> [WindowID: CGRect] {
-        switch self {
-        case .single(let id, _):
-            return [id: rect.integral]
-        case .pair(let sourceID, let targetID, let horizontal, let sourceFirst, _):
-            let parts = split(rect, horizontally: horizontal, gap: gap)
-            let sourceRect = sourceFirst ? parts.first : parts.second
-            let targetRect = sourceFirst ? parts.second : parts.first
-            return [
-                sourceID: sourceRect.integral,
-                targetID: targetRect.integral
-            ]
-        }
-    }
-
-    private func split(_ rect: CGRect, horizontally: Bool, gap: CGFloat) -> (first: CGRect, second: CGRect) {
-        if horizontally {
-            let usable = max(0, rect.width - gap)
-            let firstWidth = floor(usable / 2)
-            return (
-                CGRect(x: rect.minX, y: rect.minY, width: firstWidth, height: rect.height),
-                CGRect(x: rect.minX + firstWidth + gap, y: rect.minY, width: usable - firstWidth, height: rect.height)
-            )
-        }
-
-        let usable = max(0, rect.height - gap)
-        let firstHeight = floor(usable / 2)
-        return (
-            CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: firstHeight),
-            CGRect(x: rect.minX, y: rect.minY + firstHeight + gap, width: rect.width, height: usable - firstHeight)
-        )
-    }
-}
-
 private extension CGRect {
     var area: CGFloat {
         max(0, width) * max(0, height)
-    }
-}
-
-private extension CGFloat {
-    func isClose(to value: CGFloat, tolerance: CGFloat) -> Bool {
-        abs(self - value) <= tolerance
-    }
-
-    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
-        Swift.min(range.upperBound, Swift.max(range.lowerBound, self))
     }
 }
 

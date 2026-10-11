@@ -36,9 +36,15 @@ public struct WidthAdjustmentService {
         ]))
         guard let display = snapshot.displays.first,
               let scope = snapshot.state.activeScope(on: display.id),
-              let stage = snapshot.state.stage(scope: scope),
-              stage.mode == .bsp || stage.mode == .mutableBsp || stage.mode == .masterStack
+              let stage = snapshot.state.stage(scope: scope)
         else {
+            return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
+        }
+        // Mode arbre : refus explicite (SPEC-017 R12) ; « unavailable » donne un code de sortie non nul.
+        if stage.mode.usesTreeEngine {
+            return WidthAdjustmentResult(changed: false, message: "width: unavailable in tree mode (spatialBsp), use resize")
+        }
+        guard stage.mode == .bsp || stage.mode == .masterStack else {
             return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
         }
 

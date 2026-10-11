@@ -144,6 +144,12 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
         }
         let window = entry.window
+        // Dépôt par le navrail à un rang donné (T093) : géométrie de l'arbre cible lue avant la transaction.
+        var current = store.state()
+        let rankedScope = StageScope(displayID: displayID, desktopID: activeScope(displayID: displayID, in: &current).desktopID, stageID: stageID)
+        let rankedGeometry = insertionIndex == nil
+            ? nil
+            : service.commandTreeGeometry(for: rankedScope, tree: current.bspTree(for: rankedScope) ?? .empty, in: snapshot)
 
         let (scope, removedPin) = store.mutate { state -> (PersistentStageScope, PersistentWindowPin?) in
             for scopeIndex in state.scopes.indices {
@@ -163,6 +169,23 @@ public struct StageCommandService {
                 defaultMode: config.tiling.defaultStrategy
             )
             state.update(scope)
+            // Stage cible à arbre : la fenêtre entre dans l'arbre au rang demandé (après `update`,
+            // qui remplace le scope entier).
+            if insertionIndex != nil, scope.stages.first(where: { $0.id == stageID })?.mode.usesTreeEngine == true {
+                if let sourceScope = entry.scope, sourceScope != targetScope, let sourceTree = state.bspTree(for: sourceScope) {
+                    state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+                }
+                state.setBSPTree(
+                    insertingRanked(
+                        windowID,
+                        in: scope.memberIDs(in: stageID),
+                        into: state.bspTree(for: targetScope) ?? .empty,
+                        geometry: rankedGeometry,
+                        fallback: display.visibleFrame.cgRect
+                    ),
+                    for: targetScope
+                )
+            }
             return (scope, pin)
         }
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
@@ -601,12 +624,18 @@ public struct StageCommandService {
         )
     }
 
+    /// `treeMutation` : mutation de l'arbre cible d'un dépôt glissé (échange ou insertion du côté
+    /// visé). Sans elle, une stage à arbre reçoit la fenêtre au rang demandé dans `orderedWindowIDs`.
     public func place(
         windowID: WindowID,
         displayID: DisplayID,
         orderedWindowIDs: [WindowID],
-        placements providedPlacements: [WindowID: Rect] = [:]
+        placements providedPlacements: [WindowID: Rect] = [:],
+        treeMutation: ((BSPTree) -> BSPTree)? = nil
     ) -> StageCommandResult {
+        if activeStageMode(displayID: displayID).usesTreeEngine {
+            return placeInTree(windowID: windowID, displayID: displayID, orderedWindowIDs: orderedWindowIDs, treeMutation: treeMutation)
+        }
         beginLayoutCommand("stage.place_window")
         defer { finishLayoutCommand("stage.place_window") }
         let snapshot = service.snapshot()
@@ -670,6 +699,123 @@ public struct StageCommandService {
                 || sourceRelayout.result.failed < sourceRelayout.result.attempted
                 || applyPlan.commands.isEmpty
         )
+    }
+
+    /// `stage_place_window` vers une stage à arbre (SPEC-017 R12, T093). Une transaction retire la
+    /// fenêtre de toutes les stages et de l'arbre de sa stage d'origine, l'ajoute à la stage active
+    /// de l'écran et mute l'arbre de celle-ci (`treeMutation`, sinon insertion au rang demandé).
+    /// Puis une application immédiate par scope touché, dans une même génération, sans l'attente
+    /// globale de `LayoutCommandActivity`.
+    // O(w + n²) - w = fenêtres du snapshot, n = feuilles de l'arbre cible (borné).
+    private func placeInTree(
+        windowID: WindowID,
+        displayID: DisplayID,
+        orderedWindowIDs: [WindowID],
+        treeMutation: ((BSPTree) -> BSPTree)?
+    ) -> StageCommandResult {
+        let snapshot = service.snapshot()
+        guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }),
+              let display = snapshot.displays.first(where: { $0.id == displayID })
+        else {
+            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
+        }
+        let window = sourceEntry.window
+        let sourceScope = sourceEntry.scope
+        var current = store.state()
+        let currentScope = activeScope(displayID: displayID, in: &current)
+        let plannedScope = StageScope(displayID: displayID, desktopID: currentScope.desktopID, stageID: currentScope.activeStageID)
+        let geometry = service.commandTreeGeometry(for: plannedScope, tree: current.bspTree(for: plannedScope) ?? .empty, in: snapshot)
+        let scope = store.mutate { state -> StageScope in
+            state.remove(windowID: windowID)
+            var persistentScope = activeScope(displayID: displayID, in: &state)
+            let stageID = persistentScope.activeStageID
+            persistentScope.assign(window: window, to: stageID)
+            persistentScope.orderMembers(orderedWindowIDs, in: stageID)
+            state.update(persistentScope)
+            let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
+            // Arbres mis à jour après `update`, qui remplace le scope entier.
+            if let sourceScope, sourceScope != scope, let sourceTree = state.bspTree(for: sourceScope) {
+                state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+            }
+            let tree = state.bspTree(for: scope) ?? .empty
+            state.setBSPTree(
+                treeMutation?(tree) ?? insertingRanked(windowID, in: orderedWindowIDs, into: tree, geometry: geometry, fallback: display.visibleFrame.cgRect),
+                for: scope
+            )
+            return scope
+        }
+        service.removeLayoutIntent(scope: scope)
+        let generation = PlacementGeneration.shared.next()
+        var sourceTick = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        if let sourceScope, sourceScope != scope {
+            service.removeLayoutIntent(scope: sourceScope)
+            if snapshot.state.stage(scope: sourceScope)?.mode.usesTreeEngine == true {
+                sourceTick = service.applyTreeScope(sourceScope, cause: "stage.place_window.source", generation: generation)
+            } else {
+                let relayout = relayoutActiveSourceScopes([sourceScope], excluding: scope, from: service.snapshot(followFocus: false))
+                sourceTick = MaintenanceTick(
+                    commands: relayout.plan.commands.count,
+                    applied: relayout.result.applied,
+                    clamped: relayout.result.clamped,
+                    failed: relayout.result.failed
+                )
+            }
+        }
+        let tick = service.applyTreeScope(scope, cause: "stage.place_window", generation: generation)
+        _ = service.focus(window)
+        events.append(RoadieEvent(
+            type: "stage_place_window",
+            scope: scope,
+            details: [
+                "windowID": String(windowID.rawValue),
+                "strategy": "tree",
+                "treeMutation": String(treeMutation != nil),
+                "commands": String(tick.commands),
+                "applied": String(tick.applied),
+                "clamped": String(tick.clamped),
+                "failed": String(tick.failed),
+                "sourceCommands": String(sourceTick.commands),
+                "sourceApplied": String(sourceTick.applied),
+                "sourceClamped": String(sourceTick.clamped),
+                "sourceFailed": String(sourceTick.failed)
+            ]
+        ))
+        return StageCommandResult(
+            message: "stage place: window=\(windowID.rawValue) tree commands=\(tick.commands + sourceTick.commands) applied=\(tick.applied + sourceTick.applied) failed=\(tick.failed + sourceTick.failed)",
+            changed: true
+        )
+    }
+
+    /// Insère `windowID` dans `tree` au rang qu'elle occupe dans `ordered` (index demandé par le
+    /// navrail ou par un dépôt sans cible, T093) : devant la fenêtre suivante présente dans l'arbre,
+    /// sinon derrière la précédente. Coupe selon la forme de la feuille visée (R3).
+    // O(n²) au pire - n = feuilles, borné.
+    private func insertingRanked(
+        _ windowID: WindowID,
+        in ordered: [WindowID],
+        into tree: BSPTree,
+        geometry: CommandTreeGeometry?,
+        fallback container: CGRect
+    ) -> BSPTree {
+        let rest = tree.removing(windowID)
+        let index = ordered.firstIndex(of: windowID)
+        let next = index.flatMap { ordered[($0 + 1)...].first { rest.contains($0) } }
+        let previous = index.flatMap { ordered[..<$0].last { rest.contains($0) } }
+        return rest.inserting(
+            windowID,
+            at: next ?? previous,
+            side: next == nil ? .right : .left,
+            in: geometry?.container ?? container,
+            innerGap: geometry?.innerGap ?? 0,
+            excluding: geometry?.absent ?? []
+        )
+    }
+
+    /// Mode de la stage active d'un écran, lu sans transaction (état en cache).
+    private func activeStageMode(displayID: DisplayID) -> WindowManagementMode {
+        var state = store.state()
+        let scope = activeScope(displayID: displayID, in: &state)
+        return scope.stages.first { $0.id == scope.activeStageID }?.mode ?? config.tiling.defaultStrategy
     }
 
     public func cycle(_ direction: StageCycleDirection) -> StageCommandResult {
@@ -820,10 +966,16 @@ public struct StageCommandService {
                     let persistMs = elapsedMs(since: persistStartedAt)
 
                     var applied = 0
-                    for member in targetMembers {
-                        guard let window = windowsByID[member.windowID] else { continue }
-                        if service.setFrame(member.frame.cgRect, of: window) != nil {
-                            applied += 1
+                    if targetStage?.mode.usesTreeEngine == true {
+                        // Mode arbre (A11) : frames finales de l'arbre, pas les frames mémorisées.
+                        let tick = service.applyTreeScope(switchScope, cause: "stage.switch.reconcile", generation: PlacementGeneration.shared.next())
+                        applied = tick.applied + tick.clamped
+                    } else {
+                        for member in targetMembers {
+                            guard let window = windowsByID[member.windowID] else { continue }
+                            if service.setFrame(member.frame.cgRect, of: window) != nil {
+                                applied += 1
+                            }
                         }
                     }
                     var focusedWindow = false
@@ -888,8 +1040,10 @@ public struct StageCommandService {
             )
         }
 
-        beginLayoutCommand("stage.switch", scopes: [switchScope])
-        defer { finishLayoutCommand("stage.switch", scopes: [switchScope]) }
+        // Stage cible à arbre : application immédiate, sans l'attente de `LayoutCommandActivity` (R12).
+        let targetUsesTree = (scope.stages.first { $0.id == stageID }?.mode ?? config.tiling.defaultStrategy).usesTreeEngine
+        if !targetUsesTree { beginLayoutCommand("stage.switch", scopes: [switchScope]) }
+        defer { if !targetUsesTree { finishLayoutCommand("stage.switch", scopes: [switchScope]) } }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         // Préparé hors verrou : fenêtres visibles de l'écran. O(w * d), w = fenêtres, d = écrans.
         let visibleWindows = windowsByID.values.filter {
@@ -1026,26 +1180,39 @@ public struct StageCommandService {
         let hideMs = elapsedMs(since: hideStartedAt)
 
         let showStartedAt = Date()
-        for member in transition.targetStage?.members ?? [] {
-            guard let window = windowsByID[member.windowID] else { continue }
-            let frame = fullscreenMemberID == nil || member.windowID == fullscreenMemberID
-                ? member.frame.cgRect
-                : HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
-            if service.setFrame(frame, of: window) != nil {
-                applied += 1
+        var showMs = 0.0
+        let layoutStartedAt: Date
+        let layoutAttempted: Int
+        if targetUsesTree, fullscreenMemberID == nil {
+            // Mode arbre (A11, T094) : les frames finales de l'arbre sont posées en une application,
+            // dans une nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
+            layoutStartedAt = showStartedAt
+            let tick = service.applyTreeScope(targetScope, cause: "stage.switch", generation: PlacementGeneration.shared.next())
+            layoutAttempted = tick.commands
+            applied += tick.applied + tick.clamped
+        } else {
+            for member in transition.targetStage?.members ?? [] {
+                guard let window = windowsByID[member.windowID] else { continue }
+                let frame = fullscreenMemberID == nil || member.windowID == fullscreenMemberID
+                    ? member.frame.cgRect
+                    : HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
+                if service.setFrame(frame, of: window) != nil {
+                    applied += 1
+                }
             }
-        }
-        let showMs = elapsedMs(since: showStartedAt)
+            showMs = elapsedMs(since: showStartedAt)
 
-        let layoutStartedAt = Date()
-        let layoutSnapshot = service.snapshot(followFocus: false)
-        var layoutPlan = service.applyPlan(from: layoutSnapshot)
-        if fullscreenMemberID != nil {
-            layoutPlan = applyPlanExcluding(scope: targetScope, from: layoutPlan, snapshot: layoutSnapshot)
+            layoutStartedAt = Date()
+            let layoutSnapshot = service.snapshot(followFocus: false)
+            var layoutPlan = service.applyPlan(from: layoutSnapshot)
+            if fullscreenMemberID != nil {
+                layoutPlan = applyPlanExcluding(scope: targetScope, from: layoutPlan, snapshot: layoutSnapshot)
+            }
+            let layoutResult = service.apply(layoutPlan)
+            layoutAttempted = layoutResult.attempted
+            applied += layoutResult.applied + layoutResult.clamped
         }
-        let layoutResult = service.apply(layoutPlan)
         let layoutMs = elapsedMs(since: layoutStartedAt)
-        applied += layoutResult.applied + layoutResult.clamped
         let focusStartedAt = Date()
         if let focusedID = transition.targetFocusedWindowID,
            let focusedWindow = windowsByID[focusedID] {
@@ -1061,7 +1228,8 @@ public struct StageCommandService {
                 "hidden": String(transition.hiddenWindowIDs.count),
                 "shown": String(transition.targetMembers.count),
                 "applied": String(applied),
-                "layout": String(layoutResult.attempted),
+                "layout": String(layoutAttempted),
+                "strategy": targetUsesTree && fullscreenMemberID == nil ? "tree" : "restore",
                 "fullscreenProtected": String(fullscreenMemberID != nil),
                 "durationMs": formatMs(totalMs),
                 "persistMs": formatMs(persistMs),
@@ -1073,8 +1241,8 @@ public struct StageCommandService {
         ))
 
         return StageCommandResult(
-            message: "stage switch \(stageID.rawValue): hidden=\(transition.hiddenWindowIDs.count) shown=\(transition.targetMembers.count) applied=\(applied) layout=\(layoutResult.attempted)",
-            changed: transition.previousID != stageID || applied > 0 || layoutResult.attempted > 0
+            message: "stage switch \(stageID.rawValue): hidden=\(transition.hiddenWindowIDs.count) shown=\(transition.targetMembers.count) applied=\(applied) layout=\(layoutAttempted)",
+            changed: transition.previousID != stageID || applied > 0 || layoutAttempted > 0
         )
     }
 

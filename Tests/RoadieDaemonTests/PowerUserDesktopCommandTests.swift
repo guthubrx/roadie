@@ -4,6 +4,7 @@ import Testing
 import RoadieAX
 import RoadieCore
 import RoadieDaemon
+import RoadieTiler
 
 @Suite
 struct PowerUserDesktopCommandTests {
@@ -726,10 +727,10 @@ struct PowerUserDesktopCommandTests {
         let store = StageStore(path: tempPath("power-stage-switch-ignores-missing-maximized"))
         store.save(PersistentStageState(scopes: [
             PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
-                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, focusedWindowID: current.id, members: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .bsp, focusedWindowID: current.id, members: [
                     PersistentStageMember(windowID: current.id, bundleID: current.bundleID, title: current.title, frame: current.frame),
                 ]),
-                PersistentStage(id: StageID(rawValue: "2"), mode: .mutableBsp, focusedWindowID: first.id, members: [
+                PersistentStage(id: StageID(rawValue: "2"), mode: .bsp, focusedWindowID: first.id, members: [
                     PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: firstTarget),
                     PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: secondTarget),
                     PersistentStageMember(
@@ -747,7 +748,7 @@ struct PowerUserDesktopCommandTests {
         let service = SnapshotService(
             provider: provider,
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             stageStore: store
         )
 
@@ -781,13 +782,13 @@ struct PowerUserDesktopCommandTests {
         store.save(PersistentStageState(
             scopes: [
                 PersistentStageScope(displayID: sourceDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .bsp, members: [
                         PersistentStageMember(windowID: remaining.id, bundleID: remaining.bundleID, title: remaining.title, frame: remaining.frame),
                         PersistentStageMember(windowID: moved.id, bundleID: moved.bundleID, title: moved.title, frame: moved.frame),
                     ])
                 ]),
                 PersistentStageScope(displayID: targetDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .bsp, members: [
                         PersistentStageMember(windowID: target.id, bundleID: target.bundleID, title: target.title, frame: target.frame),
                     ])
                 ])
@@ -817,6 +818,153 @@ struct PowerUserDesktopCommandTests {
         #expect(writer.frames[remaining.id] == Rect(x: 8, y: 8, width: 984, height: 784))
         #expect(events.contains("\"sourceCommands\":\"1\""))
         #expect(events.contains("\"sourceApplied\":\"1\""))
+    }
+
+    // MARK: - Mode arbre (SPEC-017 T093, T094, T095)
+    //
+    // Les bascules posent les frames finales de l'arbre par `applyTreeScope` (lot L8) : au plus une
+    // écriture par fenêtre, jamais la frame mémorisée du membre, et pas d'attente de commande.
+
+    @Test
+    func treeStageSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() {
+        let displayID = DisplayID(rawValue: "display-main")
+        let current = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let first = powerWindow(2, x: 999, y: 799, width: 300, height: 300)
+        let second = powerWindow(3, x: 999, y: 799, width: 300, height: 300)
+        let memorized = Rect(x: 100, y: 100, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [current, first, second])
+        provider.focusedID = current.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("tree-stage-switch"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, focusedWindowID: current.id,
+                                members: [treeMember(current)], bspTree: .leaf(current.id)),
+                PersistentStage(id: StageID(rawValue: "2"), mode: .spatialBsp, focusedWindowID: first.id, members: [
+                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: memorized),
+                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: memorized),
+                ], bspTree: .split(orientation: .vertical, ratio: 0.5, first: .leaf(first.id), second: .leaf(second.id))),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = treeService(provider: provider, writer: writer, store: store, name: "tree-stage-switch")
+        let eventPath = tempPath("tree-stage-switch-events")
+        let activity = LayoutCommandActivity(path: tempPath("tree-stage-switch-activity"), enabled: true)
+
+        let result = StageCommandService(service: service, store: store, events: EventLog(path: eventPath), commandActivity: activity)
+            .switchTo("2", displayID: displayID)
+
+        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(result.changed)
+        #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "2"))
+        #expect(events.contains("\"strategy\":\"tree\""))
+        #expect(!activity.isActive())
+        expectFinalTreeFrames(writer, [first.id: Rect(x: 0, y: 0, width: 500, height: 800), second.id: Rect(x: 500, y: 0, width: 500, height: 800)], never: memorized)
+    }
+
+    @Test
+    func treeDesktopSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() {
+        let displayID = DisplayID(rawValue: "display-main")
+        let current = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let target = powerWindow(2, x: 999, y: 100, width: 300, height: 300)
+        let memorized = Rect(x: 400, y: 100, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [current, target])
+        provider.focusedID = current.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("tree-desktop-switch"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, members: [treeMember(current)], bspTree: .leaf(current.id)),
+            ]),
+            PersistentStageScope(displayID: displayID, desktopID: DesktopID(rawValue: 2), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, focusedWindowID: target.id, members: [
+                    PersistentStageMember(windowID: target.id, bundleID: target.bundleID, title: target.title, frame: memorized),
+                ], bspTree: .leaf(target.id)),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = treeService(provider: provider, writer: writer, store: store, name: "tree-desktop-switch")
+        let activity = LayoutCommandActivity(path: tempPath("tree-desktop-switch-activity"), enabled: true)
+
+        let result = DesktopCommandService(service: service, store: store, events: EventLog(path: tempPath("tree-desktop-switch-events")), commandActivity: activity)
+            .focus(DesktopID(rawValue: 2))
+
+        #expect(result.changed)
+        #expect(store.state().currentDesktopID(for: displayID) == DesktopID(rawValue: 2))
+        #expect(!activity.isActive())
+        expectFinalTreeFrames(writer, [target.id: Rect(x: 0, y: 0, width: 1000, height: 800)], never: memorized)
+    }
+
+    @Test
+    func treePlaceOnAnotherDisplayMovesLeafAtRequestedRank() {
+        let sourceDisplay = powerDisplay("display-main", index: 1, x: 0)
+        let targetDisplay = powerDisplay("display-side", index: 2, x: 1000)
+        let remaining = powerWindow(1, x: 0, y: 0, width: 500, height: 800)
+        let moved = powerWindow(2, x: 500, y: 0, width: 500, height: 800)
+        let target = powerWindow(3, x: 1000, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(displays: [sourceDisplay, targetDisplay], windows: [remaining, moved, target])
+        provider.focusedID = moved.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("tree-place-rank"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: sourceDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, members: [remaining, moved].map(treeMember),
+                                    bspTree: .split(orientation: .vertical, ratio: 0.5, first: .leaf(remaining.id), second: .leaf(moved.id))),
+                ]),
+                PersistentStageScope(displayID: targetDisplay.id, activeStageID: StageID(rawValue: "1"), stages: [
+                    PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, members: [treeMember(target)], bspTree: .leaf(target.id)),
+                ]),
+            ],
+            activeDisplayID: targetDisplay.id
+        ))
+        let service = treeService(provider: provider, writer: writer, store: store, name: "tree-place-rank")
+        let sourceScope = StageScope(displayID: sourceDisplay.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let targetScope = StageScope(displayID: targetDisplay.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+
+        // Rang 0 : devant la fenêtre cible ; feuille large, donc coupée en colonnes.
+        let result = StageCommandService(service: service, store: store, events: EventLog(path: tempPath("tree-place-rank-events")))
+            .place(windowID: moved.id, displayID: targetDisplay.id, orderedWindowIDs: [moved.id, target.id])
+
+        #expect(result.changed)
+        #expect(store.state().bspTree(for: sourceScope) == .leaf(remaining.id))
+        #expect(store.state().bspTree(for: targetScope) == .split(orientation: .vertical, ratio: 0.5, first: .leaf(moved.id), second: .leaf(target.id)))
+        expectFinalTreeFrames(writer, [
+            remaining.id: Rect(x: 0, y: 0, width: 1000, height: 800),
+            moved.id: Rect(x: 1000, y: 0, width: 500, height: 800),
+            target.id: Rect(x: 1500, y: 0, width: 500, height: 800),
+        ])
+    }
+
+    @Test
+    func railDropAtIndexInsertsIntoHiddenTreeStage() {
+        let displayID = DisplayID(rawValue: "display-main")
+        let dragged = powerWindow(1, x: 0, y: 0, width: 1000, height: 800)
+        let first = powerWindow(2, x: 999, y: 799, width: 300, height: 300)
+        let second = powerWindow(3, x: 999, y: 799, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [dragged, first, second])
+        provider.focusedID = dragged.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("tree-rail-drop-index"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: displayID, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: .spatialBsp, members: [treeMember(dragged)], bspTree: .leaf(dragged.id)),
+                PersistentStage(id: StageID(rawValue: "2"), mode: .spatialBsp, members: [first, second].map(treeMember),
+                                bspTree: .split(orientation: .vertical, ratio: 0.5, first: .leaf(first.id), second: .leaf(second.id))),
+            ]),
+        ], activeDisplayID: displayID))
+        let service = treeService(provider: provider, writer: writer, store: store, name: "tree-rail-drop-index")
+        let sourceScope = StageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let targetScope = StageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+
+        // Index 1 : entre 2 et 3, donc devant 3 dans l'arbre (feuille haute de 3 coupée en rangées).
+        let result = StageCommandService(service: service, store: store, events: EventLog(path: tempPath("tree-rail-drop-index-events")))
+            .assign(windowID: dragged.id, to: "2", displayID: displayID, insertionIndex: 1, focusAssignedWindow: false)
+
+        #expect(result.changed)
+        #expect(store.state().bspTree(for: sourceScope)?.contains(dragged.id) != true)
+        #expect(store.state().bspTree(for: targetScope) == .split(
+            orientation: .vertical, ratio: 0.5, first: .leaf(first.id),
+            second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(dragged.id), second: .leaf(second.id))
+        ))
     }
 
     @Test
@@ -1150,5 +1298,36 @@ struct CommandStateTransactionTests {
         #expect(fired)
         #expect(store.state().scopes.first { $0.displayID == display }?.activeStageID == stage2)
         #expect(stageName(store, desktop: 1) == "renamed-during-ax")
+    }
+}
+
+private func treeService(provider: PowerUserProvider, writer: PowerUserWriter, store: StageStore, name: String) -> SnapshotService {
+    SnapshotService(
+        provider: provider,
+        frameWriter: writer,
+        config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0)),
+        intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
+        stageStore: store,
+        events: EventLog(path: tempPath("\(name)-service-events"))
+    )
+}
+
+/// Une seule application (FR-012) : au plus une écriture par fenêtre attendue, sa frame d'arbre si
+/// elle est écrite, et jamais `never` (frame mémorisée restaurée avant recalcul).
+private func expectFinalTreeFrames(
+    _ writer: PowerUserWriter,
+    _ expected: [WindowID: Rect],
+    never: Rect? = nil,
+    sourceLocation: SourceLocation = #_sourceLocation
+) {
+    for (id, frame) in expected {
+        let history = writer.frameHistory[id] ?? []
+        #expect(history.count <= 1, "fenêtre \(id.rawValue) : \(history)", sourceLocation: sourceLocation)
+        if let last = history.last {
+            #expect(last == frame, "fenêtre \(id.rawValue)", sourceLocation: sourceLocation)
+        }
+        if let never {
+            #expect(!history.contains(never), "fenêtre \(id.rawValue) restaurée", sourceLocation: sourceLocation)
+        }
     }
 }

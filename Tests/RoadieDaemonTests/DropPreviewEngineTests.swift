@@ -3,6 +3,7 @@ import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
+import RoadieTiler
 @testable import RoadieDaemon
 
 private final class DropPreviewProvider: SystemSnapshotProviding, @unchecked Sendable {
@@ -27,197 +28,143 @@ private final class DropPreviewProvider: SystemSnapshotProviding, @unchecked Sen
     }
 }
 
+/// Aperçu et dépôt sur l'arbre projeté (SPEC-017 R12, T092, T095). Les anciens tests `mutableBsp`
+/// (reflow local, frame de départ du glisser) sont remplacés : l'arbre fait foi, la frame
+/// transitoire de la fenêtre glissée et les frames mémorisées n'entrent plus dans le calcul.
 @Suite
 struct DropPreviewEngineTests {
-    @Test
-    func mutableBspDragSplitsTargetWindowLocally() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let target = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
-        let source = previewWindow(2, title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500))
-        let stageStore = StageStore(path: tempPreviewPath())
-        stageStore.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(
-                    displayID: display.id,
-                    stages: [
-                        PersistentStage(
-                            id: StageID(rawValue: "1"),
-                            mode: .mutableBsp,
-                            members: [target, source].map {
-                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
-                            }
-                        ),
-                    ]
-                ),
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: DropPreviewProvider(displays: [display], windows: [target, source]),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: stageStore
-        )
-        let engine = DropPreviewEngine(service: service)
+    private static let display = DisplaySnapshot(
+        id: DisplayID(rawValue: "display-a"),
+        index: 1,
+        name: "A",
+        frame: Rect(x: 0, y: 0, width: 1000, height: 500),
+        visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
+        isMain: true
+    )
+    private static let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
 
-        let candidate = engine.candidate(sourceWindowID: source.id, atAXPoint: CGPoint(x: 250, y: 420))
+    private struct Fixture {
+        let store: StageStore
+        let service: SnapshotService
+        let engine: DropPreviewEngine
+    }
+
+    private func fixture(windows: [WindowSnapshot], tree: BSPTree) -> Fixture {
+        let store = StageStore(path: tempPreviewPath())
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: Self.display.id, stages: [
+                    PersistentStage(
+                        id: Self.scope.stageID,
+                        mode: .spatialBsp,
+                        members: windows.map {
+                            PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
+                        },
+                        bspTree: tree
+                    ),
+                ]),
+            ],
+            activeDisplayID: Self.display.id
+        ))
+        let provider = PowerUserProvider(displays: [Self.display], windows: windows)
+        let service = SnapshotService(
+            provider: provider,
+            frameWriter: PowerUserWriter(provider: provider),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 10)),
+            intentStore: LayoutIntentStore(path: tempPreviewPath()),
+            stageStore: store,
+            events: EventLog(path: tempPreviewPath())
+        )
+        return Fixture(store: store, service: service, engine: DropPreviewEngine(service: service))
+    }
+
+    private let left = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
+    private let topRight = previewWindow(2, title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245))
+    private let bottomRight = previewWindow(3, title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245))
+    private var threeTree: BSPTree {
+        .split(orientation: .vertical, ratio: 0.5, first: .leaf(left.id),
+               second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(topRight.id), second: .leaf(bottomRight.id)))
+    }
+
+    @Test
+    func treeDropOnBottomEdgeInsertsBelowTarget() {
+        let right = previewWindow(2, title: "right", frame: Rect(x: 505, y: 0, width: 495, height: 500))
+        let setup = fixture(windows: [left, right], tree: .split(orientation: .vertical, ratio: 0.5, first: .leaf(left.id), second: .leaf(right.id)))
+
+        let candidate = setup.engine.candidate(sourceWindowID: right.id, atAXPoint: CGPoint(x: 250, y: 420))
 
         #expect(candidate?.operation == .insertDown)
+        #expect(candidate?.targetWindowID == left.id)
         #expect(candidate?.frame == CGRect(x: 0, y: 255, width: 1000, height: 245))
-        #expect(candidate?.placements[target.id] == Rect(x: 0, y: 0, width: 1000, height: 245))
-        #expect(candidate?.placements[source.id] == Rect(x: 0, y: 255, width: 1000, height: 245))
+        #expect(candidate?.placements[left.id] == Rect(x: 0, y: 0, width: 1000, height: 245))
+        #expect(candidate?.placements[right.id] == Rect(x: 0, y: 255, width: 1000, height: 245))
     }
 
     @Test
-    func mutableBspDragReflowsPeerIntoFreedSpace() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let target = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
-        let peer = previewWindow(2, title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245))
-        let source = previewWindow(3, title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245))
-        let stageStore = StageStore(path: tempPreviewPath())
-        stageStore.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(
-                    displayID: display.id,
-                    stages: [
-                        PersistentStage(
-                            id: StageID(rawValue: "1"),
-                            mode: .mutableBsp,
-                            members: [target, peer, source].map {
-                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
-                            }
-                        ),
-                    ]
-                ),
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: DropPreviewProvider(displays: [display], windows: [target, peer, source]),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: stageStore
-        )
-        let engine = DropPreviewEngine(service: service)
+    func treeDropIgnoresTransientDraggedFrameAndRefillsFreedSpace() {
+        let dragged = previewWindow(3, title: "bottom-right", frame: Rect(x: 1900, y: 1700, width: 395, height: 220))
+        let setup = fixture(windows: [left, topRight, dragged], tree: threeTree)
 
-        let candidate = engine.candidate(sourceWindowID: source.id, atAXPoint: CGPoint(x: 250, y: 420))
+        let candidate = setup.engine.candidate(sourceWindowID: dragged.id, atAXPoint: CGPoint(x: 250, y: 420))
 
+        // 3 quitte la droite : 2 reprend toute la colonne ; 3 coupe la feuille de 1 en rangées.
         #expect(candidate?.operation == .insertDown)
-        #expect(candidate?.placements.keys.sorted { $0.rawValue < $1.rawValue } == [target.id, peer.id, source.id])
-        #expect(candidate?.placements[target.id] == Rect(x: 0, y: 0, width: 495, height: 245))
-        #expect(candidate?.placements[source.id] == Rect(x: 0, y: 255, width: 495, height: 245))
-        #expect(candidate?.placements[peer.id] == Rect(x: 505, y: 0, width: 495, height: 500))
+        #expect(candidate?.placements[left.id] == Rect(x: 0, y: 0, width: 495, height: 245))
+        #expect(candidate?.placements[dragged.id] == Rect(x: 0, y: 255, width: 495, height: 245))
+        #expect(candidate?.placements[topRight.id] == Rect(x: 505, y: 0, width: 495, height: 500))
     }
 
     @Test
-    func mutableBspDragPreviewIgnoresTransientDraggedSourceFrame() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let target = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
-        let peer = previewWindow(2, title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245))
-        let persistedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245))
-        let draggedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 1900, y: 1700, width: 395, height: 220))
-        let stageStore = StageStore(path: tempPreviewPath())
-        stageStore.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(
-                    displayID: display.id,
-                    stages: [
-                        PersistentStage(
-                            id: StageID(rawValue: "1"),
-                            mode: .mutableBsp,
-                            members: [target, peer, persistedSource].map {
-                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
-                            }
-                        ),
-                    ]
-                ),
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: DropPreviewProvider(displays: [display], windows: [target, peer, draggedSource]),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: stageStore
-        )
-        let engine = DropPreviewEngine(service: service)
+    func treeDropAtCenterSwapsLeaves() {
+        let setup = fixture(windows: [left, topRight, bottomRight], tree: threeTree)
 
-        let candidate = engine.candidate(sourceWindowID: draggedSource.id, atAXPoint: CGPoint(x: 250, y: 420))
-
-        #expect(candidate?.operation == .insertDown)
-        #expect(candidate?.placements[target.id] == Rect(x: 0, y: 0, width: 495, height: 245))
-        #expect(candidate?.placements[draggedSource.id] == Rect(x: 0, y: 255, width: 495, height: 245))
-        #expect(candidate?.placements[peer.id] == Rect(x: 505, y: 0, width: 495, height: 500))
-    }
-
-    @Test
-    func mutableBspSwapUsesDragStartFrameInsteadOfStalePersistedFrame() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let target = previewWindow(1, title: "left", frame: Rect(x: 0, y: 0, width: 495, height: 500))
-        let peer = previewWindow(2, title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245))
-        let stableSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 505, y: 255, width: 495, height: 245))
-        let stalePersistedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 900, y: 440, width: 80, height: 40))
-        let draggedSource = previewWindow(3, title: "bottom-right", frame: Rect(x: 220, y: 120, width: 480, height: 260))
-        let stageStore = StageStore(path: tempPreviewPath())
-        stageStore.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(
-                    displayID: display.id,
-                    stages: [
-                        PersistentStage(
-                            id: StageID(rawValue: "1"),
-                            mode: .mutableBsp,
-                            members: [target, peer, stalePersistedSource].map {
-                                PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
-                            }
-                        ),
-                    ]
-                ),
-            ],
-            activeDisplayID: display.id
-        ))
-        let service = SnapshotService(
-            provider: DropPreviewProvider(displays: [display], windows: [target, peer, draggedSource]),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: stageStore
-        )
-        let engine = DropPreviewEngine(service: service)
-
-        let candidate = engine.candidate(
-            sourceWindowID: draggedSource.id,
-            atAXPoint: CGPoint(x: 250, y: 250),
-            stableSourceFrame: stableSource.frame.cgRect
-        )
+        let candidate = setup.engine.candidate(sourceWindowID: bottomRight.id, atAXPoint: CGPoint(x: 250, y: 250))
 
         #expect(candidate?.operation == .swap)
-        #expect(candidate?.placements[draggedSource.id] == target.frame)
-        #expect(candidate?.placements[target.id] == stableSource.frame)
-        #expect(candidate?.placements[peer.id] == peer.frame)
+        #expect(candidate?.placements[bottomRight.id] == left.frame)
+        #expect(candidate?.placements[left.id] == bottomRight.frame)
+        #expect(candidate?.placements[topRight.id] == topRight.frame)
+    }
+
+    @Test
+    func treePreviewPersistsNothing() throws {
+        let setup = fixture(windows: [left, topRight, bottomRight], tree: threeTree)
+        // Contexte figé au début du glisser (son snapshot peut écrire l'état des membres) ; les
+        // aperçus qui suivent n'écrivent rien.
+        let context = setup.engine.makeContext()
+        let before = try Data(contentsOf: setup.store.fileURL)
+
+        _ = setup.engine.candidate(sourceWindowID: bottomRight.id, atAXPoint: CGPoint(x: 250, y: 420), context: context)
+        _ = setup.engine.candidate(sourceWindowID: bottomRight.id, atAXPoint: CGPoint(x: 250, y: 250), context: context)
+
+        #expect(try Data(contentsOf: setup.store.fileURL) == before)
+        #expect(setup.store.state().bspTree(for: Self.scope) == threeTree)
+    }
+
+    @Test
+    func treeDropAppliesCandidateMutationToPersistedTree() {
+        let setup = fixture(windows: [left, topRight, bottomRight], tree: threeTree)
+        guard let candidate = setup.engine.candidate(sourceWindowID: bottomRight.id, atAXPoint: CGPoint(x: 250, y: 420)) else {
+            Issue.record("aucun candidat")
+            return
+        }
+
+        let result = StageCommandService(service: setup.service, store: setup.store).place(
+            windowID: candidate.sourceWindowID,
+            displayID: candidate.displayID,
+            orderedWindowIDs: candidate.orderedWindowIDs,
+            placements: candidate.placements,
+            treeMutation: candidate.treeMutation
+        )
+
+        let expected = BSPTree.split(
+            orientation: .vertical, ratio: 0.5,
+            first: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(left.id), second: .leaf(bottomRight.id)),
+            second: .leaf(topRight.id)
+        )
+        #expect(result.changed)
+        #expect(setup.store.state().bspTree(for: Self.scope) == expected)
+        #expect(setup.store.state().scopes.first?.stages.first?.members.map { $0.windowID } == expected.windowIDs)
     }
 }
 
