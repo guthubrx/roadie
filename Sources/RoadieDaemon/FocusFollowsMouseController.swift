@@ -219,6 +219,32 @@ public final class UserInputActivity: @unchecked Sendable {
 }
 
 public enum FocusFollowsMousePicker {
+    /// Au clic, inclut une bande de 8 points autour du cadre pour les poignées de resize.
+    /// Le contenu d'une fenêtre reste prioritaire ; dans un interstice, prend le bord le plus proche.
+    /// O(n), uniquement pour les gestes : le focus au mouvement garde son test strict.
+    public static func gestureTargetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
+        if let interior = targetWindow(at: point, in: snapshot) { return interior }
+        func distance(_ entry: ScopedWindowSnapshot) -> CGFloat {
+            let frame = entry.window.frame.cgRect
+            let dx = max(frame.minX - point.x, point.x - frame.maxX, 0)
+            let dy = max(frame.minY - point.y, point.y - frame.maxY, 0)
+            return dx * dx + dy * dy
+        }
+        return snapshot.windows.filter { entry in
+            guard let scope = entry.scope else { return false }
+            return entry.window.isTileCandidate
+                && snapshot.state.activeScope(on: scope.displayID) == scope
+                && entry.window.frame.cgRect.insetBy(dx: -8, dy: -8).contains(point)
+        }.min { lhs, rhs in
+            let left = distance(lhs), right = distance(rhs)
+            if left != right { return left < right }
+            let leftFocused = lhs.window.id == snapshot.focusedWindowID
+            let rightFocused = rhs.window.id == snapshot.focusedWindowID
+            if leftFocused != rightFocused { return leftFocused }
+            return lhs.window.id.rawValue < rhs.window.id.rawValue
+        }
+    }
+
     public static func targetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
         snapshot.windows
             .filter { entry in

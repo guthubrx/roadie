@@ -31,6 +31,7 @@ Ajouts **rétrocompatibles**. Les lecteurs existants ignorent les clés inconnue
 | `layout_app_response_accepted` | `windowID`, `requested`, `actual` | une application a imposé sa taille, puis l'a acceptée |
 | `layout_external_change_reverted` | `windowID`, `observed`, `target` | changement hors geste et hors écho, ramené une fois à l'arbre |
 | `layout_manual_gesture` | `windowID`, `edge`, `ratio` | un geste à la souris a modifié un ratio de l'arbre |
+| `window_gesture_target` | `point`, `windowID`, `frame`, `hit` | cible au clic initial : intérieur, poignée de redimensionnement ou aucune fenêtre gérée |
 | `space_transition_guard` | `displayID`, `reason`, `closedBy` (`userSpace`, `spaceDidChange`, `timeout`), `heldMs` |
 | `space_did_change` | `displayID` si connu | réception de `NSWorkspace.activeSpaceDidChangeNotification` (mesure du moment d'envoi) | à la fermeture de la garde de transition de bureau |
 | `state_migrated` | `stages`, `backup` | migration `mutableBsp` vers l'arbre, une seule fois |

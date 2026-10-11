@@ -4168,6 +4168,34 @@ struct TreeLayoutMaintainerTests {
         }
     }
 
+    /// T231 : un clic hors du cadre, sur la poignée, doit conserver le redimensionnement au premier essai.
+    @MainActor
+    @Test
+    func resizeFromOutsideRightEdgeMovesFenceOnFirstAttempt() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: Rect(x: 510, y: 0, width: 490, height: 500)])
+        let store = treeStore("tree-gesture-edge", tree: treeSideBySide, frames: world.frames)
+        let input = UserInputActivity()
+        let harness = TreeHarness("tree-gesture-edge", world: world, store: store, gapsInner: 10, takeGesture: input.takeGesture)
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        let initial = world.frames[treeW1]!.cgRect
+        input.observeGestures(target: { point in
+            FocusFollowsMousePicker.gestureTargetWindow(at: point, in: harness.service.sharedSnapshot())
+                .map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
+        }, onRelease: { _ in })
+
+        input.mouseDown(at: CGPoint(x: initial.maxX + 2, y: initial.midY), now: harness.clock.now)
+        #expect(input.currentGesture?.windowID == treeW1.rawValue)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        input.mouseUp(leftButton: true, now: harness.clock.now.addingTimeInterval(0.5))
+        _ = harness.maintainer.tick(cause: "drag")
+
+        #expect(world.frames[treeW1]?.width == 700)
+        #expect(world.frames[treeW2] == Rect(x: 710, y: 0, width: 290, height: 500))
+        #expect(harness.count("layout_manual_gesture") == 1)
+        #expect(harness.count("layout_external_change_reverted") == 0)
+    }
+
     /// US3.3 : la frontière d'un geste horizontal ne touche pas le split imbriqué de la voisine
     /// (réécriture pour l'arbre de `mutableBspHorizontalResizePreservesNestedVerticalSplit`).
     @Test

@@ -389,8 +389,14 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
     UserInputActivity.shared.observeGestures(
         target: { point in
-            FocusFollowsMousePicker.targetWindow(at: point, in: service.sharedSnapshot())
-                .map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
+            let target = FocusFollowsMousePicker.gestureTargetWindow(at: point, in: service.sharedSnapshot())
+            EventLog().append(RoadieEvent(type: "window_gesture_target", details: [
+                "point": "\(point.x),\(point.y)",
+                "windowID": target.map { String($0.window.id.rawValue) } ?? "none",
+                "frame": target.map { "\($0.window.frame.x),\($0.window.frame.y) \($0.window.frame.width)x\($0.window.frame.height)" } ?? "none",
+                "hit": target.map { $0.window.frame.cgRect.contains(point) ? "interior" : "resize_handle" } ?? "none"
+            ]))
+            return target.map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
         },
         onRelease: { scheduler.buttonsReleased(gestureEnded: $0) }
     )
