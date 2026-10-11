@@ -1,7 +1,7 @@
 # Tasks: Tiling réactif façon yabai
 
 **Input**: Design documents from `specs/017-reactive-tiling/`
-**Prerequisites**: plan.md, spec.md, research.md (R1 à R15, puis amendements A1 à A12 qui priment), data-model.md, contracts/, reuse-audit.md, adversarial-review-codex.md
+**Prerequisites**: plan.md, spec.md, research.md (R1 à R15, puis amendements A1 à A20, les plus récents priment), data-model.md, contracts/, reuse-audit.md, adversarial-review-codex.md
 **Organisation** : les tâches sont regroupées par lot. Chaque lot est le propriétaire unique de ses fichiers (voir plan.md). Chaque tâche porte l'étiquette de sa user story. `[P]` signifie parallélisable avec les autres lots de la même vague.
 **Vérification commune** : `./scripts/with-xcode swift build` puis `./scripts/test` après chaque lot ; un commit par lot.
 
@@ -101,6 +101,10 @@
   - `SnapshotService.applyTreeScope(_:cause:)`.
 
   Build, suite complète, commit de la vague 1.
+- [ ] T051 Poser aussi :
+  - les stubs A20 : `UserInputActivity.currentGesture`, `takeGesture()`, `PlacementGeneration.next()` (compteur global) et le paramètre `generation` de `applyTreeScope` ;
+  - le type `layout_stable` dans le catalogue et dans `scripts/measure-layout-reactivity` (stabilité observée = `layout_stable.stableAfterMs` quand il est présent) ;
+  - le remplacement des constantes locales de L3 par celles de `LayoutTolerance`.
 
 ## Phase 4 : Vague 2
 
@@ -118,11 +122,14 @@
   - le minuteur périodique devient un filet de sécurité à 2 s ;
   - brancher `AXWindowEvent`, les notifications NSWorkspace (`activeSpaceDidChange` vers `spaceDidChange`, `didActivateApplication`, `didHide`, `didUnhide`) et la fin de « heal » d'écran ;
   - journaliser `activeSpaceDidChange` avec `tsMs`.
-- [ ] T062 [P] [US2] Dans `UserInputActivity` (`Sources/RoadieDaemon/FocusFollowsMouseController.swift`), ajouter une session de geste (A4) :
+- [ ] T062 [P] [US2] (A17) Dans `UserInputActivity` (`Sources/RoadieDaemon/FocusFollowsMouseController.swift`), ajouter une session de geste (A4) :
   - au `leftMouseDown`, enregistrer la fenêtre sous le curseur et sa frame ;
   - au `leftMouseUp`, fermer la session et notifier le `TickScheduler` ;
   - exposer `currentGesture` et `lastGesture` ;
-  - couvrir tous les boutons pour la suspension.
+  - couvrir tous les boutons pour la suspension ;
+  - une session sans cible ne produit aucun geste ;
+  - le résultat se consomme une seule fois (`takeGesture()`) ;
+  - les moniteurs locaux et globaux alimentent le même état.
 - [ ] T063 [P] [US1] `Sources/RoadieDaemon/WindowDragActivity.swift` : pas de grâce de fin de glisser pour les modes à arbre ; le relâchement déclenche la passe (A11).
 - [ ] T064 [US1] Tests dans `Tests/RoadieDaemonTests/TickSchedulerTests.swift`, avec une horloge injectée :
   - l'échéance la plus proche gagne ;
@@ -135,15 +142,18 @@
 ### Lot L7 - Cœur du maintainer, étapes séquentielles (Opus) [US1, US2, US3]
 
 - [ ] T070 [US1] Étape 1 : durées absolues dans `Sources/RoadieCore/LayoutTolerance.swift`, et suppression de `TickDuration`. Les attentes ne dépendent plus de `intervalSeconds`. Build vert.
-- [ ] T071 [US1] Étape 2 : passe unique (A1). Les étapes de `tick()` (règles, épinglages, focus, zoom, masquage des voisines plein écran, masquage des stages inactives, disposition) alimentent un **plan de passe** dédoublonné par fenêtre, avec l'ordre de priorité de A1, appliqué une fois. Remplir `tick(cause:)` et `nextDeadline(now:)`. Supprimer `run()`. Ajouter à `layout_apply` : `durationMs`, `cause`, `pass`, `scans`, `axWrites`. Build vert.
-- [ ] T072 [US1] Étape 3 : stabilisation par rafale (A6) : au moins 2 changements de membres sur le même scope en moins de `burstWindow`, puis `burstQuiet` de calme, plafond `burstCap`. Un changement isolé déclenche une passe immédiate. Garde de transition de bureau par écran (A5) via `SpaceProbe`, avec repli sur `spaceDidChange` puis une frame stable, plafond `spaceGuardCap`, et `closedBy` = `userSpace` ou `timeout`. Émettre `space_transition_guard`. Build vert.
-- [ ] T073 [US2] Étape 4 : classement des frames observées (A4), dans cet ordre : session de geste, écho, réponse de l'application, changement externe. Il remplace `lastObservedFrames` relu.
+- [ ] T071 [US1] Étape 2 : passe unique (A1, A15 : état logique sur une copie de travail, puis calcul, puis arbitrage, puis application unique, puis focus). Les étapes de `tick()` (règles, épinglages, focus, zoom, masquage des voisines plein écran, masquage des stages inactives, disposition) alimentent un **plan de passe** dédoublonné par fenêtre, avec l'ordre de priorité de A1, appliqué une fois. Remplir `tick(cause:)` et `nextDeadline(now:)`. Supprimer `run()`. Ajouter à `layout_apply` : `durationMs`, `cause`, `pass`, `scans`, `axWrites`. Build vert.
+- [ ] T072 [US1] Étape 3 : stabilisation par rafale (A6, A18 : premier placement conservé, une seule passe finale) : au moins 2 changements de membres sur le même scope en moins de `burstWindow`, puis `burstQuiet` de calme, plafond `burstCap`. Un changement isolé déclenche une passe immédiate. Garde de transition de bureau par écran (A5) via `SpaceProbe`, avec repli sur `spaceDidChange` puis une frame stable, plafond `spaceGuardCap`, et `closedBy` = `userSpace` ou `timeout`. Émettre `space_transition_guard`. Build vert.
+- [ ] T073 [US2] Étape 4 : classement des frames observées (A4, A17 : dépôt prioritaire, position seule ramenée à l'arbre, session consommée une fois), dans cet ordre : session de geste, écho, réponse de l'application, changement externe. Il remplace `lastObservedFrames` relu.
   - Geste sur un mode à arbre : `adjustingFence` sur l'arbre projeté au relâchement, puis une passe, avec `layout_manual_gesture`.
   - Changement externe en mode arbre : une seule réécriture vers l'arbre, avec `layout_external_change_reverted`.
   - Écho et réponse de l'application : `layout_echo_ignored` et `layout_app_response_accepted`.
 
   Build vert.
-- [ ] T074 [US2] Étape 5 : budget d'écriture (A2) pour les modes à arbre.
+- [ ] T074 [US2] Étape 5 : budget d'écriture (A2, A13, A14, A16) pour les modes à arbre.
+  - Génération globale ouverte par une intention externe ; une correction garde la génération.
+  - Refus confirmé par le registre ou par une relecture fraîche à échéance.
+  - Un changement externe est ramené une fois par génération, puis accepté.
   - Version de disposition, et 2 écritures au plus par fenêtre et par version, toutes écritures comptées.
   - Refus confirmé par deux observations, puis `correctingForMinimumSize`, puis acceptation. Si la correction est infaisable, accepter le chevauchement.
   - Pour les modes à arbre, ne plus appeler la réparation des voisines par la logique `mutableBsp`, l'exclusion des fenêtres qui refusent de grandir, ni l'isolement des scopes infaisables. Ces mécanismes restent pour `bsp` et `masterStack` (A3).
@@ -164,7 +174,12 @@
   - changement externe : 1 réécriture puis acceptation ;
   - refus : au plus 2 écritures par fenêtre et par version ;
   - repos de 60 s simulé : 0 commande ;
-  - `nextDeadline`.
+  - `nextDeadline` ;
+  - (A18) événements espacés de 80 ms et de 250 ms ;
+  - (A15) règle qui change la stage active, avec masquage et disposition dans la même passe ;
+  - (A14) refus confirmé sans notification, par relecture fraîche ;
+  - (A13) application qui se redimensionne en boucle : une seule réécriture ;
+  - (A20) `layout_stable` émis, et épisode ouvert pendant une garde de 1,5 s.
 
   Réécrire ou retirer, avec justification, les tests `mutableBsp`.
 
@@ -176,7 +191,7 @@
   - disposition depuis l'arbre projeté.
 - [ ] T081 [US3] Réconcilier l'arbre une seule fois par passe. Insertion à la feuille active, avec le sens selon la feuille. La feuille d'un membre absent est gardée pendant la grâce réelle du membre (30 min), et retirée sur destruction confirmée ou purge du membre (A9).
 - [ ] T082 [US3] Appeler `StageStore.migrateLegacyTreeModes` une seule fois au démarrage du producteur, avec `BSPTree.inferred` et les conteneurs des écrans. Émettre `state_migrated`.
-- [ ] T083 [US1] Remplir `applyTreeScope(_:cause:)` : plan de l'arbre du scope, une application, enregistrement des versions. Après `apply`, republier le snapshot avec les frames relues et invalider seulement les fenêtres en échec (A12). Supprimer la réparation d'ordre (`:1180-1230`) et le seuil « réussi » de 48 pt.
+- [ ] T083 [US1] Remplir `applyTreeScope(_:cause:generation:)` (A15 : une commande clôt la rafale ou la garde de son scope) : plan de l'arbre du scope, une application, enregistrement des versions. Après `apply`, republier le snapshot avec les frames relues et invalider seulement les fenêtres en échec (A12). Supprimer la réparation d'ordre (`:1180-1230`) et le seuil « réussi » de 48 pt.
 - [ ] T084 [US3] Tests dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift` :
   - intent ignoré en mode arbre sauf le zoom ;
   - membre absent depuis plus de 45 s qui reprend sa place ;
@@ -201,7 +216,7 @@
   - chaque commande des raccourcis BetterTouchTool de l'utilisateur agit en une application ;
   - `toggle-split` et `balance` sur l'arbre ;
   - refus explicite de `insert` et `width` ;
-  - glisser au centre ou sur un bord ;
+  - glisser au centre ou sur un bord, avec le dépôt qui consomme la session de geste (A17) ;
   - bascule de stage en une application, sans restauration intermédiaire.
 
 ## Phase 5 : Vague 3 - Intégration (orchestrateur)

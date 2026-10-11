@@ -22,3 +22,25 @@
 | 12 | Mesure : identité des événements, republication, épisodes coupés, coûts AX non mesurés | lecture `DaemonSnapshot.swift:1890-1900` (plafond 0,6 s), `AXWindowEventObserver.swift:16` | oui, en partie | A12 retenu. Limite assumée : les lecteurs du snapshot gardent leur cadence actuelle (rescan au plus toutes les 150 ms), coût préexistant hors périmètre |
 
 Aucune objection rejetée. L'objection 12 est retenue en partie, avec une limite écrite.
+
+## Round 2 : plan amendé (2026-10-11)
+
+- **Agent** : Codex GPT-6.1-Sol (OpenAI), via `delegate_task`.
+- **Verdict** : **BLOCKED** (2 bloquantes, 8 majeures).
+  - Objections du round 1 **levées** : O1, O3, O7, O8, O11.
+  - Objections **partielles** : O2, O4, O5, O6, O9, O10, O12.
+
+| # | Objection | Vérifiée comment | Retenue | Suite |
+|---|---|---|---|---|
+| 1 | La version renouvelle le budget à chaque correction ; la visibilité n'est pas couverte ; compteurs par scope | lecture A2, data-model | oui | A13 : génération globale ouverte par une intention externe, budget partagé par tous les chemins |
+| 2 | L'écho absorbé supprime la confirmation du refus | lecture A2, A4, T033 | oui | A14 : confirmation marquée avant absorption, relecture fraîche à échéance (transmis à L3 en cours) |
+| 3 | Le plan dédoublonné n'assure pas un état final cohérent | lecture A1, exemple règle puis masquage | oui | A15 : état logique, puis calcul, puis arbitrage, puis application, sur une copie de travail |
+| 4 | Faisabilité après les bornes et marges réelles | lecture data-model (bornes 0,05-0,95) | oui | A16 (transmis à L4 en cours) |
+| 5 | Session de geste : clic sans cible, double traitement du relâchement, moniteur local | lecture A4, doc Apple des moniteurs globaux | oui | A17 |
+| 6 | Le premier placement d'une rafale ne peut pas être évité | raisonnement temporel 0 / 15 / 80 ms | oui | A18 : premier placement conservé, 2 passes au plus en rafale, test adapté |
+| 7 | Contrat de preuve de la sonde privée | lecture `yabai space.c:88`, `display.c:225` | oui | A19 (transmis à L3 en cours) |
+| 8 | Stubs incomplets : constantes, gestes, protocole d'écriture | lecture plan, T053 | oui | A20 (génération via le protocole `WindowFrameWriting`, transmis à L3) |
+| 9 | L'identité des splits projetés n'est pas transportée | lecture interface `projected` | oui | A20 : opérations directes sur l'arbre complet avec exclusions (transmis à L4) |
+| 10 | Stabilité observée non mesurable ; épisode fermé pendant une garde | lecture contrat, A12 | oui | A20 : événement `layout_stable`, épisode ouvert tant qu'une échéance est en attente |
+
+Aucune objection rejetée. Pas de round 3 sur le plan : les points restants sont des précisions de contrat, appliquées. La contre-revue de l'implémentation vérifiera leur réalisation.

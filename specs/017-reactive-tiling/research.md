@@ -323,3 +323,86 @@ La spec réduit explicitement la garantie « une passe » aux modes à arbre. Le
 - La mesure distingue trois instants : fin d'écriture, stabilité observée, fin de garde de bureau (animation macOS).
 - `quickstart.md` ajoute une campagne avec plusieurs applications actives et une application lente.
 - **Limite assumée** : les lecteurs du snapshot (bordure, focus qui suit la souris) gardent leur cadence actuelle, avec un rescan au plus toutes les 150 ms. Ce coût existe déjà. Le réduire est hors périmètre.
+
+## Amendements après contre-revue adverse, round 2 (verdict BLOCKED, 5 objections du round 1 levées, 7 partielles)
+
+Ces amendements priment sur A1 à A12.
+
+### A13 - Génération de placement (remplace la « version de disposition » de A2)
+
+- Une **génération** est un identifiant global et monotone (UInt64, pas par scope). Elle s'ouvre à chaque **intention externe** : événement système, commande, bascule de stage ou de bureau, changement de visibilité, geste.
+- Une correction interne (refus de taille, ajustement de ratio qui en découle) **garde** la génération en cours, même si elle mute l'arbre.
+- Budget : 2 écritures par fenêtre et par génération, sur tous les chemins d'écriture (maintainer, commandes, bascules, masquage). L'écrivain AX reçoit la génération par le protocole `WindowFrameWriting`, avec une valeur par défaut pour les anciens appelants.
+- Budget épuisé : la frame observée est acceptée.
+- Application qui se redimensionne en boucle : un changement externe est ramené à l'arbre **une fois par génération**. Les suivants sur la même fenêtre sont acceptés sans lutte, et journalisés.
+
+### A14 - Confirmation des refus (précise A2)
+
+- Quand une notification déplacé ou redimensionné est un écho de la relecture alors qu'un refus est en attente (frame relue différente de la frame demandée), le registre marque le refus comme confirmé **avant** d'absorber l'écho.
+- Sans notification, le maintainer arme une échéance de relecture **fraîche** (lecture AX directe, environ 100 ms après l'écriture). Le snapshot republié ne compte jamais comme seconde observation.
+- La correction garde la génération et le budget du placement initial.
+
+### A15 - Ordre d'une passe (précise A1)
+
+1. **Changements d'état logique** sur une copie de travail du snapshot : affectations par règle, stage active, épinglages, zoom.
+2. **Calcul des placements** depuis cette copie : disposition de l'arbre, masquage des seules fenêtres hors de la stage active de la copie, frame de zoom qui remplace la frame de l'arbre pour la fenêtre zoomée.
+3. **Arbitrage** par fenêtre.
+4. **Application** unique.
+5. **Focus** : action après l'application, pas une frame.
+
+Une commande est une intention de l'utilisateur. `applyTreeScope` l'applique même si le scope est en rafale ou en garde, et clôt cette attente pour ce scope.
+
+Test combiné : une règle qui change la stage active, le masquage et la disposition finale, dans la même passe.
+
+### A16 - Faisabilité réelle des corrections (précise A2)
+
+`correctingForMinimumSize(of:minimum:in:excluding:knownMinimums:)` :
+- recalcule les frames candidates avec les mêmes marges, bornes de ratio (0,05 à 0,95) et arrondis que le placement ;
+- vérifie les minimums connus des fenêtres touchées ;
+- remonte les ancêtres de l'axe contraint, du plus proche au plus haut, jusqu'au premier qui rend la correction faisable ;
+- renvoie `nil` sinon.
+
+Tests : ratio hors bornes, voisine contrainte, correction possible seulement à un ancêtre supérieur.
+
+### A17 - Cycle de vie de la session de geste (précise A4)
+
+- Un clic qui ne tombe sur aucune fenêtre gérée (bureau, panneau, navrail, fenêtre exclue) ouvre une session **sans cible**, qui ne produit aucun geste.
+- Le résultat d'une session se consomme **une seule fois** (`takeGesture()`).
+- Arbitrage au relâchement :
+  1. un **dépôt** reconnu par le glisser-déposer consomme la session, et l'ajustement de frontière n'a pas lieu ;
+  2. une taille changée donne un ajustement de frontière ;
+  3. une position seule changée, sans dépôt, ramène la fenêtre à l'arbre (une écriture).
+- Les moniteurs **locaux et globaux** alimentent le même état, car le moniteur global ne voit pas les événements destinés à Roadie lui-même.
+- Tests : clic sans cible, navrail, fenêtre détruite pendant le geste, deux ordres de réception du relâchement (dépôt puis maintainer, et l'inverse).
+
+### A18 - Premier placement d'une rafale (précise A6)
+
+- Le premier changement est placé immédiatement. Si un second changement révèle une rafale, le premier placement est **conservé**, et une seule passe finale suit le calme.
+- SC-001 compte au plus 2 passes pour un épisode en rafale. L'objectif « une passe dans 95 % des épisodes » vise les épisodes isolés.
+- Le test existant `tiledScopeMembershipChurnSettlesBeforeRelayout` est adapté : 1 commande immédiate, rien pendant la rafale, 1 commande finale. Ajouter des événements espacés de 80 ms et de 250 ms.
+
+### A19 - Contrat de la sonde de bureau (précise A5)
+
+- Connexion obtenue par `SLSMainConnectionID` ou `CGSMainConnectionID` (dlsym).
+- Appel de `SLSCopyManagedDisplaySpaces` ou `CGSCopyManagedDisplaySpaces`, qui renvoie un tableau de dictionnaires.
+- Pour l'écran voulu (`Display Identifier`, UUID ou `Main`), lecture de `Current Space` puis `type` : 0 = bureau utilisateur, 4 = plein écran.
+- La sonde renvoie `nil` si le symbole est absent, si la réponse n'est pas conforme ou si l'écran est introuvable.
+- Le décodage est une fonction pure, testée sur des données de test : deux écrans, bureau utilisateur, plein écran, données incomplètes.
+- Repli public : `activeSpaceDidChange` reçu **après** l'ouverture de la garde, puis deux lectures AX fraîches et identiques, espacées de 50 ms.
+
+### A20 - Interfaces avant la vague 2 et mesure de la stabilité (précise A10 et A12)
+
+**Interfaces.**
+- Les constantes de `LayoutTolerance` sont posées à la jonction. L3 utilise des constantes locales en vague 1.
+- Stubs avant la vague 2 :
+  - `UserInputActivity.currentGesture` et `takeGesture()` ;
+  - `LayoutMaintainer.tick(cause:)`, `nextDeadline(now:)` et `spaceDidChange(displayUUID:)` ;
+  - `SnapshotService.applyTreeScope(_:cause:generation:)` ;
+  - `PlacementGeneration.next()`.
+- Les opérations sur l'arbre avec exclusions s'appliquent directement à l'arbre complet. Il n'y a pas d'identifiant de nœud persistant.
+
+**Stabilité observée.**
+- Nouvel événement `layout_stable` : il est émis quand une observation fraîche, faite au moins 100 ms après la dernière écriture de l'épisode, montre toutes les fenêtres de la passe à leur frame cible ou acceptée. Il porte `stableAfterMs`.
+- Un épisode reste ouvert tant qu'une échéance qu'il a armée est en attente (garde, refus, rafale). Il se ferme ensuite après 1 s de calme.
+- Les compteurs distinguent les tentatives de placement (`windowWrites`) des appels AX élémentaires (`axWrites`).
+- Tests : garde de 1,5 s dans un seul épisode, réponse différée, correction dans le même épisode.
