@@ -25,13 +25,17 @@ struct WidthAdjustmentTests {
     @Test
     func rejectsWhenNoTiledWindowExists() {
         let provider = PowerUserProvider(windows: [])
-        let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider))
+        // Cas vide en bsp, indépendant de la configuration réelle et des stages persistants.
+        let service = SnapshotService(
+            provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig(),
+            stageStore: StageStore(path: tempPath("width-empty-stages"))
+        )
 
         let result = WidthAdjustmentService(service: service, events: EventLog(path: tempPath("width-reject-events"))).apply(
             WidthAdjustmentIntent(scope: .activeWindow, mode: .presetNext)
         )
 
         #expect(!result.changed)
-        #expect(result.message.contains("unsupported layout") || result.message.contains("no active tiled window"))
+        #expect(result.message == "width: no active tiled window")
     }
 }

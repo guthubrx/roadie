@@ -161,11 +161,10 @@ struct DropPreviewEngine {
               let scope = snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope),
               stage.mode != .float,
-              snapshot.windows.contains(where: {
-                  $0.window.id == sourceWindowID
-                      && $0.scope == scope
-                      && WindowDragReorderEligibility.accepts($0.window)
-              })
+              let source = snapshot.windows.first(where: { $0.window.id == sourceWindowID }),
+              let sourceScope = source.scope,
+              snapshot.state.activeScope(on: sourceScope.displayID) == sourceScope,
+              WindowDragReorderEligibility.accepts(source.window)
         else { return nil }
         if stage.mode.usesTreeEngine {
             return treeCandidate(
@@ -173,6 +172,7 @@ struct DropPreviewEngine {
                 atAXPoint: axPoint,
                 display: display,
                 scope: scope,
+                sourceIsInScope: sourceScope == scope,
                 snapshot: snapshot,
                 tree: context.persistedStateBeforeSnapshot.bspTree(for: scope) ?? .empty
             )
@@ -227,34 +227,70 @@ struct DropPreviewEngine {
     /// Aperçu sur l'arbre projeté (SPEC-017 R12, T092), en lecture seule : cible et zone de dépôt
     /// sont mesurées sur les frames de l'arbre (la frame transitoire de la fenêtre glissée ne compte
     /// pas), puis l'arbre muté par le dépôt est placé. Rien n'est persisté pendant l'aperçu. Pas de
-    /// candidat hors de toute fenêtre : au relâchement, la fenêtre revient à sa place dans l'arbre.
+    /// candidat hors de toute fenêtre du scope d'origine : la fenêtre revient à sa place. Une
+    /// projection vide sur un autre scope peut recevoir sa première feuille visible.
     // O(n²) au pire - n = feuilles de l'arbre, borné.
     private func treeCandidate(
         sourceWindowID: WindowID,
         atAXPoint axPoint: CGPoint,
         display: DisplaySnapshot,
         scope: StageScope,
+        sourceIsInScope: Bool,
         snapshot: DaemonSnapshot,
         tree: BSPTree
     ) -> DropPreviewCandidate? {
-        guard let geometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot),
-              let target = geometry.frames(of: tree)
-                .filter({ $0.key != sourceWindowID && $0.value.contains(axPoint) })
-                .min(by: { $0.value.area < $1.value.area })
-        else { return nil }
-        let operation = dropOperation(at: axPoint, in: target.value, sourceIsActive: true)
-        let mutated = operation.applied(to: tree, source: sourceWindowID, target: target.key)
+        // La cible est mesurée avant le transfert : ses smart gaps sont encore ceux du drag.
+        let currentGeometry = service.commandTreeGeometry(for: scope, tree: tree, in: snapshot)
+        let currentFrames = currentGeometry?.frames(of: tree) ?? [:]
+        let target = currentFrames
+            .filter({ $0.key != sourceWindowID && $0.value.contains(axPoint) })
+            .min(by: { $0.value.area < $1.value.area })
+        let operation: DropPreviewOperation
+        let mutated: BSPTree
+        let orderedWindowIDs: [WindowID]
+        if let target {
+            operation = dropOperation(at: axPoint, in: target.value, sourceIsActive: sourceIsInScope && tree.contains(sourceWindowID))
+            mutated = operation.applied(to: tree, source: sourceWindowID, target: target.key)
+            orderedWindowIDs = mutated.windowIDs
+        } else {
+            guard !sourceIsInScope, currentFrames.isEmpty else { return nil }
+            operation = .append
+            // Même insertion que le dépôt sans cible (insertionRanked), sans perdre les
+            // feuilles historiques. Leur absence est traitée seulement par la projection.
+            let rest = tree.removing(sourceWindowID)
+            orderedWindowIDs = rest.windowIDs + [sourceWindowID]
+            mutated = rest.inserting(
+                sourceWindowID, at: rest.windowIDs.last, side: .right,
+                in: currentGeometry?.container ?? display.visibleFrame.cgRect,
+                innerGap: currentGeometry?.innerGap ?? 0,
+                excluding: currentGeometry?.absent ?? []
+            )
+        }
+
+        // Copie locale uniquement : le dépôt recalculera les mêmes marges avec la source
+        // affectée au scope cible. L'état figé et le store restent inchangés pendant le drag.
+        var projected = snapshot
+        if !sourceIsInScope {
+            guard let sourceIndex = projected.windows.firstIndex(where: { $0.window.id == sourceWindowID }) else { return nil }
+            do {
+                try projected.state.assignWindow(sourceWindowID, to: scope)
+            } catch {
+                return nil
+            }
+            projected.windows[sourceIndex].scope = scope
+        }
+        guard let geometry = service.commandTreeGeometry(for: scope, tree: mutated, in: projected) else { return nil }
         let placements = geometry.frames(of: mutated)
         guard let frame = placements[sourceWindowID], !frame.isEmpty else { return nil }
         return DropPreviewCandidate(
             sourceWindowID: sourceWindowID,
             displayID: display.id,
             scope: scope,
-            orderedWindowIDs: mutated.windowIDs,
+            orderedWindowIDs: orderedWindowIDs,
             placements: placements.mapValues { Rect($0.integral) },
             frame: frame.integral,
             operation: operation,
-            targetWindowID: target.key
+            targetWindowID: target?.key
         )
     }
 

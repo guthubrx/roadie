@@ -3931,6 +3931,212 @@ struct SnapshotStabilizationTests {
         #expect(members.first { $0.windowID == b.id }?.frame == movedVisible.frame)
     }
 
+    /// Une ancienne position de masquage tombe sur le nouvel écran. Elle ne devient pas une
+    /// position visible sauvegardée, même si le cache partagé est invalidé ou AX disparaît un tick.
+    @Test(arguments: ["observed", "absent", "written", "written-direct", "written-partial"])
+    func hotplugPreservesFrameOfPreviouslyHiddenWindow(observation: String) {
+        let oldDisplay = DisplaySnapshot(
+            id: display.id, index: 1, name: "Mac", frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 0, y: 30, width: 2048, height: 1250), isMain: true
+        )
+        let main = DisplaySnapshot(
+            id: display.id, index: 1, name: "Mac", frame: Rect(x: 0, y: 0, width: 1512, height: 982),
+            visibleFrame: Rect(x: 0, y: 32, width: 1512, height: 950), isMain: true
+        )
+        let external = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-external"), index: 2, name: "LG",
+            frame: Rect(x: 1512, y: -964, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 1512, y: -934, width: 3840, height: 2130), isMain: false
+        )
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        var hidden = b
+        hidden.frame = Rect(x: 2047, y: 300, width: 940, height: 612)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let writer = RecordingWriter()
+        let frameWriter: any WindowFrameWriting = observation == "written-partial"
+            ? FakeWriter(actualFrames: [b.id: hidden.frame]) : writer
+        let home = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "2"))
+        store.mutate { state in
+            _ = state.setPin(window: b, homeScope: home, pinScope: .desktop, now: clock.now)
+            state.windowBookmarks = [PersistentWindowBookmark(
+                name: "hidden", windowID: b.id, scope: home, bundleID: b.bundleID, title: b.title,
+                frame: b.frame, createdAt: clock.now, updatedAt: clock.now
+            )]
+        }
+        let read = { (screens: [DisplaySnapshot], windows: [WindowSnapshot]) in
+            SnapshotService(
+                provider: FakeProvider(displaySnapshots: screens, windowSnapshots: windows), frameWriter: frameWriter,
+                config: RoadieConfig(), stageStore: store, events: EventLog(path: tempPath("hidden-hotplug-events")), clock: { clock.now }
+            )
+        }
+        let before = read([oldDisplay], [a, observation.hasPrefix("written") ? b : hidden])
+        _ = before.snapshot(followFocus: false)
+        if observation == "written" {
+            #expect(before.apply(ApplyPlan(commands: [ApplyCommand(window: b, frame: hidden.frame)]), generation: PlacementGeneration.outsideBudget).applied == 1)
+        } else if observation == "written-direct" {
+            #expect(before.setFrame(hidden.frame.cgRect, of: b, generation: PlacementGeneration.outsideBudget) == hidden.frame.cgRect)
+        } else if observation == "written-partial" {
+            let result = before.apply(ApplyPlan(commands: [
+                ApplyCommand(window: a, frame: a.frame), ApplyCommand(window: b, frame: hidden.frame)
+            ]), generation: PlacementGeneration.outsideBudget)
+            #expect(result.applied == 1 && result.failed == 1)
+        }
+        before.invalidateSharedSnapshot()
+        clock.now += 2
+        if observation == "absent" {
+            _ = read([main, external], []).snapshot(followFocus: false)
+            clock.now += 2
+        }
+        let after = read([main, external], [a, hidden]).snapshot(followFocus: false)
+        let saved = store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == b.id }
+        #expect(saved?.frame == b.frame)
+        #expect(store.state().pin(for: b.id)?.lastFrame == b.frame)
+        #expect(store.state().windowBookmarks.first?.frame == b.frame)
+        #expect(after.windows.first { $0.window.id == b.id }?.scope?.displayID == main.id)
+        #expect(writer.requestedFrames.isEmpty == (observation != "written" && observation != "written-direct"))
+
+        // Une vraie nouvelle position observée libère la preuve de masquage.
+        var moved = hidden
+        moved.frame = Rect(x: 2400, y: -800, width: 940, height: 612)
+        clock.now += 1
+        _ = read([main, external], [a, moved]).snapshot(followFocus: false)
+        #expect(store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == b.id }?.frame == moved.frame)
+    }
+
+    /// Une fenêtre masquée à l'ancien bord peut ressembler à une fenêtre agrandie sur
+    /// l'écran reconnecté. La normalisation solo ne doit pas écraser son cadre utile.
+    @Test
+    func hotplugDoesNotSaveHiddenFrameAsSoloMaximizedFrame() {
+        let main = DisplaySnapshot(
+            id: display.id, index: 1, name: "Mac", frame: Rect(x: 0, y: 0, width: 2048, height: 1280),
+            visibleFrame: Rect(x: 0, y: 30, width: 2048, height: 1250), isMain: true
+        )
+        let external = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-external"), index: 2, name: "External",
+            frame: Rect(x: 2048, y: 0, width: 1920, height: 1080),
+            visibleFrame: Rect(x: 2048, y: 0, width: 1920, height: 1080), isMain: false
+        )
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 2200)
+        var hidden = b
+        hidden.frame = Rect(x: 2047, y: 0, width: 1920, height: 1080)
+        let store = StageStore(path: tempPath("hidden-solo-hotplug"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: main.id, stages: [PersistentStage(id: StageID(rawValue: "1"), members: [member(a)])]),
+            PersistentStageScope(displayID: external.id, stages: [PersistentStage(id: StageID(rawValue: "1"), members: [member(b)])])
+        ]))
+        let clock = StabilizationClock()
+        let read = { (screens: [DisplaySnapshot]) in
+            SnapshotService(
+                provider: FakeProvider(displaySnapshots: screens, windowSnapshots: [a, hidden]),
+                frameWriter: RecordingWriter(), config: RoadieConfig(), stageStore: store, clock: { clock.now }
+            )
+        }
+        let before = read([main])
+        _ = before.snapshot(followFocus: false)
+        #expect(store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == b.id }?.frame == b.frame)
+        before.invalidateSharedSnapshot()
+        clock.now += 1
+
+        _ = read([main, external]).snapshot(followFocus: false)
+
+        #expect(store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == b.id }?.frame == b.frame)
+    }
+
+    /// Le bord de l'ancien écran ne suffit pas à déclarer une fenêtre cachée : il faut une
+    /// observation de masquage de cette fenêtre avant le branchement.
+    @Test(arguments: [false, true])
+    func oldScreenEdgeDoesNotHideAnUnobservedNormalWindow(reusedWindowID: Bool) {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        var previous = b
+        if reusedWindowID { previous.frame = Rect(x: 999, y: 300, width: 940, height: 612) }
+        let before = service(windows: [a, previous], store: store, clock: clock)
+        _ = before.snapshot(followFocus: false)
+        before.invalidateSharedSnapshot()
+        let external = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-external"), index: 2, name: "LG",
+            frame: Rect(x: 1000, y: -964, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 1000, y: -934, width: 3840, height: 2130), isMain: false
+        )
+        var moved = b
+        if reusedWindowID { moved.pid += 1 }
+        moved.frame = Rect(x: 999, y: 300, width: 940, height: 612)
+        _ = SnapshotService(
+            provider: FakeProvider(displaySnapshots: [display, external], windowSnapshots: [a, moved]),
+            frameWriter: RecordingWriter(), config: RoadieConfig(), stageStore: store, clock: { clock.now }
+        ).snapshot(followFocus: false)
+        #expect(store.state().scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == b.id }?.frame == moved.frame)
+    }
+
+    /// Les membres conservés sur un écran débranché depuis des mois gardent leur stage, mais
+    /// leur première absence au retour ne crée pas de cartes de fenêtres imaginaires.
+    @Test(arguments: [false, true])
+    func historicalMissingMembersAreNotDisplayedAsLiveWindows(hasOldObservation: Bool) throws {
+        let a = powerWindow(1, x: 100)
+        let external = powerDisplay("display-external", index: 2, x: 1000)
+        let clock = StabilizationClock()
+        let oldObservation = hasOldObservation ? clock.now.addingTimeInterval(-120 * 24 * 60 * 60) : nil
+        let ghosts = [powerWindow(900, x: 1200), powerWindow(901, x: 1500)]
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(ghosts[0].id), second: .leaf(ghosts[1].id))
+        let store = StageStore(path: tempPath("historical-display-members"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, stages: [PersistentStage(id: StageID(rawValue: "1"), members: [member(a)])]),
+            PersistentStageScope(displayID: external.id, stages: [PersistentStage(
+                id: StageID(rawValue: "1"), name: "Com", mode: .spatialBsp,
+                members: ghosts.map { window in
+                    var value = member(window)
+                    value.lastSeenAt = oldObservation
+                    return value
+                }, bspTree: tree
+            )])
+        ], activeDisplayID: display.id))
+        let read = { (screens: [DisplaySnapshot]) in
+            SnapshotService(
+                provider: FakeProvider(displaySnapshots: screens, windowSnapshots: [a]), frameWriter: RecordingWriter(),
+                config: RoadieConfig(), stageStore: store, events: EventLog(path: tempPath("historical-members-events")), clock: { clock.now }
+            ).snapshot(followFocus: false)
+        }
+        _ = read([display])
+        clock.now += 2
+        let snapshot = read([display, external])
+        let scope = try #require(store.state().scopes.first { $0.displayID == external.id })
+        let stage = try #require(scope.stages.first { $0.id.rawValue == "1" })
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: Set(snapshot.windows.map(\.window.id)), now: clock.now).members.isEmpty)
+        #expect(stage.name == "Com")
+        #expect(stage.members.map(\.windowID) == ghosts.map(\.id))
+        #expect(stage.bspTree == tree)
+        #expect(stage.members.allSatisfy { $0.lastSeenAt == oldObservation && $0.missingSince == clock.now })
+    }
+
+    /// Une disparition réellement observée conserve sa carte quinze secondes. La conservation
+    /// du membre est indépendante de ce délai d'affichage.
+    @Test(arguments: [false, true])
+    func recentlyObservedMissingMemberKeepsRailGrace(readerBeforeWriter: Bool) throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        _ = service(windows: [a, b], store: store, clock: clock).snapshot(followFocus: false)
+        clock.now += 120
+        _ = service(windows: [a, b], store: store, clock: clock).snapshot(followFocus: false)
+        let seenAt = clock.now
+        clock.now += 2
+        if readerBeforeWriter {
+            _ = service(windows: [a], store: store, clock: clock, persist: false).snapshot(followFocus: false)
+        }
+        _ = service(windows: [a], store: store, clock: clock).snapshot(followFocus: false)
+        let stage = try #require(store.state().scopes.flatMap(\.stages).first { $0.id.rawValue == "2" })
+        #expect(stage.members.first?.lastSeenAt == seenAt)
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now + 10).members.map(\.windowID) == [b.id])
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now + 16).members.isEmpty)
+        #expect(stage.members.map(\.windowID) == [b.id])
+    }
+
     @Test
     func writerSnapshotDoesNotRewriteUnchangedState() throws {
         let a = powerWindow(1, x: 0)

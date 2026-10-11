@@ -157,6 +157,7 @@ struct WindowPresentationStateResolverTests {
     func railRepresentsMissingNativeFullscreenMember() {
         let display = powerDisplay()
         let windowID = WindowID(rawValue: 42)
+        let observedAt = Date()
         let persistentScope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
             PersistentStage(id: StageID(rawValue: "1"), members: [
                 PersistentStageMember(
@@ -165,7 +166,8 @@ struct WindowPresentationStateResolverTests {
                     title: "Native",
                     frame: display.frame,
                     presentationState: .nativeFullscreen,
-                    missingSince: Date()
+                    lastSeenAt: observedAt,
+                    missingSince: observedAt
                 )
             ])
         ])
@@ -214,6 +216,7 @@ struct WindowPresentationStateResolverTests {
     func railKeepsRecentlyMissingNormalMemberDuringStageSwitch() {
         let display = powerDisplay()
         let windowID = WindowID(rawValue: 45)
+        let observedAt = Date()
         let persistentScope = PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
             PersistentStage(id: StageID(rawValue: "1"), members: [
                 PersistentStageMember(
@@ -222,7 +225,8 @@ struct WindowPresentationStateResolverTests {
                     title: "Normal",
                     frame: Rect(x: 100, y: 100, width: 300, height: 300),
                     presentationState: .normal,
-                    missingSince: Date()
+                    lastSeenAt: observedAt,
+                    missingSince: observedAt
                 )
             ])
         ])
@@ -287,6 +291,7 @@ struct WindowPresentationStateResolverTests {
     func railDropsMissingNativeFullscreenMemberAfterFifteenSeconds() {
         let display = powerDisplay()
         let windowID = WindowID(rawValue: 48)
+        let referenceDate = Date()
         func scope(missingFor seconds: TimeInterval) -> PersistentStageScope {
             PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
                 PersistentStage(id: StageID(rawValue: "1"), members: [
@@ -296,14 +301,15 @@ struct WindowPresentationStateResolverTests {
                         title: "Native",
                         frame: display.frame,
                         presentationState: .nativeFullscreen,
-                        missingSince: Date(timeIntervalSinceNow: -seconds)
+                        lastSeenAt: referenceDate.addingTimeInterval(-seconds),
+                        missingSince: referenceDate.addingTimeInterval(-seconds)
                     )
                 ])
             ])
         }
 
-        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 10), liveWindowIDs: []) == [StageID(rawValue: "1")])
-        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 20), liveWindowIDs: []).isEmpty)
+        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 10), liveWindowIDs: [], now: referenceDate) == [StageID(rawValue: "1")])
+        #expect(RailController.railVisibleStageIDs(in: scope(missingFor: 20), liveWindowIDs: [], now: referenceDate).isEmpty)
     }
 
     @Test

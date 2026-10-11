@@ -1137,7 +1137,8 @@ public final class RailController {
 
     // Un membre present dans le snapshot est toujours represente. Un membre absent (fenetre fermee, changement
     // de stage, ou fenetre en plein ecran natif dans un autre Space) reste represente 15 s au plus apres
-    // `missingSince`, puis sa carte disparait (SPEC-016 FR-027). Aucun etat de presentation ne prolonge ce delai.
+    // `missingSince`, puis sa carte disparait (SPEC-016 FR-027). Cette grâce exige une observation
+    // réelle récente : une ancienne référence d'écran reconnecté ne crée pas de carte fantôme.
     nonisolated fileprivate static func isRailRepresentedMember(
         _ member: PersistentStageMember,
         liveWindowIDs: Set<WindowID>,
@@ -1146,8 +1147,11 @@ public final class RailController {
         if liveWindowIDs.contains(member.windowID) {
             return true
         }
-        guard let missingSince = member.missingSince else { return false }
-        return now.timeIntervalSince(missingSince) <= transientMissingMemberRailGrace
+        guard let missingSince = member.missingSince, let lastSeenAt = member.lastSeenAt else { return false }
+        let observationAge = missingSince.timeIntervalSince(lastSeenAt)
+        let missingAge = now.timeIntervalSince(missingSince)
+        return observationAge >= 0 && observationAge <= transientMissingMemberRailGrace
+            && missingAge >= 0 && missingAge <= transientMissingMemberRailGrace
     }
 
     // Complexite : O(n + m) - n = fenetres du snapshot, m = membres du scope.

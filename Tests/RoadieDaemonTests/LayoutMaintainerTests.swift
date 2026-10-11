@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
-import RoadieDaemon
+@testable import RoadieDaemon
 import RoadieTiler
 
 private final class SequenceProvider: SystemSnapshotProviding, @unchecked Sendable {
@@ -4481,6 +4481,85 @@ struct TreeLayoutMaintainerTests {
         #expect(harness.count("layout_stable") == 1)
         #expect(harness.events.contains("\"layoutVersion\":\"\(generation)\""))
         #expect(harness.generations.current == generation)
+    }
+
+    /// Un dépôt entre écrans suspend le maintien pendant le geste, applique l'aperçu aux deux
+    /// arbres, puis se stabilise sans réécrire ni ramener la fenêtre sur l'écran d'origine.
+    @Test(arguments: [false, true])
+    func crossDisplayDropKeepsPreviewPlacementAfterRelease(destinationHasWindow: Bool) throws {
+        let main = DisplaySnapshot(
+            id: treeScope.displayID, index: 1, name: "Mac",
+            frame: Rect(x: 0, y: 0, width: 1512, height: 982),
+            visibleFrame: Rect(x: 0, y: 32, width: 1512, height: 950), isMain: true
+        )
+        let external = DisplaySnapshot(
+            id: DisplayID(rawValue: "display-external"), index: 2, name: "LG",
+            frame: Rect(x: 1512, y: -964, width: 3840, height: 2160),
+            visibleFrame: Rect(x: 1512, y: -934, width: 3840, height: 2130), isMain: false
+        )
+        let sourceScope = StageScope(displayID: main.id, desktopID: DesktopID(rawValue: 2), stageID: treeScope.stageID)
+        let targetScope = StageScope(displayID: external.id, desktopID: DesktopID(rawValue: 1), stageID: treeScope.stageID)
+        var frames = treeSideBySide.place(in: main.visibleFrame.cgRect, innerGap: 0).mapValues { Rect($0) }
+        if destinationHasWindow { frames[treeW3] = external.visibleFrame }
+        let world = TreeWorld(displays: [main, external], frames: frames)
+        let member = { (id: WindowID) in
+            PersistentStageMember(windowID: id, bundleID: "app.\(id.rawValue)", title: "Window\(id.rawValue)", frame: frames[id]!)
+        }
+        let store = StageStore(path: tempPath("tree-cross-display-drop"))
+        store.save(PersistentStageState(
+            scopes: [
+                PersistentStageScope(displayID: main.id, desktopID: sourceScope.desktopID, stages: [
+                    PersistentStage(id: sourceScope.stageID, mode: .spatialBsp, members: [member(treeW1), member(treeW2)], bspTree: treeSideBySide)
+                ]),
+                PersistentStageScope(displayID: external.id, stages: [
+                    PersistentStage(id: targetScope.stageID, mode: .spatialBsp, members: destinationHasWindow ? [member(treeW3)] : [], bspTree: destinationHasWindow ? .leaf(treeW3) : .empty)
+                ])
+            ],
+            desktopSelections: [PersistentDesktopSelection(displayID: main.id, currentDesktopID: sourceScope.desktopID)],
+            activeDisplayID: main.id
+        ))
+        let drag = WindowDragActivity(path: tempPath("tree-cross-display-drop-activity"))
+        defer { drag.reset() }
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-cross-display-drop", world: world, store: store, takeGesture: gesture.take, dragActivity: drag)
+        #expect(harness.maintainer.tick(cause: "command:startup").commands == 0)
+        harness.clock.advance(5)
+        let engine = DropPreviewEngine(service: harness.service)
+        let context = engine.makeContext()
+        let startedAt = harness.clock.now
+        drag.markActive(windowID: treeW1, now: startedAt, holdSeconds: 5)
+        world.frames[treeW1] = Rect(x: 2000, y: -400, width: 400, height: 300)
+        let before = world.totalWrites
+        #expect(harness.maintainer.tick(cause: "drag").commands == 0)
+        let candidate = try #require(engine.candidate(sourceWindowID: treeW1, atAXPoint: CGPoint(x: 3432, y: -244), context: context))
+        #expect(candidate.scope == targetScope)
+        #expect(world.totalWrites == before)
+        #expect(store.state().bspTree(for: sourceScope) == treeSideBySide)
+
+        let result = StageCommandService(service: harness.service, store: store, events: EventLog(path: harness.eventPath)).place(
+            windowID: treeW1, displayID: candidate.displayID, orderedWindowIDs: candidate.orderedWindowIDs,
+            placements: candidate.placements, treeMutation: candidate.treeMutation
+        )
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: frames[treeW1]?.cgRect, startedAt: startedAt, endedAt: harness.clock.now)
+        drag.finish(now: harness.clock.now, droppedWindowID: treeW1)
+        let writesAfterDrop = world.totalWrites
+        let generation = try #require(harness.registry.entry(for: treeW1.rawValue)).generation
+        harness.clock.advance(0.1)
+        #expect(harness.maintainer.tick(cause: "ax:AXWindowMoved").commands == 0)
+        #expect(result.changed)
+        #expect(store.state().stageScope(for: treeW1) == targetScope)
+        #expect(store.state().bspTree(for: sourceScope) == .leaf(treeW2))
+        #expect(world.frames[treeW2] == main.visibleFrame)
+        for (id, expected) in candidate.placements { #expect(world.frames[id] == expected) }
+        #expect(world.frames[treeW1] == Rect(candidate.frame))
+        #expect(world.totalWrites == writesAfterDrop)
+        #expect(world.writes.values.allSatisfy { $0.count == 1 })
+        #expect(world.frames.keys.allSatisfy { harness.registry.entry(for: $0.rawValue)?.generation == generation })
+        #expect(harness.count("layout_stable") == 1)
+        #expect(harness.count("layout_manual_gesture") == 0)
+        harness.clock.advance(5)
+        #expect(harness.maintainer.tick(cause: "safety").commands == 0)
+        #expect(world.totalWrites == writesAfterDrop)
     }
 
     /// T217 : une fenêtre d'un scope à arbre posée sur un autre écran, sans geste ni commande,

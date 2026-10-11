@@ -20,6 +20,8 @@
 | 7 | Ne rien faire pendant 60 s | Aucun placement dans le journal |
 | 8 | `roadie move left`, `roadie warp right`, `roadie resize left`, `roadie balance`, `roadie layout toggle-split` | Effet immédiat, en une passe |
 | 9 | Ouvrir un terminal dans une case trop petite pour sa taille minimale | Au plus 2 écritures pour cette fenêtre, puis plus rien |
+| 10 | Rebrancher un écran longtemps absent, puis ouvrir une stage qui gardait des fenêtres disparues | Les anciennes références ne créent aucune carte de fenêtre présente. Les positions de masquage ne remplacent pas les dernières positions visibles sauvegardées |
+| 11 | Glisser une fenêtre de l’interne vers l’externe, au centre puis sur un bord. Refaire sur une stage sans fenêtre vivante, avec et sans références historiques | L’aperçu apparaît sur l’écran sous le pointeur. Le dépôt suit cet aperçu, conserve les références absentes et laisse la source stable. Aucun retour sur l’écran de départ après relâchement |
 
 ## Campagne de charge
 

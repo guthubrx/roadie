@@ -696,11 +696,12 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         keeping liveWindowIDs: Set<WindowID>,
         liveDisplayIDs: Set<DisplayID>,
         missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
+        lastObservedAt: [WindowID: Date]? = nil,
         now: Date = Date()
     ) -> MissingWindowReconciliationReport {
         var report = MissingWindowReconciliationReport()
         for scopeIndex in scopes.indices where liveDisplayIDs.contains(scopes[scopeIndex].displayID) {
-            report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, now: now))
+            report.merge(scopes[scopeIndex].pruneMissingWindows(keeping: liveWindowIDs, missingGrace: missingGrace, lastObservedAt: lastObservedAt, now: now))
         }
         rulePlacementOverrides.removeAll { !liveWindowIDs.contains($0.windowID) }
         return report
@@ -1285,6 +1286,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
     public mutating func pruneMissingWindows(
         keeping liveWindowIDs: Set<WindowID>,
         missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,
+        lastObservedAt: [WindowID: Date]? = nil,
         now: Date = Date()
     ) -> MissingWindowReconciliationReport {
         var report = MissingWindowReconciliationReport()
@@ -1304,9 +1306,15 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
                         prunedWindowIDs.insert(windowID)
                     }
                 } else {
-                    // Vu pour la dernière fois au snapshot précédent : approximation au tick près,
-                    // suffisante pour classer les membres disparus par récence.
-                    stages[stageIndex].members[memberIndex].lastSeenAt = now
+                    // Une référence historique sur un écran reconnecté n'a pas été vue maintenant.
+                    // Le daemon fournit les observations réelles ; l'API seule garde son repli.
+                    if let lastObservedAt {
+                        if let seenAt = lastObservedAt[windowID] {
+                            stages[stageIndex].members[memberIndex].lastSeenAt = seenAt
+                        }
+                    } else {
+                        stages[stageIndex].members[memberIndex].lastSeenAt = now
+                    }
                     stages[stageIndex].members[memberIndex].missingSince = now
                     report.markedMissingWindowIDs.insert(windowID)
                 }

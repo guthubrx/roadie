@@ -239,15 +239,18 @@ public struct SnapshotService {
         let providerFocusedID = provider.focusedWindowID()
         let mouseLocation = provider.mouseLocation()
         let liveDisplayIDs = Set(displays.map(\.id))
+        let hiddenWindowIDs = processState.observedHiddenWindowIDs(windows, in: displays, now: now)
         // FR-009 : un changement de stage par le focus exige une saisie utilisateur récente,
         // postérieure à la dernière disparition de fenêtre et hors des 500 ms qui la suivent.
-        let lastDisappearanceAt = processState.recordLiveWindows(stageManagedWindowIDs, now: now)
-        let focusChangeAllowed = userInput.allowsFocusChange(now: now, lastDisappearanceAt: lastDisappearanceAt)
+        let observation = processState.recordLiveWindows(stageManagedWindowIDs, now: now)
+        let focusChangeAllowed = userInput.allowsFocusChange(now: now, lastDisappearanceAt: observation.lastDisappearanceAt)
         let destroyedWindowIDs = processState.destroyedWindowIDs()
         let input = ReconciliationInput(
             config: config,
             displays: displays,
             windows: windows,
+            hiddenWindowIDs: hiddenWindowIDs,
+            lastObservedWindowAt: observation.lastSeenAt,
             stageManagedWindowIDs: stageManagedWindowIDs,
             liveDisplayIDs: liveDisplayIDs,
             providerFocusedID: providerFocusedID,
@@ -302,6 +305,8 @@ public struct SnapshotService {
         let config: RoadieConfig
         let displays: [DisplaySnapshot]
         let windows: [WindowSnapshot]
+        let hiddenWindowIDs: Set<WindowID>
+        let lastObservedWindowAt: [WindowID: Date]
         let stageManagedWindowIDs: Set<WindowID>
         let liveDisplayIDs: Set<DisplayID>
         let providerFocusedID: WindowID?
@@ -368,6 +373,7 @@ public struct SnapshotService {
             keeping: liveWindowIDs,
             liveDisplayIDs: liveDisplayIDs,
             missingGrace: Self.stageMembershipMissingGrace,
+            lastObservedAt: input.lastObservedWindowAt,
             now: now
         )
         let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs, now: now)
@@ -386,13 +392,19 @@ public struct SnapshotService {
             persistentScope.adoptDefaultModeForEmptyDefaultStages(config.tiling.defaultStrategy)
             persistedStages.update(persistentScope)
             let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }
+            let activeMode = activePersistentStage?.mode ?? config.tiling.defaultStrategy
             try? state.createStage(
                 id: persistentScope.activeStageID,
                 name: "Stage \(persistentScope.activeStageID.rawValue)",
-                mode: activePersistentStage?.mode ?? .bsp,
+                mode: activeMode,
                 in: display.id,
                 desktopID: currentDesktopID
             )
+            // ensureDisplay crée déjà le stage 1 : createStage seul ne restaure pas son mode.
+            // Le mode doit aussi être correct quand aucune fenêtre vivante ne passe dans la boucle.
+            try? state.setMode(activeMode, for: StageScope(
+                displayID: display.id, desktopID: currentDesktopID, stageID: persistentScope.activeStageID
+            ))
             try? state.switchDesktop(currentDesktopID, on: display.id)
             try? state.switchStage(persistentScope.activeStageID, in: display.id, desktopID: currentDesktopID)
         }
@@ -455,7 +467,7 @@ public struct SnapshotService {
                     desktopID: persistentScope.desktopID,
                     stageID: persistentScope.activeStageID
                 )
-            } else if !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays),
+            } else if !input.hiddenWindowIDs.contains(window.id),
                       // FR-037 : un cadre hors de tout écran présent (écran débranché) n'écrase pas la
                       // dernière position visible du membre. O(d), d = nombre d'écrans.
                       displays.contains(where: { $0.frame.cgRect.intersects(window.frame.cgRect) }) {
@@ -483,7 +495,10 @@ public struct SnapshotService {
                 desktopID: desktopID,
                 stageID: stageID
             )
-            persistedStages.updateBookmarkObservation(window: window, scope: scope, now: now)
+            if !input.hiddenWindowIDs.contains(window.id),
+               displays.contains(where: { $0.frame.cgRect.intersects(window.frame.cgRect) }) {
+                persistedStages.updateBookmarkObservation(window: window, scope: scope, now: now)
+            }
             let isNewlyScoped = knownScope == nil
             let persistedScope = persistedStages.scopes.first {
                 $0.displayID == scope.displayID && $0.desktopID == scope.desktopID
@@ -508,7 +523,10 @@ public struct SnapshotService {
                 isNewlyScoped: isNewlyScoped
             ))
         }
-        correctSoloMaximizedStates(in: &persistedStages, scopedWindows: scopedWindows, displays: displays, config: config)
+        correctSoloMaximizedStates(
+            in: &persistedStages, scopedWindows: scopedWindows, hiddenWindowIDs: input.hiddenWindowIDs,
+            displays: displays, config: config
+        )
         var focusedID: WindowID?
         if input.followFocus,
            let providerFocusedID,
@@ -617,6 +635,7 @@ public struct SnapshotService {
     private func correctSoloMaximizedStates(
         in persistedStages: inout PersistentStageState,
         scopedWindows: [ScopedWindowSnapshot],
+        hiddenWindowIDs: Set<WindowID>,
         displays: [DisplaySnapshot],
         config: RoadieConfig
     ) {
@@ -624,7 +643,7 @@ public struct SnapshotService {
         for entry in scopedWindows where entry.window.isTileCandidate {
             guard let scope = entry.scope,
                   tiledCounts[scope] == 1,
-                  !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(entry.window.frame.cgRect, in: displays),
+                  !hiddenWindowIDs.contains(entry.window.id),
                   presentationState(for: entry.window, displayID: scope.displayID, displays: displays) == .maximized,
                   let display = displays.first(where: { $0.id == scope.displayID })
             else { continue }
@@ -1712,7 +1731,7 @@ public extension SnapshotService {
                 actual: Rect(actual)
             ))
         }
-        republishSharedSnapshot(after: items)
+        republishSharedSnapshot(after: items, windows: commands.map(\.window))
         var applied = 0, clamped = 0, failed = 0
         for item in items {
             switch item.status {
@@ -1781,7 +1800,7 @@ public extension SnapshotService {
             status: actual == nil ? .failed : .applied,
             requested: Rect(frame),
             actual: actual.map { Rect($0) }
-        )])
+        )], windows: [window])
         return actual
     }
 
@@ -1808,14 +1827,23 @@ public extension SnapshotService {
     /// lecteurs (bordure, focus-souris, navrail) ne refont pas de relevé complet. Une écriture en
     /// échec laisse la fenêtre dans un état inconnu ; un snapshot partiel n'existant pas, elle
     /// invalide le snapshot partagé, et le prochain lecteur refait un relevé.
-    private func republishSharedSnapshot(after items: [ApplyResultItem]) {
+    private func republishSharedSnapshot(after items: [ApplyResultItem], windows: [WindowSnapshot]) {
         guard !items.isEmpty else { return }
+        let frames = Dictionary(items.compactMap { item in item.actual.map { (item.windowID, $0) } },
+                                uniquingKeysWith: { _, last in last })
+        // Le read-back AX prouve le masquage même si une autre écriture du lot échoue ou si
+        // le focus invalide ensuite le cache avant le premier relevé de la nouvelle topologie.
+        processState.recordWrittenWindows(windows.compactMap { window in
+            guard let frame = frames[window.id] else { return nil }
+            var observed = window
+            observed.frame = frame
+            return observed
+        })
         if items.contains(where: { $0.actual == nil }) {
             invalidateSharedSnapshot()
             return
         }
-        processState.republish(frames: Dictionary(items.compactMap { item in item.actual.map { (item.windowID, $0) } },
-                                                  uniquingKeysWith: { _, last in last }))
+        processState.republish(frames: frames)
     }
 }
 
@@ -2061,8 +2089,13 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// Clé : option `followFocus` du snapshot publié.
     private var published: [Bool: Published] = [:]
     private var liveWindowIDs: Set<WindowID>?
+    private var recentWindowObservations: [WindowID: Date] = [:]
     private var lastDisappearanceAt: Date?
     private var tileClassification: [WindowID: Bool] = [:]
+    /// Masquages réellement observés, indépendants du cache publié. Une nouvelle topologie
+    /// peut rendre leur ancienne position visible avant que le maintainer les remasque.
+    private var hiddenWindows: [WindowID: (window: WindowSnapshot, missingSince: Date?)] = [:]
+    private var observedDisplays: [DisplaySnapshot] = []
     /// Arbres (SPEC-017) : destructions confirmées en attente, dernière application par commande,
     /// migration déjà tentée.
     private var destroyed: Set<WindowID> = []
@@ -2092,6 +2125,52 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func invalidatePublished() {
         lock.withLock { published.removeAll() }
+    }
+
+    /// Garde la preuve de masquage tant que l'identité et la frame observées sont les mêmes.
+    /// Une absence AX courte ne l'efface pas ; une frame différente ou une destruction l'efface.
+    /// O(w × d + h), avec w fenêtres, d écrans et h preuves récentes.
+    func observedHiddenWindowIDs(_ windows: [WindowSnapshot], in displays: [DisplaySnapshot], now: Date) -> Set<WindowID> {
+        lock.withLock {
+            observedDisplays = displays
+            let liveIDs = Set(windows.map(\.id))
+            for id in Array(hiddenWindows.keys) {
+                guard let previous = hiddenWindows[id] else { continue }
+                if destroyed.contains(id) || previous.missingSince.map({ now.timeIntervalSince($0) >= LayoutTolerance.missingWindowGraceSeconds }) == true {
+                    hiddenWindows.removeValue(forKey: id)
+                } else if !liveIDs.contains(id) {
+                    hiddenWindows[id] = (previous.window, previous.missingSince ?? now)
+                }
+            }
+            var hidden: Set<WindowID> = []
+            for window in windows {
+                let previous = hiddenWindows[window.id]?.window
+                let sameObservedFrame = previous?.pid == window.pid
+                    && previous?.bundleID == window.bundleID && previous?.frame == window.frame
+                if HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: displays) || sameObservedFrame {
+                    hidden.insert(window.id)
+                    if !destroyed.contains(window.id) { hiddenWindows[window.id] = (window, nil) }
+                } else {
+                    hiddenWindows.removeValue(forKey: window.id)
+                }
+            }
+            return hidden
+        }
+    }
+
+    /// Enregistre les cadres réellement relus après une écriture, avec leur identité et la
+    /// dernière topologie observée. Cette preuve survit à l'invalidation du cache. O(w × d).
+    func recordWrittenWindows(_ windows: [WindowSnapshot]) {
+        lock.withLock {
+            for window in windows {
+                if !destroyed.contains(window.id),
+                   HiddenWindowPlacement.isHiddenOrLegacyOffscreen(window.frame.cgRect, in: observedDisplays) {
+                    hiddenWindows[window.id] = (window, nil)
+                } else {
+                    hiddenWindows.removeValue(forKey: window.id)
+                }
+            }
+        }
     }
 
     /// Remplace les frames des fenêtres écrites dans les snapshots publiés, sans changer leur âge. O(w).
@@ -2147,15 +2226,20 @@ final class SnapshotProcessState: @unchecked Sendable {
         }
     }
 
-    /// Enregistre les fenêtres gérées vivantes ; renvoie la date de la dernière disparition vue.
+    /// Enregistre les fenêtres réellement vues, sans écrire au repos. Les dates récentes restent
+    /// disponibles après une absence, même si un lecteur la relève avant le snapshot écrivain.
     // O(n)
-    func recordLiveWindows(_ ids: Set<WindowID>, now: Date) -> Date? {
+    func recordLiveWindows(_ ids: Set<WindowID>, now: Date) -> (lastDisappearanceAt: Date?, lastSeenAt: [WindowID: Date]) {
         lock.withLock {
             if let previous = liveWindowIDs, !previous.isSubset(of: ids) {
                 lastDisappearanceAt = now
             }
             liveWindowIDs = ids
-            return lastDisappearanceAt
+            recentWindowObservations = recentWindowObservations.filter {
+                ids.contains($0.key) || now.timeIntervalSince($0.value) <= LayoutTolerance.missingWindowGraceSeconds
+            }
+            for id in ids { recentWindowObservations[id] = now }
+            return (lastDisappearanceAt, recentWindowObservations)
         }
     }
 
