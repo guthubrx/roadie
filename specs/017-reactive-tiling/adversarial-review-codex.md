@@ -44,3 +44,24 @@ Aucune objection rejetée. L'objection 12 est retenue en partie, avec une limite
 | 10 | Stabilité observée non mesurable ; épisode fermé pendant une garde | lecture contrat, A12 | oui | A20 : événement `layout_stable`, épisode ouvert tant qu'une échéance est en attente |
 
 Aucune objection rejetée. Pas de round 3 sur le plan : les points restants sont des précisions de contrat, appliquées. La contre-revue de l'implémentation vérifiera leur réalisation.
+
+## Round 3 : implémentation (2026-10-11)
+
+- **Agent** : Codex GPT-6.1-Sol (OpenAI), via `delegate_task`. Il a compilé de son côté : 734 tests verts.
+- **Verdict** : **BLOCKED** (2 bloquantes, 8 majeures, 1 mineure). Il ne relève aucun défaut majeur dans le cache JSON (`fstat`, revalidation sous verrou) ni dans la migration.
+
+| # | Objection | Vérifiée comment | Retenue | Suite |
+|---|---|---|---|---|
+| 1 | Échéance passée rendue « maintenant + 1 ms », jamais déclenchée par `fire()` | lecture `LayoutMaintainer.swift:374-382` et `TickScheduler.swift:124-136`. Journal réel : gardes fermées par `timeout` après 2284 et 1646 ms (plafond 1500) | oui | tâche de convergence |
+| 2 | Bascules stage, bureau et signet, `window display N`, dépôt entre scopes : écritures avant le plan final | lecture des lignes citées | oui | tâche de convergence |
+| 3 | Génération 0 sur les écritures directes ; budget non contrôlé au point commun d'écriture | lecture citée | oui | tâche de convergence |
+| 4 | `treeScopes` calculé avant les règles, donc périmé | lecture citée | oui | tâche de convergence |
+| 5 | Frame acceptée non bornée à la génération dans `treeCommands` | lecture `DaemonSnapshot.swift:1153` | oui | tâche de convergence |
+| 6 | Geste abandonné par une grâce de relâchement sans dépôt reconnu | lecture citée | oui | tâche de convergence |
+| 7 | Dérive d'écran physique appliquée aux scopes à arbre sans geste | lecture citée | oui | tâche de convergence |
+| 8 | Lecture AX échouée remplacée par la frame du snapshot ; garde stable sur ensemble vide | lecture citée | oui | tâche de convergence |
+| 9 | `applyTreeScope` ne réarme ni le suivi ni l'ordonnanceur | lecture citée | oui | tâche de convergence |
+| 10 | `focus` directionnel sur les frames physiques | lecture citée | oui | tâche de convergence |
+| 11 | `warping`, `resizing` et `reconciled` sans appelant de production | `rg` | oui | tâche de convergence |
+
+**Latence de 69 ms** : hypothèse de Codex, une attente sur la file principale avant l'exécution, peut-être allongée par un geste retenu. La mesure doit séparer le délai demandé, l'échéance effective et le retard d'exécution. Retenu comme tâche d'instrumentation.

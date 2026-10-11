@@ -1023,6 +1023,41 @@ public struct ApplyCommand: Equatable, Codable, Sendable {
     }
 }
 
+/// Résultat d'une application d'arbre faite par une commande (T219). Publié au maintainer du même
+/// processus pour qu'il suive fenêtres, génération, refus et stabilité, sans refaire le placement.
+public struct TreeScopeApplication: Equatable, Sendable {
+    public var scope: StageScope
+    public var generation: UInt64
+    public var windowIDs: [WindowID]
+    public var appliedAt: Date
+
+    public init(scope: StageScope, generation: UInt64, windowIDs: [WindowID], appliedAt: Date) {
+        self.scope = scope
+        self.generation = generation
+        self.windowIDs = windowIDs
+        self.appliedAt = appliedAt
+    }
+}
+
+/// Point de publication des applications de commande, global au processus (les `SnapshotService`
+/// sont des valeurs créées par chaque commande). Le daemon y branche le maintainer et l'ordonnanceur.
+public final class TreeScopeApplicationCenter: @unchecked Sendable {
+    public static let shared = TreeScopeApplicationCenter()
+    private let lock = NSLock()
+    private var handler: (@Sendable (TreeScopeApplication) -> Void)?
+
+    public init() {}
+
+    public func setHandler(_ handler: (@Sendable (TreeScopeApplication) -> Void)?) {
+        lock.withLock { self.handler = handler }
+    }
+
+    public func publish(_ application: TreeScopeApplication) {
+        let current = lock.withLock { handler }
+        current?(application)
+    }
+}
+
 extension SnapshotService {
     /// Application immédiate de l'arbre d'un scope pour une commande (A15, A20), après sa mutation
     /// de l'arbre : un snapshot (le partagé s'il est encore valide), le plan de l'arbre projeté du
