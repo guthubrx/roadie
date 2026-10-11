@@ -28,8 +28,7 @@ public struct WrittenFrame: Sendable, Equatable {
 public final class WrittenFrameRegistry: @unchecked Sendable {
     public static let shared = WrittenFrameRegistry()
 
-    // Remplacée par LayoutTolerance.echoWindow en jonction de vague.
-    private static let echoWindow: TimeInterval = 1.0
+    private static let echoWindow: TimeInterval = LayoutTolerance.echoWindow
 
     public enum Classification: Equatable { case echo, appResponse, external }
 
@@ -114,4 +113,21 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
             && abs(lhs.width - rhs.width) <= tolerance
             && abs(lhs.height - rhs.height) <= tolerance
     }
+}
+
+/// Génération de placement globale et monotone (A13). Une génération s'ouvre à chaque intention
+/// externe (événement, commande, bascule, geste) ; une correction interne garde la génération en cours.
+public final class PlacementGeneration: @unchecked Sendable {
+    public static let shared = PlacementGeneration()
+    private let lock = NSLock()
+    private var value: UInt64 = 0
+
+    public init() {}
+
+    /// Ouvre une nouvelle génération et la renvoie. O(1).
+    @discardableResult
+    public func next() -> UInt64 { lock.withLock { value &+= 1; return value } }
+
+    /// Génération en cours (0 si aucune n'a été ouverte). O(1).
+    public var current: UInt64 { lock.withLock { value } }
 }

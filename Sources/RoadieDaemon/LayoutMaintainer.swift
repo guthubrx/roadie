@@ -100,6 +100,15 @@ public final class LayoutMaintainer {
         self.now = now
     }
 
+    // Stubs de jonction SPEC-017 (A10, A20) : le lot L7 les remplit et inverse la délégation.
+    public func tick(cause: String) -> MaintenanceTick { tick() }
+
+    /// Prochaine échéance interne (stabilisation, garde, refus, glisser...). nil = aucune.
+    public func nextDeadline(now: Date) -> Date? { nil }
+
+    /// Signal NSWorkspace activeSpaceDidChange transmis par l'ordonnanceur (A5, A19).
+    public func spaceDidChange(displayUUID: String?) {}
+
     public func tick() -> MaintenanceTick {
         // Snapshot du tick publié comme source partagée du cycle (FR-023, T212).
         let snapshot = service.producerSnapshot(cycle: intervalSeconds)

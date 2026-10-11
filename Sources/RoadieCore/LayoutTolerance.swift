@@ -102,4 +102,22 @@ public enum LayoutTolerance {
 
     /// Grâce avant de retirer un membre ou un épinglage dont la fenêtre a disparu, en secondes (FR-007).
     public static let missingWindowGraceSeconds: Double = 45
+
+    // SPEC-017 : tiling réactif (research.md, amendements A13 à A20).
+    /// Délai pendant lequel une frame différente de la frame demandée est une réponse de l'application (A4).
+    public static let echoWindow: Double = 1.0
+    /// Rafale de changements de membres : 2 changements au moins dans cette fenêtre (A6, A18).
+    public static let burstWindow: Double = 0.3
+    /// Calme qui termine une rafale (A18).
+    public static let burstQuiet: Double = 0.1
+    /// Plafond d'une stabilisation de rafale (A18).
+    public static let burstCap: Double = 1.0
+    /// Intervalle de lecture du type de bureau pendant une garde de transition (A5, A19).
+    public static let spaceGuardPoll: Double = 0.05
+    /// Plafond d'une garde de transition de bureau (A5).
+    public static let spaceGuardCap: Double = 1.5
+    /// Relecture fraîche d'un refus non confirmé par une notification (A14).
+    public static let refusalConfirmDelay: Double = 0.1
+    /// Écritures au plus par fenêtre et par génération de placement (A13).
+    public static let writeBudgetPerGeneration = 2
 }

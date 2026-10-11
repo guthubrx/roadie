@@ -61,6 +61,22 @@ public final class FocusFollowsMouseController {
 /// après la dernière disparition de fenêtre. Sans moniteur actif (CLI, processus qui ne l'a pas
 /// démarré), aucune saisie n'est prouvée : le suivi est refusé (comportement conservateur, T211).
 /// Le tiler, le rail, la bordure et le focus-souris démarrent le moniteur.
+/// Session de geste souris (A4, A17) : ouverte au clic, fermée au relâchement.
+/// `windowID == nil` : clic hors de toute fenêtre gérée, aucun geste.
+public struct GestureSession: Equatable, Sendable {
+    public var windowID: UInt32?
+    public var startFrame: CGRect?
+    public var startedAt: Date
+    public var endedAt: Date?
+
+    public init(windowID: UInt32?, startFrame: CGRect?, startedAt: Date, endedAt: Date? = nil) {
+        self.windowID = windowID
+        self.startFrame = startFrame
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+    }
+}
+
 public final class UserInputActivity: @unchecked Sendable {
     public static let shared = UserInputActivity()
 
@@ -92,6 +108,13 @@ public final class UserInputActivity: @unchecked Sendable {
             monitoring = token != nil
         }
     }
+
+    // Stubs de jonction SPEC-017 (A20) : le lot L6 les remplit.
+    /// Session en cours (bouton enfoncé). nil hors geste.
+    public var currentGesture: GestureSession? { nil }
+
+    /// Dernière session terminée, consommée une seule fois (A17).
+    public func takeGesture() -> GestureSession? { nil }
 
     public func recordInput(at date: Date = Date()) {
         lock.withLock { lastInputAt = date }

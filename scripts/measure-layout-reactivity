@@ -61,7 +61,8 @@ AUX_TYPES = {"layout_failed", "manual_resize_detected", "fullscreen_layout_suppr
 OBSERVED_TYPES = {"layout_apply", "layout_echo_ignored", "layout_app_response_accepted",
                   "layout_external_change_reverted", "layout_manual_gesture"}
 GUARD_TYPE = "space_transition_guard"
-EPISODE_TYPES = OBSERVED_TYPES | {GUARD_TYPE, "space_did_change", "state_migrated", "layout_clamped"}
+STABLE_TYPE = "layout_stable"  # A20 : stabilité observée par une lecture fraîche
+EPISODE_TYPES = OBSERVED_TYPES | {GUARD_TYPE, STABLE_TYPE, "space_did_change", "state_migrated", "layout_clamped"}
 
 
 def parse_ts(value):
@@ -213,13 +214,16 @@ def summarize(ep, events_by_ts):
     feedback = sum(1 for f in feedback_candidates
                    if any(abs(f["ts"] - a) <= FEEDBACK_WIN for a in apply_ts))
     holds = [num(e["d"], "holdSeconds") for e in members if e["type"] == "layout_stage_membership_settling"]
+    # A20 : quand le daemon émet `layout_stable`, il fait foi pour la stabilité observée.
+    stable_events = [e for e in members if e["type"] == STABLE_TYPE]
+    stable_ts = stable_events[-1]["ts"] if stable_events else (observed[-1] if apply_ts else None)
     return {
         "start": ep["start"],
         "end": end,
         "episode_id": ep["id"],
         "precise": all(e["precise"] for e in members),
         "time_to_write_end_s": (apply_ts[-1] - ep["start"]) if apply_ts else None,
-        "time_to_stable_s": (observed[-1] - ep["start"]) if apply_ts else None,
+        "time_to_stable_s": (stable_ts - ep["start"]) if stable_ts is not None and apply_ts else None,
         "time_to_guard_end_s": (guard["ts"] - ep["start"]) if guard else None,
         "guard_held_ms": num(guard["d"], "heldMs") if guard else None,
         "guard_closed_by": guard["d"].get("closedBy") if guard else None,

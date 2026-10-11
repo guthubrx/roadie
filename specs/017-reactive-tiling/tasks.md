@@ -96,12 +96,12 @@
 
 ## Phase 3 : Jonction de la vague 1 (orchestrateur)
 
-- [ ] T050 Ajouter à `Sources/RoadieCore/LayoutTolerance.swift` les constantes de plan.md. Poser les stubs compilables (A10) :
+- [x] T050 Ajouter à `Sources/RoadieCore/LayoutTolerance.swift` les constantes de plan.md. Poser les stubs compilables (A10) :
   - `LayoutMaintainer.tick(cause:)`, `nextDeadline(now:)` et `spaceDidChange(displayUUID:)` ;
   - `SnapshotService.applyTreeScope(_:cause:)`.
 
   Build, suite complète, commit de la vague 1.
-- [ ] T051 Poser aussi :
+- [x] T051 Poser aussi :
   - les stubs A20 : `UserInputActivity.currentGesture`, `takeGesture()`, `PlacementGeneration.next()` (compteur global) et le paramètre `generation` de `applyTreeScope` ;
   - le type `layout_stable` dans le catalogue et dans `scripts/measure-layout-reactivity` (stabilité observée = `layout_stable.stableAfterMs` quand il est présent) ;
   - le remplacement des constantes locales de L3 par celles de `LayoutTolerance`.

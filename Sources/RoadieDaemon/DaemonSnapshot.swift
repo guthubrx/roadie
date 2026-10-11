@@ -937,6 +937,14 @@ public struct ApplyCommand: Equatable, Codable, Sendable {
     }
 }
 
+extension SnapshotService {
+    /// Application immédiate de l'arbre d'un scope, en une passe, pour les commandes (A15, A20).
+    /// Stub de jonction SPEC-017 : le lot L8 le remplit.
+    public func applyTreeScope(_ scope: StageScope, cause: String, generation: UInt64) -> MaintenanceTick {
+        MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+    }
+}
+
 public struct ApplyResult: Equatable, Codable, Sendable {
     public var attempted: Int
     public var applied: Int
