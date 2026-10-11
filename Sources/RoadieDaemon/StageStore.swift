@@ -193,6 +193,50 @@ public struct StageStore: Sendable {
             body
         )
     }
+
+    /// Migration SPEC-017 (A8) : passe les stages `mutableBsp` en `spatialBsp`, en une transaction.
+    /// Avant la première écriture migrée, les octets d'origine sont copiés dans `<fichier>.pre-017`
+    /// (une seule fois, jamais écrasée). L'arbre est construit par `infer` s'il est absent ou ne couvre
+    /// pas exactement les membres : membres dans leur ordre, frame nil si elle est dégénérée ;
+    /// conteneur de l'écran, sinon l'union des frames connues. Rend le nombre de stages migrées :
+    /// 0, sans écriture, si rien n'est à migrer ou si le fichier est illisible.
+    // O(m) - m = membres de toutes les stages, hors coût de `infer`.
+    @discardableResult
+    public func migrateLegacyTreeModes(
+        infer: ([(WindowID, CGRect?)], CGRect) -> BSPTree,
+        container: (StageScope) -> CGRect?
+    ) throws -> Int {
+        try mutate { state in
+            guard state.scopes.contains(where: { $0.stages.contains { $0.mode == .mutableBsp } }) else { return 0 }
+            let backup = url.path + ".pre-017"
+            if !FileManager.default.fileExists(atPath: backup) {
+                try FileManager.default.copyItem(atPath: url.path, toPath: backup)
+            }
+            var migrated = 0
+            for scopeIndex in state.scopes.indices {
+                let scope = state.scopes[scopeIndex]
+                for stageIndex in scope.stages.indices where scope.stages[stageIndex].mode == .mutableBsp {
+                    var stage = scope.stages[stageIndex]
+                    stage.mode = .spatialBsp
+                    let ids = stage.members.map(\.windowID)
+                    let leaves = stage.bspTree?.windowIDs ?? []
+                    if leaves.count != ids.count || Set(leaves) != Set(ids) {
+                        let ordered = stage.members.map { member -> (WindowID, CGRect?) in
+                            let frame = member.frame.cgRect
+                            return (member.windowID, frame.width > 0 && frame.height > 0 ? frame : nil)
+                        }
+                        let known = ordered.compactMap(\.1).reduce(CGRect.null) { $0.union($1) }
+                        let stageScope = StageScope(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)
+                        let rect = container(stageScope) ?? (known.isNull ? .zero : known)
+                        stage.bspTree = ids.isEmpty ? nil : infer(ordered, rect)
+                    }
+                    state.scopes[scopeIndex].stages[stageIndex] = stage
+                    migrated += 1
+                }
+            }
+            return migrated
+        }
+    }
 }
 
 public struct PersistentStageState: Equatable, Codable, Sendable {

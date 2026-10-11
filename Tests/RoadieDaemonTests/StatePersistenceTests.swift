@@ -1,8 +1,9 @@
 import Foundation
+import os
 import Testing
 import RoadieAX
 import RoadieCore
-import RoadieDaemon
+@testable import RoadieDaemon
 import RoadieStages
 
 /// Lot A SPEC-016 : transactions d'état, fichier illisible, écriture conditionnelle,
@@ -56,6 +57,117 @@ struct StatePersistenceTests {
         DispatchQueue.concurrentPerform(iterations: 100) { index in
             stores[index % 2].mutate { state in
                 state.setLabel("L\(index)", displayID: display, desktopID: DesktopID(rawValue: index + 1))
+            }
+        }
+
+        #expect(StageStore(path: path).state().desktopLabels.count == 100)
+    }
+
+    // MARK: - Cache de l'état (SPEC-017 A7)
+
+    /// Deux lectures d'un fichier inchangé : un seul décodage. Une écriture par `mutate` publie
+    /// la valeur : la lecture suivante ne décode pas.
+    @Test
+    func cachedLoadsDecodeUnchangedFileOnce() throws {
+        let url = URL(fileURLWithPath: tempPath("state-cache-decodes"))
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONEncoder().encode(CountedPayload(value: 1)).write(to: url, options: .atomic)
+        let start = CountedPayload.decodes.withLock { $0 }
+
+        _ = JSONPersistence.load(CountedPayload.self, from: url, default: CountedPayload(value: 0))
+        _ = JSONPersistence.load(CountedPayload.self, from: url, default: CountedPayload(value: 0))
+        let afterLoads = CountedPayload.decodes.withLock { $0 }
+        JSONPersistence.mutate(CountedPayload.self, at: url, default: CountedPayload(value: 0), label: "test") { $0.value = 2 }
+        let loaded = JSONPersistence.load(CountedPayload.self, from: url, default: CountedPayload(value: 0))
+
+        #expect(afterLoads - start == 1)
+        #expect(CountedPayload.decodes.withLock { $0 } == afterLoads)
+        #expect(loaded.value == 2)
+    }
+
+    /// Une écriture d'un autre processus (hors de ce cache), faite entre un `load` et un `mutate`,
+    /// n'est pas perdue : par rename (nouvel inode) ou en place (même inode, mtime différent).
+    @Test
+    func externalWriteBetweenLoadAndMutateIsNotLost() throws {
+        let path = tempPath("state-cache-external")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let url = URL(fileURLWithPath: path)
+        let store = StageStore(path: path)
+        store.mutate { $0.setLabel("A", displayID: display, desktopID: DesktopID(rawValue: 1)) }
+
+        var external = store.state()
+        external.setLabel("B", displayID: display, desktopID: DesktopID(rawValue: 2))
+        try JSONEncoder().encode(external).write(to: url, options: .atomic)
+        store.mutate { $0.setLabel("C", displayID: display, desktopID: DesktopID(rawValue: 3)) }
+
+        _ = store.state()
+        external = store.state()
+        external.setLabel("D", displayID: display, desktopID: DesktopID(rawValue: 2))
+        try JSONEncoder().encode(external).write(to: url)
+        store.mutate { $0.setLabel("E", displayID: display, desktopID: DesktopID(rawValue: 4)) }
+
+        #expect(Set(StageStore(path: path).state().desktopLabels.map(\.label)) == ["A", "C", "D", "E"])
+    }
+
+    /// Un `mutate` sans changement n'encode ni n'écrit : date de modification identique à la ns.
+    @Test
+    func unchangedMutateKeepsModificationTime() {
+        let path = tempPath("state-cache-mtime")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let store = StageStore(path: path)
+        store.save(stateWithMember(pid: 1))
+        func modified() -> [Int] {
+            var info = stat()
+            guard stat(path, &info) == 0 else { return [] }
+            return [info.st_mtimespec.tv_sec, info.st_mtimespec.tv_nsec, Int(info.st_ino)]
+        }
+        let before = modified()
+
+        store.mutate { _ in }
+        store.mutate { $0.activeDisplayID = nil }
+
+        #expect(!before.isEmpty)
+        #expect(modified() == before)
+    }
+
+    /// Une valeur en cache ne masque pas un fichier devenu illisible : comportement SPEC-016 intact.
+    @Test
+    func cachedValueDoesNotHideFileThatBecameUnreadable() throws {
+        let path = tempPath("state-cache-corrupt")
+        let directory = (path as NSString).deletingLastPathComponent
+        let name = (path as NSString).lastPathComponent
+        defer {
+            try? FileManager.default.removeItem(atPath: path)
+            for file in (try? FileManager.default.contentsOfDirectory(atPath: directory)) ?? [] where file.hasPrefix("\(name).corrupt-") {
+                try? FileManager.default.removeItem(atPath: "\(directory)/\(file)")
+            }
+        }
+        let store = StageStore(path: path)
+        store.save(stateWithMember(pid: 1))
+        #expect(store.state() == stateWithMember(pid: 1))
+        let garbage = "{\"scopes\": [ truncated"
+        try garbage.write(toFile: path, atomically: true, encoding: .utf8)
+
+        #expect(store.state() == PersistentStageState())
+        #expect(store.loadFailure != nil)
+        store.mutate { $0.activeDisplayID = display }
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == garbage)
+    }
+
+    /// 100 mutations concurrentes, mêlées de lectures servies par le cache : rien n'est perdu.
+    @Test
+    func concurrentMutationsWithCachedReadsLoseNothing() {
+        let path = tempPath("state-cache-concurrent")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let stores = [StageStore(path: path), StageStore(path: path)]
+
+        DispatchQueue.concurrentPerform(iterations: 200) { index in
+            if index.isMultiple(of: 2) {
+                stores[0].mutate { state in
+                    state.setLabel("L\(index)", displayID: display, desktopID: DesktopID(rawValue: index + 1))
+                }
+            } else {
+                _ = stores[1].state()
             }
         }
 
@@ -424,4 +536,19 @@ private final class ConcurrentWriteProvider: SystemSnapshotProviding, WindowFram
     }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? { nil }
+}
+
+/// Charge utile qui compte ses décodages (test du cache, A7).
+private struct CountedPayload: Codable, Equatable {
+    static let decodes = OSAllocatedUnfairLock(initialState: 0)
+    var value: Int
+
+    init(value: Int) {
+        self.value = value
+    }
+
+    init(from decoder: Decoder) throws {
+        value = try decoder.container(keyedBy: CodingKeys.self).decode(Int.self, forKey: .value)
+        Self.decodes.withLock { $0 += 1 }
+    }
 }

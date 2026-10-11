@@ -1,16 +1,19 @@
 import Foundation
+import os
 import RoadieCore
 
 /// Fenêtre d'activité des commandes de disposition, partagée entre processus via un fichier.
 /// Les écritures (lecture du délai courant puis prolongation) se font sous `FileLock` exclusif :
 /// le verrou protège à la fois les threads du processus (un descripteur par prise) et les autres
 /// processus. Les lectures restent sans verrou (écriture atomique par rename).
-/// Aucun état mutable en mémoire : la classe est `Sendable` sans `@unchecked`.
+/// Seul état en mémoire : le dernier contenu lu et la signature du fichier (SPEC-017 A7), sous verrou
+/// interne. Une lecture ne relit le fichier que si sa signature a changé.
 public final class LayoutCommandActivity: Sendable {
     public static let shared = LayoutCommandActivity(enabled: !TestEnvironment.isRunningTests)
 
     private let url: URL
     private let enabled: Bool
+    private let lastRead = OSAllocatedUnfairLock<(signature: FileSignature, entries: Entries)?>(initialState: nil)
 
     public init(path: String = "~/.local/state/roadies/layout-command-activity", enabled: Bool = true) {
         self.url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
@@ -103,9 +106,19 @@ public final class LayoutCommandActivity: Sendable {
         }
     }
 
+    /// Contenu courant ; relu seulement si la signature du fichier a changé (A7). O(1) si inchangé.
     private func readEntries() -> Entries {
-        guard let payload = try? String(contentsOf: url, encoding: .utf8) else { return Entries() }
-        return Entries(payload: payload)
+        let known = lastRead.withLock { $0 }
+        switch JSONPersistence.readSigned(url, unless: known?.signature) {
+        case .unchanged:
+            return known?.entries ?? Entries()
+        case .read(let signature, let data):
+            let entries = String(data: data, encoding: .utf8).map(Entries.init(payload:)) ?? Entries()
+            lastRead.withLock { $0 = (signature, entries) }
+            return entries
+        case .missing, .failed:
+            return Entries()
+        }
     }
 
     /// Contenu du fichier. Ligne 1 : délai global (0 si aucun), lu tel quel par les versions

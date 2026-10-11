@@ -7,8 +7,10 @@ import os
 /// Regles (SPEC-016) :
 /// - lectures simples sans verrou (cf. `load`) ;
 /// - modifications en transaction exclusive (`mutate`, FR-013) ;
-/// - aucune reecriture si les octets encodes sont identiques au fichier (FR-014) ;
-/// - fichier illisible conserve en `.corrupt-<horodatage>` et jamais ecrase (FR-015).
+/// - aucune reecriture si la valeur (`mutate`) ou les octets (`writeThrowing`) sont inchanges (FR-014) ;
+/// - fichier illisible conserve en `.corrupt-<horodatage>` et jamais ecrase (FR-015) ;
+/// - valeur decodee gardee en cache par chemin et par processus, revalidee par la signature
+///   du fichier (SPEC-017 A7) : un fichier inchange n'est ni relu ni decode.
 enum JSONPersistence {
     enum LoadResult<T> {
         case missing
@@ -32,7 +34,7 @@ enum JSONPersistence {
 
     /// Distingue fichier absent, charge ou illisible (SPEC-016 R2). Sans verrou.
     static func loadResult<T: Decodable>(_ type: T.Type, from url: URL) -> LoadResult<T> {
-        let result = read(type, from: url).result
+        let result = read(type, from: url)
         if case .corrupt(let error) = result {
             reportCorrupt(url: url, error: error)
         }
@@ -48,8 +50,11 @@ enum JSONPersistence {
     ///   aucune exception (seules les erreurs de `body` sont propagees).
     /// - Fichier illisible : `body` travaille sur `defaultValue`, rien n'est ecrit (FR-015).
     /// - Le signalement (copie, stderr, evenement) a lieu apres la sortie du verrou.
+    /// - Valeur inchangee (`Equatable`) : ni encodage ni ecriture (FR-014). Fichier absent : la valeur
+    ///   est ecrite, comme avant. Apres une ecriture, la valeur et la signature du nouveau fichier
+    ///   sont publiees dans le cache avant la liberation du verrou (A7).
     @discardableResult
-    static func mutate<T: Codable, R>(
+    static func mutate<T: Codable & Equatable, R>(
         _ type: T.Type,
         at url: URL,
         default defaultValue: T,
@@ -75,22 +80,24 @@ enum JSONPersistence {
         }
         defer { lock.release() }
 
-        let (result, existing) = read(type, from: url)
-        var value: T
-        switch result {
+        let original: T?
+        switch read(type, from: url) {
         case .loaded(let loaded):
-            value = loaded
+            original = loaded
         case .missing:
-            value = defaultValue
+            original = nil
         case .corrupt(let error):
             corruptError = error
             fputs("roadie: \(label) not persisted, state file is unreadable\n", stderr)
             var fallback = defaultValue
             return try body(&fallback)
         }
+        var value = original ?? defaultValue
         let output = try body(&value)
+        guard original != value else { return output }
         do {
-            try writeLocked(value, to: url, existing: existing)
+            try writeLocked(value, to: url, existing: nil)
+            publish(value, at: url, signature: FileSignature(path: url.path))
         } catch {
             fputs("roadie: failed to persist \(label): \(error)\n", stderr)
         }
@@ -155,18 +162,77 @@ enum JSONPersistence {
         try data.write(to: url, options: .atomic)
     }
 
-    private static func read<T: Decodable>(_ type: T.Type, from url: URL) -> (result: LoadResult<T>, data: Data?) {
-        let data: Data
-        do {
-            data = try Data(contentsOf: url)
-        } catch {
-            if !FileManager.default.fileExists(atPath: url.path) { return (.missing, nil) }
-            return (.corrupt(error), nil)
+    /// Lecture par la signature (A7) : `fstat` sur le descripteur ouvert ; valeur en cache si la
+    /// signature est egale, sinon octets lus depuis CE descripteur, decodes et mis en cache.
+    /// Un fichier absent ou illisible n'est pas mis en cache.
+    // O(1) si inchange, O(taille du fichier) sinon.
+    private static func read<T: Decodable>(_ type: T.Type, from url: URL) -> LoadResult<T> {
+        let cached = cache.withLockUnchecked { $0[url.path] }
+        let known = cached.flatMap { $0.value is T ? $0.signature : nil }
+        switch readSigned(url, unless: known) {
+        case .missing:
+            return .missing
+        case .failed(let error):
+            return .corrupt(error)
+        case .unchanged:
+            // `known` non nil implique une valeur de type T en cache.
+            return .loaded(cached!.value as! T)
+        case .read(let signature, let data):
+            do {
+                let value = try JSONDecoder().decode(type, from: data)
+                publish(value, at: url, signature: signature)
+                return .loaded(value)
+            } catch {
+                return .corrupt(error)
+            }
         }
+    }
+
+    /// Ouvre `url`, lit sa signature par `fstat`, puis ses octets depuis le meme descripteur,
+    /// sauf si la signature vaut `known`. Lire par le descripteur garantit que les octets
+    /// correspondent a la signature, meme si un rename remplace le fichier entre-temps.
+    static func readSigned(_ url: URL, unless known: FileSignature?) -> SignedRead {
+        let fd = open(url.path, O_RDONLY | O_CLOEXEC)
+        guard fd >= 0 else {
+            let code = errno
+            if code == ENOENT { return .missing }
+            return .failed(POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO))
+        }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(fd, &info) == 0 else {
+            return .failed(POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+        }
+        let signature = FileSignature(info)
+        if signature == known { return .unchanged(signature) }
         do {
-            return (.loaded(try JSONDecoder().decode(type, from: data)), data)
+            return .read(signature, try handle.readToEnd() ?? Data())
         } catch {
-            return (.corrupt(error), data)
+            return .failed(error)
+        }
+    }
+
+    enum SignedRead {
+        case missing
+        case failed(Error)
+        case unchanged(FileSignature)
+        case read(FileSignature, Data)
+    }
+
+    /// Cache par chemin : derniere valeur decodee et signature du fichier dont elle vient.
+    /// La valeur est un type valeur copie ; l'acces passe par le verrou interne.
+    private struct CacheEntry {
+        var signature: FileSignature
+        var value: Any
+    }
+
+    private static let cache = OSAllocatedUnfairLock(uncheckedState: [String: CacheEntry]())
+
+    /// Publie (valeur, signature). Sans signature (stat en echec), l'entree est retiree :
+    /// la lecture suivante relira le fichier.
+    private static func publish<T>(_ value: T, at url: URL, signature: FileSignature?) {
+        cache.withLockUnchecked { entries in
+            entries[url.path] = signature.map { CacheEntry(signature: $0, value: value) }
         }
     }
 
@@ -203,5 +269,28 @@ enum JSONPersistence {
             "backup": backupPath,
             "error": String(describing: error),
         ]))
+    }
+}
+
+/// Signature d'un fichier (SPEC-017 A7) : date de modification en ns, taille et inode.
+/// L'ecriture atomique (rename) change l'inode ; une ecriture en place change la date ou la taille.
+struct FileSignature: Equatable, Sendable {
+    var modifiedSeconds: Int64
+    var modifiedNanoseconds: Int64
+    var size: Int64
+    var inode: UInt64
+
+    init(_ info: stat) {
+        modifiedSeconds = Int64(info.st_mtimespec.tv_sec)
+        modifiedNanoseconds = Int64(info.st_mtimespec.tv_nsec)
+        size = Int64(info.st_size)
+        inode = UInt64(info.st_ino)
+    }
+
+    /// Signature par chemin ; nil si le fichier est absent.
+    init?(path: String) {
+        var info = stat()
+        guard stat(path, &info) == 0 else { return nil }
+        self.init(info)
     }
 }

@@ -29,16 +29,16 @@
 
 ### Lot L2 - Cache de l'état et migration (Opus) [US1, US3]
 
-- [ ] T020 [P] [US1] Implémenter dans `Sources/RoadieDaemon/JSONPersistence.swift` le contrat A7 : signature `fstat` sur le descripteur ouvert (mtime ns, taille, inode), octets lus depuis ce même descripteur, revalidation après acquisition du verrou. Après un `mutate` qui écrit, publier la valeur et la signature avec le verrou encore tenu. Aucun encodage ni écriture si la valeur est égale. Réutiliser ou étendre `fileModificationStamp`. `.missing`, `.corrupt` et le refus d'écriture restent inchangés.
-- [ ] T021 [P] [US1] Brancher `StageStore.state()`, `LayoutIntentStore` et `LayoutCommandActivity` sur ce cache (`StageStore.swift`, `LayoutIntentStore.swift`, `LayoutCommandActivity.swift`).
-- [ ] T022 [P] [US3] Ajouter `StageStore.migrateLegacyTreeModes(infer:container:)` (A8), sous un seul verrou :
+- [x] T020 [P] [US1] Implémenter dans `Sources/RoadieDaemon/JSONPersistence.swift` le contrat A7 : signature `fstat` sur le descripteur ouvert (mtime ns, taille, inode), octets lus depuis ce même descripteur, revalidation après acquisition du verrou. Après un `mutate` qui écrit, publier la valeur et la signature avec le verrou encore tenu. Aucun encodage ni écriture si la valeur est égale. Réutiliser ou étendre `fileModificationStamp`. `.missing`, `.corrupt` et le refus d'écriture restent inchangés.
+- [x] T021 [P] [US1] Brancher `StageStore.state()`, `LayoutIntentStore` et `LayoutCommandActivity` sur ce cache (`StageStore.swift`, `LayoutIntentStore.swift`, `LayoutCommandActivity.swift`).
+- [x] T022 [P] [US3] Ajouter `StageStore.migrateLegacyTreeModes(infer:container:)` (A8), sous un seul verrou :
   1. lire les octets bruts ;
   2. si une stage est `mutableBsp`, sauvegarder une seule fois `stages.json.pre-017`, sans écraser une sauvegarde existante ;
   3. passer en `spatialBsp` et construire l'arbre manquant par `infer`, avec les membres dans l'ordre ;
   4. écriture forcée.
 
   La fonction renvoie le nombre de stages migrées.
-- [ ] T023 [US1] Tests dans `Tests/RoadieDaemonTests/StatePersistenceTests.swift` et `StateMigrationTests.swift` :
+- [x] T023 [US1] Tests dans `Tests/RoadieDaemonTests/StatePersistenceTests.swift` et `StateMigrationTests.swift` :
   - 2 `load` sans écriture font 1 décodage ;
   - une écriture par une autre instance, faite entre un `load` et un `mutate`, n'est pas perdue ;
   - un `mutate` sans changement laisse le mtime inchangé ;
