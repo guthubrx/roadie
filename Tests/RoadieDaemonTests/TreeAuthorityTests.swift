@@ -198,12 +198,10 @@ struct TreeAuthorityTests {
         let expected = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(a.id),
                                      second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(b.id), second: .leaf(c.id)))
         #expect(stages.state().bspTree(for: scope) == expected)
-        #expect(service.reconcileSpatialBSPTrees(in: snapshot) == [scope])
         #expect(targets(service, snapshot)[c.id] == CGRect(x: 500, y: 400, width: 500, height: 400))
 
         // Passe suivante sans changement : l'arbre ne bouge plus.
         _ = service.snapshot()
-        #expect(service.reconcileSpatialBSPTrees(in: snapshot).isEmpty)
         #expect(stages.state().bspTree(for: scope) == expected)
     }
 

@@ -28,51 +28,6 @@ struct LayoutPlannerTests {
     }
 
     @Test
-    func mutableBspNewWindowSplits5050IgnoringArbitraryMacOSFrame() {
-        // Reproduit le bug : une nouvelle fenetre arrive avec une frame macOS arbitraire
-        // (petite, x=150 w=491). Sans le fix, mutableBsp herite de ce ratio (~13%).
-        // Avec le fix (newWindowIDs), elle doit obtenir 50/50.
-        let existing = WindowID(rawValue: 1) // grosse fenetre existante
-        let fresh = WindowID(rawValue: 2)    // nouvelle fenetre
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [fresh, existing],
-            currentFrames: [
-                existing: CGRect(x: 350, y: 0, width: 650, height: 500),
-                fresh: CGRect(x: 0, y: 0, width: 200, height: 500) // frame macOS arbitraire
-            ],
-            newWindowIDs: [fresh],
-            innerGap: 10
-        ))
-        // 50/50 attendu : chacune ~495 de large.
-        #expect(plan.placements[fresh] == CGRect(x: 0, y: 0, width: 495, height: 500))
-        #expect(plan.placements[existing] == CGRect(x: 505, y: 0, width: 495, height: 500))
-    }
-
-    @Test
-    func mutableBspRespectsExistingRatioWhenNoNewWindow() {
-        // Sans nouvelle fenetre, mutableBsp doit preserver le ratio existant (resize manuel).
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 300, height: 500),
-                b: CGRect(x: 310, y: 0, width: 690, height: 500)
-            ],
-            innerGap: 10
-        ))
-        // Ratio preserve : a ~30%, b ~70%.
-        #expect((plan.placements[a]?.width ?? 0) < 400)
-        #expect((plan.placements[b]?.width ?? 0) > 500)
-    }
-
-    @Test
     func bspNewWindowSplits5050IgnoringArbitraryMacOSFrame() {
         let existing = WindowID(rawValue: 1)
         let fresh = WindowID(rawValue: 2)
@@ -259,93 +214,6 @@ struct LayoutPlannerTests {
     }
 
     @Test
-    func mutableBspPreservesObservedRatioWithoutPriorityWindow() {
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 800, height: 500),
-                b: CGRect(x: 810, y: 0, width: 190, height: 500),
-            ],
-            splitPolicy: "balanced",
-            innerGap: 10
-        ))
-
-        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 800, height: 500))
-        #expect(plan.placements[b] == CGRect(x: 810, y: 0, width: 190, height: 500))
-    }
-
-    @Test
-    func mutableBspDoesNotPreserveLargeInternalGapAsManagedSplit() {
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 400, height: 500),
-                b: CGRect(x: 600, y: 0, width: 400, height: 500),
-            ],
-            splitPolicy: "balanced",
-            innerGap: 10
-        ))
-
-        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 495, height: 500))
-        #expect(plan.placements[b] == CGRect(x: 505, y: 0, width: 495, height: 500))
-    }
-
-    @Test
-    func mutableBspPreservesManagedSplitWithLargeConfiguredInnerGap() {
-        // SPEC-016 T044 : la tolérance suit `gapsInner`. Un gap de 40 configuré et observé
-        // reste un split géré (ratio par le bord), au lieu du ratio des largeurs observées.
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 600, height: 500),
-                b: CGRect(x: 640, y: 0, width: 350, height: 500),
-            ],
-            splitPolicy: "balanced",
-            innerGap: 40
-        ))
-
-        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 600, height: 500))
-        #expect(plan.placements[b] == CGRect(x: 640, y: 0, width: 360, height: 500))
-    }
-
-    @Test
-    func mutableBspRejectsOverlappingFramesAsManagedSplit() {
-        // SPEC-016 T044 : un écart négatif (chevauchement) n'est plus accepté comme gap.
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 520, height: 500),
-                b: CGRect(x: 500, y: 0, width: 500, height: 500),
-            ],
-            splitPolicy: "balanced",
-            innerGap: 10
-        ))
-
-        // Ratio des largeurs observées (520 / 1020) au lieu du bord gauche (520 / 990).
-        #expect(plan.placements[a]?.width == 504)
-    }
-
-    @Test
     func bspInsertionWithFocusAbsentFromTreeKeepsNewWindow() {
         // SPEC-016 T043 : sur une feuille, un focus étranger (ici la nouvelle fenêtre) vaut nil.
         let a = WindowID(rawValue: 1)
@@ -367,7 +235,9 @@ struct LayoutPlannerTests {
     }
 
     @Test
-    func mutableBspPreservesObservedVerticalSplitOnWideContainer() {
+    func mutableBspAliasIsPlannedByTheTreeIgnoringObservedFrames() {
+        // SPEC-017 FR-018 : `mutableBsp` n'est plus qu'un alias de l'arbre. Sans arbre fourni,
+        // la stratégie à arbre insère les fenêtres dans l'ordre ; la géométrie observée ne compte pas.
         let a = WindowID(rawValue: 1)
         let b = WindowID(rawValue: 2)
         let plan = LayoutPlanner.plan(LayoutRequest(
@@ -376,50 +246,9 @@ struct LayoutPlannerTests {
             container: CGRect(x: 0, y: 0, width: 1000, height: 500),
             windowIDs: [a, b],
             currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 1000, height: 300),
-                b: CGRect(x: 0, y: 310, width: 1000, height: 190),
+                a: CGRect(x: 0, y: 0, width: 800, height: 500),
+                b: CGRect(x: 810, y: 0, width: 190, height: 500),
             ],
-            splitPolicy: "balanced",
-            innerGap: 10
-        ))
-
-        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 1000, height: 300))
-        #expect(plan.placements[b] == CGRect(x: 0, y: 310, width: 1000, height: 190))
-    }
-
-    @Test
-    func mutableBspPreservesObservedVerticalStackForThreeWindows() {
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let c = WindowID(rawValue: 3)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 900),
-            windowIDs: [a, b, c],
-            currentFrames: [
-                a: CGRect(x: 0, y: 0, width: 1000, height: 290),
-                b: CGRect(x: 0, y: 300, width: 1000, height: 290),
-                c: CGRect(x: 0, y: 600, width: 1000, height: 300),
-            ],
-            splitPolicy: "balanced",
-            innerGap: 10
-        ))
-
-        #expect(plan.placements[a] == CGRect(x: 0, y: 0, width: 1000, height: 290))
-        #expect(plan.placements[b] == CGRect(x: 0, y: 300, width: 1000, height: 290))
-        #expect(plan.placements[c] == CGRect(x: 0, y: 600, width: 1000, height: 300))
-    }
-
-    @Test
-    func mutableBspFallsBackToBalancedPlanWithoutObservedFrames() {
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let plan = LayoutPlanner.plan(LayoutRequest(
-            scope: scope,
-            mode: .mutableBsp,
-            container: CGRect(x: 0, y: 0, width: 1000, height: 500),
-            windowIDs: [a, b],
             innerGap: 10
         ))
 

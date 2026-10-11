@@ -70,13 +70,12 @@ public enum LayoutPlanner {
         switch request.mode {
         case .bsp:
             return BSPLayoutStrategy().plan(request)
-        case .mutableBsp:
-            return MutableBSPLayoutStrategy().plan(request)
         case .masterStack:
             return MasterStackLayoutStrategy().plan(request)
         case .float:
             return FloatLayoutStrategy().plan(request)
-        case .spatialBsp:
+        case .spatialBsp, .mutableBsp:
+            // `mutableBsp` n'est plus qu'un alias décodable de l'arbre (SPEC-017 A8, FR-018).
             return SpatialBSPLayoutStrategy().plan(request)
         }
     }

@@ -145,8 +145,8 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         priorityWindowIDs: Set<WindowID>,
         newWindowIDs: Set<WindowID>
     ) -> CGFloat {
-        // Nouvelle fenetre : split 50/50 plutot qu'heriter de la frame macOS arbitraire
-        // (cf. MutableBSPLayoutStrategy). Exception : si un resize explicite (priority)
+        // Nouvelle fenetre : split 50/50 plutot qu'heriter de la frame macOS arbitraire.
+        // Exception : si un resize explicite (priority)
         // est en cours dans ce split, on laisse le calcul priority habituel.
         let anyPriority = left.contains { priorityWindowIDs.contains($0) }
             || right.contains { priorityWindowIDs.contains($0) }

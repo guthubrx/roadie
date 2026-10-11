@@ -200,17 +200,6 @@ public struct SnapshotService {
         processState.noteDestroyed(windowID)
     }
 
-    /// Scopes dont l'arbre a changé lors du dernier snapshot écrivain (insertion, retrait de feuille).
-    /// Compatibilité vague 2 : la réconciliation unique se fait désormais dans `snapshot()` (T081) ;
-    /// cette fonction ne réconcilie plus rien et disparaîtra avec son dernier appelant.
-    @discardableResult
-    func reconcileSpatialBSPTrees(
-        in snapshot: DaemonSnapshot,
-        excluding excludedScopes: Set<StageScope> = []
-    ) -> Set<StageScope> {
-        processState.lastChangedTreeScopes().subtracting(excludedScopes)
-    }
-
     /// Dernière application d'arbre demandée par une commande pour ce scope (A15). Le maintainer
     /// clôt la rafale ou la garde de transition d'un scope si cette date suit leur ouverture.
     public func treeScopeAppliedAt(_ scope: StageScope) -> Date? {
@@ -273,7 +262,6 @@ public struct SnapshotService {
             // Une destruction est consommée quand la fenêtre a quitté la liste vivante : avant,
             // elle bloque seulement sa réinsertion (liste CoreGraphics en retard sur AX).
             processState.recordTreeReconciliation(
-                changedScopes: result.changedTreeScopes,
                 consumedDestroyed: destroyedWindowIDs.subtracting(stageManagedWindowIDs)
             )
         } else {
@@ -321,7 +309,6 @@ public struct SnapshotService {
         var missingWindows: MissingWindowReconciliationReport
         var prunedPins: [PersistentWindowPin]
         var prunedBookmarks: [PersistentWindowBookmark]
-        var changedTreeScopes: Set<StageScope>
     }
 
     private func appendReconciliationEvents(_ result: Reconciliation) {
@@ -545,15 +532,14 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
-        let changedTreeScopes = reconcileTrees(in: &persistedStages, input: input)
+        reconcileTrees(in: &persistedStages, input: input)
         return Reconciliation(
             state: state,
             scopedWindows: scopedWindows,
             focusedWindowID: focusedID,
             missingWindows: missingWindows,
             prunedPins: prunedPins,
-            prunedBookmarks: prunedBookmarks,
-            changedTreeScopes: changedTreeScopes
+            prunedBookmarks: prunedBookmarks
         )
     }
 
@@ -564,12 +550,11 @@ public struct SnapshotService {
     /// épinglage ou sur destruction confirmée. Une fenêtre vivante sans feuille coupe la feuille
     /// active selon la forme de cette feuille (R3). Ne lit aucune géométrie de fenêtre (FR-003).
     // O(Σ m·f) - m membres et f feuilles par stage à arbre (insertion O(f)), bornés.
-    private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) -> Set<StageScope> {
+    private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) {
         let side: BSPInsertionSide = input.config.windowPlacement.newWindowSide == "left" ? .left : .right
         let innerGap = CGFloat(input.config.tiling.gapsInner)
         let containers = Dictionary(input.displays.map { ($0.id, $0.visibleFrame.cgRect) }, uniquingKeysWith: { first, _ in first })
         let pinned = Set(persistedStages.windowPins.map(\.windowID))
-        var changed: Set<StageScope> = []
         for scopeIndex in persistedStages.scopes.indices {
             let persistentScope = persistedStages.scopes[scopeIndex]
             guard let container = containers[persistentScope.displayID] else { continue }
@@ -596,10 +581,8 @@ public struct SnapshotService {
                 let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
                 guard next != stage.bspTree else { continue }
                 persistedStages.scopes[scopeIndex].stages[stageIndex].bspTree = next
-                changed.insert(StageScope(displayID: persistentScope.displayID, desktopID: persistentScope.desktopID, stageID: stage.id))
             }
         }
-        return changed
     }
 
     /// Migration SPEC-017 (T082, A8) des stages `mutableBsp`, une fois par processus producteur :
@@ -1360,59 +1343,6 @@ public extension SnapshotService {
         return true
     }
 
-    @discardableResult
-    func repairMutableBspOrderForCurrentGeometry(
-        scopes: Set<StageScope>,
-        in snapshot: DaemonSnapshot,
-        reason: String
-    ) -> Bool {
-        guard !scopes.isEmpty else { return false }
-        let state = stageStore.state()
-        var repaired: [(scope: StageScope, old: [WindowID], new: [WindowID])] = []
-
-        for scope in scopes {
-            guard let stage = snapshot.state.stage(scope: scope),
-                  stage.mode == .mutableBsp,
-                  snapshot.state.activeScope(on: scope.displayID) == scope,
-                  let display = snapshot.displays.first(where: { $0.id == scope.displayID })
-            else { continue }
-
-            let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-            let liveStageWindowIDs = stage.windowIDs.filter { windowsByID[$0] != nil }
-            let currentFrames = Dictionary(uniqueKeysWithValues: liveStageWindowIDs.compactMap { id in
-                windowsByID[id].map { (id, $0.frame.cgRect) }
-            })
-            let ordered = spatiallyOrdered(liveStageWindowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
-            guard ordered != liveStageWindowIDs,
-                  Set(ordered) == Set(liveStageWindowIDs),
-                  state.scopes.contains(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })
-            else { continue }
-
-            repaired.append((scope, stage.windowIDs, ordered))
-            intentStore.remove(scope: scope)
-        }
-
-        guard !repaired.isEmpty else { return false }
-        // Réordonne sur l'état relu sous verrou (FR-013) pour ne pas écraser une écriture concurrente.
-        stageStore.mutate { state in
-            for item in repaired {
-                guard var persistentScope = state.scopes.first(where: {
-                    $0.displayID == item.scope.displayID && $0.desktopID == item.scope.desktopID
-                }) else { continue }
-                persistentScope.orderMembers(item.new, in: item.scope.stageID)
-                state.update(persistentScope)
-            }
-        }
-        for item in repaired {
-            events.append(RoadieEvent(type: "mutable_bsp_order_repaired", scope: item.scope, details: [
-                "reason": reason,
-                "old": item.old.map { String($0.rawValue) }.joined(separator: ","),
-                "new": item.new.map { String($0.rawValue) }.joined(separator: ",")
-            ]))
-        }
-        return true
-    }
-
     func applyPlan(
         from snapshot: DaemonSnapshot,
         scope: StageScope,
@@ -2054,10 +1984,9 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var liveWindowIDs: Set<WindowID>?
     private var lastDisappearanceAt: Date?
     private var tileClassification: [WindowID: Bool] = [:]
-    /// Arbres (SPEC-017) : destructions confirmées en attente, scopes changés au dernier snapshot
-    /// producteur, dernière application par commande, migration déjà tentée.
+    /// Arbres (SPEC-017) : destructions confirmées en attente, dernière application par commande,
+    /// migration déjà tentée.
     private var destroyed: Set<WindowID> = []
-    private var changedTreeScopes: Set<StageScope> = []
     private var treeAppliedAt: [StageScope: Date] = [:]
     private var legacyTreeMigrationClaimed = false
 
@@ -2108,15 +2037,8 @@ final class SnapshotProcessState: @unchecked Sendable {
         lock.withLock { destroyed }
     }
 
-    func recordTreeReconciliation(changedScopes: Set<StageScope>, consumedDestroyed: Set<WindowID>) {
-        lock.withLock {
-            changedTreeScopes = changedScopes
-            destroyed.subtract(consumedDestroyed)
-        }
-    }
-
-    func lastChangedTreeScopes() -> Set<StageScope> {
-        lock.withLock { changedTreeScopes }
+    func recordTreeReconciliation(consumedDestroyed: Set<WindowID>) {
+        lock.withLock { destroyed.subtract(consumedDestroyed) }
     }
 
     func noteTreeScopeApplied(_ scope: StageScope, at date: Date) {

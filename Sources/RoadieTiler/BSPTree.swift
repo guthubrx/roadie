@@ -104,7 +104,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     static let ratioBounds: ClosedRange<Double> = 0.05...0.95
 
     /// Écart minimal entre deux fenêtres empilées : la barre de titre du bas ne touche pas la
-    /// fenêtre du haut (même valeur que `MutableBSPLayoutStrategy.titleBarSeamGap`).
+    /// fenêtre du haut (même valeur que `BSPLayoutStrategy.titleBarSeamGap`).
     static let titleBarSeamGap: CGFloat = 1
 
     static func gap(for orientation: BSPOrientation, innerGap: CGFloat) -> CGFloat {
@@ -615,10 +615,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     }
 }
 
-/// Détection des coupes nettes depuis la géométrie. COPIE ASSUMÉE de `splitHorizontally`,
-/// `splitRatio` (cas sans priorité ni nouvelle fenêtre) et `managedSplitLooksUsable` de
-/// `MutableBSPLayoutStrategy.swift` : cette stratégie sera supprimée en vague 3 de la SPEC-017
-/// et seule la migration garde besoin de cette logique.
+/// Détection des coupes nettes depuis la géométrie, reprise de l'ancienne stratégie `mutableBsp`
+/// (supprimée par la SPEC-017, FR-018) : seule la migration des stages `mutableBsp` en a besoin.
 private struct InferredCuts {
     let frames: [WindowID: CGRect]
     let innerGap: CGFloat

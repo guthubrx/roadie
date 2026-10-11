@@ -221,10 +221,10 @@
 
 ## Phase 5 : Vague 3 - Intégration (orchestrateur)
 
-- [ ] T100 Supprimer les symboles `mutableBsp` devenus inutilisés : `MutableBSPLayoutStrategy.swift` (après déplacement de la détection de coupes), `LayoutStrategy.mutableBsp` et le code mort restant. Le cas d'enum `WindowManagementMode.mutableBsp` reste pour le décodage.
-- [ ] T101 Build et suite complète. Corriger les écarts d'interface entre lots.
+- [x] T100 Supprimer les symboles `mutableBsp` devenus inutilisés : `MutableBSPLayoutStrategy.swift` (après déplacement de la détection de coupes), `LayoutStrategy.mutableBsp` et le code mort restant. Le cas d'enum `WindowManagementMode.mutableBsp` reste pour le décodage.
+- [x] T101 Build et suite complète. Corriger les écarts d'interface entre lots.
 - [x] T102 [P] Écrire `docs/decisions/009-authoritative-tree-single-pass.md` et `docs/decisions/010-private-space-type-read.md`.
 - [x] T103 [P] Mettre à jour `README.md` et `examples/roadies.toml` : `mutableBsp` devient un alias, sens des commandes, nouveaux événements.
-- [ ] T104 Vérifier par `rg` l'absence dans `Sources/` de `MutableBSPLayoutStrategy`, `TickDuration`, `pendingLiveTick`, `revertedAppliedFrames` et `mutable_bsp_` (hors catalogue obsolète). Mesurer les lignes supprimées (`git diff --stat`).
+- [x] T104 Vérifier par `rg` l'absence dans `Sources/` de `MutableBSPLayoutStrategy`, `TickDuration`, `pendingLiveTick`, `revertedAppliedFrames` et `mutable_bsp_` (hors catalogue obsolète). Mesurer les lignes supprimées (`git diff --stat`).
 - [ ] T105 Installer (`ROADIE_CODESIGN_IDENTITY="roadied-cert" make install && make stop && make restart`), vérifier `roadie doctor` et la migration (`stages.json.pre-017`), puis mesurer au repos 60 s (SC-003).
 - [ ] T106 Consigner dans `implementation.md` les mesures avant et après, et ce qui reste à valider à la main (`quickstart.md`, avec la campagne multi-applications et l'application lente).

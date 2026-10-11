@@ -1305,18 +1305,16 @@ struct CommandTreeGeometry {
 
 extension SnapshotService {
     /// Géométrie de l'arbre de `scope`, en lecture seule (ni l'arbre ni l'état ne sont écrits).
-    /// Le conteneur est la zone couverte par la disposition `bsp` des mêmes fenêtres : même zone
-    /// visible, mêmes marges extérieures, même nombre de fenêtres que la disposition de l'arbre
-    /// (les marges ne sont pas exposées hors de `DaemonSnapshot.swift`). nil sans fenêtre placée.
-    // O(n log n) - n = fenêtres du scope.
+    /// Le conteneur est celui de la disposition de l'arbre (`treeContainer`). nil sans fenêtre
+    /// placée dans le scope : les appelants retombent alors sur leur conteneur de repli.
+    // O(w) - w = fenêtres du snapshot.
     func commandTreeGeometry(for scope: StageScope, tree: BSPTree, in snapshot: DaemonSnapshot) -> CommandTreeGeometry? {
         let live = snapshot.windows.compactMap { entry in
             entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
         }
-        let placements = layoutPlan(from: snapshot, scope: scope, orderedWindowIDs: live, mode: .bsp).placements.values
-        guard let first = placements.first else { return nil }
+        guard !live.isEmpty, let container = treeContainer(for: scope, in: snapshot) else { return nil }
         return CommandTreeGeometry(
-            container: placements.dropFirst().reduce(first) { $0.union($1) },
+            container: container,
             innerGap: CGFloat(innerGap()),
             absent: Set(tree.windowIDs).subtracting(live)
         )
