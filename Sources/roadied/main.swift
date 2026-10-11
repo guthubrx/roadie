@@ -383,6 +383,10 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     let liveObserver = AXWindowEventObserver(onEvent: { event in
         let isFrameChange = event.name == kAXWindowMovedNotification as String
             || event.name == kAXWindowResizedNotification as String
+        // Destruction confirmée : la feuille de l'arbre est retirée tout de suite (A9).
+        if event.name == kAXUIElementDestroyedNotification as String, let windowID = event.windowID {
+            service.noteWindowDestroyed(WindowID(rawValue: windowID))
+        }
         scheduler.request(cause: event.name, delay: isFrameChange ? .externalChange : .event)
     })
     liveObserver.start()

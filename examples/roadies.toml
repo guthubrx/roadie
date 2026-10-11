@@ -6,10 +6,12 @@
 # Every value below is the default unless a comment says otherwise.
 # Chaque valeur ci-dessous est la valeur par défaut, sauf indication contraire.
 
-# EN: Tiling engine. default_strategy: bsp | mutableBsp | masterStack | float.
-# FR: Moteur de tiling. default_strategy : bsp | mutableBsp | masterStack | float.
+# EN: Tiling engine. default_strategy: spatialBsp | bsp | masterStack | float.
+#     spatialBsp = yabai-like persistent tree (aliases: mutableBsp, yabai).
+# FR: Moteur de tiling. default_strategy : spatialBsp | bsp | masterStack | float.
+#     spatialBsp = arbre persistant façon yabai (alias : mutableBsp, yabai).
 [tiling]
-default_strategy = "bsp"
+default_strategy = "spatialBsp"
 gaps_outer = 8
 gaps_inner = 4
 master_ratio = 0.6

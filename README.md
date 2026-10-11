@@ -24,7 +24,7 @@ The trigger was personal: I never managed to make yabai coexist cleanly with the
 
 So Roadie focuses on that specific combination:
 
-- `bsp`, `mutableBsp`, and `masterStack` tiling for the visible windows.
+- `spatialBsp` (yabai-like persistent tree), `bsp`, and `masterStack` tiling for the visible windows.
 - Roadie stages: named groups of windows that can be hidden, restored, reordered, and represented visually.
 - Roadie virtual desktops managed without controlling native macOS Spaces.
 - Multi-display support where each display keeps its own current desktop, active stage, and layout.
@@ -135,7 +135,7 @@ Roadie does not require disabling SIP. It uses Accessibility for window discover
 
 ## What Roadie Does Today
 
-- Tiles visible windows with `bsp`, `mutableBsp`, `masterStack`, or `float` modes.
+- Tiles visible windows with `spatialBsp`, `bsp`, `masterStack`, or `float` modes. `spatialBsp` keeps a persistent BSP tree like yabai: a new window splits the focused one along its longest side, a closed window gives its space back to its sibling, and each event is applied in a single pass. `mutableBsp` and `yabai` are accepted as aliases of `spatialBsp`; existing `mutableBsp` stages are migrated once, with a backup in `~/.roadies/stages.json.pre-017`.
 - Runs either as a monolithic daemon or as modular components with separate
   `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode`
   processes. Restore safety lives inside the `run` and `tiler` processes.
@@ -459,8 +459,8 @@ roadie display list
 Switch layout mode for the current stage:
 
 ```bash
+roadie mode spatialBsp   # alias: mutableBsp, yabai
 roadie mode bsp
-roadie mode mutableBsp
 roadie mode masterStack
 roadie mode float
 ```
