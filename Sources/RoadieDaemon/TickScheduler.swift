@@ -8,7 +8,8 @@ import Foundation
 ///   veille). La demande reste en attente ; elle part au déblocage (relâchement, fin de « heal »,
 ///   réveil) ou au filet périodique.
 /// - Un seul minuteur, armé sur la plus proche de deux échéances : la demande en attente et
-///   l'échéance interne du maintainer (`nextDeadline`). Il est réarmé après chaque passe.
+///   l'échéance interne du maintainer (`nextDeadline`, réelle même passée). Il est réarmé après
+///   chaque passe, et après une commande appliquée sur un arbre (`rearm`, T219).
 /// - Pas de passe de suite parce qu'une passe « a agi » (A1) : seuls un nouvel événement ou une
 ///   échéance identifiée en déclenchent une.
 @MainActor
@@ -33,8 +34,9 @@ public final class TickScheduler {
     /// Programme `action` après le délai donné ; renvoie de quoi l'annuler.
     public typealias Schedule = (TimeInterval, @escaping @MainActor () -> Void) -> () -> Void
 
-    /// Plancher d'une échéance interne : une échéance déjà passée après une passe (erreur du
-    /// maintainer) ne peut pas emballer la boucle au-delà d'environ 66 passes par seconde.
+    /// Plancher d'une échéance interne, appliqué seulement à l'armement du minuteur (T211) : une
+    /// échéance que la passe ne solde pas ne peut pas emballer la boucle au-delà d'environ
+    /// 66 passes par seconde.
     static let minimumDeadlineDelay: TimeInterval = 0.015
 
     private struct Pending {
@@ -42,6 +44,8 @@ public final class TickScheduler {
         var dueAt: Date
         var requestedAt: Date
         var coalescing: Coalescing
+        /// Premier déclenchement retenu par une attente (bouton enfoncé, écrans), pour `live_tick`.
+        var heldSince: Date?
     }
 
     private let tick: @MainActor (String) -> MaintenanceTick
@@ -52,6 +56,9 @@ public final class TickScheduler {
     private let episodes: EpisodeContext
     private let events: EventLog?
     private var pending: Pending?
+    /// Échéance interne sur laquelle le minuteur est armé, et instant de l'armement. `fire()` la
+    /// déclenche même si le maintainer ne la rend plus (échéance future seulement, T211).
+    private var armedDeadline: (due: Date, armedAt: Date)?
     private var cancelTimer: (() -> Void)?
 
     public init(
@@ -117,53 +124,67 @@ public final class TickScheduler {
             current.dueAt = max(current.dueAt, releaseDue)
             pending = current
         }
-        request(cause: "gesture_end", delay: .event)
+        request(cause: "drag", delay: .event)
     }
 
-    /// Minuteur échu : une passe pour la demande échue, sinon pour l'échéance interne échue.
-    /// Bloqué, il garde tout en attente et ne réarme pas (pas de boucle) : le déblocage réarme.
+    /// Réarme le minuteur sans passe (T219) : une commande vient d'appliquer un arbre et le
+    /// maintainer en suit les échéances (refus, stabilité). O(1) hors `nextDeadline`.
+    public func rearm() {
+        arm()
+    }
+
+    /// Minuteur échu : une passe pour la demande échue, sinon pour l'échéance interne armée si
+    /// elle est échue (T211). Bloqué, il garde tout en attente et ne réarme pas (pas de boucle) :
+    /// le déblocage réarme.
     private func fire() {
         cancelTimer = nil
-        guard !isBlocked() else { return }
         let date = now()
+        guard !isBlocked() else {
+            if pending?.heldSince == nil { pending?.heldSince = date }
+            return
+        }
         if let current = pending, current.dueAt <= date {
             pending = nil
-            run(current.cause, requested: current, at: date)
-        } else if let deadline = nextDeadline(date), deadline <= date {
+            run(current.cause, requested: current, due: current.dueAt, requestedDelay: current.coalescing.delay, at: date)
+        } else if let deadline = armedDeadline, deadline.due <= date {
             // Échéance armée par l'épisode en cours (garde, refus, rafale) : il reste ouvert (A20).
+            // Le maintainer la nomme (`deadline:<nom>`, contrat des événements).
             episodes.continue()
-            run("deadline", requested: nil, at: date)
+            run("deadline", requested: nil, due: deadline.due, requestedDelay: deadline.due.timeIntervalSince(deadline.armedAt), at: date)
         }
         arm()
     }
 
-    /// Un seul minuteur, sur l'échéance la plus proche. O(1) hors `nextDeadline`.
+    /// Un seul minuteur, sur l'échéance la plus proche. Le plancher s'applique ici seulement :
+    /// l'échéance gardée pour `fire()` reste la vraie (T211). O(1) hors `nextDeadline`.
     private func arm() {
         cancelTimer?()
         cancelTimer = nil
         let date = now()
-        var due = pending?.dueAt
-        if let deadline = nextDeadline(date) {
-            let floored = max(deadline, date.addingTimeInterval(Self.minimumDeadlineDelay))
-            due = min(due ?? floored, floored)
-        }
-        guard let due else { return }
+        armedDeadline = nextDeadline(date).map { ($0, date) }
+        let floored = armedDeadline.map { max($0.due, date.addingTimeInterval(Self.minimumDeadlineDelay)) }
+        guard let due = [pending?.dueAt, floored].compactMap({ $0 }).min() else { return }
         cancelTimer = schedule(max(0, due.timeIntervalSince(date))) { [weak self] in self?.fire() }
     }
 
     /// Passe, puis trace `live_tick` (latence depuis la demande, durée) comme avant la SPEC-017,
-    /// pour comparer les mesures avec le même outil (Article XXII).
-    private func run(_ cause: String, requested: Pending?, at start: Date) {
+    /// pour comparer les mesures avec le même outil (Article XXII). La latence se décompose
+    /// (T221) : délai demandé (regroupement ou échéance), retenue par une attente (bouton
+    /// enfoncé), retard d'exécution après l'échéance (file principale).
+    private func run(_ cause: String, requested: Pending?, due: Date, requestedDelay: TimeInterval, at start: Date) {
         let result = tick(cause)
         guard let events else { return }
         let isEvent = requested.map { $0.coalescing != .safetyNet } ?? false
         guard isEvent || result.commands > 0 || result.failed > 0 else { return }
+        let ms = { (seconds: TimeInterval) in String(format: "%.1f", max(0, seconds) * 1000) }
         events.append(RoadieEvent(type: "live_tick", details: [
             "notification": cause,
             "fast": String(requested?.coalescing == .event),
-            "delayMs": String(format: "%.1f", (requested?.coalescing.delay ?? 0) * 1000),
-            "latencyMs": String(format: "%.1f", requested.map { start.timeIntervalSince($0.requestedAt) * 1000 } ?? 0),
-            "durationMs": String(format: "%.1f", now().timeIntervalSince(start) * 1000),
+            "requestedDelayMs": ms(requestedDelay),
+            "dueLagMs": ms(start.timeIntervalSince(due)),
+            "heldByGestureMs": ms(requested?.heldSince.map { start.timeIntervalSince($0) } ?? 0),
+            "latencyMs": ms(requested.map { start.timeIntervalSince($0.requestedAt) } ?? 0),
+            "durationMs": ms(now().timeIntervalSince(start)),
             "commands": String(result.commands),
             "applied": String(result.applied),
             "failed": String(result.failed),

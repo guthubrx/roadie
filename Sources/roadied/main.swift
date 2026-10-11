@@ -289,8 +289,9 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
 }
 
 /// Changement de bureau, activation, masquage et démasquage d'application : chacun demande une
-/// passe (FR-001). `activeSpaceDidChange` ferme aussi la garde de transition de bureau (A5) et
-/// est journalisé à la milliseconde, pour mesurer son moment réel d'envoi.
+/// passe (FR-001), avec une cause `ax:<notification>` (contrat des événements : les notifications
+/// système, AX ou non, partagent ce préfixe). `activeSpaceDidChange` ferme aussi la garde de
+/// transition de bureau (A5) et est journalisé à la milliseconde, pour mesurer son moment réel d'envoi.
 @MainActor
 func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickScheduler) {
     let center = NSWorkspace.shared.notificationCenter
@@ -300,14 +301,14 @@ func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickSche
     workspaceObservers.append(center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated {
             spaceDidChange()
-            scheduler.request(cause: "space_did_change")
+            scheduler.request(cause: "ax:activeSpaceDidChange")
             events.append(RoadieEvent(type: "space_did_change"))
         }
     })
     let causes: [(NSNotification.Name, String)] = [
-        (NSWorkspace.didActivateApplicationNotification, "app_activated"),
-        (NSWorkspace.didHideApplicationNotification, "app_hidden"),
-        (NSWorkspace.didUnhideApplicationNotification, "app_unhidden"),
+        (NSWorkspace.didActivateApplicationNotification, "ax:didActivateApplication"),
+        (NSWorkspace.didHideApplicationNotification, "ax:didHideApplication"),
+        (NSWorkspace.didUnhideApplicationNotification, "ax:didUnhideApplication"),
     ]
     for (name, cause) in causes {
         workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
@@ -351,15 +352,15 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
     )
 
     installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds) {
-        scheduler.request(cause: "display_change")
+        scheduler.request(cause: "ax:displayReconfigured")
     }
-    installPowerObservers { scheduler.request(cause: "wake") }
+    installPowerObservers { scheduler.request(cause: "ax:didWake") }
 
     // Filet de sécurité (FR-017). `--ticks N` arrête le process après N filets.
     var safetyNetCount = 0
     let timer = Timer(timeInterval: safetyNetInterval, repeats: true) { _ in
         MainActor.assumeIsolated {
-            scheduler.request(cause: "periodic", delay: .safetyNet)
+            scheduler.request(cause: "safety", delay: .safetyNet)
             safetyNetCount += 1
             if let ticks, safetyNetCount >= ticks {
                 NSApplication.shared.terminate(nil)
@@ -367,7 +368,22 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
         }
     }
     RunLoop.main.add(timer, forMode: .common)
-    scheduler.request(cause: "startup")
+    scheduler.request(cause: "command:startup")
+
+    // Résultat d'une commande appliquée sur un arbre (T219) : le maintainer en suit les fenêtres,
+    // la génération, les refus et la stabilité ; l'ordonnanceur réarme son minuteur, sans passe.
+    // Les commandes tournent sur le thread principal ; une publication d'ailleurs y est renvoyée.
+    let noteTreeScopeApplied: @MainActor @Sendable (TreeScopeApplication) -> Void = { application in
+        maintainer.noteTreeScopeApplied(application)
+        scheduler.rearm()
+    }
+    TreeScopeApplicationCenter.shared.setHandler { application in
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { noteTreeScopeApplied(application) }
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated { noteTreeScopeApplied(application) } }
+        }
+    }
 
     guard enableLiveEvents else { return }
     // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
@@ -387,7 +403,7 @@ func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSe
         if event.name == kAXUIElementDestroyedNotification as String, let windowID = event.windowID {
             service.noteWindowDestroyed(WindowID(rawValue: windowID))
         }
-        scheduler.request(cause: event.name, delay: isFrameChange ? .externalChange : .event)
+        scheduler.request(cause: "ax:\(event.name)", delay: isFrameChange ? .externalChange : .event)
     })
     liveObserver.start()
     tilerLiveObserver = liveObserver

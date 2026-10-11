@@ -48,12 +48,14 @@ private final class Harness {
     let episodes: EpisodeContext
     var ticks: [(cause: String, at: Date)] = []
     var deadline: Date?
+    /// Comme les échéances non soldées par une passe : rendues seulement tant qu'elles sont à venir.
+    var deadlineIsFutureOnly = false
     var blocked = false
     var result = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
     var onTick: () -> Void = {}
     private(set) var scheduler: TickScheduler!
 
-    init() {
+    init(events: EventLog? = nil) {
         let clock = timer.clock
         episodes = EpisodeContext(now: { clock.now })
         scheduler = TickScheduler(
@@ -62,12 +64,14 @@ private final class Harness {
                 onTick()
                 return result
             },
-            nextDeadline: { [unowned self] _ in deadline },
+            nextDeadline: { [unowned self] now in
+                deadlineIsFutureOnly ? deadline.flatMap { $0 > now ? $0 : nil } : deadline
+            },
             isBlocked: { [unowned self] in blocked },
             now: { clock.now },
             schedule: { [unowned self] delay, action in timer.schedule(delay, action) },
             episodes: episodes,
-            events: nil
+            events: events
         )
     }
 
@@ -189,7 +193,7 @@ struct TickSchedulerTests {
         harness.scheduler.buttonsReleased(gestureEnded: true)
         harness.timer.advance(by: 1)
 
-        #expect(harness.ticks.map(\.cause) == ["gesture_end"])
+        #expect(harness.ticks.map(\.cause) == ["drag"])
     }
 
     @Test
@@ -276,6 +280,54 @@ struct TickSchedulerTests {
         harness.timer.advance(by: 1)
 
         #expect(harness.ticks.map(\.cause) == ["AXWindowCreated"])
+    }
+
+    /// T211 : l'échéance armée part même si le maintainer ne la rend plus une fois échue.
+    @Test
+    func armedDeadlineFiresWhenNoLongerReported() {
+        let harness = Harness()
+        harness.deadlineIsFutureOnly = true
+        harness.deadline = harness.start.addingTimeInterval(0.2)
+        harness.onTick = { harness.deadline = nil }
+        harness.scheduler.rearm()
+        harness.timer.advance(by: 1)
+
+        #expect(harness.ticks.map(\.cause) == ["deadline"])
+        #expect(harness.elapsedMs(0) == 200)
+    }
+
+    /// T211 : une échéance réelle déjà passée part au plancher de 15 ms, une seule fois.
+    @Test
+    func pastRealDeadlineRunsOnceAtFloor() {
+        let harness = Harness()
+        harness.deadline = harness.start.addingTimeInterval(-0.5)
+        harness.onTick = { harness.deadline = nil }
+        harness.scheduler.rearm()
+        harness.timer.advance(by: 1)
+
+        #expect(harness.ticks.map(\.cause) == ["deadline"])
+        #expect(harness.elapsedMs(0) == 15)
+    }
+
+    /// T221 : `live_tick` sépare le délai demandé, la retenue par un bouton enfoncé et le retard
+    /// d'exécution après l'échéance.
+    @Test
+    func liveTickSplitsLatency() throws {
+        let path = "\(NSTemporaryDirectory())roadie-live-tick-\(UUID().uuidString).jsonl"
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let harness = Harness(events: EventLog(path: path))
+        harness.blocked = true
+        harness.scheduler.request(cause: "ax:AXWindowMoved", delay: .externalChange)
+        harness.timer.advance(by: 0.5)
+        harness.blocked = false
+        harness.scheduler.buttonsReleased(gestureEnded: true)
+        harness.timer.advance(by: 1)
+
+        let line = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(line.contains("\"requestedDelayMs\":\"30.0\""))
+        #expect(line.contains("\"dueLagMs\":\"0.0\""))
+        #expect(line.contains("\"heldByGestureMs\":\"485.0\""))
+        #expect(line.contains("\"latencyMs\":\"515.0\""))
     }
 
     /// Une échéance interne déjà passée (erreur du maintainer) ne fait pas tourner la boucle à vide.

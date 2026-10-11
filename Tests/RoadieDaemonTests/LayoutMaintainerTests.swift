@@ -3322,7 +3322,16 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     /// Frames imposées par l'application aux prochaines écritures, dans l'ordre.
     var forcedResults: [WindowID: [Rect]] = [:]
     var focused: WindowID?
+    /// Appelé à chaque écriture (horloge qui avance pendant l'écriture, T209).
+    var onWrite: () -> Void = {}
+    /// Fenêtres dont la lecture AX fraîche échoue (T218).
+    var unreadable: Set<WindowID> = []
+    /// Registre tenu par l'écrivain, comme `AXWindowFrameWriter` (commandes comprises, T219).
+    var registry: WrittenFrameRegistry?
+    var now: () -> Date = Date.init
     private(set) var writes: [WindowID: [Rect]] = [:]
+    /// Énumérations complètes des fenêtres (relevés AX, T210).
+    private(set) var enumerations = 0
 
     init(displays: [DisplaySnapshot] = [lotCDisplay()], frames: [WindowID: Rect]) {
         self.screens = displays
@@ -3336,7 +3345,8 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     func focusedWindowID() -> WindowID? { focused }
 
     func windows() -> [WindowSnapshot] {
-        frames.keys.sorted().map { id in
+        enumerations += 1
+        return frames.keys.sorted().map { id in
             var window = lotCWindow(id.rawValue, frames[id] ?? Rect(x: 0, y: 0, width: 0, height: 0))
             if nativeFullscreen.contains(id) {
                 // Fenêtre de document complète : sans boutons, la politique de tiling l'écarterait.
@@ -3351,6 +3361,7 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         writes[window.id, default: []].append(Rect(frame))
+        onWrite()
         if var forced = forcedResults[window.id], !forced.isEmpty {
             let actual = forced.removeFirst()
             forcedResults[window.id] = forced
@@ -3366,6 +3377,16 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
         )
         frames[window.id] = actual
         return actual.cgRect
+    }
+
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
+        var results: [WindowID: CGRect?] = [:]
+        for update in updates {
+            let actual = setFrame(update.frame, of: update.window)
+            results[update.window.id] = actual
+            registry?.record(windowID: update.window.id.rawValue, requested: update.frame, readBack: actual, generation: generation, at: now())
+        }
+        return results
     }
 }
 
@@ -3405,6 +3426,8 @@ private struct TreeHarness {
     let registry = WrittenFrameRegistry()
     let eventPath: String
     let maintainer: LayoutMaintainer
+    let service: SnapshotService
+    let generations = PlacementGeneration()
     let clock: TestClock
     let episodes: EpisodeContext
 
@@ -3416,6 +3439,7 @@ private struct TreeHarness {
         clock: TestClock = TestClock(),
         spaceProbe: ((String) -> Bool?)? = nil,
         takeGesture: (() -> GestureSession?)? = nil,
+        dragActivity: WindowDragActivity = .shared,
         commandActivity: LayoutCommandActivity = .shared,
         ruleEngine: WindowRuleEngine? = nil
     ) {
@@ -3425,29 +3449,48 @@ private struct TreeHarness {
         let episodes = EpisodeContext(now: { clock.now })
         self.episodes = episodes
         eventPath = tempPath("\(name)-events")
-        let service = SnapshotService(
-            provider: world,
+        world.registry = registry
+        world.now = { clock.now }
+        let scan = ReplayableSnapshotProvider(base: world)
+        // Les commandes de ce service publient au maintainer de ce harnais, comme dans le daemon (T219).
+        let applications = TreeScopeApplicationCenter()
+        service = SnapshotService(
+            provider: scan,
             frameWriter: world,
             config: RoadieConfig(tiling: TilingConfig(defaultStrategy: strategy, gapsOuter: 0, gapsInner: 0)),
             intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
             stageStore: store,
             clock: { clock.now },
-            frameRegistry: registry
+            frameRegistry: registry,
+            treeScopeApplications: applications
         )
         maintainer = LayoutMaintainer(
             service: service,
+            scanReplay: scan,
             events: EventLog(path: eventPath, episodes: episodes),
             ruleEngine: ruleEngine,
             store: store,
+            dragActivity: dragActivity,
             commandActivity: commandActivity,
             writtenFrames: registry,
-            generations: PlacementGeneration(),
+            generations: generations,
             takeGesture: takeGesture ?? { nil },
             spaceProbe: spaceProbe ?? { _ in true },
-            readFrame: { [world] window in world.frames[window.id]?.cgRect },
+            readFrame: { [world] window in world.unreadable.contains(window.id) ? nil : world.frames[window.id]?.cgRect },
             episodes: episodes,
             now: { clock.now }
         )
+        let maintainer = UncheckedBox(maintainer)
+        applications.setHandler { maintainer.value.noteTreeScopeApplied($0) }
+    }
+
+    /// Commande sur l'arbre du scope (A15, T219) : mutation, puis application par `applyTreeScope`.
+    @discardableResult
+    func command(_ name: String, _ mutation: (BSPTree) -> BSPTree = { $0 }) -> MaintenanceTick {
+        store.mutate { state in
+            if let tree = state.bspTree(for: treeScope) { state.setBSPTree(mutation(tree), for: treeScope) }
+        }
+        return service.applyTreeScope(treeScope, cause: "command:\(name)", generation: generations.next())
     }
 
     var events: String { (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? "" }
@@ -3474,6 +3517,12 @@ private final class TestClock: @unchecked Sendable {
 private let treeScope = StageScope(displayID: DisplayID(rawValue: "display-a"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
 private let treeContainer = CGRect(x: 0, y: 0, width: 1000, height: 500)
 
+/// Référence non `Sendable` passée à un rappel `@Sendable` d'un test mono-thread.
+private final class UncheckedBox<Value>: @unchecked Sendable {
+    let value: Value
+    init(_ value: Value) { self.value = value }
+}
+
 /// Session de geste rendue une seule fois, comme `UserInputActivity.takeGesture()` (A17).
 private final class GestureBox: @unchecked Sendable {
     var session: GestureSession?
@@ -3493,13 +3542,13 @@ struct TreeLayoutMaintainerTests {
         world.focused = treeW2
         let harness = TreeHarness("tree-new-window", world: world, store: treeStore("tree-new-window", tree: treeSideBySide, frames: world.frames))
 
-        let startup = harness.maintainer.tick(cause: "startup")
+        let startup = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
-        let opened = harness.maintainer.tick(cause: "AXWindowCreated")
+        let opened = harness.maintainer.tick(cause: "ax:AXWindowCreated")
         let tree = harness.store.state().bspTree(for: treeScope)
         harness.clock.advance(0.15)
-        let after = harness.maintainer.tick(cause: "periodic")
+        let after = harness.maintainer.tick(cause: "safety")
 
         #expect(startup.commands == 0)
         #expect(opened.commands >= 1)
@@ -3510,7 +3559,7 @@ struct TreeLayoutMaintainerTests {
         }
         #expect(after.commands == 0)
         #expect(harness.count("layout_apply") == 1)
-        #expect(harness.events.contains("\"cause\":\"AXWindowCreated\""))
+        #expect(harness.events.contains("\"cause\":\"ax:AXWindowCreated\""))
         #expect(harness.events.contains("\"scans\":\"1\""))
         #expect(harness.events.contains("\"layoutVersion\":"))
         #expect(harness.events.contains("\"windowWrites\":"))
@@ -3524,12 +3573,12 @@ struct TreeLayoutMaintainerTests {
         let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
         let harness = TreeHarness("tree-closed-window", world: world, store: treeStore("tree-closed-window", tree: treeSideBySide, frames: world.frames))
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW2] = nil
-        let closed = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        let closed = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
         harness.clock.advance(1)
-        let after = harness.maintainer.tick(cause: "periodic")
+        let after = harness.maintainer.tick(cause: "safety")
 
         #expect(closed.commands == 1)
         #expect(world.frames[treeW1] == Rect(treeContainer))
@@ -3544,13 +3593,13 @@ struct TreeLayoutMaintainerTests {
         let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
         let harness = TreeHarness("tree-spaced-changes", world: world, store: treeStore("tree-spaced-changes", tree: treeSideBySide, frames: world.frames))
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW2] = nil
-        let first = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        let first = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
         harness.clock.advance(0.4)
         world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
-        let second = harness.maintainer.tick(cause: "AXWindowCreated")
+        let second = harness.maintainer.tick(cause: "ax:AXWindowCreated")
 
         #expect(first.commands >= 1)
         #expect(second.commands >= 1)
@@ -3566,7 +3615,7 @@ struct TreeLayoutMaintainerTests {
         let harness = TreeHarness("tree-burst-cap", world: world, store: treeStore("tree-burst-cap", tree: treeSideBySide, frames: world.frames))
         let extra = Rect(x: 100, y: 100, width: 300, height: 200)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         let start = harness.clock.now
         var held: [Int] = []
@@ -3574,7 +3623,7 @@ struct TreeLayoutMaintainerTests {
         for step in 0...13 {
             harness.clock.now = start.addingTimeInterval(0.08 * Double(step))
             world.frames[treeW3] = step.isMultiple(of: 2) ? extra : nil
-            let tick = harness.maintainer.tick(cause: "AXWindowCreated")
+            let tick = harness.maintainer.tick(cause: "ax:AXWindowCreated")
             if (1...12).contains(step) { held.append(tick.commands) }
             if step == 13 { capped = tick }
         }
@@ -3600,7 +3649,7 @@ struct TreeLayoutMaintainerTests {
         )
         let harness = TreeHarness("tree-unified-plan", world: world, store: store)
 
-        let tick = harness.maintainer.tick(cause: "startup")
+        let tick = harness.maintainer.tick(cause: "command:startup")
 
         #expect(tick.commands == 3)
         #expect(world.frames[treeW1] == treeLeft)
@@ -3610,8 +3659,9 @@ struct TreeLayoutMaintainerTests {
         #expect(harness.count("stage_hide_inactive") == 1)
     }
 
-    /// A15 : une règle qui change la stage active, le masquage de l'ancienne stage et la
-    /// disposition de la nouvelle se font dans la même passe, sur une copie de travail.
+    /// A15, T210 : une règle qui change la stage active, le masquage de l'ancienne stage et la
+    /// disposition de la nouvelle se font dans la même passe, sur une copie de travail construite
+    /// sur le relevé de la passe : une seule énumération des fenêtres.
     @Test
     func ruleChangingActiveStageHidesAndLaysOutInOnePass() {
         let world = TreeWorld(frames: [treeW1: Rect(treeContainer)])
@@ -3630,10 +3680,11 @@ struct TreeLayoutMaintainerTests {
             ])
         )
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW2] = Rect(x: 100, y: 100, width: 300, height: 200)
-        let tick = harness.maintainer.tick(cause: "AXWindowCreated")
+        let enumerationsBefore = world.enumerations
+        let tick = harness.maintainer.tick(cause: "ax:AXWindowCreated")
         var state = store.state()
 
         #expect(state.scope(displayID: treeScope.displayID).activeStageID == StageID(rawValue: "2"))
@@ -3641,7 +3692,8 @@ struct TreeLayoutMaintainerTests {
         #expect(!frameIsVisible(world.frames[treeW1], on: lotCDisplay()))
         #expect(world.frames[treeW2] == Rect(treeContainer))
         #expect(harness.count("layout_apply") == 1)
-        #expect(harness.events.contains("\"scans\":\"2\""))
+        #expect(harness.events.contains("\"scans\":\"1\""))
+        #expect(world.enumerations - enumerationsBefore == 1)
     }
 
     /// US2.2 : une application qui confirme le placement à 5 pt près n'est ni redemandée ni prise
@@ -3652,9 +3704,9 @@ struct TreeLayoutMaintainerTests {
         world.writeOffsetX[treeW1] = 5
         let harness = TreeHarness("tree-echo", world: world, store: treeStore("tree-echo", tree: treeSideBySide, frames: world.frames))
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         var later = 0
-        for (step, cause) in [(0.05, "AXWindowMoved"), (0.05, "deadline"), (0.2, "deadline"), (2, "periodic"), (60, "periodic")] {
+        for (step, cause) in [(0.05, "ax:AXWindowMoved"), (0.05, "deadline"), (0.2, "deadline"), (2, "safety"), (60, "safety")] {
             harness.clock.advance(step)
             later += harness.maintainer.tick(cause: cause).commands
         }
@@ -3679,12 +3731,12 @@ struct TreeLayoutMaintainerTests {
         let store = treeStore("tree-oscillation", tree: stacked, frames: world.frames)
         let harness = TreeHarness("tree-oscillation", world: world, store: store)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         var commands = 0
         for (delay, height) in [(0.1, 97.0), (0.2, 25.0), (1.2, 97.0), (1.0, 25.0), (1.5, 97.0), (2.0, 25.0)] {
             harness.clock.advance(delay)
             world.frames[treeW2] = short(height)
-            commands += harness.maintainer.tick(cause: "AXWindowResized").commands
+            commands += harness.maintainer.tick(cause: "ax:AXWindowResized").commands
         }
 
         #expect(world.writes[treeW2]?.count == 1)
@@ -3701,12 +3753,12 @@ struct TreeLayoutMaintainerTests {
         let store = treeStore("tree-external", tree: treeSideBySide, frames: world.frames)
         let harness = TreeHarness("tree-external", world: world, store: store)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         var commands: [Int] = []
         for x in [120.0, 140, 160] {
             harness.clock.advance(5)
             world.frames[treeW1] = Rect(x: x, y: 20, width: 400, height: 300)
-            commands.append(harness.maintainer.tick(cause: "AXWindowMoved").commands)
+            commands.append(harness.maintainer.tick(cause: "ax:AXWindowMoved").commands)
         }
 
         #expect(commands == [1, 0, 0])
@@ -3727,14 +3779,14 @@ struct TreeLayoutMaintainerTests {
         let harness = TreeHarness("tree-refusal", world: world, store: store)
 
         let writtenAt = harness.clock.now
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         let pendingDeadline = harness.maintainer.nextDeadline(now: harness.clock.now)
         harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
         let corrected = harness.maintainer.tick(cause: "deadline")
         var later = 0
         for _ in 0..<3 {
             harness.clock.advance(1)
-            later += harness.maintainer.tick(cause: "periodic").commands
+            later += harness.maintainer.tick(cause: "safety").commands
         }
 
         #expect(pendingDeadline == writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay))
@@ -3757,7 +3809,7 @@ struct TreeLayoutMaintainerTests {
         let store = treeStore("tree-refusal-infeasible", tree: treeSideBySide, frames: world.frames)
         let harness = TreeHarness("tree-refusal-infeasible", world: world, store: store)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         var later = 0
         for step in [LayoutTolerance.refusalConfirmDelay, 1, 1] {
             harness.clock.advance(step)
@@ -3777,10 +3829,10 @@ struct TreeLayoutMaintainerTests {
         let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
         let harness = TreeHarness("tree-idle", world: world, store: treeStore("tree-idle", tree: treeSideBySide, frames: world.frames))
 
-        var commands = harness.maintainer.tick(cause: "startup").commands
+        var commands = harness.maintainer.tick(cause: "command:startup").commands
         for _ in 0..<30 {
             harness.clock.advance(2)
-            commands += harness.maintainer.tick(cause: "periodic").commands
+            commands += harness.maintainer.tick(cause: "safety").commands
         }
 
         #expect(commands == 0)
@@ -3802,13 +3854,13 @@ struct TreeLayoutMaintainerTests {
             spaceProbe: { _ in probe.value }
         )
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW2] = nil
-        _ = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        _ = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
         harness.clock.advance(5)
         world.frames[treeW2] = Rect(x: 0, y: 0, width: 1000, height: 500)
-        let guarded = harness.maintainer.tick(cause: "AXWindowCreated")
+        let guarded = harness.maintainer.tick(cause: "ax:AXWindowCreated")
         let pollDeadline = harness.maintainer.nextDeadline(now: harness.clock.now)
         harness.clock.advance(LayoutTolerance.spaceGuardPoll)
         probe.value = true
@@ -3837,12 +3889,12 @@ struct TreeLayoutMaintainerTests {
             spaceProbe: { _ in false }
         )
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.nativeFullscreen = []
-        let episode = harness.episodes.begin(cause: "AXWindowResized")
+        let episode = harness.episodes.begin(cause: "ax:AXWindowResized")
         let opened = harness.clock.now
-        var held = harness.maintainer.tick(cause: "AXWindowResized").commands
+        var held = harness.maintainer.tick(cause: "ax:AXWindowResized").commands
         var released = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         while let deadline = harness.maintainer.nextDeadline(now: harness.clock.now),
               deadline <= opened.addingTimeInterval(LayoutTolerance.spaceGuardCap) {
@@ -3876,19 +3928,19 @@ struct TreeLayoutMaintainerTests {
             spaceProbe: { _ in nil }
         )
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW2] = nil
-        _ = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        _ = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
         harness.clock.advance(5)
         world.frames[treeW2] = Rect(x: 0, y: 0, width: 1000, height: 500)
-        let opened = harness.maintainer.tick(cause: "AXWindowCreated")
+        let opened = harness.maintainer.tick(cause: "ax:AXWindowCreated")
         harness.clock.advance(LayoutTolerance.spaceGuardPoll)
         let withoutSignal = harness.maintainer.tick(cause: "deadline")
         harness.clock.advance(0.01)
         harness.maintainer.spaceDidChange(displayUUID: nil)
         harness.clock.advance(LayoutTolerance.spaceGuardPoll)
-        let sampled = harness.maintainer.tick(cause: "space_did_change")
+        let sampled = harness.maintainer.tick(cause: "ax:activeSpaceDidChange")
         harness.clock.advance(LayoutTolerance.spaceGuardPoll)
         let released = harness.maintainer.tick(cause: "deadline")
 
@@ -3908,19 +3960,21 @@ struct TreeLayoutMaintainerTests {
         let gesture = GestureBox()
         let harness = TreeHarness("tree-gesture-resize", world: world, store: store, takeGesture: gesture.take)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
         gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
-        let released = harness.maintainer.tick(cause: "gesture_end")
+        let released = harness.maintainer.tick(cause: "drag")
         harness.clock.advance(1)
-        let after = harness.maintainer.tick(cause: "periodic")
+        let after = harness.maintainer.tick(cause: "safety")
 
         #expect(released.commands == 1)
         #expect(world.writes[treeW1] == nil)
         #expect(world.frames[treeW2] == Rect(x: 700, y: 0, width: 300, height: 500))
         #expect(after.commands == 0)
         #expect(harness.count("layout_manual_gesture") == 1)
+        #expect(harness.events.contains("\"ratio\":\"0.700\""))
+        #expect(harness.events.contains("\"cause\":\"drag\""))
         if case .split(_, let ratio, _, _) = store.state().bspTree(for: treeScope) {
             #expect(abs(ratio - 0.7) < 0.01)
         } else {
@@ -3942,11 +3996,11 @@ struct TreeLayoutMaintainerTests {
         let gesture = GestureBox()
         let harness = TreeHarness("tree-gesture-nested", world: world, store: store, takeGesture: gesture.take)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
         world.frames[treeW1] = Rect(x: 0, y: 0, width: 640, height: 500)
         gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: targets[treeW1], startedAt: harness.clock.now, endedAt: harness.clock.now)
-        _ = harness.maintainer.tick(cause: "gesture_end")
+        _ = harness.maintainer.tick(cause: "drag")
 
         #expect(world.frames[treeW2]?.x == 640)
         #expect(world.frames[treeW3]?.x == 640)
@@ -3965,36 +4019,146 @@ struct TreeLayoutMaintainerTests {
         let gesture = GestureBox()
         let harness = TreeHarness("tree-gesture-move", world: world, store: store, takeGesture: gesture.take)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(0.3)
         world.frames[treeW1] = Rect(x: 80, y: 40, width: 500, height: 500)
         gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
-        let released = harness.maintainer.tick(cause: "gesture_end")
+        let released = harness.maintainer.tick(cause: "drag")
 
         #expect(released.commands == 1)
         #expect(world.frames[treeW1] == treeLeft)
         #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
     }
 
-    /// A17 : un dépôt récent (commande du navrail ou glisser-déposer d'un autre processus)
-    /// consomme le geste : aucune frontière n'est ajustée.
+    /// A17, T216 : un dépôt reconnu (navrail, glisser-déposer) consomme la session avant la passe :
+    /// aucune frontière n'est ajustée. La preuve est la session consommée, pas une grâce.
     @Test
-    func gestureAfterRecentDropDoesNotMoveFence() {
+    func gestureConsumedByDropDoesNotMoveFence() {
         let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
         let store = treeStore("tree-gesture-drop", tree: treeSideBySide, frames: world.frames)
         let gesture = GestureBox()
-        let activity = LayoutCommandActivity(path: tempPath("tree-gesture-drop-activity"), enabled: true)
-        defer { activity.reset() }
-        let harness = TreeHarness("tree-gesture-drop", world: world, store: store, takeGesture: gesture.take, commandActivity: activity)
+        let harness = TreeHarness("tree-gesture-drop", world: world, store: store, takeGesture: gesture.take)
 
-        _ = harness.maintainer.tick(cause: "startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
         harness.clock.advance(5)
-        activity.markActive(reason: "rail_drop", scopes: [treeScope], now: harness.clock.now, holdSeconds: 2)
         world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
         gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
-        _ = harness.maintainer.tick(cause: "gesture_end")
+        _ = gesture.take() // dépôt reconnu
+        _ = harness.maintainer.tick(cause: "drag")
 
         #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.count("layout_manual_gesture") == 0)
+    }
+
+    /// T216 : une grâce de commande ou de fin de glisser sans dépôt reconnu ne supprime pas le
+    /// geste ; la session non consommée ajuste la frontière (A17).
+    @Test
+    func releaseGraceWithoutDropKeepsGesture() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-grace", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let activity = LayoutCommandActivity(path: tempPath("tree-gesture-grace-activity"), enabled: true)
+        let drag = WindowDragActivity(path: tempPath("tree-gesture-grace-drag"))
+        defer {
+            activity.reset()
+            drag.reset()
+        }
+        let harness = TreeHarness(
+            "tree-gesture-grace", world: world, store: store, takeGesture: gesture.take,
+            dragActivity: drag, commandActivity: activity
+        )
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        activity.markActive(reason: "rail_drop", scopes: [treeScope], now: harness.clock.now, holdSeconds: 2)
+        drag.finish(now: harness.clock.now)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        _ = harness.maintainer.tick(cause: "drag")
+
+        #expect(harness.count("layout_manual_gesture") == 1)
+        #expect(world.frames[treeW2] == Rect(x: 700, y: 0, width: 300, height: 500))
+    }
+
+    /// T216 : un dépôt reconnu par un autre processus laisse sa preuve dans le fichier partagé du
+    /// glisser (`lastDrop`) ; la session de ce processus, ouverte avant, n'ajuste aucune frontière.
+    @Test
+    func dropProofFromAnotherProcessSuppressesGesture() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-drop-proof", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let path = tempPath("tree-gesture-drop-proof-drag")
+        let producer = WindowDragActivity(path: path)
+        let consumer = WindowDragActivity(path: path)
+        defer { producer.reset() }
+        let harness = TreeHarness("tree-gesture-drop-proof", world: world, store: store, takeGesture: gesture.take, dragActivity: consumer)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        let startedAt = harness.clock.now
+        producer.markActive(windowID: treeW1, now: startedAt)
+        harness.clock.advance(0.3)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        producer.finish(now: harness.clock.now, droppedWindowID: treeW1)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: startedAt, endedAt: harness.clock.now)
+        _ = harness.maintainer.tick(cause: "drag")
+
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.count("layout_manual_gesture") == 0)
+    }
+
+    /// A17 (2), T206 : relâchement reçu par le maintainer avant le dépôt, glisser encore actif : la
+    /// passe ne consomme pas la session ; le dépôt la consomme ensuite ; aucune frontière ajustée.
+    @Test
+    func releaseBeforeDropLeavesSessionToDrop() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-release-first", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let drag = WindowDragActivity(path: tempPath("tree-gesture-release-first-drag"))
+        defer { drag.reset() }
+        let harness = TreeHarness("tree-gesture-release-first", world: world, store: store, takeGesture: gesture.take, dragActivity: drag)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        drag.markActive(windowID: treeW1, now: harness.clock.now)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        let session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        gesture.session = session
+        let beforeDrop = harness.maintainer.tick(cause: "drag")
+        #expect(gesture.session == session)
+        let dropped = gesture.take() // le dépôt consomme la session
+        drag.finish(now: harness.clock.now)
+        harness.clock.advance(0.02)
+        _ = harness.maintainer.tick(cause: "drag")
+
+        #expect(beforeDrop.commands == 0)
+        #expect(dropped == session)
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.count("layout_manual_gesture") == 0)
+    }
+
+    /// A17 (1), T206 : fenêtre détruite pendant le geste : aucune frontière ajustée, la voisine
+    /// reprend la place en une passe.
+    @Test
+    func windowDestroyedDuringGestureGivesPlaceWithoutFence() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-destroyed", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-gesture-destroyed", world: world, store: store, takeGesture: gesture.take)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        world.frames[treeW1] = nil
+        harness.service.noteWindowDestroyed(treeW1)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        let released = harness.maintainer.tick(cause: "drag")
+        harness.clock.advance(1)
+        let after = harness.maintainer.tick(cause: "safety")
+
+        #expect(released.commands == 1)
+        #expect(world.frames[treeW2] == Rect(treeContainer))
+        #expect(world.writes[treeW2]?.count == 1)
+        #expect(after.commands == 0)
         #expect(harness.count("layout_manual_gesture") == 0)
     }
 
@@ -4013,10 +4177,347 @@ struct TreeLayoutMaintainerTests {
         )
         activity.markActive(reason: "test", now: harness.clock.now, holdSeconds: 5)
 
-        let tick = harness.maintainer.tick(cause: "startup")
+        let tick = harness.maintainer.tick(cause: "command:startup")
 
         #expect(tick.commands == 1)
         #expect(world.frames[treeW1] == treeLeft)
+    }
+
+    // MARK: Convergence (T205, T209, T211, T217, T218, T219)
+
+    /// A15, T205 : une commande appliquée par `applyTreeScope` pendant une rafale clôt l'attente du
+    /// scope : la passe suivante écrit sans attendre `burstQuiet`.
+    @Test
+    func commandClosesMembershipBurst() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        world.focused = treeW2
+        let harness = TreeHarness("tree-command-burst", world: world, store: treeStore("tree-command-burst", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
+        _ = harness.maintainer.tick(cause: "ax:AXWindowCreated")
+        harness.clock.advance(0.05)
+        world.frames[treeW3] = nil
+        let held = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
+        harness.clock.advance(0.02)
+        let command = harness.command("balance")
+        harness.clock.advance(0.01)
+        #expect(world.writes[treeW1] == nil)
+        world.frames[treeW1] = Rect(x: 40, y: 30, width: 400, height: 300)
+        let after = harness.maintainer.tick(cause: "ax:AXWindowMoved")
+
+        #expect(held.commands == 0)
+        #expect(harness.count("layout_stage_membership_settling") == 1)
+        #expect(command.commands >= 1)
+        #expect(after.commands == 1)
+        #expect(world.frames[treeW1] == treeLeft)
+    }
+
+    /// A15, T205 : une commande pendant une garde de bureau ouverte la clôt (`closedBy=command`) :
+    /// la passe suivante écrit sans attendre `spaceGuardCap`.
+    @Test
+    func commandClosesSpaceGuard() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness(
+            "tree-command-guard",
+            world: world,
+            store: treeStore("tree-command-guard", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in false }
+        )
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        _ = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(treeContainer)
+        let guarded = harness.maintainer.tick(cause: "ax:AXWindowCreated")
+        harness.clock.advance(0.2)
+        let command = harness.command("balance")
+        harness.clock.advance(1.1)
+        world.frames[treeW1] = Rect(x: 40, y: 30, width: 400, height: 300)
+        let after = harness.maintainer.tick(cause: "ax:AXWindowMoved")
+
+        #expect(guarded.commands == 0)
+        #expect(command.commands >= 1)
+        #expect(after.commands == 1)
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(harness.events.contains("\"closedBy\":\"command\""))
+        #expect(!harness.events.contains("\"closedBy\":\"timeout\""))
+    }
+
+    /// A20, T209 : la lecture de stabilité a lieu 100 ms après la fin de l'écriture, pas après le
+    /// début de la passe (ici, chaque écriture dure 30 ms).
+    @Test
+    func stabilityIsReadAfterWriteEnd() {
+        let clock = TestClock()
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.onWrite = { clock.advance(0.03) }
+        let harness = TreeHarness("tree-stability-write-end", world: world, store: treeStore("tree-stability-write-end", tree: treeSideBySide, frames: world.frames), clock: clock)
+
+        let start = clock.now
+        _ = harness.maintainer.tick(cause: "command:startup")
+        let writeEnd = clock.now
+        let deadline = harness.maintainer.nextDeadline(now: clock.now)
+        clock.now = writeEnd.addingTimeInterval(0.09)
+        _ = harness.maintainer.tick(cause: "safety")
+        let early = harness.count("layout_stable")
+        clock.now = deadline ?? clock.now
+        _ = harness.maintainer.tick(cause: "deadline")
+
+        #expect(writeEnd.timeIntervalSince(start) >= 0.06 - 1e-6)
+        #expect(abs((deadline ?? .distantPast).timeIntervalSince(writeEnd) - 0.1) < 1e-6)
+        #expect(early == 0)
+        #expect(harness.count("layout_stable") == 1)
+    }
+
+    /// T219, A20 : une commande appliquée sur l'arbre arme la vérification de stabilité 100 ms après
+    /// son écriture ; la passe d'échéance la constate sans réécrire, dans la génération de la commande.
+    @Test
+    func commandArmsStabilityAndKeepsItsGeneration() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("tree-command-stability", world: world, store: treeStore("tree-command-stability", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        let command = harness.command("swap") { $0.swapping(treeW1, treeW2) }
+        let appliedAt = harness.clock.now
+        let generation = harness.generations.current
+        let deadline = harness.maintainer.nextDeadline(now: appliedAt)
+        harness.clock.now = deadline ?? appliedAt
+        let tick = harness.maintainer.tick(cause: "deadline")
+
+        #expect(command.commands == 2)
+        #expect(world.frames[treeW1] == treeRight)
+        #expect(abs((deadline ?? .distantPast).timeIntervalSince(appliedAt) - 0.1) < 1e-6)
+        #expect(tick.commands == 0)
+        #expect(harness.count("layout_stable") == 1)
+        #expect(harness.events.contains("\"layoutVersion\":\"\(generation)\""))
+        #expect(harness.generations.current == generation)
+    }
+
+    /// T217 : une fenêtre d'un scope à arbre posée sur un autre écran, sans geste ni commande,
+    /// n'est pas rattachée à cet écran : elle est ramenée à l'arbre.
+    @Test
+    func treeScopeIgnoresPhysicalDisplayDrift() {
+        let left = lotCDisplay(id: "display-a", x: 0)
+        let right = lotCDisplay(id: "display-b", x: 1000)
+        let world = TreeWorld(displays: [left, right], frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-drift", display: left, tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-drift", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(10)
+        world.frames[treeW1] = Rect(x: 1200, y: 50, width: 400, height: 300)
+        let tick = harness.maintainer.tick(cause: "safety")
+
+        #expect(store.state().stageScope(for: treeW1) == treeScope)
+        #expect(!harness.events.contains("window.scope_reconciled_to_physical_display"))
+        #expect(tick.commands == 1)
+        #expect(world.frames[treeW1] == treeLeft)
+    }
+
+    /// T218 : une lecture AX échouée ne confirme pas un refus ; elle est retentée `spaceGuardPoll`
+    /// plus tard, et la lecture suivante confirme et corrige.
+    @Test
+    func failedReadDoesNotConfirmRefusal() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        let store = treeStore("tree-refusal-unreadable", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-refusal-unreadable", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        world.unreadable = [treeW1, treeW2]
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let unreadableAt = harness.clock.now
+        let unreadable = harness.maintainer.tick(cause: "deadline")
+        let retry = harness.maintainer.nextDeadline(now: harness.clock.now)
+        let stableWhileUnreadable = harness.count("layout_stable")
+        world.unreadable = []
+        harness.clock.now = retry ?? harness.clock.now
+        let corrected = harness.maintainer.tick(cause: "deadline")
+
+        #expect(unreadable.commands == 0)
+        #expect(stableWhileUnreadable == 0)
+        #expect(abs((retry ?? .distantPast).timeIntervalSince(unreadableAt) - LayoutTolerance.spaceGuardPoll) < 1e-6)
+        #expect(corrected.commands == 1)
+        #expect(harness.events.contains("\"source\":\"tree_minimum_size\""))
+    }
+
+    /// T218 : sonde indisponible et lectures échouées : la garde ne se ferme pas sur
+    /// `spaceDidChange` faute d'observation fraîche ; elle attend son plafond.
+    @Test
+    func guardWithFailedReadsWaitsForCap() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness(
+            "tree-guard-unreadable",
+            world: world,
+            store: treeStore("tree-guard-unreadable", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in nil }
+        )
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        _ = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(treeContainer)
+        world.unreadable = [treeW2]
+        let opened = harness.clock.now
+        _ = harness.maintainer.tick(cause: "ax:AXWindowCreated")
+        harness.maintainer.spaceDidChange(displayUUID: nil)
+        var held = 0
+        while let deadline = harness.maintainer.nextDeadline(now: harness.clock.now),
+              deadline < opened.addingTimeInterval(LayoutTolerance.spaceGuardCap) {
+            harness.clock.now = deadline
+            held += harness.maintainer.tick(cause: "deadline").commands
+        }
+        harness.clock.now = opened.addingTimeInterval(LayoutTolerance.spaceGuardCap)
+        let released = harness.maintainer.tick(cause: "deadline")
+
+        #expect(held == 0)
+        #expect(released.commands >= 1)
+        #expect(!harness.events.contains("\"closedBy\":\"spaceDidChange\""))
+        #expect(harness.events.contains("\"closedBy\":\"timeout\""))
+    }
+
+    /// T211 : le vrai maintainer relié à l'ordonnanceur, horloge contrôlée. La fin d'une rafale
+    /// part à son échéance réelle, et la passe finale range le scope.
+    @MainActor
+    @Test
+    func schedulerRunsMaintainerBurstEndAtItsDeadline() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        world.focused = treeW2
+        let harness = TreeHarness("tree-sched-burst", world: world, store: treeStore("tree-sched-burst", tree: treeSideBySide, frames: world.frames))
+        let run = TreeSchedulerRun(harness)
+
+        run.scheduler.request(cause: "command:startup")
+        run.timer.advance(by: 1)
+        let start = harness.clock.now
+        world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
+        run.scheduler.request(cause: "ax:AXWindowCreated")
+        run.timer.advance(by: 0.08)
+        world.frames[treeW3] = nil
+        run.scheduler.request(cause: "ax:AXUIElementDestroyed")
+        run.timer.advance(by: 2)
+
+        // Passes : 15 ms (création), 95 ms (rafale ouverte), puis la fin de rafale à 95 + 100 ms.
+        let burstEnd = start.addingTimeInterval(0.195)
+        #expect(run.passes.contains { $0.cause == "deadline" && abs($0.at.timeIntervalSince(burstEnd)) < 0.001 })
+        #expect(harness.events.contains("\"cause\":\"deadline:burst\""))
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(world.frames[treeW2] == treeRight)
+        #expect(run.timer.armedCount == 0)
+    }
+
+    /// T211 : la garde de bureau ouverte à la sortie du plein écran se ferme à son plafond de
+    /// 1,5 s (au plancher de 15 ms près), par la passe que l'ordonnanceur arme lui-même.
+    @MainActor
+    @Test
+    func schedulerClosesSpaceGuardAtCap() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: Rect(treeContainer)])
+        world.nativeFullscreen = [treeW2]
+        world.focused = treeW1
+        let harness = TreeHarness(
+            "tree-sched-guard",
+            world: world,
+            store: treeStore("tree-sched-guard", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in false }
+        )
+        let run = TreeSchedulerRun(harness)
+
+        run.scheduler.request(cause: "command:startup")
+        run.timer.advance(by: 1)
+        world.nativeFullscreen = []
+        run.scheduler.request(cause: "ax:AXWindowResized", delay: .externalChange)
+        run.timer.advance(by: 3)
+
+        let held = harness.events
+            .components(separatedBy: "\"heldMs\":\"").dropFirst().first?
+            .prefix { $0.isNumber }
+        #expect(harness.events.contains("\"closedBy\":\"timeout\""))
+        #expect(held.flatMap { Int($0) }.map { $0 >= 1500 && $0 <= 1515 } == true)
+        #expect(world.frames[treeW2] == treeRight)
+        #expect(run.timer.armedCount == 0)
+    }
+
+    /// T211, A14 : un refus de taille est confirmé par la passe d'échéance armée 100 ms après
+    /// l'écriture, puis corrigé une fois.
+    @MainActor
+    @Test
+    func schedulerConfirmsRefusalAtItsDeadline() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        let harness = TreeHarness("tree-sched-refusal", world: world, store: treeStore("tree-sched-refusal", tree: treeSideBySide, frames: world.frames))
+        let run = TreeSchedulerRun(harness)
+
+        let start = harness.clock.now
+        run.scheduler.request(cause: "command:startup")
+        run.timer.advance(by: 2)
+
+        let confirmAt = start.addingTimeInterval(0.015 + LayoutTolerance.refusalConfirmDelay)
+        #expect(run.passes.contains { $0.cause == "deadline" && abs($0.at.timeIntervalSince(confirmAt)) < 0.001 })
+        #expect(harness.events.contains("\"source\":\"tree_minimum_size\""))
+        #expect(world.writes[treeW1]?.count == 1)
+        #expect(world.writes[treeW2]?.count == 2)
+        #expect((world.frames[treeW2]?.x ?? 0) >= 700)
+        #expect(run.timer.armedCount == 0)
+    }
+}
+
+/// Ordonnanceur réel branché sur le maintainer d'un harnais, avec une minuterie manuelle qui
+/// avance l'horloge du harnais (T211).
+@MainActor
+private final class TreeSchedulerRun {
+    let timer: TreeTimer
+    private(set) var passes: [(cause: String, at: Date)] = []
+    private(set) var scheduler: TickScheduler!
+
+    init(_ harness: TreeHarness) {
+        let timer = TreeTimer(clock: harness.clock)
+        self.timer = timer
+        scheduler = TickScheduler(
+            tick: { [unowned self] cause in
+                passes.append((cause, harness.clock.now))
+                return harness.maintainer.tick(cause: cause)
+            },
+            nextDeadline: { harness.maintainer.nextDeadline(now: $0) },
+            isBlocked: { false },
+            now: { harness.clock.now },
+            schedule: { timer.schedule($0, $1) },
+            episodes: harness.episodes,
+            events: nil
+        )
+    }
+}
+
+/// Minuterie manuelle : les actions partent quand l'horloge avance au-delà de leur échéance.
+@MainActor
+private final class TreeTimer {
+    let clock: TestClock
+    private var items: [(id: Int, due: Date, action: @MainActor () -> Void)] = []
+    private var nextID = 0
+
+    init(clock: TestClock) { self.clock = clock }
+
+    var armedCount: Int { items.count }
+
+    func schedule(_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> () -> Void {
+        let id = nextID
+        nextID += 1
+        items.append((id, clock.now.addingTimeInterval(delay), action))
+        return { [weak self] in self?.items.removeAll { $0.id == id } }
+    }
+
+    func advance(by seconds: TimeInterval) {
+        let target = clock.now.addingTimeInterval(seconds)
+        while let next = items.filter({ $0.due <= target }).min(by: { $0.due < $1.due }) {
+            items.removeAll { $0.id == next.id }
+            clock.now = max(clock.now, next.due)
+            next.action()
+        }
+        clock.now = target
     }
 }
 

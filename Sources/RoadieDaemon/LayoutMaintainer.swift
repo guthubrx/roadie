@@ -51,9 +51,11 @@ public final class LayoutMaintainer {
     private let takeGesture: () -> GestureSession?
     /// Type du bureau courant d'un écran : vrai = bureau utilisateur, nil = sonde indisponible (A19).
     private let spaceProbe: (String) -> Bool?
-    /// Lecture AX fraîche d'un cadre (seconde observation d'un refus, repli de la garde ; A14, A19).
-    /// nil = lecture indisponible : la frame du snapshot sert de repli.
+    /// Lecture AX fraîche d'un cadre (seconde observation d'un refus, repli de la garde, stabilité ;
+    /// A14, A19, A20). nil = lecture échouée : elle ne prouve rien (T218).
     private let readFrame: (WindowSnapshot) -> CGRect?
+    /// Relevé de la passe rejoué pour sa copie de travail (R11, T210). nil = nouveau relevé.
+    private let scanReplay: ReplayableSnapshotProvider?
     private let episodes: EpisodeContext
     private var cachedRuleEngine: WindowRuleEngine?
     private var cachedRulesVersion: String?
@@ -96,14 +98,21 @@ public final class LayoutMaintainer {
     private var correctedGenerations: [UInt32: UInt64] = [:]
     private var treeMinimums: [WindowID: CGSize] = [:]
     private var reportedEchoWrites: [UInt32: Date] = [:]
+    /// Lecture échouée d'un refus en attente : prochaine tentative (T218).
+    private var refusalReadRetryAt: [UInt32: Date] = [:]
+    /// Génération d'une commande appliquée sur un arbre, gardée par la passe interne suivante (T219).
+    private var commandGeneration: UInt64?
     private var lastTreeWindowIDs: Set<UInt32> = []
     // Mesure (A12, A20).
     private var pendingStability: PendingStability?
     private var lastPassEpisodeID: String?
     private var passIndex = 0
 
+    /// `service` nil : service de production sur un relevé AX rejouable (T210). Un service injecté
+    /// le rejoue si `scanReplay` est son fournisseur.
     public init(
-        service: SnapshotService = SnapshotService(),
+        service: SnapshotService? = nil,
+        scanReplay: ReplayableSnapshotProvider? = nil,
         events: EventLog = EventLog(),
         intervalSeconds: TimeInterval = 0.5,
         ruleEngine: WindowRuleEngine? = nil,
@@ -119,7 +128,10 @@ public final class LayoutMaintainer {
         episodes: EpisodeContext = .shared,
         now: @escaping () -> Date = Date.init
     ) {
+        let replay = service == nil ? ReplayableSnapshotProvider(base: LiveSystemSnapshotProvider()) : scanReplay
+        let service = service ?? SnapshotService(provider: replay!)
         self.service = service
+        self.scanReplay = replay
         self.events = events
         self.intervalSeconds = intervalSeconds
         self.staticRuleEngine = ruleEngine
@@ -142,14 +154,16 @@ public final class LayoutMaintainer {
     }
 
     public func tick() -> MaintenanceTick {
-        tick(cause: "legacy")
+        tick(cause: "safety")
     }
 
     /// Une passe (A1, A15) : état logique sur une copie de travail (règles, déplacements adoptés,
     /// zoom quitté), calcul des placements (masquage, épinglages, zoom, disposition), arbitrage
     /// par fenêtre, une seule application, puis focus. Seules les suspensions globales (topologie
-    /// d'écrans, glisser, bouton enfoncé) arrêtent la passe avant le plan.
-    // O(n · s) - n fenêtres, s scopes actifs ; deux relevés au plus (état logique modifié).
+    /// d'écrans, glisser, bouton enfoncé) arrêtent la passe avant le plan. Un seul relevé AX : la
+    /// copie de travail rejoue ce relevé (R11, T210). `cause` suit le contrat des événements
+    /// (`ax:<notification>`, `command:<nom>`, `drag`, `deadline`, `safety`) ; une échéance est nommée ici.
+    // O(n · s) - n fenêtres, s scopes actifs.
     public func tick(cause: String) -> MaintenanceTick {
         let startedAt = Date()
         var scans = 1
@@ -158,16 +172,18 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
+        let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
         forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
         // Plein écran lu une seule fois, avant tout calcul de plan (R5).
         tickFullscreen = fullscreenEntries(in: snapshot)
         tickExcludedScopes = []
+        let generationBefore = generations.current
         var generation = currentGeneration(cause: cause, snapshot: snapshot)
 
         // Garde de bureau et rafale : exclusion totale du scope, aucun chemin d'écriture ne la
         // contourne (A5, A6). L'arbre d'un scope en attente n'intègre pas encore ses changements.
-        let settlingScopes = spaceGuardScopes(in: snapshot, now: tickNow)
-            .union(burstScopes(in: snapshot, now: tickNow))
+        let burstingScopes = burstScopes(in: snapshot, now: tickNow)
+        var settlingScopes = spaceGuardScopes(in: snapshot, now: tickNow).union(burstingScopes)
         let currentDisplaySignature = displaySignature(snapshot.displays)
         if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
             self.lastDisplaySignature = currentDisplaySignature
@@ -189,7 +205,7 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
         displayTopologySettlesUntil = nil
-        let treeScopes = activeTreeScopes(in: snapshot)
+        var treeScopes = activeTreeScopes(in: snapshot)
         // Pas de grâce de fin de glisser pour les modes à arbre : le relâchement fait la passe (A11).
         let releaseGrace = activeScopes(in: snapshot).contains { !treeScopes.contains($0) }
         if dragActivity.isActive(now: tickNow, includingReleaseGrace: releaseGrace) {
@@ -209,21 +225,23 @@ public final class LayoutMaintainer {
         if !settlingScopes.isEmpty {
             observe(observedFrames, scopes: settlingScopes, in: snapshot)
         }
-        let suspension = commandSuspension(in: snapshot, treeScopes: treeScopes, observedFrames: observedFrames, now: tickNow)
+        var suspension = commandSuspension(in: snapshot, treeScopes: treeScopes, observedFrames: observedFrames, now: tickNow)
         tickExcludedScopes.formUnion(suspension.scopes)
 
         // Geste terminé sur une fenêtre d'un arbre : intention externe, nouvelle génération (A13).
-        // Un dépôt récent (glisser-déposer, navrail d'un autre processus) consomme le geste (A17).
+        // Un geste n'est supprimé que sur preuve d'un dépôt reconnu pour cette session (A17, T216) :
+        // dans ce processus, le dépôt consomme la session avant cette passe (un glisser encore en
+        // cours arrête la passe plus haut sans la consommer) ; d'un autre processus, il laisse sa
+        // preuve dans le fichier partagé du glisser, postérieure au début de la session.
         var gesture = takeGesture()
+        if let session = gesture, let drop = dragActivity.lastDrop(),
+           drop.windowID.rawValue == session.windowID, drop.at >= session.startedAt {
+            gesture = nil
+        }
         if let raw = gesture?.windowID,
            let scope = snapshot.windows.first(where: { $0.window.id.rawValue == raw })?.scope,
            treeScopes.contains(scope) {
-            if dragActivity.isActive(now: tickNow, includingReleaseGrace: true)
-                || commandActivity.activity(now: tickNow)?.covers(scope) == true {
-                gesture = nil
-            } else {
-                generation = generations.next()
-            }
+            generation = generations.next()
         }
         let gestureWindowID = gesture?.windowID.map { WindowID(rawValue: $0) }
 
@@ -233,16 +251,24 @@ public final class LayoutMaintainer {
         var moveCandidates = changedWindowIDs
         if let gestureWindowID { moveCandidates.insert(gestureWindowID) }
         let adoptedMoves = adoptManualDisplayMoves(in: snapshot, changedWindowIDs: moveCandidates)
+        // Un scope à arbre n'adopte pas un écran physique sans geste ni commande (T217).
         let driftMoves = adoptedMoves.isEmpty && changedWindowIDs.isEmpty
-            ? reconcileStableVisibleDisplayDrift(in: snapshot, excluding: tickExcludedScopes)
+            ? reconcileStableVisibleDisplayDrift(in: snapshot, excluding: tickExcludedScopes.union(treeScopes))
             : []
         if !rulePlacements.isEmpty || !adoptedMoves.isEmpty || !driftMoves.isEmpty {
-            // Copie de travail : l'état persisté vient de changer, la passe continue sur lui.
+            // Copie de travail : l'état persisté vient de changer, la passe continue sur lui, avec
+            // les fenêtres déjà relevées (T210). Scopes à arbre et exclusions en sont recalculés (T214).
+            scanReplay?.replayLastScan()
             snapshot = service.snapshot(followFocus: false)
-            scans += 1
+            if scanReplay == nil { scans += 1 }
             tickFullscreen = fullscreenEntries(in: snapshot)
             observedFrames = scopedFrames(in: snapshot)
             generation = generations.next()
+            treeScopes = activeTreeScopes(in: snapshot)
+            settlingScopes = Set(spaceGuards.keys.compactMap { snapshot.state.activeScope(on: $0) }).union(burstingScopes)
+            suspension.treeDisplays = Set(treeScopes.map(\.displayID))
+            suspension.scopes = activeScopes(in: snapshot).filter(suspension.covers)
+            tickExcludedScopes = settlingScopes.union(suspension.scopes)
         }
         let focusRestore = focusedHiddenRestore(in: snapshot)
 
@@ -269,14 +295,6 @@ public final class LayoutMaintainer {
         lastTreeWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope.map(liveTreeScopes.contains) == true ? entry.window.id.rawValue : nil
         })
-        let treeCommands = treeLayoutCommands(
-            in: snapshot,
-            scopes: liveTreeScopes,
-            gesture: gesture,
-            generation: generation,
-            now: tickNow
-        )
-        treeCommands.forEach { plan.add($0, .layout) }
         let nonTree = nonTreeLayout(
             in: snapshot,
             observedFrames: observedFrames,
@@ -286,6 +304,20 @@ public final class LayoutMaintainer {
             excluding: tickExcludedScopes.union(treeScopes),
             now: tickNow
         )
+        // Modes sans arbre (A3) : leur disposition naît d'un changement observé (geste par
+        // différence, anti-rebond, intent) ; une passe qui leur écrit est une intention externe et
+        // ouvre sa génération, sinon le budget du point d'écriture la refuserait (A13).
+        if !nonTree.commands.isEmpty, generation == generationBefore {
+            generation = generations.next()
+        }
+        let treeCommands = treeLayoutCommands(
+            in: snapshot,
+            scopes: liveTreeScopes,
+            gesture: gesture,
+            generation: generation,
+            now: tickNow
+        )
+        treeCommands.forEach { plan.add($0, .layout) }
         nonTree.commands.forEach { plan.add($0, .layout) }
         if let focusRestore, let command = focusRestoreCommand(focusRestore, plan: plan, snapshot: snapshot) {
             plan.add(command, focusRestore.isFullscreen ? .zoom : .layout)
@@ -312,10 +344,10 @@ public final class LayoutMaintainer {
             ApplyPlan(commands: writable),
             in: snapshot,
             layoutWindowIDs: layoutWindowIDs,
-            treeScopes: treeScopes,
             generation: generation,
             source: focusRestore == nil ? nil : "stage_focus_restore"
         )
+        let writeEnd = now()
         for placement in rulePlacements where placement.follow {
             _ = service.focus(placement.window)
         }
@@ -351,10 +383,14 @@ public final class LayoutMaintainer {
                 generation: generation,
                 startedAt: startedAt
             )
-            armStabilityCheck(application.result, now: tickNow)
+            armStabilityCheck(
+                targets: Dictionary(application.result.items.map { ($0.windowID, $0.requested.cgRect) }, uniquingKeysWith: { _, last in last }),
+                startedAt: tickNow,
+                writeEnd: writeEnd
+            )
         }
         checkStability(in: snapshot, now: tickNow, generation: generation)
-        if !episodeDeadlines(now: tickNow).isEmpty {
+        if deadlines(now: tickNow).contains(where: \.episode) {
             // Une échéance armée par l'épisode le garde ouvert (A20).
             episodes.continue()
         }
@@ -367,38 +403,49 @@ public final class LayoutMaintainer {
         )
     }
 
-    /// Prochaine échéance interne, toujours future : celles de l'épisode (rafale, garde, refus,
-    /// stabilité), l'anti-rebond d'un geste des modes sans arbre, la fin du réglage d'écrans ou
-    /// d'une commande. Une échéance d'épisode déjà passée, que seule une passe solde, est rendue
-    /// juste après `now`. nil = aucune. Ne lit ni l'écran ni l'état persisté. O(s + r).
+    /// Prochaine échéance interne (T211) : la vraie, même déjà passée, pour celles de l'épisode
+    /// (rafale, garde, refus, stabilité), que seule une passe solde ; les autres (anti-rebond d'un
+    /// geste des modes sans arbre, fin d'une commande, réglage d'écrans) seulement à venir. Le
+    /// plancher anti-boucle est celui de l'ordonnanceur. Pendant le réglage d'écrans, seule sa fin
+    /// compte : la passe s'y arrête avant les échéances d'épisode. nil = aucune. Ne lit ni l'écran
+    /// ni l'état persisté. O(s + r).
     public func nextDeadline(now: Date) -> Date? {
-        let future = [
-            displayTopologySettlesUntil, manualResizeApplyAfter, commandSuspendedUntil,
-            lastCommandIntentAt?.addingTimeInterval(LayoutTolerance.commandIntentHold),
-            lastDisplayTopologyChangedAt?.addingTimeInterval(LayoutTolerance.displayDriftReconcileHold)
-        ].compactMap { $0 }.filter { $0 > now }.min()
-        let due = episodeDeadlines(now: now).min().map { $0 > now ? $0 : now.addingTimeInterval(0.001) }
-        return [future, due].compactMap { $0 }.min()
+        if let displayTopologySettlesUntil, displayTopologySettlesUntil > now { return displayTopologySettlesUntil }
+        return deadlines(now: now).filter { $0.episode || $0.at > now }.map(\.at).min()
     }
 
-    /// Échéances armées par l'épisode en cours (A20) : fin de rafale, sondage et plafond de garde,
-    /// refus à confirmer ou à corriger, stabilité à vérifier. O(s + r) - r fenêtres d'arbre.
-    private func episodeDeadlines(now: Date) -> [Date] {
-        var due: [Date] = membershipActivity.values.compactMap(\.burstEnd)
+    /// Nom de l'échéance qui vient d'échoir, pour la cause `deadline:<nom>` : la plus récente des
+    /// échéances passées (les anciennes non soldées sont plus anciennes). O(s + r).
+    private func dueDeadlineName(now: Date) -> String {
+        deadlines(now: now).filter { $0.at <= now }.max { $0.at < $1.at }?.name ?? "none"
+    }
+
+    /// Échéances internes nommées. `episode` : armée par l'épisode en cours (A20) et soldée par
+    /// une passe ; sinon, simple date, peut-être ancienne. O(s + r) - r fenêtres d'arbre suivies.
+    private func deadlines(now: Date) -> [(name: String, at: Date, episode: Bool)] {
+        var due: [(name: String, at: Date, episode: Bool)] = [
+            ("topology_settle", displayTopologySettlesUntil), ("manual_resize", manualResizeApplyAfter),
+            ("command_suspension", commandSuspendedUntil),
+            ("command_intent", lastCommandIntentAt?.addingTimeInterval(LayoutTolerance.commandIntentHold)),
+            ("drift_hold", lastDisplayTopologyChangedAt?.addingTimeInterval(LayoutTolerance.displayDriftReconcileHold))
+        ].compactMap { name, at in at.map { (name, $0, false) } }
+        due += membershipActivity.values.compactMap(\.burstEnd).map { ("burst", $0, true) }
         for guardState in spaceGuards.values {
-            due.append(guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap))
-            due.append((guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll))
+            due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
+            due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))
         }
         for id in lastTreeWindowIDs {
             guard let entry = writtenFrames.entry(for: id), entry.hasRefusal else { continue }
             if let confirmedAt = entry.refusalConfirmedAt {
-                if correctedGenerations[id] != generations.current { due.append(confirmedAt) }
+                if correctedGenerations[id] != generations.current { due.append(("refusal_correct", confirmedAt, true)) }
             } else if now.timeIntervalSince(entry.writtenAt) < LayoutTolerance.echoWindow {
                 // Au-delà de `echoWindow` sans confirmation, la réponse était transitoire (A2).
-                due.append(entry.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay))
+                // Une lecture échouée est retentée plus tard, pas en boucle (T218).
+                let confirmAt = entry.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay)
+                due.append(("refusal_confirm", max(confirmAt, refusalReadRetryAt[id] ?? confirmAt), true))
             }
         }
-        if let pendingStability, !pendingStability.checked { due.append(pendingStability.checkAt) }
+        if let pendingStability, !pendingStability.checked { due.append(("stability", pendingStability.checkAt, true)) }
         return due
     }
 
@@ -414,17 +461,23 @@ public final class LayoutMaintainer {
 
     /// Génération de la passe (A13) : une intention externe ou un changement de membres ou de
     /// stage active en ouvre une nouvelle ; les déplacements et redimensionnements observés, les
-    /// échéances et le filet de sécurité gardent la génération en cours (pas de lutte).
+    /// échéances et le filet de sécurité gardent la génération en cours (pas de lutte). Après une
+    /// commande appliquée sur un arbre, ses changements de stage ou de membres sont déjà dans sa
+    /// génération : la passe interne suivante la garde (T219).
     private func currentGeneration(cause: String, snapshot: DaemonSnapshot) -> UInt64 {
         let signature = snapshot.displays.compactMap { display -> String? in
             guard let scope = snapshot.state.activeScope(on: display.id) else { return nil }
             let ids = snapshot.windows.compactMap { $0.scope == scope && $0.window.isTileCandidate ? String($0.window.id.rawValue) : nil }
             return "\(scope.description):\(ids.sorted().joined(separator: ","))"
         }.sorted().joined(separator: "|")
-        let internalCause = ["legacy", "periodic", "safety"].contains(cause) || cause.hasPrefix("deadline")
+        let internalCause = cause == "safety" || cause.hasPrefix("deadline")
             || cause.contains("Moved") || cause.contains("Resized")
-        defer { lastGenerationSignature = signature }
-        if !internalCause || signature != lastGenerationSignature || generations.current == 0 {
+        let commandOwnsChange = commandGeneration != nil && commandGeneration == generations.current
+        defer {
+            lastGenerationSignature = signature
+            commandGeneration = nil
+        }
+        if !internalCause || (signature != lastGenerationSignature && !commandOwnsChange) || generations.current == 0 {
             return generations.next()
         }
         return generations.current
@@ -480,15 +533,16 @@ public final class LayoutMaintainer {
         _ plan: ApplyPlan,
         in snapshot: DaemonSnapshot,
         layoutWindowIDs: Set<WindowID>,
-        treeScopes: Set<StageScope>,
         generation: UInt64,
         source: String?
     ) -> PlanApplication {
         guard !plan.commands.isEmpty else { return PlanApplication(result: .empty, commands: 0) }
         let scopesByID = Dictionary(snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } }, uniquingKeysWith: { first, _ in first })
-        // Disposition sans arbre : seule partie qui passe par les réparations historiques.
+        // Disposition sans arbre : seule partie qui passe par les réparations historiques. Le mode
+        // de la stage est lu directement sur la copie finale de la passe (T214).
         let isRepairable = { (id: WindowID) in
-            layoutWindowIDs.contains(id) && scopesByID[id].map(treeScopes.contains) != true
+            layoutWindowIDs.contains(id)
+                && scopesByID[id].flatMap { snapshot.state.stage(scope: $0)?.mode.usesTreeEngine } != true
         }
         let before = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id.rawValue, writtenFrames.entry(for: $0.window.id.rawValue)) })
         let firstResult = service.apply(plan, generation: generation)
@@ -500,7 +554,7 @@ public final class LayoutMaintainer {
         let nonTreeResult = ApplyResult.filtering(firstResult) { isRepairable($0.windowID) }
         let directResult = ApplyResult.filtering(firstResult) { !isRepairable($0.windowID) }
         var result = stabilizeClampedPositions(nonTreeResult, from: nonTreeCommands, in: snapshot)
-        let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot, treeScopes: treeScopes)
+        let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot)
         if !repairPlan.commands.isEmpty {
             let repairResult = stabilizeClampedPositions(service.apply(repairPlan, generation: generation), from: repairPlan, in: snapshot)
             result = result.merged(with: repairResult)
@@ -511,7 +565,7 @@ public final class LayoutMaintainer {
             if let source { details["source"] = source }
             events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: details))
         }
-        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot, treeScopes: treeScopes)
+        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot)
         result = result.merged(with: resolution.result)
         let nonTreeAll = nonTreeCommands.commands + repairPlan.commands + resolution.commands
         record(result, from: ApplyPlan(commands: nonTreeAll))
@@ -529,7 +583,8 @@ public final class LayoutMaintainer {
     private func plannedCommands(
         from snapshot: DaemonSnapshot,
         priorityWindowIDs: Set<WindowID> = [],
-        excluding excluded: Set<StageScope>
+        excluding excluded: Set<StageScope>,
+        generation: UInt64
     ) -> ApplyPlan {
         var planning = snapshot
         if !excluded.isEmpty {
@@ -537,7 +592,7 @@ public final class LayoutMaintainer {
                 snapshot.state.activeScope(on: display.id).map(excluded.contains) ?? false
             }
         }
-        return service.applyPlan(from: planning, priorityWindowIDs: priorityWindowIDs)
+        return service.applyPlan(from: planning, priorityWindowIDs: priorityWindowIDs, generation: generation)
     }
 
     /// Met à jour la référence d'observation pour les seules fenêtres des scopes donnés (R6).
@@ -722,8 +777,9 @@ public final class LayoutMaintainer {
         excluding excluded: Set<StageScope>
     ) -> [ApplyCommand] {
         let planningSnapshot = snapshotExcludingGrowthClampedWindows(snapshot)
+        // La génération ne sert qu'aux frames acceptées des scopes à arbre, exclus de ce plan.
         return suppressKnownUnmovableFrames(
-            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priority, excluding: excluded),
+            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priority, excluding: excluded, generation: generations.current),
             snapshot: planningSnapshot
         ).commands
     }
@@ -753,7 +809,7 @@ public final class LayoutMaintainer {
         confirmPendingRefusals(in: snapshot, scopes: scopes, now: now)
         correctConfirmedRefusals(in: snapshot, scopes: scopes, generation: generation)
         let otherScopes = Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }).subtracting(scopes)
-        return plannedCommands(from: snapshot, excluding: otherScopes).commands.compactMap { command in
+        return plannedCommands(from: snapshot, excluding: otherScopes, generation: generation).commands.compactMap { command in
             treeWrite(command, snapBack: command.window.id == snappedWindowID, generation: generation, now: now)
         }
     }
@@ -891,9 +947,20 @@ public final class LayoutMaintainer {
         events.append(RoadieEvent(type: "layout_manual_gesture", scope: scope, details: [
             "windowID": String(entry.window.id.rawValue),
             "edge": edges.map(\.rawValue).joined(separator: ","),
+            "ratio": Self.changedRatios(from: tree, to: adjusted).map { String(format: "%.3f", $0) }.joined(separator: ","),
             "frame": frameDescription(entry.window.frame)
         ]))
         return false
+    }
+
+    /// Nouveaux ratios des splits changés entre deux arbres de même forme (un geste ne change que
+    /// des ratios), en ordre préfixe. O(n).
+    static func changedRatios(from old: BSPTree, to new: BSPTree) -> [Double] {
+        guard case let .split(_, oldRatio, oldFirst, oldSecond) = old,
+              case let .split(_, newRatio, newFirst, newSecond) = new
+        else { return [] }
+        return (oldRatio == newRatio ? [] : [newRatio])
+            + changedRatios(from: oldFirst, to: newFirst) + changedRatios(from: oldSecond, to: newSecond)
     }
 
     /// Conteneur, marge intérieure et feuilles absentes (membres hors relevé ou en plein écran
@@ -909,8 +976,8 @@ public final class LayoutMaintainer {
     }
 
     /// Seconde observation des refus en attente sans notification (A14) : une lecture AX fraîche
-    /// à `refusalConfirmDelay` après l'écriture. Sans lecture possible, la frame du relevé courant
-    /// sert de repli. O(r) - r refus en attente.
+    /// à `refusalConfirmDelay` après l'écriture. Une lecture échouée ne confirme rien : elle est
+    /// retentée `spaceGuardPoll` plus tard, tant que dure `echoWindow` (T218). O(r) - r refus en attente.
     private func confirmPendingRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) {
         let pending = Set(writtenFrames.pendingRefusals())
         guard !pending.isEmpty else { return }
@@ -918,9 +985,14 @@ public final class LayoutMaintainer {
             let id = entry.window.id.rawValue
             guard pending.contains(id), let scope = entry.scope, scopes.contains(scope),
                   let written = writtenFrames.entry(for: id),
-                  written.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay) <= now
+                  written.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay) <= now,
+                  (refusalReadRetryAt[id] ?? now) <= now
             else { continue }
-            let observed = readFrame(entry.window) ?? entry.window.frame.cgRect
+            guard let observed = readFrame(entry.window) else {
+                refusalReadRetryAt[id] = now.addingTimeInterval(LayoutTolerance.spaceGuardPoll)
+                continue
+            }
+            refusalReadRetryAt[id] = nil
             writtenFrames.confirmRefusal(windowID: id, observed: observed, at: now)
         }
     }
@@ -1075,13 +1147,16 @@ public final class LayoutMaintainer {
                     break
                 case nil:
                     if guardState.spaceDidChangeAt != nil {
+                        // Lectures fraîches de toutes les fenêtres gardées, sinon pas d'échantillon :
+                        // la garde attend alors son plafond (T218).
                         let frames = guardState.windowIDs.reduce(into: [WindowID: CGRect]()) { frames, id in
-                            guard let entry = entriesByID[id] else { return }
-                            frames[id] = readFrame(entry.window) ?? entry.window.frame.cgRect
+                            guard let entry = entriesByID[id], let frame = readFrame(entry.window) else { return }
+                            frames[id] = frame
                         }
-                        if let sample = guardState.sample,
+                        if frames.isEmpty || frames.count != guardState.windowIDs.count {
+                            updated.sample = nil
+                        } else if let sample = guardState.sample,
                            sample.at.addingTimeInterval(LayoutTolerance.spaceGuardPoll) <= now,
-                           sample.frames.count == frames.count,
                            frames.allSatisfy({ id, frame in sample.frames[id].map { Self.matches($0, frame) } ?? false }) {
                             closedBy = "spaceDidChange"
                         } else {
@@ -1221,24 +1296,39 @@ public final class LayoutMaintainer {
         var checked = false
     }
 
-    private func armStabilityCheck(_ result: ApplyResult, now: Date) {
-        var pending = pendingStability ?? PendingStability(startedAt: now, checkAt: now, targets: [:])
-        for item in result.items {
-            pending.targets[item.windowID] = item.requested.cgRect
-        }
-        pending.checkAt = now.addingTimeInterval(0.1)
+    /// Arme la lecture de stabilité 100 ms après la fin de la dernière écriture (A20, T209).
+    private func armStabilityCheck(targets: [WindowID: CGRect], startedAt: Date, writeEnd: Date) {
+        var pending = pendingStability ?? PendingStability(startedAt: startedAt, checkAt: writeEnd, targets: [:])
+        pending.targets.merge(targets) { _, new in new }
+        pending.checkAt = writeEnd.addingTimeInterval(0.1)
         pending.checked = false
         pendingStability = pending
     }
 
+    /// Résultat d'une commande appliquée sur un arbre (T219, A15, A20), publié par
+    /// `SnapshotService.applyTreeScope` : ses fenêtres sont suivies (refus à confirmer ou à
+    /// corriger), sa génération est gardée par la passe interne suivante, et la stabilité est lue
+    /// 100 ms après la fin de son écriture. Aucun placement ici. O(k) - k fenêtres écrites.
+    public func noteTreeScopeApplied(_ application: TreeScopeApplication) {
+        lastTreeWindowIDs.formUnion(application.windowIDs.map(\.rawValue))
+        commandGeneration = application.generation
+        var targets: [WindowID: CGRect] = [:]
+        for id in application.windowIDs {
+            if let written = writtenFrames.entry(for: id.rawValue) { targets[id] = written.requested }
+        }
+        guard !targets.isEmpty else { return }
+        armStabilityCheck(targets: targets, startedAt: application.appliedAt, writeEnd: application.appliedAt)
+    }
+
     /// `layout_stable` (A20) : une observation fraîche, au moins 100 ms après la dernière écriture,
-    /// montre chaque fenêtre de la passe à sa cible ou à sa frame acceptée. O(k).
+    /// montre chaque fenêtre de la passe à sa cible ou à sa frame acceptée. Une lecture échouée
+    /// ne prouve pas la stabilité (T218). O(k).
     private func checkStability(in snapshot: DaemonSnapshot, now: Date, generation: UInt64) {
         guard var pending = pendingStability, now >= pending.checkAt else { return }
         let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
         let stable = pending.targets.allSatisfy { id, target in
             guard let entry = entriesByID[id] else { return true }
-            let observed = readFrame(entry.window) ?? entry.window.frame.cgRect
+            guard let observed = readFrame(entry.window) else { return false }
             if Self.matches(observed, target) { return true }
             return writtenFrames.entry(for: id.rawValue)?.accepted.map { Self.matches($0, observed) } ?? false
         }
@@ -1342,6 +1432,7 @@ public final class LayoutMaintainer {
         externalReverts = externalReverts.filter { liveWindowIDs.contains($0.key) }
         correctedGenerations = correctedGenerations.filter { liveWindowIDs.contains($0.key) }
         reportedEchoWrites = reportedEchoWrites.filter { liveWindowIDs.contains($0.key) }
+        refusalReadRetryAt = refusalReadRetryAt.filter { liveWindowIDs.contains($0.key) }
         treeMinimums = treeMinimums.filter { liveWindowIDs.contains($0.key.rawValue) }
     }
 
@@ -2304,7 +2395,7 @@ public final class LayoutMaintainer {
     }
 
     /// Voisines des fenêtres clampées replacées dans l'espace restant (modes sans arbre, A3). O(s · n).
-    private func clampedSiblingRepairPlan(from result: ApplyResult, in snapshot: DaemonSnapshot, treeScopes: Set<StageScope>) -> ApplyPlan {
+    private func clampedSiblingRepairPlan(from result: ApplyResult, in snapshot: DaemonSnapshot) -> ApplyPlan {
         let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
         guard !clampedItems.isEmpty else { return ApplyPlan(commands: []) }
 
@@ -2319,7 +2410,7 @@ public final class LayoutMaintainer {
         let scopes = Set(clampedItems.compactMap { item in entriesByID[item.windowID]?.scope })
         var commands: [ApplyCommand] = []
 
-        for scope in scopes where !treeScopes.contains(scope) {
+        for scope in scopes {
             guard let stage = snapshot.state.stage(scope: scope),
                   stage.mode != .float,
                   !stage.mode.usesTreeEngine,
@@ -2383,8 +2474,7 @@ public final class LayoutMaintainer {
     // O(s · n³) au pire — s scopes concernés, n fenêtres par scope (n petit).
     private func resolveInfeasibleClampedScopes(
         from result: ApplyResult,
-        in snapshot: DaemonSnapshot,
-        treeScopes: Set<StageScope>
+        in snapshot: DaemonSnapshot
     ) -> (result: ApplyResult, commands: [ApplyCommand], hidden: Int) {
         var resolution = ApplyResult.empty
         var commands: [ApplyCommand] = []
@@ -2406,11 +2496,11 @@ public final class LayoutMaintainer {
 
         for (optionalScope, scopedClampedItems) in clampedScopes {
             guard let scope = optionalScope,
-                  !treeScopes.contains(scope),
                   scopedClampedItems.count >= 2,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
                   let stage = snapshot.state.stage(scope: scope),
                   stage.mode.isTiled,
+                  !stage.mode.usesTreeEngine,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID })
             else { continue }
 
@@ -3252,5 +3342,65 @@ private extension ApplyResult {
 private extension CGRect {
     var area: CGFloat {
         max(0, width) * max(0, height)
+    }
+}
+
+/// Fournisseur qui garde son dernier relevé et peut le rejouer une fois (R11, T210) : la copie de
+/// travail d'une passe qui change l'état logique (règle, déplacement adopté, dérive d'écran) se
+/// reconstruit sur les fenêtres déjà relevées, sans second relevé AX. Hors rejeu, il délègue.
+public final class ReplayableSnapshotProvider: SystemSnapshotProviding, @unchecked Sendable {
+    private struct Scan {
+        var permissions: PermissionSnapshot?
+        var displays: [DisplaySnapshot]?
+        var windows: [WindowSnapshot]?
+        var focusedWindowID: WindowID??
+        var mouseLocation: CGPoint??
+    }
+
+    private let base: any SystemSnapshotProviding
+    private let lock = NSLock()
+    private var last = Scan()
+    private var replay = Scan()
+
+    public init(base: any SystemSnapshotProviding) {
+        self.base = base
+    }
+
+    /// Chaque lecture suivante rend, une fois, sa valeur du dernier relevé. O(1).
+    public func replayLastScan() {
+        lock.withLock { replay = last }
+    }
+
+    public func permissions(prompt: Bool) -> PermissionSnapshot {
+        served(\.permissions) ?? recorded(\.permissions, base.permissions(prompt: prompt))
+    }
+
+    public func displays() -> [DisplaySnapshot] {
+        served(\.displays) ?? recorded(\.displays, base.displays())
+    }
+
+    public func windows() -> [WindowSnapshot] {
+        served(\.windows) ?? recorded(\.windows, base.windows())
+    }
+
+    public func focusedWindowID() -> WindowID? {
+        served(\.focusedWindowID) ?? recorded(\.focusedWindowID, base.focusedWindowID())
+    }
+
+    public func mouseLocation() -> CGPoint? {
+        served(\.mouseLocation) ?? recorded(\.mouseLocation, base.mouseLocation())
+    }
+
+    /// Valeur rejouée et consommée, nil hors rejeu.
+    private func served<Value>(_ field: WritableKeyPath<Scan, Value?>) -> Value? {
+        lock.withLock {
+            defer { replay[keyPath: field] = nil }
+            return replay[keyPath: field]
+        }
+    }
+
+    private func recorded<Value>(_ field: WritableKeyPath<Scan, Value?>, _ value: Value) -> Value {
+        lock.withLock { last[keyPath: field] = value }
+        return value
     }
 }

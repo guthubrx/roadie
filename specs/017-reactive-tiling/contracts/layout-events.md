@@ -16,7 +16,7 @@ Ajouts **rétrocompatibles**. Les lecteurs existants ignorent les clés inconnue
 | Clé | Sens |
 |---|---|
 | `durationMs` | durée de la passe (plan + écriture) |
-| `cause` | `ax:<notification>`, `command:<nom>`, `drag`, `deadline:<nom>`, `safety` |
+| `cause` | `ax:<notification>` (y compris les notifications système : `ax:activeSpaceDidChange`, `ax:didActivateApplication`, `ax:displayReconfigured`, `ax:didWake`), `command:<nom>` (dont `command:startup`), `drag`, `deadline:<nom>` (`burst`, `guard_cap`, `guard_poll`, `refusal_confirm`, `stable`...), `safety` |
 | `pass` | rang de la passe dans l'épisode (1 = première) |
 | `scans` | relevés complets faits pendant la passe |
 | `axWrites` | écritures AX faites pendant la passe |
@@ -36,3 +36,11 @@ Ajouts **rétrocompatibles**. Les lecteurs existants ignorent les clés inconnue
 | `state_migrated` | `stages`, `backup` | migration `mutableBsp` vers l'arbre, une seule fois |
 
 Les types retirés avec la suppression de `mutableBsp` (`mutable_bsp_geometry_adopted`, `mutable_bsp_order_repaired`, `mutable_bsp_resize_propagated`) restent lisibles dans les anciens journaux. Ils ne sont plus émis. Ils restent dans `AutomationEventCatalog` avec la mention « obsolète », pour que `roadie events subscribe --type` ne casse pas.
+
+## `live_tick` : détails ajoutés (T221)
+
+| Clé | Sens |
+|---|---|
+| `requestedDelayMs` | regroupement demandé (15 ou 30 ms) |
+| `dueLagMs` | retard entre l'échéance et l'exécution sur le thread principal |
+| `heldByGestureMs` | temps pendant lequel la demande a attendu le relâchement de la souris |
