@@ -1,0 +1,32 @@
+# Contrat : événements de placement (journal `~/.roadies/events.jsonl`)
+
+Ajouts **rétrocompatibles**. Les lecteurs existants ignorent les clés inconnues, et les anciennes lignes n'ont pas ces clés.
+
+## Champs communs ajoutés à chaque événement
+
+| Clé | Type | Sens |
+|---|---|---|
+| `tsMs` | entier | epoch en millisecondes, dérivé de `timestamp` |
+| `episodeId` | chaîne, optionnelle | `ep_<epoch ms>` de la cause en cours |
+
+`timestamp` garde son format ISO 8601 à la seconde.
+
+## `layout_apply` : détails ajoutés
+
+| Clé | Sens |
+|---|---|
+| `durationMs` | durée de la passe (plan + écriture) |
+| `cause` | `ax:<notification>`, `command:<nom>`, `drag`, `deadline:<nom>`, `safety` |
+| `pass` | rang de la passe dans l'épisode (1 = première) |
+
+## Nouveaux types
+
+| Type | Détails | Quand |
+|---|---|---|
+| `layout_echo_ignored` | `windowID`, `deltaPt` | une frame observée est l'écho d'une écriture |
+| `layout_app_response_accepted` | `windowID`, `requested`, `actual` | une application a imposé sa taille, puis l'a acceptée |
+| `layout_manual_gesture` | `windowID`, `edge`, `ratio` | un geste à la souris a modifié un ratio de l'arbre |
+| `space_transition_guard` | `scope`, `reason`, `closedBy`, `heldMs` | à la fermeture de la garde de transition de bureau |
+| `state_migrated` | `stages`, `backup` | migration `mutableBsp` vers l'arbre, une seule fois |
+
+Les types retirés avec la suppression de `mutableBsp` (`mutable_bsp_geometry_adopted`, `mutable_bsp_order_repaired`, `mutable_bsp_resize_propagated`) restent lisibles dans les anciens journaux. Ils ne sont plus émis. Ils restent dans `AutomationEventCatalog` avec la mention « obsolète », pour que `roadie events subscribe --type` ne casse pas.
