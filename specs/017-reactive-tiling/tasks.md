@@ -185,14 +185,14 @@
 
 ### Lot L8 - Arbre qui fait foi dans le snapshot (Opus) [US1, US3]
 
-- [ ] T080 [US3] Dans `Sources/RoadieDaemon/DaemonSnapshot.swift` :
+- [x] T080 [US3] Dans `Sources/RoadieDaemon/DaemonSnapshot.swift` :
   - pour les modes à arbre (`usesTreeEngine`), aucun intent appliqué sauf le marqueur de zoom ;
   - aucun intent automatique persisté ;
   - disposition depuis l'arbre projeté.
-- [ ] T081 [US3] Réconcilier l'arbre une seule fois par passe. Insertion à la feuille active, avec le sens selon la feuille. La feuille d'un membre absent est gardée pendant la grâce réelle du membre (30 min), et retirée sur destruction confirmée ou purge du membre (A9).
-- [ ] T082 [US3] Appeler `StageStore.migrateLegacyTreeModes` une seule fois au démarrage du producteur, avec `BSPTree.inferred` et les conteneurs des écrans. Émettre `state_migrated`.
-- [ ] T083 [US1] Remplir `applyTreeScope(_:cause:generation:)` (A15 : une commande clôt la rafale ou la garde de son scope) : plan de l'arbre du scope, une application, enregistrement des versions. Après `apply`, republier le snapshot avec les frames relues et invalider seulement les fenêtres en échec (A12). Supprimer la réparation d'ordre (`:1180-1230`) et le seuil « réussi » de 48 pt.
-- [ ] T084 [US3] Tests dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift` :
+- [x] T081 [US3] Réconcilier l'arbre une seule fois par passe. Insertion à la feuille active, avec le sens selon la feuille. La feuille d'un membre absent est gardée pendant la grâce réelle du membre (30 min), et retirée sur destruction confirmée ou purge du membre (A9).
+- [x] T082 [US3] Appeler `StageStore.migrateLegacyTreeModes` une seule fois au démarrage du producteur, avec `BSPTree.inferred` et les conteneurs des écrans. Émettre `state_migrated`.
+- [x] T083 [US1] Remplir `applyTreeScope(_:cause:generation:)` (A15 : une commande clôt la rafale ou la garde de son scope) : plan de l'arbre du scope, une application, enregistrement des versions. Après `apply`, republier le snapshot avec les frames relues et invalider seulement les fenêtres en échec (A12). Supprimer la réparation d'ordre (`:1180-1230`) et le seuil « réussi » de 48 pt.
+- [x] T084 [US3] Tests dans `Tests/RoadieDaemonTests/SnapshotServiceTests.swift` :
   - intent ignoré en mode arbre sauf le zoom ;
   - membre absent depuis plus de 45 s qui reprend sa place ;
   - redimensionnement pendant l'absence d'une voisine, puis retour de la voisine ;

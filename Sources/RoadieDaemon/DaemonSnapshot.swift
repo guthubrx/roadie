@@ -76,6 +76,8 @@ public struct SnapshotService {
 
     private let provider: any SystemSnapshotProviding
     private let frameWriter: any WindowFrameWriting
+    /// Frames écrites par Roadie (SPEC-017 R9) : la frame acceptée d'une cible évite de la redemander.
+    private let frameRegistry: WrittenFrameRegistry
     /// Config figée injectée (tests, commandes) ; nil = config du processus rechargée à chaud.
     private let fixedConfig: RoadieConfig?
     private let railSettings: RailSettings?
@@ -124,10 +126,12 @@ public struct SnapshotService {
         events: EventLog = EventLog(),
         persistStateChanges: Bool = Self.defaultPersistStateChanges,
         userInput: UserInputActivity = .shared,
-        clock: @escaping @Sendable () -> Date = { Date() }
+        clock: @escaping @Sendable () -> Date = { Date() },
+        frameRegistry: WrittenFrameRegistry = .shared
     ) {
         self.provider = provider
         self.frameWriter = frameWriter
+        self.frameRegistry = frameRegistry
         self.fixedConfig = config
         self.railSettings = railSettings
         self.railRuntimeStateStore = railRuntimeStateStore
@@ -180,23 +184,49 @@ public struct SnapshotService {
     }
 
     public func snapshot(promptForPermissions: Bool = false, followFocus: Bool = true) -> DaemonSnapshot {
-        snapshot(promptForPermissions: promptForPermissions, followFocus: followFocus, sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge)
+        snapshot(promptForPermissions: promptForPermissions, followFocus: followFocus, sharedMaxAge: SnapshotProcessState.sharedSnapshotMaxAge, producer: false)
     }
 
     /// Snapshot du tick du tiler, producteur unique du processus quand il tourne (FR-023) : publié
     /// comme source partagée valable tout le cycle (`cycle` + marge, borné à 600 ms). Les lecteurs
     /// du processus le consomment au lieu de rescanner ; ailleurs la règle des 150 ms s'applique.
     public func producerSnapshot(cycle: TimeInterval) -> DaemonSnapshot {
-        snapshot(promptForPermissions: false, followFocus: true, sharedMaxAge: SnapshotProcessState.producerMaxAge(cycle: cycle))
+        snapshot(promptForPermissions: false, followFocus: true, sharedMaxAge: SnapshotProcessState.producerMaxAge(cycle: cycle), producer: true)
     }
 
-    private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval) -> DaemonSnapshot {
+    /// Destruction confirmée d'une fenêtre (`kAXUIElementDestroyedNotification`, SPEC-017 A9) : sa
+    /// feuille est retirée de l'arbre au prochain snapshot écrivain, sans attendre la purge du membre.
+    public func noteWindowDestroyed(_ windowID: WindowID) {
+        processState.noteDestroyed(windowID)
+    }
+
+    /// Scopes dont l'arbre a changé lors du dernier snapshot écrivain (insertion, retrait de feuille).
+    /// Compatibilité vague 2 : la réconciliation unique se fait désormais dans `snapshot()` (T081) ;
+    /// cette fonction ne réconcilie plus rien et disparaîtra avec son dernier appelant.
+    @discardableResult
+    func reconcileSpatialBSPTrees(
+        in snapshot: DaemonSnapshot,
+        excluding excludedScopes: Set<StageScope> = []
+    ) -> Set<StageScope> {
+        processState.lastChangedTreeScopes().subtracting(excludedScopes)
+    }
+
+    /// Dernière application d'arbre demandée par une commande pour ce scope (A15). Le maintainer
+    /// clôt la rafale ou la garde de transition d'un scope si cette date suit leur ouverture.
+    public func treeScopeAppliedAt(_ scope: StageScope) -> Date? {
+        processState.treeScopeAppliedAt(scope)
+    }
+
+    private func snapshot(promptForPermissions: Bool, followFocus: Bool, sharedMaxAge: TimeInterval, producer: Bool) -> DaemonSnapshot {
         let config = self.config
         let now = clock()
         // Énumération Accessibility HORS verrou (R1) : seule la réconciliation, fonction pure
         // de (état, fenêtres vivantes), tourne sous le verrou de `StageStore.mutate`.
         let permissions = provider.permissions(prompt: promptForPermissions)
         let displays = provider.displays()
+        if producer, persistStateChanges, processState.claimLegacyTreeMigration() {
+            migrateLegacyTreeModes(displays: displays)
+        }
         let rawWindows = provider.windows()
         // Pre-calcule les structures lourdes (Set subroles, regles triees) une seule fois
         // par snapshot pour eviter O(n_windows) recompactations dans applyTilingPolicy.
@@ -214,6 +244,7 @@ public struct SnapshotService {
         // postérieure à la dernière disparition de fenêtre et hors des 500 ms qui la suivent.
         let lastDisappearanceAt = processState.recordLiveWindows(stageManagedWindowIDs, now: now)
         let focusChangeAllowed = userInput.allowsFocusChange(now: now, lastDisappearanceAt: lastDisappearanceAt)
+        let destroyedWindowIDs = processState.destroyedWindowIDs()
         let input = ReconciliationInput(
             config: config,
             displays: displays,
@@ -224,6 +255,7 @@ public struct SnapshotService {
             mouseLocation: mouseLocation,
             followFocus: followFocus,
             focusChangeAllowed: focusChangeAllowed,
+            destroyedWindowIDs: destroyedWindowIDs,
             now: now
         )
 
@@ -238,6 +270,12 @@ public struct SnapshotService {
             // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont
             // dupliques N fois (un par composant) dans events.jsonl.
             appendReconciliationEvents(result)
+            // Une destruction est consommée quand la fenêtre a quitté la liste vivante : avant,
+            // elle bloque seulement sa réinsertion (liste CoreGraphics en retard sur AX).
+            processState.recordTreeReconciliation(
+                changedScopes: result.changedTreeScopes,
+                consumedDestroyed: destroyedWindowIDs.subtracting(stageManagedWindowIDs)
+            )
         } else {
             var persistedStages = stageStore.state()
             result = reconcile(&persistedStages, input: input)
@@ -272,6 +310,7 @@ public struct SnapshotService {
         let mouseLocation: CGPoint?
         let followFocus: Bool
         let focusChangeAllowed: Bool
+        let destroyedWindowIDs: Set<WindowID>
         let now: Date
     }
 
@@ -282,6 +321,7 @@ public struct SnapshotService {
         var missingWindows: MissingWindowReconciliationReport
         var prunedPins: [PersistentWindowPin]
         var prunedBookmarks: [PersistentWindowBookmark]
+        var changedTreeScopes: Set<StageScope>
     }
 
     private func appendReconciliationEvents(_ result: Reconciliation) {
@@ -505,14 +545,77 @@ public struct SnapshotService {
         } else {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
+        let changedTreeScopes = reconcileTrees(in: &persistedStages, input: input)
         return Reconciliation(
             state: state,
             scopedWindows: scopedWindows,
             focusedWindowID: focusedID,
             missingWindows: missingWindows,
             prunedPins: prunedPins,
-            prunedBookmarks: prunedBookmarks
+            prunedBookmarks: prunedBookmarks,
+            changedTreeScopes: changedTreeScopes
         )
+    }
+
+    /// Réconciliation unique des arbres des stages à arbre, sous le verrou du snapshot (SPEC-017
+    /// T081, A9). La feuille d'un membre absent (plein écran natif, autre bureau) est gardée tant que
+    /// le membre existe, donc pendant sa grâce réelle de 30 min : la fenêtre reprend sa place à son
+    /// retour (FR-007). Elle est retirée à la purge du membre, à son départ de la stage, à son
+    /// épinglage ou sur destruction confirmée. Une fenêtre vivante sans feuille coupe la feuille
+    /// active selon la forme de cette feuille (R3). Ne lit aucune géométrie de fenêtre (FR-003).
+    // O(Σ m·f) - m membres et f feuilles par stage à arbre (insertion O(f)), bornés.
+    private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) -> Set<StageScope> {
+        let side: BSPInsertionSide = input.config.windowPlacement.newWindowSide == "left" ? .left : .right
+        let innerGap = CGFloat(input.config.tiling.gapsInner)
+        let containers = Dictionary(input.displays.map { ($0.id, $0.visibleFrame.cgRect) }, uniquingKeysWith: { first, _ in first })
+        let pinned = Set(persistedStages.windowPins.map(\.windowID))
+        var changed: Set<StageScope> = []
+        for scopeIndex in persistedStages.scopes.indices {
+            let persistentScope = persistedStages.scopes[scopeIndex]
+            guard let container = containers[persistentScope.displayID] else { continue }
+            for stageIndex in persistentScope.stages.indices where persistentScope.stages[stageIndex].mode.usesTreeEngine {
+                let stage = persistentScope.stages[stageIndex]
+                let kept = Set(stage.members.map(\.windowID)).subtracting(input.destroyedWindowIDs).subtracting(pinned)
+                var tree = stage.bspTree ?? .empty
+                for id in tree.windowIDs where !kept.contains(id) {
+                    tree = tree.removing(id)
+                }
+                let absent = Set(tree.windowIDs).subtracting(input.stageManagedWindowIDs)
+                var anchor = Self.bspInsertionAnchor(
+                    tree: tree,
+                    live: input.stageManagedWindowIDs,
+                    globalFocus: input.providerFocusedID,
+                    stage: stage
+                )
+                for member in stage.members where kept.contains(member.windowID)
+                    && input.stageManagedWindowIDs.contains(member.windowID)
+                    && !tree.contains(member.windowID) {
+                    tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
+                    anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
+                }
+                let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
+                guard next != stage.bspTree else { continue }
+                persistedStages.scopes[scopeIndex].stages[stageIndex].bspTree = next
+                changed.insert(StageScope(displayID: persistentScope.displayID, desktopID: persistentScope.desktopID, stageID: stage.id))
+            }
+        }
+        return changed
+    }
+
+    /// Migration SPEC-017 (T082, A8) des stages `mutableBsp`, une fois par processus producteur :
+    /// arbre déduit de la géométrie connue des membres, dans le cadre visible de leur écran.
+    private func migrateLegacyTreeModes(displays: [DisplaySnapshot]) {
+        let containers = Dictionary(displays.map { ($0.id, $0.visibleFrame.cgRect) }, uniquingKeysWith: { first, _ in first })
+        // Échec de lecture ou d'écriture : les stages restent `mutableBsp`, servies par le même
+        // moteur à arbre (`usesTreeEngine`) ; la migration est retentée au prochain démarrage.
+        guard let migrated = try? stageStore.migrateLegacyTreeModes(
+            infer: { BSPTree.inferred(from: $0, in: $1) },
+            container: { containers[$0.displayID] }
+        ), migrated > 0 else { return }
+        events.append(RoadieEvent(type: "state_migrated", details: [
+            "stages": String(migrated),
+            "backup": stageStore.fileURL.path + ".pre-017"
+        ]))
     }
 
     /// FR-027 : une fenêtre tilée seule dans son scope remplit l'écran par construction et n'est
@@ -938,10 +1041,37 @@ public struct ApplyCommand: Equatable, Codable, Sendable {
 }
 
 extension SnapshotService {
-    /// Application immédiate de l'arbre d'un scope, en une passe, pour les commandes (A15, A20).
-    /// Stub de jonction SPEC-017 : le lot L8 le remplit.
+    /// Application immédiate de l'arbre d'un scope pour une commande (A15, A20), après sa mutation
+    /// de l'arbre : un snapshot (le partagé s'il est encore valide), le plan de l'arbre projeté du
+    /// scope (avec le marqueur de zoom), une seule écriture groupée avec `generation`. Une commande
+    /// est une intention de l'utilisateur : elle s'applique même si le scope est en rafale ou en
+    /// garde, et clôt cette attente (`treeScopeAppliedAt`). Sans effet hors mode à arbre ou si le
+    /// scope n'est pas la stage active de son écran.
+    // O(n log n) - n = fenêtres du scope.
     public func applyTreeScope(_ scope: StageScope, cause: String, generation: UInt64) -> MaintenanceTick {
-        MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        let startedAt = clock()
+        let snapshot = sharedSnapshot()
+        guard snapshot.permissions.accessibilityTrusted else {
+            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
+        }
+        guard let stage = snapshot.state.stage(scope: scope),
+              stage.mode.usesTreeEngine,
+              snapshot.state.activeScope(on: scope.displayID) == scope
+        else { return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0) }
+        processState.noteTreeScopeApplied(scope, at: startedAt)
+        let plan = treeApplyPlan(for: scope, in: snapshot, mode: stage.mode)
+        let result = apply(plan, generation: generation)
+        events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
+            "cause": cause,
+            "durationMs": String(max(0, Int((clock().timeIntervalSince(startedAt) * 1000).rounded()))),
+            "layoutVersion": String(generation),
+            "commands": String(plan.commands.count),
+            "applied": String(result.applied),
+            "clamped": String(result.clamped),
+            "failed": String(result.failed),
+            "windowWrites": plan.commands.map { "\($0.window.id.rawValue):1" }.joined(separator: ",")
+        ]))
+        return MaintenanceTick(commands: plan.commands.count, applied: result.applied, clamped: result.clamped, failed: result.failed)
     }
 }
 
@@ -996,9 +1126,10 @@ public extension SnapshotService {
 
             guard let stage = snapshot.state.stage(scope: scope) else { continue }
             let effectiveMode = mode ?? stage.mode
-            if effectiveMode.isTiled,
-               let intent = validIntent(for: scope, from: snapshot),
-               shouldApplyLayoutIntent(intent, mode: effectiveMode, scope: scope, from: snapshot) {
+            if effectiveMode.usesTreeEngine {
+                commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode).commands)
+            } else if effectiveMode.isTiled,
+               let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
@@ -1014,23 +1145,40 @@ public extension SnapshotService {
         return ApplyPlan(commands: commands)
     }
 
-    private func shouldApplyLayoutIntent(
-        _ intent: LayoutIntent,
-        mode: WindowManagementMode,
-        scope: StageScope,
-        from snapshot: DaemonSnapshot
-    ) -> Bool {
-        if intent.source == .command { return true }
-        if mode != .mutableBsp { return true }
-
-        let scopedWindows = snapshot.windows.filter { entry in
-            entry.scope == scope && intent.windowIDs.contains(entry.window.id)
+    /// Plan d'un scope à arbre (SPEC-017 R2, T080) : frames de l'arbre projeté ; seul le marqueur
+    /// de zoom d'un intent (`zoomedWindowID`) remplace les frames de l'arbre de ses fenêtres (A15).
+    /// Aucun autre intent, automatique ou de commande, n'entre dans le calcul.
+    // O(n log n) - n = fenêtres du scope (tri des commandes).
+    private func treeApplyPlan(for scope: StageScope, in snapshot: DaemonSnapshot, mode: WindowManagementMode) -> ApplyPlan {
+        var targets = layoutPlan(
+            from: snapshot,
+            scope: scope,
+            orderedWindowIDs: orderedWindowIDs(in: scope, from: snapshot, mode: mode),
+            mode: mode
+        ).placements
+        if intentStore.intent(for: scope)?.zoomedWindowID != nil,
+           let zoom = validIntent(for: scope, from: snapshot) {
+            for (id, frame) in zoom.placements { targets[id] = frame.cgRect }
         }
-        guard !scopedWindows.isEmpty else { return true }
+        return treeCommands(targets: targets, in: snapshot)
+    }
 
-        return scopedWindows.contains { entry in
-            !entry.window.isOnScreen || HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
-        }
+    /// Commandes vers les cibles de l'arbre, avec la tolérance unique (R9, FR-010) : une fenêtre est
+    /// laissée si sa frame est à `frameMatch` de sa cible, ou si elle est la frame acceptée par le
+    /// registre pour cette même cible (refus de taille confirmé, arrondi de terminal).
+    // O(n log n) - n = cibles.
+    private func treeCommands(targets: [WindowID: CGRect], in snapshot: DaemonSnapshot) -> ApplyPlan {
+        let windowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
+        return ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in
+            guard let window = windowsByID[id], let target = targets[id] else { return nil }
+            let observed = window.frame.cgRect
+            if observed.matchesFrame(target) { return nil }
+            if let entry = frameRegistry.entry(for: id.rawValue), let accepted = entry.accepted,
+               entry.requested.matchesFrame(target), accepted.matchesFrame(observed) {
+                return nil
+            }
+            return ApplyCommand(window: window, frame: Rect(target))
+        })
     }
 
     func orderedWindowIDs(
@@ -1048,13 +1196,33 @@ public extension SnapshotService {
             windowsByID[id].map { (id, $0.frame.cgRect) }
         })
         let effectiveMode = mode ?? stage.mode
-        guard effectiveMode.usesSpatialBSPOrdering else { return liveStageWindowIDs }
+        // Modes à arbre : l'ordre ne se déduit jamais de la géométrie observée (FR-003).
+        guard effectiveMode.usesSpatialBSPOrdering, !effectiveMode.usesTreeEngine else { return liveStageWindowIDs }
 
         return spatiallyOrdered(liveStageWindowIDs, frames: currentFrames, container: display.visibleFrame.cgRect)
     }
 
     func innerGap() -> Double {
         config.tiling.gapsInner
+    }
+
+    /// Conteneur réel de l'arbre d'un scope, celui de `layoutPlan` : cadre visible de l'écran moins
+    /// les marges extérieures (smart gaps compris, selon les fenêtres placées). nil sans stage ni écran.
+    // O(w) - w = fenêtres du snapshot.
+    func treeContainer(for scope: StageScope, in snapshot: DaemonSnapshot) -> CGRect? {
+        guard snapshot.state.stage(scope: scope) != nil,
+              let display = snapshot.displays.first(where: { $0.id == scope.displayID })
+        else { return nil }
+        let placed = treePlacedWindowIDs(orderedWindowIDs(in: scope, from: snapshot), in: snapshot)
+        return display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: placed.count, display: display))
+    }
+
+    /// Fenêtres placées par l'arbre : vivantes et hors plein écran natif (leur feuille reste). O(w).
+    private func treePlacedWindowIDs(_ ids: [WindowID], in snapshot: DaemonSnapshot) -> [WindowID] {
+        let placeable = Set(snapshot.windows.compactMap { entry in
+            entry.window.furniture?.isNativeFullscreen == true ? nil : entry.window.id
+        })
+        return ids.filter(placeable.contains)
     }
 
     func saveLayoutIntent(scope: StageScope, windowIDs: [WindowID], placements: [WindowID: Rect]) {
@@ -1068,6 +1236,13 @@ public extension SnapshotService {
         source: LayoutIntent.Source,
         zoomedWindowID: WindowID? = nil
     ) {
+        // Modes à arbre : aucun intent automatique persisté, l'arbre fait foi (R2, T080).
+        if source == .auto, zoomedWindowID == nil,
+           stageStore.state().scopes
+               .first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?
+               .stages.first(where: { $0.id == scope.stageID })?.mode.usesTreeEngine == true {
+            return
+        }
         intentStore.save(LayoutIntent(
             scope: scope,
             windowIDs: windowIDs,
@@ -1158,6 +1333,7 @@ public extension SnapshotService {
     func saveCurrentLayoutIntentIfValid(scope: StageScope, from snapshot: DaemonSnapshot) -> Bool {
         guard let stage = snapshot.state.stage(scope: scope),
               stage.mode.isTiled,
+              !stage.mode.usesTreeEngine,
               snapshot.state.activeScope(on: scope.displayID) == scope
         else { return false }
 
@@ -1178,7 +1354,7 @@ public extension SnapshotService {
             intent,
             scope: scope,
             from: snapshot,
-            requireReasonableTileSizes: stage.mode != .mutableBsp
+            requireReasonableTileSizes: true
         ) else { return false }
         intentStore.save(intent)
         return true
@@ -1252,6 +1428,9 @@ public extension SnapshotService {
             priorityWindowIDs: priorityWindowIDs
         )
         guard let stage = snapshot.state.stage(scope: scope) else { return ApplyPlan(commands: []) }
+        if (mode ?? stage.mode).usesTreeEngine {
+            return treeCommands(targets: plan.placements, in: snapshot)
+        }
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
@@ -1278,6 +1457,22 @@ public extension SnapshotService {
 
         let config = self.config
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
+        let effectiveMode = mode ?? stage.mode
+        if effectiveMode.usesTreeEngine {
+            // Arbre déjà réconcilié par le snapshot de la passe (T081) : projeté sans les feuilles
+            // absentes ni les fenêtres en plein écran natif, puis placé (A9, FR-007). La stratégie
+            // garde le filet de sécurité d'une fenêtre vivante encore sans feuille.
+            let placed = treePlacedWindowIDs(orderedWindowIDs, in: snapshot)
+            return LayoutPlanner.plan(LayoutRequest(
+                scope: scope,
+                mode: .spatialBsp,
+                container: display.visibleFrame.cgRect,
+                windowIDs: placed,
+                bspTree: stageStore.state().bspTree(for: scope),
+                outerGaps: outerGaps(windowCount: placed.count, display: display),
+                innerGap: config.tiling.gapsInner
+            ))
+        }
         let liveOrderedWindowIDs = orderedWindowIDs.filter { windowsByID[$0] != nil }
         let currentFrames = Dictionary(uniqueKeysWithValues: stage.windowIDs.compactMap { id in
             windowsByID[id].map { (id, $0.frame.cgRect) }
@@ -1287,19 +1482,6 @@ public extension SnapshotService {
         let newWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.isNewlyScoped ? entry.window.id : nil
         })
-        let effectiveMode = mode ?? stage.mode
-        // Mode BSP à arbre persistant (SPEC-013) : on reconcilie l'arbre du stage avec les
-        // fenêtres réelles (insertion des nouvelles à côté du focus, retrait des disparues),
-        // on le persiste si writer autorisé, et on le fournit à la stratégie pour le placement.
-        var bspTree: BSPTree? = nil
-        if effectiveMode == .spatialBsp {
-            bspTree = reconciledBSPTree(
-                for: scope,
-                liveOrderedWindowIDs: liveOrderedWindowIDs,
-                focus: snapshot.focusedWindowID,
-                containerIsWide: display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
-            )
-        }
         return LayoutPlanner.plan(LayoutRequest(
             scope: scope,
             mode: effectiveMode,
@@ -1308,126 +1490,28 @@ public extension SnapshotService {
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
             newWindowIDs: newWindowIDs,
-            bspTree: bspTree,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
             innerGap: config.tiling.gapsInner
         ))
     }
 
-    /// Reconcilie les arbres BSP de TOUS les stages `.spatialBsp` ayant des fenêtres live,
-    /// indépendamment du stage actif ou d'une décision de re-tile. Retourne les scopes dont
-    /// l'arbre a changé (nouvelle/fenêtre disparue), pour que l'appelant force un re-tile.
-    /// Sans cela, l'arbre d'un stage n'était reconcilié que lors d'un re-tile explicite, donc
-    /// une fenêtre ouverte/fermée n'était pas intégrée immédiatement (SPEC-013 fix).
-    @discardableResult
-    func reconcileSpatialBSPTrees(
-        in snapshot: DaemonSnapshot,
-        excluding excludedScopes: Set<StageScope> = []
-    ) -> Set<StageScope> {
-        guard persistStateChanges else { return [] }
-        var changedScopes: Set<StageScope> = []
-        let scopes = Set(snapshot.windows.compactMap(\.scope))
-        let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
-        let currentState = stageStore.state()
-        for scope in scopes {
-            guard !excludedScopes.contains(scope) else { continue }
-            guard let stage = snapshot.state.stage(scope: scope), stage.mode == .spatialBsp,
-                  let display = snapshot.displays.first(where: { $0.id == scope.displayID })
-            else { continue }
-            let ordered = orderedWindowIDs(in: scope, from: snapshot)
-            guard !ordered.isEmpty else { continue }
-            let wide = display.visibleFrame.cgRect.width >= display.visibleFrame.cgRect.height
-            let reconcile = { (existing: BSPTree) in
-                existing.reconciled(
-                    liveWindowIDs: ordered,
-                    focus: Self.bspInsertionAnchor(
-                        tree: existing,
-                        liveWindowIDs: ordered,
-                        globalFocus: snapshot.focusedWindowID,
-                        scope: scope,
-                        state: currentState
-                    ),
-                    side: side,
-                    containerIsWide: wide
-                )
-            }
-            // Pré-contrôle sans verrou : au repos, aucun verrou ni écriture.
-            let existing = currentState.bspTree(for: scope) ?? .empty
-            guard reconcile(existing) != existing else { continue }
-            if persistBSPTree(for: scope, reconcile) {
-                changedScopes.insert(scope)
-            }
-        }
-        return changedScopes
-    }
-
-    /// Reconcilie l'arbre BSP persistant d'un stage avec les fenêtres réellement présentes.
-    /// Persiste l'arbre mis à jour uniquement si ce process est writer (persistStateChanges),
-    /// pour ne pas écraser l'état canonique en mode lecteur (SPEC-011/012).
-    private func reconciledBSPTree(
-        for scope: StageScope,
-        liveOrderedWindowIDs: [WindowID],
-        focus: WindowID?,
-        containerIsWide: Bool
-    ) -> BSPTree {
-        let state = stageStore.state()
-        let existing = state.bspTree(for: scope) ?? .empty
-        let side: BSPInsertionSide = config.windowPlacement.newWindowSide == "left" ? .left : .right
-        let reconcile = { (tree: BSPTree) in
-            tree.reconciled(
-                liveWindowIDs: liveOrderedWindowIDs,
-                focus: Self.bspInsertionAnchor(
-                    tree: tree,
-                    liveWindowIDs: liveOrderedWindowIDs,
-                    globalFocus: focus,
-                    scope: scope,
-                    state: state
-                ),
-                side: side,
-                containerIsWide: containerIsWide
-            )
-        }
-        let reconciled = reconcile(existing)
-        if persistStateChanges, reconciled != existing {
-            persistBSPTree(for: scope, reconcile)
-        }
-        return reconciled
-    }
-
     /// FR-005 : point d'ancrage BSP d'une nouvelle fenêtre = premier candidat déjà feuille vivante
     /// de l'arbre parmi le focus global, le focus de la stage et son focus précédent ; `nil` sinon
     /// (insertion sur la première feuille). Le focus global seul ne suffit pas : c'est souvent la
     /// nouvelle fenêtre elle-même, et la stage l'a déjà adoptée comme focus (le précédent reste).
-    // O(n) - n = feuilles de l'arbre + fenêtres vivantes.
+    // O(f) - f = feuilles de l'arbre.
     fileprivate static func bspInsertionAnchor(
         tree: BSPTree,
-        liveWindowIDs: [WindowID],
+        live: Set<WindowID>,
         globalFocus: WindowID?,
-        scope: StageScope,
-        state: PersistentStageState
+        stage: PersistentStage
     ) -> WindowID? {
-        let stage = state.scopes
-            .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
-            .stages
-            .first { $0.id == scope.stageID }
-        let anchors = Set(tree.windowIDs).intersection(liveWindowIDs)
-        return [globalFocus, stage?.focusedWindowID, stage?.previousFocusedWindowID]
+        let anchors = Set(tree.windowIDs).intersection(live)
+        return [globalFocus, stage.focusedWindowID, stage.previousFocusedWindowID]
             .lazy
             .compactMap { $0 }
             .first { anchors.contains($0) }
-    }
-
-    /// Recalcule l'arbre sur l'état relu sous verrou et l'écrit s'il change (FR-013).
-    @discardableResult
-    private func persistBSPTree(for scope: StageScope, _ reconcile: (BSPTree) -> BSPTree) -> Bool {
-        stageStore.mutate { state in
-            let existing = state.bspTree(for: scope) ?? .empty
-            let reconciled = reconcile(existing)
-            guard reconciled != existing else { return false }
-            state.setBSPTree(reconciled, for: scope)
-            return true
-        }
     }
 
     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
@@ -1611,13 +1695,17 @@ public extension SnapshotService {
         return ApplyPlan(commands: commands)
     }
 
-    func apply(_ plan: ApplyPlan) -> ApplyResult {
-        if !plan.commands.isEmpty { invalidateSharedSnapshot() }
+    /// Écrit le plan en un lot, avec la génération de placement (A13 ; par défaut la génération en
+    /// cours). « Réussi » suit la tolérance unique (R9) : frame relue à `frameMatch` de la demande,
+    /// ou frame acceptée par le registre pour cette demande ; sinon « clamped ». Le snapshot partagé
+    /// est ensuite republié avec les frames relues au lieu d'être invalidé (R11, A12).
+    // O(n) - n = commandes.
+    func apply(_ plan: ApplyPlan, generation: UInt64 = PlacementGeneration.shared.current) -> ApplyResult {
         var items: [ApplyResultItem] = []
         let updates = plan.commands.map { command in
             WindowFrameUpdate(window: command.window, frame: command.frame.cgRect)
         }
-        let actualFrames = frameWriter.setFrames(updates)
+        let actualFrames = updates.isEmpty ? [:] : frameWriter.setFrames(updates, generation: generation)
 
         for command in plan.commands {
             guard let rawActual = actualFrames[command.window.id], let actual = rawActual else {
@@ -1629,18 +1717,17 @@ public extension SnapshotService {
                 ))
                 continue
             }
-            let actualRect = Rect(actual)
+            let requested = command.frame.cgRect
+            let entry = frameRegistry.entry(for: command.window.id.rawValue)
+            let accepted = entry.flatMap { $0.requested.matchesFrame(requested) ? $0.accepted : nil }
             items.append(ApplyResultItem(
                 windowID: command.window.id,
-                status: actualRect.isClose(
-                    to: command.frame,
-                    positionTolerance: LayoutTolerance.appliedFrame,
-                    sizeTolerance: LayoutTolerance.appliedFrame
-                ) ? .applied : .clamped,
+                status: actual.matchesFrame(requested) || accepted?.matchesFrame(actual) == true ? .applied : .clamped,
                 requested: command.frame,
-                actual: actualRect
+                actual: Rect(actual)
             ))
         }
+        republishSharedSnapshot(after: items)
         var applied = 0, clamped = 0, failed = 0
         for item in items {
             switch item.status {
@@ -1693,8 +1780,33 @@ public extension SnapshotService {
     }
 
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
-        invalidateSharedSnapshot()
-        return frameWriter.setFrame(frame, of: window)
+        let actual = frameWriter.setFrame(frame, of: window)
+        republishSharedSnapshot(after: [ApplyResultItem(
+            windowID: window.id,
+            status: actual == nil ? .failed : .applied,
+            requested: Rect(frame),
+            actual: actual.map { Rect($0) }
+        )])
+        return actual
+    }
+
+    /// Lecture AX fraîche du cadre d'une fenêtre (seconde observation d'un refus, A14). nil si illisible.
+    func readFrame(of window: WindowSnapshot) -> CGRect? {
+        frameWriter.readFrame(of: window)
+    }
+
+    /// Republie le snapshot partagé avec les frames relues après une écriture (R11, A12) : les
+    /// lecteurs (bordure, focus-souris, navrail) ne refont pas de relevé complet. Une écriture en
+    /// échec laisse la fenêtre dans un état inconnu ; un snapshot partiel n'existant pas, elle
+    /// invalide le snapshot partagé, et le prochain lecteur refait un relevé.
+    private func republishSharedSnapshot(after items: [ApplyResultItem]) {
+        guard !items.isEmpty else { return }
+        if items.contains(where: { $0.actual == nil }) {
+            invalidateSharedSnapshot()
+            return
+        }
+        processState.republish(frames: Dictionary(items.compactMap { item in item.actual.map { (item.windowID, $0) } },
+                                                  uniquingKeysWith: { _, last in last }))
     }
 }
 
@@ -1818,6 +1930,15 @@ private extension CGRect {
         max(0, width) * max(0, height)
     }
 
+    /// Tolérance unique de comparaison de frames (R9, FR-010) : `frameMatch` sur chaque composante.
+    func matchesFrame(_ other: CGRect) -> Bool {
+        let tolerance = LayoutTolerance.frameMatch
+        return abs(minX - other.minX) <= tolerance
+            && abs(minY - other.minY) <= tolerance
+            && abs(width - other.width) <= tolerance
+            && abs(height - other.height) <= tolerance
+    }
+
     func contains(_ other: CGRect, tolerance: CGFloat) -> Bool {
         other.minX >= minX - tolerance
             && other.minY >= minY - tolerance
@@ -1933,6 +2054,12 @@ final class SnapshotProcessState: @unchecked Sendable {
     private var liveWindowIDs: Set<WindowID>?
     private var lastDisappearanceAt: Date?
     private var tileClassification: [WindowID: Bool] = [:]
+    /// Arbres (SPEC-017) : destructions confirmées en attente, scopes changés au dernier snapshot
+    /// producteur, dernière application par commande, migration déjà tentée.
+    private var destroyed: Set<WindowID> = []
+    private var changedTreeScopes: Set<StageScope> = []
+    private var treeAppliedAt: [StageScope: Date] = [:]
+    private var legacyTreeMigrationClaimed = false
 
     func publish(_ snapshot: DaemonSnapshot, followFocus: Bool, maxAge: TimeInterval, at date: Date, stateStamp: [Int64], config: RoadieConfig) {
         lock.withLock {
@@ -1955,6 +2082,57 @@ final class SnapshotProcessState: @unchecked Sendable {
 
     func invalidatePublished() {
         lock.withLock { published.removeAll() }
+    }
+
+    /// Remplace les frames des fenêtres écrites dans les snapshots publiés, sans changer leur âge. O(w).
+    func republish(frames: [WindowID: Rect]) {
+        guard !frames.isEmpty else { return }
+        lock.withLock {
+            for (key, entry) in published {
+                var snapshot = entry.snapshot
+                for index in snapshot.windows.indices {
+                    if let frame = frames[snapshot.windows[index].window.id] {
+                        snapshot.windows[index].window.frame = frame
+                    }
+                }
+                published[key] = Published(snapshot: snapshot, maxAge: entry.maxAge, at: entry.at, stateStamp: entry.stateStamp, config: entry.config)
+            }
+        }
+    }
+
+    func noteDestroyed(_ id: WindowID) {
+        lock.withLock { _ = destroyed.insert(id) }
+    }
+
+    func destroyedWindowIDs() -> Set<WindowID> {
+        lock.withLock { destroyed }
+    }
+
+    func recordTreeReconciliation(changedScopes: Set<StageScope>, consumedDestroyed: Set<WindowID>) {
+        lock.withLock {
+            changedTreeScopes = changedScopes
+            destroyed.subtract(consumedDestroyed)
+        }
+    }
+
+    func lastChangedTreeScopes() -> Set<StageScope> {
+        lock.withLock { changedTreeScopes }
+    }
+
+    func noteTreeScopeApplied(_ scope: StageScope, at date: Date) {
+        lock.withLock { treeAppliedAt[scope] = date }
+    }
+
+    func treeScopeAppliedAt(_ scope: StageScope) -> Date? {
+        lock.withLock { treeAppliedAt[scope] }
+    }
+
+    /// Vrai au premier appel seulement : la migration des modes hérités est tentée une fois.
+    func claimLegacyTreeMigration() -> Bool {
+        lock.withLock {
+            defer { legacyTreeMigrationClaimed = true }
+            return !legacyTreeMigrationClaimed
+        }
     }
 
     /// Enregistre les fenêtres gérées vivantes ; renvoie la date de la dernière disparition vue.

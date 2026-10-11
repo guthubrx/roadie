@@ -887,55 +887,10 @@ struct SnapshotServiceTests {
         try? FileManager.default.removeItem(atPath: intentPath)
     }
 
+    /// SPEC-017 : une stage `mutableBsp` non migrée passe par l'arbre ; ses fenêtres cachées
+    /// reviennent aux frames de l'arbre (50/50), sans dépendre de l'intent automatique.
     @Test
-    func mutableBspVisibleAutoIntentDoesNotOverrideCurrentGeometry() {
-        let displayID = DisplayID(rawValue: "display-a")
-        let display = DisplaySnapshot(
-            id: displayID,
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "one", frame: Rect(x: 0, y: 0, width: 700, height: 500), isOnScreen: true, isTileCandidate: true)
-        let second = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "two", frame: Rect(x: 710, y: 0, width: 290, height: 500), isOnScreen: true, isTileCandidate: true)
-        let scope = StageScope(displayID: displayID, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let stagePath = tempPath("mutable-bsp-visible-stage")
-        let intentPath = tempPath("mutable-bsp-visible-intent")
-        let stageStore = StageStore(path: stagePath)
-        let intentStore = LayoutIntentStore(path: intentPath)
-        stageStore.save(PersistentStageState(scopes: [
-            PersistentStageScope(displayID: displayID, stages: [
-                PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
-                    PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
-                    PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
-                ])
-            ])
-        ]))
-        intentStore.save(LayoutIntent(
-            scope: scope,
-            windowIDs: [first.id, second.id],
-            placements: [
-                first.id: Rect(x: 0, y: 0, width: 495, height: 500),
-                second.id: Rect(x: 505, y: 0, width: 495, height: 500),
-            ],
-            source: .auto
-        ))
-        let service = SnapshotService(
-            provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [first, second]),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore,
-            stageStore: stageStore
-        )
-
-        #expect(service.applyPlan(from: service.snapshot()).commands.isEmpty)
-        try? FileManager.default.removeItem(atPath: stagePath)
-        try? FileManager.default.removeItem(atPath: intentPath)
-    }
-
-    @Test
-    func mutableBspHiddenAutoIntentRestoresHiddenStageGeometry() {
+    func legacyTreeStageRestoresHiddenWindowsFromTheTree() {
         let displayID = DisplayID(rawValue: "display-a")
         let display = DisplaySnapshot(
             id: displayID,
@@ -1616,8 +1571,10 @@ struct SnapshotServiceTests {
         try? FileManager.default.removeItem(atPath: intentPath)
     }
 
+    /// SPEC-017 : la stage `mutableBsp` passe par l'arbre ; son arbre est celui que la migration
+    /// déduit de la grille 2 x 2 (colonnes gauche et droite), la géométrie ne décide plus rien.
     @Test
-    func mutableBspWarpInsertsIntoImmediateNeighborSlot() {
+    func legacyTreeWarpInsertsIntoImmediateNeighborSlot() {
         let display = DisplayID(rawValue: "display-a")
         let topLeft = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: "A", bundleID: "a", title: "top-left", frame: Rect(x: 0, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
         let topRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: "B", bundleID: "b", title: "top-right", frame: Rect(x: 505, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)
@@ -1645,7 +1602,13 @@ struct SnapshotServiceTests {
                             focusedWindowID: bottomRight.id,
                             members: [topLeft, topRight, bottomLeft, bottomRight].map {
                                 PersistentStageMember(windowID: $0.id, bundleID: $0.bundleID, title: $0.title, frame: $0.frame)
-                            }
+                            },
+                            bspTree: .split(
+                                orientation: .vertical,
+                                ratio: 0.5,
+                                first: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(topLeft.id), second: .leaf(bottomLeft.id)),
+                                second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(topRight.id), second: .leaf(bottomRight.id))
+                            )
                         ),
                     ]
                 ),
@@ -1835,7 +1798,8 @@ struct SnapshotServiceTests {
                 ],
                 windowSnapshots: [left, right]
             ),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            // Validation des intents : modes sans arbre seulement (SPEC-017 R2).
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             intentStore: intentStore
         )
 
@@ -4073,11 +4037,10 @@ struct SnapshotStabilizationTests {
         ))
         let service = service(windows: [a, b, c, newcomer], focusedID: newcomer.id, store: store, clock: StabilizationClock())
 
-        let snapshot = service.snapshot()
-        let changed = service.reconcileSpatialBSPTrees(in: snapshot)
+        // Réconciliation unique dans le snapshot (SPEC-017 T081), sans second appel.
+        _ = service.snapshot()
 
         let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        #expect(changed == [scope])
         let reconciled = try #require(store.state().bspTree(for: scope))
         #expect(Set(reconciled.windowIDs) == [a.id, b.id, c.id, newcomer.id])
         #expect(Self.sibling(of: newcomer.id, in: reconciled) == .leaf(b.id))
