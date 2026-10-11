@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import Testing
+import RoadieAX
 import RoadieCore
 @testable import RoadieDaemon
 
@@ -310,4 +311,46 @@ struct CLICommandRouterTests {
         #expect(DaemonStatusReading.read(path: path, now: now, isAlive: { _ in false }).state == "pid_not_alive")
         #expect(DaemonStatusReading.read(path: path, now: now.addingTimeInterval(120), isAlive: { _ in true }).state == "status_stale")
     }
+
+    /// Audit QUAL-101 : un verbe `layout` autre que `plan`/`apply` ne relève pas les fenêtres
+    /// avant de s'exécuter (le raccourci ne fait que le relevé de la commande elle-même).
+    @Test
+    func layoutVerbDoesNotScanBeforeItsCommand() {
+        func service(_ name: String, _ provider: RouterScanCounter) -> SnapshotService {
+            SnapshotService(
+                provider: provider,
+                frameWriter: PowerUserWriter(provider: provider.base),
+                config: RoadieConfig(),
+                intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
+                stageStore: StageStore(path: tempPath("\(name)-stages")),
+                events: EventLog(path: tempPath("\(name)-events")),
+                persistStateChanges: false
+            )
+        }
+        let direct = RouterScanCounter(PowerUserProvider(windows: [powerWindow(1, x: 0), powerWindow(2, x: 600)]))
+        _ = LayoutCommandService(service: service("cli-layout-direct", direct)).flatten()
+        let routed = RouterScanCounter(PowerUserProvider(windows: [powerWindow(1, x: 0), powerWindow(2, x: 600)]))
+        let router = CLICommandRouter(makeService: { _ in service("cli-layout-routed", routed) })
+
+        _ = router.run(["layout", "flatten"])
+
+        #expect(direct.windowsCalls > 0)
+        #expect(routed.windowsCalls == direct.windowsCalls)
+    }
+}
+
+/// Fournisseur qui compte les relevés de fenêtres (énumérations AX) d'un `PowerUserProvider`.
+private final class RouterScanCounter: SystemSnapshotProviding, @unchecked Sendable {
+    let base: PowerUserProvider
+    private(set) var windowsCalls = 0
+
+    init(_ base: PowerUserProvider) { self.base = base }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { base.permissions(prompt: prompt) }
+    func displays() -> [DisplaySnapshot] { base.displays() }
+    func windows() -> [WindowSnapshot] {
+        windowsCalls += 1
+        return base.windows()
+    }
+    func focusedWindowID() -> WindowID? { base.focusedWindowID() }
 }

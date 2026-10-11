@@ -83,14 +83,18 @@ struct CommandSinglePlanTests {
     private let stage2 = StageID(rawValue: "2")
     private let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsInner: 0))
 
-    private func service(_ provider: PowerUserProvider, _ writer: SinglePlanWriter, _ store: StageStore, _ name: String, config: RoadieConfig? = nil) -> SnapshotService {
+    private func service(
+        _ provider: PowerUserProvider, _ writer: SinglePlanWriter, _ store: StageStore, _ name: String,
+        config: RoadieConfig? = nil, applications: TreeScopeApplicationCenter = .shared
+    ) -> SnapshotService {
         SnapshotService(
             provider: provider,
             frameWriter: writer,
             config: config ?? self.config,
             intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
             stageStore: store,
-            events: EventLog(path: tempPath("\(name)-service-events"))
+            events: EventLog(path: tempPath("\(name)-service-events")),
+            treeScopeApplications: applications
         )
     }
 
@@ -133,6 +137,35 @@ struct CommandSinglePlanTests {
             generationAfter: before
         )
         #expect(writer.log.last == "focus")
+    }
+
+    /// Audit TEST-003 (T219) : une commande à plan unique publie son application d'arbre au
+    /// centre de son service (celui du maintainer en production), une fois par scope à arbre,
+    /// avec la génération de l'application groupée.
+    @Test
+    func treeStageSwitchPublishesItsApplicationToTheServiceCenter() {
+        let (state, windows) = twoStageState(mode: .spatialBsp, memorized: Rect(x: 100, y: 100, width: 300, height: 300))
+        let provider = PowerUserProvider(windows: windows)
+        provider.focusedID = windows[0].id
+        let writer = SinglePlanWriter(provider: provider)
+        let store = StageStore(path: tempPath("single-plan-stage-publish"))
+        store.save(state)
+        let applications = TreeScopeApplicationCenter()
+        let published = PublishedApplications()
+        applications.setHandler { published.append($0) }
+
+        _ = StageCommandService(
+            service: service(provider, writer, store, "single-plan-stage-publish", applications: applications),
+            store: store,
+            events: EventLog(path: tempPath("single-plan-stage-publish-events"))
+        ).switchTo("2", displayID: displayID)
+
+        let received = published.values
+        #expect(received.count == 1)
+        #expect(received.first?.scope.displayID == displayID)
+        #expect(received.first?.scope.stageID == stage2)
+        #expect(received.first?.generation == writer.batches.first?.generation)
+        #expect(Set(received.first?.windowIDs ?? []) == [windows[1].id, windows[2].id])
     }
 
     @Test
@@ -366,4 +399,13 @@ struct WindowDragReleaseTests {
         #expect(activity.lastDrop() == nil)
         #expect(fixture.writer.frameHistory.isEmpty)
     }
+}
+
+/// Applications d'arbre reçues par un centre de test (le handler peut être appelé hors du test).
+private final class PublishedApplications: @unchecked Sendable {
+    private let lock = NSLock()
+    private var received: [TreeScopeApplication] = []
+
+    func append(_ application: TreeScopeApplication) { lock.withLock { received.append(application) } }
+    var values: [TreeScopeApplication] { lock.withLock { received } }
 }

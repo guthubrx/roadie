@@ -451,7 +451,7 @@ public final class LayoutMaintainer {
                 if correctedGenerations[id] != generations.current { due.append(("refusal_correct", confirmedAt, true)) }
             } else if now.timeIntervalSince(entry.writtenAt) < LayoutTolerance.echoWindow {
                 // Au-delà de `echoWindow` sans confirmation, la réponse était transitoire (A2).
-                // Une lecture échouée est retentée plus tard, pas en boucle (T218).
+                // Une lecture échouée ou non concluante est retentée plus tard, pas en boucle (T218, REL-002).
                 let confirmAt = entry.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay)
                 due.append(("refusal_confirm", max(confirmAt, refusalReadRetryAt[id] ?? confirmAt), true))
             }
@@ -997,8 +997,9 @@ public final class LayoutMaintainer {
     }
 
     /// Seconde observation des refus en attente sans notification (A14) : une lecture AX fraîche
-    /// à `refusalConfirmDelay` après l'écriture. Une lecture échouée ne confirme rien : elle est
-    /// retentée `spaceGuardPoll` plus tard, tant que dure `echoWindow` (T218). O(r) - r refus en attente.
+    /// à `refusalConfirmDelay` après l'écriture. Une lecture échouée ou non concluante ne confirme
+    /// rien : elle est retentée `spaceGuardPoll` plus tard, tant que dure `echoWindow` (T218,
+    /// audit REL-002). O(r) - r refus en attente.
     private func confirmPendingRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) {
         let pending = Set(writtenFrames.pendingRefusals())
         guard !pending.isEmpty else { return }
@@ -1013,8 +1014,10 @@ public final class LayoutMaintainer {
                 refusalReadRetryAt[id] = now.addingTimeInterval(LayoutTolerance.spaceGuardPoll)
                 continue
             }
-            refusalReadRetryAt[id] = nil
             writtenFrames.confirmRefusal(windowID: id, observed: observed, at: now)
+            // Lecture qui ne tranche pas (ni demandée ni relue) : retentée plus tard, pas en boucle.
+            let stillPending = writtenFrames.entry(for: id).map { $0.hasRefusal && $0.refusalConfirmedAt == nil } ?? false
+            refusalReadRetryAt[id] = stillPending ? now.addingTimeInterval(LayoutTolerance.spaceGuardPoll) : nil
         }
     }
 

@@ -350,19 +350,21 @@ public final class CLICommandRouter {
             }
         case "layout":
             let verb = args.dropFirst().first
-            let snapshot = service.snapshot()
-            let plan = service.applyPlan(from: snapshot)
+            // Relevé et plan seulement pour `plan` et `apply` : les autres verbes relèvent eux-mêmes ;
+            // un relevé de plus doublerait l'énumération AX du raccourci (audit QUAL-101).
             switch verb {
             case "plan":
+                let plan = service.applyPlan(from: service.snapshot())
                 if args.contains("--json") {
                     try printJSON(plan, label: "layout plan")
                 } else {
                     out(TextFormatter.applyPlan(plan))
                 }
             case "apply":
+                let snapshot = service.snapshot()
                 guard args.contains("--yes") else {
                     err("roadie: refusing to move windows without --yes")
-                    out(TextFormatter.applyPlan(plan))
+                    out(TextFormatter.applyPlan(service.applyPlan(from: snapshot)))
                     return 2
                 }
                 // Génération ouverte à l'entrée de la commande (A13, T223) : le plan est recalculé

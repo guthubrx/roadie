@@ -350,7 +350,7 @@ extension SnapshotService {
         generation: UInt64,
         events: EventLog
     ) -> (plan: ApplyPlan, result: ApplyResult) {
-        let startedAt = Date()
+        let startedAt = clock()
         let observed = snapshot ?? sharedSnapshot(followFocus: false)
         var working = observed
         for index in working.windows.indices {
@@ -392,7 +392,7 @@ extension SnapshotService {
         if let episode, let scope = treeScopes.first {
             events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
                 "cause": commandCause,
-                "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000),
+                "durationMs": String(format: "%.1f", clock().timeIntervalSince(startedAt) * 1000),
                 "pass": String(processState.nextCommandPass(episode: episode)),
                 // Relevé fait après les changements logiques : l'état a changé, le partagé est périmé.
                 "scans": "1",
@@ -405,11 +405,11 @@ extension SnapshotService {
                 "windowWrites": result.items.map { "\($0.windowID.rawValue):1" }.joined(separator: ",")
             ], episodeId: episode))
             for scope in treeScopes {
-                TreeScopeApplicationCenter.shared.publish(TreeScopeApplication(
+                treeScopeApplications.publish(TreeScopeApplication(
                     scope: scope,
                     generation: generation,
                     windowIDs: result.items.compactMap { scopeByWindow[$0.windowID] == scope ? $0.windowID : nil },
-                    appliedAt: Date()
+                    appliedAt: clock()
                 ))
             }
         }

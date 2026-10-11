@@ -4475,6 +4475,28 @@ struct TreeLayoutMaintainerTests {
         #expect(harness.events.contains("\"source\":\"tree_minimum_size\""))
     }
 
+    /// Audit REL-002 : une relecture qui ne tranche pas (ni la frame demandée, ni la frame relue)
+    /// est retentée `spaceGuardPoll` plus tard, comme une lecture échouée, et non au plancher
+    /// de l'ordonnanceur à chaque passe pendant `echoWindow`.
+    @Test
+    func inconclusiveRefusalReadIsDelayed() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        let store = treeStore("tree-refusal-inconclusive", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-refusal-inconclusive", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        let refused = world.frames[treeW1] ?? Rect(x: 0, y: 0, width: 0, height: 0)
+        world.frames[treeW1] = Rect(x: refused.x, y: refused.y, width: refused.width, height: refused.height - 77)
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let readAt = harness.clock.now
+        let inconclusive = harness.maintainer.tick(cause: "deadline")
+        let retry = harness.maintainer.nextDeadline(now: harness.clock.now)
+
+        #expect(inconclusive.commands == 0)
+        #expect(abs((retry ?? .distantPast).timeIntervalSince(readAt) - LayoutTolerance.spaceGuardPoll) < 1e-6)
+    }
+
     /// T218 : sonde indisponible et lectures échouées : la garde ne se ferme pas sur
     /// `spaceDidChange` faute d'observation fraîche ; elle attend son plafond.
     @Test

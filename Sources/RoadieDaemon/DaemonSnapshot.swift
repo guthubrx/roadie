@@ -93,11 +93,12 @@ public struct SnapshotService {
     /// `stageStore.mutate { ... }` (verrou flock POSIX, FR-013).
     private let persistStateChanges: Bool
     private let userInput: UserInputActivity
-    private let clock: @Sendable () -> Date
+    /// Interne (et non privé) : aussi lu par `applyCommandPlacement` (audit TEST-003).
+    let clock: @Sendable () -> Date
     /// Mémoire de processus partagée par les services du même fichier d'état.
     private let processState: SnapshotProcessState
     /// Destination des applications d'arbre par commande (T219) ; injectable pour les tests.
-    private let treeScopeApplications: TreeScopeApplicationCenter
+    let treeScopeApplications: TreeScopeApplicationCenter
 
     /// Detecte via la variable d'env `ROADIE_PERSIST_STATE_CHANGES` si le snapshot
     /// doit persister ses mutations dans `stages.json`. SPEC-011 atomique : le
@@ -1352,31 +1353,6 @@ public extension SnapshotService {
               intent.source == .command
         else { return nil }
         return intent
-    }
-
-    func commandLayoutIntentNeedsApply(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
-        guard let intent = validIntent(for: scope, from: snapshot),
-              intent.source == .command
-        else { return false }
-
-        let frames = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (UInt32, Rect)? in
-            guard entry.scope == scope,
-                  intent.placements[entry.window.id] != nil
-            else { return nil }
-            return (entry.window.id.rawValue, entry.window.frame)
-        })
-        guard frames.count == intent.placements.count else { return true }
-
-        return !hasMatchingIntent(
-            scope: scope,
-            frames: frames,
-            focusedWindowID: snapshot.focusedWindowID,
-            positionTolerance: LayoutTolerance.observedChange,
-            sizeTolerance: LayoutTolerance.observedChange,
-            focusedPositionTolerance: LayoutTolerance.observedChange,
-            focusedSizeTolerance: LayoutTolerance.observedChange,
-            allowFocusChromeDelta: false
-        )
     }
 
     func hasValidLayoutIntent(scope: StageScope, in snapshot: DaemonSnapshot) -> Bool {
