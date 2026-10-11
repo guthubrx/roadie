@@ -263,3 +263,31 @@ Passe 1 (2026-10-11). Écarts entre le code réel et la spec (FR, SC, amendement
 - [x] T219 [US1] Suivi après `applyTreeScope` (objection 9). Publier le résultat de commande (`SnapshotService.onTreeScopeApplied`) vers le maintainer : fenêtres suivies, génération, échéances de refus et de stabilité. L'ordonnanceur réarme son minuteur sans refaire le placement. Le branchement se fait dans `main.swift`.
 - [x] T220 [US4] `focus` directionnel en mode arbre sur les frames projetées de l'arbre, et non sur les frames physiques (objection 10). Fichier : `WindowCommands.swift`.
 - [x] T221 [US5] Latence : `live_tick` distingue `requestedDelayMs`, `dueLagMs` (retard entre l'échéance et l'exécution) et `heldByGestureMs`. Sert à expliquer les 69 ms. Fichier : `TickScheduler.swift`.
+
+### Convergence passe 2
+
+Passe 2 (2026-10-11), sur `e77f498`. T201 à T221 sont réalisées et testées (763 tests verts). Quatre écarts restent. Les hypothèses 1, 2 et 3 ont été vérifiées par une sonde jetable, sur une copie du dépôt, avec le câblage de production (registre et génération partagés par le service et le maintainer).
+
+- [ ] T222 [US2] FR-005, A3, A13 (suite de T213). Le budget du point commun d'écriture coupe la réparation des modes `bsp` et `masterStack`. Dans une même passe, la chaîne écrit plusieurs fois la même fenêtre dans la génération de la passe : ancrage (`LayoutMaintainer.swift:~2381`), réarrangement aux tailles minimales en 2 essais (`:~2547`), puis isolement (`:~2582`). Au-delà de 2 écritures, l'écriture est refusée sans appel AX.
+  - Preuve (sonde) : le scénario de `gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden` ne produit plus `layout_clamped_scope_rearranged`, et les frames finales se chevauchent. Avec le câblage des tests, le réarrangement a lieu.
+  - Pourquoi les tests ne le voient pas : dans les tests, le maintainer prend un registre et une génération privés (`LayoutMaintainer.swift:48-49`), le service prend `.shared`, et les doubles n'inscrivent pas leurs écritures.
+  - Attendu (A3) : pour un scope sans arbre, le budget ne refuse aucune étape de cette chaîne.
+  - Résultat : `gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden` et `mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing` passent aussi avec un écrivain qui inscrit chaque tentative dans le registre et la génération du maintainer. Un test d'arbre montre toujours au plus 2 écritures par fenêtre et par génération.
+- [ ] T223 [US4] A13, FR-012 (suite de T213). Ces commandes n'ouvrent pas de génération et écrivent dans `PlacementGeneration.shared.current` :
+  - `layout width` (`WidthAdjustmentService.swift:70`) ;
+  - `layout apply --yes` (`CLICommandRouter.swift:368`) ;
+  - `heal` (`DaemonHealth.swift:110`) ;
+  - `restore apply` (`RestoreSafetyService.swift:189` et `:354`) ;
+  - l'assignation bureau et stage du menu de barre de titre (`WindowContextActions.swift:360-361`). Celle-ci fait en plus deux applications : un masquage, puis une application globale.
+
+  Leurs échos sont absorbés et ne déclenchent aucune passe. La génération reste donc la même entre deux appels. Résultat : le 3e `layout width next` de suite sur la même fenêtre est refusé (`write_budget_exhausted`) sans écriture.
+  - Attendu : chaque commande ouvre une génération à son entrée et la passe à toutes ses écritures. L'assignation du menu passe par `applyCommandPlacement`, en un seul plan.
+  - Résultat : 3 `layout width next` de suite en `bsp`, avec un écrivain qui tient le registre, donnent 3 écritures. L'assignation bureau et stage du menu réussit `expectSinglePlan` (une application, une génération ouverte par la commande).
+- [ ] T224 [US1] T211, A1 (pas de boucle). Quand le glisser est dans sa grâce de relâchement (un scope actif sans arbre), ou quand l'accessibilité est refusée, `tick` s'arrête avant `checkStability` et avant le traitement des refus. Pourtant, `nextDeadline` rend encore l'échéance passée (`stability`, `refusal_confirm`, `refusal_correct`). L'ordonnanceur relance alors une passe à chaque plancher de 15 ms, avec un relevé complet à chaque fois.
+  - Preuve (sonde, `bsp`, grâce de glisser) : 66 passes en 1 s sur la même échéance de stabilité.
+  - Attendu : tant qu'une suspension globale arrête la passe, `nextDeadline` rend la fin de cette suspension (comme pour le réglage des écrans), ou rien si l'accessibilité est refusée.
+  - Résultat : un test avec le vrai `TickScheduler` montre au plus une passe pendant la grâce, puis une à sa fin, et aucune passe d'échéance si l'accessibilité est refusée.
+- [ ] T225 [US5] A20, FR-016. `layout_stable` manque après la correction d'un refus. `armStabilityCheck` (`LayoutMaintainer.swift:1300`) fusionne les cibles dans une seule attente, partagée par tout le processus. Une fenêtre refusée dont la nouvelle cible de l'arbre égale sa frame observée n'est pas réécrite. Son ancienne cible (la taille refusée) reste donc en attente, la vérification échoue, et rien ne la réarme.
+  - Preuve (sonde) : dans le scénario de `confirmedRefusalIsCorrectedOnceWithinWriteBudget`, avec les échéances et 3 passes du filet de sécurité, aucun `layout_stable`. L'épisode suivant n'obtient le sien que si la fenêtre refusée est réécrite. Le `stableAfterMs` se compte alors depuis l'écriture non résolue la plus ancienne.
+  - Attendu : après une correction, on vérifie les cibles du plan corrigé, ou la frame acceptée. Une vérification ne garde pas les cibles d'une vérification déjà échouée.
+  - Résultat : refus corrigé sans réécriture de la fenêtre refusée, puis un `layout_stable` au moins 100 ms après l'écriture de correction. Un épisode suivant émet ensuite son propre `layout_stable`, avec un `stableAfterMs` compté depuis sa propre passe.
