@@ -66,7 +66,9 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     /// Budget A13 épuisé : `writeBudgetPerGeneration` tentatives déjà inscrites pour cette fenêtre
     /// dans `generation`. Contrôlé au point commun d'écriture (T213). O(1).
     public func isOverBudget(windowID: UInt32, generation: UInt64) -> Bool {
-        guard let entry = entry(for: windowID), entry.generation == generation else { return false }
+        guard generation != PlacementGeneration.outsideBudget,
+              let entry = entry(for: windowID), entry.generation == generation
+        else { return false }
         return entry.writesInGeneration >= LayoutTolerance.writeBudgetPerGeneration
     }
 
@@ -126,6 +128,10 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
 /// externe (événement, commande, bascule, geste) ; une correction interne garde la génération en cours.
 public final class PlacementGeneration: @unchecked Sendable {
     public static let shared = PlacementGeneration()
+    /// Génération des écritures hors budget (T222, A3) : réparation des modes sans arbre
+    /// (`bsp`, `masterStack` : recalage, voisines, tailles minimales, isolement), qui n'ont pas la
+    /// garantie d'une passe. Jamais rendue par `next()` ; inscrite au registre comme une autre.
+    public static let outsideBudget = UInt64.max
     private let lock = NSLock()
     private var value: UInt64 = 0
 

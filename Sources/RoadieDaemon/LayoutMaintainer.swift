@@ -76,6 +76,9 @@ public final class LayoutMaintainer {
     private var lastDisplaySignature: String?
     private var lastDisplayTopologyChangedAt: Date?
     private var displayTopologySettlesUntil: Date?
+    /// Suspension globale qui a arrêté la dernière passe avant le plan (T224) : fin du glisser ou
+    /// de sa grâce, `.distantFuture` si l'accessibilité est refusée. nil = aucune.
+    private var globalSuspensionUntil: Date?
     private var emittedRuleSkippedKeys: Set<String> = []
     private var emittedRuleAppliedKeys: Set<String> = []
     private var emittedRulePlacementIssueKeys: Set<String> = []
@@ -168,7 +171,9 @@ public final class LayoutMaintainer {
         let startedAt = Date()
         var scans = 1
         var snapshot = service.producerSnapshot(cycle: intervalSeconds)
+        globalSuspensionUntil = nil
         guard snapshot.permissions.accessibilityTrusted else {
+            globalSuspensionUntil = .distantFuture
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
@@ -209,6 +214,7 @@ public final class LayoutMaintainer {
         // Pas de grâce de fin de glisser pour les modes à arbre : le relâchement fait la passe (A11).
         let releaseGrace = activeScopes(in: snapshot).contains { !treeScopes.contains($0) }
         if dragActivity.isActive(now: tickNow, includingReleaseGrace: releaseGrace) {
+            globalSuspensionUntil = dragActivity.suspensionEnd()
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
@@ -310,14 +316,15 @@ public final class LayoutMaintainer {
         if !nonTree.commands.isEmpty, generation == generationBefore {
             generation = generations.next()
         }
-        let treeCommands = treeLayoutCommands(
+        let treePlan = treeLayoutCommands(
             in: snapshot,
             scopes: liveTreeScopes,
             gesture: gesture,
             generation: generation,
             now: tickNow
         )
-        treeCommands.forEach { plan.add($0, .layout) }
+        treePlan.commands.forEach { plan.add($0, .layout) }
+        retargetStabilityCheck(treePlan.targets)
         nonTree.commands.forEach { plan.add($0, .layout) }
         if let focusRestore, let command = focusRestoreCommand(focusRestore, plan: plan, snapshot: snapshot) {
             plan.add(command, focusRestore.isFullscreen ? .zoom : .layout)
@@ -406,11 +413,15 @@ public final class LayoutMaintainer {
     /// Prochaine échéance interne (T211) : la vraie, même déjà passée, pour celles de l'épisode
     /// (rafale, garde, refus, stabilité), que seule une passe solde ; les autres (anti-rebond d'un
     /// geste des modes sans arbre, fin d'une commande, réglage d'écrans) seulement à venir. Le
-    /// plancher anti-boucle est celui de l'ordonnanceur. Pendant le réglage d'écrans, seule sa fin
-    /// compte : la passe s'y arrête avant les échéances d'épisode. nil = aucune. Ne lit ni l'écran
+    /// plancher anti-boucle est celui de l'ordonnanceur. Pendant une suspension globale (réglage
+    /// d'écrans, glisser ou sa grâce), seule sa fin compte : la passe s'y arrête avant les
+    /// échéances d'épisode (T224). Accessibilité refusée : aucune. nil = aucune. Ne lit ni l'écran
     /// ni l'état persisté. O(s + r).
     public func nextDeadline(now: Date) -> Date? {
         if let displayTopologySettlesUntil, displayTopologySettlesUntil > now { return displayTopologySettlesUntil }
+        if let globalSuspensionUntil, globalSuspensionUntil > now {
+            return globalSuspensionUntil == .distantFuture ? nil : globalSuspensionUntil
+        }
         return deadlines(now: now).filter { $0.episode || $0.at > now }.map(\.at).min()
     }
 
@@ -527,8 +538,9 @@ public final class LayoutMaintainer {
     }
 
     /// Application unique de la passe, puis, pour la disposition des modes sans arbre seulement,
-    /// le bloc « recaler, réparer les voisines, isoler » (A3). Toutes les écritures comptent au
-    /// budget de la génération (A13) ; un refus d'arbre attend sa seconde observation (A14).
+    /// le bloc « recaler, réparer les voisines, isoler » (A3). L'application compte au budget de
+    /// la génération (A13) ; le bloc sans arbre est hors budget (T222) : il réécrit plusieurs fois
+    /// les mêmes fenêtres dans la passe. Un refus d'arbre attend sa seconde observation (A14).
     private func applyPass(
         _ plan: ApplyPlan,
         in snapshot: DaemonSnapshot,
@@ -556,7 +568,7 @@ public final class LayoutMaintainer {
         var result = stabilizeClampedPositions(nonTreeResult, from: nonTreeCommands, in: snapshot)
         let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot)
         if !repairPlan.commands.isEmpty {
-            let repairResult = stabilizeClampedPositions(service.apply(repairPlan, generation: generation), from: repairPlan, in: snapshot)
+            let repairResult = stabilizeClampedPositions(service.apply(repairPlan, generation: PlacementGeneration.outsideBudget), from: repairPlan, in: snapshot)
             result = result.merged(with: repairResult)
             var details = [
                 "commands": String(repairPlan.commands.count),
@@ -789,6 +801,8 @@ public final class LayoutMaintainer {
     /// Disposition des scopes à arbre : l'arbre fait foi. Pour chaque fenêtre dont la frame
     /// observée s'écarte de sa cible, dans l'ordre : session de geste, écho, réponse de
     /// l'application, changement externe ; au plus 2 écritures par fenêtre et par génération.
+    /// `targets` : cibles du plan de l'arbre, écrites ou non (stabilité, T225). Une fenêtre absente
+    /// du plan est déjà à sa cible ou à sa frame acceptée : sa cible est sa frame observée.
     // O(n) par scope, plus le plan de l'arbre.
     private func treeLayoutCommands(
         in snapshot: DaemonSnapshot,
@@ -796,8 +810,8 @@ public final class LayoutMaintainer {
         gesture: GestureSession?,
         generation: UInt64,
         now: Date
-    ) -> [ApplyCommand] {
-        guard !scopes.isEmpty else { return [] }
+    ) -> (commands: [ApplyCommand], targets: [WindowID: CGRect]) {
+        guard !scopes.isEmpty else { return ([], [:]) }
         let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
         var snappedWindowID: WindowID?
         if let gesture, let raw = gesture.windowID,
@@ -809,9 +823,16 @@ public final class LayoutMaintainer {
         confirmPendingRefusals(in: snapshot, scopes: scopes, now: now)
         correctConfirmedRefusals(in: snapshot, scopes: scopes, generation: generation)
         let otherScopes = Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }).subtracting(scopes)
-        return plannedCommands(from: snapshot, excluding: otherScopes, generation: generation).commands.compactMap { command in
+        let planned = plannedCommands(from: snapshot, excluding: otherScopes, generation: generation).commands
+        let commands = planned.compactMap { command in
             treeWrite(command, snapBack: command.window.id == snappedWindowID, generation: generation, now: now)
         }
+        var targets: [WindowID: CGRect] = [:]
+        for entry in snapshot.windows where entry.window.isTileCandidate && entry.scope.map(scopes.contains) == true {
+            targets[entry.window.id] = entry.window.frame.cgRect
+        }
+        for command in planned { targets[command.window.id] = command.frame.cgRect }
+        return (commands, targets)
     }
 
     /// Décide l'écriture d'une fenêtre d'arbre vers sa cible (R9, A2, A4, A13). nil = rien à écrire.
@@ -1293,15 +1314,34 @@ public final class LayoutMaintainer {
         var startedAt: Date
         var checkAt: Date
         var targets: [WindowID: CGRect]
+        var episode: String?
         var checked = false
     }
 
-    /// Arme la lecture de stabilité 100 ms après la fin de la dernière écriture (A20, T209).
+    /// Arme la lecture de stabilité 100 ms après la fin de la dernière écriture (A20, T209). Une
+    /// vérification échouée ne garde pas ses cibles ; `stableAfterMs` se compte depuis la
+    /// première passe de l'épisode qui arme (T225). O(k).
     private func armStabilityCheck(targets: [WindowID: CGRect], startedAt: Date, writeEnd: Date) {
-        var pending = pendingStability ?? PendingStability(startedAt: startedAt, checkAt: writeEnd, targets: [:])
+        let episode = episodes.current
+        var pending = pendingStability.flatMap { $0.checked ? nil : $0 }
+            ?? PendingStability(startedAt: startedAt, checkAt: writeEnd, targets: [:], episode: episode)
+        if pending.episode != episode {
+            (pending.startedAt, pending.episode) = (startedAt, episode)
+        }
         pending.targets.merge(targets) { _, new in new }
         pending.checkAt = writeEnd.addingTimeInterval(0.1)
         pending.checked = false
+        pendingStability = pending
+    }
+
+    /// Une correction de l'arbre (refus confirmé) change la cible d'une fenêtre sans forcément la
+    /// réécrire : déjà à sa nouvelle cible. La stabilité attendue vise alors les cibles du plan
+    /// corrigé, pas l'ancienne taille refusée (T225). O(k).
+    private func retargetStabilityCheck(_ targets: [WindowID: CGRect]) {
+        guard var pending = pendingStability, !pending.checked else { return }
+        for (id, target) in targets where pending.targets[id] != nil {
+            pending.targets[id] = target
+        }
         pendingStability = pending
     }
 
@@ -2378,7 +2418,7 @@ public final class LayoutMaintainer {
             }
             let anchored = stabilizedClampedFrame(requested: item.requested, actual: actual, display: display)
             guard !actual.isClose(to: anchored, tolerance: LayoutTolerance.frameMatch),
-                  let stabilized = service.setFrame(anchored.cgRect, of: command.window)
+                  let stabilized = service.setFrame(anchored.cgRect, of: command.window, generation: PlacementGeneration.outsideBudget)
             else { continue }
 
             item.actual = Rect(stabilized)
@@ -2544,7 +2584,7 @@ public final class LayoutMaintainer {
                     return ApplyCommand(window: window, frame: Rect(target))
                 })
                 guard !plan.commands.isEmpty else { break }
-                let attempt = service.apply(plan)
+                let attempt = service.apply(plan, generation: PlacementGeneration.outsideBudget)
                 resolution = resolution.merged(with: attempt)
                 commands += plan.commands
                 for item in attempt.items where item.status != .failed {
@@ -2579,7 +2619,7 @@ public final class LayoutMaintainer {
             var hiddenIDs: [String] = []
             for entry in entries where entry.window.id != keepID {
                 let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-                if service.setFrame(frame, of: entry.window) != nil {
+                if service.setFrame(frame, of: entry.window, generation: PlacementGeneration.outsideBudget) != nil {
                     hidden += 1
                     hiddenIDs.append(String(entry.window.id.rawValue))
                 }

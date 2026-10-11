@@ -1787,8 +1787,9 @@ struct LayoutMaintainerTests {
         #expect(events.contains("\"type\":\"layout_clamped_scope_repaired\""))
     }
 
-    @Test
-    func mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing() {
+    /// T222 : avec le câblage de production, le budget A13 ne coupe pas la chaîne sans arbre.
+    @Test(arguments: [false, true])
+    func mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing(productionWiring: Bool) {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
             index: 1,
@@ -1805,16 +1806,21 @@ struct LayoutMaintainerTests {
             WindowID(rawValue: 1): finderActual,
             WindowID(rawValue: 2): firefoxActual,
         ])
+        let wiring = BudgetWiring(writer, production: productionWiring)
         let eventPath = tempPath("mutually-clamped-oversized-isolate-events")
         defer { try? FileManager.default.removeItem(atPath: eventPath) }
         let service = SnapshotService(
             provider: SequenceProvider(display: display, windowFrames: [
                 [finderInitial, firefoxInitial],
             ]),
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
+            frameWriter: wiring.writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
+            frameRegistry: wiring.registry ?? .shared
         )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+        let maintainer = LayoutMaintainer(
+            service: service, events: EventLog(path: eventPath),
+            writtenFrames: wiring.registry, generations: wiring.generations
+        )
 
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
@@ -2786,6 +2792,61 @@ private final class MinimumSizeWindows: SystemSnapshotProviding, WindowFrameWrit
     }
 }
 
+/// Câblage du budget A13 (T222). En production : un registre partagé par le service, le
+/// maintainer et l'écrivain, la génération partagée du processus, et un écrivain qui, comme
+/// `AXWindowFrameWriter`, inscrit chaque tentative avec sa génération et refuse une fenêtre au
+/// budget épuisé. Sinon : le double d'origine et les registre et génération privés des tests.
+private struct BudgetWiring {
+    let writer: any WindowFrameWriting
+    let registry: WrittenFrameRegistry?
+    let generations: PlacementGeneration?
+
+    init(_ inner: any WindowFrameWriting, production: Bool) {
+        guard production else {
+            (writer, registry, generations) = (inner, nil, nil)
+            return
+        }
+        let registry = WrittenFrameRegistry()
+        (writer, self.registry, generations) = (BudgetedWriter(inner, registry: registry), registry, .shared)
+    }
+}
+
+private final class BudgetedWriter: WindowFrameWriting, @unchecked Sendable {
+    private let inner: any WindowFrameWriting
+    private let registry: WrittenFrameRegistry
+
+    init(_ inner: any WindowFrameWriting, registry: WrittenFrameRegistry) {
+        self.inner = inner
+        self.registry = registry
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        setFrame(frame, of: window, generation: PlacementGeneration.shared.current)
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot, generation: UInt64) -> CGRect? {
+        setFrames([WindowFrameUpdate(window: window, frame: frame)], generation: generation)[window.id] ?? nil
+    }
+
+    func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        setFrames(updates, generation: PlacementGeneration.shared.current)
+    }
+
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
+        var results: [WindowID: CGRect?] = [:]
+        for update in updates {
+            let id = update.window.id.rawValue
+            var actual: CGRect?
+            if !registry.isOverBudget(windowID: id, generation: generation) {
+                actual = inner.setFrame(update.frame, of: update.window)
+                registry.record(windowID: id, requested: update.frame, readBack: actual, generation: generation, at: Date())
+            }
+            results.updateValue(actual, forKey: update.window.id)
+        }
+        return results
+    }
+}
+
 private func lotCDisplay(id: String = "display-a", x: Double = 0) -> DisplaySnapshot {
     DisplaySnapshot(
         id: DisplayID(rawValue: id),
@@ -3183,8 +3244,9 @@ extension LayoutMaintainerTests {
 
     /// FR-003 : une grille de trois fenêtres dont deux refusent de rétrécir est replanifiée aux
     /// tailles minimales connues, sans masquage, et reste stable au tick suivant.
-    @Test
-    func gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden() {
+    /// T222 : avec le câblage de production, le budget A13 ne coupe pas la chaîne sans arbre.
+    @Test(arguments: [false, true])
+    func gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden(productionWiring: Bool) {
         let display = lotCDisplay()
         let windows = MinimumSizeWindows(
             display: display,
@@ -3204,13 +3266,18 @@ extension LayoutMaintainerTests {
             try? FileManager.default.removeItem(atPath: eventPath)
             try? FileManager.default.removeItem(atPath: intentTemp.path)
         }
+        let wiring = BudgetWiring(windows, production: productionWiring)
         let service = SnapshotService(
             provider: windows,
-            frameWriter: windows,
+            frameWriter: wiring.writer,
             config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .masterStack, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentTemp.store
+            intentStore: intentTemp.store,
+            frameRegistry: wiring.registry ?? .shared
         )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
+        let maintainer = LayoutMaintainer(
+            service: service, events: EventLog(path: eventPath),
+            writtenFrames: wiring.registry, generations: wiring.generations
+        )
 
         let first = maintainer.tick()
         let second = maintainer.tick()
@@ -3329,6 +3396,7 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     /// Registre tenu par l'écrivain, comme `AXWindowFrameWriter` (commandes comprises, T219).
     var registry: WrittenFrameRegistry?
     var now: () -> Date = Date.init
+    var accessibilityTrusted = true
     private(set) var writes: [WindowID: [Rect]] = [:]
     /// Énumérations complètes des fenêtres (relevés AX, T210).
     private(set) var enumerations = 0
@@ -3340,7 +3408,7 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
 
     var totalWrites: Int { writes.values.reduce(0) { $0 + $1.count } }
 
-    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: accessibilityTrusted) }
     func displays() -> [DisplaySnapshot] { screens }
     func focusedWindowID() -> WindowID? { focused }
 
@@ -3390,14 +3458,15 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     }
 }
 
-/// Stage 1 d'un écran en mode arbre (`spatialBsp`), avec son arbre et ses membres.
+/// Stage 1 d'un écran en mode arbre (`spatialBsp`, ou `mode`), avec son arbre et ses membres.
 private func treeStore(
     _ name: String,
     display: DisplaySnapshot = lotCDisplay(),
     tree: BSPTree,
     frames: [WindowID: Rect],
     inactive: [WindowID: Rect] = [:],
-    activeStage: StageID = StageID(rawValue: "1")
+    activeStage: StageID = StageID(rawValue: "1"),
+    mode: WindowManagementMode = .spatialBsp
 ) -> StageStore {
     let member = { (id: WindowID, frame: Rect) in
         PersistentStageMember(windowID: id, bundleID: "app.\(id.rawValue)", title: "Window\(id.rawValue)", frame: frame)
@@ -3405,7 +3474,7 @@ private func treeStore(
     let store = StageStore(path: tempPath(name))
     var stages = [PersistentStage(
         id: StageID(rawValue: "1"),
-        mode: .spatialBsp,
+        mode: mode,
         members: frames.keys.sorted().map { member($0, frames[$0]!) },
         bspTree: tree
     )]
@@ -3798,6 +3867,67 @@ struct TreeLayoutMaintainerTests {
         #expect((world.frames[treeW2]?.x ?? 0) >= 700)
         #expect(later == 0)
         #expect(harness.events.contains("\"source\":\"tree_minimum_size\""))
+        // T222 : le budget A13 tient toujours pour l'arbre, avec l'écrivain qui tient le registre.
+        for id in [treeW1, treeW2] {
+            #expect((harness.registry.entry(for: id.rawValue)?.writesInGeneration ?? 0) <= LayoutTolerance.writeBudgetPerGeneration)
+        }
+    }
+
+    /// T225, A20 : après la correction d'un refus, la stabilité vise les cibles du plan corrigé.
+    /// La fenêtre refusée, déjà à sa nouvelle cible, n'est pas réécrite ; `layout_stable` suit la
+    /// lecture 100 ms après l'écriture de correction. L'épisode suivant a son propre
+    /// `layout_stable`, compté depuis sa propre passe.
+    @Test
+    func stabilityAfterRefusalCorrectionTargetsCorrectedPlan() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        let harness = TreeHarness("tree-refusal-stable", world: world, store: treeStore("tree-refusal-stable", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let corrected = harness.maintainer.tick(cause: "deadline")
+        let stableAtCorrection = harness.count("layout_stable")
+        harness.clock.advance(0.1)
+        _ = harness.maintainer.tick(cause: "deadline")
+        let stableAfterCorrection = harness.count("layout_stable")
+        let refusedWrites = world.writes[treeW1]?.count
+
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        let next = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
+        harness.clock.advance(0.1)
+        _ = harness.maintainer.tick(cause: "deadline")
+
+        #expect(corrected.commands == 1)
+        #expect(refusedWrites == 1)
+        #expect(stableAtCorrection == 0)
+        #expect(stableAfterCorrection == 1)
+        #expect(next.commands == 1)
+        #expect(harness.count("layout_stable") == 2)
+        // Première : 200 ms depuis la passe de démarrage ; seconde : 100 ms depuis sa propre passe.
+        #expect(harness.events.contains("\"stableAfterMs\":\"200\""))
+        #expect(harness.events.contains("\"stableAfterMs\":\"100\""))
+    }
+
+    /// T225, A20 : un épisode qui écrit avant la lecture de stabilité du précédent compte son
+    /// `stableAfterMs` depuis sa propre passe.
+    @Test
+    func overlappingEpisodeCountsStabilityFromItsOwnPass() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        let harness = TreeHarness("tree-stable-overlap", world: world, store: treeStore("tree-stable-overlap", tree: treeSideBySide, frames: world.frames))
+
+        harness.episodes.begin(cause: "command:startup")
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(0.05)
+        harness.episodes.begin(cause: "ax:AXUIElementDestroyed")
+        world.frames[treeW2] = nil
+        let closed = harness.maintainer.tick(cause: "ax:AXUIElementDestroyed")
+        harness.clock.advance(0.1)
+        _ = harness.maintainer.tick(cause: "deadline")
+
+        #expect(closed.commands == 1)
+        #expect(harness.count("layout_stable") == 1)
+        #expect(harness.events.contains("\"stableAfterMs\":\"100\""))
     }
 
     /// A2 : une correction infaisable (taille minimale plus grande que l'écran) laisse le
@@ -4462,6 +4592,61 @@ struct TreeLayoutMaintainerTests {
         #expect(world.writes[treeW1]?.count == 1)
         #expect(world.writes[treeW2]?.count == 2)
         #expect((world.frames[treeW2]?.x ?? 0) >= 700)
+        #expect(run.timer.armedCount == 0)
+    }
+
+    /// T224 : pendant la grâce de fin de glisser d'un scope sans arbre (`bsp`), la passe s'arrête
+    /// avant ses échéances. L'échéance rendue est la fin de la grâce : au plus une passe pendant
+    /// la grâce, une à sa fin, qui solde la stabilité.
+    @MainActor
+    @Test
+    func dragReleaseGraceDefersDeadlinesToItsEnd() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        let drag = WindowDragActivity(path: tempPath("tree-sched-drag-grace"))
+        defer { drag.reset() }
+        let store = treeStore("tree-sched-drag-grace", tree: treeSideBySide, frames: world.frames, mode: .bsp)
+        let harness = TreeHarness("tree-sched-drag-grace", world: world, store: store, strategy: .bsp, dragActivity: drag)
+        let run = TreeSchedulerRun(harness)
+
+        run.scheduler.request(cause: "command:startup")
+        run.timer.advance(by: 0.015)
+        let placed = run.passes.count
+        // Le glisser finit juste après la passe, qui a armé la lecture de stabilité à 100 ms.
+        drag.finish(now: harness.clock.now)
+        let graceEnd = harness.clock.now.addingTimeInterval(0.9)
+        run.timer.advance(by: 2)
+
+        let during = run.passes.dropFirst(placed).filter { $0.at <= graceEnd }
+        let after = run.passes.filter { $0.at > graceEnd }
+        #expect(placed == 1)
+        #expect(world.totalWrites >= 1)
+        #expect(during.count <= 1)
+        #expect(after.count == 1)
+        #expect(after.first.map { $0.at.timeIntervalSince(graceEnd) < 0.001 } == true)
+        #expect(harness.count("layout_stable") == 1)
+        #expect(run.timer.armedCount == 0)
+    }
+
+    /// T224 : accessibilité refusée, la passe s'arrête avant ses échéances ; aucune passe
+    /// d'échéance n'est relancée.
+    @MainActor
+    @Test
+    func accessibilityDeniedArmsNoDeadline() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        let harness = TreeHarness("tree-sched-ax-denied", world: world, store: treeStore("tree-sched-ax-denied", tree: treeSideBySide, frames: world.frames))
+        let run = TreeSchedulerRun(harness)
+
+        run.scheduler.request(cause: "command:startup")
+        run.timer.advance(by: 0.015)
+        // La passe a écrit : stabilité armée à 100 ms. Une passe d'événement voit ensuite
+        // l'accessibilité refusée, avant cette échéance.
+        world.accessibilityTrusted = false
+        run.scheduler.request(cause: "ax:AXFocusedWindowChanged")
+        run.timer.advance(by: 2)
+
+        #expect(world.totalWrites >= 1)
+        #expect(run.passes.map(\.cause) == ["command:startup", "ax:AXFocusedWindowChanged"])
+        #expect(harness.maintainer.nextDeadline(now: harness.clock.now) == nil)
         #expect(run.timer.armedCount == 0)
     }
 }

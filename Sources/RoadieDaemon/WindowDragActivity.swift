@@ -56,6 +56,17 @@ public final class WindowDragActivity: @unchecked Sendable {
         return readLocked()?.drop
     }
 
+    /// Premier instant où ni le glisser ni sa grâce ne sont actifs (`isActive` inclut sa borne),
+    /// sans effet de bord (T224) : le maintainer le rend comme échéance tant que le glisser
+    /// suspend ses passes. nil = aucun glisser connu. O(1).
+    public func suspensionEnd() -> Date? {
+        guard enabled else { return nil }
+        lock.lock()
+        defer { lock.unlock() }
+        let expiry = max(activeUntil, readLocked()?.expiry ?? .distantPast)
+        return expiry == .distantPast ? nil : Date(timeIntervalSinceReferenceDate: expiry.timeIntervalSinceReferenceDate.nextUp)
+    }
+
     public func reset() {
         lock.lock()
         defer { lock.unlock() }

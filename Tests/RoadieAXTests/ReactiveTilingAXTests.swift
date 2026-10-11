@@ -244,6 +244,22 @@ struct AXWindowFrameWriterTests {
         #expect(fixture.frames.entry(for: 581)?.writesInGeneration == 1)
     }
 
+    /// T222, A3 : la réparation des modes sans arbre écrit hors budget ; aucune tentative n'est refusée.
+    @Test
+    func outsideBudgetGenerationIsNeverRefused() {
+        let fixture = WriterFixture()
+        fixture.io.windows[57] = index(pid: 57, ids: [571])
+        let target = CGRect(x: 0, y: 0, width: 300, height: 200)
+        fixture.io.readBack = target
+        let writer: any WindowFrameWriting = fixture.writer
+
+        for _ in 0..<4 {
+            #expect(writer.setFrame(target, of: window(571, pid: 57), generation: PlacementGeneration.outsideBudget) == target)
+        }
+        #expect(fixture.frames.entry(for: 571)?.writesInGeneration == 4)
+        #expect(!fixture.frames.isOverBudget(windowID: 571, generation: PlacementGeneration.outsideBudget))
+    }
+
     @Test
     func failedAttemptsAfterTheAXCallCountTowardsTheBudget() {
         let fixture = WriterFixture()
