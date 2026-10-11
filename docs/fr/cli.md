@@ -56,7 +56,7 @@ Cas d'usage :
 
 ```bash
 roadie mode bsp
-roadie mode mutableBsp
+roadie mode spatialBsp
 roadie mode masterStack
 roadie mode float
 roadie layout plan --json
@@ -78,10 +78,12 @@ roadie balance
 Cas d'usage :
 
 - inspecter le plan avant application avec `layout plan`;
-- persister une intention manuelle avec `insert` ou `zoom-parent`;
-- inverser l'orientation locale de deux voisines en `mutableBsp` avec `toggle-split`;
+- modifier l’arbre enregistré avec `warp`, `resize` ou `layout split`;
+- inverser l'orientation locale de deux voisines en `spatialBsp` avec `toggle-split`;
 - ajuster manuellement la largeur de la fenetre active avec `layout width`;
-- revenir a un layout lineaire avec `flatten`.
+- équilibrer l’arbre existant avec `flatten` en `spatialBsp`.
+
+Dans `spatialBsp`, `layout insert` et `layout join-with` sont refusés : utilise `warp`. `layout width` est refusé : utilise `resize`. `layout flatten` équilibre l’arbre existant. Les anciennes commandes restent disponibles dans les autres modes compatibles.
 
 ## Navrail
 

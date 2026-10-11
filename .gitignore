@@ -15,3 +15,17 @@ DerivedData/
 .idea/
 .netrc
 .worktrees/
+
+# Local metadata and private runtime data must stay outside the repository.
+/.specify/memory/user-layer.json
+/.roadies/
+/.local/state/roadies/
+/.config/roadies/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision

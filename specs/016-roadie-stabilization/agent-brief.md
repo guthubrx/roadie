@@ -1,6 +1,6 @@
 # Brief commun aux agents d'implémentation (SPEC-016)
 
-Dépôt : `/path/to/roadie` (Swift 6, macOS 14+, gestionnaire de fenêtres tiling « Roadie »). Branche `016-roadie-stabilization`.
+Dépôt : `<repo-root>` (Swift 6, macOS 14+, gestionnaire de fenêtres tiling « Roadie »). Branche `016-roadie-stabilization`.
 
 ## À lire avant de coder
 

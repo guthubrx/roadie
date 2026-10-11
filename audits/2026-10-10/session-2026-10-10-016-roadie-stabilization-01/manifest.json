@@ -2,7 +2,7 @@
   "audit_meta": {
     "version": "v14.0",
     "timestamp": "2026-10-10T20:41:56Z",
-    "scope": "/path/to/roadie (SPEC-016, diff 3560183..HEAD sur Sources Tests scripts Makefile)",
+    "scope": "<repo-root> (SPEC-016, diff 3560183..HEAD sur Sources Tests scripts Makefile)",
     "scope_mode": "diff",
     "diff": {
       "base": "3560183",

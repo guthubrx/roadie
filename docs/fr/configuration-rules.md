@@ -120,7 +120,7 @@ minimum_ratio = 0.25
 maximum_ratio = 1.5
 ```
 
-Ces valeurs sont utilisees uniquement par les commandes manuelles `roadie layout width ...`.
+Ces valeurs concernent uniquement les commandes manuelles `roadie layout width ...` en `bsp` et `masterStack`. Elles ne s’appliquent pas à `spatialBsp`. Utilise `resize` dans le mode arbre.
 
 Cas d'usage :
 

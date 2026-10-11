@@ -7,7 +7,7 @@ Roadie tiles the visible windows in the active stage.
 Available modes:
 
 - `bsp`: binary tree layout for terminal/code/browser workflows.
-- `mutableBsp`: binary tree layout that keeps observed split ratios when windows are moved or resized.
+- `spatialBsp`: persistent binary tree; stored splits and ratios define the layout. `mutableBsp` and `yabai` remain aliases.
 - `masterStack`: one main window and a secondary stack.
 - `float`: Roadie keeps stage state but does not retile windows.
 
@@ -15,7 +15,7 @@ Examples:
 
 ```bash
 roadie mode bsp
-roadie mode mutableBsp
+roadie mode spatialBsp
 roadie mode masterStack
 roadie mode float
 roadie balance
@@ -24,7 +24,7 @@ roadie balance
 Use cases:
 
 - development with an editor as master and terminals in the stack;
-- yabai-like BSP experiments where manual moves should influence the next tiling pass;
+- persistent BSP layouts edited with `move`, `warp`, `resize`, and drag and drop;
 - multi-display operations with different modes per display/stage;
 - temporary tiling pause on a `float` stage.
 
@@ -337,8 +337,8 @@ roadie focus back-and-forth
 roadie layout split horizontal
 roadie layout split vertical
 roadie layout flatten
-roadie layout insert right
-roadie layout join-with left
+roadie warp right
+roadie resize right
 roadie layout zoom-parent
 roadie layout toggle-split
 ```
@@ -347,9 +347,11 @@ Use cases:
 
 - return to the previous focus;
 - force a local layout restructuring;
-- place the next window on a chosen side;
-- locally flip two neighboring windows in `mutableBsp` with `toggle-split`;
+- insert the active window on a chosen side with `warp`;
+- locally flip two neighboring windows in `spatialBsp` with `toggle-split`;
 - temporarily enlarge a window without losing context.
+
+In `spatialBsp`, `layout insert` and `layout join-with` are rejected; use `warp`. `layout width` is rejected; use `resize`. `layout flatten` balances the existing tree. In other modes, legacy commands remain available where supported.
 
 ## Rules
 
@@ -431,7 +433,7 @@ Use cases:
 
 ## Width Presets And Performance Diagnostics
 
-Width adjustments are manual commands. Performance diagnostics read the event log; they do not time the focus/border path in real time.
+Width presets apply to `bsp` and `masterStack`. In `spatialBsp`, use `resize` instead of `layout width`. Performance diagnostics read the event log; they do not time the focus/border path in real time.
 
 ```bash
 roadie layout width next

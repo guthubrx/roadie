@@ -1,6 +1,6 @@
 # Brief commun aux agents d'implémentation (SPEC-017)
 
-Dépôt : `/path/to/roadie` (Swift 6, macOS 14+, gestionnaire de fenêtres tiling « Roadie »). Branche `017-reactive-tiling`.
+Dépôt : `<repo-root>` (Swift 6, macOS 14+, gestionnaire de fenêtres tiling « Roadie »). Branche `017-reactive-tiling`.
 
 ## À lire avant de coder
 

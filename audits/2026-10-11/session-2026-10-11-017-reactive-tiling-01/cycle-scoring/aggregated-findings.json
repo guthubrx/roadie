@@ -6,7 +6,7 @@
   "start_timestamp": "2026-10-11T02:59:26Z",
   "end_timestamp": "2026-10-11T03:52:00Z",
   "duration_ms": 3154000,
-  "audit_scope": "/path/to/roadie (SPEC-017 diff 27cb244..HEAD : Sources Tests scripts, 61 fichiers)",
+  "audit_scope": "<repo-root> (SPEC-017 diff 27cb244..HEAD : Sources Tests scripts, 61 fichiers)",
   "audit_mode": "fix",
   "audit_grid": "pre-merge",
   "scope_mode": "diff",

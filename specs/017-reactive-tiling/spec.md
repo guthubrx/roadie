@@ -8,7 +8,7 @@
 
 ## Contexte
 
-Le 2026-10-11, l'utilisateur a observé que Roadie range les fenêtres lentement et qu'elles « sautent ». Le journal réel (`~/.roadies/events.jsonl`) et deux analyses de code (Roadie et yabai, dépôt `/path/to/yabai`) donnent les faits suivants.
+Le 2026-10-11, l'utilisateur a observé que Roadie range les fenêtres lentement et qu'elles « sautent ». Le journal réel (`~/.roadies/events.jsonl`) et deux analyses de code (Roadie et yabai, dépôt `<yabai-checkout>`) donnent les faits suivants.
 
 - Roadie détecte un changement en 73 ms. Il met ensuite environ 6 s à poser une disposition stable après une sortie de plein écran natif : environ 1 s d'animation macOS, 2 s d'attente fixe, puis 7 passes de placement espacées de 500 ms.
 - Le mode utilisé (`mutableBsp`) n'a pas de structure de disposition qui fait autorité. Il recalcule l'ordre, le sens et les proportions depuis la position observée des fenêtres. Chaque passe change cette position, donc la suivante aussi.

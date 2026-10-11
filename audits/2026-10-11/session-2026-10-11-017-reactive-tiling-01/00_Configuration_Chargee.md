@@ -1,5 +1,5 @@
 # Configuration Audit v14.0
-- AUDIT_ROOT_PATH     : /path/to/roadie
+- AUDIT_ROOT_PATH     : <repo-root>
 - AUDIT_SCOPE         : SPEC-017 (specs/017-reactive-tiling) - fichiers de Sources/, Tests/, scripts/ modifiés entre 27cb244 et HEAD (548e80f)
 - SCOPE_MODE          : diff (DIFF_BASE = 27cb244, imposé par l'appelant ; 61 fichiers dont 1 supprimé, liste dans diff_files.txt)
 - AUDIT_MODE          : fix
@@ -10,8 +10,8 @@
 - MAX_RETRY_PER_FINDING : 2
 - AUTO_COMMIT         : false (imposé par l'orchestrateur appelant : aucun git add/commit/stash/checkout/reset ; il commitera lui-même)
 - SKIP_HOOKS          : false
-- BASELINE_PATH       : /path/to/roadie/audits/baseline.json (absent = baseline vide)
-- SESSION_DIR         : /path/to/roadie/audits/2026-10-11/session-2026-10-11-017-reactive-tiling-01/
+- BASELINE_PATH       : <repo-root>/audits/baseline.json (absent = baseline vide)
+- SESSION_DIR         : <repo-root>/audits/2026-10-11/session-2026-10-11-017-reactive-tiling-01/
 - SAMPLING_THRESHOLD  : 500 (non atteint : pas d'échantillonnage)
 - MODE_PARALLELISME   : agents
 - MODELE_SUBAGENTS    : sonnet (checklists) ; contre-audit par agents séparés (modèle hérité)

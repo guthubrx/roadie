@@ -1,28 +1,44 @@
 # Documentation Roadie
 
-Documentation en francais pour utiliser Roadie au quotidien, le configurer et l'integrer a un ecosysteme de scripts.
+Guides français pour les sources actuelles de `main`. Le [README principal](../../README.fr.md) explique l’installation, les permissions, les commandes et la confidentialité. [English](../en/README.md).
 
 ## Guides
 
-- [Vue d'ensemble des fonctionnalites](features.md)
+- [Vue d’ensemble des fonctionnalités](features.md)
 - [Commandes CLI](cli.md)
-- [Configuration et rules](configuration-rules.md)
-- [Evenements et Query API](events-query.md)
-- [Cas d'usage](use-cases.md)
-- [Release notes v0.3.0](../releases/v0.3.0.md)
+- [Configuration et règles](configuration-rules.md)
+- [Événements et API de requêtes](events-query.md)
+- [Cas d’usage](use-cases.md)
+- [Notes de version v0.3.0](../releases/v0.3.0.md) — version antérieure aux derniers changements des sources.
 
-## Positionnement
+## Fonctions Actuelles
 
-Roadie est un window manager macOS en Swift qui combine :
+Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Chaque écran garde son bureau courant, son stage actif et sa disposition. SIP reste actif. Roadie ne pilote pas les Spaces natifs de macOS.
 
-- tiling automatique `bsp`, `mutableBsp`, `masterStack` et `float`;
-- stages nommees et masquables, proches d'un workflow Stage Manager;
-- desktops virtuels Roadie sans controle des Spaces macOS natifs;
-- parking d'ecran pour garder les stages recuperables quand un moniteur est debranche;
-- runtime modulaire pour separer tiling, rail, bordures, focus, mode cibles,
-  actions de barre de titre et restore safety en composants distincts;
-- commandes CLI pour BetterTouchTool, Karabiner, scripts shell ou launchers;
-- surface d'automatisation : events, rules, groups, query API, Mode Cibles,
-  Grille Ecran, Grille Fenetre et enregistrement de macros courtes.
+- **Tiling réactif :** `spatialBsp` conserve un arbre binaire qui fait référence. Les événements déclenchent les mises à jour. Les fenêtres temporairement absentes gardent leur place enregistrée. `mutableBsp` et `yabai` restent des alias. Les modes `bsp`, `masterStack` et `float` restent disponibles.
+- **Glisser-déposer :** un dépôt au centre échange les fenêtres du même stage. Un dépôt sur un bord insère la fenêtre. L’aperçu entre écrans suit le pointeur, y compris vers un stage tilé vide. Les tailles minimales des applications peuvent limiter les proportions finales.
+- **Retour d’écran :** les stages sont placés en parking au débranchement. Le retour conserve les positions visibles utiles. Les anciennes références absentes ne créent plus de cartes visibles dans le rail.
+- **Nav rail :** vignettes ou icônes, réorganisation, transferts et distinction des fenêtres agrandies ou en plein écran natif.
+- **Outils de fenêtre :** bordure de focus, focus à la souris, actions de barre de titre, épinglages, signets et groupes persistants.
+- **Exécution fiable :** socket local, écritures atomiques, cache partagé, rechargement validé de la configuration, récupération des fenêtres masquées et requêtes de santé.
+- **Automatisation :** CLI, règles TOML, requêtes JSON, événements JSONL et diagnostics de performance en lecture seule.
+- **Modes facultatifs :** cibles clavier, découverte expérimentale des zones applicatives, grilles écran/fenêtre et macros courtes.
+- **Exécution modulaire :** processus séparés pour le tiling, le rail, la bordure, le focus, les actions de barre de titre et les cibles. Les profils limités au rôle de compagnon restent à définir.
 
-Roadie garde SIP actif et n'utilise pas d'OSAX/SkyLight pour piloter les Spaces natifs.
+## Mettre À Jour Et Contrôler
+
+Depuis le dossier des sources :
+
+```bash
+make install
+make restart
+roadie query health
+```
+
+Si une session de développement tmux tourne, lance d’abord `make stop`. L’installation conserve le certificat existant quand c’est possible. Si le certificat requis manque, elle s’arrête avant de remplacer l’application.
+
+Dans `spatialBsp`, utilise `warp` à la place de `layout insert` ou `layout join-with`. Utilise `resize` à la place de `layout width`. `layout flatten` équilibre l’arbre enregistré.
+
+## Confidentialité
+
+L’application fonctionne localement. Les sources actuelles ne contiennent aucun service de télémétrie ou d’envoi distant. L’état, les logs, les macros, les exports et les captures peuvent toutefois contenir des titres de fenêtres ou d’autres données privées. Relis et anonymise ces éléments avant de les partager. Voir [Confidentialité](../../README.fr.md#confidentialité).

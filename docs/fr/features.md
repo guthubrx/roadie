@@ -7,7 +7,7 @@ Roadie tile les fenetres visibles d'une stage active.
 Modes disponibles :
 
 - `bsp` : repartition en arbre binaire, adaptee aux workflows terminal/code/navigateur.
-- `mutableBsp` : repartition en arbre binaire qui conserve les ratios observes quand les fenetres sont deplacees ou redimensionnees.
+- `spatialBsp` : arbre binaire persistant. Les séparations et proportions enregistrées définissent la disposition. `mutableBsp` et `yabai` restent des alias.
 - `masterStack` : une fenetre principale et une pile secondaire.
 - `float` : Roadie garde les fenetres dans l'etat de stage mais ne les retile pas.
 
@@ -15,7 +15,7 @@ Exemples :
 
 ```bash
 roadie mode bsp
-roadie mode mutableBsp
+roadie mode spatialBsp
 roadie mode masterStack
 roadie mode float
 roadie balance
@@ -24,7 +24,7 @@ roadie balance
 Cas d'usage :
 
 - developpement avec editeur en master et terminaux en stack;
-- experimentations BSP proches de yabai ou les mouvements manuels doivent influencer le prochain tiling;
+- arbre BSP persistant modifié avec `move`, `warp`, `resize` et glisser-déposer;
 - operations multi-ecran avec chaque ecran dans un mode different;
 - pause temporaire du tiling sur une stage en `float`.
 
@@ -342,8 +342,8 @@ roadie focus back-and-forth
 roadie layout split horizontal
 roadie layout split vertical
 roadie layout flatten
-roadie layout insert right
-roadie layout join-with left
+roadie warp right
+roadie resize right
 roadie layout zoom-parent
 roadie layout toggle-split
 ```
@@ -352,9 +352,11 @@ Cas d'usage :
 
 - revenir au dernier focus;
 - forcer une restructuration locale du layout;
-- placer la prochaine fenetre du cote voulu;
-- inverser localement deux fenetres voisines en `mutableBsp` avec `toggle-split`;
+- insérer la fenêtre active du côté voulu avec `warp`;
+- inverser localement deux fenetres voisines en `spatialBsp` avec `toggle-split`;
 - agrandir temporairement une fenetre sans perdre le contexte.
+
+Dans `spatialBsp`, `layout insert` et `layout join-with` sont refusés : utilise `warp`. `layout width` est refusé : utilise `resize`. `layout flatten` équilibre l’arbre existant. Les anciennes commandes restent disponibles dans les autres modes compatibles.
 
 ## Rules
 
@@ -436,7 +438,7 @@ Cas d'usage :
 
 ## Width presets et diagnostics performance
 
-Les ajustements de largeur sont des commandes manuelles. Les diagnostics performance lisent le journal d'evenements; ils ne mesurent pas le chemin focus/bordure en temps reel.
+Les préréglages de largeur concernent `bsp` et `masterStack`. Dans `spatialBsp`, utilise `resize` à la place de `layout width`. Les diagnostics performance lisent le journal d'evenements; ils ne mesurent pas le chemin focus/bordure en temps reel.
 
 ```bash
 roadie layout width next

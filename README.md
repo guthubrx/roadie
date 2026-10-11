@@ -1,166 +1,81 @@
 <div align="center">
   <img src="docs/assets/roadie-logo.svg" alt="Roadie logo" width="128" height="128">
-</div>
-
-<div align="center">
 
 # Roadie
 
-**Work in progress. Expect rough edges, breaking changes, and missing polish.**
+**A macOS window manager combining automatic tiling, named stages, and virtual desktops.**
 
 English | [Français](README.fr.md)
 
 </div>
 
-Roadie is a small macOS tiling window manager written in Swift, built around one idea: automatic tiling and a Stage Manager-like workflow should be able to live together.
+Roadie is written in Swift. It groups windows into stages and tiles the active stage on each display. A native side panel, the **nav rail**, lets you switch stages and move windows with thumbnails.
 
-Current release: [v0.3.0](docs/releases/v0.3.0.md).
+**Status:** active development. Commands and configuration can still change. This README describes the current `main` sources, including the stabilization and reactive tiling work completed in October 2026. The latest documented release is [v0.3.0](docs/releases/v0.3.0.md); its release notes describe that version, not every later source change.
 
-## Why This Project Exists
+## Why Roadie Exists
 
-I never set out to write a window manager. For years, [yabai](https://github.com/koekeishiya/yabai) has been the foundation of my macOS workstation: sharp, powerful, and deeply influential for anyone who cares about tiling on macOS. Roadie owes a lot to yabai, both functionally and culturally.
+Roadie brings three ideas into one workflow:
 
-The trigger was personal: I never managed to make yabai coexist cleanly with the Stage Manager workflow I wanted. I wanted named, hideable, restorable groups of windows, while still keeping automatic tiling for the visible windows.
+- Automatic tiling inspired by [yabai](https://github.com/koekeishiya/yabai).
+- Virtual desktops inspired by [AeroSpace](https://github.com/nikitabobko/AeroSpace).
+- Named window groups inspired by Stage Manager.
 
-So Roadie focuses on that specific combination:
-
-- `spatialBsp` (yabai-like persistent tree), `bsp`, and `masterStack` tiling for the visible windows.
-- Roadie stages: named groups of windows that can be hidden, restored, reordered, and represented visually.
-- Roadie virtual desktops managed without controlling native macOS Spaces.
-- Multi-display support where each display keeps its own current desktop, active stage, and layout.
-- Display parking: when a monitor disappears, Roadie parks its non-empty stages on a remaining display instead of merging them into the active stage.
-- A modular runtime where tiling, rail, borders, focus-follow-mouse, target mode,
-  title-bar actions, and restore safety can run as separate components.
-
-Roadie is not trying to replace yabai. yabai is broader, older, and much more mature. Roadie is intentionally smaller and opinionated around my workflow.
-
-## The AeroSpace Influence
-
-The second major influence is [AeroSpace](https://github.com/nikitabobko/AeroSpace).
-
-Instead of trying to manipulate native macOS Spaces, Roadie follows the same broad direction: keep SIP on, avoid private write APIs, and manage virtual workspaces on Roadie's side. Switching a Roadie desktop means hiding windows from the outgoing desktop and restoring windows from the incoming one.
-
-The result is a small hybrid:
-
-- A tiling model inspired by yabai's practical macOS window-manager ergonomics.
-- A virtual desktop model inspired by AeroSpace's refusal to fight native Spaces.
-- A stage layer built for people who want a Stage Manager-like workflow on top of tiling.
-
-If you need a mature general-purpose macOS WM, look at yabai or AeroSpace first. Roadie exists for the narrower case where tiling, virtual desktops, and stage groups need to be one workflow.
-
-## Feature Positioning
-
-This is not a superiority table. It is only meant to make Roadie's scope clear.
-
-Legend: ✅ supported, ◐ partial or narrower, ❌ not supported, 🧪 experimental,
-⚙️ requires extra setup or an external companion tool.
-
-### Layout And Window Control
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| BSP tiling | ✅ | ✅ | ✅ |
-| User-mutable tiling tree | ✅ | ✅ | ◐ |
-| Master-stack layout | ◐ | ✅ | ✅ |
-| Float mode | ✅ | ✅ | ✅ |
-| Window grid placement | ✅ | ❌ | ❌ |
-| Window insert point | ✅ | ❌ | ◐ |
-| Stack/tab/accordion layout | ✅ stack | ✅ accordion | ◐ groups only |
-| Scratchpad windows | ✅ | ❌ | ◐ |
-| Power-user tree commands | ✅ | ✅ | ◐ |
-
-### Runtime And Companion Mode
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| Single full window-manager daemon | ✅ | ✅ | ✅ |
-| Modular components | ❌ | ❌ | ✅ |
-| Run only overlays/stages beside another WM | ⚙️ | ⚙️ | 🧪 foundation |
-| Component-level health checks | ◐ | ◐ | ✅ |
-| Per-component logs | ◐ | ◐ | ✅ |
-
-### Workspaces, Stages, And Displays
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| Native macOS Spaces control | ✅ ⚙️ | ❌ | ❌ |
-| Create/destroy/move native macOS Spaces | ✅ ⚙️ | ❌ | ❌ |
-| Virtual desktops without native Spaces | ❌ | ✅ | ✅ |
-| Named stages inside a desktop | ❌ | ❌ | ✅ |
-| Stage rail with thumbnails | ❌ | ❌ | ✅ |
-| Visible stage navigation and reorder | ❌ | ❌ | ✅ |
-| Display parking and reconnect recovery | ❌ | ◐ | ✅ |
-| Multi-display tiling | ✅ | ✅ | ✅ |
-| Move workspace/stage to another display | ✅ | ✅ | ✅ |
-| Mission Control awareness | ✅ | ◐ | ◐ |
-
-### Rules, Automation, And Configuration
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| Window rules and automatic placement | ✅ | ✅ callbacks | ✅ |
-| Rich rule effects | ✅ | ◐ | ◐ |
-| Integrated hotkeys | ❌ ⚙️ `skhd` | ✅ | ❌ ⚙️ BTT/Karabiner |
-| Binding modes | ❌ | ✅ | ❌ |
-| Config callbacks | ✅ signals | ✅ | ◐ |
-| Declarative config reload | ◐ shell | ✅ | ✅ |
-| Stable JSON query API | ✅ | ✅ | ✅ |
-| Automation event stream | ✅ signals | ✅ subscribe | ✅ JSONL |
-| CLI-first operation | ✅ | ✅ | ✅ |
-
-### Focus And Visual Behavior
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| Focus follows mouse | ✅ | ✅ | ✅ |
-| Focus border overlay | ❌ | ❌ | ✅ |
-| Window opacity/layers/PiP/shadow toggles | ✅ ⚙️ | ❌ | ❌ |
-| Native fullscreen helpers | ✅ | ✅ | ◐ |
-| Title-bar context actions | ❌ | ❌ | ✅ |
-
-### Keyboard Targeting And Grids
-
-| Feature | yabai | AeroSpace | Roadie |
-|---|---:|---:|---:|
-| Keyboard target labels | ❌ | ❌ | ✅ |
-| App element target discovery | ❌ | ❌ | 🧪 |
-| Recursive display grid | ❌ | ❌ | 🧪 |
-| Recursive focused-window grid | ❌ | ❌ | 🧪 |
-| Short macro record/replay | ❌ | ❌ | 🧪 |
-
-`◐` means Roadie has a narrower or less mature version of the feature, not full
-parity with yabai or AeroSpace.
-
-Roadie does not require disabling SIP. It uses Accessibility for window discovery and movement, and Screen Recording only for rail thumbnails.
+Roadie desktops and stages belong to Roadie. They do not create or control native macOS Spaces. SIP stays enabled. Window movement uses Accessibility. A private read-only system probe helps identify native fullscreen transitions; Roadie does not use private APIs to write or switch Spaces.
 
 ## What Roadie Does Today
 
-- Tiles visible windows with `spatialBsp`, `bsp`, `masterStack`, or `float` modes. `spatialBsp` keeps a persistent BSP tree like yabai: a new window splits the focused one along its longest side, a closed window gives its space back to its sibling, and each event is applied in a single pass. `mutableBsp` and `yabai` are accepted as aliases of `spatialBsp`; existing `mutableBsp` stages are migrated once, with a backup in `~/.roadies/stages.json.pre-017`.
-- Runs either as a monolithic daemon or as modular components with separate
-  `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode`
-  processes. Restore safety lives inside the `run` and `tiler` processes.
-- Keeps stage groups per display and Roadie desktop.
-- Provides Roadie virtual desktops without controlling native macOS Spaces.
-- Supports multiple displays independently.
-- Parks stages from a disconnected display on a remaining display, then restores them when the same display comes back and can be recognized safely.
-- Shows a native side rail with stage thumbnails.
-- Lets you drag thumbnails between stages or into the active workspace.
-- Lets you optionally right-click a managed window title bar to send that window to another stage, desktop, or display.
-- Shows a focus border around the active window.
-- Provides keyboard-friendly CLI commands for BetterTouchTool, Karabiner, shell scripts, or any launcher.
-- Persists stage membership and layout state across daemon restarts.
-- Exposes state, health, metrics, events, and audit commands for debugging.
-- Publishes JSONL automation events and stable `roadie query ...` JSON projections.
-- Supports TOML window rules with validation, explain, runtime `rule.*` events, and automatic stage/display placement.
-- Supports power-user layout commands such as `focus back-and-forth`, `layout insert`, `layout flatten`, and `layout zoom-parent`.
-- Supports a persistent BSP tree and mutable BSP operations closer to yabai:
-  move, warp, resize, insert, swap, and observed split-ratio preservation.
-- Persists and exposes window groups for stack/tab-like workflows.
-- Exposes Keyboard Targets for labels, search picking, JSON automation, target inspection, and experimental app-zone discovery.
-- Provides two configurable spatial grids: Display Grid for full-screen recursive targeting, and Window Grid for recursive targeting inside the focused window.
-- Records short mouse macros with target context and grid fallback.
-- Provides safety tools: atomic config reload, manual restore snapshots, limited restore-on-exit/crash watcher, generated-file cleanup.
-- Exposes read-only performance diagnostics without instrumenting focus/border hot paths.
+| Area | Current behavior |
+|---|---|
+| Tiling | Persistent `spatialBsp` tree, automatic `bsp`, `masterStack`, and `float` modes |
+| Stages | Named window groups, hide/restore, reorder, summon, and move to another display |
+| Desktops | Roadie virtual desktops with independent current desktop and active stage per display |
+| Multiple displays | Independent layouts, parking on disconnect, and recovery on reconnect |
+| Nav rail | Stage cards, live thumbnails or app icons, drag and drop, and window presentation state |
+| Window tools | Focus border, focus follows mouse, title-bar context menu, window pins, bookmarks, and groups |
+| Automation | CLI, JSON queries, JSONL events, TOML rules, and configuration reload |
+| Safety | State backups, atomic persistence, hidden-window recovery, instance locks, and health checks |
+| Optional modes | Keyboard Targets, application-zone discovery, display/window grids, and short macros |
+| Runtime | One daemon for daily use, or separate modular components |
+
+### Reactive Tiling And Drag And Drop
+
+`spatialBsp` stores the layout as a persistent binary tree. The tree keeps the splits and their ratios. A new window splits the focused window along its longest side. Closing a window gives its space to its sibling. Temporarily absent windows keep their place in the stored tree without receiving placements.
+
+Accessibility and application events trigger layout updates. Roadie groups bursts of events and ignores echoes of its own placements. It also keeps a periodic safety check. It holds layout writes while you drag a window, then applies the drop.
+
+- On the same display, within the same stage, a drop on a window center swaps the two positions. A drop on an edge inserts on that side.
+- Between displays, the preview follows the pointer. A center drop inserts to the right of the target; an edge drop inserts on that edge. An empty tiled stage can also receive the window.
+- A swapped window takes the destination cell. If an application refuses a small size, Roadie adjusts the affected splits to respect its minimum size. A wide minimum can make the result look balanced instead of giving the other window the full original width.
+- Reconnecting a display preserves the last useful visible positions. Old saved members alone do not create visible window cards in the rail.
+
+`mutableBsp` and `yabai` remain aliases of `spatialBsp`. Existing `mutableBsp` stages migrate once. Roadie saves the previous state as `stages.json.pre-017` in its local state directory.
+
+Use `move`, `warp`, `resize`, `window swap`, `layout split`, and `layout toggle-split` to edit the tree. In this mode, `layout insert` and `layout join-with` are rejected: use `warp`. `layout width` is also rejected: use `resize`. `layout flatten` balances the existing tree; it does not rebuild it from window positions.
+
+### Stages, Desktops, And The Nav Rail
+
+Only the active stage of the current Roadie desktop is shown on each display. Other stages stay hidden and remain accessible through the nav rail. You can drag a thumbnail between stages, summon it into the active workspace, or move a whole stage to another display.
+
+The rail distinguishes normal, maximized, and native fullscreen windows. It hides over native fullscreen by default. Hiding over maximized windows is configurable. Screen Recording enables live thumbnails; without it, app icons remain available.
+
+When a display disconnects, Roadie parks its non-empty stages on a remaining display. It keeps their origin so they can return when the display is recognized safely. Pins keep selected windows visible across stage changes. Bookmarks let you return to a selected window. Persistent groups provide a narrower stack-like workflow.
+
+### Stabilization And Recovery
+
+The daemon caches shared window snapshots and keeps state mutations under a single file lock. Changed state is written atomically. Invalid files are preserved for diagnosis. Configuration reload keeps the last valid configuration if the replacement is invalid.
+
+Commands normally reach the daemon through a local Unix socket. The daemon uses its own macOS permissions. Health queries, event logs, state audits, and read-only performance summaries help diagnose problems.
+
+`make restart` now stops an instance opened directly as an app as well as the installed service. Installation preserves the exact existing signing certificate when available, which helps retain Accessibility permission. Shutdown and the crash watcher restore hidden windows.
+
+### Optional And Experimental Features
+
+Keyboard Targets provide labels, search, inspection, activation, and JSON output. Application-zone discovery, recursive Display Grid and Window Grid, and short mouse macro recording are experimental. Each has a separate configuration gate.
+
+The modular runtime splits `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode` into separate processes. The standard modular launcher starts the full set. Using Roadie as a stage-only or overlay-only companion to another window manager still needs dedicated startup profiles.
+
+Native Spaces management, built-in global shortcut bindings, and a notarized public installer remain outside the current scope. Some listed CLI commands, such as `window close` and `toggle floating`, explicitly report that they are not implemented. The abandoned pin-popover redesign is not part of the delivered features.
 
 ## Documentation
 
@@ -235,11 +150,13 @@ If Roadie is already running, `make install` does not stop it. Run this when you
 make restart
 ```
 
-`make restart` stops Roadie, then reloads the installed service through launchd. It also stops an instance opened directly as an application. It does not build anything. Reloading the service applies changes to the LaunchAgent too.
+`make restart` stops Roadie, then reloads the installed service through launchd. It also stops an instance opened directly as an application. Startup checks that launchd and the daemon PID file identify the same live process. It does not build anything. Reloading the service applies changes to the LaunchAgent too.
+
+After an update, run `make install`, then `make restart`, then `roadie query health`. If a development tmux session is running, use `make stop` first.
 
 ### Code signing and permissions
 
-Grant Accessibility to **Roadie** in System Settings > Privacy & Security > Accessibility. macOS ties this permission to the code signature of the app. `make install` reuses the signing identity of the installed app. For a first install, it uses `roadied-cert` if that identity is available. Otherwise, it uses an ad hoc signature and prints a warning: macOS may forget the permission after a new build.
+Grant Accessibility to **Roadie** in System Settings > Privacy & Security > Accessibility. macOS ties this permission to the code signature of the app. `make install` reuses the exact certificate of the installed app when its fingerprint is available. If that certificate is missing from the keychain, installation stops before replacing the app. A certificate with the same name is not enough. An explicit `ROADIE_CODESIGN_IDENTITY` overrides this choice. For a first install, it uses `roadied-cert` if that identity is available. Otherwise, it uses an ad hoc signature and prints a warning: macOS may forget the permission after a new build.
 
 To choose a stable identity explicitly, use:
 
@@ -278,7 +195,7 @@ Equivalent direct commands:
 ./scripts/stop
 ./scripts/status
 ./scripts/logs
-./scripts/roadie daemon health
+./scripts/roadie query health
 ```
 
 Logs are kept in `~/.roadies/`. At each start, the previous log is kept as `roadied.stdout.log.1` and `roadied.stderr.log.1`, so a crash stays readable after a restart.
@@ -293,10 +210,10 @@ The script does these steps in order:
 
 1. runs `roadie restore unhide-all` so that no window stays hidden or off screen;
 2. stops the LaunchAgent (`launchctl bootout`);
-3. deletes the LaunchAgent file and the binaries in `~/.local/bin`;
+3. deletes the LaunchAgent file, `~/Applications/Roadie.app`, and the binaries in `~/.local/bin`;
 4. asks whether to keep Roadie state (`~/.roadies`, `~/.local/state/roadies`). Without a terminal, it keeps it.
 
-The script never deletes your configuration in `~/.config/roadies`. Delete it by hand if you want. To finish, remove `roadied` from System Settings > Privacy & Security > Accessibility and Screen Recording.
+The script never deletes your configuration in `~/.config/roadies`. Delete it by hand if you want. To finish, remove Roadie from System Settings > Privacy & Security > Accessibility and Screen Recording.
 
 ## Modular Runtime
 
@@ -306,7 +223,7 @@ the same capabilities as separate processes:
 ```bash
 ./scripts/start-modular
 roadie query components
-roadie daemon health
+roadie query health
 ```
 
 The standard modular script currently starts the full component set, including
@@ -369,16 +286,11 @@ Roadie asks for two permissions. Both go to the `roadied` daemon.
 | Accessibility | Read and move windows | Yes |
 | Screen Recording | Live window thumbnails in the rail | No. Without it, the rail shows app icons. |
 
-After `make install`, add this binary in System Settings > Privacy & Security > Accessibility, and in Screen Recording if you want thumbnails:
-
-```text
-~/.local/bin/roadied
-```
-
-In the file picker, press Cmd+Shift+G and type the path, because `.local` is a hidden folder. Then restart the daemon:
+After `make install`, grant permissions to **Roadie**, the installed app in `~/Applications/Roadie.app`. The `~/.local/bin/roadied` command links to its daemon. In the file picker, use Cmd+Shift+G to open the app location. Then restart and check the daemon:
 
 ```bash
 make restart
+roadie query health
 ```
 
 ### The `roadie` command needs no permission
@@ -387,7 +299,7 @@ When the daemon runs, the `roadie` command sends your request to it through a lo
 
 If the daemon is stopped, `roadie` runs the command itself. In that case, the program that started it (terminal, BetterTouchTool) needs Accessibility permission. Some commands always run locally: `daemon start|stop|restart|health`, `doctor`, `permissions`, and `config validate`.
 
-Run `roadie doctor` to see the real state of the daemon, both permissions, and the validity of your configuration. The daemon publishes this state in `~/.roadies/daemon-status.json` (process id, version, permissions, configuration validity, update time), and `roadie doctor` reads that file. Doctor treats the daemon as stopped when its process is gone or when the file is more than 90 seconds old.
+Use `roadie query health` to check the running daemon with its own permissions. `roadie doctor` also reads the daemon status and checks configuration. Local `doctor` and `daemon health` checks can scan windows with the terminal’s permissions. A local empty scan does not mean the daemon sees no windows. The daemon publishes this state in `~/.roadies/daemon-status.json` (process id, version, permissions, configuration validity, update time), and `roadie doctor` reads that file. Doctor treats the daemon as stopped when its process is gone or when the file is more than 90 seconds old.
 
 ## Configuration
 
@@ -443,7 +355,7 @@ make restart
 Check the runtime state:
 
 ```bash
-roadie daemon health
+roadie query health
 roadie state audit
 roadie metrics
 roadie tree dump
@@ -552,13 +464,13 @@ roadie desktop label 2 DeepWork
 ```bash
 roadie layout split horizontal
 roadie layout split vertical
-roadie layout insert right
-roadie layout join-with left
+roadie layout toggle-split
+roadie warp right
 roadie layout flatten
 roadie layout zoom-parent
 ```
 
-These commands persist layout intent where applicable, so the maintainer does not immediately undo deliberate manual structure.
+In `spatialBsp`, these commands modify the stored tree or its zoom state. Use `warp` for insertion and `resize` for size changes. The legacy `layout insert`, `layout join-with`, and `layout width` commands are unavailable in tree mode. They remain available where supported by the other layout modes.
 
 ## Window Groups
 
@@ -656,7 +568,7 @@ Risky surfaces are experimental and independently configurable through
 Run the quick health checks:
 
 ```bash
-roadie daemon health
+roadie query health
 roadie state audit
 roadie self-test
 ```
@@ -690,7 +602,7 @@ If windows stay hidden or off screen (for example after a crash), bring them all
 roadie restore unhide-all
 ```
 
-If windows stop moving after a new install, check that `~/.local/bin/roadied` is still enabled in Accessibility (see [Code signing and permissions](#code-signing-and-permissions)), then restart:
+If windows stop moving after a new install, check that Roadie is still enabled in Accessibility (see [Code signing and permissions](#code-signing-and-permissions)), then restart:
 
 ```bash
 make restart
@@ -699,6 +611,14 @@ make restart
 The daemon restores hidden windows when it receives a stop signal (SIGTERM, SIGINT, SIGHUP) and a small watcher process does the same if the daemon crashes. To run the daemon without this safety, start it with `roadied run --yes --no-restore-safety`.
 
 The previous run logs are in `~/.roadies/roadied.stderr.log.1` and `~/.roadies/roadied.stdout.log.1`.
+
+## Privacy
+
+Roadie runs locally. The current application sources have no telemetry or remote upload service. CLI commands communicate with the daemon through a local Unix socket. Screen Recording is optional and is used for window thumbnails.
+
+Local state and diagnostic output can contain window titles, application names, display identifiers, window positions, and event history. Recorded macros can include target context. Treat configuration, state backups, logs, query exports, macros, and desktop screenshots as private. Review and redact them before sharing an issue or committing files.
+
+The repository contains source code and example/test data. Local runtime folders, environment files, signing keys, and machine-specific SpecKit metadata are excluded from Git. Published illustrations must use synthetic content. Repository checks cannot remove data from older commits or copies already downloaded.
 
 ## Repository Layout
 

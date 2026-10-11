@@ -78,7 +78,7 @@ Dernier démarrage : `accessibilityTrusted=false`.
 
 ## Utilisabilité
 
-25. ✔ `roadie/main.swift:468` chemin `/Users/USERNAME/...` ; aussi `scripts/btt/roadie-record-toggle.sh:4`, `README.md:325-330`.
+25. ✔ `roadie/main.swift:468` chemin `<local-path>` ; aussi `scripts/btt/roadie-record-toggle.sh:4`, `README.md:325-330`.
 26. `scripts/with-xcode:6-7` impose Xcode.app ; `PATH` fixe sans `/usr/local/bin`.
 27. Signature ad hoc (`scripts/install:41`, `scripts/start:42-45`) ; LaunchAgent pointe vers le dépôt.
 28. `make restart` = `stop start` → build debug + tmux + retrait LaunchAgent + logs vidés (`scripts/start:15-97`).

@@ -3,7 +3,7 @@
 **Date** : 2026-10-11
 **Sources** :
 - journal réel `~/.roadies/events.jsonl` ;
-- code de yabai `/path/to/yabai/src` (commit `f17ef88`) ;
+- code de yabai `<yabai-checkout>/src` (commit `f17ef88`) ;
 - code de Roadie (branche `017-reactive-tiling`) ;
 - trois analyses de code et une mesure de référence, faites le 2026-10-11.
 

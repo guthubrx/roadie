@@ -6,7 +6,7 @@
     "start_timestamp": "2026-10-10T20:41:56Z",
     "end_timestamp": null,
     "duration_ms": null,
-    "audit_scope": "/path/to/roadie (SPEC-016 diff 3560183..HEAD : Sources Tests scripts Makefile, 91 fichiers)",
+    "audit_scope": "<repo-root> (SPEC-016 diff 3560183..HEAD : Sources Tests scripts Makefile, 91 fichiers)",
     "audit_mode": "fix",
     "audit_grid": "pre-merge",
     "scope_mode": "diff",
