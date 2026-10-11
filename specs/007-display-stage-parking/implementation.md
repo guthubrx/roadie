@@ -124,3 +124,4 @@
   - 43 tests ciblés passés.
   - Suite complète OK : 296 tests passés.
   - Aucun appel restant à `migrateDisconnectedDisplays`.
+  - Le quickstart manuel est considéré résolu par décision utilisateur le 2026-10-11. Aucun compte rendu détaillé des scénarios n’est consigné.

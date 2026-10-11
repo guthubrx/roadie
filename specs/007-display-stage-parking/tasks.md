@@ -138,7 +138,7 @@
 - [x] T061 Vérifier qu'aucun appel destructif à `migrateDisconnectedDisplays` ne reste dans `Sources/RoadieDaemon/`
 - [x] T062 Exécuter `make build` via `Makefile`
 - [x] T063 Exécuter `./scripts/roadie config validate` via `scripts/roadie`
-- [ ] T064 Exécuter le quickstart manuel décrit dans `specs/007-display-stage-parking/quickstart.md`
+- [x] T064 Exécuter le quickstart manuel décrit dans `specs/007-display-stage-parking/quickstart.md`
 - [x] T065 Finaliser `specs/007-display-stage-parking/implementation.md` avec le résumé des validations, commits et risques résiduels
 
 ---

@@ -5,7 +5,7 @@
 - **Spec** : 017-reactive-tiling
 - **Branche** : `017-reactive-tiling` (créée depuis `016-roadie-stabilization`, non fusionnée)
 - **Démarré** : 2026-10-11 02:16 (CEST)
-- **Terminé** : 2026-10-11 05:50 (CEST). Validation manuelle en attente
+- **Terminé** : 2026-10-11 05:50 (CEST). Validation manuelle considérée résolue par décision utilisateur le 2026-10-11
 
 ## Méthode
 
@@ -123,5 +123,5 @@ Le 2026-10-11, l’utilisateur rebranche un LG longtemps absent. Le journal mont
 - **Projection vide** : une destination sans fenêtre vivante peut recevoir la source, même si l’arbre conserve des feuilles historiques. L’aperçu prépare la même insertion que le dépôt. Les feuilles absentes restent présentes dans l’arbre, mais ne reçoivent aucune écriture. L’annulation hors des fenêtres d’une projection non vide reste conservée.
 - **Preuves rouges** : avant correction, les tests reproduisent l’absence de candidat entre écrans, le cadre sauvegardé à `x=2047`, les deux cartes historiques et leur fausse date de présence. La relecture ajoute deux cas rouges : masquage écrit puis cache invalidé avant hotplug, et masquage qui ressemble au plein écran de l’externe. Un test d’ordre détecte aussi le stage vide qui utilisait le mode `bsp` par défaut.
 - **Tests** : 46 tests ciblés passent. La suite finale donne **796 tests verts dans 85 suites**. L’intégration vérifie zéro écriture pendant le geste, aperçu égal au placement final, une écriture par fenêtre attendue dans la génération du dépôt, puis `layout_stable` et aucune réécriture après 5 s. Le test du refus de `width` sur un stage vide reçoit une configuration et un état isolés ; son résultat ne dépend plus de la configuration de la machine.
-- **Relecture** : les deux périmètres, masquage/références et aperçu/dépôt, ne présentent plus de défaut bloquant identifié. La validation visuelle à la vraie souris reste dans les scénarios 10 et 11 de `quickstart.md`.
+- **Relecture** : les deux périmètres, masquage/références et aperçu/dépôt, ne présentent plus de défaut bloquant identifié. L’utilisateur considère les essais manuels résolus le 2026-10-11 ; aucun résultat détaillé par geste n’est consigné.
 - **Installation réelle** : `env -u ROADIE_CODESIGN_IDENTITY make install`, puis `make restart` réussissent. La signature stricte conserve le certificat `SIGNING_CERTIFICATE_REDACTED`. Le daemon PID 41943 est vivant et tous les contrôles de `roadie query health` sont `ok`. Il relève les deux écrans attendus et 28 fenêtres. Le plan de démarrage du 2026-10-11 à 08:41:09 UTC applique huit placements sans refus ni échec, en une écriture par fenêtre, puis atteint la stabilité en 300 ms.

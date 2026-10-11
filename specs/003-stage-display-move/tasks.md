@@ -116,7 +116,7 @@
 - [x] T037 [P] Mettre a jour la documentation fonctionnelle francaise multi-display/stages dans `docs/fr/features.md`
 - [x] T038 [P] Mettre a jour le README avec les commandes stage display move dans `README.md`
 - [x] T039 Executer `swift test` et noter le resultat de validation dans `specs/003-stage-display-move/quickstart.md`
-- [ ] T040 Executer les scenarios manuels multi-ecran du quickstart et consigner les ecarts dans `specs/003-stage-display-move/quickstart.md`
+- [x] T040 Executer les scenarios manuels multi-ecran du quickstart et consigner les ecarts dans `specs/003-stage-display-move/quickstart.md`
 
 ---
 

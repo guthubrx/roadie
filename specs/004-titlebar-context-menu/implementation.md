@@ -9,10 +9,7 @@
 
 ## Validation manuelle
 
-- iTerm2 : a valider.
-- Finder : a valider.
-- Firefox/Chromium/Electron : a valider.
-- Popup/dialogue systeme : a valider.
+Considérée résolue par décision utilisateur le 2026-10-11. Le journal ne détaille pas le résultat pour chaque application.
 
 ## Non-regressions a surveiller
 

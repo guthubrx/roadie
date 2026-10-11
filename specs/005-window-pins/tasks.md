@@ -150,9 +150,9 @@
 - [X] T058 Mettre à jour le quickstart utilisateur si le libellé final du menu diffère dans `specs/005-window-pins/quickstart.md`
 - [X] T059 Exécuter `make test` et corriger toute régression dans `Tests/RoadieDaemonTests`
 - [X] T060 Exécuter `make build` et corriger toute erreur de compilation dans `Sources`
-- [ ] T061 Réaliser le test manuel `desktop` pin du quickstart avec 10 changements de stage et 10 changements de desktop, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
-- [ ] T062 Réaliser le test manuel `all_desktops` pin du quickstart avec 10 changements de desktop, 10 changements de stage et seuil 95 % sans mouvement parasite, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
-- [ ] T063 Réaliser le test manuel unpin du quickstart avec vérification du retour en visibilité unique en moins de 2 secondes, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
+- [x] T061 Réaliser le test manuel `desktop` pin du quickstart avec 10 changements de stage et 10 changements de desktop, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
+- [x] T062 Réaliser le test manuel `all_desktops` pin du quickstart avec 10 changements de desktop, 10 changements de stage et seuil 95 % sans mouvement parasite, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
+- [x] T063 Réaliser le test manuel unpin du quickstart avec vérification du retour en visibilité unique en moins de 2 secondes, puis consigner le résultat dans `specs/005-window-pins/implementation.md`
 
 ---
 

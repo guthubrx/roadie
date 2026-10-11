@@ -21,4 +21,4 @@ Implémenté.
 
 ## Notes manuelles
 
-Les scénarios du quickstart restent à valider dans une session graphique réelle après déploiement du binaire : pin desktop avec changements répétés de stage/desktop, pin all desktops avec changements répétés, puis unpin.
+Les scénarios du quickstart sont considérés résolus par décision utilisateur le 2026-10-11. Le journal ne consigne pas les mesures détaillées de chaque séquence.

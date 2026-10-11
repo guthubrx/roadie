@@ -1,5 +1,7 @@
 # Validation manuelle : Tiling réactif façon yabai
 
+Statut : considérée résolue par décision utilisateur le 2026-10-11. Les scénarios restent disponibles pour une vérification ultérieure.
+
 ## Préparation
 
 1. Installer : `make install && make restart`. L’installation conserve l’identité de signature existante. Le redémarrage arrête aussi une instance ouverte comme application.

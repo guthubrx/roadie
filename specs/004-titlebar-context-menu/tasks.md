@@ -122,7 +122,7 @@
 - [x] T043 Executer `./scripts/with-xcode swift test --filter TitlebarContextMenuTests` et consigner le resultat dans `specs/004-titlebar-context-menu/implementation.md`
 - [x] T044 Executer `./scripts/with-xcode swift test --filter ConfigTests` et consigner le resultat dans `specs/004-titlebar-context-menu/implementation.md`
 - [x] T045 Executer `make build` et consigner le resultat dans `specs/004-titlebar-context-menu/implementation.md`
-- [ ] T046 Valider manuellement iTerm2, Finder, Firefox/Electron et popup/dialogue systeme selon `specs/004-titlebar-context-menu/quickstart.md`
+- [x] T046 Valider manuellement iTerm2, Finder, Firefox/Electron et popup/dialogue systeme selon `specs/004-titlebar-context-menu/quickstart.md`
 - [x] T047 Ajouter les evenements `titlebar_context_menu.*` au catalogue public dans `Sources/RoadieCore/AutomationEventCatalog.swift`
 - [x] T048 [P] Ajouter une validation de non-regression navrail drag-and-drop dans `specs/004-titlebar-context-menu/implementation.md`
 - [x] T049 [P] Ajouter une validation de non-regression raccourcis Roadie/BTT dans `specs/004-titlebar-context-menu/implementation.md`

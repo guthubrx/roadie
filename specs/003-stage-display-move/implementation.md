@@ -27,4 +27,4 @@ Implementation appliquee sur la branche `028-stage-display-move`.
 ld: unknown option: -no_warn_duplicate_libraries
 ```
 
-Le probleme est note dans `quickstart.md`; les scenarios manuels multi-ecran restent a executer apres resolution du linker et relance de l'app.
+Le probleme est note dans `quickstart.md`; les scenarios manuels multi-ecran sont considérés résolus par décision utilisateur du 2026-10-11. Aucun résultat détaillé par scénario n’est consigné.
