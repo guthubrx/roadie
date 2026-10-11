@@ -141,16 +141,16 @@
 
 ### Lot L7 - Cœur du maintainer, étapes séquentielles (Opus) [US1, US2, US3]
 
-- [ ] T070 [US1] Étape 1 : durées absolues dans `Sources/RoadieCore/LayoutTolerance.swift`, et suppression de `TickDuration`. Les attentes ne dépendent plus de `intervalSeconds`. Build vert.
-- [ ] T071 [US1] Étape 2 : passe unique (A1, A15 : état logique sur une copie de travail, puis calcul, puis arbitrage, puis application unique, puis focus). Les étapes de `tick()` (règles, épinglages, focus, zoom, masquage des voisines plein écran, masquage des stages inactives, disposition) alimentent un **plan de passe** dédoublonné par fenêtre, avec l'ordre de priorité de A1, appliqué une fois. Remplir `tick(cause:)` et `nextDeadline(now:)`. Supprimer `run()`. Ajouter à `layout_apply` : `durationMs`, `cause`, `pass`, `scans`, `axWrites`. Build vert.
-- [ ] T072 [US1] Étape 3 : stabilisation par rafale (A6, A18 : premier placement conservé, une seule passe finale) : au moins 2 changements de membres sur le même scope en moins de `burstWindow`, puis `burstQuiet` de calme, plafond `burstCap`. Un changement isolé déclenche une passe immédiate. Garde de transition de bureau par écran (A5) via `SpaceProbe`, avec repli sur `spaceDidChange` puis une frame stable, plafond `spaceGuardCap`, et `closedBy` = `userSpace` ou `timeout`. Émettre `space_transition_guard`. Build vert.
-- [ ] T073 [US2] Étape 4 : classement des frames observées (A4, A17 : dépôt prioritaire, position seule ramenée à l'arbre, session consommée une fois), dans cet ordre : session de geste, écho, réponse de l'application, changement externe. Il remplace `lastObservedFrames` relu.
+- [x] T070 [US1] Étape 1 : durées absolues dans `Sources/RoadieCore/LayoutTolerance.swift`, et suppression de `TickDuration`. Les attentes ne dépendent plus de `intervalSeconds`. Build vert.
+- [x] T071 [US1] Étape 2 : passe unique (A1, A15 : état logique sur une copie de travail, puis calcul, puis arbitrage, puis application unique, puis focus). Les étapes de `tick()` (règles, épinglages, focus, zoom, masquage des voisines plein écran, masquage des stages inactives, disposition) alimentent un **plan de passe** dédoublonné par fenêtre, avec l'ordre de priorité de A1, appliqué une fois. Remplir `tick(cause:)` et `nextDeadline(now:)`. Supprimer `run()`. Ajouter à `layout_apply` : `durationMs`, `cause`, `pass`, `scans`, `axWrites`. Build vert.
+- [x] T072 [US1] Étape 3 : stabilisation par rafale (A6, A18 : premier placement conservé, une seule passe finale) : au moins 2 changements de membres sur le même scope en moins de `burstWindow`, puis `burstQuiet` de calme, plafond `burstCap`. Un changement isolé déclenche une passe immédiate. Garde de transition de bureau par écran (A5) via `SpaceProbe`, avec repli sur `spaceDidChange` puis une frame stable, plafond `spaceGuardCap`, et `closedBy` = `userSpace` ou `timeout`. Émettre `space_transition_guard`. Build vert.
+- [x] T073 [US2] Étape 4 : classement des frames observées (A4, A17 : dépôt prioritaire, position seule ramenée à l'arbre, session consommée une fois), dans cet ordre : session de geste, écho, réponse de l'application, changement externe. Il remplace `lastObservedFrames` relu.
   - Geste sur un mode à arbre : `adjustingFence` sur l'arbre projeté au relâchement, puis une passe, avec `layout_manual_gesture`.
   - Changement externe en mode arbre : une seule réécriture vers l'arbre, avec `layout_external_change_reverted`.
   - Écho et réponse de l'application : `layout_echo_ignored` et `layout_app_response_accepted`.
 
   Build vert.
-- [ ] T074 [US2] Étape 5 : budget d'écriture (A2, A13, A14, A16) pour les modes à arbre.
+- [x] T074 [US2] Étape 5 : budget d'écriture (A2, A13, A14, A16) pour les modes à arbre.
   - Génération globale ouverte par une intention externe ; une correction garde la génération.
   - Refus confirmé par le registre ou par une relecture fraîche à échéance.
   - Un changement externe est ramené une fois par génération, puis accepté.
@@ -159,9 +159,9 @@
   - Pour les modes à arbre, ne plus appeler la réparation des voisines par la logique `mutableBsp`, l'exclusion des fenêtres qui refusent de grandir, ni l'isolement des scopes infaisables. Ces mécanismes restent pour `bsp` et `masterStack` (A3).
 
   Build vert.
-- [ ] T075 [US2] Étape 6 : tolérance unique (R9). Une frame est « à refaire » si l'écart dépasse `frameMatch` et qu'elle n'est pas la frame acceptée de la version courante.
-- [ ] T076 [US1] Étape 7 : supprimer la chaîne `mutableBsp` du maintainer (geometry adopted, resize propagated, référence synthétique, `stableVisibleMutableBspScopes`, `revertedAppliedFrames`). Les protections partagées deviennent conditionnelles au mode (A3).
-- [ ] T077 [US1] Tests dans `Tests/RoadieDaemonTests/LayoutMaintainerTests.swift`. Garder `tiledScopeMembershipChurnSettlesBeforeRelayout` et le test à deux écrans. Ajouter :
+- [x] T075 [US2] Étape 6 : tolérance unique (R9). Une frame est « à refaire » si l'écart dépasse `frameMatch` et qu'elle n'est pas la frame acceptée de la version courante.
+- [x] T076 [US1] Étape 7 : supprimer la chaîne `mutableBsp` du maintainer (geometry adopted, resize propagated, référence synthétique, `stableVisibleMutableBspScopes`, `revertedAppliedFrames`). Les protections partagées deviennent conditionnelles au mode (A3).
+- [x] T077 [US1] Tests dans `Tests/RoadieDaemonTests/LayoutMaintainerTests.swift`. Garder `tiledScopeMembershipChurnSettlesBeforeRelayout` et le test à deux écrans. Ajouter :
   - changement isolé : 1 passe sans attente ;
   - rafale de plusieurs changements ;
   - plafond atteint ;

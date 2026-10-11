@@ -33,8 +33,6 @@ public enum LayoutTolerance {
     public static let untiledCell: CGFloat = 24
     /// Écart de centres en deçà duquel deux fenêtres sont sur la même rangée ou la même colonne.
     public static let spatialAlignment: CGFloat = 48
-    /// Écart maximal entre cadre demandé et cadre obtenu pour compter une application comme réussie.
-    public static let appliedFrame: CGFloat = 48
 
     // Seuils du maintien de la disposition (SPEC-016 T205, T216).
 
@@ -58,28 +56,18 @@ public enum LayoutTolerance {
     public static let usableVisibleWidthMaximum: CGFloat = 120
     public static let usableVisibleHeightMaximum: CGFloat = 80
 
-    /// Durée dérivée de l'intervalle du tick : `ticks` intervalles, jamais moins de `minimum` secondes.
-    public struct TickDuration: Sendable {
-        public let minimum: Double
-        public let ticks: Double
+    // Durées absolues en secondes (SPEC-017 R5) : elles ne dépendent plus de l'intervalle du tick.
 
-        public func seconds(intervalSeconds: Double) -> Double {
-            max(minimum, intervalSeconds * ticks)
-        }
-    }
-
-    /// Protection d'un intent de commande contre un réarrangement immédiat.
-    public static let commandIntentHold = TickDuration(minimum: 4, ticks: 10)
-    /// Attente après un redimensionnement manuel avant de l'adopter.
-    public static let manualResizeDebounce = TickDuration(minimum: 0.35, ticks: 0.9)
+    /// Protection d'un intent de commande contre un réarrangement immédiat (modes sans arbre).
+    public static let commandIntentHold: Double = 4
+    /// Attente après un redimensionnement manuel avant de l'adopter (modes sans arbre).
+    public static let manualResizeDebounce: Double = 0.35
     /// Attente après un changement d'écrans avant de rattacher une fenêtre à son écran physique.
-    public static let displayDriftReconcileHold = TickDuration(minimum: 8, ticks: 16)
-    /// Stabilisation d'un scope après un changement de membres (FR-017).
-    public static let stageMembershipSettle = TickDuration(minimum: 2, ticks: 4)
+    public static let displayDriftReconcileHold: Double = 8
     /// Pause du maintien pendant qu'une topologie d'écrans se stabilise.
-    public static let displayTopologySettle = TickDuration(minimum: 1.5, ticks: 4)
+    public static let displayTopologySettle: Double = 1.5
     /// Mémoire courte d'un cadre refusé ou échoué, pour ne pas le redemander en boucle.
-    public static let recentRefusal = TickDuration(minimum: 3, ticks: 8)
+    public static let recentRefusal: Double = 3
     /// Intervalle minimal entre deux événements répétitifs de suspension, en secondes.
     public static let repeatedEventInterval: Double = 1
 

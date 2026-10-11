@@ -33,11 +33,9 @@ public struct MaintenanceTick: Equatable, Codable, Sendable {
 public final class LayoutMaintainer {
     private let service: SnapshotService
     private let events: EventLog
+    /// Cycle du filet de sécurité, seulement pour la durée de vie du snapshot publié (FR-023).
+    /// Aucune attente n'en dépend : les durées de `LayoutTolerance` sont absolues (SPEC-017 R5).
     private let intervalSeconds: TimeInterval
-    private let commandIntentHoldSeconds: TimeInterval
-    private let manualResizeDebounceSeconds: TimeInterval
-    private let displayDriftReconcileHoldSeconds: TimeInterval
-    private let stageMembershipSettleSeconds: TimeInterval
     private let now: () -> Date
     private let staticRuleEngine: WindowRuleEngine?
     private let store: StageStore
@@ -45,15 +43,30 @@ public final class LayoutMaintainer {
     private let commandActivity: LayoutCommandActivity
     /// Vrai tant qu'un bouton de souris est enfoncé (FR-010). Injectable pour les tests.
     private let mouseButtonsPressed: () -> Bool
+    /// Mémoire des frames écrites : écho, réponse de l'application, refus (R6, A4, A14).
+    private let writtenFrames: WrittenFrameRegistry
+    /// Génération de placement globale (A13).
+    private let generations: PlacementGeneration
+    /// Session de geste terminée, consommée une seule fois (A17). Injectable pour les tests.
+    private let takeGesture: () -> GestureSession?
+    /// Type du bureau courant d'un écran : vrai = bureau utilisateur, nil = sonde indisponible (A19).
+    private let spaceProbe: (String) -> Bool?
+    /// Lecture AX fraîche d'un cadre (seconde observation d'un refus, repli de la garde ; A14, A19).
+    /// nil = lecture indisponible : la frame du snapshot sert de repli.
+    private let readFrame: (WindowSnapshot) -> CGRect?
+    private let episodes: EpisodeContext
     private var cachedRuleEngine: WindowRuleEngine?
     private var cachedRulesVersion: String?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
+    /// Écritures réussies que l'application a annulées (modes sans arbre seulement, A3).
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
+    /// Référence d'observation des modes sans arbre (A3) : un changement s'y lit par différence.
+    /// Les modes à arbre ne s'en servent pas : l'arbre fait foi (R2, A4).
     private var lastObservedFrames: [UInt32: Rect]?
-    /// Fenêtres en plein écran (natif ou zoom de commande), relues au début de chaque tick.
+    /// Fenêtres en plein écran (natif ou zoom de commande), relues au début de chaque passe.
     private var tickFullscreen: [(entry: ScopedWindowSnapshot, display: DisplaySnapshot)] = []
-    /// Scopes exclus du tick en cours (R6) : plein écran, stabilisation, commande en cours.
+    /// Scopes exclus de la disposition de la passe (R6) : plein écran, rafale, garde, commande.
     private var tickExcludedScopes: Set<StageScope> = []
     private var priorityWindowIDs: Set<WindowID> = []
     private var lastCommandIntentAt: Date?
@@ -67,10 +80,27 @@ public final class LayoutMaintainer {
     private var observedRulePlacementWindowIDs: Set<WindowID> = []
     private var lastGrowthClampedExcludedWindowIDs: Set<WindowID> = []
     private var lastCommandActivitySuppressedAt: Date?
-    private var lastMutableBspSuppressionSignature: String?
+    /// Échéance de l'activité de commande qui a suspendu des scopes sans arbre.
+    private var commandSuspendedUntil: Date?
+    // Rafales et garde de bureau (A5, A6, A18, A19).
     private var lastActiveTiledStageMembershipSignatures: [StageScope: String] = [:]
-    private var activeTiledStageMembershipChangedAt: [StageScope: Date] = [:]
-    private var lastStageMembershipSettlingSignature: String?
+    private var membershipActivity: [StageScope: MembershipActivity] = [:]
+    private var lastActiveLiveMembers: [StageScope: Set<WindowID>] = [:]
+    private var departedMembers: [StageScope: Set<WindowID>] = [:]
+    private var lastNativeFullscreenWindows: [WindowID: DisplayID] = [:]
+    private var spaceGuards: [DisplayID: SpaceGuard] = [:]
+    // Budget d'écriture et classement des frames (A2, A4, A13, A14).
+    private var lastGenerationSignature: String?
+    private var writeCounts: [UInt32: (generation: UInt64, count: Int)] = [:]
+    private var externalReverts: [UInt32: UInt64] = [:]
+    private var correctedGenerations: [UInt32: UInt64] = [:]
+    private var treeMinimums: [WindowID: CGSize] = [:]
+    private var reportedEchoWrites: [UInt32: Date] = [:]
+    private var lastTreeWindowIDs: Set<UInt32> = []
+    // Mesure (A12, A20).
+    private var pendingStability: PendingStability?
+    private var lastPassEpisodeID: String?
+    private var passIndex = 0
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -81,71 +111,72 @@ public final class LayoutMaintainer {
         dragActivity: WindowDragActivity = .shared,
         commandActivity: LayoutCommandActivity = .shared,
         mouseButtonsPressed: (() -> Bool)? = nil,
+        writtenFrames: WrittenFrameRegistry? = nil,
+        generations: PlacementGeneration? = nil,
+        takeGesture: (() -> GestureSession?)? = nil,
+        spaceProbe: ((String) -> Bool?)? = nil,
+        readFrame: ((WindowSnapshot) -> CGRect?)? = nil,
+        episodes: EpisodeContext = .shared,
         now: @escaping () -> Date = Date.init
     ) {
         self.service = service
         self.events = events
         self.intervalSeconds = intervalSeconds
-        self.commandIntentHoldSeconds = LayoutTolerance.commandIntentHold.seconds(intervalSeconds: intervalSeconds)
-        self.manualResizeDebounceSeconds = LayoutTolerance.manualResizeDebounce.seconds(intervalSeconds: intervalSeconds)
-        self.displayDriftReconcileHoldSeconds = LayoutTolerance.displayDriftReconcileHold.seconds(intervalSeconds: intervalSeconds)
-        self.stageMembershipSettleSeconds = LayoutTolerance.stageMembershipSettle.seconds(intervalSeconds: intervalSeconds)
         self.staticRuleEngine = ruleEngine
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
         self.commandActivity = commandActivity
-        // Sous les tests, la souris réelle de la machine ne doit pas suspendre les ticks.
+        // Sous les tests, la souris, les gestes et les bureaux réels de la machine ne comptent pas.
+        let testing = TestEnvironment.isRunningTests
         self.mouseButtonsPressed = mouseButtonsPressed
-            ?? (TestEnvironment.isRunningTests ? { false } : { NSEvent.pressedMouseButtons != 0 })
+            ?? (testing ? { false } : { NSEvent.pressedMouseButtons != 0 })
+        // Sous les tests, registre et génération propres à l'instance : les suites tournent en
+        // parallèle avec les mêmes identifiants de fenêtre.
+        self.writtenFrames = writtenFrames ?? (testing ? WrittenFrameRegistry() : .shared)
+        self.generations = generations ?? (testing ? PlacementGeneration() : .shared)
+        self.takeGesture = takeGesture ?? (testing ? { nil } : { UserInputActivity.shared.takeGesture() })
+        self.spaceProbe = spaceProbe ?? (testing ? { _ in true } : { SpaceProbe.isUserSpaceActive(displayUUID: $0) })
+        self.readFrame = readFrame ?? { [service] in service.readFrame(of: $0) }
+        self.episodes = episodes
         self.now = now
     }
 
-    // Stubs de jonction SPEC-017 (A10, A20) : le lot L7 les remplit et inverse la délégation.
-    public func tick(cause: String) -> MaintenanceTick { tick() }
-
-    /// Prochaine échéance interne (stabilisation, garde, refus, glisser...). nil = aucune.
-    public func nextDeadline(now: Date) -> Date? { nil }
-
-    /// Signal NSWorkspace activeSpaceDidChange transmis par l'ordonnanceur (A5, A19).
-    public func spaceDidChange(displayUUID: String?) {}
-
     public func tick() -> MaintenanceTick {
-        // Snapshot du tick publié comme source partagée du cycle (FR-023, T212).
-        let snapshot = service.producerSnapshot(cycle: intervalSeconds)
+        tick(cause: "legacy")
+    }
+
+    /// Une passe (A1, A15) : état logique sur une copie de travail (règles, déplacements adoptés,
+    /// zoom quitté), calcul des placements (masquage, épinglages, zoom, disposition), arbitrage
+    /// par fenêtre, une seule application, puis focus. Seules les suspensions globales (topologie
+    /// d'écrans, glisser, bouton enfoncé) arrêtent la passe avant le plan.
+    // O(n · s) - n fenêtres, s scopes actifs ; deux relevés au plus (état logique modifié).
+    public func tick(cause: String) -> MaintenanceTick {
+        let startedAt = Date()
+        var scans = 1
+        var snapshot = service.producerSnapshot(cycle: intervalSeconds)
         guard snapshot.permissions.accessibilityTrusted else {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
-        forgetExpiredRefusals(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
+        forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
         // Plein écran lu une seule fois, avant tout calcul de plan (R5).
         tickFullscreen = fullscreenEntries(in: snapshot)
         tickExcludedScopes = []
-        let observedFramesForChurn = scopedFrames(in: snapshot)
-        let changedWindowIDsForChurn = changedWindows(in: observedFramesForChurn)
-        let settlingLayoutScopes = activeTiledStageMembershipSettlingScopes(
-            in: snapshot,
-            changedWindowIDs: changedWindowIDsForChurn,
-            now: tickNow
-        )
-        // SPEC-013/014 : reconcilie les arbres BSP persistants de tous les stages spatial_bsp
-        // (intègre les fenêtres ouvertes/fermées). Si un arbre change, on invalide l'intent du
-        // scope pour forcer un re-tile immédiat depuis l'arbre, sans attendre un autre déclencheur.
-        let changedTreeScopes = service.reconcileSpatialBSPTrees(in: snapshot, excluding: settlingLayoutScopes)
-        for scope in changedTreeScopes {
-            service.removeLayoutIntent(scope: scope)
-        }
+        var generation = currentGeneration(cause: cause, snapshot: snapshot)
+
+        // Garde de bureau et rafale : exclusion totale du scope, aucun chemin d'écriture ne la
+        // contourne (A5, A6). L'arbre d'un scope en attente n'intègre pas encore ses changements.
+        let settlingScopes = spaceGuardScopes(in: snapshot, now: tickNow)
+            .union(burstScopes(in: snapshot, now: tickNow))
         let currentDisplaySignature = displaySignature(snapshot.displays)
         if let lastDisplaySignature, lastDisplaySignature != currentDisplaySignature {
             self.lastDisplaySignature = currentDisplaySignature
             lastDisplayTopologyChangedAt = tickNow
-            displayTopologySettlesUntil = tickNow.addingTimeInterval(
-                LayoutTolerance.displayTopologySettle.seconds(intervalSeconds: intervalSeconds)
-            )
+            displayTopologySettlesUntil = tickNow.addingTimeInterval(LayoutTolerance.displayTopologySettle)
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
             failedFrames.removeAll()
             revertedAppliedFrames.removeAll()
-            lastMutableBspSuppressionSignature = nil
             events.append(RoadieEvent(type: "display.topology_settling", details: [
                 "from": lastDisplaySignature,
                 "to": currentDisplaySignature
@@ -158,7 +189,10 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
         displayTopologySettlesUntil = nil
-        if dragActivity.isActive(now: tickNow) {
+        let treeScopes = activeTreeScopes(in: snapshot)
+        // Pas de grâce de fin de glisser pour les modes à arbre : le relâchement fait la passe (A11).
+        let releaseGrace = activeScopes(in: snapshot).contains { !treeScopes.contains($0) }
+        if dragActivity.isActive(now: tickNow, includingReleaseGrace: releaseGrace) {
             priorityWindowIDs = []
             manualResizeApplyAfter = nil
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
@@ -169,387 +203,338 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         }
 
-        // Scopes exclus de ce tick : chaque garde exclut son scope au lieu d'arrêter tout le tick
-        // (R6, FR-040). Leur référence d'observation est mise à jour, celle des autres scopes non.
-        if !settlingLayoutScopes.isEmpty {
-            tickExcludedScopes.formUnion(settlingLayoutScopes)
-            observe(observedFramesForChurn, scopes: settlingLayoutScopes, in: snapshot)
-            appendStageMembershipSettlingEvent(scopes: settlingLayoutScopes)
+        tickExcludedScopes.formUnion(settlingScopes)
+        var observedFrames = scopedFrames(in: snapshot)
+        let changedForChurn = changedWindows(in: observedFrames, outside: treeScopes, snapshot: snapshot)
+        if !settlingScopes.isEmpty {
+            observe(observedFrames, scopes: settlingScopes, in: snapshot)
         }
-        let missingMemberReclaimScopes = activeTiledScopesWithRecentMissingMembers(in: snapshot, now: tickNow)
-        if let activity = commandActivity.activity(now: tickNow) {
-            let activeUntil = String(activity.activeUntil.timeIntervalSince1970)
-            if activity.isGlobal && missingMemberReclaimScopes.isEmpty {
-                // Commande sans scope connu (globale) : tick suspendu.
-                priorityWindowIDs = []
-                manualResizeApplyAfter = nil
-                lastObservedFrames = scopedFrames(in: snapshot)
-                if lastCommandActivitySuppressedAt.map({ tickNow.timeIntervalSince($0) > LayoutTolerance.repeatedEventInterval }) ?? true {
-                    lastCommandActivitySuppressedAt = tickNow
-                    events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                        "activeUntil": activeUntil
-                    ]))
-                }
-                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            }
-            // Seuls les scopes touchés par la commande sont exclus (tous si elle est globale), sauf
-            // ceux qui ont perdu un membre et doivent être repris (FR-040).
-            let commandScopes = activeScopes(in: snapshot)
-                .filter(activity.covers)
-                .subtracting(missingMemberReclaimScopes)
-            tickExcludedScopes.formUnion(commandScopes)
-            observe(observedFramesForChurn, scopes: commandScopes, in: snapshot)
-            if activity.isGlobal {
-                events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                    "activeUntil": activeUntil,
-                    "bypassedForMissingReclaim": "true",
-                    "scopes": missingMemberReclaimScopes.map(\.description).sorted().joined(separator: ",")
-                ]))
-            } else if !commandScopes.isEmpty,
-                      lastCommandActivitySuppressedAt.map({ tickNow.timeIntervalSince($0) > LayoutTolerance.repeatedEventInterval }) ?? true {
-                lastCommandActivitySuppressedAt = tickNow
-                events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: [
-                    "activeUntil": activeUntil,
-                    "commandScopes": commandScopes.map(\.description).sorted().joined(separator: ",")
-                ]))
+        let suspension = commandSuspension(in: snapshot, treeScopes: treeScopes, observedFrames: observedFrames, now: tickNow)
+        tickExcludedScopes.formUnion(suspension.scopes)
+
+        // Geste terminé sur une fenêtre d'un arbre : intention externe, nouvelle génération (A13).
+        // Un dépôt récent (glisser-déposer, navrail d'un autre processus) consomme le geste (A17).
+        var gesture = takeGesture()
+        if let raw = gesture?.windowID,
+           let scope = snapshot.windows.first(where: { $0.window.id.rawValue == raw })?.scope,
+           treeScopes.contains(scope) {
+            if dragActivity.isActive(now: tickNow, includingReleaseGrace: true)
+                || commandActivity.activity(now: tickNow)?.covers(scope) == true {
+                gesture = nil
+            } else {
+                generation = generations.next()
             }
         }
+        let gestureWindowID = gesture?.windowID.map { WindowID(rawValue: $0) }
+
+        // 1. État logique (A15) : règles, déplacements d'écran adoptés, rattachement physique.
+        let changedWindowIDs = windowIDs(changedForChurn, outside: tickExcludedScopes, in: snapshot)
         let rulePlacements = evaluateRules(in: snapshot)
-        if rulePlacements > 0 {
-            return MaintenanceTick(commands: rulePlacements, applied: rulePlacements, clamped: 0, failed: 0)
+        var moveCandidates = changedWindowIDs
+        if let gestureWindowID { moveCandidates.insert(gestureWindowID) }
+        let adoptedMoves = adoptManualDisplayMoves(in: snapshot, changedWindowIDs: moveCandidates)
+        let driftMoves = adoptedMoves.isEmpty && changedWindowIDs.isEmpty
+            ? reconcileStableVisibleDisplayDrift(in: snapshot, excluding: tickExcludedScopes)
+            : []
+        if !rulePlacements.isEmpty || !adoptedMoves.isEmpty || !driftMoves.isEmpty {
+            // Copie de travail : l'état persisté vient de changer, la passe continue sur lui.
+            snapshot = service.snapshot(followFocus: false)
+            scans += 1
+            tickFullscreen = fullscreenEntries(in: snapshot)
+            observedFrames = scopedFrames(in: snapshot)
+            generation = generations.next()
         }
+        let focusRestore = focusedHiddenRestore(in: snapshot)
 
-        let restoredPins = restoreVisiblePinnedWindows(in: snapshot)
-        if restoredPins > 0 {
-            events.append(RoadieEvent(type: "window.pin_restored", details: ["applied": String(restoredPins)]))
-            return MaintenanceTick(commands: restoredPins, applied: restoredPins, clamped: 0, failed: 0)
-        }
+        // 2. Calcul des placements depuis la copie de travail.
+        var plan = PassPlan()
+        let hiddenInactive = hideInactiveStageCommands(in: snapshot)
+        let hiddenSiblings = fullscreenSiblingHideCommands(in: snapshot)
+        let restoredPins = pinRestoreCommands(in: snapshot)
+        let reanchoredZoomed = zoomReanchorCommands(in: snapshot)
+        hiddenInactive.forEach { plan.add($0, .hide) }
+        hiddenSiblings.forEach { plan.add($0, .hide) }
+        restoredPins.forEach { plan.add($0, .pin) }
+        reanchoredZoomed.forEach { plan.add($0, .zoom) }
 
-        if let focusRestore = restoreFocusedActiveStageIfNeeded(
-            in: snapshot,
-            observedFrames: observedFramesForChurn
-        ) {
-            return focusRestore
-        }
-
-        let reanchoredZoomed = reanchorShiftedZoomedWindows(in: snapshot)
-        if reanchoredZoomed > 0 {
-            events.append(RoadieEvent(type: "fullscreen_sized_windows_reanchored", details: [
-                "applied": String(reanchoredZoomed)
-            ]))
-            return MaintenanceTick(commands: reanchoredZoomed, applied: reanchoredZoomed, clamped: 0, failed: 0)
-        }
-
-        let hiddenFullscreenSiblings = hideActiveStageSiblingsOfFullscreenWindows(in: snapshot)
-        if hiddenFullscreenSiblings > 0 {
-            events.append(RoadieEvent(type: "fullscreen_stage_siblings_hidden", details: [
-                "applied": String(hiddenFullscreenSiblings)
-            ]))
-            return MaintenanceTick(commands: hiddenFullscreenSiblings, applied: hiddenFullscreenSiblings, clamped: 0, failed: 0)
-        }
-
-        // Plein écran natif ou zoom de commande : seul son scope est exclu (FR-016).
+        // Plein écran natif ou zoom de commande : seul son scope est exclu de la disposition (FR-016).
         let fullscreenScopes = Set(tickFullscreen.compactMap(\.entry.scope))
         if !fullscreenScopes.isEmpty {
             tickExcludedScopes.formUnion(fullscreenScopes)
-            observe(observedFramesForChurn, scopes: fullscreenScopes, in: snapshot)
-            handleFullscreenScopeChanges(
-                in: snapshot,
-                changedWindowIDs: changedWindowIDsForChurn,
-                fullscreenScopes: fullscreenScopes
-            )
+            observe(observedFrames, scopes: fullscreenScopes, in: snapshot)
+            handleFullscreenScopeChanges(in: snapshot, changedWindowIDs: changedForChurn, fullscreenScopes: fullscreenScopes)
         }
 
-        let hiddenInactive = hideInactiveStageWindows(in: snapshot)
-        if hiddenInactive > 0 {
-            events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive)]))
-            return MaintenanceTick(commands: hiddenInactive, applied: hiddenInactive, clamped: 0, failed: 0)
+        let liveTreeScopes = treeScopes.subtracting(tickExcludedScopes)
+        lastTreeWindowIDs = Set(snapshot.windows.compactMap { entry in
+            entry.scope.map(liveTreeScopes.contains) == true ? entry.window.id.rawValue : nil
+        })
+        let treeCommands = treeLayoutCommands(
+            in: snapshot,
+            scopes: liveTreeScopes,
+            gesture: gesture,
+            generation: generation,
+            now: tickNow
+        )
+        treeCommands.forEach { plan.add($0, .layout) }
+        let nonTree = nonTreeLayout(
+            in: snapshot,
+            observedFrames: observedFrames,
+            changedWindowIDs: windowIDs(changedWindowIDs, outside: tickExcludedScopes, in: snapshot),
+            adoptedWindowIDs: Set(adoptedMoves.map(\.window.id) + driftMoves.map(\.window.id)),
+            focusPriority: focusRestore.map { Set($0.activeHiddenWindowIDs) } ?? [],
+            excluding: tickExcludedScopes.union(treeScopes),
+            now: tickNow
+        )
+        nonTree.commands.forEach { plan.add($0, .layout) }
+        if let focusRestore, let command = focusRestoreCommand(focusRestore, plan: plan, snapshot: snapshot) {
+            plan.add(command, focusRestore.isFullscreen ? .zoom : .layout)
         }
 
-        let observedFrames = observedFramesForChurn
-        let changedWindowIDs = windowIDs(changedWindowIDsForChurn, outside: tickExcludedScopes, in: snapshot)
-        let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: tickExcludedScopes, in: snapshot)
-        if unexcludedPriorityWindowIDs != priorityWindowIDs {
-            priorityWindowIDs = unexcludedPriorityWindowIDs
-            if priorityWindowIDs.isEmpty {
-                manualResizeApplyAfter = nil
+        // 3. Arbitrage : une commande par fenêtre (fait par `PassPlan`), aucune écriture dans un
+        //    scope en rafale, en garde ou suspendu par une commande (A6, FR-040).
+        //    Sur un écran à arbre, masquage, épinglage et zoom comptent aussi au budget (A13).
+        let scopesByID = Dictionary(snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } }, uniquingKeysWith: { first, _ in first })
+        let treeDisplays = Set(treeScopes.map(\.displayID))
+        let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
+            guard let scope = scopesByID[command.window.id] else { return command }
+            if settlingScopes.contains(scope) || suspension.covers(scope) { return nil }
+            if priority != .layout, treeDisplays.contains(scope.displayID),
+               writesUsed(command.window.id.rawValue, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
+                return nil
             }
-        }
-        let now = now()
-        let cutoff = now.addingTimeInterval(-commandIntentHoldSeconds)
-
-        if !changedWindowIDs.isEmpty {
-            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
-                lastObservedFrames = observedFrames
-                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            }
-
-            if let tick = adoptManualDisplayMoves(in: snapshot, changedWindowIDs: changedWindowIDs) {
-                lastObservedFrames = scopedFrames(in: service.snapshot(followFocus: false))
-                priorityWindowIDs = []
-                manualResizeApplyAfter = nil
-                return tick
-            }
-
-            let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)
-            if !modeledScopes.isEmpty {
-                priorityWindowIDs = []
-                manualResizeApplyAfter = nil
-                let tick = applyPlan(from: snapshot, observedFrames: observedFrames, excluding: tickExcludedScopes)
-                events.append(RoadieEvent(type: "external_geometry_snapped_to_layout_model", details: [
-                    "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
-                    "scopes": modeledScopes.map(\.description).sorted().joined(separator: ","),
-                    "commands": String(tick.commands)
-                ]))
-                return tick
-            }
-
-            if let tick = adoptMutableBspGeometryChange(
-                in: snapshot,
-                changedWindowIDs: changedWindowIDs
-            ) {
-                return tick
-            }
-
-            if changedWindowIDs.count >= 2 {
-                lastObservedFrames = observedFrames
-                return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-            }
-
-            priorityWindowIDs = changedWindowIDs
-            manualResizeApplyAfter = now.addingTimeInterval(manualResizeDebounceSeconds)
-            removeLayoutIntents(for: changedWindowIDs, in: snapshot)
-            lastObservedFrames = observedFrames
-            events.append(RoadieEvent(type: "manual_resize_detected", details: [
-                "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
-                "applyAfter": String(manualResizeApplyAfter?.timeIntervalSince1970 ?? 0)
-            ]))
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
+            return command
         }
 
-        if let tick = reconcileStableVisibleDisplayDrift(in: snapshot, excluding: tickExcludedScopes) {
-            return tick
+        // 4. Application unique, puis 5. focus (action, pas une frame).
+        let layoutWindowIDs = Set(plan.entries.compactMap { $0.priority == .layout ? $0.command.window.id : nil })
+        let application = applyPass(
+            ApplyPlan(commands: writable),
+            in: snapshot,
+            layoutWindowIDs: layoutWindowIDs,
+            treeScopes: treeScopes,
+            generation: generation,
+            source: focusRestore == nil ? nil : "stage_focus_restore"
+        )
+        for placement in rulePlacements where placement.follow {
+            _ = service.focus(placement.window)
         }
+        finishDriftMoves(driftMoves, result: application.result)
 
-        if let manualResizeApplyAfter, now < manualResizeApplyAfter {
-            lastObservedFrames = observedFrames
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
+        // Référence des modes sans arbre : frames de la passe, écritures comprises.
+        if nonTree.updateBaseline || lastObservedFrames == nil || application.commands > 0 {
+            lastObservedFrames = framesAfterApplying(application.result, fallback: observedFrames)
         }
-        manualResizeApplyAfter = nil
-
-        let commandProtectedScopes = priorityWindowIDs.isEmpty
-            ? recentCommandScopes(in: snapshot, since: cutoff, now: now)
-            : []
-        // Un scope exclu (plein écran, stabilisation) garde son intent : pas de contrôle de dérive.
-        let strictCommandProtectedScopes = strictAuthoritativeScopes(commandProtectedScopes, in: snapshot)
-            .subtracting(tickExcludedScopes)
-        if !strictCommandProtectedScopes.isEmpty {
-            let driftedScopes = driftedCommandScopes(strictCommandProtectedScopes, frames: observedFrames)
-            if !driftedScopes.isEmpty {
-                for scope in driftedScopes {
-                    service.removeLayoutIntent(scope: scope)
-                }
-                lastCommandIntentAt = nil
-                let remainingProtectedScopes = strictCommandProtectedScopes.subtracting(driftedScopes)
-                let tick = applyPlan(
-                    from: snapshot,
-                    observedFrames: observedFrames,
-                    excluding: remainingProtectedScopes.union(tickExcludedScopes)
-                )
-                events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
-                    "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
-                    "remainingProtectedScopes": remainingProtectedScopes.map(\.description).sorted().joined(separator: ","),
-                    "commands": String(tick.commands)
-                ]))
-                return tick
-            }
-            lastCommandIntentAt = now
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-            let tick = applyPlan(
-                from: snapshot,
-                observedFrames: observedFrames,
-                excluding: strictCommandProtectedScopes.union(tickExcludedScopes),
-                updateBaselineWhenEmpty: false
-            )
-            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
-                "scopes": strictCommandProtectedScopes.map(\.description).sorted().joined(separator: ","),
-                "unprotectedCommands": String(tick.commands)
-            ]))
-            return tick
+        if nonTree.commands.isEmpty && nonTree.persistCurrentIntents {
+            persistCurrentLayoutIntents(in: snapshot, excluding: tickExcludedScopes.union(treeScopes))
         }
-
-        if let lastCommandIntentAt,
-           priorityWindowIDs.isEmpty,
-           now.timeIntervalSince(lastCommandIntentAt) < commandIntentHoldSeconds
-        {
-            let protectedScopes = strictAuthoritativeScopes(
-                recentCommandScopes(in: snapshot, since: cutoff, now: now),
-                in: snapshot
-            ).subtracting(tickExcludedScopes)
-            let driftedScopes = driftedCommandScopes(protectedScopes, frames: observedFrames)
-            if !driftedScopes.isEmpty {
-                for scope in driftedScopes {
-                    service.removeLayoutIntent(scope: scope)
-                }
-                self.lastCommandIntentAt = nil
-                let remainingProtectedScopes = protectedScopes.subtracting(driftedScopes)
-                let tick = applyPlan(
-                    from: snapshot,
-                    observedFrames: observedFrames,
-                    excluding: remainingProtectedScopes.union(tickExcludedScopes)
-                )
-                events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
-                    "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
-                    "remainingProtectedScopes": remainingProtectedScopes.map(\.description).sorted().joined(separator: ","),
-                    "commands": String(tick.commands)
-                ]))
-                return tick
-            }
-            priorityWindowIDs = []
-            return applyPlan(
-                from: snapshot,
-                observedFrames: observedFrames,
-                excluding: protectedScopes.union(tickExcludedScopes),
-                updateBaselineWhenEmpty: false
-            )
+        if application.commands > 0 && application.result.clamped == 0 && application.result.failed == 0 {
+            persistLayoutIntent(in: snapshot, result: application.result, treeScopes: treeScopes)
         }
-
-        let repairedPlanningSnapshot = repairMutableBspOrderBeforePriorityApplyIfNeeded(
+        let writtenIDs = Set(application.result.items.map(\.windowID))
+        appendPassEvents(
+            hiddenInactive: hiddenInactive.filter { writtenIDs.contains($0.window.id) },
+            hiddenSiblings: hiddenSiblings.filter { writtenIDs.contains($0.window.id) },
+            restoredPins: restoredPins.filter { writtenIDs.contains($0.window.id) },
+            reanchoredZoomed: reanchoredZoomed.filter { writtenIDs.contains($0.window.id) },
+            focusRestore: focusRestore,
+            application: application,
             snapshot: snapshot,
-            priorityWindowIDs: priorityWindowIDs
+            startedAt: startedAt
         )
-        let planningSnapshot = snapshotExcludingGrowthClampedWindows(repairedPlanningSnapshot ?? snapshot)
-        let planningObservedFrames = repairedPlanningSnapshot.map { scopedFrames(in: $0) } ?? observedFrames
-        let plan = suppressKnownUnmovableFrames(
-            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
-            snapshot: planningSnapshot
-        )
-        let protectedMutableScopes = priorityWindowIDs.isEmpty
-            ? stableVisibleMutableBspScopes(in: planningSnapshot)
-            : []
-        let protectedLayoutScopes = protectedMutableScopes.union(tickExcludedScopes)
-        lastObservedFrames = planningObservedFrames
-        let windowsByID = Dictionary(uniqueKeysWithValues: planningSnapshot.windows.map { ($0.window.id, $0) })
-        let filteredPlan = ApplyPlan(commands: plan.commands.filter { command in
-            guard let scope = windowsByID[command.window.id]?.scope else { return true }
-            return !protectedLayoutScopes.contains(scope)
-        })
-        if !protectedMutableScopes.isEmpty && filteredPlan.commands.count != plan.commands.count {
-            appendMutableBspSuppressionEvent(
-                scopes: protectedMutableScopes,
-                suppressed: plan.commands.count - filteredPlan.commands.count
+        if application.commands > 0 {
+            appendLayoutApplyEvent(
+                application,
+                priorityWindowIDs: nonTree.priorityWindowIDs,
+                cause: cause,
+                scans: scans,
+                generation: generation,
+                startedAt: startedAt
             )
+            armStabilityCheck(application.result, now: tickNow)
         }
-        guard !filteredPlan.commands.isEmpty else {
-            persistCurrentLayoutIntents(in: planningSnapshot, excluding: tickExcludedScopes)
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        checkStability(in: snapshot, now: tickNow, generation: generation)
+        if !episodeDeadlines(now: tickNow).isEmpty {
+            // Une échéance armée par l'épisode le garde ouvert (A20).
+            episodes.continue()
         }
-        let application = applyRepairingClamps(filteredPlan, in: planningSnapshot)
-        if application.result.clamped == 0 && application.result.failed == 0 {
-            persistLayoutIntent(in: planningSnapshot, result: application.result)
-        }
-        events.append(RoadieEvent(type: "layout_apply", details: [
-            "commands": String(application.commands),
-            "applied": String(application.result.applied),
-            "clamped": String(application.result.clamped),
-            "failed": String(application.result.failed),
-            "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ",")
-        ]))
-        priorityWindowIDs = []
-        manualResizeApplyAfter = nil
-        lastObservedFrames = framesAfterApplying(application.result, fallback: planningObservedFrames)
-        return application.tick
-    }
-
-    private func applyPlan(
-        from snapshot: DaemonSnapshot,
-        observedFrames: [UInt32: Rect],
-        excluding protectedScopes: Set<StageScope>,
-        updateBaselineWhenEmpty: Bool = true
-    ) -> MaintenanceTick {
-        let planningSnapshot = snapshotExcludingGrowthClampedWindows(snapshot)
-        let windowsByID = Dictionary(uniqueKeysWithValues: planningSnapshot.windows.map { ($0.window.id, $0) })
-        let plan = suppressKnownUnmovableFrames(
-            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priorityWindowIDs),
-            snapshot: planningSnapshot
+        return MaintenanceTick(
+            commands: application.commands,
+            applied: application.result.applied,
+            clamped: application.result.clamped,
+            failed: application.result.failed,
+            manualResizeDetected: nonTree.manualResizeDetected
         )
-        let filtered = ApplyPlan(commands: plan.commands.filter { command in
-            guard let scope = windowsByID[command.window.id]?.scope else { return true }
-            return !protectedScopes.contains(scope)
-        })
-        guard !filtered.commands.isEmpty else {
-            if updateBaselineWhenEmpty || lastObservedFrames == nil {
-                lastObservedFrames = observedFrames
-            }
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-        }
-        let application = applyRepairingClamps(filtered, in: planningSnapshot)
-        if application.result.clamped == 0 && application.result.failed == 0 {
-            persistLayoutIntent(in: planningSnapshot, result: application.result)
-        }
-        lastObservedFrames = framesAfterApplying(application.result, fallback: observedFrames)
-        return application.tick
     }
 
-    /// Résultat du bloc « appliquer, réparer, isoler, émettre ».
+    /// Prochaine échéance interne, toujours future : celles de l'épisode (rafale, garde, refus,
+    /// stabilité), l'anti-rebond d'un geste des modes sans arbre, la fin du réglage d'écrans ou
+    /// d'une commande. Une échéance d'épisode déjà passée, que seule une passe solde, est rendue
+    /// juste après `now`. nil = aucune. Ne lit ni l'écran ni l'état persisté. O(s + r).
+    public func nextDeadline(now: Date) -> Date? {
+        let future = [
+            displayTopologySettlesUntil, manualResizeApplyAfter, commandSuspendedUntil,
+            lastCommandIntentAt?.addingTimeInterval(LayoutTolerance.commandIntentHold),
+            lastDisplayTopologyChangedAt?.addingTimeInterval(LayoutTolerance.displayDriftReconcileHold)
+        ].compactMap { $0 }.filter { $0 > now }.min()
+        let due = episodeDeadlines(now: now).min().map { $0 > now ? $0 : now.addingTimeInterval(0.001) }
+        return [future, due].compactMap { $0 }.min()
+    }
+
+    /// Échéances armées par l'épisode en cours (A20) : fin de rafale, sondage et plafond de garde,
+    /// refus à confirmer ou à corriger, stabilité à vérifier. O(s + r) - r fenêtres d'arbre.
+    private func episodeDeadlines(now: Date) -> [Date] {
+        var due: [Date] = membershipActivity.values.compactMap(\.burstEnd)
+        for guardState in spaceGuards.values {
+            due.append(guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap))
+            due.append((guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll))
+        }
+        for id in lastTreeWindowIDs {
+            guard let entry = writtenFrames.entry(for: id), entry.hasRefusal else { continue }
+            if let confirmedAt = entry.refusalConfirmedAt {
+                if correctedGenerations[id] != generations.current { due.append(confirmedAt) }
+            } else if now.timeIntervalSince(entry.writtenAt) < LayoutTolerance.echoWindow {
+                // Au-delà de `echoWindow` sans confirmation, la réponse était transitoire (A2).
+                due.append(entry.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay))
+            }
+        }
+        if let pendingStability, !pendingStability.checked { due.append(pendingStability.checkAt) }
+        return due
+    }
+
+    /// Signal NSWorkspace activeSpaceDidChange transmis par l'ordonnanceur (A5, A19). Il compte
+    /// pour le repli de la garde seulement s'il arrive après son ouverture. nil = tous les écrans.
+    public func spaceDidChange(displayUUID: String?) {
+        let date = now()
+        for (displayID, guardState) in spaceGuards where displayUUID == nil || displayUUID == displayID.rawValue {
+            guard date >= guardState.openedAt else { continue }
+            spaceGuards[displayID]?.spaceDidChangeAt = date
+        }
+    }
+
+    /// Génération de la passe (A13) : une intention externe ou un changement de membres ou de
+    /// stage active en ouvre une nouvelle ; les déplacements et redimensionnements observés, les
+    /// échéances et le filet de sécurité gardent la génération en cours (pas de lutte).
+    private func currentGeneration(cause: String, snapshot: DaemonSnapshot) -> UInt64 {
+        let signature = snapshot.displays.compactMap { display -> String? in
+            guard let scope = snapshot.state.activeScope(on: display.id) else { return nil }
+            let ids = snapshot.windows.compactMap { $0.scope == scope && $0.window.isTileCandidate ? String($0.window.id.rawValue) : nil }
+            return "\(scope.description):\(ids.sorted().joined(separator: ","))"
+        }.sorted().joined(separator: "|")
+        let internalCause = ["legacy", "periodic", "safety"].contains(cause) || cause.hasPrefix("deadline")
+            || cause.contains("Moved") || cause.contains("Resized")
+        defer { lastGenerationSignature = signature }
+        if !internalCause || signature != lastGenerationSignature || generations.current == 0 {
+            return generations.next()
+        }
+        return generations.current
+    }
+
+    private func activeTreeScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+        Set(snapshot.displays.compactMap { display -> StageScope? in
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
+            else { return nil }
+            return scope
+        })
+    }
+
+    /// Plan de passe (A1) : une commande par fenêtre ; en conflit, la priorité la plus forte gagne
+    /// (masquage, puis épinglage, puis zoom, puis disposition). Ordre d'insertion conservé. O(1) par ajout.
+    private struct PassPlan {
+        enum Priority: Int, Comparable {
+            case hide, pin, zoom, layout
+            static func < (lhs: Priority, rhs: Priority) -> Bool { lhs.rawValue < rhs.rawValue }
+        }
+
+        private var byWindow: [WindowID: (priority: Priority, command: ApplyCommand)] = [:]
+        private var order: [WindowID] = []
+
+        mutating func add(_ command: ApplyCommand, _ priority: Priority) {
+            if let existing = byWindow[command.window.id] {
+                guard priority < existing.priority else { return }
+            } else {
+                order.append(command.window.id)
+            }
+            byWindow[command.window.id] = (priority, command)
+        }
+
+        func contains(_ windowID: WindowID) -> Bool { byWindow[windowID] != nil }
+
+        var entries: [(command: ApplyCommand, priority: Priority)] {
+            order.compactMap { id in byWindow[id].map { ($0.command, $0.priority) } }
+        }
+    }
+
+    /// Résultat de l'application d'une passe.
     private struct PlanApplication {
         var result: ApplyResult
         /// Commandes envoyées : plan, réparation des voisines et résolution des scopes infaisables.
         var commands: Int
-
-        var tick: MaintenanceTick {
-            MaintenanceTick(commands: commands, applied: result.applied, clamped: result.clamped, failed: result.failed)
-        }
     }
 
-    /// Bloc unique « appliquer, réparer, isoler, émettre » (FR-040) : applique le plan, recale les
-    /// fenêtres clampées, replace leurs voisines, résout les scopes infaisables, mémorise les refus
-    /// et émet les événements par fenêtre.
-    private func applyRepairingClamps(
+    /// Application unique de la passe, puis, pour la disposition des modes sans arbre seulement,
+    /// le bloc « recaler, réparer les voisines, isoler » (A3). Toutes les écritures comptent au
+    /// budget de la génération (A13) ; un refus d'arbre attend sa seconde observation (A14).
+    private func applyPass(
         _ plan: ApplyPlan,
         in snapshot: DaemonSnapshot,
-        source: String? = nil
+        layoutWindowIDs: Set<WindowID>,
+        treeScopes: Set<StageScope>,
+        generation: UInt64,
+        source: String?
     ) -> PlanApplication {
-        var result = stabilizeClampedPositions(service.apply(plan), from: plan, in: snapshot)
-        let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot)
+        guard !plan.commands.isEmpty else { return PlanApplication(result: .empty, commands: 0) }
+        let scopesByID = Dictionary(snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } }, uniquingKeysWith: { first, _ in first })
+        // Disposition sans arbre : seule partie qui passe par les réparations historiques.
+        let isRepairable = { (id: WindowID) in
+            layoutWindowIDs.contains(id) && scopesByID[id].map(treeScopes.contains) != true
+        }
+        let before = Dictionary(uniqueKeysWithValues: plan.commands.map { ($0.window.id.rawValue, writtenFrames.entry(for: $0.window.id.rawValue)) })
+        let firstResult = service.apply(plan, generation: generation)
+        recordWrites(firstResult, before: before, generation: generation)
+
+        // Les fenêtres qui refusent de grandir restent hors des réparations, comme du plan (A3).
+        let snapshot = snapshotExcludingGrowthClampedWindows(snapshot)
+        let nonTreeCommands = ApplyPlan(commands: plan.commands.filter { isRepairable($0.window.id) })
+        let nonTreeResult = ApplyResult.filtering(firstResult) { isRepairable($0.windowID) }
+        let directResult = ApplyResult.filtering(firstResult) { !isRepairable($0.windowID) }
+        var result = stabilizeClampedPositions(nonTreeResult, from: nonTreeCommands, in: snapshot)
+        let repairPlan = clampedSiblingRepairPlan(from: result, in: snapshot, treeScopes: treeScopes)
         if !repairPlan.commands.isEmpty {
-            let repairResult = stabilizeClampedPositions(service.apply(repairPlan), from: repairPlan, in: snapshot)
+            let repairResult = stabilizeClampedPositions(service.apply(repairPlan, generation: generation), from: repairPlan, in: snapshot)
             result = result.merged(with: repairResult)
             var details = [
                 "commands": String(repairPlan.commands.count),
-                "windowIDs": repairPlan.commands
-                    .map { String($0.window.id.rawValue) }
-                    .sorted()
-                    .joined(separator: ",")
+                "windowIDs": repairPlan.commands.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
             ]
-            if let source {
-                details["source"] = source
-            }
+            if let source { details["source"] = source }
             events.append(RoadieEvent(type: "layout_clamped_scope_repaired", details: details))
         }
-        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot)
+        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot, treeScopes: treeScopes)
         result = result.merged(with: resolution.result)
-        let commands = plan.commands + repairPlan.commands + resolution.commands
-        record(result, from: ApplyPlan(commands: commands))
-        appendItemEvents(result)
-        if result.applied > 0 || result.clamped > 0 || result.failed > 0 {
-            lastMutableBspSuppressionSignature = nil
-        }
+        let nonTreeAll = nonTreeCommands.commands + repairPlan.commands + resolution.commands
+        record(result, from: ApplyPlan(commands: nonTreeAll))
+        appendItemEvents(result.merged(with: ApplyResult.filtering(directResult) { layoutWindowIDs.contains($0.windowID) }))
+        result = result.merged(with: directResult)
         result.applied += resolution.hidden
-        return PlanApplication(result: result, commands: commands.count + resolution.hidden)
+        return PlanApplication(
+            result: result,
+            commands: plan.commands.count + repairPlan.commands.count + resolution.commands.count + resolution.hidden
+        )
     }
 
-    /// Plan du service sans les écrans dont le scope actif est exclu du tick : le planificateur ne
-    /// touche ni les fenêtres ni les intents de ces scopes (R6). O(d + plan).
+    /// Plan du service sans les écrans dont le scope actif est exclu : le planificateur ne touche
+    /// ni les fenêtres ni les intents de ces scopes (R6). O(d + plan).
     private func plannedCommands(
         from snapshot: DaemonSnapshot,
-        priorityWindowIDs: Set<WindowID> = []
+        priorityWindowIDs: Set<WindowID> = [],
+        excluding excluded: Set<StageScope>
     ) -> ApplyPlan {
         var planning = snapshot
-        if !tickExcludedScopes.isEmpty {
+        if !excluded.isEmpty {
             planning.displays.removeAll { display in
-                snapshot.state.activeScope(on: display.id).map { tickExcludedScopes.contains($0) } ?? false
+                snapshot.state.activeScope(on: display.id).map(excluded.contains) ?? false
             }
         }
         return service.applyPlan(from: planning, priorityWindowIDs: priorityWindowIDs)
@@ -569,16 +554,6 @@ public final class LayoutMaintainer {
         lastObservedFrames = observed
     }
 
-    /// Note dans la référence d'observation un cadre posé par Roadie, pour ne pas le prendre
-    /// au tick suivant pour un changement manuel.
-    private func recordObservedFrame(_ frame: CGRect, of windowID: WindowID) {
-        lastObservedFrames?[windowID.rawValue] = Rect(frame)
-    }
-
-    private func activeScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
-        Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) })
-    }
-
     /// Fenêtres de `windowIDs` dont le scope n'est pas exclu. O(n).
     private func windowIDs(
         _ windowIDs: Set<WindowID>,
@@ -593,13 +568,937 @@ public final class LayoutMaintainer {
         return windowIDs.subtracting(excludedWindowIDs)
     }
 
-    public func run(maxTicks: Int? = nil, onTick: (MaintenanceTick) -> Void = { _ in }) {
-        var ticks = 0
-        while maxTicks.map({ ticks < $0 }) ?? true {
-            let result = tick()
-            onTick(result)
-            ticks += 1
-            Thread.sleep(forTimeInterval: intervalSeconds)
+    // MARK: - Disposition des modes sans arbre (A3 : comportement actuel, plan unifié)
+
+    /// Décision de disposition des modes `bsp`, `masterStack` et `float` pour la passe.
+    private struct NonTreeLayout {
+        var commands: [ApplyCommand] = []
+        var manualResizeDetected = false
+        /// Faux tant qu'une commande protège ses scopes : la référence garde l'ancienne géométrie.
+        var updateBaseline = true
+        var priorityWindowIDs: Set<WindowID> = []
+        /// Vrai sur la branche finale : un plan vide y enregistre l'intent courant (016).
+        var persistCurrentIntents = false
+    }
+
+    /// Chaîne de décision historique des modes sans arbre (geste par différence d'observation,
+    /// intent de commande, anti-rebond), réduite à produire des commandes pour le plan unifié.
+    private func nonTreeLayout(
+        in snapshot: DaemonSnapshot,
+        observedFrames: [UInt32: Rect],
+        changedWindowIDs: Set<WindowID>,
+        adoptedWindowIDs: Set<WindowID>,
+        focusPriority: Set<WindowID>,
+        excluding excluded: Set<StageScope>,
+        now: Date
+    ) -> NonTreeLayout {
+        if !adoptedWindowIDs.isEmpty {
+            priorityWindowIDs = []
+            manualResizeApplyAfter = nil
+            return NonTreeLayout(
+                commands: nonTreeLayoutPlan(from: snapshot, priority: adoptedWindowIDs, excluding: excluded),
+                priorityWindowIDs: adoptedWindowIDs
+            )
+        }
+        let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: excluded, in: snapshot)
+        if unexcludedPriorityWindowIDs != priorityWindowIDs {
+            priorityWindowIDs = unexcludedPriorityWindowIDs
+            if priorityWindowIDs.isEmpty {
+                manualResizeApplyAfter = nil
+            }
+        }
+
+        if !changedWindowIDs.isEmpty {
+            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {
+                return NonTreeLayout()
+            }
+            let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)
+            if !modeledScopes.isEmpty {
+                priorityWindowIDs = []
+                manualResizeApplyAfter = nil
+                let commands = nonTreeLayoutPlan(from: snapshot, excluding: excluded)
+                events.append(RoadieEvent(type: "external_geometry_snapped_to_layout_model", details: [
+                    "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                    "scopes": modeledScopes.map(\.description).sorted().joined(separator: ","),
+                    "commands": String(commands.count)
+                ]))
+                return NonTreeLayout(commands: commands)
+            }
+            if changedWindowIDs.count >= 2 {
+                return NonTreeLayout()
+            }
+            priorityWindowIDs = changedWindowIDs
+            manualResizeApplyAfter = now.addingTimeInterval(LayoutTolerance.manualResizeDebounce)
+            removeLayoutIntents(for: changedWindowIDs, in: snapshot)
+            events.append(RoadieEvent(type: "manual_resize_detected", details: [
+                "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                "applyAfter": String(manualResizeApplyAfter?.timeIntervalSince1970 ?? 0)
+            ]))
+            return NonTreeLayout(manualResizeDetected: true)
+        }
+
+        if let manualResizeApplyAfter, now < manualResizeApplyAfter {
+            return NonTreeLayout(manualResizeDetected: true)
+        }
+        manualResizeApplyAfter = nil
+
+        let cutoff = now.addingTimeInterval(-LayoutTolerance.commandIntentHold)
+        let commandProtectedScopes = priorityWindowIDs.isEmpty
+            ? recentCommandScopes(in: snapshot, since: cutoff, now: now)
+            : []
+        // Un scope exclu (plein écran, rafale, arbre) garde son intent : pas de contrôle de dérive.
+        let strictCommandProtectedScopes = strictAuthoritativeScopes(commandProtectedScopes, in: snapshot)
+            .subtracting(excluded)
+        if !strictCommandProtectedScopes.isEmpty {
+            let driftedScopes = driftedCommandScopes(strictCommandProtectedScopes, frames: observedFrames)
+            if !driftedScopes.isEmpty {
+                return invalidateDriftedCommandIntents(driftedScopes, protected: strictCommandProtectedScopes, snapshot: snapshot, excluding: excluded)
+            }
+            lastCommandIntentAt = now
+            priorityWindowIDs = []
+            manualResizeApplyAfter = nil
+            let commands = nonTreeLayoutPlan(from: snapshot, excluding: strictCommandProtectedScopes.union(excluded))
+            events.append(RoadieEvent(type: "manual_resize_suppressed_by_command_intent", details: [
+                "scopes": strictCommandProtectedScopes.map(\.description).sorted().joined(separator: ","),
+                "unprotectedCommands": String(commands.count)
+            ]))
+            return NonTreeLayout(commands: commands, updateBaseline: false)
+        }
+
+        if let lastCommandIntentAt,
+           priorityWindowIDs.isEmpty,
+           now.timeIntervalSince(lastCommandIntentAt) < LayoutTolerance.commandIntentHold
+        {
+            let protectedScopes = strictAuthoritativeScopes(
+                recentCommandScopes(in: snapshot, since: cutoff, now: now),
+                in: snapshot
+            ).subtracting(excluded)
+            let driftedScopes = driftedCommandScopes(protectedScopes, frames: observedFrames)
+            if !driftedScopes.isEmpty {
+                return invalidateDriftedCommandIntents(driftedScopes, protected: protectedScopes, snapshot: snapshot, excluding: excluded)
+            }
+            priorityWindowIDs = []
+            return NonTreeLayout(
+                commands: nonTreeLayoutPlan(from: snapshot, excluding: protectedScopes.union(excluded)),
+                updateBaseline: false
+            )
+        }
+        if lastCommandIntentAt.map({ now.timeIntervalSince($0) >= LayoutTolerance.commandIntentHold }) == true {
+            lastCommandIntentAt = nil
+        }
+
+        let priority = priorityWindowIDs.union(focusPriority)
+        let commands = nonTreeLayoutPlan(from: snapshot, priority: priority, excluding: excluded)
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
+        return NonTreeLayout(commands: commands, priorityWindowIDs: priority, persistCurrentIntents: true)
+    }
+
+    private func invalidateDriftedCommandIntents(
+        _ driftedScopes: Set<StageScope>,
+        protected protectedScopes: Set<StageScope>,
+        snapshot: DaemonSnapshot,
+        excluding excluded: Set<StageScope>
+    ) -> NonTreeLayout {
+        for scope in driftedScopes {
+            service.removeLayoutIntent(scope: scope)
+        }
+        lastCommandIntentAt = nil
+        let remainingProtectedScopes = protectedScopes.subtracting(driftedScopes)
+        let commands = nonTreeLayoutPlan(from: snapshot, excluding: remainingProtectedScopes.union(excluded))
+        events.append(RoadieEvent(type: "command_intent_invalidated_by_manual_geometry", details: [
+            "scopes": driftedScopes.map(\.description).sorted().joined(separator: ","),
+            "remainingProtectedScopes": remainingProtectedScopes.map(\.description).sorted().joined(separator: ","),
+            "commands": String(commands.count)
+        ]))
+        return NonTreeLayout(commands: commands)
+    }
+
+    /// Commandes de disposition des modes sans arbre : fenêtres qui refusent de grandir retirées,
+    /// refus et échecs connus écartés, réponse de l'application acceptée (R9). O(plan).
+    private func nonTreeLayoutPlan(
+        from snapshot: DaemonSnapshot,
+        priority: Set<WindowID> = [],
+        excluding excluded: Set<StageScope>
+    ) -> [ApplyCommand] {
+        let planningSnapshot = snapshotExcludingGrowthClampedWindows(snapshot)
+        return suppressKnownUnmovableFrames(
+            in: plannedCommands(from: planningSnapshot, priorityWindowIDs: priority, excluding: excluded),
+            snapshot: planningSnapshot
+        ).commands
+    }
+
+    // MARK: - Disposition des modes à arbre (A2, A4, A13, A14, A16, R9)
+
+    /// Disposition des scopes à arbre : l'arbre fait foi. Pour chaque fenêtre dont la frame
+    /// observée s'écarte de sa cible, dans l'ordre : session de geste, écho, réponse de
+    /// l'application, changement externe ; au plus 2 écritures par fenêtre et par génération.
+    // O(n) par scope, plus le plan de l'arbre.
+    private func treeLayoutCommands(
+        in snapshot: DaemonSnapshot,
+        scopes: Set<StageScope>,
+        gesture: GestureSession?,
+        generation: UInt64,
+        now: Date
+    ) -> [ApplyCommand] {
+        guard !scopes.isEmpty else { return [] }
+        let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var snappedWindowID: WindowID?
+        if let gesture, let raw = gesture.windowID,
+           let entry = entriesByID[WindowID(rawValue: raw)],
+           let scope = entry.scope, scopes.contains(scope),
+           applyGesture(gesture, to: entry, scope: scope, snapshot: snapshot) {
+            snappedWindowID = entry.window.id
+        }
+        confirmPendingRefusals(in: snapshot, scopes: scopes, now: now)
+        correctConfirmedRefusals(in: snapshot, scopes: scopes, generation: generation)
+        let otherScopes = Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) }).subtracting(scopes)
+        return plannedCommands(from: snapshot, excluding: otherScopes).commands.compactMap { command in
+            treeWrite(command, snapBack: command.window.id == snappedWindowID, generation: generation, now: now)
+        }
+    }
+
+    /// Décide l'écriture d'une fenêtre d'arbre vers sa cible (R9, A2, A4, A13). nil = rien à écrire.
+    // O(1)
+    private func treeWrite(_ command: ApplyCommand, snapBack: Bool, generation: UInt64, now: Date) -> ApplyCommand? {
+        let id = command.window.id.rawValue
+        let observed = command.window.frame.cgRect
+        let target = command.frame.cgRect
+        // Tolérance unique (R9) : à refaire seulement au-delà de `frameMatch`.
+        if Self.matches(observed, target) { return nil }
+        if snapBack { return command }
+        let entry = writtenFrames.entry(for: id)
+        let sameTarget = entry.map { Self.matches($0.requested, target) } ?? false
+        // R9 : la frame acceptée de la génération courante n'est pas à refaire.
+        if sameTarget, let entry, entry.generation == generation,
+           let accepted = entry.accepted, Self.matches(accepted, observed) {
+            return nil
+        }
+        if writesUsed(id, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
+            acceptObserved(command, reason: "write_budget_exhausted")
+            return nil
+        }
+        guard sameTarget, let entry else { return command }
+        if let readBack = entry.readBack, entry.hasRefusal, Self.matches(readBack, observed) {
+            // Écho de la relecture d'un refus : il attend sa seconde observation (A14).
+            reportEcho(command, entry: entry)
+            return nil
+        }
+        switch writtenFrames.classify(windowID: id, observed: observed, now: now) {
+        case .echo:
+            reportEcho(command, entry: entry)
+            return nil
+        case .appResponse:
+            acceptObserved(command, reason: "app_response")
+            return nil
+        case .external:
+            // Changement externe : une réécriture par génération, puis acceptation (A4, A13).
+            guard externalReverts[id] != generation else {
+                acceptObserved(command, reason: "external_change_repeated")
+                return nil
+            }
+            externalReverts[id] = generation
+            events.append(RoadieEvent(type: "layout_external_change_reverted", details: [
+                "windowID": String(id),
+                "observed": frameDescription(Rect(observed)),
+                "target": frameDescription(command.frame)
+            ]))
+            return command
+        }
+    }
+
+    /// Écritures faites pour cette fenêtre dans la génération : celles de la passe et celles que
+    /// l'écrivain AX a enregistrées (commandes comprises). O(1).
+    private func writesUsed(_ id: UInt32, generation: UInt64) -> Int {
+        let local = writeCounts[id].flatMap { $0.generation == generation ? $0.count : nil } ?? 0
+        let registry = writtenFrames.entry(for: id).flatMap { $0.generation == generation ? $0.writesInGeneration : nil } ?? 0
+        return max(local, registry)
+    }
+
+    /// Compte les écritures au budget de la génération et les inscrit au registre quand
+    /// l'écrivain ne l'a pas fait lui-même (doubles de test, génération non transmise). O(k).
+    private func recordWrites(_ result: ApplyResult, before: [UInt32: WrittenFrame?], generation: UInt64) {
+        let date = now()
+        for item in result.items {
+            let id = item.windowID.rawValue
+            let used = writeCounts[id].flatMap { $0.generation == generation ? $0.count : nil } ?? 0
+            writeCounts[id] = (generation, used + 1)
+            guard let actual = item.actual else { continue }
+            let after = writtenFrames.entry(for: id)
+            if after == (before[id] ?? nil) || after?.generation != generation {
+                writtenFrames.record(windowID: id, requested: item.requested.cgRect, readBack: actual.cgRect, generation: generation, at: date)
+            }
+        }
+    }
+
+    private func acceptObserved(_ command: ApplyCommand, reason: String) {
+        let id = command.window.id.rawValue
+        let observed = command.window.frame.cgRect
+        if let accepted = writtenFrames.entry(for: id)?.accepted, Self.matches(accepted, observed) { return }
+        writtenFrames.accept(windowID: id, frame: observed)
+        events.append(RoadieEvent(type: "layout_app_response_accepted", details: [
+            "windowID": String(id),
+            "requested": frameDescription(command.frame),
+            "actual": frameDescription(command.window.frame),
+            "reason": reason
+        ]))
+    }
+
+    /// Une seule trace par écriture : la frame observée est celle que Roadie a relue. O(1).
+    private func reportEcho(_ command: ApplyCommand, entry: WrittenFrame) {
+        let id = command.window.id.rawValue
+        guard reportedEchoWrites[id] != entry.writtenAt else { return }
+        reportedEchoWrites[id] = entry.writtenAt
+        let observed = command.window.frame
+        let delta = max(abs(observed.x - command.frame.x), abs(observed.y - command.frame.y),
+                        abs(observed.width - command.frame.width), abs(observed.height - command.frame.height))
+        events.append(RoadieEvent(type: "layout_echo_ignored", details: [
+            "windowID": String(id),
+            "deltaPt": String(Int(delta.rounded()))
+        ]))
+    }
+
+    /// Geste à la souris sur une fenêtre d'arbre (A4, A17). Une taille changée déplace la
+    /// frontière de l'arbre sur chaque bord bougé (arbre complet, feuilles absentes exclues) ;
+    /// une position seule, ou un bord sans frontière, ramène la fenêtre à l'arbre (vrai).
+    // O(e · n) - e bords bougés (4 au plus), n feuilles.
+    private func applyGesture(
+        _ gesture: GestureSession,
+        to entry: ScopedWindowSnapshot,
+        scope: StageScope,
+        snapshot: DaemonSnapshot
+    ) -> Bool {
+        guard let start = gesture.startFrame else { return false }
+        let current = entry.window.frame.cgRect
+        let tolerance = LayoutTolerance.frameMatch
+        let sizeChanged = abs(current.width - start.width) > tolerance || abs(current.height - start.height) > tolerance
+        guard sizeChanged else { return !Self.matches(current, start) }
+        guard let tree = store.state().bspTree(for: scope),
+              let geometry = treeGeometry(of: scope, in: snapshot)
+        else { return true }
+        let edges: [BSPEdge] = [
+            (BSPEdge.left, current.minX - start.minX), (.right, current.maxX - start.maxX),
+            (.up, current.minY - start.minY), (.down, current.maxY - start.maxY)
+        ].compactMap { abs($0.1) > tolerance ? $0.0 : nil }
+        let adjusted = edges.reduce(tree) { tree, edge in
+            tree.adjustingFence(
+                of: entry.window.id, edge: edge, to: current, in: geometry.container,
+                innerGap: geometry.innerGap, excluding: geometry.absent
+            )
+        }
+        guard adjusted != tree else { return true }
+        store.mutate { $0.setBSPTree(adjusted, for: scope) }
+        events.append(RoadieEvent(type: "layout_manual_gesture", scope: scope, details: [
+            "windowID": String(entry.window.id.rawValue),
+            "edge": edges.map(\.rawValue).joined(separator: ","),
+            "frame": frameDescription(entry.window.frame)
+        ]))
+        return false
+    }
+
+    /// Conteneur, marge intérieure et feuilles absentes (membres hors relevé ou en plein écran
+    /// natif) de l'arbre d'un scope, comme pour son placement (A9). O(n).
+    private func treeGeometry(of scope: StageScope, in snapshot: DaemonSnapshot) -> (container: CGRect, innerGap: CGFloat, absent: Set<WindowID>)? {
+        guard let container = service.treeContainer(for: scope, in: snapshot) else { return nil }
+        let placed = Set(snapshot.windows.compactMap { entry in
+            entry.scope == scope && entry.window.isTileCandidate && entry.window.furniture?.isNativeFullscreen != true
+                ? entry.window.id : nil
+        })
+        let leaves = Set(store.state().bspTree(for: scope)?.windowIDs ?? [])
+        return (container, CGFloat(service.innerGap()), leaves.subtracting(placed))
+    }
+
+    /// Seconde observation des refus en attente sans notification (A14) : une lecture AX fraîche
+    /// à `refusalConfirmDelay` après l'écriture. Sans lecture possible, la frame du relevé courant
+    /// sert de repli. O(r) - r refus en attente.
+    private func confirmPendingRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, now: Date) {
+        let pending = Set(writtenFrames.pendingRefusals())
+        guard !pending.isEmpty else { return }
+        for entry in snapshot.windows {
+            let id = entry.window.id.rawValue
+            guard pending.contains(id), let scope = entry.scope, scopes.contains(scope),
+                  let written = writtenFrames.entry(for: id),
+                  written.writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay) <= now
+            else { continue }
+            let observed = readFrame(entry.window) ?? entry.window.frame.cgRect
+            writtenFrames.confirmRefusal(windowID: id, observed: observed, at: now)
+        }
+    }
+
+    /// Refus confirmé (A2, A16) : la taille minimale révélée est respectée en ajustant une seule
+    /// fois l'ancêtre de l'axe contraint, dans la génération en cours. Correction infaisable :
+    /// la frame obtenue est acceptée (chevauchement, comme yabai). O(r · n).
+    private func correctConfirmedRefusals(in snapshot: DaemonSnapshot, scopes: Set<StageScope>, generation: UInt64) {
+        for entry in snapshot.windows {
+            let id = entry.window.id.rawValue
+            guard let scope = entry.scope, scopes.contains(scope),
+                  let written = writtenFrames.entry(for: id),
+                  written.refusalConfirmedAt != nil, let readBack = written.readBack,
+                  correctedGenerations[id] != generation
+            else { continue }
+            correctedGenerations[id] = generation
+            let minimum = Self.minimumSize(requested: Rect(written.requested), actual: Rect(readBack))
+            treeMinimums[entry.window.id] = Self.largest(treeMinimums[entry.window.id] ?? .zero, minimum)
+            // Sans arbre lisible, rien à corriger : la frame obtenue est acceptée.
+            var reason = "minimum_size_infeasible"
+            if let tree = store.state().bspTree(for: scope),
+               let geometry = treeGeometry(of: scope, in: snapshot) {
+                let corrected = tree.correctingForMinimumSize(
+                    of: entry.window.id, minimum: minimum, in: geometry.container, innerGap: geometry.innerGap,
+                    excluding: geometry.absent, knownMinimums: treeMinimums.filter { $0.key != entry.window.id }
+                )
+                if let corrected, corrected != tree {
+                    store.mutate { $0.setBSPTree(corrected, for: scope) }
+                    events.append(RoadieEvent(type: "layout_clamped_scope_repaired", scope: scope, details: [
+                        "windowIDs": String(id),
+                        "source": "tree_minimum_size",
+                        "minimum": "\(Int(minimum.width))x\(Int(minimum.height))"
+                    ]))
+                    continue
+                }
+                // Arbre inchangé : le refus ne révèle aucune taille minimale (décalage, arrondi).
+                if corrected != nil { reason = "refusal_without_minimum" }
+            }
+            writtenFrames.accept(windowID: id, frame: readBack)
+            events.append(RoadieEvent(type: "layout_app_response_accepted", details: [
+                "windowID": String(id),
+                "requested": frameDescription(Rect(written.requested)),
+                "actual": frameDescription(Rect(readBack)),
+                "reason": reason
+            ]))
+        }
+    }
+
+    // MARK: - Rafales et garde de bureau (A5, A6, A18, A19)
+
+    /// Changements de membres d'un scope actif. Un changement isolé est placé tout de suite ; un
+    /// second en moins de `burstWindow` ouvre une rafale : le premier placement est conservé et
+    /// une seule passe finale suit `burstQuiet` de calme, au plus `burstCap` après le début (A18).
+    private struct MembershipActivity {
+        var lastChangeAt: Date
+        var burstStartedAt: Date?
+
+        var burstEnd: Date? {
+            burstStartedAt.map { min(lastChangeAt.addingTimeInterval(LayoutTolerance.burstQuiet), $0.addingTimeInterval(LayoutTolerance.burstCap)) }
+        }
+    }
+
+    /// Scopes actifs en rafale de changements de membres. L'activation d'un scope n'est pas un
+    /// changement de membres (FR-017 de la SPEC-016). O(n + s).
+    private func burstScopes(in snapshot: DaemonSnapshot, now: Date) -> Set<StageScope> {
+        var signatures: [StageScope: String] = [:]
+        var bursting: Set<StageScope> = []
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  let stage = snapshot.state.stage(scope: scope),
+                  stage.mode.isTiled
+            else { continue }
+            let signature = stageMembershipSignature(scope: scope, mode: stage.mode, in: snapshot)
+            signatures[scope] = signature
+            if let previous = lastActiveTiledStageMembershipSignatures[scope], previous != signature {
+                if var activity = membershipActivity[scope],
+                   now.timeIntervalSince(activity.lastChangeAt) < LayoutTolerance.burstWindow {
+                    if activity.burstStartedAt == nil {
+                        activity.burstStartedAt = activity.lastChangeAt
+                        events.append(RoadieEvent(type: "layout_stage_membership_settling", scope: scope, details: [
+                            "scopes": scope.description,
+                            "quietSeconds": String(LayoutTolerance.burstQuiet),
+                            "holdSeconds": String(LayoutTolerance.burstCap)
+                        ]))
+                    }
+                    activity.lastChangeAt = now
+                    membershipActivity[scope] = activity
+                } else {
+                    membershipActivity[scope] = MembershipActivity(lastChangeAt: now)
+                }
+            }
+            // Une commande appliquée sur l'arbre du scope après le début de la rafale la clôt (A15).
+            if let start = membershipActivity[scope]?.burstStartedAt,
+               let appliedAt = service.treeScopeAppliedAt(scope), appliedAt >= start {
+                membershipActivity[scope]?.burstStartedAt = nil
+            }
+            if let end = membershipActivity[scope]?.burstEnd {
+                if now < end {
+                    bursting.insert(scope)
+                } else {
+                    // Fin de rafale : la passe en cours est la passe finale.
+                    membershipActivity[scope]?.burstStartedAt = nil
+                }
+            }
+        }
+        membershipActivity = membershipActivity.filter { signatures[$0.key] != nil }
+        lastActiveTiledStageMembershipSignatures = signatures
+        return bursting
+    }
+
+    /// Membres vivants du scope (les membres disparus n'y sont plus), avec le mode. O(n).
+    private func stageMembershipSignature(scope: StageScope, mode: WindowManagementMode, in snapshot: DaemonSnapshot) -> String {
+        let ids = snapshot.windows
+            .compactMap { $0.scope == scope && $0.window.isTileCandidate ? String($0.window.id.rawValue) : nil }
+            .sorted()
+            .joined(separator: ",")
+        return "\(mode.rawValue):\(ids)"
+    }
+
+    /// Garde de transition de bureau d'un écran (A5, A19).
+    private struct SpaceGuard {
+        var openedAt: Date
+        var reason: String
+        var windowIDs: Set<WindowID>
+        var spaceDidChangeAt: Date?
+        var lastPollAt: Date?
+        var sample: (at: Date, frames: [WindowID: CGRect])?
+    }
+
+    /// Ouvre une garde à la sortie du plein écran natif ou au retour d'un membre manquant, et la
+    /// ferme quand le bureau courant de l'écran est un bureau utilisateur. Sonde indisponible :
+    /// `spaceDidChange` reçu après l'ouverture puis deux lectures identiques à `spaceGuardPoll`
+    /// d'écart. Plafond `spaceGuardCap`. Retourne les scopes actifs des écrans gardés. O(n).
+    private func spaceGuardScopes(in snapshot: DaemonSnapshot, now: Date) -> Set<StageScope> {
+        openSpaceGuards(in: snapshot, now: now)
+        let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for (displayID, guardState) in spaceGuards {
+            var updated = guardState
+            var closedBy: String?
+            let commandAppliedAt = snapshot.state.activeScope(on: displayID).flatMap(service.treeScopeAppliedAt)
+            // Comparaisons par addition de dates, comme les échéances rendues par `nextDeadline`.
+            if guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap) <= now {
+                closedBy = "timeout"
+            } else if let commandAppliedAt, commandAppliedAt >= guardState.openedAt {
+                // Une commande est une intention de l'utilisateur : elle clôt la garde (A15).
+                closedBy = "command"
+            } else {
+                switch spaceProbe(displayID.rawValue) {
+                case true?:
+                    closedBy = "userSpace"
+                case false?:
+                    break
+                case nil:
+                    if guardState.spaceDidChangeAt != nil {
+                        let frames = guardState.windowIDs.reduce(into: [WindowID: CGRect]()) { frames, id in
+                            guard let entry = entriesByID[id] else { return }
+                            frames[id] = readFrame(entry.window) ?? entry.window.frame.cgRect
+                        }
+                        if let sample = guardState.sample,
+                           sample.at.addingTimeInterval(LayoutTolerance.spaceGuardPoll) <= now,
+                           sample.frames.count == frames.count,
+                           frames.allSatisfy({ id, frame in sample.frames[id].map { Self.matches($0, frame) } ?? false }) {
+                            closedBy = "spaceDidChange"
+                        } else {
+                            updated.sample = (now, frames)
+                        }
+                    }
+                }
+            }
+            updated.lastPollAt = now
+            if let closedBy {
+                spaceGuards[displayID] = nil
+                events.append(RoadieEvent(type: "space_transition_guard", details: [
+                    "displayID": displayID.rawValue,
+                    "reason": guardState.reason,
+                    "closedBy": closedBy,
+                    "heldMs": String(Int((now.timeIntervalSince(guardState.openedAt) * 1000).rounded()))
+                ]))
+            } else {
+                spaceGuards[displayID] = updated
+            }
+        }
+        return Set(spaceGuards.keys.compactMap { snapshot.state.activeScope(on: $0) })
+    }
+
+    /// Détecte les sorties de plein écran natif et les retours de membres manquants. O(n + s).
+    private func openSpaceGuards(in snapshot: DaemonSnapshot, now: Date) {
+        func open(_ displayID: DisplayID, reason: String, windowID: WindowID) {
+            if spaceGuards[displayID] == nil {
+                spaceGuards[displayID] = SpaceGuard(openedAt: now, reason: reason, windowIDs: [windowID])
+            } else {
+                spaceGuards[displayID]?.windowIDs.insert(windowID)
+            }
+        }
+        var nativeFullscreen: [WindowID: DisplayID] = [:]
+        for entry in snapshot.windows {
+            guard let displayID = entry.scope?.displayID else { continue }
+            if entry.window.furniture?.isNativeFullscreen == true {
+                nativeFullscreen[entry.window.id] = displayID
+            } else if lastNativeFullscreenWindows[entry.window.id] != nil {
+                open(displayID, reason: "fullscreen_exit", windowID: entry.window.id)
+            }
+        }
+        // Une fenêtre en plein écran natif peut quitter le relevé (son propre bureau) : on la garde.
+        let liveIDs = Set(snapshot.windows.map(\.window.id))
+        for (id, displayID) in lastNativeFullscreenWindows where !liveIDs.contains(id) && nativeFullscreen[id] == nil {
+            nativeFullscreen[id] = displayID
+        }
+        let members = Set(store.state().scopes.flatMap { $0.stages.flatMap { $0.members.map(\.windowID) } })
+        lastNativeFullscreenWindows = nativeFullscreen.filter { liveIDs.contains($0.key) || members.contains($0.key) }
+
+        var live: [StageScope: Set<WindowID>] = [:]
+        for display in snapshot.displays {
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  snapshot.state.stage(scope: scope)?.mode.isTiled == true
+            else { continue }
+            let current = Set(snapshot.windows.compactMap { $0.scope == scope && $0.window.isTileCandidate ? $0.window.id : nil })
+            live[scope] = current
+            var departed = departedMembers[scope] ?? []
+            if let previous = lastActiveLiveMembers[scope] {
+                departed.formUnion(previous.subtracting(current))
+            }
+            for returned in departed.intersection(current) {
+                open(scope.displayID, reason: "member_return", windowID: returned)
+            }
+            departed.subtract(current)
+            departedMembers[scope] = departed.intersection(members)
+        }
+        departedMembers = departedMembers.filter { live[$0.key] != nil && !$0.value.isEmpty }
+        lastActiveLiveMembers = live
+    }
+
+    /// Activité de commande (R12, FR-040) : seuls les scopes sans arbre qu'elle couvre sont
+    /// suspendus ; un scope qui vient de perdre un membre est repris quand même.
+    private struct CommandSuspension {
+        var activity: LayoutCommandActivity.Activity?
+        var scopes: Set<StageScope> = []
+        var resumed: Set<StageScope> = []
+        var treeDisplays: Set<DisplayID> = []
+
+        /// Vrai si aucune écriture ne doit toucher une fenêtre de ce scope. O(s).
+        func covers(_ scope: StageScope) -> Bool {
+            guard let activity, activity.covers(scope), !treeDisplays.contains(scope.displayID) else { return false }
+            return !resumed.contains { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }
+        }
+    }
+
+    private func commandSuspension(
+        in snapshot: DaemonSnapshot,
+        treeScopes: Set<StageScope>,
+        observedFrames: [UInt32: Rect],
+        now: Date
+    ) -> CommandSuspension {
+        commandSuspendedUntil = nil
+        guard let activity = commandActivity.activity(now: now) else { return CommandSuspension() }
+        let resumed = activeTiledScopesWithRecentMissingMembers(in: snapshot, now: now)
+        let commandScopes = activeScopes(in: snapshot)
+            .filter(activity.covers)
+            .subtracting(treeScopes)
+            .subtracting(resumed)
+        let suspension = CommandSuspension(
+            activity: activity,
+            scopes: commandScopes,
+            resumed: resumed,
+            treeDisplays: Set(treeScopes.map(\.displayID))
+        )
+        guard !commandScopes.isEmpty else { return suspension }
+        commandSuspendedUntil = activity.activeUntil
+        observe(observedFrames, scopes: commandScopes, in: snapshot)
+        if lastCommandActivitySuppressedAt.map({ now.timeIntervalSince($0) > LayoutTolerance.repeatedEventInterval }) ?? true {
+            lastCommandActivitySuppressedAt = now
+            var details = [
+                "activeUntil": String(activity.activeUntil.timeIntervalSince1970),
+                "commandScopes": commandScopes.map(\.description).sorted().joined(separator: ",")
+            ]
+            if !resumed.isEmpty {
+                details["bypassedForMissingReclaim"] = "true"
+                details["scopes"] = resumed.map(\.description).sorted().joined(separator: ",")
+            }
+            events.append(RoadieEvent(type: "layout_command_activity_suppressed", details: details))
+        }
+        priorityWindowIDs = []
+        manualResizeApplyAfter = nil
+        return suspension
+    }
+
+    private func activeScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
+        Set(snapshot.displays.compactMap { snapshot.state.activeScope(on: $0.id) })
+    }
+
+    // MARK: - Mesure (A12, A20)
+
+    /// Stabilité à vérifier : cibles écrites depuis la dernière stabilité observée.
+    private struct PendingStability {
+        var startedAt: Date
+        var checkAt: Date
+        var targets: [WindowID: CGRect]
+        var checked = false
+    }
+
+    private func armStabilityCheck(_ result: ApplyResult, now: Date) {
+        var pending = pendingStability ?? PendingStability(startedAt: now, checkAt: now, targets: [:])
+        for item in result.items {
+            pending.targets[item.windowID] = item.requested.cgRect
+        }
+        pending.checkAt = now.addingTimeInterval(0.1)
+        pending.checked = false
+        pendingStability = pending
+    }
+
+    /// `layout_stable` (A20) : une observation fraîche, au moins 100 ms après la dernière écriture,
+    /// montre chaque fenêtre de la passe à sa cible ou à sa frame acceptée. O(k).
+    private func checkStability(in snapshot: DaemonSnapshot, now: Date, generation: UInt64) {
+        guard var pending = pendingStability, now >= pending.checkAt else { return }
+        let entriesByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let stable = pending.targets.allSatisfy { id, target in
+            guard let entry = entriesByID[id] else { return true }
+            let observed = readFrame(entry.window) ?? entry.window.frame.cgRect
+            if Self.matches(observed, target) { return true }
+            return writtenFrames.entry(for: id.rawValue)?.accepted.map { Self.matches($0, observed) } ?? false
+        }
+        guard stable else {
+            pending.checked = true
+            pendingStability = pending
+            return
+        }
+        pendingStability = nil
+        events.append(RoadieEvent(type: "layout_stable", details: [
+            "stableAfterMs": String(Int((now.timeIntervalSince(pending.startedAt) * 1000).rounded())),
+            "windows": String(pending.targets.count),
+            "layoutVersion": String(generation)
+        ]))
+    }
+
+    /// `layout_apply` (R14, A12, A20) : durée, cause, rang dans l'épisode, relevés, écritures.
+    private func appendLayoutApplyEvent(
+        _ application: PlanApplication,
+        priorityWindowIDs: Set<WindowID>,
+        cause: String,
+        scans: Int,
+        generation: UInt64,
+        startedAt: Date
+    ) {
+        let episode = episodes.current
+        passIndex = episode != nil && episode == lastPassEpisodeID ? passIndex + 1 : 1
+        lastPassEpisodeID = episode
+        let writesByWindow = application.result.items.reduce(into: [UInt32: Int]()) { $0[$1.windowID.rawValue, default: 0] += 1 }
+        events.append(RoadieEvent(type: "layout_apply", details: [
+            "commands": String(application.commands),
+            "applied": String(application.result.applied),
+            "clamped": String(application.result.clamped),
+            "failed": String(application.result.failed),
+            "priorityWindowIDs": priorityWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
+            "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000),
+            "cause": cause,
+            "pass": String(passIndex),
+            "scans": String(scans),
+            // Écriture façon yabai : taille, position, taille (R8), soit trois appels AX par fenêtre.
+            "axWrites": String(application.result.items.count * 3),
+            "windowWrites": writesByWindow.keys.sorted().map { "\($0):\(writesByWindow[$0] ?? 0)" }.joined(separator: ","),
+            "layoutVersion": String(generation)
+        ]))
+    }
+
+    private func appendPassEvents(
+        hiddenInactive: [ApplyCommand],
+        hiddenSiblings: [ApplyCommand],
+        restoredPins: [ApplyCommand],
+        reanchoredZoomed: [ApplyCommand],
+        focusRestore: FocusRestore?,
+        application: PlanApplication,
+        snapshot: DaemonSnapshot,
+        startedAt: Date
+    ) {
+        if !restoredPins.isEmpty {
+            events.append(RoadieEvent(type: "window.pin_restored", details: ["applied": String(restoredPins.count)]))
+        }
+        if !reanchoredZoomed.isEmpty {
+            events.append(RoadieEvent(type: "fullscreen_sized_windows_reanchored", details: ["applied": String(reanchoredZoomed.count)]))
+        }
+        if !hiddenSiblings.isEmpty {
+            events.append(RoadieEvent(type: "fullscreen_stage_siblings_hidden", details: ["applied": String(hiddenSiblings.count)]))
+        }
+        if !hiddenInactive.isEmpty {
+            events.append(RoadieEvent(type: "stage_hide_inactive", details: ["applied": String(hiddenInactive.count)]))
+        }
+        guard let focusRestore,
+              let item = application.result.items.first(where: { $0.windowID == focusRestore.entry.window.id })
+        else { return }
+        let scope = focusRestore.scope
+        let hiddenIDs = Set(hiddenInactive.map(\.window.id))
+        let hiddenOnDisplay = snapshot.windows.filter { hiddenIDs.contains($0.window.id) && $0.scope?.displayID == scope.displayID }.count
+        var details = [
+            "hiddenActive": String(focusRestore.activeHiddenWindowIDs.count),
+            "focusedWindowID": String(focusRestore.entry.window.id.rawValue),
+            "focusedDisplayID": scope.displayID.rawValue,
+            "restored": String(item.status == .failed ? 0 : 1),
+            "hiddenInactive": String(hiddenOnDisplay),
+            "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000)
+        ]
+        if !focusRestore.isFullscreen {
+            details["scopes"] = "\(scope.displayID.rawValue)/\(scope.desktopID.rawValue)/\(scope.stageID.rawValue)"
+            details["commands"] = String(application.commands)
+            details["applied"] = String(application.result.applied)
+            details["clamped"] = String(application.result.clamped)
+            details["failed"] = String(application.result.failed)
+        }
+        events.append(RoadieEvent(type: focusRestore.isFullscreen ? "stage_focus_fullscreen_restore" : "stage_focus_restore", details: details))
+    }
+
+    /// Oublie les refus de taille et les échecs de plus de 30 s, et la mémoire des fenêtres
+    /// disparues (FR-004). O(r) - r entrées mémorisées.
+    private func forgetGoneWindows(liveWindowIDs: Set<UInt32>, now: Date) {
+        let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
+        clampedFrames = clampedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
+        revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
+        writeCounts = writeCounts.filter { liveWindowIDs.contains($0.key) }
+        externalReverts = externalReverts.filter { liveWindowIDs.contains($0.key) }
+        correctedGenerations = correctedGenerations.filter { liveWindowIDs.contains($0.key) }
+        reportedEchoWrites = reportedEchoWrites.filter { liveWindowIDs.contains($0.key) }
+        treeMinimums = treeMinimums.filter { liveWindowIDs.contains($0.key.rawValue) }
+    }
+
+    /// Égalité de deux frames à `LayoutTolerance.frameMatch` près : la tolérance unique (R9).
+    static func matches(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        let tolerance = LayoutTolerance.frameMatch
+        return abs(lhs.minX - rhs.minX) <= tolerance
+            && abs(lhs.minY - rhs.minY) <= tolerance
+            && abs(lhs.width - rhs.width) <= tolerance
+            && abs(lhs.height - rhs.height) <= tolerance
+    }
+
+    // MARK: - Placements de la passe (masquage, épinglages, zoom, focus)
+
+    /// Fenêtre focalisée cachée dans le scope actif de son écran (Cmd-Tab vers une fenêtre masquée).
+    private struct FocusRestore {
+        var entry: ScopedWindowSnapshot
+        var scope: StageScope
+        var display: DisplaySnapshot
+        var activeHiddenWindowIDs: [WindowID]
+        /// Fenêtre zoomée par une commande : elle reprend le cadre plein écran, sans disposition.
+        var isFullscreen: Bool
+    }
+
+    /// Détecte la fenêtre focalisée cachée (FR-002). Le focus sur une voisine cachée d'une fenêtre
+    /// zoomée sort du zoom : changement d'état logique (A15) ; l'intent de zoom est retiré et la
+    /// fenêtre zoomée quitte le plein écran de la passe, le scope est redisposé normalement.
+    private func focusedHiddenRestore(in snapshot: DaemonSnapshot) -> FocusRestore? {
+        guard let focusedWindowID = snapshot.focusedWindowID,
+              let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
+              let focusedScope = focusedEntry.scope,
+              snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
+              focusedEntry.window.isTileCandidate,
+              HiddenWindowPlacement.isHidden(focusedEntry.window.frame.cgRect, in: snapshot.displays),
+              !tickExcludedScopes.contains(focusedScope),
+              let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
+        else { return nil }
+
+        if let zoomedWindowID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID,
+           zoomedWindowID != focusedWindowID {
+            service.removeLayoutIntent(scope: focusedScope)
+            tickFullscreen.removeAll { $0.entry.window.id == zoomedWindowID }
+            events.append(RoadieEvent(type: "layout_zoom_exited", scope: focusedScope, details: [
+                "zoomedWindowID": String(zoomedWindowID.rawValue),
+                "focusedWindowID": String(focusedWindowID.rawValue)
+            ]))
+        }
+        let activeHidden = snapshot.windows.compactMap { entry -> WindowID? in
+            entry.scope == focusedScope
+                && entry.window.isTileCandidate
+                && HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+                ? entry.window.id : nil
+        }
+        return FocusRestore(
+            entry: focusedEntry,
+            scope: focusedScope,
+            display: display,
+            activeHiddenWindowIDs: activeHidden,
+            isFullscreen: tickFullscreen.contains { $0.entry.window.id == focusedWindowID }
+        )
+    }
+
+    /// Commande qui rend visible la fenêtre focalisée quand la disposition ne la place pas : cadre
+    /// plein écran d'une fenêtre zoomée, sinon même taille centrée (plan du scope retenu par le
+    /// plein écran ou un refus connu ; un échec mémorisé n'est pas redemandé).
+    private func focusRestoreCommand(_ restore: FocusRestore, plan: PassPlan, snapshot: DaemonSnapshot) -> ApplyCommand? {
+        let window = restore.entry.window
+        if restore.isFullscreen {
+            guard let target = fullscreenSizedRestoreTarget(for: window.frame.cgRect, on: restore.display) else { return nil }
+            return ApplyCommand(window: window, frame: Rect(target))
+        }
+        guard !plan.contains(window.id) else { return nil }
+        let command = ApplyCommand(window: window, frame: Rect(centeredVisibleFrame(for: window.frame.cgRect, on: restore.display)))
+        return failedFrames[window.id.rawValue]?.matches(command: command) == true ? nil : command
+    }
+
+    /// Cadre visible de repli : même taille (bornée à la zone visible), centré sur l'écran.
+    private func centeredVisibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect {
+        let visible = display.visibleFrame.cgRect
+        let width = min(frame.width, visible.width)
+        let height = min(frame.height, visible.height)
+        return CGRect(
+            x: visible.midX - width / 2,
+            y: visible.midY - height / 2,
+            width: width,
+            height: height
+        ).integral
+    }
+
+    /// Masquage des fenêtres des stages inactives (hors épinglage visible et plein écran). O(n).
+    private func hideInactiveStageCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
+        return snapshot.windows.compactMap { entry -> ApplyCommand? in
+            guard let scope = entry.scope,
+                  let activeScope = snapshot.state.activeScope(on: scope.displayID),
+                  scope != activeScope,
+                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+                  !HiddenWindowPlacement.isPreferred(entry.window.frame.cgRect, among: snapshot.displays),
+                  !fullscreenWindowIDs.contains(entry.window.id),
+                  entry.pin?.visibility(in: activeScope).shouldBeVisible != true
+            else { return nil }
+            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            return ApplyCommand(window: entry.window, frame: Rect(frame))
+        }
+    }
+
+    /// Masquage des voisines d'une fenêtre en plein écran dans son scope actif. La fenêtre qui a le
+    /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002). O(n).
+    private func fullscreenSiblingHideCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+        let fullscreenItems = tickFullscreen.filter { item in
+            guard let scope = item.entry.scope else { return false }
+            return snapshot.state.activeScope(on: scope.displayID) == scope
+        }
+        guard !fullscreenItems.isEmpty else { return [] }
+        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
+        let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
+        // Focus réel du système (pas le focus mémorisé de la stage).
+        let systemFocusedWindowID = service.focusedWindowID()
+        return snapshot.windows.compactMap { entry -> ApplyCommand? in
+            guard let scope = entry.scope,
+                  fullscreenScopes.contains(scope),
+                  !fullscreenWindowIDs.contains(entry.window.id),
+                  entry.window.id != systemFocusedWindowID,
+                  entry.window.isTileCandidate,
+                  entry.window.isOnScreen,
+                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+            else { return nil }
+            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+            return ApplyCommand(window: entry.window, frame: Rect(frame))
+        }
+    }
+
+    /// Recalage d'une fenêtre zoomée par commande dont l'origine a glissé (redémarrage, changement
+    /// d'écran). Une fenêtre en plein écran natif appartient à macOS : jamais déplacée. O(f).
+    private func zoomReanchorCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+        tickFullscreen.compactMap { item -> ApplyCommand? in
+            let entry = item.entry
+            guard let scope = entry.scope,
+                  snapshot.state.activeScope(on: scope.displayID) == scope,
+                  entry.window.furniture?.isNativeFullscreen != true,
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
+                  let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display)
+            else { return nil }
+            return ApplyCommand(window: entry.window, frame: Rect(target))
+        }
+    }
+
+    /// Retour d'une fenêtre épinglée visible dans le scope actif à son dernier cadre. O(n).
+    private func pinRestoreCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+        snapshot.windows.compactMap { entry -> ApplyCommand? in
+            guard let pin = entry.pin,
+                  let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
+                  pin.visibility(in: activeScope).shouldBeVisible,
+                  HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+            else { return nil }
+            return ApplyCommand(window: entry.window, frame: pin.lastFrame)
         }
     }
 
@@ -646,13 +1545,21 @@ public final class LayoutMaintainer {
             .joined(separator: "|")
     }
 
-    private func evaluateRules(in snapshot: DaemonSnapshot) -> Int {
-        guard let ruleEngine = currentRuleEngine() else { return 0 }
+    /// Fenêtre placée par une règle dans la passe ; `follow` demande le focus après l'application.
+    private struct RulePlacement {
+        var window: WindowSnapshot
+        var follow: Bool
+    }
+
+    /// Règles de placement : changements d'état logique de la passe (A15). Les frames (masquage
+    /// d'une stage inactive, disposition de la stage cible) viennent du plan de la copie de travail.
+    private func evaluateRules(in snapshot: DaemonSnapshot) -> [RulePlacement] {
+        guard let ruleEngine = currentRuleEngine() else { return [] }
         guard ruleEngine.validationErrors.isEmpty else {
             appendRuleFailedEvents(ruleEngine.validationErrors)
-            return 0
+            return []
         }
-        var placements = 0
+        var placements: [RulePlacement] = []
         let liveWindowIDs = Set(snapshot.windows.map(\.window.id))
         observedRulePlacementWindowIDs.formIntersection(liveWindowIDs)
         pruneRuleEventKeys(keeping: liveWindowIDs)
@@ -664,8 +1571,8 @@ public final class LayoutMaintainer {
             )
             let application = ruleEngine.evaluate(window: entry.window, context: context)
             appendRuleEvents(application, window: entry.window)
-            if applyRulePlacement(application, entry: entry, snapshot: snapshot) {
-                placements += 1
+            if let placement = applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+                placements.append(placement)
             }
             observedRulePlacementWindowIDs.insert(entry.window.id)
         }
@@ -827,21 +1734,21 @@ public final class LayoutMaintainer {
         _ application: WindowRuleApplication,
         entry: ScopedWindowSnapshot,
         snapshot: DaemonSnapshot
-    ) -> Bool {
+    ) -> RulePlacement? {
         guard application.matchedRuleID != nil,
               application.assignDisplay != nil || application.assignDesktop != nil || application.assignStage != nil
-        else { return false }
+        else { return nil }
         guard !application.excluded else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "excluded")
-            return false
+            return nil
         }
         guard entry.window.isTileCandidate else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "not a tile candidate")
-            return false
+            return nil
         }
         guard !observedRulePlacementWindowIDs.contains(entry.window.id) else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "window already managed")
-            return false
+            return nil
         }
 
         // Décision et écriture dans une seule transaction sur l'état relu sous verrou (SPEC-016
@@ -850,7 +1757,7 @@ public final class LayoutMaintainer {
         enum PlacementDecision {
             case skipped(String, StageScope?)
             case deferred
-            case placed(RulePlacementDestination, activeScope: StageScope)
+            case placed(RulePlacementDestination)
         }
         let decision: PlacementDecision = store.mutate { state in
             var working = state
@@ -877,54 +1784,41 @@ public final class LayoutMaintainer {
             working.update(targetScope)
             working.updatePinHomeScope(windowID: entry.window.id, to: destination.scope)
             state = working
-            return .placed(destination, activeScope: working.activeScopeEquivalent(on: destination.scope.displayID))
+            return .placed(destination)
         }
         let destination: RulePlacementDestination
-        let activeScope: StageScope
         switch decision {
         case .skipped(let reason, let target):
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: target, reason: reason)
-            return false
+            return nil
         case .deferred:
             appendPlacementEvent("rule.placement_deferred", application: application, entry: entry, reason: "destination unavailable")
-            return false
-        case .placed(let placed, let active):
+            return nil
+        case .placed(let placed):
             destination = placed
-            activeScope = active
         }
 
-        let sourceScope = entry.scope
-
-        if let sourceScope {
+        if let sourceScope = entry.scope {
             service.removeLayoutIntent(scope: sourceScope)
         }
         service.removeLayoutIntent(scope: destination.scope)
-
-        if !destination.follow {
-            if activeScope != destination.scope {
-                _ = service.setFrame(HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: destination.display, among: snapshot.displays), of: entry.window)
-            }
-        }
-
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
-        if destination.follow {
-            _ = service.focus(entry.window)
-        }
         appendPlacementEvent(
             "rule.placement_applied",
             application: application,
             entry: entry,
             destination: destination.scope,
-            reason: "placed",
-            extra: ["layout": .int(result.attempted)]
+            reason: "placed"
         )
-        return true
+        return RulePlacement(window: entry.window, follow: destination.follow)
     }
 
+    /// Fenêtre déplacée à la main sur un autre écran : adoptée par la stage active de cet écran,
+    /// sur l'état relu sous verrou (SPEC-016 FR-013). Changement d'état logique de la passe (A15).
     private func adoptManualDisplayMoves(
         in snapshot: DaemonSnapshot,
         changedWindowIDs: Set<WindowID>
-    ) -> MaintenanceTick? {
+    ) -> [(window: WindowSnapshot, source: StageScope, target: StageScope, removedPin: PersistentWindowPin?)] {
+        guard !changedWindowIDs.isEmpty else { return [] }
         // Adoption sur l'état relu sous verrou (SPEC-016 FR-013) ; événements après le bloc.
         let adopted = store.mutate { state in
             var adopted: [(window: WindowSnapshot, source: StageScope, target: StageScope, removedPin: PersistentWindowPin?)] = []
@@ -961,7 +1855,7 @@ public final class LayoutMaintainer {
             return adopted
         }
 
-        guard !adopted.isEmpty else { return nil }
+        guard !adopted.isEmpty else { return [] }
 
         for item in adopted {
             service.removeLayoutIntent(scope: item.source)
@@ -982,28 +1876,7 @@ public final class LayoutMaintainer {
             ]))
         }
 
-        let updatedSnapshot = service.snapshot(followFocus: false)
-        let plan = suppressKnownUnmovableFrames(
-            in: plannedCommands(from: updatedSnapshot, priorityWindowIDs: Set(adopted.map(\.window.id))),
-            snapshot: updatedSnapshot
-        )
-        let result = service.apply(plan)
-        record(result, from: plan)
-        events.append(RoadieEvent(type: "layout_apply", details: [
-            "commands": String(plan.commands.count),
-            "applied": String(result.applied),
-            "clamped": String(result.clamped),
-            "failed": String(result.failed),
-            "reason": "manual_display_move_adopted",
-            "priorityWindowIDs": adopted.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
-        ]))
-        appendItemEvents(result)
-        return MaintenanceTick(
-            commands: max(adopted.count, plan.commands.count),
-            applied: adopted.count + result.applied,
-            clamped: result.clamped,
-            failed: result.failed
-        )
+        return adopted
     }
 
     private func resolvePlacementDestination(
@@ -1024,7 +1897,6 @@ public final class LayoutMaintainer {
         }
         state.update(scope)
         return RulePlacementDestination(
-            display: display,
             scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: stageID),
             follow: application.follow ?? false
         )
@@ -1131,11 +2003,13 @@ public final class LayoutMaintainer {
         ))
     }
 
+    /// Commandes des modes sans arbre, sans les plein écrans ni les demandes déjà refusées,
+    /// échouées ou annulées par l'application (protections des modes sans arbre, A3). O(plan)
     private func suppressKnownUnmovableFrames(in plan: ApplyPlan, snapshot: DaemonSnapshot) -> ApplyPlan {
-        let cutoff = now().addingTimeInterval(-LayoutTolerance.recentRefusal.seconds(intervalSeconds: intervalSeconds))
+        let cutoff = now().addingTimeInterval(-LayoutTolerance.recentRefusal)
         let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         let fullscreenScopes = Set(tickFullscreen.compactMap(\.entry.scope))
-        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
+        let windowsByID = Dictionary(snapshot.windows.map { ($0.window.id, $0) }, uniquingKeysWith: { first, _ in first })
         return ApplyPlan(commands: plan.commands.compactMap { planned -> ApplyCommand? in
             if fullscreenWindowIDs.contains(planned.window.id) {
                 return nil
@@ -1160,15 +2034,6 @@ public final class LayoutMaintainer {
             }
             return command
         })
-    }
-
-    /// Oublie les refus de taille et les échecs de plus de 30 s, et ceux des fenêtres disparues
-    /// (FR-004). O(r) — r refus mémorisés.
-    private func forgetExpiredRefusals(liveWindowIDs: Set<UInt32>, now: Date) {
-        let oldest = now.addingTimeInterval(-LayoutTolerance.refusalMemorySeconds)
-        clampedFrames = clampedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
-        failedFrames = failedFrames.filter { liveWindowIDs.contains($0.key) && $0.value.recordedAt >= oldest }
-        revertedAppliedFrames = revertedAppliedFrames.filter { liveWindowIDs.contains($0.key) }
     }
 
     private func snapshotExcludingGrowthClampedWindows(_ snapshot: DaemonSnapshot) -> DaemonSnapshot {
@@ -1328,6 +2193,7 @@ public final class LayoutMaintainer {
             && abs(lhs.height - rhs.height) <= tolerance
     }
 
+    /// Mémoire des refus, des échecs et des annulations des modes sans arbre (FR-004, A3). O(k).
     private func record(_ result: ApplyResult, from plan: ApplyPlan) {
         let commandsByID = plan.commands.reduce(into: [WindowID: ApplyCommand]()) { result, command in
             result[command.window.id] = command
@@ -1437,7 +2303,8 @@ public final class LayoutMaintainer {
         )
     }
 
-    private func clampedSiblingRepairPlan(from result: ApplyResult, in snapshot: DaemonSnapshot) -> ApplyPlan {
+    /// Voisines des fenêtres clampées replacées dans l'espace restant (modes sans arbre, A3). O(s · n).
+    private func clampedSiblingRepairPlan(from result: ApplyResult, in snapshot: DaemonSnapshot, treeScopes: Set<StageScope>) -> ApplyPlan {
         let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
         guard !clampedItems.isEmpty else { return ApplyPlan(commands: []) }
 
@@ -1452,9 +2319,10 @@ public final class LayoutMaintainer {
         let scopes = Set(clampedItems.compactMap { item in entriesByID[item.windowID]?.scope })
         var commands: [ApplyCommand] = []
 
-        for scope in scopes {
+        for scope in scopes where !treeScopes.contains(scope) {
             guard let stage = snapshot.state.stage(scope: scope),
                   stage.mode != .float,
+                  !stage.mode.usesTreeEngine,
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID })
             else { continue }
 
@@ -1483,10 +2351,9 @@ public final class LayoutMaintainer {
             let currentFrames = siblingEntries.reduce(into: [WindowID: CGRect]()) { result, entry in
                 result[entry.window.id] = entry.window.frame.cgRect
             }
-            let mode: WindowManagementMode = stage.mode == .spatialBsp ? .mutableBsp : stage.mode
             let plan = LayoutPlanner.plan(LayoutRequest(
                 scope: scope,
-                mode: mode,
+                mode: stage.mode,
                 container: repairContainer.integral,
                 windowIDs: siblingIDs,
                 currentFrames: currentFrames,
@@ -1510,13 +2377,14 @@ public final class LayoutMaintainer {
         return ApplyPlan(commands: commands)
     }
 
-    /// Scopes actifs où au moins deux fenêtres clampées se chevauchent ou débordent encore.
+    /// Scopes actifs sans arbre (A3) où au moins deux fenêtres clampées se chevauchent ou débordent encore.
     /// Replanifie avec les tailles minimales connues ; garde la fenêtre focalisée et cache les
     /// autres seulement si aucune disposition n'existe (dernier recours journalisé, FR-003).
     // O(s · n³) au pire — s scopes concernés, n fenêtres par scope (n petit).
     private func resolveInfeasibleClampedScopes(
         from result: ApplyResult,
-        in snapshot: DaemonSnapshot
+        in snapshot: DaemonSnapshot,
+        treeScopes: Set<StageScope>
     ) -> (result: ApplyResult, commands: [ApplyCommand], hidden: Int) {
         var resolution = ApplyResult.empty
         var commands: [ApplyCommand] = []
@@ -1538,6 +2406,7 @@ public final class LayoutMaintainer {
 
         for (optionalScope, scopedClampedItems) in clampedScopes {
             guard let scope = optionalScope,
+                  !treeScopes.contains(scope),
                   scopedClampedItems.count >= 2,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
                   let stage = snapshot.state.stage(scope: scope),
@@ -1893,13 +2762,16 @@ public final class LayoutMaintainer {
         return frames
     }
 
-    private func persistLayoutIntent(in snapshot: DaemonSnapshot, result: ApplyResult) {
+    /// Intent des scopes sans arbre touchés par une application sans refus. Les modes à arbre
+    /// n'enregistrent aucun intent automatique : l'arbre fait foi (R2).
+    private func persistLayoutIntent(in snapshot: DaemonSnapshot, result: ApplyResult, treeScopes: Set<StageScope>) {
         let resultFrames = Dictionary(uniqueKeysWithValues: result.items.compactMap { item -> (WindowID, Rect)? in
             guard item.status == .applied else { return nil }
             return (item.windowID, item.actual ?? item.requested)
         })
         let touchedScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
             guard let scope = entry.scope,
+                  !treeScopes.contains(scope),
                   resultFrames[entry.window.id] != nil || priorityWindowIDs.contains(entry.window.id)
             else { return nil }
             return snapshot.state.activeScope(on: scope.displayID) == scope ? scope : nil
@@ -1915,26 +2787,8 @@ public final class LayoutMaintainer {
                 placements[id] = frame
             }
             guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
-            let orderedIDs = stage.mode == .mutableBsp
-                ? service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
-                : stage.windowIDs
-            service.saveLayoutIntent(scope: scope, windowIDs: orderedIDs, placements: placements)
+            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)
         }
-    }
-
-    private func repairMutableBspOrderBeforePriorityApplyIfNeeded(
-        snapshot: DaemonSnapshot,
-        priorityWindowIDs: Set<WindowID>
-    ) -> DaemonSnapshot? {
-        guard !priorityWindowIDs.isEmpty else { return nil }
-        let scopes = activeMutableBspScopes(for: priorityWindowIDs, in: snapshot)
-        guard !scopes.isEmpty else { return nil }
-        let repaired = service.repairMutableBspOrderForCurrentGeometry(
-            scopes: scopes,
-            in: snapshot,
-            reason: "manual_resize_priority_apply"
-        )
-        return repaired ? service.snapshot(followFocus: false) : nil
     }
 
     private func persistCurrentLayoutIntents(in snapshot: DaemonSnapshot, excluding excludedScopes: Set<StageScope>) {
@@ -1945,77 +2799,6 @@ public final class LayoutMaintainer {
             guard !service.hasValidLayoutIntent(scope: scope, in: snapshot) else { continue }
             _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: snapshot)
         }
-    }
-
-    private func appendMutableBspSuppressionEvent(scopes: Set<StageScope>, suppressed: Int) {
-        let scopeDescriptions = scopes.map(\.description).sorted()
-        let signature = scopeDescriptions.joined(separator: ",")
-        guard signature != lastMutableBspSuppressionSignature else { return }
-        lastMutableBspSuppressionSignature = signature
-        events.append(RoadieEvent(type: "mutable_bsp_auto_relayout_suppressed", details: [
-            "scopes": scopeDescriptions.joined(separator: ","),
-            "suppressed": String(suppressed)
-        ]))
-    }
-
-    private func appendStageMembershipSettlingEvent(scopes: Set<StageScope>) {
-        let scopeDescriptions = scopes.map(\.description).sorted()
-        let signature = scopeDescriptions.joined(separator: ",")
-        guard signature != lastStageMembershipSettlingSignature else { return }
-        lastStageMembershipSettlingSignature = signature
-        events.append(RoadieEvent(type: "layout_stage_membership_settling", details: [
-            "scopes": scopeDescriptions.joined(separator: ","),
-            "holdSeconds": String(stageMembershipSettleSeconds)
-        ]))
-    }
-
-    private func activeTiledStageMembershipSettlingScopes(
-        in snapshot: DaemonSnapshot,
-        changedWindowIDs: Set<WindowID>,
-        now tickNow: Date
-    ) -> Set<StageScope> {
-        let persistentState = store.state()
-        let geometryChangedScopes = activeTiledScopes(for: changedWindowIDs, in: snapshot)
-        var currentSignatures: [StageScope: String] = [:]
-        var candidateScopes: Set<StageScope> = []
-        var settlingScopes: Set<StageScope> = []
-
-        for display in snapshot.displays {
-            guard let scope = snapshot.state.activeScope(on: display.id),
-                  let stage = snapshot.state.stage(scope: scope),
-                  stage.mode.isTiled
-            else { continue }
-
-            let signature = stageMembershipSignature(stage)
-            currentSignatures[scope] = signature
-            // Un scope qui vient de devenir actif (changement de stage) n'a pas de signature
-            // précédente : son activation n'est pas un changement de membres (FR-017).
-            if let previous = lastActiveTiledStageMembershipSignatures[scope],
-               previous != signature {
-                candidateScopes.insert(scope)
-            }
-
-            if persistentStageHasRecentMissingMember(scope: scope, in: persistentState, now: tickNow) {
-                candidateScopes.insert(scope)
-            }
-
-            if candidateScopes.contains(scope), geometryChangedScopes.contains(scope) {
-                activeTiledStageMembershipChangedAt[scope] = tickNow
-            }
-
-            if let changedAt = activeTiledStageMembershipChangedAt[scope],
-               tickNow.timeIntervalSince(changedAt) < stageMembershipSettleSeconds {
-                settlingScopes.insert(scope)
-            }
-        }
-
-        let activeScopes = Set(currentSignatures.keys)
-        activeTiledStageMembershipChangedAt = activeTiledStageMembershipChangedAt.filter { activeScopes.contains($0.key) }
-        lastActiveTiledStageMembershipSignatures = currentSignatures
-        if settlingScopes.isEmpty {
-            lastStageMembershipSettlingSignature = nil
-        }
-        return settlingScopes
     }
 
     private func persistentStageHasRecentMissingMember(
@@ -2031,7 +2814,7 @@ public final class LayoutMaintainer {
 
         return stage.members.contains { member in
             guard let missingSince = member.missingSince else { return false }
-            return tickNow.timeIntervalSince(missingSince) < stageMembershipSettleSeconds
+            return tickNow.timeIntervalSince(missingSince) < LayoutTolerance.burstCap
         }
     }
 
@@ -2048,296 +2831,6 @@ public final class LayoutMaintainer {
             else { return nil }
             return scope
         })
-    }
-
-    private func stageMembershipSignature(_ stage: StageState) -> String {
-        let ids = stage.windowIDs
-            .map { String($0.rawValue) }
-            .sorted()
-            .joined(separator: ",")
-        return "\(stage.mode.rawValue):\(ids)"
-    }
-
-    private func activeTiledScopes(
-        for windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
-    ) -> Set<StageScope> {
-        Set(snapshot.windows.compactMap { entry -> StageScope? in
-            guard windowIDs.contains(entry.window.id),
-                  let scope = entry.scope,
-                  let stage = snapshot.state.stage(scope: scope),
-                  stage.mode.isTiled,
-                  snapshot.state.activeScope(on: scope.displayID) == scope
-            else { return nil }
-            return scope
-        })
-    }
-
-    private func activeMutableBspScopes(
-        for windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
-    ) -> Set<StageScope> {
-        Set(snapshot.windows.compactMap { entry -> StageScope? in
-            guard windowIDs.contains(entry.window.id),
-                  let scope = entry.scope,
-                  let stage = snapshot.state.stage(scope: scope),
-                  stage.mode == .mutableBsp,
-                  snapshot.state.activeScope(on: scope.displayID) == scope
-            else { return nil }
-            return scope
-        })
-    }
-
-    private func activeMutableBspChangedWindowIDs(
-        for windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
-    ) -> Set<WindowID> {
-        Set(snapshot.windows.compactMap { entry -> WindowID? in
-            guard windowIDs.contains(entry.window.id),
-                  entry.window.isTileCandidate,
-                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
-                  let scope = entry.scope,
-                  let stage = snapshot.state.stage(scope: scope),
-                  stage.mode == .mutableBsp,
-                  snapshot.state.activeScope(on: scope.displayID) == scope
-            else { return nil }
-            return entry.window.id
-        })
-    }
-
-    private func adoptMutableBspGeometryChange(
-        in snapshot: DaemonSnapshot,
-        changedWindowIDs: Set<WindowID>
-    ) -> MaintenanceTick? {
-        let mutableChangedWindowIDs = activeMutableBspChangedWindowIDs(for: changedWindowIDs, in: snapshot)
-        let mutableScopes = activeMutableBspScopes(for: mutableChangedWindowIDs, in: snapshot)
-        guard !mutableScopes.isEmpty else { return nil }
-
-        let resizeAxes = singleWindowResizeAxes(for: mutableChangedWindowIDs, in: snapshot)
-        let shouldRepairOrder = resizeAxes == nil
-        let repaired = shouldRepairOrder && service.repairMutableBspOrderForCurrentGeometry(
-            scopes: mutableScopes,
-            in: snapshot,
-            reason: mutableChangedWindowIDs.count >= 2
-                ? "manual_multi_window_geometry_change"
-                : "manual_window_geometry_change"
-        )
-        let updatedSnapshot = repaired ? service.snapshot(followFocus: false) : snapshot
-        let planningSnapshot = snapshotByPreservingOrthogonalResizeAxis(
-            in: updatedSnapshot,
-            resizeAxes: resizeAxes
-        )
-        for scope in mutableScopes {
-            service.removeLayoutIntent(scope: scope)
-        }
-
-        if mutableChangedWindowIDs.count == 1,
-           let propagated = propagateMutableBspSingleWindowResize(
-                in: planningSnapshot,
-                scopes: mutableScopes,
-                changedWindowIDs: mutableChangedWindowIDs,
-                resizeAxes: resizeAxes
-           ) {
-            return propagated
-        }
-
-        for scope in mutableScopes {
-            _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: updatedSnapshot)
-        }
-        priorityWindowIDs = []
-        manualResizeApplyAfter = nil
-        lastObservedFrames = scopedFrames(in: updatedSnapshot)
-        events.append(RoadieEvent(type: "mutable_bsp_geometry_adopted", details: [
-            "windowIDs": mutableChangedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
-            "ignoredWindowIDs": changedWindowIDs.subtracting(mutableChangedWindowIDs).map { String($0.rawValue) }.sorted().joined(separator: ","),
-            "scopes": mutableScopes.map(\.description).sorted().joined(separator: ","),
-            "resizeAxes": resizeAxesEventValue(resizeAxes)
-        ]))
-        return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
-    }
-
-    private func propagateMutableBspSingleWindowResize(
-        in snapshot: DaemonSnapshot,
-        scopes: Set<StageScope>,
-        changedWindowIDs: Set<WindowID>,
-        resizeAxes: [WindowID: MutableResizeAxes]?
-    ) -> MaintenanceTick? {
-        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-        let planned = suppressKnownUnmovableFrames(
-            in: plannedCommands(from: snapshot, priorityWindowIDs: changedWindowIDs),
-            snapshot: snapshot
-        )
-        let rawPlan = planByPreservingOrthogonalResizeAxis(
-            planned,
-            in: snapshot,
-            resizeAxes: resizeAxes,
-            windowsByID: windowsByID,
-            scopes: scopes
-        )
-        let plan = ApplyPlan(commands: rawPlan.commands.filter { command in
-            guard !changedWindowIDs.contains(command.window.id),
-                  let scope = windowsByID[command.window.id]?.scope
-            else { return false }
-            return scopes.contains(scope)
-        })
-
-        let observedFrames = scopedFrames(in: snapshot)
-        if plan.commands.isEmpty {
-            for scope in scopes {
-                _ = service.saveCurrentLayoutIntentIfValid(scope: scope, from: snapshot)
-            }
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-            lastObservedFrames = observedFrames
-            events.append(RoadieEvent(type: "mutable_bsp_geometry_adopted", details: [
-                "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
-                "scopes": scopes.map(\.description).sorted().joined(separator: ","),
-                "reason": "single_window_no_neighbor_delta"
-            ]))
-            return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, manualResizeDetected: true)
-        }
-
-        var result = service.apply(plan)
-        result = stabilizeClampedPositions(result, from: plan, in: snapshot)
-        record(result, from: plan)
-        appendItemEvents(result)
-        if result.clamped == 0 && result.failed == 0 {
-            persistLayoutIntent(in: snapshot, result: result)
-        }
-
-        priorityWindowIDs = []
-        manualResizeApplyAfter = nil
-        lastObservedFrames = framesAfterApplying(result, fallback: observedFrames)
-        events.append(RoadieEvent(type: "mutable_bsp_resize_propagated", details: [
-            "windowIDs": changedWindowIDs.map { String($0.rawValue) }.sorted().joined(separator: ","),
-            "scopes": scopes.map(\.description).sorted().joined(separator: ","),
-            "commands": String(plan.commands.count),
-            "applied": String(result.applied),
-            "clamped": String(result.clamped),
-            "failed": String(result.failed),
-            "resizeAxes": resizeAxesEventValue(resizeAxes)
-        ]))
-        return MaintenanceTick(
-            commands: plan.commands.count,
-            applied: result.applied,
-            clamped: result.clamped,
-            failed: result.failed,
-            manualResizeDetected: true
-        )
-    }
-
-    private func planByPreservingOrthogonalResizeAxis(
-        _ plan: ApplyPlan,
-        in snapshot: DaemonSnapshot,
-        resizeAxes: [WindowID: MutableResizeAxes]?,
-        windowsByID: [WindowID: ScopedWindowSnapshot],
-        scopes: Set<StageScope>
-    ) -> ApplyPlan {
-        guard let axis = resizeAxes?.values.first else { return plan }
-
-        return ApplyPlan(commands: plan.commands.map { command in
-            guard let entry = windowsByID[command.window.id],
-                  let scope = entry.scope,
-                  scopes.contains(scope),
-                  let previousFrame = visiblePreviousFrame(of: entry, in: snapshot)
-            else { return command }
-
-            var frame = command.frame
-            switch axis {
-            case .horizontal:
-                frame.y = previousFrame.y
-                frame.height = previousFrame.height
-            case .vertical:
-                frame.x = previousFrame.x
-                frame.width = previousFrame.width
-            }
-            return ApplyCommand(window: command.window, frame: frame)
-        })
-    }
-
-    private enum MutableResizeAxes: String {
-        case horizontal
-        case vertical
-    }
-
-    private func singleWindowResizeAxes(
-        for windowIDs: Set<WindowID>,
-        in snapshot: DaemonSnapshot
-    ) -> [WindowID: MutableResizeAxes]? {
-        guard windowIDs.count == 1,
-              let windowID = windowIDs.first,
-              let axes = resizeAxesFor(windowID, in: snapshot)
-        else { return nil }
-        return [windowID: axes]
-    }
-
-    private func resizeAxesFor(
-        _ windowID: WindowID,
-        in snapshot: DaemonSnapshot
-    ) -> MutableResizeAxes? {
-        guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
-              let previous = visiblePreviousFrame(of: entry, in: snapshot)
-        else { return nil }
-
-        let current = entry.window.frame
-        let horizontalDelta = abs(current.x - previous.x) + abs(current.width - previous.width)
-        let verticalDelta = abs(current.y - previous.y) + abs(current.height - previous.height)
-        let threshold = LayoutTolerance.observedChange
-
-        if horizontalDelta > threshold,
-           verticalDelta <= max(LayoutTolerance.clampShrink, horizontalDelta * LayoutTolerance.growthRatio) {
-            return .horizontal
-        }
-        if verticalDelta > threshold,
-           horizontalDelta <= max(LayoutTolerance.clampShrink, verticalDelta * LayoutTolerance.growthRatio) {
-            return .vertical
-        }
-        return nil
-    }
-
-    /// Cadre observé au tick précédent, seulement s'il était visible sur l'écran de la fenêtre.
-    /// Un cadre caché ou hors de `visibleFrame` ne sert pas de référence d'axe (moteur 15).
-    private func visiblePreviousFrame(of entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> Rect? {
-        guard let previous = lastObservedFrames?[entry.window.id.rawValue],
-              let display = display(for: entry, in: snapshot),
-              !HiddenWindowPlacement.isHidden(previous.cgRect, in: snapshot.displays)
-        else { return nil }
-        let tolerance = LayoutTolerance.observedChange
-        let bounds = display.visibleFrame.cgRect.insetBy(dx: -tolerance, dy: -tolerance)
-        return bounds.contains(previous.cgRect) ? previous : nil
-    }
-
-    private func snapshotByPreservingOrthogonalResizeAxis(
-        in snapshot: DaemonSnapshot,
-        resizeAxes: [WindowID: MutableResizeAxes]?
-    ) -> DaemonSnapshot {
-        guard let resizeAxes else { return snapshot }
-        return DaemonSnapshot(
-            permissions: snapshot.permissions,
-            displays: snapshot.displays,
-            windows: snapshot.windows.map { entry in
-                guard let axis = resizeAxes[entry.window.id],
-                      let previousFrame = visiblePreviousFrame(of: entry, in: snapshot)
-                else { return entry }
-                var window = entry.window
-                switch axis {
-                case .horizontal:
-                    window.frame.y = previousFrame.y
-                    window.frame.height = previousFrame.height
-                case .vertical:
-                    window.frame.x = previousFrame.x
-                    window.frame.width = previousFrame.width
-                }
-                return ScopedWindowSnapshot(
-                    window: window,
-                    scope: entry.scope,
-                    pin: entry.pin,
-                    isNewlyScoped: entry.isNewlyScoped
-                )
-            },
-            state: snapshot.state,
-            focusedWindowID: snapshot.focusedWindowID
-        )
     }
 
     /// Annule seulement les déplacements de `reconcileStableVisibleDisplayDrift`, sur l'état relu
@@ -2369,22 +2862,18 @@ public final class LayoutMaintainer {
         }
     }
 
-    private func resizeAxesEventValue(_ axes: [WindowID: MutableResizeAxes]?) -> String {
-        guard let axes, !axes.isEmpty else { return "" }
-        return axes.keys.sorted().map { id in
-            "\(id.rawValue):\(axes[id]?.rawValue ?? "")"
-        }.joined(separator: ",")
-    }
-
+    /// Fenêtre stable et visible sur un autre écran que celui de son scope : rattachée à la stage
+    /// active de son écran physique (changement d'état logique, A15). Les frames viennent du plan
+    /// de la passe ; `finishDriftMoves` annule le rattachement si l'application échoue.
     private func reconcileStableVisibleDisplayDrift(
         in snapshot: DaemonSnapshot,
         excluding excludedScopes: Set<StageScope>
-    ) -> MaintenanceTick? {
+    ) -> [ReconciledDisplayMove] {
         let tickNow = now()
         if let lastDisplayTopologyChangedAt,
-           tickNow.timeIntervalSince(lastDisplayTopologyChangedAt) < displayDriftReconcileHoldSeconds
+           tickNow.timeIntervalSince(lastDisplayTopologyChangedAt) < LayoutTolerance.displayDriftReconcileHold
         {
-            return nil
+            return []
         }
 
         // Déplacements calculés et écrits sur l'état relu sous verrou (SPEC-016 FR-013). La
@@ -2431,44 +2920,25 @@ public final class LayoutMaintainer {
             return reconciled
         }
 
-        guard !reconciled.isEmpty else { return nil }
+        return reconciled
+    }
 
-        let updatedSnapshot = service.snapshot(followFocus: false)
-        let plan = suppressKnownUnmovableFrames(
-            in: plannedCommands(from: updatedSnapshot, priorityWindowIDs: Set(reconciled.map(\.window.id))),
-            snapshot: updatedSnapshot
-        )
-        let result = service.apply(plan)
-        record(result, from: plan)
-        appendItemEvents(result)
-        if result.failed > 0 {
-            revertReconciledDisplayMoves(reconciled)
-            lastObservedFrames = scopedFrames(in: snapshot)
+    /// Fin du rattachement physique après l'application de la passe : annulé si une écriture de ces
+    /// fenêtres a échoué, sinon journalisé et les intents des deux scopes oubliés. O(m · M).
+    private func finishDriftMoves(_ moves: [ReconciledDisplayMove], result: ApplyResult) {
+        guard !moves.isEmpty else { return }
+        let movedIDs = Set(moves.map(\.window.id))
+        let failed = result.items.filter { movedIDs.contains($0.windowID) && $0.status == .failed }
+        if !failed.isEmpty {
+            revertReconciledDisplayMoves(moves)
             events.append(RoadieEvent(type: "window.scope_reconcile_failed", details: [
-                "windows": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
-                "commands": String(plan.commands.count),
-                "applied": String(result.applied),
-                "clamped": String(result.clamped),
-                "failed": String(result.failed),
+                "windows": moves.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
+                "failed": String(failed.count),
                 "reason": "frame_apply_failed"
             ]))
-            events.append(RoadieEvent(type: "layout_apply", details: [
-                "commands": String(plan.commands.count),
-                "applied": String(result.applied),
-                "clamped": String(result.clamped),
-                "failed": String(result.failed),
-                "reason": "physical_display_reconcile_failed",
-                "priorityWindowIDs": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
-            ]))
-            return MaintenanceTick(
-                commands: plan.commands.count,
-                applied: result.applied,
-                clamped: result.clamped,
-                failed: result.failed
-            )
+            return
         }
-
-        for item in reconciled {
+        for item in moves {
             service.removeLayoutIntent(scope: item.source)
             service.removeLayoutIntent(scope: item.target)
             events.append(RoadieEvent(type: "window.scope_reconciled_to_physical_display", scope: item.target, details: [
@@ -2480,85 +2950,11 @@ public final class LayoutMaintainer {
                 "reason": "stable_visible_frame_on_different_display"
             ]))
         }
-
-        lastObservedFrames = framesAfterApplying(result, fallback: scopedFrames(in: updatedSnapshot))
-        events.append(RoadieEvent(type: "layout_apply", details: [
-            "commands": String(plan.commands.count),
-            "applied": String(result.applied),
-            "clamped": String(result.clamped),
-            "failed": String(result.failed),
-            "reason": "physical_display_reconciled",
-            "priorityWindowIDs": reconciled.map { String($0.window.id.rawValue) }.sorted().joined(separator: ",")
-        ]))
-        return MaintenanceTick(
-            commands: max(reconciled.count, plan.commands.count),
-            applied: reconciled.count + result.applied,
-            clamped: result.clamped,
-            failed: result.failed
-        )
     }
 
-    private func stableVisibleMutableBspScopes(in snapshot: DaemonSnapshot) -> Set<StageScope> {
-        let persistentState = store.state()
-        return Set(snapshot.displays.compactMap { display -> StageScope? in
-            guard let scope = snapshot.state.activeScope(on: display.id),
-                  let stage = snapshot.state.stage(scope: scope),
-                  stage.mode == .mutableBsp,
-                  !stage.windowIDs.isEmpty
-            else { return nil }
-            let persistentStage = persistentState.scopes
-                .first { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID }?
-                .stages
-                .first { $0.id == scope.stageID }
-            if let persistentStage,
-               Set(persistentStage.members.map(\.windowID)) != Set(stage.windowIDs) {
-                return nil
-            }
-
-            let entries = snapshot.windows.filter { entry in
-                entry.scope == scope && entry.window.isTileCandidate
-            }
-            guard Set(entries.map(\.window.id)) == Set(stage.windowIDs) else { return nil }
-            if service.commandLayoutIntentNeedsApply(scope: scope, in: snapshot) {
-                return nil
-            }
-            if let lastObservedFrames,
-               entries.contains(where: { lastObservedFrames[$0.window.id.rawValue] == nil }) {
-                return nil
-            }
-            guard entries.allSatisfy({ entry in
-                entry.window.isOnScreen
-                    && !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
-            }) else { return nil }
-            guard stableMutableBspFramesLookUsable(entries.map(\.window.frame.cgRect), on: display) else {
-                return nil
-            }
-
-            return scope
-        })
-    }
-
-    private func stableMutableBspFramesLookUsable(_ frames: [CGRect], on display: DisplaySnapshot) -> Bool {
-        let container = display.visibleFrame.cgRect
-        let overflow = LayoutTolerance.clampShrink
-        guard frames.allSatisfy({ container.insetBy(dx: -overflow, dy: -overflow).contains($0) }) else {
-            return false
-        }
-        guard frames.count > 1 else { return true }
-        for index in frames.indices {
-            for otherIndex in frames.index(after: index)..<frames.endIndex {
-                // Chevauchement réel seulement s'il dépasse le bruit d'application sur les deux axes
-                // (l'ancien seuil comparait une aire à une tolérance en points).
-                let intersection = frames[index].intersection(frames[otherIndex])
-                if intersection.width > LayoutTolerance.frameNear && intersection.height > LayoutTolerance.frameNear {
-                    return false
-                }
-            }
-        }
-        return true
-    }
-
-    private func changedWindows(in frames: [UInt32: Rect]) -> Set<WindowID> {
+    /// Fenêtres des modes sans arbre dont le cadre a changé depuis la passe précédente (A3). Les
+    /// scopes à arbre ne lisent jamais de géométrie pour décider (R2) : ils en sont exclus. O(n).
+    private func changedWindows(in frames: [UInt32: Rect], outside treeScopes: Set<StageScope>, snapshot: DaemonSnapshot) -> Set<WindowID> {
         guard let previous = lastObservedFrames else { return [] }
         var result: Set<WindowID> = []
         for (id, frame) in frames {
@@ -2567,7 +2963,7 @@ public final class LayoutMaintainer {
                 result.insert(WindowID(rawValue: id))
             }
         }
-        return result
+        return windowIDs(result, outside: treeScopes, in: snapshot)
     }
 
     private func authoritativeModelScopes(
@@ -2661,260 +3057,6 @@ public final class LayoutMaintainer {
             )
         })
     }
-
-    private func hideInactiveStageWindows(in snapshot: DaemonSnapshot, onlyDisplayID: DisplayID? = nil) -> Int {
-        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
-        var applied = 0
-        for entry in snapshot.windows {
-            guard let scope = entry.scope,
-                  onlyDisplayID.map({ scope.displayID == $0 }) ?? true,
-                  let activeScope = snapshot.state.activeScope(on: scope.displayID),
-                  scope != activeScope,
-                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  !HiddenWindowPlacement.isPreferred(entry.window.frame.cgRect, among: snapshot.displays),
-                  !fullscreenWindowIDs.contains(entry.window.id)
-            else { continue }
-            if entry.pin?.visibility(in: activeScope).shouldBeVisible == true {
-                continue
-            }
-
-            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if let actual = service.setFrame(frame, of: entry.window) {
-                recordObservedFrame(actual, of: entry.window.id)
-                applied += 1
-            }
-        }
-        return applied
-    }
-
-    /// Cache les voisines d'une fenêtre en plein écran dans son scope actif. La fenêtre qui a le
-    /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002).
-    private func hideActiveStageSiblingsOfFullscreenWindows(in snapshot: DaemonSnapshot) -> Int {
-        let fullscreenItems = tickFullscreen.filter { item in
-            guard let scope = item.entry.scope else { return false }
-            return snapshot.state.activeScope(on: scope.displayID) == scope
-        }
-        guard !fullscreenItems.isEmpty else { return 0 }
-
-        let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
-        let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
-        // Focus réel du système (pas le focus mémorisé de la stage).
-        let systemFocusedWindowID = service.focusedWindowID()
-        var applied = 0
-
-        for entry in snapshot.windows {
-            guard let scope = entry.scope,
-                  fullscreenScopes.contains(scope),
-                  !fullscreenWindowIDs.contains(entry.window.id),
-                  entry.window.id != systemFocusedWindowID,
-                  entry.window.isTileCandidate,
-                  entry.window.isOnScreen,
-                  let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
-                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
-            else { continue }
-
-            let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if let actual = service.setFrame(frame, of: entry.window) {
-                recordObservedFrame(actual, of: entry.window.id)
-                applied += 1
-            }
-        }
-        return applied
-    }
-
-    /// Recale une fenêtre zoomée par commande dont l'origine a glissé (redémarrage, changement
-    /// d'écran). Une fenêtre en plein écran natif appartient à macOS : jamais déplacée.
-    private func reanchorShiftedZoomedWindows(in snapshot: DaemonSnapshot) -> Int {
-        var applied = 0
-        for item in tickFullscreen {
-            let entry = item.entry
-            guard let scope = entry.scope,
-                  snapshot.state.activeScope(on: scope.displayID) == scope,
-                  entry.window.furniture?.isNativeFullscreen != true,
-                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
-                  let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display)
-            else { continue }
-
-            if let actual = service.setFrame(target, of: entry.window) {
-                recordObservedFrame(actual, of: entry.window.id)
-                applied += 1
-            }
-        }
-        return applied
-    }
-
-    /// Rend visible la fenêtre focalisée quand elle est cachée dans le scope actif de son écran
-    /// (Cmd-Tab vers une fenêtre masquée). nil s'il n'y a rien à appliquer : le tick continue (FR-002).
-    private func restoreFocusedActiveStageIfNeeded(
-        in snapshot: DaemonSnapshot,
-        observedFrames: [UInt32: Rect]
-    ) -> MaintenanceTick? {
-        let startedAt = Date()
-        guard let focusedWindowID = snapshot.focusedWindowID,
-              let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
-              let focusedScope = focusedEntry.scope,
-              snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
-              focusedEntry.window.isTileCandidate,
-              HiddenWindowPlacement.isHidden(focusedEntry.window.frame.cgRect, in: snapshot.displays),
-              !tickExcludedScopes.contains(focusedScope),
-              let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
-        else { return nil }
-
-        // Membre disparu récemment : scope exclu le temps que la composition se stabilise (R6).
-        if persistentStageHasRecentMissingMember(scope: focusedScope, in: store.state(), now: now()) {
-            tickExcludedScopes.insert(focusedScope)
-            observe(observedFrames, scopes: [focusedScope], in: snapshot)
-            appendStageMembershipSettlingEvent(scopes: [focusedScope])
-            return nil
-        }
-
-        // FR-002 : le focus sur une voisine cachée d'une fenêtre zoomée sort du zoom. L'intent de
-        // zoom (voisines aux cadres cachés) est retiré et la fenêtre zoomée quitte le plein écran
-        // du tick : le scope est redisposé normalement au lieu de rester exclu.
-        if let zoomedWindowID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID,
-           zoomedWindowID != focusedWindowID {
-            service.removeLayoutIntent(scope: focusedScope)
-            tickFullscreen.removeAll { $0.entry.window.id == zoomedWindowID }
-            events.append(RoadieEvent(type: "layout_zoom_exited", scope: focusedScope, details: [
-                "zoomedWindowID": String(zoomedWindowID.rawValue),
-                "focusedWindowID": String(focusedWindowID.rawValue)
-            ]))
-        }
-
-        let activeHiddenEntries = snapshot.windows.filter { entry in
-            entry.scope == focusedScope
-                && entry.window.isTileCandidate
-                && HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
-        }
-        let activeHiddenWindowIDs = Set(activeHiddenEntries.map(\.window.id))
-        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-
-        if tickFullscreen.contains(where: { $0.entry.window.id == focusedWindowID }),
-           let target = fullscreenSizedRestoreTarget(for: focusedEntry.window.frame.cgRect, on: display) {
-            let restoreStartedAt = Date()
-            let restoredFrame = service.setFrame(target, of: focusedEntry.window)
-            let restored = restoredFrame == nil ? 0 : 1
-            if let restoredFrame {
-                recordObservedFrame(restoredFrame, of: focusedWindowID)
-            }
-            let restoreMs = Date().timeIntervalSince(restoreStartedAt) * 1000
-            let hideStartedAt = Date()
-            let hiddenInactive = hideInactiveStageWindows(in: snapshot, onlyDisplayID: focusedScope.displayID)
-            let hideMs = Date().timeIntervalSince(hideStartedAt) * 1000
-
-            priorityWindowIDs = []
-            manualResizeApplyAfter = nil
-
-            events.append(RoadieEvent(type: "stage_focus_fullscreen_restore", details: [
-                "hiddenActive": String(activeHiddenEntries.count),
-                "focusedWindowID": String(focusedWindowID.rawValue),
-                "focusedDisplayID": focusedScope.displayID.rawValue,
-                "restored": String(restored),
-                "hiddenInactive": String(hiddenInactive),
-                "restoreMs": String(format: "%.1f", restoreMs),
-                "hideMs": String(format: "%.1f", hideMs),
-                "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000)
-            ]))
-
-            return MaintenanceTick(
-                commands: restored + hiddenInactive,
-                applied: restored + hiddenInactive,
-                clamped: 0,
-                failed: restored == 0 ? 1 : 0
-            )
-        }
-
-        let planStartedAt = Date()
-        let rawPlan = ApplyPlan(commands: plannedCommands(from: snapshot, priorityWindowIDs: activeHiddenWindowIDs)
-            .commands
-            .filter { windowsByID[$0.window.id]?.scope == focusedScope })
-        var plan = suppressKnownUnmovableFrames(in: rawPlan, snapshot: snapshot)
-        // Le plan du scope peut être retenu (plein écran, refus connu) : la fenêtre focalisée
-        // redevient visible quand même, sinon le maintien resterait bloqué sur elle.
-        if !plan.commands.contains(where: { $0.window.id == focusedWindowID }) {
-            let planned = rawPlan.commands.first { $0.window.id == focusedWindowID }?.frame.cgRect
-            let target = planned.flatMap { HiddenWindowPlacement.isHidden($0, in: snapshot.displays) ? nil : $0 }
-                ?? centeredVisibleFrame(for: focusedEntry.window.frame.cgRect, on: display)
-            let command = ApplyCommand(window: focusedEntry.window, frame: Rect(target))
-            if failedFrames[focusedWindowID.rawValue]?.matches(command: command) != true {
-                plan.commands.append(command)
-            }
-        }
-        let planMs = Date().timeIntervalSince(planStartedAt) * 1000
-
-        let applyStartedAt = Date()
-        var application = PlanApplication(
-            result: ApplyResult.empty,
-            commands: 0
-        )
-        if !plan.commands.isEmpty {
-            application = applyRepairingClamps(plan, in: snapshot, source: "stage_focus_restore")
-            for item in application.result.items where item.status != .failed {
-                recordObservedFrame((item.actual ?? item.requested).cgRect, of: item.windowID)
-            }
-        }
-        let applyMs = Date().timeIntervalSince(applyStartedAt) * 1000
-
-        let hideStartedAt = Date()
-        let hiddenInactive = hideInactiveStageWindows(in: snapshot, onlyDisplayID: focusedScope.displayID)
-        let hideMs = Date().timeIntervalSince(hideStartedAt) * 1000
-        guard application.commands > 0 || hiddenInactive > 0 else { return nil }
-
-        priorityWindowIDs = []
-        manualResizeApplyAfter = nil
-
-        events.append(RoadieEvent(type: "stage_focus_restore", details: [
-            "hiddenActive": String(activeHiddenEntries.count),
-            "scopes": "\(focusedScope.displayID.rawValue)/\(focusedScope.desktopID.rawValue)/\(focusedScope.stageID.rawValue)",
-            "commands": String(application.commands),
-            "applied": String(application.result.applied),
-            "clamped": String(application.result.clamped),
-            "failed": String(application.result.failed),
-            "hiddenInactive": String(hiddenInactive),
-            "focusedWindowID": String(focusedWindowID.rawValue),
-            "focusedDisplayID": focusedScope.displayID.rawValue,
-            "planMs": String(format: "%.1f", planMs),
-            "applyMs": String(format: "%.1f", applyMs),
-            "hideMs": String(format: "%.1f", hideMs),
-            "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000)
-        ]))
-
-        return MaintenanceTick(
-            commands: application.commands + hiddenInactive,
-            applied: application.result.applied + hiddenInactive,
-            clamped: application.result.clamped,
-            failed: application.result.failed
-        )
-    }
-
-    /// Cadre visible de repli : même taille (bornée à la zone visible), centré sur l'écran.
-    private func centeredVisibleFrame(for frame: CGRect, on display: DisplaySnapshot) -> CGRect {
-        let visible = display.visibleFrame.cgRect
-        let width = min(frame.width, visible.width)
-        let height = min(frame.height, visible.height)
-        return CGRect(
-            x: visible.midX - width / 2,
-            y: visible.midY - height / 2,
-            width: width,
-            height: height
-        ).integral
-    }
-
-    private func restoreVisiblePinnedWindows(in snapshot: DaemonSnapshot) -> Int {
-        var applied = 0
-        for entry in snapshot.windows {
-            guard let pin = entry.pin,
-                  let activeScope = snapshot.state.activeScope(on: pin.homeScope.displayID),
-                  pin.visibility(in: activeScope).shouldBeVisible,
-                  HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
-            else { continue }
-
-            if service.setFrame(pin.lastFrame.cgRect, of: entry.window) != nil {
-                applied += 1
-            }
-        }
-        return applied
-    }
 }
 
 /// Déplacement d'une fenêtre vers la stage de son écran physique, avec sa place d'origine.
@@ -2946,7 +3088,6 @@ private struct ReconciledDisplayMove {
 }
 
 private struct RulePlacementDestination {
-    var display: DisplaySnapshot
     var scope: StageScope
     var follow: Bool
 }
@@ -3057,6 +3198,8 @@ private struct FailedFrame {
     }
 }
 
+/// Écriture réussie puis annulée par l'application : la même demande n'est pas répétée tant que
+/// la fenêtre reste à son cadre d'avant l'écriture (modes sans arbre, A3).
 private struct RevertedAppliedFrame {
     var requested: Rect
     var observedBeforeApply: Rect
@@ -3065,15 +3208,6 @@ private struct RevertedAppliedFrame {
     func matches(command: ApplyCommand) -> Bool {
         requested.isClose(to: command.frame, tolerance: LayoutTolerance.sameRequest)
             && command.window.frame.isClose(to: observedBeforeApply, tolerance: LayoutTolerance.unchangedSinceRefusal)
-    }
-}
-
-private extension PersistentStageState {
-    func activeScopeEquivalent(on displayID: DisplayID) -> StageScope {
-        let desktopID = currentDesktopID(for: displayID)
-        let stageID = scopes.first { $0.displayID == displayID && $0.desktopID == desktopID }?.activeStageID
-            ?? StageID(rawValue: "1")
-        return StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
     }
 }
 
@@ -3092,6 +3226,18 @@ private extension Rect {
 }
 
 private extension ApplyResult {
+    /// Sous-résultat des seuls éléments retenus, compteurs recalculés. O(k).
+    static func filtering(_ result: ApplyResult, _ isIncluded: (ApplyResultItem) -> Bool) -> ApplyResult {
+        let items = result.items.filter(isIncluded)
+        return ApplyResult(
+            attempted: items.count,
+            applied: items.filter { $0.status == .applied }.count,
+            clamped: items.filter { $0.status == .clamped }.count,
+            failed: items.filter { $0.status == .failed }.count,
+            items: items
+        )
+    }
+
     func merged(with other: ApplyResult) -> ApplyResult {
         ApplyResult(
             attempted: attempted + other.attempted,
@@ -3108,5 +3254,3 @@ private extension CGRect {
         max(0, width) * max(0, height)
     }
 }
-// MARK: - Temporary Focus-Jitter Guard
-// Keep focus-only geometry jitter from mouse clicks from forcing a full relayout.

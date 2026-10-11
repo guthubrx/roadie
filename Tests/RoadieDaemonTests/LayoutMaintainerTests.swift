@@ -92,7 +92,9 @@ struct WindowPinLayoutMaintainerTests {
 
         let tick = maintainer.tick()
 
-        #expect(tick.commands == 1)
+        // A1 : masquage de la stage inactive et disposition de la stage active dans la même passe.
+        #expect(tick.commands == 2)
+        #expect(writer.requestedFrames[active.id] != nil)
         #expect(writer.requestedFrames[pinned.id] == nil)
         #expect(writer.requestedFrames[inactive.id] != nil)
     }
@@ -526,7 +528,7 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func activeLayoutCommandSuppressesMutableGeometryAdoption() {
+    func activeLayoutCommandSuppressesNonTreeRelayout() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
             index: 1,
@@ -549,7 +551,7 @@ struct LayoutMaintainerTests {
         let service = SnapshotService(
             provider: provider,
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
         )
         var currentTime = Date(timeIntervalSince1970: 100)
         let commandActivity = LayoutCommandActivity(path: tempPath("layout-command-activity"))
@@ -686,440 +688,76 @@ struct LayoutMaintainerTests {
         try? FileManager.default.removeItem(atPath: eventPath)
     }
 
-    @Test
-    func mutableBspExternalResizeIsAdoptedAsLayoutConstraint() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
+    /// FR-017 (016) et A18 : un changement isolé est rangé tout de suite ; un second changement
+    /// moins de `burstWindow` plus tard ouvre une rafale : le premier placement est conservé, rien
+    /// n'est écrit pendant la rafale, puis une seule passe finale suit `burstQuiet` de calme.
+    @Test(arguments: [0.08, 0.25])
+    func tiledScopeMembershipChurnSettlesBeforeRelayout(spacing: Double) {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness(
+            "membership-burst-\(spacing)",
+            world: world,
+            store: StageStore(path: tempPath("membership-burst-\(spacing)")),
+            strategy: .bsp
         )
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [
-                Rect(x: 0, y: 0, width: 495, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 500),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 700, height: 500),
-                Rect(x: 710, y: 0, width: 290, height: 500),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 700, height: 500),
-                Rect(x: 710, y: 0, width: 290, height: 500),
-            ],
-        ])
-        let writer = RecordingWriter()
-        let intentPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-mutable-resize-intent-\(UUID().uuidString).json")
-            .path
-        let intentStore = LayoutIntentStore(path: intentPath)
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        intentStore.save(LayoutIntent(
-            scope: scope,
-            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
-            placements: [
-                WindowID(rawValue: 1): Rect(x: 0, y: 0, width: 495, height: 500),
-                WindowID(rawValue: 2): Rect(x: 505, y: 0, width: 495, height: 500),
-            ]
-        ))
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore
-        )
-        var currentTime = Date(timeIntervalSince1970: 0)
-        let maintainer = LayoutMaintainer(service: service, now: { currentTime })
 
-        let initial = maintainer.tick()
-        let resizing = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(2)
-        let settled = maintainer.tick()
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        let first = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        let placedFirst = world.frames[treeW1]
+        harness.clock.advance(spacing)
+        world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
+        let duringBurst = harness.maintainer.tick(cause: "AXWindowCreated")
+        harness.clock.advance(LayoutTolerance.burstQuiet)
+        let final = harness.maintainer.tick(cause: "deadline")
 
-        #expect(initial.commands == 0)
-        #expect(resizing.manualResizeDetected)
-        #expect(resizing.commands == 0)
-        #expect(settled.commands == 0)
-        #expect(writer.requestedFrames.isEmpty)
-        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 700, height: 500))
-        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
-        try? FileManager.default.removeItem(atPath: intentPath)
+        #expect(first.commands == 1)
+        #expect(placedFirst == Rect(x: 0, y: 0, width: 1000, height: 500))
+        #expect(duringBurst.commands == 0)
+        #expect(final.commands >= 1)
+        #expect(world.writes[treeW3]?.count == 1)
+        #expect(harness.count("layout_stage_membership_settling") == 1)
     }
 
-    @Test
-    func mutableBspExternalResizePropagatesToNeighborWithoutSnapback() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [
-                Rect(x: 0, y: 0, width: 495, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 500),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 700, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 500),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 700, height: 500),
-                Rect(x: 710, y: 0, width: 290, height: 500),
-            ],
-        ])
-        let writer = RecordingWriter()
-        let intentPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-mutable-resize-neighbor-intent-\(UUID().uuidString).json")
-            .path
-        let eventPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-mutable-resize-neighbor-events-\(UUID().uuidString).jsonl")
-            .path
-        let intentStore = LayoutIntentStore(path: intentPath)
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        intentStore.save(LayoutIntent(
-            scope: scope,
-            windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)],
-            placements: [
-                WindowID(rawValue: 1): Rect(x: 0, y: 0, width: 495, height: 500),
-                WindowID(rawValue: 2): Rect(x: 505, y: 0, width: 495, height: 500),
-            ]
-        ))
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore
-        )
-        var currentTime = Date(timeIntervalSince1970: 0)
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), now: { currentTime })
-
-        let initial = maintainer.tick()
-        let resizing = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(2)
-        let settled = maintainer.tick()
-
-        #expect(initial.commands == 0)
-        #expect(resizing.manualResizeDetected)
-        #expect(resizing.commands == 1)
-        #expect(settled.commands == 0)
-        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
-        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
-        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 700, height: 500))
-        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 2)] == Rect(x: 710, y: 0, width: 290, height: 500))
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
-        #expect(events.contains("\"type\":\"mutable_bsp_resize_propagated\""))
-        try? FileManager.default.removeItem(atPath: intentPath)
-        try? FileManager.default.removeItem(atPath: eventPath)
-    }
-
-    @Test
-    func mutableBspHorizontalResizePreservesNestedVerticalSplit() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let store = StageStore(path: tempPath("mutable-bsp-horizontal-resize-axis"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, activeStageID: scope.stageID, stages: [
-                    PersistentStage(id: scope.stageID, mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window1", frame: Rect(x: 0, y: 0, width: 495, height: 500)),
-                        PersistentStageMember(windowID: WindowID(rawValue: 2), bundleID: "app.2", title: "Window2", frame: Rect(x: 505, y: 0, width: 495, height: 245)),
-                        PersistentStageMember(windowID: WindowID(rawValue: 3), bundleID: "app.3", title: "Window3", frame: Rect(x: 505, y: 255, width: 495, height: 245)),
-                    ])
-                ])
-            ],
-            activeDisplayID: display.id
-        ))
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [
-                Rect(x: 0, y: 0, width: 495, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 245),
-                Rect(x: 505, y: 255, width: 495, height: 245),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 495, height: 500),
-                Rect(x: 650, y: 0, width: 350, height: 245),
-                Rect(x: 505, y: 255, width: 495, height: 245),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 640, height: 500),
-                Rect(x: 650, y: 0, width: 350, height: 245),
-                Rect(x: 650, y: 255, width: 350, height: 245),
-            ],
-        ])
-        let writer = RecordingWriter()
-        let intentStore = LayoutIntentStore(path: tempPath("mutable-bsp-horizontal-resize-axis-intent"))
-        let eventPath = tempPath("mutable-bsp-horizontal-resize-axis-events")
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore,
-            stageStore: store
-        )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store)
-
-        let initial = maintainer.tick()
-        let resized = maintainer.tick()
-        let settled = maintainer.tick()
-
-        let stage = store.state().scopes[0].stages[0]
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
-        #expect(initial.commands == 0)
-        #expect(resized.manualResizeDetected)
-        #expect(resized.commands == 2)
-        #expect(settled.commands == 0)
-        #expect(stage.members.map(\.windowID) == [WindowID(rawValue: 1), WindowID(rawValue: 2), WindowID(rawValue: 3)])
-        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 0, y: 0, width: 640, height: 500))
-        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
-        #expect(writer.requestedFrames[WindowID(rawValue: 3)] == Rect(x: 650, y: 255, width: 350, height: 245))
-        #expect(intentStore.intent(for: scope)?.placements[WindowID(rawValue: 3)]?.height == 245)
-        #expect(events.contains("\"resizeAxes\":\"2:horizontal\""))
-    }
-
-    @Test
-    func tiledScopeMembershipChurnSettlesBeforeRelayout() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let first = WindowSnapshot(
-            id: WindowID(rawValue: 1),
-            pid: 11,
-            appName: "App1",
-            bundleID: "app.1",
-            title: "Window1",
-            frame: Rect(x: 0, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let second = WindowSnapshot(
-            id: WindowID(rawValue: 2),
-            pid: 12,
-            appName: "App2",
-            bundleID: "app.2",
-            title: "Window2",
-            frame: Rect(x: 505, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let firstDuringChurn = WindowSnapshot(
-            id: first.id,
-            pid: first.pid,
-            appName: first.appName,
-            bundleID: first.bundleID,
-            title: first.title,
-            frame: Rect(x: 0, y: 0, width: 700, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [
-            [first, second],
-            [firstDuringChurn],
-            [firstDuringChurn],
-        ])
-        let writer = RecordingWriter()
-        let eventPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-membership-settle-events-\(UUID().uuidString).jsonl")
-            .path
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10))
-        )
-        var currentTime = Date()
-        let maintainer = LayoutMaintainer(
-            service: service,
-            events: EventLog(path: eventPath),
-            intervalSeconds: 0.1,
-            now: { currentTime }
-        )
-
-        let initial = maintainer.tick()
-        let settling = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(3)
-        let settled = maintainer.tick()
-
-        #expect(initial.commands == 0)
-        #expect(settling.commands == 0)
-        #expect(settled.commands == 1)
-        #expect(writer.requestedFrames[first.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
-        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
-        try? FileManager.default.removeItem(atPath: eventPath)
-    }
-
+    /// A18 (remplace l'attente fixe de la 016, réécrit pour l'arbre) : la disparition d'une voisine
+    /// est rangée tout de suite et la fenêtre focalisée cachée revient ; un second changement moins
+    /// de `burstWindow` plus tard ouvre une rafale : ni restauration ni disposition avant le calme,
+    /// puis une passe finale.
     @Test
     func focusedStageRestoreWaitsForRecentMissingMemberToSettle() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let focusedVisible = WindowSnapshot(
-            id: WindowID(rawValue: 1),
-            pid: 10,
-            appName: "A",
-            bundleID: "a",
-            title: "focused",
-            frame: Rect(x: 0, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let sibling = WindowSnapshot(
-            id: WindowID(rawValue: 2),
-            pid: 11,
-            appName: "B",
-            bundleID: "b",
-            title: "sibling",
-            frame: Rect(x: 505, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        var focusedHidden = focusedVisible
-        focusedHidden.frame = Rect(x: 999, y: 499, width: 495, height: 500)
-        let stagePath = tempPath("focused-restore-membership-settling")
-        let eventPath = tempPath("focused-restore-membership-settling-events")
-        defer {
-            try? FileManager.default.removeItem(atPath: stagePath)
-            try? FileManager.default.removeItem(atPath: eventPath)
-        }
-        let stageStore = StageStore(path: stagePath)
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: MultiDisplaySequenceProvider(
-                displaySnapshots: [display],
-                windowSnapshots: [[focusedVisible, sibling], [focusedHidden]],
-                focusedID: focusedVisible.id
-            ),
-            frameWriter: writer,
-            // Config explicite : sans elle le test lit ~/.config/roadies/roadies.toml de la machine.
-            // mutableBsp reproduit la config sous laquelle ce test a été écrit ; L7 le porte sur l'arbre (A18).
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp)),
-            stageStore: stageStore
-        )
-        var currentTime = Date()
-        let maintainer = LayoutMaintainer(
-            service: service,
-            events: EventLog(path: eventPath),
-            intervalSeconds: 0.1,
-            store: stageStore,
-            now: { currentTime }
+        let hiddenCorner = Rect(x: 999, y: 499, width: 500, height: 500)
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        world.focused = treeW1
+        let harness = TreeHarness(
+            "focused-restore-burst",
+            world: world,
+            store: treeStore("focused-restore-burst", tree: treeSideBySide, frames: world.frames)
         )
 
-        _ = maintainer.tick()
-        currentTime = currentTime.addingTimeInterval(0.1)
-        let settling = maintainer.tick()
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        world.frames[treeW1] = hiddenCorner
+        let first = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        let restored = world.frames[treeW1]
+        harness.clock.advance(0.08)
+        world.frames[treeW2] = treeRight
+        world.frames[treeW1] = hiddenCorner
+        let settling = harness.maintainer.tick(cause: "AXWindowCreated")
+        let restoresDuringBurst = harness.count("stage_focus_restore")
+        harness.clock.advance(LayoutTolerance.burstQuiet)
+        let final = harness.maintainer.tick(cause: "deadline")
 
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
+        #expect(first.commands >= 1)
+        #expect(restored == Rect(x: 0, y: 0, width: 1000, height: 500))
         #expect(settling.commands == 0)
-        #expect(writer.requestedFrames.isEmpty)
-        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
-        #expect(!events.contains("\"type\":\"stage_focus_restore\""))
-    }
-
-    @Test
-    func mutableBspDoesNotAdoptGeometryDuringMembershipChurn() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let firstInitial = WindowSnapshot(
-            id: WindowID(rawValue: 1),
-            pid: 11,
-            appName: "App1",
-            bundleID: "app.1",
-            title: "Window1",
-            frame: Rect(x: 0, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let second = WindowSnapshot(
-            id: WindowID(rawValue: 2),
-            pid: 12,
-            appName: "App2",
-            bundleID: "app.2",
-            title: "Window2",
-            frame: Rect(x: 505, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let firstDuringChurn = WindowSnapshot(
-            id: firstInitial.id,
-            pid: firstInitial.pid,
-            appName: firstInitial.appName,
-            bundleID: firstInitial.bundleID,
-            title: firstInitial.title,
-            frame: Rect(x: 0, y: 0, width: 700, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let intentPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-mutable-churn-intent-\(UUID().uuidString).json")
-            .path
-        let eventPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("roadie-mutable-churn-events-\(UUID().uuidString).jsonl")
-            .path
-        let intentStore = LayoutIntentStore(path: intentPath)
-        intentStore.save(LayoutIntent(
-            scope: scope,
-            windowIDs: [firstInitial.id, second.id],
-            placements: [
-                firstInitial.id: firstInitial.frame,
-                second.id: second.frame,
-            ]
-        ))
-        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [
-            [firstInitial, second],
-            [firstDuringChurn],
-        ])
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: RecordingWriter(),
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore
-        )
-        let currentTime = Date()
-        let maintainer = LayoutMaintainer(
-            service: service,
-            events: EventLog(path: eventPath),
-            intervalSeconds: 0.1,
-            now: { currentTime }
-        )
-
-        _ = maintainer.tick()
-        let settling = maintainer.tick()
-
-        #expect(settling.commands == 0)
-        #expect(intentStore.intent(for: scope)?.windowIDs == [firstInitial.id, second.id])
-        let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
-        #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
-        #expect(!events.contains("\"type\":\"mutable_bsp_geometry_adopted\""))
-        try? FileManager.default.removeItem(atPath: intentPath)
-        try? FileManager.default.removeItem(atPath: eventPath)
+        #expect(restoresDuringBurst == 1)
+        #expect(harness.count("layout_stage_membership_settling") == 1)
+        #expect(final.commands >= 1)
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(world.frames[treeW2] == treeRight)
+        #expect(harness.count("stage_focus_restore") == 2)
     }
 
     @Test
@@ -1207,194 +845,6 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func mutableBspStableVisibleScopeIsNotAutomaticallyRelayouted() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let userLeft = Rect(x: 0, y: 0, width: 700, height: 500)
-        let userRight = Rect(x: 710, y: 0, width: 290, height: 500)
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [userLeft, userRight],
-            [userLeft, userRight],
-        ])
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
-        )
-        let maintainer = LayoutMaintainer(service: service)
-
-        let first = maintainer.tick()
-        let second = maintainer.tick()
-
-        #expect(first.commands == 0)
-        #expect(second.commands == 0)
-        #expect(writer.requestedFrames.isEmpty)
-    }
-
-    @Test
-    func mutableBspStableSuppressionDoesNotSpamEvents() throws {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let left = Rect(x: 0, y: 0, width: 600, height: 500)
-        let right = Rect(x: 700, y: 0, width: 300, height: 500)
-        let eventPath = tempPath("mutable-bsp-stable-suppression-events")
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [left, right],
-            [left, right],
-        ])
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
-        )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath))
-
-        let first = maintainer.tick()
-        let second = maintainer.tick()
-
-        #expect(first.commands == 0)
-        #expect(second.commands == 0)
-        #expect(writer.requestedFrames.isEmpty)
-        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
-        #expect(events.components(separatedBy: "\"type\":\"mutable_bsp_auto_relayout_suppressed\"").count - 1 == 1)
-        try? FileManager.default.removeItem(atPath: eventPath)
-    }
-
-    @Test
-    func mutableBspOverlappingVisibleFramesAreRelayouted() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1200, height: 600),
-            visibleFrame: Rect(x: 0, y: 0, width: 1200, height: 600),
-            isMain: true
-        )
-        let wide = WindowSnapshot(
-            id: WindowID(rawValue: 1),
-            pid: 11,
-            appName: "Wide",
-            bundleID: "app.wide",
-            title: "Wide",
-            frame: Rect(x: 0, y: 0, width: 900, height: 600),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let overlapping = WindowSnapshot(
-            id: WindowID(rawValue: 2),
-            pid: 12,
-            appName: "Overlap",
-            bundleID: "app.overlap",
-            title: "Overlap",
-            frame: Rect(x: 600, y: 0, width: 300, height: 600),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let right = WindowSnapshot(
-            id: WindowID(rawValue: 3),
-            pid: 13,
-            appName: "Right",
-            bundleID: "app.right",
-            title: "Right",
-            frame: Rect(x: 910, y: 0, width: 290, height: 600),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let stageID = StageID(rawValue: "1")
-        let store = StageStore(path: tempPath("mutable-bsp-overlap-relayout"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, activeStageID: stageID, stages: [
-                    PersistentStage(id: stageID, mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: wide.id, bundleID: wide.bundleID, title: wide.title, frame: wide.frame),
-                        PersistentStageMember(windowID: overlapping.id, bundleID: overlapping.bundleID, title: overlapping.title, frame: overlapping.frame),
-                        PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),
-                    ])
-                ])
-            ],
-            activeDisplayID: display.id
-        ))
-        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[wide, overlapping, right]])
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: store
-        )
-        let maintainer = LayoutMaintainer(service: service, store: store)
-
-        let tick = maintainer.tick()
-
-        #expect(tick.commands > 0)
-        #expect(writer.requestedFrames[overlapping.id] != nil)
-    }
-
-    @Test
-    func mutableBspRelayoutsLiveWindowsWhenStageMemberDisappears() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let live = WindowSnapshot(
-            id: WindowID(rawValue: 1),
-            pid: 10,
-            appName: "Live",
-            bundleID: "app.live",
-            title: "Live",
-            frame: Rect(x: 0, y: 0, width: 495, height: 500),
-            isOnScreen: true,
-            isTileCandidate: true
-        )
-        let closed = WindowID(rawValue: 2)
-        let store = StageStore(path: tempPath("mutable-bsp-closed-member"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
-                        PersistentStageMember(windowID: closed, bundleID: "app.closed", title: "Closed", frame: Rect(x: 505, y: 0, width: 495, height: 500)),
-                    ])
-                ])
-            ],
-            activeDisplayID: display.id
-        ))
-        let provider = MultiDisplaySequenceProvider(displaySnapshots: [display], windowSnapshots: [[live]])
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            stageStore: store
-        )
-        let maintainer = LayoutMaintainer(service: service, store: store)
-
-        let tick = maintainer.tick()
-
-        #expect(tick.commands == 1)
-        #expect(writer.requestedFrames[live.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
-        #expect(store.state().scopes.first?.memberIDs(in: StageID(rawValue: "1")) == [live.id, closed])
-    }
-
-    @Test
     func commandActivityDoesNotDelayReclaimAfterStageMemberDisappears() {
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -1452,164 +902,6 @@ struct LayoutMaintainerTests {
         #expect(tick.commands == 1)
         #expect(writer.requestedFrames[live.id] == Rect(x: 0, y: 0, width: 1000, height: 500))
         commandActivity.reset()
-    }
-
-    @Test
-    func mutableBspNewWindowStillReceivesAutomaticLayout() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let left = Rect(x: 0, y: 0, width: 495, height: 500)
-        let right = Rect(x: 505, y: 0, width: 495, height: 500)
-        let newWindow = Rect(x: 300, y: 80, width: 300, height: 200)
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [left, right],
-            [left, right, newWindow],
-        ])
-        let writer = RecordingWriter()
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10))
-        )
-        let maintainer = LayoutMaintainer(service: service)
-
-        _ = maintainer.tick()
-        let withNewWindow = maintainer.tick()
-
-        #expect(withNewWindow.commands > 0)
-        #expect(writer.requestedFrames[WindowID(rawValue: 3)] != nil)
-    }
-
-    @Test
-    func mutableBspMultiWindowResizeAdoptsCurrentGeometryAndRepairsOrder() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let store = StageStore(path: tempPath("mutable-bsp-order-repair"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window1", frame: Rect(x: 0, y: 0, width: 490, height: 500)),
-                        PersistentStageMember(windowID: WindowID(rawValue: 2), bundleID: "app.2", title: "Window2", frame: Rect(x: 490, y: 251, width: 510, height: 249)),
-                        PersistentStageMember(windowID: WindowID(rawValue: 3), bundleID: "app.3", title: "Window3", frame: Rect(x: 490, y: 0, width: 510, height: 250)),
-                    ])
-                ])
-            ],
-            activeDisplayID: display.id
-        ))
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [
-                Rect(x: 0, y: 0, width: 490, height: 500),
-                Rect(x: 490, y: 251, width: 510, height: 249),
-                Rect(x: 490, y: 0, width: 510, height: 250),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 490, height: 500),
-                Rect(x: 490, y: 301, width: 510, height: 199),
-                Rect(x: 490, y: 0, width: 510, height: 300),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 490, height: 500),
-                Rect(x: 490, y: 301, width: 510, height: 199),
-                Rect(x: 490, y: 0, width: 510, height: 300),
-            ],
-        ])
-        let writer = RecordingWriter()
-        let intentStore = LayoutIntentStore(path: tempPath("mutable-bsp-order-intent"))
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 0)),
-            intentStore: intentStore,
-            stageStore: store
-        )
-        let maintainer = LayoutMaintainer(service: service, store: store)
-
-        let initial = maintainer.tick()
-        let resized = maintainer.tick()
-
-        let stage = store.state().scopes[0].stages[0]
-        #expect(initial.commands == 0)
-        #expect(resized.manualResizeDetected)
-        #expect(resized.commands == 0)
-        #expect(stage.members.map(\.windowID) == [WindowID(rawValue: 1), WindowID(rawValue: 3), WindowID(rawValue: 2)])
-        #expect(intentStore.intent(for: scope)?.windowIDs == [WindowID(rawValue: 1), WindowID(rawValue: 3), WindowID(rawValue: 2)])
-        #expect(writer.requestedFrames.isEmpty)
-    }
-
-    @Test
-    func mutableBspAdoptionIgnoresChangedWindowsOutsideActiveScope() {
-        let display = DisplaySnapshot(
-            id: DisplayID(rawValue: "display-a"),
-            index: 1,
-            name: "A",
-            frame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),
-            isMain: true
-        )
-        let activeScope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        let store = StageStore(path: tempPath("mutable-bsp-cross-scope-adopt"))
-        store.save(PersistentStageState(
-            scopes: [
-                PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: WindowID(rawValue: 1), bundleID: "app.1", title: "Window1", frame: Rect(x: 0, y: 0, width: 495, height: 500)),
-                        PersistentStageMember(windowID: WindowID(rawValue: 2), bundleID: "app.2", title: "Window2", frame: Rect(x: 505, y: 0, width: 495, height: 500)),
-                    ])
-                ]),
-                PersistentStageScope(displayID: display.id, desktopID: DesktopID(rawValue: 2), stages: [
-                    PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp, members: [
-                        PersistentStageMember(windowID: WindowID(rawValue: 3), bundleID: "app.3", title: "Window3", frame: Rect(x: 999, y: 499, width: 300, height: 200)),
-                    ])
-                ]),
-            ],
-            desktopSelections: [
-                PersistentDesktopSelection(displayID: display.id, currentDesktopID: DesktopID(rawValue: 1))
-            ],
-            activeDisplayID: display.id
-        ))
-        let provider = SequenceProvider(display: display, windowFrames: [
-            [
-                Rect(x: 0, y: 0, width: 495, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 500),
-                Rect(x: 999, y: 499, width: 300, height: 200),
-            ],
-            [
-                Rect(x: 0, y: 0, width: 650, height: 500),
-                Rect(x: 505, y: 0, width: 495, height: 500),
-                Rect(x: 999, y: 450, width: 300, height: 200),
-            ],
-        ])
-        let writer = RecordingWriter()
-        let intentStore = LayoutIntentStore(path: tempPath("mutable-bsp-cross-scope-intent"))
-        let service = SnapshotService(
-            provider: provider,
-            frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
-            intentStore: intentStore,
-            stageStore: store
-        )
-        let maintainer = LayoutMaintainer(service: service, store: store)
-
-        _ = maintainer.tick()
-        let resized = maintainer.tick()
-
-        #expect(resized.manualResizeDetected)
-        #expect(writer.requestedFrames[WindowID(rawValue: 2)] != nil)
-        #expect(intentStore.intent(for: activeScope)?.placements[WindowID(rawValue: 3)] == nil)
     }
 
     @Test
@@ -1899,10 +1191,13 @@ struct LayoutMaintainerTests {
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
-        #expect(tick.commands == 1)
+        // A1 : recalage de la fenêtre zoomée et masquage de sa voisine dans la même passe.
+        #expect(tick.commands == 2)
         #expect(writer.requestedFrames[WindowID(rawValue: 1)] == Rect(x: 1040, y: -460, width: 1100, height: 720))
-        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] != nil)
+        #expect(!frameIsVisible(writer.requestedFrames[WindowID(rawValue: 2)], on: display))
         #expect(events.contains("\"type\":\"fullscreen_sized_windows_reanchored\""))
+        #expect(events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
         try? FileManager.default.removeItem(atPath: eventPath)
     }
 
@@ -3004,7 +2299,7 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func focusedStageRestoreOnlyHidesInactiveWindowsOnSameDisplay() {
+    func focusedStageRestoreAndInactiveHidingShareOnePass() {
         let leftDisplay = powerDisplay("display-a", index: 1, x: 0)
         let rightDisplay = powerDisplay("display-b", index: 2, x: 1000)
         let focusedHidden = powerWindow(
@@ -3051,9 +2346,12 @@ struct LayoutMaintainerTests {
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
-        #expect(tick.commands == 1)
+        // A1 : la restauration du focus et le masquage de la stage inactive de l'autre écran se
+        // font dans la même passe ; l'événement ne compte que le masquage de l'écran restauré.
+        #expect(tick.commands == 2)
         #expect(writer.requestedFrames[focusedHidden.id] != nil)
-        #expect(writer.requestedFrames[inactiveRight.id] == nil)
+        #expect(writer.requestedFrames[inactiveRight.id] != nil)
+        #expect(!frameIsVisible(writer.requestedFrames[inactiveRight.id], on: rightDisplay))
         #expect(events.contains("\"type\":\"stage_focus_restore\""))
         #expect(events.contains("\"hiddenInactive\":\"0\""))
         #expect(events.contains("\"focusedDisplayID\":\"display-a\""))
@@ -3186,7 +2484,7 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func mutableBspUnmatchedCommandIntentIsRetriedBeforeStableSuppression() {
+    func unmatchedCommandIntentIsRetried() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -3219,7 +2517,7 @@ struct LayoutMaintainerTests {
                 ]
             ),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             intentStore: intentStore
         )
 
@@ -3233,7 +2531,7 @@ struct LayoutMaintainerTests {
     }
 
     @Test
-    func mutableBspCommandIntentCanKeepSmallPaneAfterFreshnessWindow() {
+    func commandIntentCanKeepSmallPaneAfterFreshnessWindow() {
         let intentTemp = makeIntentStore()
         let display = DisplaySnapshot(
             id: DisplayID(rawValue: "display-a"),
@@ -3267,7 +2565,7 @@ struct LayoutMaintainerTests {
                 ]
             ),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             intentStore: intentStore
         )
 
@@ -3315,7 +2613,7 @@ struct LayoutMaintainerTests {
                 ]
             ),
             frameWriter: writer,
-            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp, gapsOuter: 0, gapsInner: 10)),
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .bsp, gapsOuter: 0, gapsInner: 10)),
             intentStore: intentStore
         )
 
@@ -3713,8 +3011,9 @@ extension LayoutMaintainerTests {
         #expect(!scenario.events.contains("\"type\":\"fullscreen_scope_change_suppressed\""))
     }
 
-    /// FR-017 : la stabilisation d'un changement de membres sur l'écran 1 n'exclut que son scope ;
-    /// l'écran 2 est toujours redisposé dans le même tick.
+    /// FR-017, A18 : la rafale de changements de membres de l'écran 1 n'exclut que son scope ;
+    /// l'écran 2 est toujours redisposé dans la même passe. Le premier changement de l'écran 1,
+    /// isolé, est rangé tout de suite (A18).
     @Test
     func membershipSettlingOnOneDisplayDoesNotStopOtherDisplay() {
         let displayA = lotCDisplay()
@@ -3731,9 +3030,16 @@ extension LayoutMaintainerTests {
                     lotCWindow(3, Rect(x: 1000, y: 0, width: 495, height: 500)),
                     lotCWindow(4, bRight),
                 ],
-                // Écran 1 : la fenêtre 2 disparaît et la 1 grandit (churn). Écran 2 : la 4 est déplacée.
+                // Écran 1 : la fenêtre 2 disparaît (premier changement, isolé).
                 [
-                    lotCWindow(1, Rect(x: 0, y: 0, width: 700, height: 500)),
+                    lotCWindow(1, Rect(x: 0, y: 0, width: 495, height: 500)),
+                    lotCWindow(3, Rect(x: 1000, y: 0, width: 495, height: 500)),
+                    lotCWindow(4, bRight),
+                ],
+                // 80 ms plus tard, écran 1 : la fenêtre 2 revient (rafale). Écran 2 : la 4 est déplacée.
+                [
+                    lotCWindow(1, Rect(x: 0, y: 0, width: 1000, height: 500)),
+                    lotCWindow(2, Rect(x: 505, y: 0, width: 495, height: 500)),
                     lotCWindow(3, Rect(x: 1000, y: 0, width: 495, height: 500)),
                     lotCWindow(4, Rect(x: 1200, y: 50, width: 400, height: 300)),
                 ],
@@ -3751,11 +3057,16 @@ extension LayoutMaintainerTests {
 
         _ = maintainer.tick()
         currentTime = currentTime.addingTimeInterval(0.1)
+        let first = maintainer.tick()
+        let placedFirst = writer.requestedFrames[WindowID(rawValue: 1)]
+        currentTime = currentTime.addingTimeInterval(0.08)
         let tick = maintainer.tick()
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
+        #expect(first.commands >= 1)
+        #expect(placedFirst == Rect(x: 0, y: 0, width: 1000, height: 500))
         #expect(events.contains("\"type\":\"layout_stage_membership_settling\""))
-        #expect(writer.requestedFrames[WindowID(rawValue: 1)] == nil)
+        #expect(writer.requestedFrames[WindowID(rawValue: 2)] == nil)
         #expect(tick.commands >= 1)
         #expect(writer.requestedFrames[WindowID(rawValue: 4)] == bRight)
     }
@@ -3997,3 +3308,719 @@ extension LayoutMaintainerTests {
 }
 
 private let scope1 = StageID(rawValue: "1")
+
+// MARK: - SPEC-017 : modes à arbre, rafales, garde de bureau, budget d'écriture
+
+/// Monde simulé : le relevé et l'écriture partagent les mêmes frames. Une écriture respecte la
+/// taille minimale de l'application et peut être décalée (`writeOffsetX`), comme une vraie app.
+private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unchecked Sendable {
+    let screens: [DisplaySnapshot]
+    var frames: [WindowID: Rect]
+    var minimumSizes: [WindowID: CGSize] = [:]
+    var writeOffsetX: [WindowID: Double] = [:]
+    var nativeFullscreen: Set<WindowID> = []
+    /// Frames imposées par l'application aux prochaines écritures, dans l'ordre.
+    var forcedResults: [WindowID: [Rect]] = [:]
+    var focused: WindowID?
+    private(set) var writes: [WindowID: [Rect]] = [:]
+
+    init(displays: [DisplaySnapshot] = [lotCDisplay()], frames: [WindowID: Rect]) {
+        self.screens = displays
+        self.frames = frames
+    }
+
+    var totalWrites: Int { writes.values.reduce(0) { $0 + $1.count } }
+
+    func permissions(prompt: Bool) -> PermissionSnapshot { PermissionSnapshot(accessibilityTrusted: true) }
+    func displays() -> [DisplaySnapshot] { screens }
+    func focusedWindowID() -> WindowID? { focused }
+
+    func windows() -> [WindowSnapshot] {
+        frames.keys.sorted().map { id in
+            var window = lotCWindow(id.rawValue, frames[id] ?? Rect(x: 0, y: 0, width: 0, height: 0))
+            if nativeFullscreen.contains(id) {
+                // Fenêtre de document complète : sans boutons, la politique de tiling l'écarterait.
+                window.furniture = WindowFurniture(
+                    hasCloseButton: true, hasFullscreenButton: true, fullscreenButtonEnabled: true,
+                    hasMinimizeButton: true, hasZoomButton: true, isNativeFullscreen: true
+                )
+            }
+            return window
+        }
+    }
+
+    func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
+        writes[window.id, default: []].append(Rect(frame))
+        if var forced = forcedResults[window.id], !forced.isEmpty {
+            let actual = forced.removeFirst()
+            forcedResults[window.id] = forced
+            frames[window.id] = actual
+            return actual.cgRect
+        }
+        let minimum = minimumSizes[window.id] ?? .zero
+        let actual = Rect(
+            x: frame.minX + (writeOffsetX[window.id] ?? 0),
+            y: frame.minY,
+            width: max(frame.width, minimum.width),
+            height: max(frame.height, minimum.height)
+        )
+        frames[window.id] = actual
+        return actual.cgRect
+    }
+}
+
+/// Stage 1 d'un écran en mode arbre (`spatialBsp`), avec son arbre et ses membres.
+private func treeStore(
+    _ name: String,
+    display: DisplaySnapshot = lotCDisplay(),
+    tree: BSPTree,
+    frames: [WindowID: Rect],
+    inactive: [WindowID: Rect] = [:],
+    activeStage: StageID = StageID(rawValue: "1")
+) -> StageStore {
+    let member = { (id: WindowID, frame: Rect) in
+        PersistentStageMember(windowID: id, bundleID: "app.\(id.rawValue)", title: "Window\(id.rawValue)", frame: frame)
+    }
+    let store = StageStore(path: tempPath(name))
+    var stages = [PersistentStage(
+        id: StageID(rawValue: "1"),
+        mode: .spatialBsp,
+        members: frames.keys.sorted().map { member($0, frames[$0]!) },
+        bspTree: tree
+    )]
+    if !inactive.isEmpty {
+        stages.append(PersistentStage(id: StageID(rawValue: "2"), mode: .spatialBsp, members: inactive.keys.sorted().map { member($0, inactive[$0]!) }))
+    }
+    store.save(PersistentStageState(
+        scopes: [PersistentStageScope(displayID: display.id, activeStageID: activeStage, stages: stages)],
+        activeDisplayID: display.id
+    ))
+    return store
+}
+
+/// Maintainer et service isolés (état, intents, registre, journal) sur un monde simulé.
+private struct TreeHarness {
+    let world: TreeWorld
+    let store: StageStore
+    let registry = WrittenFrameRegistry()
+    let eventPath: String
+    let maintainer: LayoutMaintainer
+    let clock: TestClock
+    let episodes: EpisodeContext
+
+    init(
+        _ name: String,
+        world: TreeWorld,
+        store: StageStore,
+        strategy: WindowManagementMode = .spatialBsp,
+        clock: TestClock = TestClock(),
+        spaceProbe: ((String) -> Bool?)? = nil,
+        takeGesture: (() -> GestureSession?)? = nil,
+        commandActivity: LayoutCommandActivity = .shared,
+        ruleEngine: WindowRuleEngine? = nil
+    ) {
+        self.world = world
+        self.store = store
+        self.clock = clock
+        let episodes = EpisodeContext(now: { clock.now })
+        self.episodes = episodes
+        eventPath = tempPath("\(name)-events")
+        let service = SnapshotService(
+            provider: world,
+            frameWriter: world,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: strategy, gapsOuter: 0, gapsInner: 0)),
+            intentStore: LayoutIntentStore(path: tempPath("\(name)-intents")),
+            stageStore: store,
+            clock: { clock.now },
+            frameRegistry: registry
+        )
+        maintainer = LayoutMaintainer(
+            service: service,
+            events: EventLog(path: eventPath, episodes: episodes),
+            ruleEngine: ruleEngine,
+            store: store,
+            commandActivity: commandActivity,
+            writtenFrames: registry,
+            generations: PlacementGeneration(),
+            takeGesture: takeGesture ?? { nil },
+            spaceProbe: spaceProbe ?? { _ in true },
+            readFrame: { [world] window in world.frames[window.id]?.cgRect },
+            episodes: episodes,
+            now: { clock.now }
+        )
+    }
+
+    var events: String { (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? "" }
+
+    func count(_ type: String) -> Int {
+        events.components(separatedBy: "\"type\":\"\(type)\"").count - 1
+    }
+}
+
+private let treeW1 = WindowID(rawValue: 1)
+private let treeW2 = WindowID(rawValue: 2)
+private let treeW3 = WindowID(rawValue: 3)
+/// Deux fenêtres côte à côte, 50/50, sur l'écran 1000x500 sans marges.
+private let treeSideBySide = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(treeW1), second: .leaf(treeW2))
+private let treeLeft = Rect(x: 0, y: 0, width: 500, height: 500)
+private let treeRight = Rect(x: 500, y: 0, width: 500, height: 500)
+
+/// Horloge de test réglable, partagée par le maintainer et l'épisode.
+private final class TestClock: @unchecked Sendable {
+    var now = Date(timeIntervalSince1970: 1_000)
+    func advance(_ seconds: TimeInterval) { now = now.addingTimeInterval(seconds) }
+}
+
+private let treeScope = StageScope(displayID: DisplayID(rawValue: "display-a"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+private let treeContainer = CGRect(x: 0, y: 0, width: 1000, height: 500)
+
+/// Session de geste rendue une seule fois, comme `UserInputActivity.takeGesture()` (A17).
+private final class GestureBox: @unchecked Sendable {
+    var session: GestureSession?
+    func take() -> GestureSession? {
+        defer { session = nil }
+        return session
+    }
+}
+
+@Suite
+struct TreeLayoutMaintainerTests {
+    /// US1 / A6 : une fenêtre ouverte seule est rangée tout de suite, en une passe ; `layout_apply`
+    /// porte la cause et les compteurs, `layout_stable` suit une observation à 100 ms (A20).
+    @Test
+    func newWindowIsPlacedInOnePassWithoutWaiting() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        world.focused = treeW2
+        let harness = TreeHarness("tree-new-window", world: world, store: treeStore("tree-new-window", tree: treeSideBySide, frames: world.frames))
+
+        let startup = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
+        let opened = harness.maintainer.tick(cause: "AXWindowCreated")
+        let tree = harness.store.state().bspTree(for: treeScope)
+        harness.clock.advance(0.15)
+        let after = harness.maintainer.tick(cause: "periodic")
+
+        #expect(startup.commands == 0)
+        #expect(opened.commands >= 1)
+        #expect(world.writes[treeW3]?.count == 1)
+        #expect(tree?.windowIDs.contains(treeW3) == true)
+        for (id, frame) in tree?.place(in: treeContainer, innerGap: 0) ?? [:] {
+            #expect(world.frames[id] == Rect(frame))
+        }
+        #expect(after.commands == 0)
+        #expect(harness.count("layout_apply") == 1)
+        #expect(harness.events.contains("\"cause\":\"AXWindowCreated\""))
+        #expect(harness.events.contains("\"scans\":\"1\""))
+        #expect(harness.events.contains("\"layoutVersion\":"))
+        #expect(harness.events.contains("\"windowWrites\":"))
+        #expect(harness.count("layout_stable") == 1)
+        #expect(harness.count("layout_stage_membership_settling") == 0)
+    }
+
+    /// US1.3 : une fenêtre fermée rend sa place à sa voisine, en une passe.
+    @Test
+    func closedWindowGivesItsPlaceToNeighborInOnePass() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("tree-closed-window", world: world, store: treeStore("tree-closed-window", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        let closed = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        harness.clock.advance(1)
+        let after = harness.maintainer.tick(cause: "periodic")
+
+        #expect(closed.commands == 1)
+        #expect(world.frames[treeW1] == Rect(treeContainer))
+        #expect(world.writes[treeW1]?.count == 1)
+        #expect(after.commands == 0)
+    }
+
+    /// A18 : deux changements espacés de plus de `burstWindow` sont deux changements isolés,
+    /// chacun rangé tout de suite.
+    @Test
+    func spacedMembershipChangesAreEachPlacedImmediately() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("tree-spaced-changes", world: world, store: treeStore("tree-spaced-changes", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        let first = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        harness.clock.advance(0.4)
+        world.frames[treeW3] = Rect(x: 100, y: 100, width: 300, height: 200)
+        let second = harness.maintainer.tick(cause: "AXWindowCreated")
+
+        #expect(first.commands >= 1)
+        #expect(second.commands >= 1)
+        #expect(world.writes[treeW3]?.count == 1)
+        #expect(harness.count("layout_stage_membership_settling") == 0)
+    }
+
+    /// A6 : une rafale qui ne se calme pas est close au plafond `burstCap`, même si les
+    /// changements continuent ; la passe finale part alors.
+    @Test
+    func membershipBurstIsClosedAtBurstCap() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("tree-burst-cap", world: world, store: treeStore("tree-burst-cap", tree: treeSideBySide, frames: world.frames))
+        let extra = Rect(x: 100, y: 100, width: 300, height: 200)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        let start = harness.clock.now
+        var held: [Int] = []
+        var capped = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        for step in 0...13 {
+            harness.clock.now = start.addingTimeInterval(0.08 * Double(step))
+            world.frames[treeW3] = step.isMultiple(of: 2) ? extra : nil
+            let tick = harness.maintainer.tick(cause: "AXWindowCreated")
+            if (1...12).contains(step) { held.append(tick.commands) }
+            if step == 13 { capped = tick }
+        }
+
+        #expect(held.allSatisfy { $0 == 0 })
+        #expect(capped.commands >= 1)
+        #expect(harness.count("layout_stage_membership_settling") >= 1)
+    }
+
+    /// A1, A15 : masquage d'une stage inactive et disposition de la stage active dans la même passe.
+    @Test
+    func hidingAndLayoutShareOnePass() {
+        let world = TreeWorld(frames: [
+            treeW1: Rect(x: 50, y: 50, width: 300, height: 200),
+            treeW2: Rect(x: 400, y: 50, width: 300, height: 200),
+            treeW3: Rect(x: 100, y: 100, width: 300, height: 200),
+        ])
+        let store = treeStore(
+            "tree-unified-plan",
+            tree: treeSideBySide,
+            frames: [treeW1: world.frames[treeW1]!, treeW2: world.frames[treeW2]!],
+            inactive: [treeW3: world.frames[treeW3]!]
+        )
+        let harness = TreeHarness("tree-unified-plan", world: world, store: store)
+
+        let tick = harness.maintainer.tick(cause: "startup")
+
+        #expect(tick.commands == 3)
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(world.frames[treeW2] == treeRight)
+        #expect(!frameIsVisible(world.frames[treeW3], on: lotCDisplay()))
+        #expect(harness.count("layout_apply") == 1)
+        #expect(harness.count("stage_hide_inactive") == 1)
+    }
+
+    /// A15 : une règle qui change la stage active, le masquage de l'ancienne stage et la
+    /// disposition de la nouvelle se font dans la même passe, sur une copie de travail.
+    @Test
+    func ruleChangingActiveStageHidesAndLaysOutInOnePass() {
+        let world = TreeWorld(frames: [treeW1: Rect(treeContainer)])
+        let store = treeStore("tree-rule-stage", tree: .leaf(treeW1), frames: world.frames)
+        store.mutate { state in
+            var scope = state.scope(displayID: treeScope.displayID)
+            scope.ensureStage(StageID(rawValue: "2"), mode: .spatialBsp)
+            state.update(scope)
+        }
+        let harness = TreeHarness(
+            "tree-rule-stage",
+            world: world,
+            store: store,
+            ruleEngine: WindowRuleEngine(rules: [
+                WindowRule(id: "app2-stage2", match: RuleMatch(app: "App2"), action: RuleAction(assignStage: "2", follow: true))
+            ])
+        )
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(x: 100, y: 100, width: 300, height: 200)
+        let tick = harness.maintainer.tick(cause: "AXWindowCreated")
+        var state = store.state()
+
+        #expect(state.scope(displayID: treeScope.displayID).activeStageID == StageID(rawValue: "2"))
+        #expect(tick.commands == 2)
+        #expect(!frameIsVisible(world.frames[treeW1], on: lotCDisplay()))
+        #expect(world.frames[treeW2] == Rect(treeContainer))
+        #expect(harness.count("layout_apply") == 1)
+        #expect(harness.events.contains("\"scans\":\"2\""))
+    }
+
+    /// US2.2 : une application qui confirme le placement à 5 pt près n'est ni redemandée ni prise
+    /// pour un geste ; l'écho est journalisé une fois et la frame acceptée.
+    @Test
+    func echoWithFewPointsOfDifferenceIsNotRewritten() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: treeRight])
+        world.writeOffsetX[treeW1] = 5
+        let harness = TreeHarness("tree-echo", world: world, store: treeStore("tree-echo", tree: treeSideBySide, frames: world.frames))
+
+        _ = harness.maintainer.tick(cause: "startup")
+        var later = 0
+        for (step, cause) in [(0.05, "AXWindowMoved"), (0.05, "deadline"), (0.2, "deadline"), (2, "periodic"), (60, "periodic")] {
+            harness.clock.advance(step)
+            later += harness.maintainer.tick(cause: cause).commands
+        }
+
+        #expect(world.writes[treeW1]?.count == 1)
+        #expect(later == 0)
+        #expect(harness.count("layout_manual_gesture") == 0)
+        #expect(harness.count("layout_echo_ignored") == 1)
+        #expect(harness.events.contains("\"reason\":\"refusal_without_minimum\""))
+    }
+
+    /// US2 : l'oscillation 97/25 px du journal réel, rejouée, ne provoque ni propagation ni geste :
+    /// une écriture, puis la frame de l'application est acceptée.
+    @Test
+    func oscillatingApplicationHeightIsNotPropagated() {
+        let stacked = BSPTree.split(orientation: .horizontal, ratio: 0.5, first: .leaf(treeW1), second: .leaf(treeW2))
+        let targets = stacked.place(in: treeContainer, innerGap: 0)
+        let bottom = Rect(targets[treeW2]!)
+        let world = TreeWorld(frames: [treeW1: Rect(targets[treeW1]!), treeW2: Rect(x: 0, y: 300, width: 1000, height: 150)])
+        let short = { (height: Double) in Rect(x: bottom.x, y: bottom.y, width: bottom.width, height: height) }
+        world.forcedResults[treeW2] = [short(97)]
+        let store = treeStore("tree-oscillation", tree: stacked, frames: world.frames)
+        let harness = TreeHarness("tree-oscillation", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        var commands = 0
+        for (delay, height) in [(0.1, 97.0), (0.2, 25.0), (1.2, 97.0), (1.0, 25.0), (1.5, 97.0), (2.0, 25.0)] {
+            harness.clock.advance(delay)
+            world.frames[treeW2] = short(height)
+            commands += harness.maintainer.tick(cause: "AXWindowResized").commands
+        }
+
+        #expect(world.writes[treeW2]?.count == 1)
+        #expect(commands == 0)
+        #expect(store.state().bspTree(for: treeScope) == stacked)
+        #expect(harness.count("layout_manual_gesture") == 0)
+    }
+
+    /// A4, A13 : un changement externe (application qui se redimensionne seule, outil clavier) est
+    /// ramené une fois à l'arbre par génération, puis accepté sans lutte.
+    @Test
+    func externalChangeIsRevertedOnceThenAccepted() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: treeRight])
+        let store = treeStore("tree-external", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-external", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        var commands: [Int] = []
+        for x in [120.0, 140, 160] {
+            harness.clock.advance(5)
+            world.frames[treeW1] = Rect(x: x, y: 20, width: 400, height: 300)
+            commands.append(harness.maintainer.tick(cause: "AXWindowMoved").commands)
+        }
+
+        #expect(commands == [1, 0, 0])
+        #expect(world.writes[treeW1]?.count == 2)
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.count("layout_external_change_reverted") == 1)
+        #expect(harness.count("layout_app_response_accepted") >= 1)
+    }
+
+    /// A2, A13, A14, A16 : un refus de taille est confirmé par une relecture fraîche sans
+    /// notification, puis corrigé une fois par l'ancêtre de l'axe contraint ; au plus 2 écritures
+    /// par fenêtre et par génération, voisine comprise.
+    @Test
+    func confirmedRefusalIsCorrectedOnceWithinWriteBudget() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: Rect(x: 600, y: 50, width: 300, height: 200)])
+        world.minimumSizes[treeW1] = CGSize(width: 700, height: 0)
+        let store = treeStore("tree-refusal", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-refusal", world: world, store: store)
+
+        let writtenAt = harness.clock.now
+        _ = harness.maintainer.tick(cause: "startup")
+        let pendingDeadline = harness.maintainer.nextDeadline(now: harness.clock.now)
+        harness.clock.advance(LayoutTolerance.refusalConfirmDelay)
+        let corrected = harness.maintainer.tick(cause: "deadline")
+        var later = 0
+        for _ in 0..<3 {
+            harness.clock.advance(1)
+            later += harness.maintainer.tick(cause: "periodic").commands
+        }
+
+        #expect(pendingDeadline == writtenAt.addingTimeInterval(LayoutTolerance.refusalConfirmDelay))
+        // La fenêtre refusée est déjà à sa nouvelle cible : seule la voisine est réécrite.
+        #expect(corrected.commands == 1)
+        #expect(world.writes[treeW1]?.count == 1)
+        #expect(world.writes[treeW2]?.count == 2)
+        #expect((world.frames[treeW1]?.width ?? 0) >= 700)
+        #expect((world.frames[treeW2]?.x ?? 0) >= 700)
+        #expect(later == 0)
+        #expect(harness.events.contains("\"source\":\"tree_minimum_size\""))
+    }
+
+    /// A2 : une correction infaisable (taille minimale plus grande que l'écran) laisse le
+    /// chevauchement, comme yabai : la frame obtenue est acceptée, sans nouvelle écriture.
+    @Test
+    func infeasibleRefusalIsAcceptedWithoutRetry() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: treeRight])
+        world.minimumSizes[treeW1] = CGSize(width: 1200, height: 0)
+        let store = treeStore("tree-refusal-infeasible", tree: treeSideBySide, frames: world.frames)
+        let harness = TreeHarness("tree-refusal-infeasible", world: world, store: store)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        var later = 0
+        for step in [LayoutTolerance.refusalConfirmDelay, 1, 1] {
+            harness.clock.advance(step)
+            later += harness.maintainer.tick(cause: "deadline").commands
+        }
+
+        #expect(world.writes[treeW1]?.count == 1)
+        #expect(later == 0)
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.events.contains("\"reason\":\"minimum_size_infeasible\""))
+    }
+
+    /// SC-003, FR-017 : une stage rangée et laissée au repos 60 s ne reçoit aucun placement, et
+    /// rien n'est en attente.
+    @Test
+    func idleArrangedStageReceivesNoPlacement() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("tree-idle", world: world, store: treeStore("tree-idle", tree: treeSideBySide, frames: world.frames))
+
+        var commands = harness.maintainer.tick(cause: "startup").commands
+        for _ in 0..<30 {
+            harness.clock.advance(2)
+            commands += harness.maintainer.tick(cause: "periodic").commands
+        }
+
+        #expect(commands == 0)
+        #expect(world.totalWrites == 0)
+        #expect(harness.count("layout_apply") == 0)
+        #expect(harness.maintainer.nextDeadline(now: harness.clock.now) == nil)
+    }
+
+    /// A5 : le retour d'un membre manquant ouvre la garde de l'écran ; elle tient la passe tant que
+    /// le bureau n'est pas un bureau utilisateur, puis se ferme sur la sonde (`userSpace`).
+    @Test
+    func memberReturnGuardClosesOnUserSpace() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let probe = ProbeBox(false)
+        let harness = TreeHarness(
+            "tree-guard-user-space",
+            world: world,
+            store: treeStore("tree-guard-user-space", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in probe.value }
+        )
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        _ = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let guarded = harness.maintainer.tick(cause: "AXWindowCreated")
+        let pollDeadline = harness.maintainer.nextDeadline(now: harness.clock.now)
+        harness.clock.advance(LayoutTolerance.spaceGuardPoll)
+        probe.value = true
+        let released = harness.maintainer.tick(cause: "deadline")
+
+        #expect(guarded.commands == 0)
+        #expect(pollDeadline == harness.clock.now)
+        #expect(released.commands >= 1)
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(world.frames[treeW2] == treeRight)
+        #expect(harness.events.contains("\"closedBy\":\"userSpace\""))
+        #expect(harness.events.contains("\"reason\":\"member_return\""))
+    }
+
+    /// A5, A20 : à la sortie du plein écran natif, la garde reste ouverte jusqu'au plafond si le
+    /// bureau utilisateur n'est jamais confirmé (`timeout`) ; l'épisode reste ouvert pendant la garde.
+    @Test
+    func fullscreenExitGuardTimesOutWithinOneEpisode() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: Rect(treeContainer)])
+        world.nativeFullscreen = [treeW2]
+        world.focused = treeW1
+        let harness = TreeHarness(
+            "tree-guard-timeout",
+            world: world,
+            store: treeStore("tree-guard-timeout", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in false }
+        )
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.nativeFullscreen = []
+        let episode = harness.episodes.begin(cause: "AXWindowResized")
+        let opened = harness.clock.now
+        var held = harness.maintainer.tick(cause: "AXWindowResized").commands
+        var released = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
+        while let deadline = harness.maintainer.nextDeadline(now: harness.clock.now),
+              deadline <= opened.addingTimeInterval(LayoutTolerance.spaceGuardCap) {
+            harness.clock.now = deadline
+            let tick = harness.maintainer.tick(cause: "deadline")
+            if harness.clock.now < opened.addingTimeInterval(LayoutTolerance.spaceGuardCap) {
+                held += tick.commands
+            } else {
+                released = tick
+                break
+            }
+        }
+
+        #expect(held == 0)
+        #expect(released.commands >= 1)
+        #expect(harness.episodes.current == episode)
+        #expect(harness.events.contains("\"closedBy\":\"timeout\""))
+        #expect(harness.events.contains("\"reason\":\"fullscreen_exit\""))
+        #expect(world.frames[treeW2] == treeRight)
+    }
+
+    /// A19 : sonde indisponible, la garde se ferme sur `spaceDidChange` reçu après l'ouverture,
+    /// puis deux lectures fraîches identiques espacées de `spaceGuardPoll`.
+    @Test
+    func guardFallsBackToSpaceDidChangeAndStableReads() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness(
+            "tree-guard-fallback",
+            world: world,
+            store: treeStore("tree-guard-fallback", tree: treeSideBySide, frames: world.frames),
+            spaceProbe: { _ in nil }
+        )
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW2] = nil
+        _ = harness.maintainer.tick(cause: "AXUIElementDestroyed")
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(x: 0, y: 0, width: 1000, height: 500)
+        let opened = harness.maintainer.tick(cause: "AXWindowCreated")
+        harness.clock.advance(LayoutTolerance.spaceGuardPoll)
+        let withoutSignal = harness.maintainer.tick(cause: "deadline")
+        harness.clock.advance(0.01)
+        harness.maintainer.spaceDidChange(displayUUID: nil)
+        harness.clock.advance(LayoutTolerance.spaceGuardPoll)
+        let sampled = harness.maintainer.tick(cause: "space_did_change")
+        harness.clock.advance(LayoutTolerance.spaceGuardPoll)
+        let released = harness.maintainer.tick(cause: "deadline")
+
+        #expect(opened.commands == 0)
+        #expect(withoutSignal.commands == 0)
+        #expect(sampled.commands == 0)
+        #expect(released.commands >= 1)
+        #expect(harness.events.contains("\"closedBy\":\"spaceDidChange\""))
+    }
+
+    /// US3.3, A4 : un redimensionnement à la souris déplace la frontière de l'arbre au relâchement ;
+    /// la voisine s'ajuste une seule fois et la fenêtre déplacée n'est pas réécrite.
+    @Test
+    func resizeGestureMovesTreeFenceAndNeighborOnce() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-resize", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-gesture-resize", world: world, store: store, takeGesture: gesture.take)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        let released = harness.maintainer.tick(cause: "gesture_end")
+        harness.clock.advance(1)
+        let after = harness.maintainer.tick(cause: "periodic")
+
+        #expect(released.commands == 1)
+        #expect(world.writes[treeW1] == nil)
+        #expect(world.frames[treeW2] == Rect(x: 700, y: 0, width: 300, height: 500))
+        #expect(after.commands == 0)
+        #expect(harness.count("layout_manual_gesture") == 1)
+        if case .split(_, let ratio, _, _) = store.state().bspTree(for: treeScope) {
+            #expect(abs(ratio - 0.7) < 0.01)
+        } else {
+            Issue.record("arbre attendu")
+        }
+    }
+
+    /// US3.3 : la frontière d'un geste horizontal ne touche pas le split imbriqué de la voisine
+    /// (réécriture pour l'arbre de `mutableBspHorizontalResizePreservesNestedVerticalSplit`).
+    @Test
+    func resizeGesturePreservesNestedSplit() {
+        let nested = BSPTree.split(
+            orientation: .vertical, ratio: 0.5, first: .leaf(treeW1),
+            second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(treeW2), second: .leaf(treeW3))
+        )
+        let targets = nested.place(in: treeContainer, innerGap: 0)
+        let world = TreeWorld(frames: targets.mapValues { Rect($0) })
+        let store = treeStore("tree-gesture-nested", tree: nested, frames: world.frames)
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-gesture-nested", world: world, store: store, takeGesture: gesture.take)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 640, height: 500)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: targets[treeW1], startedAt: harness.clock.now, endedAt: harness.clock.now)
+        _ = harness.maintainer.tick(cause: "gesture_end")
+
+        #expect(world.frames[treeW2]?.x == 640)
+        #expect(world.frames[treeW3]?.x == 640)
+        #expect(world.frames[treeW2]?.height == Rect(targets[treeW2]!).height)
+        #expect(world.frames[treeW3]?.height == Rect(targets[treeW3]!).height)
+        #expect(world.writes[treeW2]?.count == 1)
+        #expect(world.writes[treeW3]?.count == 1)
+    }
+
+    /// A17 : une position changée sans dépôt ramène la fenêtre à l'arbre, même juste après une
+    /// écriture de Roadie (pas de réponse d'application pour un geste).
+    @Test
+    func moveGestureWithoutDropSnapsBackToTree() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: treeRight])
+        let store = treeStore("tree-gesture-move", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-gesture-move", world: world, store: store, takeGesture: gesture.take)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(0.3)
+        world.frames[treeW1] = Rect(x: 80, y: 40, width: 500, height: 500)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        let released = harness.maintainer.tick(cause: "gesture_end")
+
+        #expect(released.commands == 1)
+        #expect(world.frames[treeW1] == treeLeft)
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+    }
+
+    /// A17 : un dépôt récent (commande du navrail ou glisser-déposer d'un autre processus)
+    /// consomme le geste : aucune frontière n'est ajustée.
+    @Test
+    func gestureAfterRecentDropDoesNotMoveFence() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let store = treeStore("tree-gesture-drop", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let activity = LayoutCommandActivity(path: tempPath("tree-gesture-drop-activity"), enabled: true)
+        defer { activity.reset() }
+        let harness = TreeHarness("tree-gesture-drop", world: world, store: store, takeGesture: gesture.take, commandActivity: activity)
+
+        _ = harness.maintainer.tick(cause: "startup")
+        harness.clock.advance(5)
+        activity.markActive(reason: "rail_drop", scopes: [treeScope], now: harness.clock.now, holdSeconds: 2)
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 700, height: 500)
+        gesture.session = GestureSession(windowID: treeW1.rawValue, startFrame: treeLeft.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        _ = harness.maintainer.tick(cause: "gesture_end")
+
+        #expect(store.state().bspTree(for: treeScope) == treeSideBySide)
+        #expect(harness.count("layout_manual_gesture") == 0)
+    }
+
+    /// R12 : l'activité d'une commande ne suspend pas un scope à arbre (la commande applique
+    /// elle-même l'arbre), contrairement aux modes sans arbre.
+    @Test
+    func commandActivityDoesNotSuspendTreeScope() {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 50, y: 50, width: 300, height: 200), treeW2: treeRight])
+        let activity = LayoutCommandActivity(path: tempPath("tree-command-activity"), enabled: true)
+        defer { activity.reset() }
+        let harness = TreeHarness(
+            "tree-command-activity",
+            world: world,
+            store: treeStore("tree-command-activity", tree: treeSideBySide, frames: world.frames),
+            commandActivity: activity
+        )
+        activity.markActive(reason: "test", now: harness.clock.now, holdSeconds: 5)
+
+        let tick = harness.maintainer.tick(cause: "startup")
+
+        #expect(tick.commands == 1)
+        #expect(world.frames[treeW1] == treeLeft)
+    }
+}
+
+private final class ProbeBox: @unchecked Sendable {
+    var value: Bool?
+    init(_ value: Bool?) { self.value = value }
+}
