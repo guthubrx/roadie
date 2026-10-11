@@ -102,12 +102,14 @@ public struct DaemonHealthService {
     }
 
     public func heal() -> DaemonHealReport {
+        // Génération ouverte à l'entrée de la commande (A13, T223).
+        let generation = PlacementGeneration.shared.next()
         let parkingReport = applyParkingTransition(snapshot: service.snapshot())
         appendParkingEvent(parkingReport)
 
         let stateReport = StateAuditService(service: service, stageStore: stageStore).heal()
         let snapshot = service.snapshot()
-        let layoutResult = service.apply(service.applyPlan(from: snapshot))
+        let layoutResult = service.apply(service.applyPlan(from: snapshot, generation: generation), generation: generation)
         let healthReport = run()
         return DaemonHealReport(parking: parkingReport, state: stateReport, layout: layoutResult, health: healthReport)
     }

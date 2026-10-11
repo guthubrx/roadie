@@ -131,6 +131,8 @@ public struct RestoreSafetyService {
     /// Un membre introuvable dont le processus n'est pas prouvé mort compte comme échec.
     // O(n + m), n = fenêtres live, m = membres de stage.
     public func unhideAll() -> RestoreSafetyApplyResult {
+        // Génération ouverte à l'entrée de la commande (A13, T223).
+        let generation = PlacementGeneration.shared.next()
         let current = service.snapshot(followFocus: false)
         let displays = current.displays
         let state = service.effectiveStageStore.state()
@@ -186,7 +188,7 @@ public struct RestoreSafetyService {
             if known == nil { unknown += 1 }
             return ApplyCommand(window: window, frame: Self.onScreen(known ?? window.frame, displays: displays))
         }
-        let result = service.apply(ApplyPlan(commands: commands))
+        let result = service.apply(ApplyPlan(commands: commands), generation: generation)
         // Un cadre ajusté par l'application compte comme succès s'il est visible, sinon échec.
         let clampedHidden = result.items.filter { item in
             item.status == .clamped && !(item.actual.map { Self.isVisible($0, displays: displays) } ?? false)
@@ -336,6 +338,8 @@ public struct RestoreSafetyService {
     }
 
     public func apply() throws -> RestoreSafetyApplyResult {
+        // Génération ouverte à l'entrée de la commande (A13, T223).
+        let generation = PlacementGeneration.shared.next()
         let restore = try loadSnapshot()
         let current = service.snapshot()
         let windowsByID = Dictionary(current.windows.map { ($0.window.id.rawValue, $0.window) }, uniquingKeysWith: { first, _ in first })
@@ -351,7 +355,7 @@ public struct RestoreSafetyService {
             cause: .command,
             payload: ["attempted": .int(commands.count)]
         ))
-        let result = service.apply(ApplyPlan(commands: commands))
+        let result = service.apply(ApplyPlan(commands: commands), generation: generation)
         let report = RestoreSafetyApplyResult(
             path: path,
             attempted: result.attempted,

@@ -273,7 +273,7 @@ Passe 2 (2026-10-11), sur `e77f498`. T201 à T221 sont réalisées et testées (
   - Pourquoi les tests ne le voient pas : dans les tests, le maintainer prend un registre et une génération privés (`LayoutMaintainer.swift:48-49`), le service prend `.shared`, et les doubles n'inscrivent pas leurs écritures.
   - Attendu (A3) : pour un scope sans arbre, le budget ne refuse aucune étape de cette chaîne.
   - Résultat : `gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden` et `mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing` passent aussi avec un écrivain qui inscrit chaque tentative dans le registre et la génération du maintainer. Un test d'arbre montre toujours au plus 2 écritures par fenêtre et par génération.
-- [ ] T223 [US4] A13, FR-012 (suite de T213). Ces commandes n'ouvrent pas de génération et écrivent dans `PlacementGeneration.shared.current` :
+- [x] T223 [US4] A13, FR-012 (suite de T213). Ces commandes n'ouvrent pas de génération et écrivent dans `PlacementGeneration.shared.current` :
   - `layout width` (`WidthAdjustmentService.swift:70`) ;
   - `layout apply --yes` (`CLICommandRouter.swift:368`) ;
   - `heal` (`DaemonHealth.swift:110`) ;

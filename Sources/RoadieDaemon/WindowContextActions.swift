@@ -328,6 +328,8 @@ public struct WindowContextActions {
         desktopID: DesktopID,
         displayID: DisplayID
     ) -> StageCommandResult {
+        // Génération ouverte à l'entrée de la commande (A13, T223).
+        let generation = PlacementGeneration.shared.next()
         let snapshot = snapshotService.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "desktop/stage assign: unknown display", changed: false)
@@ -344,7 +346,8 @@ public struct WindowContextActions {
         // Config lue hors transaction : le verrou d'état reste tenu le moins longtemps possible.
         let stageManagerConfig = ConfigReloadService.shared.currentConfig().stageManager
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
-        stageStore.mutate { state in
+        let sourceScope = snapshot.windows.first(where: { $0.window.id == windowID })?.scope
+        let targetIsVisible = stageStore.mutate { state -> Bool in
             for scopeIndex in state.scopes.indices {
                 state.scopes[scopeIndex].remove(windowID: windowID)
             }
@@ -354,11 +357,17 @@ public struct WindowContextActions {
             targetScope.assign(window: window, to: stageID)
             state.update(targetScope)
             state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
+            return state.currentDesktopID(for: displayID) == desktopID && targetScope.activeStageID == stageID
         }
 
         snapshotService.removeLayoutIntent(scope: targetStageScope)
-        _ = snapshotService.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
-        let result = snapshotService.apply(snapshotService.applyPlan(from: snapshotService.snapshot()))
+        // Plan unique (A15, T223) : masquage (si la cible n'est pas affichée) et disposition des
+        // scopes touchés en une écriture groupée. Une cible affichée est posée par la disposition.
+        var placement = CommandPlacement(layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 }))
+        if !targetIsVisible {
+            placement.hiding[windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
+        }
+        let result = snapshotService.applyCommandPlacement(placement, cause: "window.assign", generation: generation, events: eventLog).result
         eventLog.append(RoadieEvent(
             type: "stage_assign_window",
             scope: targetStageScope,

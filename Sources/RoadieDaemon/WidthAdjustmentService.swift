@@ -1,4 +1,5 @@
 import Foundation
+import RoadieAX
 import RoadieCore
 
 public struct WidthAdjustmentResult: Codable, Equatable, Sendable {
@@ -67,7 +68,9 @@ public struct WidthAdjustmentService {
             frame.x = max(display.visibleFrame.x, min(frame.x, display.visibleFrame.x + display.visibleFrame.width - frame.width))
             return ApplyCommand(window: entry.window, frame: frame)
         }
-        let result = service.apply(ApplyPlan(commands: commands))
+        // Chaque commande ouvre sa génération (A13, T223) : sans cela, le budget d'écriture de la
+        // génération précédente refuserait la 3e commande de suite sur la même fenêtre.
+        let result = service.apply(ApplyPlan(commands: commands), generation: PlacementGeneration.shared.next())
         events.append(RoadieEvent(type: result.failed < result.attempted ? "layout.width_adjust_applied" : "layout.width_adjust_rejected", details: [
             "ratio": String(format: "%.4f", ratio),
             "applied": String(result.applied),

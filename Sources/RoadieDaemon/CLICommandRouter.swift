@@ -365,7 +365,10 @@ public final class CLICommandRouter {
                     out(TextFormatter.applyPlan(plan))
                     return 2
                 }
-                let result = service.apply(plan)
+                // Génération ouverte à l'entrée de la commande (A13, T223) : le plan est recalculé
+                // dedans, pour que les frames acceptées d'une autre génération ne le filtrent pas.
+                let generation = PlacementGeneration.shared.next()
+                let result = service.apply(service.applyPlan(from: snapshot, generation: generation), generation: generation)
                 if args.contains("--json") {
                     try printJSON(result, label: "apply result")
                 } else {
