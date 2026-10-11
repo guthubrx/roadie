@@ -130,7 +130,8 @@ public struct WindowCommandService {
         _ verb: TreeVerb,
         _ direction: Direction,
         snapshot: DaemonSnapshot,
-        context: (active: ScopedWindowSnapshot, scope: StageScope, tree: BSPTree)
+        context: (active: ScopedWindowSnapshot, scope: StageScope, tree: BSPTree),
+        generation: UInt64
     ) -> WindowCommandResult {
         let (active, scope, tree) = context
         let id = active.window.id
@@ -190,7 +191,7 @@ public struct WindowCommandService {
             tick = service.applyTreeScope(
                 scope,
                 cause: "window.\(verb.rawValue).\(direction.rawValue)",
-                generation: PlacementGeneration.shared.next()
+                generation: generation
             )
         }
         _ = focusWindow(active.window)
@@ -228,9 +229,10 @@ public struct WindowCommandService {
     }
 
     public func move(_ direction: Direction) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         if let context = activeTree(in: snapshot) {
-            return treeCommand(.move, direction, snapshot: snapshot, context: context)
+            return treeCommand(.move, direction, snapshot: snapshot, context: context, generation: generation)
         }
         beginLayoutCommand("window.move.\(direction.rawValue)")
         defer { finishLayoutCommand("window.move.\(direction.rawValue)") }
@@ -257,9 +259,10 @@ public struct WindowCommandService {
         let plan = service.applyPlan(
             from: snapshot,
             scope: scope,
-            orderedWindowIDs: ordered
+            orderedWindowIDs: ordered,
+            generation: generation
         )
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: result) {
             persistIntentAfterCommand(
                 from: snapshot,
@@ -288,9 +291,10 @@ public struct WindowCommandService {
     }
 
     public func warp(_ direction: Direction) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         if let context = activeTree(in: snapshot) {
-            return treeCommand(.warp, direction, snapshot: snapshot, context: context)
+            return treeCommand(.warp, direction, snapshot: snapshot, context: context, generation: generation)
         }
         beginLayoutCommand("window.warp.\(direction.rawValue)")
         defer { finishLayoutCommand("window.warp.\(direction.rawValue)") }
@@ -327,7 +331,7 @@ public struct WindowCommandService {
             )
             return result
         }
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
             persistIntentAfterCommand(
@@ -357,9 +361,10 @@ public struct WindowCommandService {
     }
 
     public func resize(_ direction: Direction) -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         if let context = activeTree(in: snapshot) {
-            return treeCommand(.resize, direction, snapshot: snapshot, context: context)
+            return treeCommand(.resize, direction, snapshot: snapshot, context: context, generation: generation)
         }
         beginLayoutCommand("window.resize.\(direction.rawValue)")
         defer { finishLayoutCommand("window.resize.\(direction.rawValue)") }
@@ -380,7 +385,7 @@ public struct WindowCommandService {
         service.removeLayoutIntent(scope: scope)
         let resizeResult = service.apply(ApplyPlan(commands: [
             ApplyCommand(window: active.window, frame: Rect(frame)),
-        ]))
+        ]), generation: generation)
         guard resizeResult.attempted > 0 && resizeResult.failed < resizeResult.attempted else {
             _ = focusWindow(active.window)
             let result = WindowCommandResult(
@@ -402,8 +407,8 @@ public struct WindowCommandService {
 
         let actualFrame = resizeResult.items.first(where: { $0.windowID == active.window.id })?.actual ?? Rect(frame)
         let updatedSnapshot = snapshotByUpdating(windowID: active.window.id, to: actualFrame, in: snapshot)
-        let plan = service.applyPlan(from: updatedSnapshot, priorityWindowIDs: [active.window.id])
-        let result = service.apply(plan)
+        let plan = service.applyPlan(from: updatedSnapshot, priorityWindowIDs: [active.window.id], generation: generation)
+        let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: resizeResult), shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)
             persistIntentAfterCommand(
@@ -438,6 +443,7 @@ public struct WindowCommandService {
     }
 
     public func reset() -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -463,11 +469,11 @@ public struct WindowCommandService {
             ),
             in: visible
         )
-        _ = service.setFrame(intermediate, of: active.window)
+        _ = service.setFrame(intermediate, of: active.window, generation: generation)
         Thread.sleep(forTimeInterval: 0.08)
 
         let updatedSnapshot = service.snapshot()
-        let result = service.apply(service.applyPlan(from: updatedSnapshot))
+        let result = service.apply(service.applyPlan(from: updatedSnapshot, generation: generation), generation: generation)
         _ = focusWindow(active.window)
         return WindowCommandResult(
             message: "window reset: zoom=\(zoomed) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
@@ -476,6 +482,7 @@ public struct WindowCommandService {
     }
 
     public func toggleFullscreen() -> WindowCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope,
@@ -498,11 +505,11 @@ public struct WindowCommandService {
             // L'intent zoomé est retiré AVANT de calculer le plan, sinon le plan rejouerait le zoom.
             service.removeLayoutIntent(scope: scope)
             let scopedWindows = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-            let fullPlan = service.applyPlan(from: snapshot)
+            let fullPlan = service.applyPlan(from: snapshot, generation: generation)
             let plan = ApplyPlan(commands: fullPlan.commands.filter { command in
                 scopedWindows[command.window.id]?.scope == scope
             })
-            let result = service.apply(plan)
+            let result = service.apply(plan, generation: generation)
             _ = focusWindow(active.window)
             return WindowCommandResult(
                 message: "toggle fullscreen off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
@@ -510,13 +517,13 @@ public struct WindowCommandService {
             )
         }
 
-        guard let appliedFrame = service.setFrame(visible, of: active.window) else {
+        guard let appliedFrame = service.setFrame(visible, of: active.window, generation: generation) else {
             _ = focusWindow(active.window)
             return WindowCommandResult(message: "toggle fullscreen on: changed=false", changed: false)
         }
         let zoomedFrame = Rect(appliedFrame)
         persistFrame(zoomedFrame, for: active.window, in: scope)
-        let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot)
+        let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot, generation: generation)
         // Placements = cadres réellement appliqués (FR-012) : fenêtre zoomée, voisines cachées,
         // autres fenêtres tilables du scope à leur cadre observé.
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
@@ -553,7 +560,8 @@ public struct WindowCommandService {
         of fullscreenWindowID: WindowID,
         in scope: StageScope,
         display: DisplaySnapshot,
-        snapshot: DaemonSnapshot
+        snapshot: DaemonSnapshot,
+        generation: UInt64
     ) -> [WindowID: Rect] {
         var hidden: [WindowID: Rect] = [:]
         for entry in snapshot.windows {
@@ -567,7 +575,7 @@ public struct WindowCommandService {
                 on: display,
                 among: snapshot.displays
             )
-            if let applied = service.setFrame(frame, of: entry.window) {
+            if let applied = service.setFrame(frame, of: entry.window, generation: generation) {
                 hidden[entry.window.id] = Rect(applied)
             }
         }
@@ -622,6 +630,7 @@ public struct WindowCommandService {
     ) -> WindowCommandResult {
         beginLayoutCommand("window.display")
         defer { finishLayoutCommand("window.display") }
+        let generation = PlacementGeneration.shared.next()
         let sourceScope = active.scope
         var initialStageState = stageStore.state()
         let targetDesktopID = initialStageState.currentDesktopID(for: display.id)
@@ -635,39 +644,16 @@ public struct WindowCommandService {
             return WindowCommandResult(message: "display \(display.index): already on target display", changed: false)
         }
 
+        // Frame de transfert : centrée sur l'écran cible. Elle n'est pas écrite seule (T212) : elle
+        // entre dans le plan unique, comme géométrie de départ de la disposition cible.
         let transferFrame = centeredFrame(active.window.frame.cgRect, in: display.visibleFrame.cgRect)
-        let initialMove = setInitialTransferFrame(transferFrame, of: active.window)
-        guard let movedFrame = initialMove.frame else {
-            events.append(RoadieEvent(
-                type: "window_display_initial_move_failed",
-                scope: targetScopeID,
-                details: [
-                    "windowID": String(active.window.id.rawValue),
-                    "displayIndex": String(display.index),
-                    "attempts": String(initialMove.attempts)
-                ]
-            ))
-            return WindowCommandResult(message: "display \(display.index): initial move failed", changed: false)
-        }
-        if initialMove.attempts > 1 {
-            events.append(RoadieEvent(
-                type: "window_display_initial_move_retried",
-                scope: targetScopeID,
-                details: [
-                    "windowID": String(active.window.id.rawValue),
-                    "displayIndex": String(display.index),
-                    "attempts": String(initialMove.attempts)
-                ]
-            ))
-        }
-
         let transferredWindow = WindowSnapshot(
             id: active.window.id,
             pid: active.window.pid,
             appName: active.window.appName,
             bundleID: active.window.bundleID,
             title: active.window.title,
-            frame: Rect(movedFrame),
+            frame: Rect(transferFrame),
             isOnScreen: active.window.isOnScreen,
             isTileCandidate: active.window.isTileCandidate,
             subrole: active.window.subrole,
@@ -691,9 +677,17 @@ public struct WindowCommandService {
         }
         service.removeLayoutIntent(scope: targetScopeID)
 
-        let updatedSnapshot = service.snapshot()
-        let plan = service.applyPlan(from: updatedSnapshot)
-        let result = service.apply(plan)
+        // Plan unique (A15, T212) : fenêtre transférée, scope d'origine et scope cible dans une seule
+        // écriture groupée, puis le focus.
+        let observed = service.snapshot()
+        let (plan, result) = service.applyCommandPlacement(
+            CommandPlacement(restoring: [active.window.id: transferFrame], layoutScopes: Set([sourceScope, targetScopeID].compactMap { $0 })),
+            snapshot: observed,
+            cause: "window.display",
+            generation: generation,
+            events: events
+        )
+        let updatedSnapshot = snapshotByUpdating(windowID: active.window.id, to: Rect(transferFrame), in: observed)
         if shouldPersistCommandIntent(after: result) {
             persistIntentsAfterDisplayMove(
                 from: updatedSnapshot,
@@ -717,7 +711,6 @@ public struct WindowCommandService {
                 "applied": String(result.applied),
                 "clamped": String(result.clamped),
                 "failed": String(result.failed),
-                "initialMoveAttempts": String(initialMove.attempts),
                 "unpinned": String(removedPin != nil),
             ]
         ))
@@ -820,24 +813,23 @@ public struct WindowCommandService {
         }
     }
 
-    private func setInitialTransferFrame(_ frame: CGRect, of window: WindowSnapshot) -> (frame: CGRect?, attempts: Int) {
-        let maxAttempts = 3
-        for attempt in 1...maxAttempts {
-            if let movedFrame = service.setFrame(frame, of: window) {
-                return (movedFrame, attempt)
-            }
-            if attempt < maxAttempts {
-                Thread.sleep(forTimeInterval: 0.08)
-            }
-        }
-        return (nil, maxAttempts)
-    }
-
+    /// Fenêtre active et sa voisine dans `direction`. Mode arbre (T220) : voisine mesurée sur les
+    /// frames de l'arbre projeté (A9), pas sur les frames physiques (une fenêtre qui déborde de sa
+    /// feuille ne fausse pas le choix) ; frames physiques pour les autres modes, ou si la fenêtre
+    /// active n'a pas encore de feuille. O(w).
     private func activeAndNeighbor(
         in snapshot: DaemonSnapshot,
         direction: Direction
     ) -> (active: ScopedWindowSnapshot, neighbor: ScopedWindowSnapshot)? {
         guard let active = activeWindow(in: snapshot), let scope = active.scope else { return nil }
+        if let context = activeTree(in: snapshot),
+           let frames = service.commandTreeGeometry(for: scope, tree: context.tree, in: snapshot)?.frames(of: context.tree),
+           frames[active.window.id] != nil {
+            guard let neighborID = treeNeighbor(of: active.window.id, direction: direction, frames: frames),
+                  let neighbor = snapshot.windows.first(where: { $0.window.id == neighborID })
+            else { return nil }
+            return (active, neighbor)
+        }
         let activeFrame = active.window.frame.cgRect
         // Pre-compute score once per candidate to avoid O(2n) score calls in min(by:).
         let scored = snapshot.windows.compactMap { candidate -> (ScopedWindowSnapshot, CGFloat)? in

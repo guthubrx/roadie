@@ -129,6 +129,7 @@ public struct StageCommandService {
     ) -> StageCommandResult {
         beginLayoutCommand(commandReason)
         defer { finishLayoutCommand(commandReason) }
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
@@ -191,11 +192,15 @@ public struct StageCommandService {
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
 
         var visibilityRepairFrame: CGRect?
+        // Plan unique (A15, T212) : fenêtre masquée ou rendue visible, scope d'origine et stage
+        // active disposés dans une seule écriture groupée.
+        var placement = CommandPlacement()
         if scope.activeStageID != stageID, focusAssignedWindow {
             let switchResult = switchDisplay(
                 display,
                 to: stageID,
-                snapshot: service.snapshot(followFocus: false)
+                snapshot: service.snapshot(followFocus: false),
+                generation: generation
             )
             var details = [
                 "stageID": stageID.rawValue,
@@ -226,14 +231,15 @@ public struct StageCommandService {
                     duration: 3.0
                 )
             }
-            _ = service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window)
+            placement.hiding[windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
         } else if let frame = visibleFrame(for: window.frame.cgRect, on: display) {
             visibilityRepairFrame = frame
-            _ = service.setFrame(frame, of: window)
+            placement.restoring[windowID] = frame
         }
 
         let layoutScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: scope.activeStageID)
-        let layoutResult = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        placement.layoutScopes = Set([layoutScope, entry.scope].compactMap { $0 })
+        let layoutResult = service.applyCommandPlacement(placement, cause: commandReason, generation: generation, events: events).result
         if focusAssignedWindow, scope.activeStageID == stageID {
             _ = service.focus(window)
         }
@@ -494,6 +500,7 @@ public struct StageCommandService {
     ) -> StageCommandResult {
         beginLayoutCommand("stage.move_display")
         defer { finishLayoutCommand("stage.move_display") }
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let sourceDisplay = snapshot.displays.first(where: { $0.id == sourceDisplayID }),
               let targetDisplay = resolveStageMoveTarget(target, from: sourceDisplay, in: snapshot.displays)
@@ -576,23 +583,16 @@ public struct StageCommandService {
         let requestedStageID = move.requestedStageID
         let targetScopeID = move.targetScopeID
 
-        var applied = 0
-        var failed = 0
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
-        for member in movingStage.members {
-            guard let window = windowsByID[member.windowID] else {
-                failed += 1
-                continue
-            }
-            if service.setFrame(centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect), of: window) != nil {
-                applied += 1
-            } else {
-                failed += 1
-            }
+        // Plan unique (A15, T212) : membres transférés et disposition des deux écrans en une écriture.
+        var placement = CommandPlacement(layoutScopes: nil)
+        for member in movingStage.members where windowsByID[member.windowID] != nil {
+            placement.restoring[member.windowID] = centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect)
         }
+        var failed = movingStage.members.count - placement.restoring.count
         service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
         service.removeLayoutIntent(scope: targetScopeID)
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        let result = service.applyCommandPlacement(placement, cause: "stage.move_display", generation: generation, events: events).result
         failed += result.failed
         events.append(RoadieEvent(
             type: "stage_move_display",
@@ -608,7 +608,7 @@ public struct StageCommandService {
                 "followFocus": String(effectiveFollow),
                 "movedWindowCount": String(movingStage.members.count),
                 "failedWindowCount": String(failed),
-                "applied": String(applied + result.applied + result.clamped)
+                "applied": String(result.applied + result.clamped)
             ]
         ))
         return stageMoveResult(
@@ -638,6 +638,7 @@ public struct StageCommandService {
         }
         beginLayoutCommand("stage.place_window")
         defer { finishLayoutCommand("stage.place_window") }
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
@@ -664,17 +665,19 @@ public struct StageCommandService {
         let sourceRelayout = relayoutActiveSourceScopes(
             [sourceScope].compactMap { $0 },
             excluding: scope,
-            from: updated
+            from: updated,
+            generation: generation
         )
         let ordered = normalizedOrder(orderedWindowIDs, windowID: windowID, in: updated, scope: scope)
         let layout = layoutPlan(from: updated, scope: scope, ordered: ordered, providedPlacements: providedPlacements)
         let applyPlan = applyPlan(from: updated, scope: scope, ordered: ordered, layout: layout)
-        let result = service.apply(applyPlan)
+        let result = service.apply(applyPlan, generation: generation)
         let isolated = isolateInfeasibleClampedScope(
             scope,
             result: result,
             snapshot: updated,
-            keepWindowID: windowID
+            keepWindowID: windowID,
+            generation: generation
         )
         persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
         _ = service.focus(window)
@@ -704,8 +707,8 @@ public struct StageCommandService {
     /// `stage_place_window` vers une stage à arbre (SPEC-017 R12, T093). Une transaction retire la
     /// fenêtre de toutes les stages et de l'arbre de sa stage d'origine, l'ajoute à la stage active
     /// de l'écran et mute l'arbre de celle-ci (`treeMutation`, sinon insertion au rang demandé).
-    /// Puis une application immédiate par scope touché, dans une même génération, sans l'attente
-    /// globale de `LayoutCommandActivity`.
+    /// Puis un seul plan pour les scopes d'origine et cible, appliqué en une écriture groupée dans la
+    /// génération de la commande (T212, T213), sans l'attente globale de `LayoutCommandActivity`.
     // O(w + n²) - w = fenêtres du snapshot, n = feuilles de l'arbre cible (borné).
     private func placeInTree(
         windowID: WindowID,
@@ -713,6 +716,7 @@ public struct StageCommandService {
         orderedWindowIDs: [WindowID],
         treeMutation: ((BSPTree) -> BSPTree)?
     ) -> StageCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
@@ -745,23 +749,17 @@ public struct StageCommandService {
             return scope
         }
         service.removeLayoutIntent(scope: scope)
-        let generation = PlacementGeneration.shared.next()
-        var sourceTick = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
         if let sourceScope, sourceScope != scope {
             service.removeLayoutIntent(scope: sourceScope)
-            if snapshot.state.stage(scope: sourceScope)?.mode.usesTreeEngine == true {
-                sourceTick = service.applyTreeScope(sourceScope, cause: "stage.place_window.source", generation: generation)
-            } else {
-                let relayout = relayoutActiveSourceScopes([sourceScope], excluding: scope, from: service.snapshot(followFocus: false))
-                sourceTick = MaintenanceTick(
-                    commands: relayout.plan.commands.count,
-                    applied: relayout.result.applied,
-                    clamped: relayout.result.clamped,
-                    failed: relayout.result.failed
-                )
-            }
         }
-        let tick = service.applyTreeScope(scope, cause: "stage.place_window", generation: generation)
+        // Plan unique (A15, T212) : scope d'origine et scope cible disposés dans une seule écriture
+        // groupée, puis le focus.
+        let (plan, result) = service.applyCommandPlacement(
+            CommandPlacement(layoutScopes: Set([scope, sourceScope].compactMap { $0 })),
+            cause: "stage.place_window",
+            generation: generation,
+            events: events
+        )
         _ = service.focus(window)
         events.append(RoadieEvent(
             type: "stage_place_window",
@@ -770,18 +768,14 @@ public struct StageCommandService {
                 "windowID": String(windowID.rawValue),
                 "strategy": "tree",
                 "treeMutation": String(treeMutation != nil),
-                "commands": String(tick.commands),
-                "applied": String(tick.applied),
-                "clamped": String(tick.clamped),
-                "failed": String(tick.failed),
-                "sourceCommands": String(sourceTick.commands),
-                "sourceApplied": String(sourceTick.applied),
-                "sourceClamped": String(sourceTick.clamped),
-                "sourceFailed": String(sourceTick.failed)
+                "commands": String(plan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed)
             ]
         ))
         return StageCommandResult(
-            message: "stage place: window=\(windowID.rawValue) tree commands=\(tick.commands + sourceTick.commands) applied=\(tick.applied + sourceTick.applied) failed=\(tick.failed + sourceTick.failed)",
+            message: "stage place: window=\(windowID.rawValue) tree commands=\(plan.commands.count) applied=\(result.applied) failed=\(result.failed)",
             changed: true
         )
     }
@@ -866,6 +860,7 @@ public struct StageCommandService {
     }
 
     public func setMode(_ mode: WindowManagementMode) -> StageCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
@@ -883,7 +878,7 @@ public struct StageCommandService {
         }
         let stageID = modeScope.stageID
         service.removeLayoutIntent(scope: modeScope)
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false), generation: generation), generation: generation)
         events.append(RoadieEvent(
             type: "stage_mode",
             scope: modeScope,
@@ -908,10 +903,13 @@ public struct StageCommandService {
         var nativeFullscreenMember: PersistentStageMember?
     }
 
+    /// `generation` : celle de la commande, ouverte à son entrée et passée à toutes ses écritures
+    /// (A13, T213) ; une nouvelle si la bascule est la commande elle-même.
     private func switchDisplay(
         _ display: DisplaySnapshot,
         to stageID: StageID,
-        snapshot: DaemonSnapshot
+        snapshot: DaemonSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.next()
     ) -> StageCommandResult {
         let startedAt = Date()
         // Lecture pour décider du cas « déjà active » ; les écritures passent par `mutate`.
@@ -965,18 +963,23 @@ public struct StageCommandService {
                     }
                     let persistMs = elapsedMs(since: persistStartedAt)
 
-                    var applied = 0
+                    let applied: Int
                     if targetStage?.mode.usesTreeEngine == true {
                         // Mode arbre (A11) : frames finales de l'arbre, pas les frames mémorisées.
-                        let tick = service.applyTreeScope(switchScope, cause: "stage.switch.reconcile", generation: PlacementGeneration.shared.next())
+                        let tick = service.applyTreeScope(switchScope, cause: "stage.switch.reconcile", generation: generation)
                         applied = tick.applied + tick.clamped
                     } else {
-                        for member in targetMembers {
-                            guard let window = windowsByID[member.windowID] else { continue }
-                            if service.setFrame(member.frame.cgRect, of: window) != nil {
-                                applied += 1
-                            }
-                        }
+                        let restoring = Dictionary(uniqueKeysWithValues: targetMembers.compactMap { member in
+                            windowsByID[member.windowID] == nil ? nil : (member.windowID, member.frame.cgRect)
+                        })
+                        let result = service.applyCommandPlacement(
+                            CommandPlacement(restoring: restoring),
+                            snapshot: snapshot,
+                            cause: "stage.switch.reconcile",
+                            generation: generation,
+                            events: events
+                        ).result
+                        applied = result.applied + result.clamped
                     }
                     var focusedWindow = false
                     if let focusedID = targetFocusedWindowID,
@@ -1119,12 +1122,15 @@ public struct StageCommandService {
                 // La fenêtre vit dans son propre Space : activer l'application suffit.
                 activatedApplication = service.activateApplication(bundleID: nativeFullscreenMember.bundleID)
             } else {
-                for id in transition.hiddenWindowIDs {
-                    guard let window = windowsByID[id] else { continue }
-                    if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
-                        hidden += 1
-                    }
-                }
+                let hiding = hiddenFrames(transition.hiddenWindowIDs, windowsByID: windowsByID, display: display, displays: snapshot.displays)
+                let result = service.applyCommandPlacement(
+                    CommandPlacement(hiding: hiding),
+                    snapshot: snapshot,
+                    cause: "stage.switch.missing_target",
+                    generation: generation,
+                    events: events
+                ).result
+                hidden = result.applied + result.clamped
                 if let focusMember = preferredMissingFocusMember(in: transition.targetStage) {
                     focusedApplicationWindow = service.focusApplicationWindow(
                         bundleID: focusMember.bundleID,
@@ -1168,50 +1174,28 @@ public struct StageCommandService {
             preferredWindowID: transition.targetFocusedWindowID
         )
 
-        var applied = 0
-
-        let hideStartedAt = Date()
-        for id in transition.hiddenWindowIDs {
-            guard let window = windowsByID[id] else { continue }
-            if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
-                applied += 1
-            }
-        }
-        let hideMs = elapsedMs(since: hideStartedAt)
-
-        let showStartedAt = Date()
-        var showMs = 0.0
-        let layoutStartedAt: Date
-        let layoutAttempted: Int
+        // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage cible
+        // dans une seule écriture groupée, puis le focus.
+        var placement = CommandPlacement(hiding: hiddenFrames(transition.hiddenWindowIDs, windowsByID: windowsByID, display: display, displays: snapshot.displays))
         if targetUsesTree, fullscreenMemberID == nil {
-            // Mode arbre (A11, T094) : les frames finales de l'arbre sont posées en une application,
-            // dans une nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
-            layoutStartedAt = showStartedAt
-            let tick = service.applyTreeScope(targetScope, cause: "stage.switch", generation: PlacementGeneration.shared.next())
-            layoutAttempted = tick.commands
-            applied += tick.applied + tick.clamped
+            // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.
+            placement.layoutScopes = [targetScope]
         } else {
             for member in transition.targetStage?.members ?? [] {
                 guard let window = windowsByID[member.windowID] else { continue }
-                let frame = fullscreenMemberID == nil || member.windowID == fullscreenMemberID
-                    ? member.frame.cgRect
-                    : HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
-                if service.setFrame(frame, of: window) != nil {
-                    applied += 1
+                if fullscreenMemberID == nil || member.windowID == fullscreenMemberID {
+                    placement.restoring[member.windowID] = member.frame.cgRect
+                } else {
+                    placement.hiding[member.windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
                 }
             }
-            showMs = elapsedMs(since: showStartedAt)
-
-            layoutStartedAt = Date()
-            let layoutSnapshot = service.snapshot(followFocus: false)
-            var layoutPlan = service.applyPlan(from: layoutSnapshot)
-            if fullscreenMemberID != nil {
-                layoutPlan = applyPlanExcluding(scope: targetScope, from: layoutPlan, snapshot: layoutSnapshot)
-            }
-            let layoutResult = service.apply(layoutPlan)
-            layoutAttempted = layoutResult.attempted
-            applied += layoutResult.applied + layoutResult.clamped
+            // Membre plein écran protégé : la stage cible garde ses frames, sans disposition.
+            placement.layoutScopes = fullscreenMemberID == nil ? [targetScope] : []
         }
+        let layoutStartedAt = Date()
+        let (layoutPlan, layoutResult) = service.applyCommandPlacement(placement, cause: "stage.switch", generation: generation, events: events)
+        let applied = layoutResult.applied + layoutResult.clamped
+        let layoutAttempted = layoutPlan.commands.count
         let layoutMs = elapsedMs(since: layoutStartedAt)
         let focusStartedAt = Date()
         if let focusedID = transition.targetFocusedWindowID,
@@ -1233,8 +1217,6 @@ public struct StageCommandService {
                 "fullscreenProtected": String(fullscreenMemberID != nil),
                 "durationMs": formatMs(totalMs),
                 "persistMs": formatMs(persistMs),
-                "hideMs": formatMs(hideMs),
-                "showMs": formatMs(showMs),
                 "layoutMs": formatMs(layoutMs),
                 "focusMs": formatMs(focusMs)
             ]
@@ -1284,17 +1266,15 @@ public struct StageCommandService {
         }
     }
 
-    private func applyPlanExcluding(
-        scope: StageScope,
-        from plan: ApplyPlan,
-        snapshot: DaemonSnapshot
-    ) -> ApplyPlan {
-        let scopesByWindowID = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, StageScope)? in
-            guard let scope = entry.scope else { return nil }
-            return (entry.window.id, scope)
-        })
-        return ApplyPlan(commands: plan.commands.filter { command in
-            scopesByWindowID[command.window.id] != scope
+    /// Frames de masquage des fenêtres `ids` vivantes, sur l'écran de la commande. O(k).
+    private func hiddenFrames(
+        _ ids: Set<WindowID>,
+        windowsByID: [WindowID: WindowSnapshot],
+        display: DisplaySnapshot,
+        displays: [DisplaySnapshot]
+    ) -> [WindowID: CGRect] {
+        Dictionary(uniqueKeysWithValues: ids.compactMap { id in
+            windowsByID[id].map { (id, HiddenWindowPlacement.frame(for: $0.frame.cgRect, on: display, among: displays)) }
         })
     }
 
@@ -1472,7 +1452,8 @@ public struct StageCommandService {
     private func relayoutActiveSourceScopes(
         _ scopes: [StageScope],
         excluding excludedScope: StageScope,
-        from snapshot: DaemonSnapshot
+        from snapshot: DaemonSnapshot,
+        generation: UInt64
     ) -> (plan: ApplyPlan, result: ApplyResult) {
         let activeScopes = Set(scopes.filter { scope in
             scope != excludedScope && snapshot.state.activeScope(on: scope.displayID) == scope
@@ -1486,7 +1467,7 @@ public struct StageCommandService {
             guard let scope = windowsByID[command.window.id]?.scope else { return false }
             return activeScopes.contains(scope)
         })
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         if result.failed == 0 && result.clamped == 0 {
             let refreshed = service.snapshot(followFocus: false)
             for scope in activeScopes {
@@ -1584,7 +1565,8 @@ public struct StageCommandService {
         _ scope: StageScope,
         result: ApplyResult,
         snapshot: DaemonSnapshot,
-        keepWindowID: WindowID
+        keepWindowID: WindowID,
+        generation: UInt64
     ) -> Int {
         let clampedItems = result.items.filter { $0.status == .clamped && $0.actual != nil }
         guard clampedItems.count >= 2,
@@ -1618,7 +1600,7 @@ public struct StageCommandService {
         var hiddenIDs: [String] = []
         for entry in entries where entry.window.id != keepWindowID {
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
-            if service.setFrame(frame, of: entry.window) != nil {
+            if service.setFrame(frame, of: entry.window, generation: generation) != nil {
                 applied += 1
                 hiddenIDs.append(String(entry.window.id.rawValue))
             }

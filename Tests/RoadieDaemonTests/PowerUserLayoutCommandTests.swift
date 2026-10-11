@@ -49,9 +49,8 @@ struct PowerUserLayoutCommandTests {
 
     // MARK: - Mode arbre (SPEC-017 R12, T090, T091, T095)
     //
-    // Les commandes mutent l'arbre persisté puis l'appliquent par `applyTreeScope` (lot L8). Les
-    // assertions sur les écritures valent avec ou sans son remplissage : au plus une écriture par
-    // fenêtre, et si elle a lieu, la frame de l'arbre muté.
+    // Les commandes mutent l'arbre persisté puis l'appliquent par `applyTreeScope` : exactement une
+    // écriture par fenêtre déplacée, à la frame de l'arbre muté (T204).
 
     @Test
     func treeMoveSwapsLeavesInOneApplicationWithoutCommandHold() {
@@ -64,7 +63,7 @@ struct PowerUserLayoutCommandTests {
         #expect(fixture.tree() == .split(orientation: .vertical, ratio: 0.5, first: .leaf(TreeFixture.w3),
                                          second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(TreeFixture.w2), second: .leaf(TreeFixture.w1))))
         #expect(!fixture.activity.isActive())
-        fixture.expectAtMostOneWrite([TreeFixture.w1: TreeFixture.bottomRight, TreeFixture.w3: TreeFixture.left])
+        fixture.expectOneWrite([TreeFixture.w1: TreeFixture.bottomRight, TreeFixture.w3: TreeFixture.left])
         #expect(fixture.events().contains("\"strategy\":\"tree\""))
     }
 
@@ -80,7 +79,7 @@ struct PowerUserLayoutCommandTests {
         #expect(fixture.tree() == .split(orientation: .horizontal, ratio: 0.5, first: .leaf(TreeFixture.w2),
                                          second: .split(orientation: .vertical, ratio: 0.5, first: .leaf(TreeFixture.w3), second: .leaf(TreeFixture.w1))))
         #expect(!fixture.activity.isActive())
-        fixture.expectAtMostOneWrite([TreeFixture.w2: Rect(x: 0, y: 0, width: 1000, height: 399)])
+        fixture.expectOneWrite([TreeFixture.w2: Rect(x: 0, y: 0, width: 1000, height: 399)])
     }
 
     @Test
@@ -111,7 +110,7 @@ struct PowerUserLayoutCommandTests {
 
         #expect(result.changed)
         #expect(fixture.tree() == TreeFixture.baseTree)
-        fixture.expectAtMostOneWrite([TreeFixture.w1: TreeFixture.left, TreeFixture.w2: TreeFixture.topRight, TreeFixture.w3: TreeFixture.bottomRight])
+        fixture.expectOneWrite([TreeFixture.w1: TreeFixture.left, TreeFixture.w2: TreeFixture.topRight, TreeFixture.w3: TreeFixture.bottomRight])
     }
 
     @Test
@@ -123,6 +122,7 @@ struct PowerUserLayoutCommandTests {
 
         #expect(LayoutCommandService(service: fixture.service).flatten().changed)
         #expect(fixture.tree() == TreeFixture.baseTree)
+        fixture.expectOneWrite([TreeFixture.w1: TreeFixture.left, TreeFixture.w2: TreeFixture.topRight, TreeFixture.w3: TreeFixture.bottomRight])
     }
 
     @Test
@@ -134,7 +134,7 @@ struct PowerUserLayoutCommandTests {
         #expect(result.changed)
         #expect(fixture.tree() == .split(orientation: .vertical, ratio: 0.5, first: .leaf(TreeFixture.w1),
                                          second: .split(orientation: .vertical, ratio: 0.5, first: .leaf(TreeFixture.w2), second: .leaf(TreeFixture.w3))))
-        fixture.expectAtMostOneWrite([TreeFixture.w2: Rect(x: 500, y: 0, width: 250, height: 800)])
+        fixture.expectOneWrite([TreeFixture.w2: Rect(x: 500, y: 0, width: 250, height: 800)])
     }
 
     @Test
@@ -253,7 +253,7 @@ func treeMember(_ window: WindowSnapshot) -> PersistentStageMember {
 }
 
 /// Stage à arbre de 3 fenêtres sur un écran 1000x800 sans marges (SPEC-017 T095) : 1 à gauche,
-/// 2 en haut à droite, 3 en bas à droite, chacune déjà à sa frame d'arbre.
+/// 2 en haut à droite, 3 en bas à droite, chacune déjà à sa frame dans l'arbre de départ.
 struct TreeFixture {
     static let w1 = WindowID(rawValue: 1)
     static let w2 = WindowID(rawValue: 2)
@@ -275,8 +275,11 @@ struct TreeFixture {
     let scope = StageScope(displayID: DisplayID(rawValue: "display-main"), desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
 
     init(_ name: String, mode: WindowManagementMode = .spatialBsp, tree: BSPTree = Self.baseTree, focused: WindowID = Self.w1) {
-        let windows = [(Self.w1, Self.left), (Self.w2, Self.topRight), (Self.w3, Self.bottomRight)].map { id, frame in
-            powerWindow(id.rawValue, x: frame.x, y: frame.y, width: frame.width, height: frame.height)
+        // Fenêtres posées aux frames de `tree` : une commande qui change l'arbre doit les écrire (T204).
+        let placed = tree.place(in: CGRect(x: 0, y: 0, width: 1000, height: 800), innerGap: 0)
+        let windows = [(Self.w1, Self.left), (Self.w2, Self.topRight), (Self.w3, Self.bottomRight)].map { id, base in
+            let frame = placed[id].map { Rect($0) } ?? base
+            return powerWindow(id.rawValue, x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         }
         provider = PowerUserProvider(windows: windows)
         provider.focusedID = focused
@@ -319,13 +322,14 @@ struct TreeFixture {
         (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
     }
 
-    /// Une seule application : au plus une écriture par fenêtre, et la frame attendue si écrite.
-    func expectAtMostOneWrite(_ expected: [WindowID: Rect], sourceLocation: SourceLocation = #_sourceLocation) {
+    /// Une seule application (FR-012, T204) : exactement une écriture par fenêtre attendue, à sa
+    /// frame d'arbre, et aucune autre fenêtre écrite plus d'une fois. Échoue si rien n'est écrit.
+    func expectOneWrite(_ expected: [WindowID: Rect], sourceLocation: SourceLocation = #_sourceLocation) {
+        for (id, frame) in expected {
+            #expect(writer.frameHistory[id] == [frame], "fenêtre \(id.rawValue)", sourceLocation: sourceLocation)
+        }
         for (id, history) in writer.frameHistory {
             #expect(history.count <= 1, "fenêtre \(id.rawValue) : \(history)", sourceLocation: sourceLocation)
-            if let frame = expected[id], let last = history.last {
-                #expect(last == frame, "fenêtre \(id.rawValue)", sourceLocation: sourceLocation)
-            }
         }
     }
 }

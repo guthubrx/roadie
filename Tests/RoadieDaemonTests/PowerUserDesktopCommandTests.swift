@@ -662,7 +662,11 @@ struct PowerUserDesktopCommandTests {
 
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
         #expect(events.contains("\"fullscreenProtected\":\"false\""))
-        #expect(writer.frameHistory[sibling.id]?.first == Rect(x: 100, y: 100, width: 300, height: 300))
+        // Plan unique (T212) : la voisine est posée une fois, à l'écran (pas cachée), sans passer par
+        // sa frame mémorisée.
+        let siblingWrites = writer.frameHistory[sibling.id] ?? []
+        #expect(siblingWrites.count == 1)
+        #expect(siblingWrites.allSatisfy { display.visibleFrame.cgRect.contains(CGPoint(x: $0.cgRect.midX, y: $0.cgRect.midY)) })
     }
 
     @Test
@@ -822,7 +826,7 @@ struct PowerUserDesktopCommandTests {
 
     // MARK: - Mode arbre (SPEC-017 T093, T094, T095)
     //
-    // Les bascules posent les frames finales de l'arbre par `applyTreeScope` (lot L8) : au plus une
+    // Les bascules posent les frames finales de l'arbre dans un seul plan (T212) : exactement une
     // écriture par fenêtre, jamais la frame mémorisée du membre, et pas d'attente de commande.
 
     @Test
@@ -858,7 +862,7 @@ struct PowerUserDesktopCommandTests {
         #expect(store.state().scopes.first?.activeStageID == StageID(rawValue: "2"))
         #expect(events.contains("\"strategy\":\"tree\""))
         #expect(!activity.isActive())
-        expectFinalTreeFrames(writer, [first.id: Rect(x: 0, y: 0, width: 500, height: 800), second.id: Rect(x: 500, y: 0, width: 500, height: 800)], never: memorized)
+        expectFinalTreeFrames(writer, [first.id: Rect(x: 0, y: 0, width: 500, height: 800), second.id: Rect(x: 500, y: 0, width: 500, height: 800)])
     }
 
     @Test
@@ -890,7 +894,7 @@ struct PowerUserDesktopCommandTests {
         #expect(result.changed)
         #expect(store.state().currentDesktopID(for: displayID) == DesktopID(rawValue: 2))
         #expect(!activity.isActive())
-        expectFinalTreeFrames(writer, [target.id: Rect(x: 0, y: 0, width: 1000, height: 800)], never: memorized)
+        expectFinalTreeFrames(writer, [target.id: Rect(x: 0, y: 0, width: 1000, height: 800)])
     }
 
     @Test
@@ -1312,22 +1316,18 @@ private func treeService(provider: PowerUserProvider, writer: PowerUserWriter, s
     )
 }
 
-/// Une seule application (FR-012) : au plus une écriture par fenêtre attendue, sa frame d'arbre si
-/// elle est écrite, et jamais `never` (frame mémorisée restaurée avant recalcul).
+/// Une seule application (FR-012, T204) : exactement une écriture par fenêtre attendue, à sa frame
+/// d'arbre (donc jamais une frame mémorisée restaurée avant recalcul), et aucune autre fenêtre
+/// écrite plus d'une fois. Échoue si rien n'est écrit.
 private func expectFinalTreeFrames(
     _ writer: PowerUserWriter,
     _ expected: [WindowID: Rect],
-    never: Rect? = nil,
     sourceLocation: SourceLocation = #_sourceLocation
 ) {
     for (id, frame) in expected {
-        let history = writer.frameHistory[id] ?? []
+        #expect(writer.frameHistory[id] == [frame], "fenêtre \(id.rawValue)", sourceLocation: sourceLocation)
+    }
+    for (id, history) in writer.frameHistory {
         #expect(history.count <= 1, "fenêtre \(id.rawValue) : \(history)", sourceLocation: sourceLocation)
-        if let last = history.last {
-            #expect(last == frame, "fenêtre \(id.rawValue)", sourceLocation: sourceLocation)
-        }
-        if let never {
-            #expect(!history.contains(never), "fenêtre \(id.rawValue) restaurée", sourceLocation: sourceLocation)
-        }
     }
 }

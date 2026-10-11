@@ -124,6 +124,7 @@ public struct DesktopCommandService {
     public func assignActiveWindow(to desktopID: DesktopID, follow: Bool = false) -> StageCommandResult {
         beginLayoutCommand("desktop.assign_active_window")
         defer { finishLayoutCommand("desktop.assign_active_window") }
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays),
@@ -156,11 +157,20 @@ public struct DesktopCommandService {
         service.removeLayoutIntent(scope: targetStageScope)
 
         if follow {
-            return switchDisplay(display, to: desktopID, snapshot: snapshot)
+            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)
         }
 
-        let hidden = service.setFrame(HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays), of: active.window) != nil
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
+        let (_, result) = service.applyCommandPlacement(
+            CommandPlacement(
+                hiding: [active.window.id: HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays)],
+                layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
+            ),
+            cause: "desktop.assign_window",
+            generation: generation,
+            events: events
+        )
+        let hidden = !result.items.contains { $0.windowID == active.window.id && $0.status == .failed }
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
@@ -186,6 +196,7 @@ public struct DesktopCommandService {
     ) -> StageCommandResult {
         beginLayoutCommand("desktop.assign_window")
         defer { finishLayoutCommand("desktop.assign_window") }
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
@@ -218,11 +229,20 @@ public struct DesktopCommandService {
         service.removeLayoutIntent(scope: targetStageScope)
 
         if follow {
-            return switchDisplay(display, to: desktopID, snapshot: snapshot)
+            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)
         }
 
-        let hidden = service.setFrame(HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays), of: entry.window) != nil
-        let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
+        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
+        let (_, result) = service.applyCommandPlacement(
+            CommandPlacement(
+                hiding: [entry.window.id: HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)],
+                layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
+            ),
+            cause: "desktop.assign_window",
+            generation: generation,
+            events: events
+        )
+        let hidden = !result.items.contains { $0.windowID == entry.window.id && $0.status == .failed }
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
@@ -250,7 +270,8 @@ public struct DesktopCommandService {
     private func switchDisplay(
         _ display: DisplaySnapshot,
         to desktopID: DesktopID,
-        snapshot: DaemonSnapshot
+        snapshot: DaemonSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.next()
     ) -> StageCommandResult {
         // Préparé hors verrou : config et fenêtres visibles de l'écran (aucune E/S dans `mutate`).
         let stageConfig = ConfigReloadService.shared.currentConfig().stageManager
@@ -304,42 +325,30 @@ public struct DesktopCommandService {
         let targetStage = plan.targetStage
         let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
 
-        var applied = 0
+        // Plan unique (A15, T212) : masquage du bureau quitté et disposition de la stage cible dans
+        // une seule écriture groupée, puis le focus.
+        let targetScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: plan.targetStageID)
+        var placement = CommandPlacement(layoutScopes: [targetScope])
         for id in plan.hiddenIDs {
             guard let window = windowsByID[id] else { continue }
-            if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
-                applied += 1
+            placement.hiding[id] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
+        }
+        // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.
+        if targetStage?.mode.usesTreeEngine != true {
+            for member in targetStage?.members ?? [] where windowsByID[member.windowID] != nil {
+                placement.restoring[member.windowID] = member.frame.cgRect
             }
         }
-        let layoutAttempted: Int
-        if targetStage?.mode.usesTreeEngine == true {
-            // Mode arbre (A11, T094) : frames finales de l'arbre en une application, dans une
-            // nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
-            let tick = service.applyTreeScope(
-                StageScope(displayID: display.id, desktopID: desktopID, stageID: plan.targetStageID),
-                cause: "desktop.switch",
-                generation: PlacementGeneration.shared.next()
-            )
-            layoutAttempted = tick.commands
-            applied += tick.applied + tick.clamped
-        } else {
-            for member in targetStage?.members ?? [] {
-                guard let window = windowsByID[member.windowID] else { continue }
-                if service.setFrame(member.frame.cgRect, of: window) != nil {
-                    applied += 1
-                }
-            }
-            let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false)))
-            layoutAttempted = result.attempted
-            applied += result.applied + result.clamped
-        }
+        let (layoutPlan, result) = service.applyCommandPlacement(placement, cause: "desktop.switch", generation: generation, events: events)
+        let layoutAttempted = layoutPlan.commands.count
+        let applied = result.applied + result.clamped
         if let focusedID = targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
            let focused = windowsByID[focusedID] {
             _ = service.focus(focused)
         }
         events.append(RoadieEvent(
             type: "desktop_focus",
-            scope: StageScope(displayID: display.id, desktopID: desktopID, stageID: plan.targetStageID),
+            scope: targetScope,
             details: [
                 "previousDesktopID": String(plan.previousDesktopID.rawValue),
                 "hidden": String(plan.hiddenIDs.count),

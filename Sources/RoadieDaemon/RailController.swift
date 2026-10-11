@@ -977,6 +977,8 @@ public final class RailController {
     // Complexite : O(c + w) au lieu de O(c * w) en construisant un index windowID -> displayID.
     private func relayoutAfterRailWidthChange(on displayID: DisplayID) {
         guard RailSettings.load().layoutMode == "resize" else { return }
+        // Changement de largeur du rail : intention externe, nouvelle génération (A13, T213).
+        let generation = PlacementGeneration.shared.next()
         let snapshot = snapshotService.snapshot()
         let displayByWindow: [WindowID: DisplayID] = Dictionary(
             snapshot.windows.compactMap { entry in
@@ -984,11 +986,11 @@ public final class RailController {
             },
             uniquingKeysWith: { first, _ in first }
         )
-        let commands = snapshotService.applyPlan(from: snapshot).commands.filter { command in
+        let commands = snapshotService.applyPlan(from: snapshot, generation: generation).commands.filter { command in
             displayByWindow[command.window.id] == displayID
         }
         guard !commands.isEmpty else { return }
-        let result = snapshotService.apply(ApplyPlan(commands: commands))
+        let result = snapshotService.apply(ApplyPlan(commands: commands), generation: generation)
         print("rail relayout display=\(displayID.rawValue) commands=\(commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)")
         fflush(stdout)
     }

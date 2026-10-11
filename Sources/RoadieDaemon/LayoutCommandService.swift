@@ -28,6 +28,7 @@ public struct LayoutCommandService {
     /// disposition globale, sans les scopes à arbre.
     // O(w log w) - w = fenêtres du snapshot.
     public func balance() -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         service.removeLayoutIntents(in: snapshot)
         let treeScopes = snapshot.displays.compactMap { display -> StageScope? in
@@ -37,16 +38,16 @@ public struct LayoutCommandService {
             return scope
         }
         let treeResults = treeScopes.map { scope in
-            treeCommand("balance", label: "balance", scope: scope, snapshot: snapshot) { tree, _ in tree.balanced() }
+            treeCommand("balance", label: "balance", scope: scope, snapshot: snapshot, generation: generation) { tree, _ in tree.balanced() }
         }
         let scopesByWindowID = Dictionary(
             snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } },
             uniquingKeysWith: { first, _ in first }
         )
-        let plan = ApplyPlan(commands: service.applyPlan(from: service.snapshot()).commands.filter { command in
+        let plan = ApplyPlan(commands: service.applyPlan(from: service.snapshot(), generation: generation).commands.filter { command in
             scopesByWindowID[command.window.id].map { !treeScopes.contains($0) } ?? true
         })
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         return LayoutCommandResult(
             message: "balance: trees=\(treeScopes.count) commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: treeResults.contains { $0.changed } || result.failed < result.attempted || plan.commands.isEmpty
@@ -54,19 +55,20 @@ public struct LayoutCommandService {
     }
 
     public func flatten() -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         guard let context = activeContext() else {
             return LayoutCommandResult(message: "layout flatten: no active scope", changed: false)
         }
         // Mode arbre : `layout flatten` équivaut à `balance` (R12).
         if context.stage.mode.usesTreeEngine {
-            return treeCommand("layout.flatten", label: "layout flatten", scope: context.scope, snapshot: context.snapshot) { tree, _ in
+            return treeCommand("layout.flatten", label: "layout flatten", scope: context.scope, snapshot: context.snapshot, generation: generation) { tree, _ in
                 tree.balanced()
             }
         }
         service.removeLayoutIntent(scope: context.scope)
         let ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
-        let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered)
-        let result = service.apply(plan)
+        let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered, generation: generation)
+        let result = service.apply(plan, generation: generation)
         emit(command: "layout.flatten", changed: result.failed < result.attempted || plan.commands.isEmpty)
         return LayoutCommandResult(
             message: "layout flatten: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
@@ -75,6 +77,7 @@ public struct LayoutCommandService {
     }
 
     public func split(_ axis: String) -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         guard axis == "horizontal" || axis == "vertical" else {
             return LayoutCommandResult(message: "layout split: requires horizontal|vertical", changed: false)
         }
@@ -88,7 +91,7 @@ public struct LayoutCommandService {
                 return LayoutCommandResult(message: "layout split: no active window", changed: false)
             }
             let orientation: BSPOrientation = axis == "horizontal" ? .vertical : .horizontal
-            return treeCommand("layout.split", label: "layout split \(axis)", scope: context.scope, snapshot: context.snapshot) { tree, absent in
+            return treeCommand("layout.split", label: "layout split \(axis)", scope: context.scope, snapshot: context.snapshot, generation: generation) { tree, absent in
                 tree.settingSplit(of: activeID, to: orientation, excluding: absent)
             }
         }
@@ -112,7 +115,7 @@ public struct LayoutCommandService {
             return ApplyCommand(window: window, frame: Rect(frame.integral))
         }
         let plan = ApplyPlan(commands: commands)
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         persist(scope: context.scope, ordered: ordered, snapshot: context.snapshot, result: result)
         emit(command: "layout.split", changed: result.failed < result.attempted || plan.commands.isEmpty)
         return LayoutCommandResult(
@@ -124,6 +127,7 @@ public struct LayoutCommandService {
     /// Inverse le sens du split parent de la fenêtre active (yabai --toggle split). Mode arbre
     /// uniquement ; `direction` est accepté pour la compatibilité de la CLI et ignoré.
     public func toggleSplit(_ direction: Direction? = nil) -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         guard let context = activeContext() else {
             return LayoutCommandResult(message: "layout toggle-split: no active scope", changed: false)
         }
@@ -133,7 +137,7 @@ public struct LayoutCommandService {
         guard let activeID = activeWindowID(in: context) else {
             return LayoutCommandResult(message: "layout toggle-split: no active window", changed: false)
         }
-        return treeCommand("layout.toggle_split", label: "layout toggle-split", scope: context.scope, snapshot: context.snapshot) { tree, absent in
+        return treeCommand("layout.toggle_split", label: "layout toggle-split", scope: context.scope, snapshot: context.snapshot, generation: generation) { tree, absent in
             tree.togglingSplit(of: activeID, excluding: absent)
         }
     }
@@ -143,6 +147,7 @@ public struct LayoutCommandService {
     }
 
     private func insert(_ direction: Direction, verb: String) -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         guard let context = activeContext(),
               let activeID = context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
         else {
@@ -160,8 +165,8 @@ public struct LayoutCommandService {
         case .right, .down:
             ordered.append(activeID)
         }
-        let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered)
-        let result = service.apply(plan)
+        let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered, generation: generation)
+        let result = service.apply(plan, generation: generation)
         persist(scope: context.scope, ordered: ordered, snapshot: context.snapshot, result: result)
         emit(command: "layout.insert", changed: result.failed < result.attempted || plan.commands.isEmpty)
         return LayoutCommandResult(
@@ -171,6 +176,7 @@ public struct LayoutCommandService {
     }
 
     public func zoomParent() -> LayoutCommandResult {
+        let generation = PlacementGeneration.shared.next()
         guard let context = activeContext(),
               let activeID = context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last,
               let entry = context.snapshot.windows.first(where: { $0.window.id == activeID }),
@@ -179,7 +185,7 @@ public struct LayoutCommandService {
             return LayoutCommandResult(message: "layout zoom-parent: no active window", changed: false)
         }
         let plan = ApplyPlan(commands: [ApplyCommand(window: entry.window, frame: display.visibleFrame)])
-        let result = service.apply(plan)
+        let result = service.apply(plan, generation: generation)
         service.saveLayoutIntent(
             scope: context.scope,
             windowIDs: [activeID],
@@ -211,6 +217,7 @@ public struct LayoutCommandService {
         label: String,
         scope: StageScope,
         snapshot: DaemonSnapshot,
+        generation: UInt64,
         mutation: (BSPTree, Set<WindowID>) -> BSPTree
     ) -> LayoutCommandResult {
         let live = Set(snapshot.windows.compactMap { entry in
@@ -223,7 +230,7 @@ public struct LayoutCommandService {
             state.setBSPTree(mutated, for: scope)
             return true
         }
-        let tick = service.applyTreeScope(scope, cause: command, generation: PlacementGeneration.shared.next())
+        let tick = service.applyTreeScope(scope, cause: command, generation: generation)
         let changed = treeChanged || tick.applied + tick.clamped > 0
         emit(command: command, changed: changed || tick.failed == 0)
         return LayoutCommandResult(
@@ -310,5 +317,102 @@ public struct LayoutCommandService {
             cause: .command,
             payload: ["command": .string(command)]
         ))
+    }
+}
+
+/// Frames d'une commande qui change la visibilité (bascule de stage, de bureau ou de signet,
+/// `window display N`, dépôt entre scopes, SPEC-017 A15, T212). Les changements logiques sont
+/// déjà persistés ; ces frames entrent dans un seul plan arbitré par fenêtre.
+struct CommandPlacement {
+    /// Fenêtres à masquer : priorité sur toute autre frame (A1).
+    var hiding: [WindowID: CGRect] = [:]
+    /// Frames à reposer (frames mémorisées des modes sans arbre, fenêtre transférée). Elles servent
+    /// de géométrie au calcul de la disposition et cèdent la place à sa frame si elle en donne une.
+    var restoring: [WindowID: CGRect] = [:]
+    /// Scopes à disposer ; seuls ceux actifs dans le snapshot du plan sont posés. nil : tous.
+    var layoutScopes: Set<StageScope>? = []
+}
+
+extension SnapshotService {
+    /// Plan unique d'une commande (A15, T212) : copie de travail du snapshot avec les frames
+    /// masquées et restaurées, disposition des scopes demandés calculée sur cette copie, arbitrage
+    /// par fenêtre (masquage, puis disposition, puis restauration), puis une seule écriture groupée
+    /// dans `generation`. Le focus reste à l'appelant, après l'application.
+    /// `snapshot` : relevé fait après les changements logiques ; nil = snapshot partagé (relevé si
+    /// l'état a changé). Contournement local (lot C3) : le suivi des scopes à arbre reprend celui de
+    /// `applyTreeScope` (fin d'attente, épisode, `layout_apply`, publication), faute d'API commune.
+    // O(w log w) - w = fenêtres du snapshot.
+    @discardableResult
+    func applyCommandPlacement(
+        _ placement: CommandPlacement,
+        snapshot: DaemonSnapshot? = nil,
+        cause: String,
+        generation: UInt64,
+        events: EventLog
+    ) -> (plan: ApplyPlan, result: ApplyResult) {
+        let startedAt = Date()
+        let observed = snapshot ?? sharedSnapshot(followFocus: false)
+        var working = observed
+        for index in working.windows.indices {
+            let id = working.windows[index].window.id
+            if let frame = placement.hiding[id] ?? placement.restoring[id] {
+                working.windows[index].window.frame = Rect(frame)
+            }
+        }
+        let scopeByWindow = Dictionary(
+            working.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let laidOut = { (id: WindowID) in
+            placement.layoutScopes.map { scopes in scopeByWindow[id].map(scopes.contains) ?? false } ?? true
+        }
+        var targets = placement.restoring
+        let layout = placement.layoutScopes?.isEmpty == true ? [] : applyPlan(from: working, generation: generation).commands
+        for command in layout where laidOut(command.window.id) {
+            targets[command.window.id] = command.frame.cgRect
+        }
+        targets.merge(placement.hiding) { _, hidden in hidden }
+        let windowsByID = Dictionary(observed.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })
+        let plan = ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in
+            guard let window = windowsByID[id], let target = targets[id], !LayoutMaintainer.matches(window.frame.cgRect, target) else { return nil }
+            return ApplyCommand(window: window, frame: Rect(target))
+        })
+        let treeScopes = observed.displays.compactMap { display -> StageScope? in
+            guard let scope = working.state.activeScope(on: display.id),
+                  working.state.stage(scope: scope)?.mode.usesTreeEngine == true,
+                  placement.layoutScopes?.contains(scope) ?? true
+            else { return nil }
+            return scope
+        }
+        let processState = SnapshotProcessState.forStatePath(effectiveStageStore.fileURL.path)
+        let commandCause = cause.hasPrefix("command:") ? cause : "command:\(cause)"
+        let episode = treeScopes.isEmpty ? nil : EpisodeContext.shared.begin(cause: commandCause)
+        for scope in treeScopes { processState.noteTreeScopeApplied(scope, at: startedAt) }
+        let result = apply(plan, generation: generation)
+        if let episode, let scope = treeScopes.first {
+            events.append(RoadieEvent(type: "layout_apply", scope: scope, details: [
+                "cause": commandCause,
+                "durationMs": String(format: "%.1f", Date().timeIntervalSince(startedAt) * 1000),
+                "pass": String(processState.nextCommandPass(episode: episode)),
+                // Relevé fait après les changements logiques : l'état a changé, le partagé est périmé.
+                "scans": "1",
+                "axWrites": String(result.items.count * 3),
+                "layoutVersion": String(generation),
+                "commands": String(plan.commands.count),
+                "applied": String(result.applied),
+                "clamped": String(result.clamped),
+                "failed": String(result.failed),
+                "windowWrites": result.items.map { "\($0.windowID.rawValue):1" }.joined(separator: ",")
+            ], episodeId: episode))
+            for scope in treeScopes {
+                TreeScopeApplicationCenter.shared.publish(TreeScopeApplication(
+                    scope: scope,
+                    generation: generation,
+                    windowIDs: result.items.compactMap { scopeByWindow[$0.windowID] == scope ? $0.windowID : nil },
+                    appliedAt: Date()
+                ))
+            }
+        }
+        return (plan, result)
     }
 }

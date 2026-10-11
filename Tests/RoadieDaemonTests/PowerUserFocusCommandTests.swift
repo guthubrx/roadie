@@ -173,7 +173,7 @@ struct PowerUserFocusCommandTests {
         provider.focusedID = WindowID(rawValue: 2)
         let writer = PowerUserWriter(provider: provider)
         let store = StageStore(path: tempPath("power-focus-band"))
-        let service = SnapshotService(provider: provider, frameWriter: writer, stageStore: store)
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store)
         _ = service.snapshot()
 
         let result = WindowCommandService(service: service, stageStore: store).focus(.right)

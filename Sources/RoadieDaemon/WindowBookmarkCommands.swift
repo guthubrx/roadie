@@ -43,6 +43,7 @@ public struct WindowBookmarkCommandService {
 
     public func focus(_ rawName: String) -> WindowCommandResult {
         let name = PersistentWindowBookmark.normalizedName(rawName)
+        let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot(followFocus: false)
         let state = store.state()
         guard let bookmark = state.bookmark(named: name) else {
@@ -104,32 +105,24 @@ public struct WindowBookmarkCommandService {
             return result
         }
 
-        var applied = 0
+        // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage du signet
+        // dans une seule écriture groupée, puis le focus.
+        var placement = CommandPlacement(layoutScopes: [targetScope])
         if plan.previousScope != targetScope {
             for id in plan.previousMembers.subtracting(plan.targetMembers) {
                 guard let window = windowsByID[id] else { continue }
-                if service.setFrame(HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays), of: window) != nil {
-                    applied += 1
-                }
+                placement.hiding[id] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
             }
         }
-
-        let layoutAttempted: Int
-        if plan.targetStage?.mode.usesTreeEngine == true {
-            // Mode arbre (A11, T094) : frames finales de l'arbre en une application, dans une
-            // nouvelle génération, sans restaurer les frames mémorisées puis recalculer.
-            let tick = service.applyTreeScope(targetScope, cause: "bookmark.focus", generation: PlacementGeneration.shared.next())
-            layoutAttempted = tick.commands
-            applied += tick.applied + tick.clamped
-        } else {
-            for member in plan.targetStage?.members ?? [] {
-                guard let window = windowsByID[member.windowID] else { continue }
-                if service.setFrame(member.frame.cgRect, of: window) != nil {
-                    applied += 1
-                }
+        // Mode arbre (A11, T094) : frames finales de l'arbre, sans restaurer les frames mémorisées.
+        if plan.targetStage?.mode.usesTreeEngine != true {
+            for member in plan.targetStage?.members ?? [] where windowsByID[member.windowID] != nil {
+                placement.restoring[member.windowID] = member.frame.cgRect
             }
-            layoutAttempted = service.apply(service.applyPlan(from: service.snapshot(followFocus: false))).attempted
         }
+        let (layoutPlan, result) = service.applyCommandPlacement(placement, cause: "bookmark.focus", generation: generation, events: events)
+        let layoutAttempted = layoutPlan.commands.count
+        let applied = result.applied + result.clamped
         let ok = service.focus(targetEntry.window)
         if ok {
             mouseFollower.follow(targetEntry.window)

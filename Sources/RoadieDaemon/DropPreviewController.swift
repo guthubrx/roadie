@@ -472,18 +472,21 @@ final class WindowDragReorderController {
     private let commandService: StageCommandService
     private let events: EventLog
     private let userInput: UserInputActivity
+    private let dragActivity: WindowDragActivity
     private var pending: PendingWindowDrag?
 
     init(
         preview: DropPreviewController,
         commandService: StageCommandService = StageCommandService(),
         events: EventLog = EventLog(),
-        userInput: UserInputActivity = .shared
+        userInput: UserInputActivity = .shared,
+        dragActivity: WindowDragActivity = .shared
     ) {
         self.preview = preview
         self.commandService = commandService
         self.events = events
         self.userInput = userInput
+        self.dragActivity = dragActivity
     }
 
     var hasActiveDrag: Bool {
@@ -498,7 +501,7 @@ final class WindowDragReorderController {
     func cancelPendingDrag() {
         pending = nil
         preview.endDrag()
-        WindowDragActivity.shared.finish()
+        dragActivity.release()
     }
 
     func handleMouseDown(at point: CGPoint) {
@@ -525,7 +528,7 @@ final class WindowDragReorderController {
             preview.beginDrag(context: drag.context)
         }
         drag.didDrag = true
-        WindowDragActivity.shared.markActive(windowID: drag.windowID)
+        dragActivity.markActive(windowID: drag.windowID)
         if let candidate = preview.update(sourceWindowID: drag.windowID, at: point),
            candidate != drag.lastCandidate {
             events.append(RoadieEvent(type: "window_drag_preview", scope: candidate.scope, details: [
@@ -537,19 +540,24 @@ final class WindowDragReorderController {
         pending = drag
     }
 
+    /// Relâchement d'un glisser (T216). Sans dépôt reconnu, le glisser cesse tout de suite, sans
+    /// grâce : le geste suit A17. Un dépôt reconnu consomme la session de geste de ce processus,
+    /// applique le dépôt, puis termine le glisser avec sa preuve (`WindowDragActivity.lastDrop`) pour
+    /// le maintien d'un autre processus.
     func handleMouseUp(at point: CGPoint) {
         guard let drag = pending else { return }
         pending = nil
-        defer {
-            preview.endDrag()
-            WindowDragActivity.shared.finish()
-        }
+        defer { preview.endDrag() }
         guard drag.didDrag,
               let candidate = preview.update(sourceWindowID: drag.windowID, at: point)
-        else { return }
+        else {
+            if drag.didDrag { dragActivity.release() }
+            return
+        }
         // Dépôt reconnu : il consomme la session de geste, le maintien n'ajuste donc aucune
         // frontière pour ce relâchement (A17).
         _ = userInput.takeGesture()
+        defer { dragActivity.finish(droppedWindowID: candidate.sourceWindowID) }
         let result = commandService.place(
             windowID: candidate.sourceWindowID,
             displayID: candidate.displayID,
