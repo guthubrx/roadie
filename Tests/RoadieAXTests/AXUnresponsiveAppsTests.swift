@@ -50,11 +50,11 @@ struct AXAttributeCacheTests {
         let clock = ManualClock()
         let cache = AXAttributeCache(now: { clock.now })
 
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         #expect(cache.stableAttributes(for: 1, ttl: 600) == nil)
 
         clock.advance(0.6)
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         #expect(cache.stableAttributes(for: 1, ttl: 600)?.subrole == "AXStandardWindow")
     }
 
@@ -62,12 +62,12 @@ struct AXAttributeCacheTests {
     func cacheHoldsOnlyStablePartAndLastKnownFollowsLatestState() {
         let clock = ManualClock()
         let cache = AXAttributeCache(now: { clock.now })
-        cache.record(attributes(fullscreen: false), for: 1, stableIsFresh: true)
+        cache.record(attributes(fullscreen: false), for: 1, pid: 9, stableIsFresh: true)
         clock.advance(1)
-        cache.record(attributes(fullscreen: false), for: 1, stableIsFresh: true)
+        cache.record(attributes(fullscreen: false), for: 1, pid: 9, stableIsFresh: true)
 
         // L'état change : seule la dernière lecture complète le reflète, le cache reste stable.
-        cache.record(attributes(fullscreen: true, focused: true), for: 1, stableIsFresh: false)
+        cache.record(attributes(fullscreen: true, focused: true), for: 1, pid: 9, stableIsFresh: false)
         #expect(cache.lastKnown(for: 1)?.volatile.isNativeFullscreen == true)
         #expect(cache.lastKnown(for: 1)?.furniture.isFocused == true)
         #expect(cache.stableAttributes(for: 1, ttl: 600) == attributes().stable)
@@ -77,13 +77,13 @@ struct AXAttributeCacheTests {
     func staleReadDoesNotReplaceCachedStableAttributes() {
         let clock = ManualClock()
         let cache = AXAttributeCache(now: { clock.now })
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         clock.advance(1)
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
 
         // Une partie stable qui n'a pas été relue (repli dernier état) n'entre pas en cache.
-        cache.invalidate()
-        cache.record(attributes(subrole: "AXDialog"), for: 1, stableIsFresh: false)
+        cache.invalidate(pid: 9)
+        cache.record(attributes(subrole: "AXDialog"), for: 1, pid: 9, stableIsFresh: false)
         #expect(cache.stableAttributes(for: 1, ttl: 600) == nil)
     }
 
@@ -91,16 +91,16 @@ struct AXAttributeCacheTests {
     func invalidateDropsStablePartButKeepsLastKnownState() {
         let clock = ManualClock()
         let cache = AXAttributeCache(now: { clock.now })
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         clock.advance(1)
-        cache.record(attributes(fullscreen: true), for: 1, stableIsFresh: true)
+        cache.record(attributes(fullscreen: true), for: 1, pid: 9, stableIsFresh: true)
 
-        cache.invalidate()
+        cache.invalidate(pid: 9)
         #expect(cache.stableAttributes(for: 1, ttl: 600) == nil)
         #expect(cache.lastKnown(for: 1)?.volatile.isNativeFullscreen == true)
 
         // L'âge de la fenêtre est conservé : la lecture suivante revient en cache.
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         #expect(cache.stableAttributes(for: 1, ttl: 600) != nil)
     }
 
@@ -108,9 +108,9 @@ struct AXAttributeCacheTests {
     func expiredEntryIsReadAgain() {
         let clock = ManualClock()
         let cache = AXAttributeCache(now: { clock.now })
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
         clock.advance(1)
-        cache.record(attributes(), for: 1, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
 
         clock.advance(11)
         #expect(cache.stableAttributes(for: 1, ttl: 10) == nil)
@@ -119,8 +119,8 @@ struct AXAttributeCacheTests {
     @Test
     func retainForgetsClosedWindows() {
         let cache = AXAttributeCache(now: { Date() })
-        cache.record(attributes(), for: 1, stableIsFresh: true)
-        cache.record(attributes(), for: 2, stableIsFresh: true)
+        cache.record(attributes(), for: 1, pid: 9, stableIsFresh: true)
+        cache.record(attributes(), for: 2, pid: 9, stableIsFresh: true)
 
         cache.retain(only: [2])
         #expect(cache.lastKnown(for: 1) == nil)

@@ -2,6 +2,19 @@ import AppKit
 import ApplicationServices
 import Foundation
 
+/// Événement AX transmis au daemon : nom de la notification, application et fenêtre (A12).
+public struct AXWindowEvent: Sendable, Equatable {
+    public var name: String
+    public var pid: pid_t
+    public var windowID: UInt32?
+
+    public init(name: String, pid: pid_t, windowID: UInt32?) {
+        self.name = name
+        self.pid = pid
+        self.windowID = windowID
+    }
+}
+
 /// Observe les notifications AX (windowCreated, focusChanged, miniaturized, etc.) sur toutes
 /// les applications regulieres et invoque une callback a chaque evenement. Permet au daemon
 /// de reagir instantanement sans attendre le prochain tick de polling.
@@ -14,11 +27,19 @@ import Foundation
 @MainActor
 public final class AXWindowEventObserver {
     public typealias Callback = (_ notification: String) -> Void
+    public typealias EventCallback = (_ event: AXWindowEvent) -> Void
 
-    private let callback: Callback
+    private let callback: EventCallback
+    /// Notifications posees au niveau application : sans deplacement ni redimensionnement
+    /// pour l'ancienne callback, dont le daemon ne sait pas filtrer l'echo.
+    private let notifications: [String]
+    private let writtenFrames: WrittenFrameRegistry
     private var observers: [pid_t: AXObserver] = [:]
     /// Notifications deja enregistrees (ou refusees definitivement) par application.
     private var registered: [pid_t: Set<String>] = [:]
+    /// ID des fenetres surveillees pour leur destruction : un element detruit ne repond plus
+    /// a `_AXUIElementGetWindow`, on le retrouve par egalite d'element (CFEqual).
+    private var watchedWindowIDs: [pid_t: [AXUIElement: CGWindowID]] = [:]
     private var workspaceTokens: [NSObjectProtocol] = []
     private var isStarted = false
 
@@ -37,7 +58,14 @@ public final class AXWindowEventObserver {
         kAXUIElementDestroyedNotification as String,
     ]
 
-    /// Notifications qui changent l'ensemble des fenetres : elles invalident le cache AX.
+    /// Deplacement et redimensionnement, observes comme yabai (`application.h`). Un echo de nos
+    /// propres ecritures est absorbe dans le callback (A1).
+    static let frameNotifications: Set<String> = [
+        kAXWindowMovedNotification as String,
+        kAXWindowResizedNotification as String,
+    ]
+
+    /// Notifications qui changent l'ensemble des fenetres : elles invalident les caches AX du pid.
     private static let cacheInvalidatingNotifications: Set<String> = [
         kAXWindowCreatedNotification as String,
         kAXWindowDeminiaturizedNotification as String,
@@ -49,8 +77,22 @@ public final class AXWindowEventObserver {
     /// la duree de mise de cote d'une app qui ne repond pas.
     private static let retryDelays: [TimeInterval] = [0.5, 1, 2, 4, 8]
 
+    /// Ancienne callback (nom de notification seul), sans deplacement ni redimensionnement.
     public init(onWindowEvent: @escaping Callback) {
-        self.callback = onWindowEvent
+        self.callback = { onWindowEvent($0.name) }
+        self.notifications = Self.trackedNotifications
+        self.writtenFrames = .shared
+    }
+
+    /// Callback complete, avec deplacement et redimensionnement ; l'echo est absorbe.
+    public convenience init(onEvent: @escaping EventCallback) {
+        self.init(writtenFrames: .shared, onEvent: onEvent)
+    }
+
+    init(writtenFrames: WrittenFrameRegistry, onEvent: @escaping EventCallback) {
+        self.callback = onEvent
+        self.notifications = Self.trackedNotifications + Self.frameNotifications.sorted()
+        self.writtenFrames = writtenFrames
     }
 
     /// Demarre l'observation. A appeler depuis la main thread (les notifications AppKit
@@ -98,16 +140,47 @@ public final class AXWindowEventObserver {
 
     fileprivate func handleEvent(observer: AXObserver, element: AXUIElement, notification: CFString) {
         let name = notification as String
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success else { return }
+        let isDestroyed = name == kAXUIElementDestroyedNotification as String
+        let windowID = (isDestroyed ? watchedWindowIDs[pid]?.removeValue(forKey: element) : nil)
+            ?? Self.windowID(of: element, pid: pid)
         if name == kAXWindowCreatedNotification as String {
-            var pid: pid_t = 0
-            if AXUIElementGetPid(element, &pid) == .success {
-                watchDestruction(of: element, observer: observer, pid: pid)
-            }
+            watchDestruction(of: element, id: windowID, observer: observer, pid: pid)
         }
         if Self.cacheInvalidatingNotifications.contains(name) {
-            AXAttributeCache.shared.invalidate()
+            AXAttributeCache.shared.invalidate(pid: pid)
+            AXWindowIndexCache.shared.invalidate(pid: pid)
         }
-        callback(name)
+        if isDestroyed, let windowID {
+            writtenFrames.forget(windowID: windowID)
+        }
+        let event = AXWindowEvent(name: name, pid: pid, windowID: windowID)
+        let observed = Self.frameNotifications.contains(name) && windowID != nil
+            && !AXUnresponsiveApps.shared.isQuarantined(pid)
+            ? AXWindowFrameWriter().frame(of: element, pid: pid) : nil
+        dispatch(event, observedFrame: observed, now: Date())
+    }
+
+    /// Transmet l'evenement, sauf un deplacement ou redimensionnement classe echo par le
+    /// registre : il ne planifie aucune passe (A1). Avant d'etre absorbe, un echo de la relecture
+    /// confirme le refus de taille en attente (A14). O(1).
+    func dispatch(_ event: AXWindowEvent, observedFrame: CGRect?, now: Date) {
+        if Self.frameNotifications.contains(event.name), let windowID = event.windowID, let observedFrame,
+           writtenFrames.classify(windowID: windowID, observed: observedFrame, now: now) == .echo {
+            writtenFrames.confirmRefusal(windowID: windowID, observed: observedFrame, at: now)
+            return
+        }
+        callback(event)
+    }
+
+    /// ID CoreGraphics d'une fenetre AX, nil pour un element application ou illisible.
+    private static func windowID(of element: AXUIElement, pid: pid_t) -> CGWindowID? {
+        guard !AXUnresponsiveApps.shared.isQuarantined(pid) else { return nil }
+        var id = CGWindowID()
+        let error = AXUIElementGetWindowID(element, &id)
+        AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        return error == .success && id > 0 ? id : nil
     }
 
     /// Abonne l'application. Les notifications refusees parce que l'app n'est pas prete sont
@@ -138,7 +211,7 @@ public final class AXWindowEventObserver {
         let context = Unmanaged.passUnretained(self).toOpaque()
         var done = registered[pid] ?? []
         var needsRetry = false
-        for notification in Self.trackedNotifications where !done.contains(notification) {
+        for notification in notifications where !done.contains(notification) {
             let error = AXObserverAddNotification(observer, appElement, notification as CFString, context)
             switch error {
             case .success, .notificationAlreadyRegistered, .notificationUnsupported, .notImplemented:
@@ -154,7 +227,7 @@ public final class AXWindowEventObserver {
         if !registry.isQuarantined(pid), let windows = AXApplicationWindows(pid: pid) {
             for entry in windows.entries {
                 // Application mise de côté : inutile d'attendre un délai par fenêtre restante.
-                if watchDestruction(of: entry.element, observer: observer, pid: pid) { break }
+                if watchDestruction(of: entry.element, id: entry.id, observer: observer, pid: pid) { break }
             }
         }
         if needsRetry {
@@ -174,14 +247,21 @@ public final class AXWindowEventObserver {
     /// notification n'arrive pas pour les fenetres de toutes les apps. Un doublon est sans effet.
     /// Retourne vrai si l'application ne repond plus (mise de cote) : l'appelant interrompt la boucle.
     @discardableResult
-    private func watchDestruction(of window: AXUIElement, observer: AXObserver, pid: pid_t) -> Bool {
+    private func watchDestruction(of window: AXUIElement, id: CGWindowID?, observer: AXObserver, pid: pid_t) -> Bool {
+        if let id { watchedWindowIDs[pid, default: [:]][window] = id }
         let context = Unmanaged.passUnretained(self).toOpaque()
         let error = AXObserverAddNotification(observer, window, kAXUIElementDestroyedNotification as CFString, context)
         return AXUnresponsiveApps.shared.noteResult(error, pid: pid)
     }
 
+    /// Fin de l'application ou arret : ses fenetres sortent du registre et des caches.
     private func unsubscribe(pid: pid_t) {
         registered[pid] = nil
+        for id in (watchedWindowIDs.removeValue(forKey: pid) ?? [:]).values {
+            writtenFrames.forget(windowID: id)
+        }
+        AXAttributeCache.shared.invalidate(pid: pid)
+        AXWindowIndexCache.shared.invalidate(pid: pid)
         guard let observer = observers.removeValue(forKey: pid) else { return }
         CFRunLoopRemoveSource(
             CFRunLoopGetMain(),

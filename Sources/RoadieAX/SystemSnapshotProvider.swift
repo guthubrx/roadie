@@ -3,7 +3,7 @@ import CoreGraphics
 import RoadieCore
 
 @_silgen_name("_AXUIElementGetWindow")
-private func AXUIElementGetWindowID(_ element: AXUIElement, _ identifier: UnsafeMutablePointer<CGWindowID>) -> AXError
+func AXUIElementGetWindowID(_ element: AXUIElement, _ identifier: UnsafeMutablePointer<CGWindowID>) -> AXError
 
 public protocol SystemSnapshotProviding: Sendable {
     func permissions(prompt: Bool) -> PermissionSnapshot
@@ -21,6 +21,11 @@ public extension SystemSnapshotProviding {
 public protocol WindowFrameWriting: Sendable {
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect?
     func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?]
+    /// `generation` : génération de placement globale et monotone, transmise au registre des
+    /// frames écrites (budget de 2 écritures par fenêtre et par génération, A2).
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?]
+    /// Lecture AX fraîche du cadre (seconde observation d'un refus, A14). nil si illisible.
+    func readFrame(of window: WindowSnapshot) -> CGRect?
     func focus(_ window: WindowSnapshot) -> Bool
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool
     func activateApplication(bundleID: String) -> Bool
@@ -38,6 +43,12 @@ public extension WindowFrameWriting {
         return results
     }
 
+    /// Écrivains sans registre (doubles de test) : la génération est ignorée.
+    func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
+        setFrames(updates)
+    }
+
+    func readFrame(of window: WindowSnapshot) -> CGRect? { nil }
     func focus(_ window: WindowSnapshot) -> Bool { false }
     func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool { false }
     func activateApplication(bundleID: String) -> Bool { false }
@@ -387,6 +398,7 @@ final class AXAttributeCache: @unchecked Sendable {
     static let minimumAge: TimeInterval = 0.5
 
     private struct Entry {
+        var pid: pid_t
         var firstSeen: Date
         var stable: AXStableWindowAttributes?
         var stableFetchedAt = Date.distantPast
@@ -420,10 +432,10 @@ final class AXAttributeCache: @unchecked Sendable {
 
     /// Enregistre l'état lu. La partie stable n'entre en cache que si elle vient d'être lue
     /// et si la fenêtre est connue depuis au moins `minimumAge`. O(1).
-    func record(_ attributes: AXWindowAttributes, for id: CGWindowID, stableIsFresh: Bool) {
+    func record(_ attributes: AXWindowAttributes, for id: CGWindowID, pid: pid_t, stableIsFresh: Bool) {
         lock.withLock {
             let date = now()
-            var entry = entries[id] ?? Entry(firstSeen: date)
+            var entry = entries[id] ?? Entry(pid: pid, firstSeen: date)
             entry.lastKnown = attributes
             if stableIsFresh, entry.stable == nil, date.timeIntervalSince(entry.firstSeen) >= Self.minimumAge {
                 entry.stable = attributes.stable
@@ -433,10 +445,11 @@ final class AXAttributeCache: @unchecked Sendable {
         }
     }
 
-    /// Oublie les attributs stables. Garde l'âge et le dernier état connu des fenêtres. O(n).
-    func invalidate() {
+    /// Oublie les attributs stables des fenêtres d'une application. Garde l'âge et le dernier
+    /// état connu des fenêtres. O(n).
+    func invalidate(pid: pid_t) {
         lock.withLock {
-            for id in entries.keys { entries[id]?.stable = nil }
+            for (id, entry) in entries where entry.pid == pid { entries[id]?.stable = nil }
         }
     }
 
@@ -463,22 +476,85 @@ struct AXApplicationWindows {
         guard error == .success, let windows = raw as? [AXUIElement] else { return nil }
 
         var entries: [(id: CGWindowID?, element: AXUIElement)] = []
-        var byID: [CGWindowID: AXUIElement] = [:]
         for element in windows {
             var id = CGWindowID()
             let idError = AXUIElementGetWindowID(element, &id)
             if registry.noteResult(idError, pid: pid) { return nil }
-            let windowID: CGWindowID? = idError == .success && id > 0 ? id : nil
-            if let windowID { byID[windowID] = element }
-            entries.append((windowID, element))
+            entries.append((idError == .success && id > 0 ? id : nil, element))
         }
+        self.init(pid: pid, entries: entries)
+    }
+
+    init(pid: pid_t, entries: [(id: CGWindowID?, element: AXUIElement)]) {
         self.pid = pid
         self.entries = entries
+        var byID: [CGWindowID: AXUIElement] = [:]
+        for entry in entries { if let id = entry.id { byID[id] = entry.element } }
         self.byID = byID
     }
 
     func element(id: CGWindowID) -> AXUIElement? {
         byID[id]
+    }
+}
+
+/// Index des fenêtres AX par application, posé par le dernier snapshot et réutilisé par
+/// l'écrivain (SPEC-017 R8) : une écriture ne réénumère plus `kAXWindows`. Vidé pour un pid
+/// à la création ou destruction d'une fenêtre, à la fin de l'application ou sur un élément
+/// devenu invalide.
+final class AXWindowIndexCache: @unchecked Sendable {
+    static let shared = AXWindowIndexCache()
+
+    private let lock = NSLock()
+    private var byPID: [pid_t: AXApplicationWindows] = [:]
+
+    func windows(for pid: pid_t) -> AXApplicationWindows? {
+        lock.withLock { byPID[pid] }
+    }
+
+    func store(_ windows: AXApplicationWindows) {
+        lock.withLock { byPID[windows.pid] = windows }
+    }
+
+    /// Remplace l'index par celui d'un snapshot complet : les applications absentes en sortent. O(p).
+    func replaceAll(with windows: [AXApplicationWindows]) {
+        lock.withLock { byPID = Dictionary(windows.map { ($0.pid, $0) }, uniquingKeysWith: { $1 }) }
+    }
+
+    func invalidate(pid: pid_t) {
+        lock.withLock { byPID[pid] = nil }
+    }
+}
+
+/// Appels AX de l'écrivain, isolés pour l'écrivain espion des tests (SPEC-017 T035).
+protocol AXFrameIO: Sendable {
+    func enumerateWindows(pid: pid_t) -> AXApplicationWindows?
+    func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?)
+    func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject])
+    func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError
+}
+
+struct LiveAXFrameIO: AXFrameIO {
+    func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
+        AXApplicationWindows(pid: pid)
+    }
+
+    func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
+        var raw: CFTypeRef?
+        let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
+        return (error, raw)
+    }
+
+    func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
+        var raw: CFArray?
+        let error = AXUIElementCopyMultipleAttributeValues(
+            element, attributes as CFArray, AXCopyMultipleAttributeOptions(rawValue: 0), &raw
+        )
+        return (error, error == .success ? (raw as? [AnyObject]) ?? [] : [])
+    }
+
+    func setValue(_ value: CFTypeRef, of attribute: String, on element: AXUIElement) -> AXError {
+        AXUIElementSetAttributeValue(element, attribute as CFString, value)
     }
 }
 
@@ -577,6 +653,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         }
 
         AXAttributeCache.shared.retain(only: Set(result.map { $0.id.rawValue }))
+        AXWindowIndexCache.shared.replaceAll(with: appWindows.values.compactMap { $0 })
         return result
     }
 
@@ -609,7 +686,7 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
         let fresh = cached == nil ? Self.readStable(element, pid: pid) : nil
         guard let stable = cached ?? fresh ?? lastKnown?.stable else { return nil }
         let attrs = AXWindowAttributes(stable: stable, volatile: reading.resolved(lastKnown: lastKnown?.volatile))
-        cache.record(attrs, for: id, stableIsFresh: fresh != nil)
+        cache.record(attrs, for: id, pid: pid, stableIsFresh: fresh != nil)
         return attrs
     }
 
@@ -799,26 +876,68 @@ public final class LiveSystemSnapshotProvider: SystemSnapshotProviding {
 public struct AXWindowFrameWriter: WindowFrameWriting {
     /// Ecart maximal pour reconnaitre une fenetre par son cadre quand l'ID AX manque.
     static let frameMatchTolerance: CGFloat = 48
+    static let enhancedUserInterface = "AXEnhancedUserInterface"
 
-    public init() {}
+    private let io: any AXFrameIO
+    private let windowIndex: AXWindowIndexCache
+    private let writtenFrames: WrittenFrameRegistry
+    private let registry: AXUnresponsiveApps
+    private let now: @Sendable () -> Date
+
+    public init() {
+        self.init(io: LiveAXFrameIO())
+    }
+
+    init(
+        io: any AXFrameIO,
+        windowIndex: AXWindowIndexCache = .shared,
+        writtenFrames: WrittenFrameRegistry = .shared,
+        registry: AXUnresponsiveApps = .shared,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.io = io
+        self.windowIndex = windowIndex
+        self.writtenFrames = writtenFrames
+        self.registry = registry
+        self.now = now
+    }
 
     public func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         setFrames([WindowFrameUpdate(window: window, frame: frame)])[window.id] ?? nil
     }
 
-    // O(n + Σm) : regroupement par pid, une enumeration kAXWindows (m elements) par application,
-    // puis resolution par ID en O(1). Le repli par cadre/titre, en O(m), reste l'exception.
     public func setFrames(_ updates: [WindowFrameUpdate]) -> [WindowID: CGRect?] {
+        setFrames(updates, generation: 0)
+    }
+
+    // O(n + Σm) : regroupement par pid, index AX du dernier snapshot (au plus une enumeration
+    // kAXWindows de m elements par application et par lot), resolution par ID en O(1). Le repli
+    // par cadre/titre, en O(m), reste l'exception.
+    public func setFrames(_ updates: [WindowFrameUpdate], generation: UInt64) -> [WindowID: CGRect?] {
         var results: [WindowID: CGRect?] = [:]
         let reserved = Set(updates.map { $0.window.id.rawValue })
-        let registry = AXUnresponsiveApps.shared
         for (pid, group) in Dictionary(grouping: updates, by: { $0.window.pid }) {
-            let appWindows = AXApplicationWindows(pid: pid)
+            var windows: PIDWindows?
+            // AXEnhancedUserInterface : lu au premier placement de l'application, retabli en fin de lot.
+            var enhancedUI: (app: AXUIElement, restore: Bool)?
+            defer {
+                if let enhancedUI, enhancedUI.restore {
+                    let error = io.setValue(kCFBooleanTrue, of: Self.enhancedUserInterface, on: enhancedUI.app)
+                    registry.noteResult(error, pid: pid)
+                }
+            }
             for update in group {
                 var applied: CGRect?
-                if let appWindows, !registry.isQuarantined(pid),
-                   let element = element(in: appWindows, window: update.window, reserved: reserved) {
-                    applied = set(update.frame, on: element, pid: pid)
+                if !registry.isQuarantined(pid),
+                   let element = element(pid: pid, id: update.window.id, title: update.window.title,
+                                         frame: update.window.frame, windows: &windows, reserved: reserved) {
+                    if enhancedUI == nil {
+                        let app = AXMessaging.application(pid)
+                        enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
+                    }
+                    if !registry.isQuarantined(pid) {
+                        applied = write(update, generation: generation, on: element, pid: pid)
+                    }
                 }
                 results.updateValue(applied, forKey: update.window.id)
             }
@@ -826,9 +945,16 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         return results
     }
 
+    public func readFrame(of window: WindowSnapshot) -> CGRect? {
+        var windows: PIDWindows?
+        guard let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows)
+        else { return nil }
+        return frame(of: element, pid: window.pid)
+    }
+
     public func focus(_ window: WindowSnapshot) -> Bool {
-        guard let appWindows = AXApplicationWindows(pid: window.pid),
-              let element = element(in: appWindows, window: window)
+        var windows: PIDWindows?
+        guard let element = element(pid: window.pid, id: window.id, title: window.title, frame: window.frame, windows: &windows)
         else { return false }
         return focus(element, pid: window.pid)
     }
@@ -836,8 +962,8 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     public func focusApplicationWindow(bundleID: String, windowID: WindowID, title: String, frame: Rect) -> Bool {
         for application in NSRunningApplication.runningApplications(withBundleIdentifier: bundleID) {
             let pid = application.processIdentifier
-            guard let appWindows = AXApplicationWindows(pid: pid),
-                  let element = element(in: appWindows, id: windowID, title: title, frame: frame)
+            var windows: PIDWindows?
+            guard let element = element(pid: pid, id: windowID, title: title, frame: frame, windows: &windows)
             else { continue }
             return focus(element, pid: pid)
         }
@@ -868,12 +994,12 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     private func press(_ buttonAttribute: String, of window: WindowSnapshot) -> Bool {
         let pid = window.pid
-        guard let appWindows = AXApplicationWindows(pid: pid),
-              let element = element(in: appWindows, window: window),
+        var windows: PIDWindows?
+        guard let element = element(pid: pid, id: window.id, title: window.title, frame: window.frame, windows: &windows),
               let button = elementAttribute(element, buttonAttribute, pid: pid)
         else { return false }
         let error = AXUIElementPerformAction(button, kAXPressAction as CFString)
-        AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid)
         return error == .success
     }
 
@@ -883,7 +1009,6 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     private func focus(_ element: AXUIElement, pid: pid_t) -> Bool {
         NSRunningApplication(processIdentifier: pid)?.activate()
         _ = setFrontmost(pid: pid)
-        let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return false }
         let app = AXMessaging.application(pid)
         if registry.noteResult(AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element), pid: pid) {
@@ -893,7 +1018,6 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     }
 
     private func setFrontmost(pid: pid_t) -> Bool {
-        let registry = AXUnresponsiveApps.shared
         guard !registry.isQuarantined(pid) else { return false }
         let error = AXUIElementSetAttributeValue(
             AXMessaging.application(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue as CFTypeRef
@@ -905,13 +1029,40 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     private func elementAttribute(_ element: AXUIElement, _ attribute: String, pid: pid_t) -> AXUIElement? {
         var raw: CFTypeRef?
         let error = AXUIElementCopyAttributeValue(element, attribute as CFString, &raw)
-        AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid)
         guard error == .success, let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
         return (raw as! AXUIElement)
     }
 
-    private func element(in appWindows: AXApplicationWindows, window: WindowSnapshot, reserved: Set<CGWindowID> = []) -> AXUIElement? {
-        element(in: appWindows, id: window.id, title: window.title, frame: window.frame, reserved: reserved)
+    /// Fenetres AX d'une application pendant un appel, et si elles viennent d'etre enumerees.
+    private struct PIDWindows {
+        var index: AXApplicationWindows?
+        var isFresh: Bool
+    }
+
+    /// Enumere les fenetres de l'application et met l'index en cache.
+    private func enumerateWindows(pid: pid_t) -> PIDWindows {
+        let index = io.enumerateWindows(pid: pid)
+        if let index { windowIndex.store(index) }
+        return PIDWindows(index: index, isFresh: true)
+    }
+
+    /// Element AX d'une fenetre depuis l'index du dernier snapshot. Un ID absent de l'index en
+    /// cache (fenetre plus recente que le snapshot) provoque une seule nouvelle enumeration
+    /// pour ce pid et cet appel. O(1) si l'ID est connu, O(m) sinon.
+    private func element(
+        pid: pid_t, id: WindowID, title: String, frame: Rect,
+        windows: inout PIDWindows?, reserved: Set<CGWindowID> = []
+    ) -> AXUIElement? {
+        guard !registry.isQuarantined(pid) else { return nil }
+        if windows == nil {
+            windows = windowIndex.windows(for: pid).map { PIDWindows(index: $0, isFresh: false) } ?? enumerateWindows(pid: pid)
+        }
+        if windows?.isFresh == false, windows?.index?.element(id: id.rawValue) == nil {
+            windows = enumerateWindows(pid: pid)
+        }
+        guard let index = windows?.index else { return nil }
+        return element(in: index, id: id, title: title, frame: frame, reserved: reserved)
     }
 
     // O(1) si l'ID est connu d'AX, O(m) pour le repli. Priorite : ID exact > cadre unique > titre unique.
@@ -926,7 +1077,6 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     ) -> AXUIElement? {
         if let exact = appWindows.element(id: id.rawValue) { return exact }
         let pid = appWindows.pid
-        let registry = AXUnresponsiveApps.shared
         let candidates = appWindows.entries
             .filter { entry in entry.id.map { !reserved.contains($0) } ?? true }
             .map(\.element)
@@ -961,53 +1111,72 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     func title(of element: AXUIElement, pid: pid_t) -> String {
         var rawTitle: CFTypeRef?
         let error = AXUIElementCopyAttributeValue(element, kAXTitleAttribute as CFString, &rawTitle)
-        AXUnresponsiveApps.shared.noteResult(error, pid: pid)
+        registry.noteResult(error, pid: pid)
         guard error == .success, let title = rawTitle as? String else { return "" }
         return title
     }
 
-    /// Position, taille puis position (la seconde position corrige une taille bornee par
-    /// l'ancien ecran), sans pause, puis une seule relecture du cadre. Arret au premier echec.
-    private func set(_ frame: CGRect, on element: AXUIElement, pid: pid_t) -> CGRect? {
-        var position = CGPoint(x: frame.minX, y: frame.minY)
-        var size = CGSize(width: frame.width, height: frame.height)
+    /// Desactive `AXEnhancedUserInterface` sur l'application s'il est actif : avec lui, certaines
+    /// applications animent chaque changement de cadre (yabai, `AX_ENHANCED_UI_WORKAROUND`).
+    /// Retourne vrai s'il faut le retablir.
+    private func disableEnhancedUserInterface(_ app: AXUIElement, pid: pid_t) -> Bool {
+        let (error, raw) = io.value(of: Self.enhancedUserInterface, on: app)
+        if registry.noteResult(error, pid: pid) { return false }
+        guard error == .success, (raw as? Bool) == true else { return false }
+        let setError = io.setValue(kCFBooleanFalse, of: Self.enhancedUserInterface, on: app)
+        registry.noteResult(setError, pid: pid)
+        return setError == .success
+    }
+
+    /// Taille, position puis taille, comme yabai (`window_manager.c:729-762`) : la premiere taille
+    /// evite qu'une fenetre trop grande soit bornee par l'ecran a sa nouvelle position, la seconde
+    /// corrige une taille bornee par l'ancien ecran. Une taille refusee (fenetre non
+    /// redimensionnable) n'arrete pas l'ecriture ; une position refusee, une fenetre detruite ou
+    /// un delai depasse l'arretent. Puis une seule relecture, enregistree dans le registre.
+    private func write(_ update: WindowFrameUpdate, generation: UInt64, on element: AXUIElement, pid: pid_t) -> CGRect? {
+        var position = update.frame.origin
+        var size = update.frame.size
         guard let axPosition = AXValueCreate(.cgPoint, &position),
               let axSize = AXValueCreate(.cgSize, &size)
         else { return nil }
 
-        let registry = AXUnresponsiveApps.shared
-        for (attribute, value) in [(kAXPositionAttribute, axPosition), (kAXSizeAttribute, axSize), (kAXPositionAttribute, axPosition)] {
-            let error = AXUIElementSetAttributeValue(element, attribute as CFString, value)
-            registry.noteResult(error, pid: pid)
-            guard error == .success else { return nil }
+        for (attribute, value) in [(kAXSizeAttribute, axSize), (kAXPositionAttribute, axPosition), (kAXSizeAttribute, axSize)] {
+            let error = io.setValue(value, of: attribute, on: element)
+            if registry.noteResult(error, pid: pid) { return nil }
+            if error == .invalidUIElement {
+                windowIndex.invalidate(pid: pid)
+                return nil
+            }
+            if error != .success, attribute == kAXPositionAttribute { return nil }
         }
-        return self.frame(of: element, pid: pid)
+        let readBack = frame(of: element, pid: pid)
+        writtenFrames.record(
+            windowID: update.window.id.rawValue, requested: update.frame, readBack: readBack,
+            generation: generation, at: now()
+        )
+        return readBack
     }
 
-    /// Lit le cadre AX. Avec un pid, un delai depasse met l'application de cote et arrete la lecture.
+    private static let frameAttributeNames: [String] = [kAXPositionAttribute, kAXSizeAttribute]
+
+    /// Lit le cadre AX en un seul aller-retour. Avec un pid, un delai depasse met l'application
+    /// de cote et arrete la lecture.
     func frame(of element: AXUIElement, pid: pid_t?) -> CGRect? {
-        let registry = AXUnresponsiveApps.shared
-        var rawPosition: CFTypeRef?
-        let positionError = AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &rawPosition)
-        if let pid { registry.noteResult(positionError, pid: pid) }
-        guard positionError == .success else { return nil }
-        var rawSize: CFTypeRef?
-        let sizeError = AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &rawSize)
-        if let pid { registry.noteResult(sizeError, pid: pid) }
-        guard sizeError == .success,
-              let axPosition = rawPosition,
-              let axSize = rawSize,
-              CFGetTypeID(axPosition) == AXValueGetTypeID(),
-              CFGetTypeID(axSize) == AXValueGetTypeID()
+        let (error, values) = io.values(of: Self.frameAttributeNames, on: element)
+        if let pid {
+            if registry.noteResult(error, pid: pid) { return nil }
+            if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }
+        }
+        guard error == .success, values.count == 2,
+              CFGetTypeID(values[0]) == AXValueGetTypeID(),
+              CFGetTypeID(values[1]) == AXValueGetTypeID()
         else { return nil }
 
         var position = CGPoint.zero
         var size = CGSize.zero
         // Safe: CFTypeID == AXValueGetTypeID() verified in the guard above.
-        let posValue = axPosition as! AXValue
-        let sizeValue = axSize as! AXValue
-        guard AXValueGetValue(posValue, .cgPoint, &position),
-              AXValueGetValue(sizeValue, .cgSize, &size)
+        guard AXValueGetValue(values[0] as! AXValue, .cgPoint, &position),
+              AXValueGetValue(values[1] as! AXValue, .cgSize, &size)
         else { return nil }
         return CGRect(origin: position, size: size)
     }
