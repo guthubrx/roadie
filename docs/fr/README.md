@@ -9,7 +9,6 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 - [Configuration et règles](configuration-rules.md)
 - [Événements et API de requêtes](events-query.md)
 - [Cas d’usage](use-cases.md)
-- [Archive v0.3.0](../releases/v0.3.0.md) — version antérieure aux derniers changements des sources.
 
 ## Fonctions Actuelles
 

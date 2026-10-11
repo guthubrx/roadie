@@ -96,8 +96,6 @@ Main guides:
 - [Events and Query API](docs/en/events-query.md)
 - [Use cases](docs/en/use-cases.md)
 
-Historical notes: [v0.3.0 archive](docs/releases/v0.3.0.md). These notes describe an earlier version of the project.
-
 ## Requirements
 
 - macOS 14 or later.
