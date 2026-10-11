@@ -34,6 +34,8 @@ var daemonStatusPublisher: DaemonStatusPublisher?
 // Retenu globalement : la sous-commande `tiler` (runComponent) retourne avant
 // NSApplication.run(), donc une reference locale serait desallouee.
 var tilerLiveObserver: AXWindowEventObserver?
+// Notifications NSWorkspace du tiler, retenues pour la vie du process.
+var workspaceObservers: [NSObjectProtocol] = []
 // Canal des commandes CLI (`run` et `tiler`), retenu pour toute la vie du process.
 var commandSocketServer: CommandSocketServer?
 
@@ -55,6 +57,9 @@ func printUsage() {
       roadied permissions [--prompt]
       roadied help | -h | --help
       roadied --version
+
+    `--interval-ms` : période du filet de sécurité du tiler (2000 par défaut) ; les
+    passes suivent les événements.
 
     `run` et `tiler` partagent un verrou d'instance (~/.roadies/roadied.lock) :
     un seul des deux peut tourner par session.
@@ -219,11 +224,11 @@ func startRestoreSafetyComponent() {
 
 /// Au changement de paramètres d'écran (display branché/débranché), planifie un
 /// "parking heal" léger : `DaemonHealthService.healDisplayChange()` migre les stages des
-/// écrans disparus vers un écran présent (un seul snapshot, service partagé) ; le tick
-/// suivant applique la disposition. Sans cet observer, les fenêtres d'un écran
+/// écrans disparus vers un écran présent (un seul snapshot, service partagé), puis demande
+/// tout de suite une passe (`onHealed`). Sans cet observer, les fenêtres d'un écran
 /// déconnecté restent orphelines (floating) indéfiniment.
 @MainActor
-func installDisplayChangeObserver(displaySettleSeconds: Double) {
+func installDisplayChangeObserver(displaySettleSeconds: Double, onHealed: @escaping @MainActor () -> Void) {
     displayChangeObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.didChangeScreenParametersNotification,
         object: nil,
@@ -241,6 +246,7 @@ func installDisplayChangeObserver(displaySettleSeconds: Double) {
                 let report = DaemonHealthService(service: service, stageStore: service.effectiveStageStore).healDisplayChange()
                 print("display-change-heal parking=\(report.kind.rawValue)/\(report.reason.rawValue)")
                 fflush(stdout)
+                onHealed()
             }
         }
     }
@@ -282,79 +288,103 @@ func installPowerObservers(reconcile: @escaping @MainActor () -> Void) {
     }
 }
 
-/// Démarre le tiler : observer d'écran + timer de polling + voie rapide AX.
-/// La voie rapide re-tile en ~15-80ms dès qu'une fenêtre apparaît/change, sans
-/// attendre le prochain tick de polling.
+/// Changement de bureau, activation, masquage et démasquage d'application : chacun demande une
+/// passe (FR-001). `activeSpaceDidChange` ferme aussi la garde de transition de bureau (A5) et
+/// est journalisé à la milliseconde, pour mesurer son moment réel d'envoi.
 @MainActor
-func startTilerComponent(interval: Double, ticks: Int?, displaySettleSeconds: Double, enableLiveEvents: Bool) {
-    UserInputActivity.shared.startMonitoring()
-    installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds)
-
-    let maintainer = LayoutMaintainer(intervalSeconds: interval)
-    var reportedAccessibilityDenied = false
-    let target = MaintenanceTimerTarget(
-        maintainer: maintainer,
-        maxTicks: ticks,
-        shouldTick: { Date() >= displaySettlingUntil && Date() >= tickSuspendedUntil }
-    ) { tick in
-        if tick.accessibilityDenied {
-            if !reportedAccessibilityDenied {
-                fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
-                fflush(stderr)
-                reportedAccessibilityDenied = true
-            }
-            return
+func installWorkspaceObservers(maintainer: LayoutMaintainer, scheduler: TickScheduler) {
+    let center = NSWorkspace.shared.notificationCenter
+    let events = EventLog()
+    // La notification ne dit pas quel écran a changé : nil = tous les écrans.
+    let spaceDidChange: @MainActor () -> Void = { maintainer.spaceDidChange(displayUUID: nil) }
+    workspaceObservers.append(center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
+        MainActor.assumeIsolated {
+            spaceDidChange()
+            scheduler.request(cause: "space_did_change")
+            events.append(RoadieEvent(type: "space_did_change"))
         }
-        reportedAccessibilityDenied = false
-        if tick.commands > 0 || tick.failed > 0 {
-            print("commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)")
-            fflush(stdout)
+    })
+    let causes: [(NSNotification.Name, String)] = [
+        (NSWorkspace.didActivateApplicationNotification, "app_activated"),
+        (NSWorkspace.didHideApplicationNotification, "app_hidden"),
+        (NSWorkspace.didUnhideApplicationNotification, "app_unhidden"),
+    ]
+    for (name, cause) in causes {
+        workspaceObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { scheduler.request(cause: cause) }
+        })
+    }
+}
+
+/// Démarre le tiler (SPEC-017 R5) : chaque événement (AX, NSWorkspace, relâchement de souris,
+/// fin de « heal » d'écran, réveil) demande une passe à l'ordonnanceur, qui les regroupe en
+/// 15 ou 30 ms et n'en perd aucune. Le minuteur périodique n'est plus qu'un filet de sécurité.
+@MainActor
+func startTilerComponent(safetyNetInterval: Double, ticks: Int?, displaySettleSeconds: Double, enableLiveEvents: Bool) {
+    UserInputActivity.shared.startMonitoring()
+
+    let maintainer = LayoutMaintainer()
+    var reportedAccessibilityDenied = false
+    let scheduler = TickScheduler(
+        tick: { cause in
+            let tick = maintainer.tick(cause: cause)
+            if tick.accessibilityDenied {
+                if !reportedAccessibilityDenied {
+                    fputs("roadied: accessibilityTrusted=false; enable Accessibility for roadied or run from a trusted terminal\n", stderr)
+                    fflush(stderr)
+                    reportedAccessibilityDenied = true
+                }
+                return tick
+            }
+            reportedAccessibilityDenied = false
+            if tick.commands > 0 || tick.failed > 0 {
+                print("commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)")
+                fflush(stdout)
+            }
+            return tick
+        },
+        nextDeadline: { maintainer.nextDeadline(now: $0) },
+        isBlocked: {
+            let now = Date()
+            return NSEvent.pressedMouseButtons != 0 || now < displaySettlingUntil || now < tickSuspendedUntil
+        }
+    )
+
+    installDisplayChangeObserver(displaySettleSeconds: displaySettleSeconds) {
+        scheduler.request(cause: "display_change")
+    }
+    installPowerObservers { scheduler.request(cause: "wake") }
+
+    // Filet de sécurité (FR-017). `--ticks N` arrête le process après N filets.
+    var safetyNetCount = 0
+    let timer = Timer(timeInterval: safetyNetInterval, repeats: true) { _ in
+        MainActor.assumeIsolated {
+            scheduler.request(cause: "periodic", delay: .safetyNet)
+            safetyNetCount += 1
+            if let ticks, safetyNetCount >= ticks {
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
-    let timer = Timer(timeInterval: interval, target: target, selector: #selector(MaintenanceTimerTarget.tick(_:)), userInfo: nil, repeats: true)
     RunLoop.main.add(timer, forMode: .common)
-    installPowerObservers { target.performTick(timer, countsTowardLimit: false) }
+    scheduler.request(cause: "startup")
 
     guard enableLiveEvents else { return }
-    let liveEvents = EventLog()
-    var pendingLiveTick: DispatchWorkItem?
-    var lastLiveTickAt: Date = .distantPast
-    let liveCoalesceMs = value(after: "--live-coalesce-ms").flatMap(Double.init) ?? 80
-    let fastLiveCoalesceMs = value(after: "--fast-live-coalesce-ms").flatMap(Double.init) ?? 15
-    let fastNotifications: Set<String> = [
-        kAXWindowCreatedNotification as String,
-        kAXFocusedWindowChangedNotification as String,
-        kAXMainWindowChangedNotification as String,
-        kAXWindowDeminiaturizedNotification as String,
-        kAXUIElementDestroyedNotification as String,
-    ]
-    let liveObserver = AXWindowEventObserver { notification in
-        let isFastEvent = fastNotifications.contains(notification)
-        if !isFastEvent && Date().timeIntervalSince(lastLiveTickAt) < 0.2 { return }
-        pendingLiveTick?.cancel()
-        let requestedAt = Date()
-        let delayMs = isFastEvent ? fastLiveCoalesceMs : liveCoalesceMs
-        let item = DispatchWorkItem {
-            pendingLiveTick = nil
-            let beforeTick = Date()
-            let tick = target.performTick(timer, countsTowardLimit: false)
-            lastLiveTickAt = Date()
-            if isFastEvent || tick.commands > 0 || tick.failed > 0 {
-                liveEvents.append(RoadieEvent(type: "live_tick", details: [
-                    "notification": notification,
-                    "fast": String(isFastEvent),
-                    "delayMs": String(format: "%.1f", delayMs),
-                    "latencyMs": String(format: "%.1f", beforeTick.timeIntervalSince(requestedAt) * 1000),
-                    "durationMs": String(format: "%.1f", Date().timeIntervalSince(beforeTick) * 1000),
-                    "commands": String(tick.commands),
-                    "applied": String(tick.applied),
-                    "failed": String(tick.failed),
-                ]))
-            }
-        }
-        pendingLiveTick = item
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(Int(delayMs)), execute: item)
-    }
+    // Session de geste (A4) : la fenêtre gérée sous le curseur au clic, d'après le snapshot partagé.
+    UserInputActivity.shared.observeGestures(
+        target: { point in
+            FocusFollowsMousePicker.targetWindow(at: point, in: service.sharedSnapshot())
+                .map { ($0.window.id.rawValue, $0.window.frame.cgRect) }
+        },
+        onRelease: { scheduler.buttonsReleased(gestureEnded: $0) }
+    )
+    installWorkspaceObservers(maintainer: maintainer, scheduler: scheduler)
+    // Les échos de nos écritures sont absorbés par l'observateur (A1) : ils n'arrivent pas ici.
+    let liveObserver = AXWindowEventObserver(onEvent: { event in
+        let isFrameChange = event.name == kAXWindowMovedNotification as String
+            || event.name == kAXWindowResizedNotification as String
+        scheduler.request(cause: event.name, delay: isFrameChange ? .externalChange : .event)
+    })
     liveObserver.start()
     tilerLiveObserver = liveObserver
 }
@@ -365,10 +395,9 @@ case "run":
         fputs("roadied: refusing to maintain layout without --yes\n", stderr)
         exit(2)
     }
-    let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
     let ticks = value(after: "--ticks").flatMap(Int.init)
     let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
-    let interval = max(100, intervalMs) / 1000
+    let safetyNetInterval = safetyNetIntervalSeconds()
 
     // Verrou d'instance partagé avec `tiler` (FR-019), tenu jusqu'à la sortie.
     acquireInstanceLock("roadied", label: "run")
@@ -385,7 +414,7 @@ case "run":
     if !args.contains("--no-target-mode") { startTargetModeComponent() }
     if !args.contains("--no-tiler") {
         startTilerComponent(
-            interval: interval,
+            safetyNetInterval: safetyNetInterval,
             ticks: ticks,
             displaySettleSeconds: displaySettleSeconds,
             enableLiveEvents: !args.contains("--no-live-events")
@@ -398,15 +427,14 @@ case "tiler":
         fputs("roadied tiler: refusing to maintain layout without --yes\n", stderr)
         exit(2)
     }
-    let intervalMs = value(after: "--interval-ms").flatMap(Double.init) ?? 500
     let ticks = value(after: "--ticks").flatMap(Int.init)
     let displaySettleSeconds = max(0.5, (value(after: "--display-settle-ms").flatMap(Double.init) ?? 1500) / 1000)
-    let interval = max(100, intervalMs) / 1000
+    let safetyNetInterval = safetyNetIntervalSeconds()
     runComponent("tiler", lockName: "roadied") {
         startDaemonStatusPublisher(mode: "tiler")
         if !args.contains("--no-restore-safety") { startRestoreSafetyComponent() }
         startTilerComponent(
-            interval: interval,
+            safetyNetInterval: safetyNetInterval,
             ticks: ticks,
             displaySettleSeconds: displaySettleSeconds,
             enableLiveEvents: !args.contains("--no-live-events")
@@ -475,56 +503,17 @@ func value(after flag: String) -> String? {
     return args[index + 1]
 }
 
+/// Période du filet de sécurité : `--interval-ms`, 2 s par défaut (SPEC-017 R5), 100 ms au moins.
+func safetyNetIntervalSeconds() -> Double {
+    max(100, value(after: "--interval-ms").flatMap(Double.init) ?? 2000) / 1000
+}
+
 func resolvedArguments() -> [String] {
     let arguments = Array(CommandLine.arguments.dropFirst())
     if arguments.isEmpty && Bundle.main.bundleIdentifier == "com.roadie.roadied" {
         return ["run", "--yes"]
     }
     return arguments
-}
-
-private final class MaintenanceTimerTarget: NSObject {
-    private let maintainer: LayoutMaintainer
-    private let maxTicks: Int?
-    private let shouldTick: () -> Bool
-    private let onTick: (MaintenanceTick) -> Void
-    private var tickCount = 0
-
-    init(
-        maintainer: LayoutMaintainer,
-        maxTicks: Int?,
-        shouldTick: @escaping () -> Bool = { true },
-        onTick: @escaping (MaintenanceTick) -> Void
-    ) {
-        self.maintainer = maintainer
-        self.maxTicks = maxTicks
-        self.shouldTick = shouldTick
-        self.onTick = onTick
-    }
-
-    /// `countsTowardLimit` : seuls les ticks du timer comptent pour `--ticks` ; les ticks live
-    /// (événements AX) et la réconciliation de réveil n'avancent pas le compteur.
-    @discardableResult
-    @MainActor func performTick(_ timer: Timer, countsTowardLimit: Bool = true) -> MaintenanceTick {
-        let tick: MaintenanceTick
-        if shouldTick() {
-            tick = maintainer.tick()
-            onTick(tick)
-        } else {
-            tick = MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0)
-        }
-        guard countsTowardLimit else { return tick }
-        tickCount += 1
-        if let maxTicks, tickCount >= maxTicks {
-            timer.invalidate()
-            NSApplication.shared.terminate(nil)
-        }
-        return tick
-    }
-
-    @MainActor @objc func tick(_ timer: Timer) {
-        performTick(timer)
-    }
 }
 
 /// Cycle de vie de la restauration dans le daemon (SPEC-016 R9) : reprise d'un arrêt

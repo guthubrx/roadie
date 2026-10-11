@@ -20,7 +20,7 @@ public final class WindowDragActivity: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         activeWindowID = windowID
-        activeUntil = max(activeUntil, now.addingTimeInterval(holdSeconds), readExpiryLocked() ?? .distantPast)
+        activeUntil = max(activeUntil, now.addingTimeInterval(holdSeconds), readLocked()?.expiry ?? .distantPast)
         writeActiveUntilLocked(activeUntil, windowID: windowID)
     }
 
@@ -29,7 +29,7 @@ public final class WindowDragActivity: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         activeWindowID = nil
-        activeUntil = max(activeUntil, now.addingTimeInterval(graceSeconds), readExpiryLocked() ?? .distantPast)
+        activeUntil = max(activeUntil, now.addingTimeInterval(graceSeconds), readLocked()?.expiry ?? .distantPast)
         writeActiveUntilLocked(activeUntil, windowID: nil)
     }
 
@@ -41,13 +41,18 @@ public final class WindowDragActivity: @unchecked Sendable {
         try? FileManager.default.removeItem(at: url)
     }
 
-    public func isActive(now: Date = Date()) -> Bool {
+    /// Glisser en cours, ou grâce de fin de glisser encore due. `includingReleaseGrace: false`
+    /// (modes à arbre, A11) : seul un glisser en cours compte ; le relâchement déclenche la passe.
+    /// Le fichier partagé fait foi entre processus : sa seconde ligne porte la fenêtre glissée,
+    /// vide après `finish`.
+    public func isActive(now: Date = Date(), includingReleaseGrace: Bool = true) -> Bool {
         guard enabled else { return false }
         lock.lock()
         defer { lock.unlock() }
-        activeUntil = max(activeUntil, readExpiryLocked() ?? .distantPast)
+        let stored = readLocked()
+        activeUntil = max(activeUntil, stored?.expiry ?? .distantPast)
         if now <= activeUntil {
-            return true
+            return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))
         }
         activeWindowID = nil
         activeUntil = .distantPast
@@ -63,11 +68,11 @@ public final class WindowDragActivity: @unchecked Sendable {
         try? payload.write(to: url, atomically: true, encoding: .utf8)
     }
 
-    private func readExpiryLocked() -> Date? {
-        guard let payload = try? String(contentsOf: url, encoding: .utf8),
-              let firstLine = payload.split(separator: "\n", maxSplits: 1).first,
-              let timestamp = TimeInterval(firstLine)
-        else { return nil }
-        return Date(timeIntervalSince1970: timestamp)
+    private func readLocked() -> (expiry: Date, dragging: Bool)? {
+        guard let payload = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let lines = payload.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let first = lines.first, let timestamp = TimeInterval(first) else { return nil }
+        let dragging = lines.count > 1 && !lines[1].isEmpty
+        return (Date(timeIntervalSince1970: timestamp), dragging)
     }
 }

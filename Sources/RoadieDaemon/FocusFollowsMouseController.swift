@@ -56,11 +56,6 @@ public final class FocusFollowsMouseController {
     }
 }
 
-/// Dernière saisie utilisateur (clic, touche, modificateur) vue par le processus (SPEC-016 FR-009).
-/// La stage ne suit un changement de focus que si une saisie a eu lieu dans la seconde qui précède,
-/// après la dernière disparition de fenêtre. Sans moniteur actif (CLI, processus qui ne l'a pas
-/// démarré), aucune saisie n'est prouvée : le suivi est refusé (comportement conservateur, T211).
-/// Le tiler, le rail, la bordure et le focus-souris démarrent le moniteur.
 /// Session de geste souris (A4, A17) : ouverte au clic, fermée au relâchement.
 /// `windowID == nil` : clic hors de toute fenêtre gérée, aucun geste.
 public struct GestureSession: Equatable, Sendable {
@@ -77,44 +72,132 @@ public struct GestureSession: Equatable, Sendable {
     }
 }
 
+/// Dernière saisie utilisateur (clic, touche, modificateur) vue par le processus (SPEC-016 FR-009).
+/// La stage ne suit un changement de focus que si une saisie a eu lieu dans la seconde qui précède,
+/// après la dernière disparition de fenêtre. Sans moniteur actif (CLI, processus qui ne l'a pas
+/// démarré), aucune saisie n'est prouvée : le suivi est refusé (comportement conservateur, T211).
+/// Le tiler, le rail, la bordure et le focus-souris démarrent le moniteur.
+/// Tient aussi la session de geste souris (SPEC-017 A4, A17).
 public final class UserInputActivity: @unchecked Sendable {
     public static let shared = UserInputActivity()
 
     static let inputWindow: TimeInterval = 1
     static let disappearanceExclusion: TimeInterval = 0.5
 
+    /// Fenêtre gérée sous le curseur (coordonnées CoreGraphics) et sa frame, d'après le dernier snapshot.
+    public typealias GestureTarget = @MainActor (CGPoint) -> (windowID: UInt32, frame: CGRect)?
+    /// Tous les boutons relâchés ; `gestureEnded` : une session sur une fenêtre gérée vient de se fermer.
+    public typealias ReleaseHandler = @MainActor (_ gestureEnded: Bool) -> Void
+
     private let lock = NSLock()
     private var monitoring: Bool
     private var lastInputAt: Date?
-    private var monitor: Any?
+    private var monitors: [Any] = []
+    private var gesture: GestureSession?
+    private var finishedGesture: GestureSession?
+    private var gestureTarget: GestureTarget?
+    private var releaseHandler: ReleaseHandler?
 
     /// `monitoring: true` simule un moniteur actif (tests).
     public init(monitoring: Bool = false) {
         self.monitoring = monitoring
     }
 
-    /// Installe le moniteur global, une fois par processus, dans chaque processus qui fait
-    /// suivre le focus. `.flagsChanged` capte Cmd-Tab, dont le keyDown n'est pas livré.
+    /// Installe les moniteurs, une fois par processus, dans chaque processus qui fait suivre le
+    /// focus ou qui range. `.flagsChanged` capte Cmd-Tab, dont le keyDown n'est pas livré.
+    /// Le moniteur global ne voit pas les événements destinés à Roadie (navrail) : un moniteur
+    /// local alimente la même session de geste (A17). La saisie qui autorise le suivi du focus
+    /// (FR-009) reste celle du moniteur global, comme avant.
     @MainActor
     public func startMonitoring() {
-        guard lock.withLock({ monitor == nil }) else { return }
-        let token = NSEvent.addGlobalMonitorForEvents(
-            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown, .flagsChanged]
-        ) { [weak self] _ in
-            self?.recordInput()
+        guard lock.withLock({ monitors.isEmpty }) else { return }
+        let mask: NSEvent.EventTypeMask = [
+            .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp,
+            .otherMouseDown, .otherMouseUp, .keyDown, .flagsChanged,
+        ]
+        let global = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            MainActor.assumeIsolated { self?.handle(event, recordsInput: true) }
+        }
+        let local = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            MainActor.assumeIsolated { self?.handle(event, recordsInput: false) }
+            return event
         }
         lock.withLock {
-            monitor = token
-            monitoring = token != nil
+            monitors = [global, local].compactMap { $0 }
+            monitoring = global != nil
         }
     }
 
-    // Stubs de jonction SPEC-017 (A20) : le lot L6 les remplit.
-    /// Session en cours (bouton enfoncé). nil hors geste.
-    public var currentGesture: GestureSession? { nil }
+    /// Branche la session de geste sur le tiler : `target` trouve la fenêtre sous le curseur au
+    /// clic, `onRelease` reçoit chaque relâchement. Sans branchement, les sessions n'ont pas de cible.
+    public func observeGestures(target: @escaping GestureTarget, onRelease: @escaping ReleaseHandler) {
+        lock.withLock {
+            gestureTarget = target
+            releaseHandler = onRelease
+        }
+    }
 
-    /// Dernière session terminée, consommée une seule fois (A17).
-    public func takeGesture() -> GestureSession? { nil }
+    @MainActor
+    private func handle(_ event: NSEvent, recordsInput: Bool) {
+        switch event.type {
+        case .leftMouseDown:
+            if let point = event.cgEvent?.location ?? CGEvent(source: nil)?.location {
+                mouseDown(at: point)
+            }
+        case .leftMouseUp:
+            mouseUp(leftButton: true)
+            return
+        case .rightMouseUp, .otherMouseUp:
+            mouseUp(leftButton: false)
+            return
+        default:
+            break
+        }
+        if recordsInput { recordInput() }
+    }
+
+    /// Ouvre la session de geste (A4) : fenêtre gérée sous le curseur et sa frame, ou aucune
+    /// cible (bureau, navrail, fenêtre exclue). La cible est cherchée hors verrou, car le
+    /// snapshot consulte aussi cet objet.
+    @MainActor
+    func mouseDown(at point: CGPoint, now: Date = Date()) {
+        let target = lock.withLock { gestureTarget }?(point)
+        lock.withLock {
+            gesture = GestureSession(windowID: target?.windowID, startFrame: target?.frame, startedAt: now)
+        }
+    }
+
+    /// Relâchement d'un bouton. Celui du bouton gauche ferme la session ; une session sans cible
+    /// ne produit aucun geste (A17). Un geste encore non consommé sur la même fenêtre garde sa
+    /// frame de départ, pour qu'un double geste rapide ne perde pas le premier. Les boutons encore
+    /// enfoncés retiennent les passes : l'ordonnanceur relit leur état avant d'agir.
+    @MainActor
+    func mouseUp(leftButton: Bool, now: Date = Date()) {
+        let (ended, handler) = lock.withLock { () -> (Bool, ReleaseHandler?) in
+            guard leftButton, var session = gesture else { return (false, releaseHandler) }
+            gesture = nil
+            guard session.windowID != nil else { return (false, releaseHandler) }
+            if let previous = finishedGesture, previous.windowID == session.windowID {
+                session.startFrame = previous.startFrame
+                session.startedAt = previous.startedAt
+            }
+            session.endedAt = now
+            finishedGesture = session
+            return (true, releaseHandler)
+        }
+        handler?(ended)
+    }
+
+    /// Session en cours (bouton gauche enfoncé). nil hors geste.
+    public var currentGesture: GestureSession? { lock.withLock { gesture } }
+
+    /// Dernière session terminée sur une fenêtre gérée, consommée une seule fois (A17).
+    public func takeGesture() -> GestureSession? {
+        lock.withLock {
+            defer { finishedGesture = nil }
+            return finishedGesture
+        }
+    }
 
     public func recordInput(at date: Date = Date()) {
         lock.withLock { lastInputAt = date }

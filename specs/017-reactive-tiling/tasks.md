@@ -110,19 +110,19 @@
 
 ### Lot L6 - Ordonnanceur, sources d'événements, session de geste (Opus) [US1, US2]
 
-- [ ] T060 [P] [US1] Créer `Sources/RoadieDaemon/TickScheduler.swift` (`@MainActor`) :
+- [x] T060 [P] [US1] Créer `Sources/RoadieDaemon/TickScheduler.swift` (`@MainActor`) :
   - garder l'échéance la plus proche et ne jamais abandonner d'événement ;
   - regrouper pendant 15 ms (création, destruction, fin de geste, changement de bureau, commande) ou 30 ms (changement externe) ;
   - aucun tick tant qu'un bouton est enfoncé, puis un tick au relâchement ;
   - un minuteur unique sur `nextDeadline(now:)` ;
   - pas de tick de suite fondé sur « la passe a agi » (A1) ;
   - ouvrir ou continuer l'épisode.
-- [ ] T061 [P] [US1] Dans `Sources/roadied/main.swift` :
+- [x] T061 [P] [US1] Dans `Sources/roadied/main.swift` :
   - remplacer la logique live tick (`pendingLiveTick`, règle des 200 ms) par le `TickScheduler` ;
   - le minuteur périodique devient un filet de sécurité à 2 s ;
   - brancher `AXWindowEvent`, les notifications NSWorkspace (`activeSpaceDidChange` vers `spaceDidChange`, `didActivateApplication`, `didHide`, `didUnhide`) et la fin de « heal » d'écran ;
   - journaliser `activeSpaceDidChange` avec `tsMs`.
-- [ ] T062 [P] [US2] (A17) Dans `UserInputActivity` (`Sources/RoadieDaemon/FocusFollowsMouseController.swift`), ajouter une session de geste (A4) :
+- [x] T062 [P] [US2] (A17) Dans `UserInputActivity` (`Sources/RoadieDaemon/FocusFollowsMouseController.swift`), ajouter une session de geste (A4) :
   - au `leftMouseDown`, enregistrer la fenêtre sous le curseur et sa frame ;
   - au `leftMouseUp`, fermer la session et notifier le `TickScheduler` ;
   - exposer `currentGesture` et `lastGesture` ;
@@ -130,8 +130,8 @@
   - une session sans cible ne produit aucun geste ;
   - le résultat se consomme une seule fois (`takeGesture()`) ;
   - les moniteurs locaux et globaux alimentent le même état.
-- [ ] T063 [P] [US1] `Sources/RoadieDaemon/WindowDragActivity.swift` : pas de grâce de fin de glisser pour les modes à arbre ; le relâchement déclenche la passe (A11).
-- [ ] T064 [US1] Tests dans `Tests/RoadieDaemonTests/TickSchedulerTests.swift`, avec une horloge injectée :
+- [x] T063 [P] [US1] `Sources/RoadieDaemon/WindowDragActivity.swift` : pas de grâce de fin de glisser pour les modes à arbre ; le relâchement déclenche la passe (A11).
+- [x] T064 [US1] Tests dans `Tests/RoadieDaemonTests/TickSchedulerTests.swift`, avec une horloge injectée :
   - l'échéance la plus proche gagne ;
   - aucun événement n'est perdu sous 200 ms ;
   - tick à l'échéance ;
