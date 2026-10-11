@@ -138,17 +138,6 @@ struct BSPTreeTests {
         #expect(BSPTree.leaf(win(1)).removing(win(1)) == .empty)
     }
 
-    // MARK: - Reconciliation
-
-    @Test
-    func reconcileInsertsNewAndRemovesGone() {
-        // Arbre [w1 | w2]. Réalité : w1 et w3 (w2 fermée, w3 ouverte). Focus w1.
-        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2)))
-        let after = tree.reconciled(liveWindowIDs: [win(1), win(3)], focus: win(1), side: .right, containerIsWide: true)
-        #expect(Set(after.windowIDs) == Set([win(1), win(3)]))
-        #expect(!after.contains(win(2)))
-    }
-
     @Test
     func codableRoundTrip() throws {
         let tree = BSPTree.split(orientation: .vertical, ratio: 0.4, first: .leaf(win(1)), second: .leaf(win(2)))

@@ -38,10 +38,10 @@ public enum BSPEdge: String, Equatable, Sendable {
 /// Complexité (Article XVIII) : `place`, `windowIDs`, `contains`, `removing`, `projected` et
 /// `balanced` sont O(n) sur le nombre de feuilles. `inserting`, `togglingSplit`, `settingSplit`
 /// et `adjustingFence` sont O(n²) au pire (un `contains` par niveau pendant la descente),
-/// `correctingForMinimumSize` O(d·n) (d = profondeur) et `reconciled` O(k·n) (k fenêtres à
-/// insérer). n = fenêtres d'un stage, BORNÉ par construction (typiquement < 20, plafond observé
-/// ~50) → au pire ~2500 opérations, hors hot path serré. Compromis accepté : la lisibilité d'un
-/// arbre immuable récursif prime sur une optimisation non nécessaire à cette échelle.
+/// `correctingForMinimumSize` O(d·n) (d = profondeur). n = fenêtres d'un stage, BORNÉ par
+/// construction (typiquement < 20, plafond observé ~50) → au pire ~2500 opérations, hors hot
+/// path serré. Compromis accepté : la lisibilité d'un arbre immuable récursif prime sur une
+/// optimisation non nécessaire à cette échelle.
 public indirect enum BSPTree: Equatable, Codable, Sendable {
     case empty
     case leaf(WindowID)
@@ -248,78 +248,6 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                           first: first.relabelling(a, b),
                           second: second.relabelling(a, b))
         }
-    }
-
-    /// Déplace `window` à côté de `neighbor` : retire `window` (son frère récupère l'espace)
-    /// puis l'insère en divisant le pane de `neighbor`. Change la structure. Utilisé par `warp`.
-    public func warping(_ window: WindowID, nextTo neighbor: WindowID, side: BSPInsertionSide, containerIsWide: Bool) -> BSPTree {
-        guard window != neighbor, contains(window), contains(neighbor) else { return self }
-        return removing(window).inserting(window, nextTo: neighbor, side: side, containerIsWide: containerIsWide)
-    }
-
-    /// Ajuste le ratio du split ancêtre le plus profond de l'orientation donnée qui contient
-    /// `window`. `delta` est signé : positif agrandit le `first`, négatif le `second`.
-    /// Utilisé par `resize` (orientation `.vertical` pour gauche/droite, `.horizontal` pour haut/bas).
-    public func resizing(window: WindowID, orientation: BSPOrientation, delta: Double) -> BSPTree {
-        resizing(window: window, orientation: orientation, delta: delta, applied: false).tree
-    }
-
-    private func resizing(window: WindowID, orientation: BSPOrientation, delta: Double, applied: Bool) -> (tree: BSPTree, applied: Bool) {
-        switch self {
-        case .empty, .leaf:
-            return (self, false)
-        case .split(let splitOrientation, let ratio, let first, let second):
-            let windowInFirst = first.contains(window)
-            let windowInSecond = second.contains(window)
-            guard windowInFirst || windowInSecond else { return (self, false) }
-
-            // Descendre d'abord pour ajuster le split le plus PROFOND de la bonne orientation.
-            if windowInFirst {
-                let child = first.resizing(window: window, orientation: orientation, delta: delta, applied: applied)
-                if child.applied {
-                    return (.split(orientation: splitOrientation, ratio: ratio, first: child.tree, second: second), true)
-                }
-            } else {
-                let child = second.resizing(window: window, orientation: orientation, delta: delta, applied: applied)
-                if child.applied {
-                    return (.split(orientation: splitOrientation, ratio: ratio, first: first, second: child.tree), true)
-                }
-            }
-
-            // Aucun descendant n'a appliqué : ce nœud le fait s'il est de la bonne orientation.
-            if splitOrientation == orientation {
-                // Si la fenêtre est dans `first`, agrandir = augmenter le ratio ; sinon l'inverse.
-                let signed = windowInFirst ? delta : -delta
-                let newRatio = min(max(ratio + signed, 0.05), 0.95)
-                return (.split(orientation: splitOrientation, ratio: newRatio, first: first, second: second), true)
-            }
-            return (self, false)
-        }
-    }
-
-    /// Reconcilie l'arbre avec l'ensemble des fenêtres réellement présentes : retire les
-    /// feuilles orphelines, puis insère les fenêtres manquantes à côté du focus.
-    public func reconciled(
-        liveWindowIDs: [WindowID],
-        focus: WindowID?,
-        side: BSPInsertionSide,
-        containerIsWide: Bool
-    ) -> BSPTree {
-        let live = Set(liveWindowIDs)
-        var tree = self
-        // 1. Retirer les feuilles dont la fenêtre n'existe plus.
-        for id in windowIDs where !live.contains(id) {
-            tree = tree.removing(id)
-        }
-        // 2. Insérer les fenêtres présentes mais absentes de l'arbre, dans l'ordre fourni.
-        //    `present` grandit à chaque insertion : un ID en double dans la liste n'est inséré qu'une fois.
-        var present = Set(tree.windowIDs)
-        var currentFocus = focus
-        for id in liveWindowIDs where present.insert(id).inserted {
-            tree = tree.inserting(id, nextTo: currentFocus, side: side, containerIsWide: containerIsWide)
-            currentFocus = id // la fenêtre suivante se greffe à côté de la dernière insérée
-        }
-        return tree
     }
 
     // MARK: - Projection (SPEC-017 A9)

@@ -220,18 +220,6 @@ struct LayoutPlannerTests {
         let b = WindowID(rawValue: 2)
         let inserted = BSPTree.leaf(a).inserting(b, nextTo: b, side: .right, containerIsWide: true)
         #expect(inserted.windowIDs == [a, b])
-
-        let reconciled = BSPTree.leaf(a).reconciled(liveWindowIDs: [a, b], focus: b, side: .right, containerIsWide: true)
-        #expect(reconciled.windowIDs == [a, b])
-    }
-
-    @Test
-    func bspReconcileDoesNotDuplicateRepeatedWindowIDs() {
-        // SPEC-016 T043 : un ID répété dans la liste vivante n'est inséré qu'une fois.
-        let a = WindowID(rawValue: 1)
-        let b = WindowID(rawValue: 2)
-        let tree = BSPTree.leaf(a).reconciled(liveWindowIDs: [a, b, b], focus: a, side: .right, containerIsWide: true)
-        #expect(tree.windowIDs == [a, b])
     }
 
     @Test

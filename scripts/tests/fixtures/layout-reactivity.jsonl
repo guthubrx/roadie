@@ -1,0 +1,13 @@
+{"timestamp":"2026-10-10T10:00:00Z","type":"stage_switch","details":{"durationMs":"40"}}
+{"timestamp":"2026-10-10T10:00:00Z","type":"layout_apply","details":{"commands":"3","scans":"1","axWrites":"3"}}
+{"timestamp":"2026-10-10T10:00:01Z","type":"layout_apply","details":{"commands":"1","scans":"1","axWrites":"1"}}
+{"timestamp":"2026-10-10T10:00:30Z","type":"windows.missing_reconciled","details":{"restored":"1","markedMissing":"0"}}
+{"timestamp":"2026-10-10T10:00:30Z","tsMs":1791626430000,"type":"layout_apply","details":{"commands":"2","scans":"1","axWrites":"2"}}
+{"timestamp":"2026-10-10T10:01:00Z","tsMs":1791626460100,"episodeId":"ep_1791626460000","type":"space_did_change","details":{}}
+{"timestamp":"2026-10-10T10:01:00Z","tsMs":1791626460150,"episodeId":"ep_1791626460000","type":"layout_apply","details":{"cause":"space_change","commands":"4","scans":"1","axWrites":"4","windowWrites":"11:2,12:2"}}
+{"timestamp":"2026-10-10T10:01:00Z","tsMs":1791626460300,"episodeId":"ep_1791626460000","type":"layout_apply","details":{"cause":"space_change","commands":"1","scans":"1","axWrites":"1","windowWrites":"11:1"}}
+{"timestamp":"2026-10-10T10:01:00Z","tsMs":1791626460600,"episodeId":"ep_1791626460000","type":"space_transition_guard","details":{"heldMs":"500","closedBy":"stable"}}
+{"timestamp":"2026-10-10T10:01:00Z","tsMs":1791626460700,"episodeId":"ep_1791626460000","type":"layout_stable","details":{}}
+{"timestamp":"2026-10-10T10:01:05Z","tsMs":1791626465000,"episodeId":"ep_1791626465000","type":"layout_apply","details":{"cause":"window_created","commands":"2","scans":"1","axWrites":"2","windowWrites":"21:1,22:1"}}
+{"timestamp":"2026-10-10T10:01:05Z","tsMs":1791626465100,"episodeId":"ep_1791626465000","type":"layout_stable","details":{}}
+ligne corrompue
