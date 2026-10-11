@@ -11,8 +11,11 @@ struct SpatialBSPConfigTests {
         #expect(WindowManagementMode(roadieValue: "spatial_bsp") == .spatialBsp)
         #expect(WindowManagementMode(roadieValue: "spatial") == .spatialBsp)
         #expect(WindowManagementMode(roadieValue: "tree") == .spatialBsp)
-        #expect(WindowManagementMode.spatialBsp.usesPersistentBSPTree)
-        #expect(!WindowManagementMode.mutableBsp.usesPersistentBSPTree)
+        #expect(WindowManagementMode.spatialBsp.usesTreeEngine)
+        #expect(WindowManagementMode.mutableBsp.usesTreeEngine)
+        #expect(!WindowManagementMode.bsp.usesTreeEngine)
+        #expect(!WindowManagementMode.masterStack.usesTreeEngine)
+        #expect(!WindowManagementMode.float.usesTreeEngine)
     }
 
     private func loadConfig(_ toml: String) throws -> RoadieConfig {
@@ -61,13 +64,22 @@ struct SpatialBSPConfigTests {
         #expect(config.tiling.defaultStrategy == .spatialBsp)
     }
 
-    @Test
-    func tilingModeParsesYabaiAsMutableBsp() throws {
+    /// SPEC-017 A8 : la config n'a pas d'état, ses alias `mutableBsp` désignent l'arbre.
+    @Test(arguments: ["yabai", "mutableBsp", "mutable_bsp", "mutable-bsp"])
+    func tilingModeParsesMutableBspAliasesAsSpatialBsp(_ value: String) throws {
         let config = try loadConfig("""
         [tiling]
-        default_strategy = "yabai"
+        default_strategy = "\(value)"
         """)
-        #expect(config.tiling.defaultStrategy == .mutableBsp)
+        #expect(config.tiling.defaultStrategy == .spatialBsp)
+    }
+
+    /// Le décodage de `stages.json` est inchangé : `mutableBsp` y reste lu tel quel jusqu'à la migration.
+    @Test
+    func persistedMutableBspStageStillDecodes() throws {
+        let stage = PersistentStage(id: StageID(rawValue: "1"), mode: .mutableBsp)
+        let decoded = try JSONDecoder().decode(PersistentStage.self, from: JSONEncoder().encode(stage))
+        #expect(decoded.mode == .mutableBsp)
     }
 
     @Test

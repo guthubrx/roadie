@@ -30,8 +30,9 @@ public enum WindowManagementMode: String, Codable, Sendable, CaseIterable {
         self == .bsp || self == .mutableBsp
     }
 
-    /// Mode à arbre BSP persistant (insertion sur le pane focalisé, structure mémorisée).
-    public var usesPersistentBSPTree: Bool {
-        self == .spatialBsp
+    /// Mode à moteur à arbre BSP persistant (SPEC-017 R1, A8). `mutableBsp` reste décodable dans
+    /// `stages.json` jusqu'à sa migration et passe par le même moteur que `spatialBsp`.
+    public var usesTreeEngine: Bool {
+        self == .spatialBsp || self == .mutableBsp
     }
 }

@@ -1011,6 +1011,9 @@ struct LayoutMaintainerTests {
                 focusedID: focusedVisible.id
             ),
             frameWriter: writer,
+            // Config explicite : sans elle le test lit ~/.config/roadies/roadies.toml de la machine.
+            // mutableBsp reproduit la config sous laquelle ce test a été écrit ; L7 le porte sur l'arbre (A18).
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .mutableBsp)),
             stageStore: stageStore
         )
         var currentTime = Date()

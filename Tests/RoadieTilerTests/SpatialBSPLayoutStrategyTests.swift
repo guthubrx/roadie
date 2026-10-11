@@ -78,4 +78,31 @@ struct SpatialBSPLayoutStrategyTests {
         // w2 garde la moitié droite entière (insertion n'a touché que la gauche).
         #expect(plan.placements[win(2)] == CGRect(x: 500, y: 0, width: 500, height: 500))
     }
+
+    /// SPEC-017 T043 : une feuille gardée pour une fenêtre absente ne prend pas de place, et
+    /// une fenêtre inconnue de l'arbre est insérée sans jeter la structure existante.
+    @Test
+    func placesFromProjectedTreeAndKeepsStructureForUnknownWindow() {
+        let tree = BSPTree.split(
+            orientation: .vertical, ratio: 0.7,
+            first: .leaf(win(1)),
+            second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(win(2)), second: .leaf(win(3)))
+        )
+        let container = CGRect(x: 0, y: 0, width: 1000, height: 500)
+        let absent = LayoutPlanner.plan(LayoutRequest(
+            scope: scope, mode: .spatialBsp, container: container,
+            windowIDs: [win(1), win(2)], bspTree: tree, innerGap: 0
+        ))
+        #expect(absent.placements[win(1)] == CGRect(x: 0, y: 0, width: 700, height: 500))
+        #expect(absent.placements[win(2)] == CGRect(x: 700, y: 0, width: 300, height: 500))
+        #expect(absent.placements[win(3)] == nil)
+
+        let unknown = LayoutPlanner.plan(LayoutRequest(
+            scope: scope, mode: .spatialBsp, container: container,
+            windowIDs: [win(1), win(2), win(4)], bspTree: tree, innerGap: 0
+        ))
+        // w1 garde sa colonne de 70 % ; w4 coupe la première feuille (w1) faute d'ancre.
+        #expect(unknown.placements.count == 3)
+        #expect(unknown.placements[win(2)] == CGRect(x: 700, y: 0, width: 300, height: 500))
+    }
 }

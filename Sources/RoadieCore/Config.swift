@@ -1653,11 +1653,13 @@ private enum ConfigValidationRules {
 }
 
 private extension WindowManagementMode {
+    /// La config n'a pas d'état : `mutableBsp` et `yabai` y désignent directement l'unique
+    /// moteur à arbre `spatialBsp` (SPEC-017 R1, A8).
     init?(tomlValue: String) {
         guard let mode = WindowManagementMode(roadieValue: tomlValue) else {
             return nil
         }
-        self = mode
+        self = mode == .mutableBsp ? .spatialBsp : mode
     }
 }
 

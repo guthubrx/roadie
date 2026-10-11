@@ -28,7 +28,8 @@ struct BSPTreeTests {
     func placeHorizontalSplitStacks() {
         let tree = BSPTree.split(orientation: .horizontal, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2)))
         let p = tree.place(in: container, innerGap: 0)
-        #expect(p[win(1)] == CGRect(x: 0, y: 0, width: 1000, height: 300))
+        // Écart minimal de 1 px pour la barre de titre (SPEC-017 T040) : 599 px à partager.
+        #expect(p[win(1)] == CGRect(x: 0, y: 0, width: 1000, height: 299))
         #expect(p[win(2)] == CGRect(x: 0, y: 300, width: 1000, height: 300))
     }
 
@@ -149,16 +150,18 @@ struct BSPTreeTests {
     }
 
     @Test
-    func balancedFromListProducesAllWindows() {
-        let tree = BSPTree.balanced(from: [win(1), win(2), win(3), win(4)], containerIsWide: true)
-        #expect(Set(tree.windowIDs) == Set([win(1), win(2), win(3), win(4)]))
-    }
-
-    @Test
     func codableRoundTrip() throws {
         let tree = BSPTree.split(orientation: .vertical, ratio: 0.4, first: .leaf(win(1)), second: .leaf(win(2)))
         let data = try JSONEncoder().encode(tree)
         let decoded = try JSONDecoder().decode(BSPTree.self, from: data)
         #expect(decoded == tree)
+    }
+
+    @Test
+    func decodesTreePersistedBeforeSpec017() throws {
+        // Format de `stages.json` inchangé : aucun identifiant de nœud n'est requis.
+        let json = #"{"split":{"orientation":"vertical","ratio":0.5,"first":{"leaf":{"_0":1}},"second":{"leaf":{"_0":2}}}}"#
+        let decoded = try JSONDecoder().decode(BSPTree.self, from: Data(json.utf8))
+        #expect(decoded == .split(orientation: .vertical, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2))))
     }
 }

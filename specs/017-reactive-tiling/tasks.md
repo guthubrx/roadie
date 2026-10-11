@@ -48,17 +48,17 @@
 
 ### Lot L3 - Écriture et événements AX, registre, sonde de bureau (Opus) [US1, US2]
 
-- [ ] T030 [P] [US2] Créer `Sources/RoadieAX/WrittenFrameRegistry.swift` selon plan.md :
+- [x] T030 [P] [US2] Créer `Sources/RoadieAX/WrittenFrameRegistry.swift` selon plan.md :
   - frame demandée, relue et acceptée, version de disposition, nombre d'écritures dans la version ;
   - `classify` renvoie `echo` (dernière écriture, à `frameMatch` près), `appResponse` (moins de `echoWindow`) ou `external` ;
   - une frame acceptée est invalidée par une nouvelle version.
-- [ ] T031 [P] [US1] Dans `AXWindowFrameWriter` (`Sources/RoadieAX/SystemSnapshotProvider.swift`) :
+- [x] T031 [P] [US1] Dans `AXWindowFrameWriter` (`Sources/RoadieAX/SystemSnapshotProvider.swift`) :
   - écrire dans l'ordre taille, position, taille ;
   - désactiver puis rétablir `AXEnhancedUserInterface`, une fois par pid et par lot, seulement s'il était actif, et le rétablir même en cas d'erreur ;
   - faire une seule relecture via `AXUIElementCopyMultipleAttributeValues` ;
   - appeler `WrittenFrameRegistry.shared.record` à chaque écriture, avec la version de disposition passée par l'appelant (paramètre optionnel, 0 par défaut).
-- [ ] T032 [P] [US1] Réutiliser l'index `AXApplicationWindows` du dernier snapshot dans l'écrivain : cache par pid, invalidé sur `invalidUIElement`, sur la destruction d'une fenêtre ou à la fin d'une application.
-- [ ] T033 [P] [US1] Dans `Sources/RoadieAX/AXWindowEventObserver.swift` :
+- [x] T032 [P] [US1] Réutiliser l'index `AXApplicationWindows` du dernier snapshot dans l'écrivain : cache par pid, invalidé sur `invalidUIElement`, sur la destruction d'une fenêtre ou à la fin d'une application.
+- [x] T033 [P] [US1] Dans `Sources/RoadieAX/AXWindowEventObserver.swift` :
   - observer `kAXWindowMovedNotification` et `kAXWindowResizedNotification` au niveau de l'application ;
   - le callback reçoit `AXWindowEvent { name, pid, windowID? }` ;
   - un déplacement ou redimensionnement classé `echo` par le registre est absorbé dans le callback et ne remonte pas (A1) ;
@@ -66,8 +66,8 @@
   - à la destruction, appeler `WrittenFrameRegistry.forget`.
 
   Garder l'ancienne signature de callback le temps de la vague 1 si `main.swift` l'utilise encore (A10).
-- [ ] T034 [P] [US1] Créer `Sources/RoadieAX/SpaceProbe.swift` : `isUserSpaceActive(displayUUID:)` lit en lecture seule `CGSCopyManagedDisplaySpaces`, résolu par `dlsym`, et renvoie `nil` si le symbole est indisponible (A5).
-- [ ] T035 [US1] Tests dans `Tests/RoadieAXTests/` :
+- [x] T034 [P] [US1] Créer `Sources/RoadieAX/SpaceProbe.swift` : `isUserSpaceActive(displayUUID:)` lit en lecture seule `CGSCopyManagedDisplaySpaces`, résolu par `dlsym`, et renvoie `nil` si le symbole est indisponible (A5).
+- [x] T035 [US1] Tests dans `Tests/RoadieAXTests/` :
   - ordre des attributs écrits (écrivain espion) ;
   - `AXEnhancedUserInterface` rétabli même en cas d'échec ;
   - une seule énumération par pid et par passe ;
@@ -77,22 +77,22 @@
 
 ### Lot L4 - Moteur à arbre (Opus) [US3, US4]
 
-- [ ] T040 [P] [US3] Dans `Sources/RoadieTiler/BSPTree.swift` :
+- [x] T040 [P] [US3] Dans `Sources/RoadieTiler/BSPTree.swift` :
   - le sens de coupe d'une insertion suit la feuille coupée ;
   - ajouter `projected(excluding:)` (feuilles absentes retirées, splits unaires repliés, identité des splits conservée, A9) ;
   - ajouter `balanced()`, `togglingSplit(of:)`, `settingSplit(of:to:)`, `adjustingFence(of:edge:to:in:)` et `correctingForMinimumSize(of:minimum:in:)` (ancêtre de l'axe contraint, `nil` si infaisable, A2) ;
   - écart minimal de 1 px pour la barre de titre.
-- [ ] T041 [P] [US3] `BSPTree.inferred(from:in:)` reçoit les membres **dans l'ordre**, avec une frame optionnelle. Il détecte les coupes nettes en reprenant `splitHorizontally` et `splitRatio` de `MutableBSPLayoutStrategy.swift:94-207`, sans supprimer ce fichier. Si une frame manque ou est inutilisable, le repli déterministe insère tous les membres dans l'ordre.
-- [ ] T042 [P] [US3] Dans `Sources/RoadieCore/WindowManagementMode.swift`, ajouter `usesTreeEngine` (vrai pour `spatialBsp` et `mutableBsp`). Dans le parsing de la config, `mutableBsp` et `yabai` donnent `spatialBsp`. Le décodage de `stages.json` est inchangé.
-- [ ] T043 [P] [US3] `SpatialBSPLayoutStrategy` (`Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift`) place depuis l'arbre projeté.
-- [ ] T044 [US3] Tests dans `Tests/RoadieTilerTests/` :
+- [x] T041 [P] [US3] `BSPTree.inferred(from:in:)` reçoit les membres **dans l'ordre**, avec une frame optionnelle. Il détecte les coupes nettes en reprenant `splitHorizontally` et `splitRatio` de `MutableBSPLayoutStrategy.swift:94-207`, sans supprimer ce fichier. Si une frame manque ou est inutilisable, le repli déterministe insère tous les membres dans l'ordre.
+- [x] T042 [P] [US3] Dans `Sources/RoadieCore/WindowManagementMode.swift`, ajouter `usesTreeEngine` (vrai pour `spatialBsp` et `mutableBsp`). Dans le parsing de la config, `mutableBsp` et `yabai` donnent `spatialBsp`. Le décodage de `stages.json` est inchangé.
+- [x] T043 [P] [US3] `SpatialBSPLayoutStrategy` (`Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift`) place depuis l'arbre projeté.
+- [x] T044 [US3] Tests dans `Tests/RoadieTilerTests/` :
   - sens de coupe selon la feuille (écran paysage, 4 insertions, pas de colonnes de 1/8) ;
   - projection : identité des splits, un geste sur la projection modifie le bon split de l'arbre complet ;
   - `balanced`, `togglingSplit`, `adjustingFence` ;
   - `correctingForMinimumSize` : faisable sur l'axe contraint, `nil` si infaisable ;
   - `inferred` : grille, colonnes, lignes, frames manquantes, ordre conservé ;
   - parsing des alias de config.
-- [ ] T045 [US3] Publier dans le rapport du lot les signatures finales de `BSPTree`.
+- [x] T045 [US3] Publier dans le rapport du lot les signatures finales de `BSPTree`.
 
 ## Phase 3 : Jonction de la vague 1 (orchestrateur)
 

@@ -15,18 +15,33 @@ public enum BSPInsertionSide: String, Codable, Equatable, Sendable {
     case left    // nouvelle fenêtre en premier (gauche/haut)
 }
 
+/// Bord d'une fenêtre, pour désigner la frontière (fence) à déplacer. Mêmes valeurs brutes que
+/// `Direction` (RoadieDaemon) : `BSPEdge(rawValue: direction.rawValue)` convertit sans table.
+public enum BSPEdge: String, Equatable, Sendable {
+    case left
+    case right
+    case up
+    case down
+}
+
 /// Arbre BSP persistant (style yabai/i3). Chaque nœud interne (`split`) coupe l'espace
 /// en deux selon une orientation et un ratio ; chaque feuille (`leaf`) porte une fenêtre.
 /// Contrairement aux stratégies dérivées d'une liste, cet arbre MÉMORISE la structure :
 /// une nouvelle fenêtre divise uniquement la feuille focalisée, le reste ne bouge pas.
 ///
-/// Complexité (Article XVIII) : `place`, `windowIDs`, `contains`, `removing` sont O(n) sur le
-/// nombre de feuilles. `inserting` est O(n²) au pire (un `contains` par niveau pendant la
-/// descente) et `reconciled` O(k·n) (k fenêtres à insérer). n = fenêtres d'un stage, BORNÉ par
-/// construction (typiquement < 20, plafond observé ~50) → au pire ~2500 opérations, hors hot
-/// path serré (appelé à la fréquence du tiling, pas par fenêtre). Compromis accepté : la
-/// lisibilité d'un arbre immuable récursif prime sur une optimisation non nécessaire à cette
-/// échelle.
+/// Identité des splits (SPEC-017 A9) : aucun identifiant n'est stocké (format JSON de
+/// `stages.json` inchangé). Un split est identifié par la première feuille de chacun de ses
+/// deux côtés : leur ancêtre commun le plus bas est ce split, dans l'arbre complet comme dans
+/// toute projection où il survit. Les opérations qui prennent `excluding:` calculent sur la
+/// projection puis reportent orientation et ratio sur l'arbre complet par cette identité.
+///
+/// Complexité (Article XVIII) : `place`, `windowIDs`, `contains`, `removing`, `projected` et
+/// `balanced` sont O(n) sur le nombre de feuilles. `inserting`, `togglingSplit`, `settingSplit`
+/// et `adjustingFence` sont O(n²) au pire (un `contains` par niveau pendant la descente),
+/// `correctingForMinimumSize` O(d·n) (d = profondeur) et `reconciled` O(k·n) (k fenêtres à
+/// insérer). n = fenêtres d'un stage, BORNÉ par construction (typiquement < 20, plafond observé
+/// ~50) → au pire ~2500 opérations, hors hot path serré. Compromis accepté : la lisibilité d'un
+/// arbre immuable récursif prime sur une optimisation non nécessaire à cette échelle.
 public indirect enum BSPTree: Equatable, Codable, Sendable {
     case empty
     case leaf(WindowID)
@@ -79,35 +94,78 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         case .leaf(let id):
             result[id] = rect.integral
         case .split(let orientation, let ratio, let first, let second):
-            let clamped = min(max(ratio, 0.05), 0.95)
-            switch orientation {
-            case .vertical:
-                let usable = max(0, rect.width - innerGap)
-                let firstWidth = floor(usable * clamped)
-                let secondWidth = usable - firstWidth
-                let firstRect = CGRect(x: rect.minX, y: rect.minY, width: firstWidth, height: rect.height)
-                let secondRect = CGRect(x: rect.minX + firstWidth + innerGap, y: rect.minY, width: secondWidth, height: rect.height)
-                first.place(in: firstRect, innerGap: innerGap, into: &result)
-                second.place(in: secondRect, innerGap: innerGap, into: &result)
-            case .horizontal:
-                let usable = max(0, rect.height - innerGap)
-                let firstHeight = floor(usable * clamped)
-                let secondHeight = usable - firstHeight
-                let firstRect = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: firstHeight)
-                let secondRect = CGRect(x: rect.minX, y: rect.minY + firstHeight + innerGap, width: rect.width, height: secondHeight)
-                first.place(in: firstRect, innerGap: innerGap, into: &result)
-                second.place(in: secondRect, innerGap: innerGap, into: &result)
-            }
+            let rects = Self.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+            first.place(in: rects.first, innerGap: innerGap, into: &result)
+            second.place(in: rects.second, innerGap: innerGap, into: &result)
+        }
+    }
+
+    /// Bornes du ratio appliqué au placement (et des ratios calculés depuis une frame).
+    static let ratioBounds: ClosedRange<Double> = 0.05...0.95
+
+    /// Écart minimal entre deux fenêtres empilées : la barre de titre du bas ne touche pas la
+    /// fenêtre du haut (même valeur que `MutableBSPLayoutStrategy.titleBarSeamGap`).
+    static let titleBarSeamGap: CGFloat = 1
+
+    static func gap(for orientation: BSPOrientation, innerGap: CGFloat) -> CGFloat {
+        orientation == .horizontal ? max(innerGap, titleBarSeamGap) : innerGap
+    }
+
+    /// Longueur partageable d'un split (son étendue sur l'axe coupé, moins l'écart).
+    static func usableExtent(of rect: CGRect, orientation: BSPOrientation, innerGap: CGFloat) -> CGFloat {
+        let extent = orientation == .vertical ? rect.width : rect.height
+        return max(0, extent - gap(for: orientation, innerGap: innerGap))
+    }
+
+    /// Rectangles des deux enfants d'un split, au ratio borné.
+    static func childRects(
+        of rect: CGRect,
+        orientation: BSPOrientation,
+        ratio: Double,
+        innerGap: CGFloat
+    ) -> (first: CGRect, second: CGRect) {
+        let clamped = min(max(ratio, ratioBounds.lowerBound), ratioBounds.upperBound)
+        let gap = gap(for: orientation, innerGap: innerGap)
+        let usable = usableExtent(of: rect, orientation: orientation, innerGap: innerGap)
+        let firstExtent = floor(usable * clamped)
+        let secondExtent = usable - firstExtent
+        switch orientation {
+        case .vertical:
+            return (CGRect(x: rect.minX, y: rect.minY, width: firstExtent, height: rect.height),
+                    CGRect(x: rect.minX + firstExtent + gap, y: rect.minY, width: secondExtent, height: rect.height))
+        case .horizontal:
+            return (CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: firstExtent),
+                    CGRect(x: rect.minX, y: rect.minY + firstExtent + gap, width: rect.width, height: secondExtent))
         }
     }
 
     // MARK: - Mutations
 
+    /// Insère `window` en divisant la feuille `anchor` (première feuille visible si `anchor` est
+    /// nil, inconnue ou dans `absent`). Le sens de coupe suit la dimension dominante du rectangle VISIBLE de cette feuille
+    /// dans `container` (split auto de yabai, `view.c:148`, SPEC-013 EF-004) : une feuille large
+    /// est coupée en deux colonnes, une feuille haute en deux rangées. Ratio 0,5. `absent` désigne
+    /// les feuilles gardées mais non affichées (A9) : le rectangle est mesuré sur la projection.
+    // O(n²) au pire - n = feuilles (voir l'en-tête du type).
+    public func inserting(
+        _ window: WindowID,
+        at anchor: WindowID?,
+        side: BSPInsertionSide,
+        in container: CGRect,
+        innerGap: CGFloat = 0,
+        excluding absent: Set<WindowID> = []
+    ) -> BSPTree {
+        let visible = projected(excluding: absent)
+        let target = anchor.flatMap { visible.contains($0) ? $0 : nil } ?? visible.windowIDs.first
+        let rect = target.flatMap { visible.place(in: container, innerGap: innerGap)[$0] } ?? container
+        return inserting(window, nextTo: target, side: side, containerIsWide: rect.width >= rect.height)
+    }
+
     /// Insère `window` en divisant la feuille `focus`. Si `focus` est absent (ou nil), insère
     /// sur la première feuille rencontrée ; si l'arbre est vide, `window` devient la racine.
     /// `side` détermine si la nouvelle fenêtre prend la moitié droite/bas (`right`) ou
-    /// gauche/haut (`left`). `containerIsWide` choisit l'orientation par défaut quand on ne
-    /// peut pas la déduire (split vertical si large, horizontal sinon — comportement yabai).
+    /// gauche/haut (`left`). `containerIsWide` impose l'orientation du nouveau split (vertical
+    /// si vrai). Préférer `inserting(_:at:side:in:)`, qui la déduit de la feuille coupée (R3).
     public func inserting(
         _ window: WindowID,
         nextTo focus: WindowID?,
@@ -163,24 +221,6 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
                 return newSecond.isEmpty ? first : .split(orientation: orientation, ratio: ratio, first: first, second: newSecond)
             }
             return self
-        }
-    }
-
-    /// Applique `newRatio` au split le plus HAUT (premier rencontré depuis la racine) dont le
-    /// côté choisi (`first` si `onFirstSide`, sinon `second`) contient `window`. Si ce côté ne
-    /// la contient pas, la recherche continue dans les deux enfants. Un seul split est modifié.
-    public func adoptingRatio(_ newRatio: Double, forSplitContaining window: WindowID, onFirstSide: Bool) -> BSPTree {
-        switch self {
-        case .empty, .leaf:
-            return self
-        case .split(let orientation, let ratio, let first, let second):
-            let target = onFirstSide ? first.contains(window) : second.contains(window)
-            if target {
-                return .split(orientation: orientation, ratio: newRatio, first: first, second: second)
-            }
-            return .split(orientation: orientation, ratio: ratio,
-                          first: first.adoptingRatio(newRatio, forSplitContaining: window, onFirstSide: onFirstSide),
-                          second: second.adoptingRatio(newRatio, forSplitContaining: window, onFirstSide: onFirstSide))
         }
     }
 
@@ -257,25 +297,6 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         }
     }
 
-    // MARK: - Construction depuis une liste (migration)
-
-    /// Construit un arbre équilibré à partir d'une liste ordonnée de fenêtres.
-    /// Utilisé pour migrer un stage existant (liste de membres) vers un arbre.
-    public static func balanced(from windowIDs: [WindowID], containerIsWide: Bool) -> BSPTree {
-        guard let first = windowIDs.first else { return .empty }
-        guard windowIDs.count > 1 else { return .leaf(first) }
-        let mid = windowIDs.count / 2
-        let left = Array(windowIDs[..<mid])
-        let right = Array(windowIDs[mid...])
-        let orientation: BSPOrientation = containerIsWide ? .vertical : .horizontal
-        return .split(
-            orientation: orientation,
-            ratio: 0.5,
-            first: balanced(from: left, containerIsWide: containerIsWide),
-            second: balanced(from: right, containerIsWide: containerIsWide)
-        )
-    }
-
     /// Reconcilie l'arbre avec l'ensemble des fenêtres réellement présentes : retire les
     /// feuilles orphelines, puis insère les fenêtres manquantes à côté du focus.
     public func reconciled(
@@ -299,5 +320,414 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             currentFocus = id // la fenêtre suivante se greffe à côté de la dernière insérée
         }
         return tree
+    }
+
+    // MARK: - Projection (SPEC-017 A9)
+
+    /// Copie de l'arbre sans les feuilles `absent` (fenêtres gardées pendant leur grâce mais non
+    /// affichées). Un split dont un côté devient vide est replié : l'autre côté prend sa place.
+    /// Les splits restants gardent orientation et ratio, donc leur identité (voir l'en-tête).
+    // O(n)
+    public func projected(excluding absent: Set<WindowID>) -> BSPTree {
+        guard !absent.isEmpty else { return self }
+        switch self {
+        case .empty:
+            return self
+        case .leaf(let id):
+            return absent.contains(id) ? .empty : self
+        case .split(let orientation, let ratio, let first, let second):
+            let newFirst = first.projected(excluding: absent)
+            let newSecond = second.projected(excluding: absent)
+            if newFirst.isEmpty { return newSecond }
+            if newSecond.isEmpty { return newFirst }
+            return .split(orientation: orientation, ratio: ratio, first: newFirst, second: newSecond)
+        }
+    }
+
+    /// Applique `operation` (qui ne change ni les feuilles ni la structure) sur la projection
+    /// sans `absent`, puis reporte ses splits sur l'arbre complet : les feuilles absentes ne sont
+    /// jamais perdues et les splits repliés restent inchangés.
+    private func onProjection(excluding absent: Set<WindowID>, _ operation: (BSPTree) -> BSPTree?) -> BSPTree? {
+        guard !absent.isEmpty else { return operation(self) }
+        return operation(projected(excluding: absent)).map(adoptingSplits(from:))
+    }
+
+    /// Reporte sur l'arbre complet l'orientation et le ratio de chaque split de `projection`
+    /// (table temporaire indexée par l'identité des splits, voir l'en-tête).
+    // O(n)
+    private func adoptingSplits(from projection: BSPTree) -> BSPTree {
+        var splits: [SplitKey: (orientation: BSPOrientation, ratio: Double)] = [:]
+        projection.collectSplits(into: &splits)
+        guard !splits.isEmpty else { return self }
+        return adoptingSplits(splits, present: Set(projection.windowIDs)).tree
+    }
+
+    /// Identité d'un split : première feuille de son côté `first` et de son côté `second`.
+    private struct SplitKey: Hashable {
+        let first: WindowID
+        let second: WindowID
+    }
+
+    /// Recense les splits ; rend la première feuille du sous-arbre.
+    @discardableResult
+    private func collectSplits(into splits: inout [SplitKey: (orientation: BSPOrientation, ratio: Double)]) -> WindowID? {
+        switch self {
+        case .empty:
+            return nil
+        case .leaf(let id):
+            return id
+        case .split(let orientation, let ratio, let first, let second):
+            let a = first.collectSplits(into: &splits)
+            let b = second.collectSplits(into: &splits)
+            if let a, let b { splits[SplitKey(first: a, second: b)] = (orientation, ratio) }
+            return a ?? b
+        }
+    }
+
+    /// Rend l'arbre mis à jour et la première feuille présente (dans `present`) du sous-arbre.
+    private func adoptingSplits(
+        _ splits: [SplitKey: (orientation: BSPOrientation, ratio: Double)],
+        present: Set<WindowID>
+    ) -> (tree: BSPTree, firstPresent: WindowID?) {
+        switch self {
+        case .empty:
+            return (self, nil)
+        case .leaf(let id):
+            return (self, present.contains(id) ? id : nil)
+        case .split(let orientation, let ratio, let first, let second):
+            let newFirst = first.adoptingSplits(splits, present: present)
+            let newSecond = second.adoptingSplits(splits, present: present)
+            var adopted = (orientation: orientation, ratio: ratio)
+            if let a = newFirst.firstPresent, let b = newSecond.firstPresent,
+               let match = splits[SplitKey(first: a, second: b)] {
+                adopted = match
+            }
+            return (.split(orientation: adopted.orientation, ratio: adopted.ratio,
+                           first: newFirst.tree, second: newSecond.tree),
+                    newFirst.firstPresent ?? newSecond.firstPresent)
+        }
+    }
+
+    // MARK: - Commandes sur les splits (SPEC-017 R12)
+
+    /// Remet tous les ratios à 0,5 (`balance`, `layout flatten`). Structure inchangée.
+    // O(n)
+    public func balanced() -> BSPTree {
+        switch self {
+        case .empty, .leaf:
+            return self
+        case .split(let orientation, _, let first, let second):
+            return .split(orientation: orientation, ratio: 0.5, first: first.balanced(), second: second.balanced())
+        }
+    }
+
+    /// Inverse le sens du split parent VISIBLE de `window` (`layout toggle-split`, comme yabai).
+    /// Arbre inchangé si `window` est absente ou seule.
+    // O(n²) au pire (recherche du chemin), n borné.
+    public func togglingSplit(of window: WindowID, excluding absent: Set<WindowID> = []) -> BSPTree {
+        onProjection(excluding: absent) { tree in
+            guard let parent = tree.ancestors(of: window, in: .zero, innerGap: 0).last else { return tree }
+            return tree.updatingSplit(at: parent.path[...]) { ($0 == .vertical ? .horizontal : .vertical, $1) }
+        } ?? self
+    }
+
+    /// Impose `orientation` au split parent VISIBLE de `window` (`layout split horizontal|vertical`).
+    // O(n²) au pire (recherche du chemin), n borné.
+    public func settingSplit(of window: WindowID, to orientation: BSPOrientation, excluding absent: Set<WindowID> = []) -> BSPTree {
+        onProjection(excluding: absent) { tree in
+            guard let parent = tree.ancestors(of: window, in: .zero, innerGap: 0).last else { return tree }
+            return tree.updatingSplit(at: parent.path[...]) { _, ratio in (orientation, ratio) }
+        } ?? self
+    }
+
+    // MARK: - Frontières et tailles minimales (SPEC-017 R6, R12, A2)
+
+    /// Déplace la frontière (fence) entre `window` et sa voisine du côté `edge` pour qu'elle
+    /// passe par le bord correspondant de `frame` (frame demandée par un geste ou un resize).
+    /// La frontière est celle du split ancêtre VISIBLE le plus proche qui sépare `window` de ce
+    /// côté ; géométrie mesurée sans les feuilles `absent`. Le ratio est recalculé depuis `frame`,
+    /// borné à [0,05 ; 0,95]. Arbre inchangé s'il n'y a pas de frontière de ce côté.
+    // O(n²) au pire (recherche du chemin), n borné.
+    public func adjustingFence(
+        of window: WindowID,
+        edge: BSPEdge,
+        to frame: CGRect,
+        in container: CGRect,
+        innerGap: CGFloat = 0,
+        excluding absent: Set<WindowID> = []
+    ) -> BSPTree {
+        let orientation: BSPOrientation = (edge == .left || edge == .right) ? .vertical : .horizontal
+        // La fenêtre est du côté `first` quand la frontière est à sa droite ou en dessous.
+        let windowInFirst = edge == .right || edge == .down
+        return onProjection(excluding: absent) { tree in
+            guard let split = tree.ancestors(of: window, in: container, innerGap: innerGap)
+                .last(where: { $0.orientation == orientation && $0.windowInFirst == windowInFirst })
+            else { return tree }
+            let usable = Self.usableExtent(of: split.rect, orientation: orientation, innerGap: innerGap)
+            guard usable > 0 else { return tree }
+            let gap = Self.gap(for: orientation, innerGap: innerGap)
+            let origin = orientation == .vertical ? split.rect.minX : split.rect.minY
+            // Étendue du côté `first` = position de la frontière depuis l'origine du split.
+            let firstExtent: CGFloat = switch edge {
+            case .right: frame.maxX - origin
+            case .down: frame.maxY - origin
+            case .left: frame.minX - gap - origin
+            case .up: frame.minY - gap - origin
+            }
+            let ratio = min(max(Double(firstExtent / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
+            return tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
+        } ?? self
+    }
+
+    /// Corrige l'arbre pour que `window` obtienne au moins `minimum` (taille refusée par
+    /// l'application, A2). Pour chaque axe en déficit, essaie les splits ancêtres VISIBLES qui
+    /// coupent cet axe, du plus proche au plus haut, et retient le premier qui rend la correction
+    /// faisable. Faisable = ratio dans [0,05 ; 0,95] et, au placement réel (mêmes marges, bornes
+    /// et arrondis que `place`), `window` atteint `minimum` sans qu'aucune fenêtre rétrécie passe
+    /// sous son minimum connu (`knownMinimums`). Un seul split modifié par axe.
+    /// Rend `nil` si c'est infaisable (fenêtre absente ou non visible, aucun ancêtre faisable),
+    /// l'arbre inchangé si aucun axe n'est en déficit.
+    // O(d·n) - d = profondeur de la fenêtre (un placement de contrôle par ancêtre candidat), n borné.
+    public func correctingForMinimumSize(
+        of window: WindowID,
+        minimum: CGSize,
+        in container: CGRect,
+        innerGap: CGFloat = 0,
+        excluding absent: Set<WindowID> = [],
+        knownMinimums: [WindowID: CGSize] = [:]
+    ) -> BSPTree? {
+        onProjection(excluding: absent) { visible in
+            var tree = visible
+            for axis in [BSPOrientation.vertical, .horizontal] {
+                let extent = { (rect: CGRect) in axis == .vertical ? rect.width : rect.height }
+                let need = ceil(axis == .vertical ? minimum.width : minimum.height)
+                let before = tree.place(in: container, innerGap: innerGap)
+                guard let current = before[window] else { return nil }
+                guard extent(current) < need else { continue }
+                let chain = tree.ancestors(of: window, in: container, innerGap: innerGap)
+                var corrected: BSPTree?
+                // `required` = étendue que le côté de la fenêtre doit avoir sous l'ancêtre examiné.
+                var required = need
+                for split in chain.reversed() where split.orientation == axis {
+                    let usable = Self.usableExtent(of: split.rect, orientation: axis, innerGap: innerGap)
+                    // `place` arrondit le côté `first` à l'entier inférieur : +0,5 garantit `required`.
+                    let ratio = Double(split.windowInFirst ? (required + 0.5) / usable : (usable - required) / usable)
+                    if usable > 0, Self.ratioBounds.contains(ratio) {
+                        let candidate = tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
+                        let after = candidate.place(in: container, innerGap: innerGap)
+                        let respectsMinimums = knownMinimums.allSatisfy { id, known in
+                            guard let old = before[id], let new = after[id], extent(new) < extent(old) else { return true }
+                            return extent(new) >= ceil(axis == .vertical ? known.width : known.height)
+                        }
+                        if let reached = after[window], extent(reached) >= need, respectsMinimums {
+                            corrected = candidate
+                            break
+                        }
+                    }
+                    // Remonter : le côté de la fenêtre sous cet ancêtre doit couvrir `required`
+                    // une fois partagé par ce split au ratio actuel (borné).
+                    let share = min(max(split.ratio, Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
+                    let side = split.windowInFirst ? share : 1 - share
+                    required = ceil(required / CGFloat(side)) + Self.gap(for: axis, innerGap: innerGap)
+                }
+                guard let corrected else { return nil }
+                tree = corrected
+            }
+            return tree
+        }
+    }
+
+    /// Split ancêtre d'une fenêtre : chemin depuis la racine (`true` = côté `first`), orientation,
+    /// ratio, rectangle du split et côté de la fenêtre.
+    private struct Ancestor {
+        let path: [Bool]
+        let orientation: BSPOrientation
+        let ratio: Double
+        let rect: CGRect
+        let windowInFirst: Bool
+    }
+
+    /// Splits ancêtres de `window`, de la racine vers la feuille, avec leur rectangle dans `rect`.
+    /// Vide si `window` est absente ou seule.
+    // O(n·d) - un `contains` par niveau.
+    private func ancestors(of window: WindowID, in rect: CGRect, innerGap: CGFloat) -> [Ancestor] {
+        var result: [Ancestor] = []
+        var node = self
+        var nodeRect = rect
+        var path: [Bool] = []
+        while case .split(let orientation, let ratio, let first, let second) = node {
+            let inFirst = first.contains(window)
+            guard inFirst || second.contains(window) else { return [] }
+            result.append(Ancestor(path: path, orientation: orientation, ratio: ratio, rect: nodeRect, windowInFirst: inFirst))
+            let rects = Self.childRects(of: nodeRect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+            node = inFirst ? first : second
+            nodeRect = inFirst ? rects.first : rects.second
+            path.append(inFirst)
+        }
+        return node == .leaf(window) ? result : []
+    }
+
+    /// Remplace orientation et ratio du split au bout de `path` (depuis la racine).
+    private func updatingSplit(
+        at path: ArraySlice<Bool>,
+        _ transform: (BSPOrientation, Double) -> (BSPOrientation, Double)
+    ) -> BSPTree {
+        guard case .split(let orientation, let ratio, let first, let second) = self else { return self }
+        guard let step = path.first else {
+            let (newOrientation, newRatio) = transform(orientation, ratio)
+            return .split(orientation: newOrientation, ratio: newRatio, first: first, second: second)
+        }
+        let rest = path.dropFirst()
+        return step
+            ? .split(orientation: orientation, ratio: ratio, first: first.updatingSplit(at: rest, transform), second: second)
+            : .split(orientation: orientation, ratio: ratio, first: first, second: second.updatingSplit(at: rest, transform))
+    }
+
+    // MARK: - Arbre initial déduit de la géométrie (migration SPEC-017 A8)
+
+    /// Construit l'arbre initial d'une stage depuis ses membres DANS L'ORDRE et leurs frames
+    /// actuelles, pour éviter un saut visuel à la migration. Coupe la liste en deux moitiés
+    /// (politique `balanced`) et déduit de la géométrie le sens et le ratio de chaque coupe.
+    /// Repli déterministe si une frame manque ou est inutilisable (hors du conteneur,
+    /// chevauchement) : chaque membre est inséré dans l'ordre à côté du précédent.
+    /// L'ordre des feuilles est celui de `ordered` ; aucun membre n'est perdu (doublons ignorés).
+    // O(n²) - vérification des chevauchements deux à deux ; n = membres d'une stage, borné (< 50).
+    public static func inferred(
+        from ordered: [(WindowID, CGRect?)],
+        in container: CGRect,
+        innerGap: CGFloat = 0
+    ) -> BSPTree {
+        var seen = Set<WindowID>()
+        let members = ordered.filter { seen.insert($0.0).inserted }
+        let ids = members.map(\.0)
+        let known = members.compactMap { id, frame in frame.map { (id, $0) } }
+        let frames = Dictionary(known, uniquingKeysWith: { first, _ in first })
+        guard known.count == ids.count, InferredCuts.framesAreUsable(known.map(\.1), in: container) else {
+            var tree = BSPTree.empty
+            var previous: WindowID?
+            for id in ids {
+                tree = tree.inserting(id, at: previous, side: .right, in: container, innerGap: innerGap)
+                previous = id
+            }
+            return tree
+        }
+        return InferredCuts(frames: frames, innerGap: innerGap).tree(for: ids[...], in: container)
+    }
+}
+
+/// Détection des coupes nettes depuis la géométrie. COPIE ASSUMÉE de `splitHorizontally`,
+/// `splitRatio` (cas sans priorité ni nouvelle fenêtre) et `managedSplitLooksUsable` de
+/// `MutableBSPLayoutStrategy.swift` : cette stratégie sera supprimée en vague 3 de la SPEC-017
+/// et seule la migration garde besoin de cette logique.
+private struct InferredCuts {
+    let frames: [WindowID: CGRect]
+    let innerGap: CGFloat
+
+    /// Frames exploitables : chacune non vide et au moins à moitié dans le conteneur, et pas de
+    /// chevauchement de plus de 10 % de la plus petite de deux frames.
+    // O(n²) - n borné (membres d'une stage).
+    static func framesAreUsable(_ frames: [CGRect], in container: CGRect) -> Bool {
+        func area(_ rect: CGRect) -> CGFloat { rect.isNull ? 0 : rect.width * rect.height }
+        for frame in frames {
+            guard frame.width > 0, frame.height > 0,
+                  area(frame.intersection(container)) >= area(frame) * LayoutTolerance.halfCoverage
+            else { return false }
+        }
+        for (index, lhs) in frames.enumerated() {
+            for rhs in frames[(index + 1)...] where area(lhs.intersection(rhs)) > min(area(lhs), area(rhs)) * 0.1 {
+                return false
+            }
+        }
+        return true
+    }
+
+    func tree(for windows: ArraySlice<WindowID>, in rect: CGRect) -> BSPTree {
+        guard let first = windows.first else { return .empty }
+        guard windows.count > 1 else { return .leaf(first) }
+        let left = windows.prefix(windows.count / 2)
+        let right = windows.dropFirst(windows.count / 2)
+        let orientation: BSPOrientation = splitHorizontally(left: left, right: right, rect: rect) ? .vertical : .horizontal
+        let ratio = Double(splitRatio(left: left, right: right, rect: rect, orientation: orientation))
+        let rects = BSPTree.childRects(of: rect, orientation: orientation, ratio: ratio, innerGap: innerGap)
+        return .split(orientation: orientation, ratio: ratio,
+                      first: tree(for: left, in: rects.first),
+                      second: tree(for: right, in: rects.second))
+    }
+
+    /// Vrai si les deux groupes sont côte à côte (coupe verticale), faux s'ils sont empilés.
+    private func splitHorizontally(left: ArraySlice<WindowID>, right: ArraySlice<WindowID>, rect: CGRect) -> Bool {
+        guard let leftFrame = unionFrame(for: left, in: frames),
+              let rightFrame = unionFrame(for: right, in: frames)
+        else { return rect.width >= rect.height }
+
+        let tolerance = LayoutTolerance.edgeAlignment
+        let xOverlap = overlap(leftFrame.minX...leftFrame.maxX, rightFrame.minX...rightFrame.maxX)
+        let yOverlap = overlap(leftFrame.minY...leftFrame.maxY, rightFrame.minY...rightFrame.maxY)
+        let xOverlapRatio = xOverlap / max(1, min(leftFrame.width, rightFrame.width))
+        let yOverlapRatio = yOverlap / max(1, min(leftFrame.height, rightFrame.height))
+
+        let sideBySide = yOverlapRatio >= 0.45
+            && (leftFrame.maxX <= rightFrame.minX + tolerance || rightFrame.maxX <= leftFrame.minX + tolerance)
+        if sideBySide { return true }
+
+        let stacked = xOverlapRatio >= 0.45
+            && (leftFrame.maxY <= rightFrame.minY + tolerance || rightFrame.maxY <= leftFrame.minY + tolerance)
+        if stacked { return false }
+
+        if abs(xOverlapRatio - yOverlapRatio) >= 0.15 {
+            return yOverlapRatio > xOverlapRatio
+        }
+        return rect.width >= rect.height
+    }
+
+    private func splitRatio(
+        left: ArraySlice<WindowID>,
+        right: ArraySlice<WindowID>,
+        rect: CGRect,
+        orientation: BSPOrientation
+    ) -> CGFloat {
+        guard let leftFrame = unionFrame(for: left, in: frames),
+              let rightFrame = unionFrame(for: right, in: frames)
+        else { return 0.5 }
+        let horizontal = orientation == .vertical
+        let gap = BSPTree.gap(for: orientation, innerGap: innerGap)
+        let usableExtent = BSPTree.usableExtent(of: rect, orientation: orientation, innerGap: innerGap)
+        guard usableExtent > 0 else { return 0.5 }
+
+        if managedSplitLooksUsable(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal, gap: gap) {
+            let edge = horizontal ? leftFrame.maxX - rect.minX : leftFrame.maxY - rect.minY
+            return (edge / usableExtent).clamped(to: 0.1...0.9)
+        }
+
+        let leftExtent = horizontal ? leftFrame.width : leftFrame.height
+        let rightExtent = horizontal ? rightFrame.width : rightFrame.height
+        let totalObserved = leftExtent + rightExtent
+        guard totalObserved > 0 else { return 0.5 }
+        return (leftExtent / totalObserved).clamped(to: 0.1...0.9)
+    }
+
+    private func overlap(_ lhs: ClosedRange<CGFloat>, _ rhs: ClosedRange<CGFloat>) -> CGFloat {
+        max(0, min(lhs.upperBound, rhs.upperBound) - max(lhs.lowerBound, rhs.lowerBound))
+    }
+
+    // L'écart signé entre les deux côtés (négatif = chevauchement) doit rester proche de la
+    // marge intérieure configurée ; la tolérance en dérive (SPEC-016 FR-041).
+    private func managedSplitLooksUsable(
+        leftFrame: CGRect,
+        rightFrame: CGRect,
+        rect: CGRect,
+        horizontal: Bool,
+        gap: CGFloat
+    ) -> Bool {
+        let edgeTolerance = LayoutTolerance.edgeAlignment
+        let gapTolerance = LayoutTolerance.innerGapTolerance(gapsInner: gap)
+        if horizontal {
+            return leftFrame.minX.isClose(to: rect.minX, tolerance: edgeTolerance)
+                && rightFrame.maxX.isClose(to: rect.maxX, tolerance: edgeTolerance)
+                && abs(rightFrame.minX - leftFrame.maxX - gap) <= gapTolerance
+        }
+        return leftFrame.minY.isClose(to: rect.minY, tolerance: edgeTolerance)
+            && rightFrame.maxY.isClose(to: rect.maxY, tolerance: edgeTolerance)
+            && abs(rightFrame.minY - leftFrame.maxY - gap) <= gapTolerance
     }
 }

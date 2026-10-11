@@ -7,39 +7,28 @@ import RoadieCore
 /// la structure exacte (qui a coupé qui). L'insertion/suppression dans l'arbre est gérée
 /// en amont (reconciliation côté daemon) ; ici on ne fait que le placement géométrique.
 ///
-/// Repli : si aucun arbre n'est fourni (ou incohérent avec `windowIDs`), on construit un
-/// arbre équilibré à la volée pour ne jamais laisser de fenêtre non placée.
+/// Le placement se fait sur l'arbre PROJETÉ (SPEC-017 A9) : les feuilles gardées pour des
+/// fenêtres absentes de la requête (plein écran natif, autre bureau) sont retirées sans
+/// toucher aux autres splits. Filet de sécurité : une fenêtre demandée mais absente de l'arbre
+/// (ou arbre absent) y est insérée dans l'ordre, pour ne jamais laisser de fenêtre non placée.
 public struct SpatialBSPLayoutStrategy: LayoutStrategy {
     public init() {}
 
+    // O(n²) au pire (insertions de secours) - n = fenêtres du stage, borné.
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
         guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }
 
         let rect = request.container.inset(by: request.outerGaps)
         let gap = CGFloat(request.innerGap)
-
-        let tree = usableTree(for: request, windows: windows)
-        var placements = tree.place(in: rect, innerGap: gap)
-
-        // Filet de sécurité : toute fenêtre demandée mais absente de l'arbre reçoit quand
-        // même une place (ne devrait pas arriver après reconciliation, mais évite une
-        // fenêtre invisible en cas d'incohérence transitoire).
-        let missing = windows.filter { placements[$0] == nil }
-        if !missing.isEmpty {
-            let fallback = BSPTree.balanced(from: missing, containerIsWide: rect.width >= rect.height)
-            for (id, frame) in fallback.place(in: rect, innerGap: gap) {
-                placements[id] = frame
-            }
+        let requested = Set(windows)
+        let full = request.bspTree ?? .empty
+        var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))
+        var previous: WindowID?
+        for id in windows where !tree.contains(id) {
+            tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)
+            previous = id
         }
-        return LayoutPlan(placements: placements)
-    }
-
-    private func usableTree(for request: LayoutRequest, windows: [WindowID]) -> BSPTree {
-        if let tree = request.bspTree, Set(tree.windowIDs) == Set(windows) {
-            return tree
-        }
-        // Arbre absent ou désynchronisé : repli équilibré déterministe.
-        return BSPTree.balanced(from: windows, containerIsWide: request.container.width >= request.container.height)
+        return LayoutPlan(placements: tree.place(in: rect, innerGap: gap))
     }
 }
