@@ -41,6 +41,17 @@ struct CLICommandRouterTests {
     }
 
     @Test
+    func maximizeIsAdvertisedAndRouted() {
+        #expect(router().run(["help", "toggle"]).stdout.contains("maximize|fullscreen|native-fullscreen"))
+        let response = router().run(["toggle", "maximize"])
+        #expect(response.exitCode == 0)
+        #expect(response.stdout.contains("maximize"))
+        #expect(response.stderr.isEmpty)
+        #expect(CLICommandRouter.isDaemonRouted(["toggle", "maximize"]))
+        #expect(!CLICommandRouter.isDaemonRouted(["toggle", "maximize", "--help"]))
+    }
+
+    @Test
     func helpIsGeneratedFromCommandTable() {
         let full = router().run(["--help"]).stdout
         #expect(!full.contains("wrap"))

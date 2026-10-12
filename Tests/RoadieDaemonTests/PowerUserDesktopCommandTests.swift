@@ -1331,3 +1331,283 @@ private func expectFinalTreeFrames(
         #expect(history.count <= 1, "fenêtre \(id.rawValue) : \(history)", sourceLocation: sourceLocation)
     }
 }
+
+
+@Suite
+struct NavrailMaximizationTests {
+    @Test(arguments: [WindowManagementMode.spatialBsp, .mutableBsp, .bsp, .masterStack, .float])
+    func reservedZoomRestoresLayoutAndSurvivesModeChanges(mode: WindowManagementMode) throws {
+        let windows = [powerWindow(201, x: 150, y: 0, width: 300, height: 800),
+                       powerWindow(202, x: 460, y: 0, width: 540, height: 800)]
+        let provider = PowerUserProvider(windows: windows)
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-layout"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0, gapsOuterLeft: 150, gapsInner: 10)),
+            railSettings: RailSettings.load(raw: ""), stageStore: store)
+        let before = service.snapshot()
+        _ = service.apply(service.applyPlan(from: before))
+        if mode.usesTreeEngine {
+            _ = WindowCommandService(service: service, stageStore: store).resize(.right)
+        } else if mode.isTiled {
+            provider.snapshots[0].frame = Rect(x: 150, y: 0, width: 250, height: 800)
+            provider.snapshots[1].frame = Rect(x: 410, y: 0, width: 590, height: 800)
+        }
+        let initial = service.snapshot()
+        let scope = try #require(initial.windows.first(where: { $0.window.id == windows[0].id })?.scope)
+        let original = Dictionary(uniqueKeysWithValues: provider.snapshots.map { ($0.id, $0.frame) })
+        if !mode.usesTreeEngine && mode.isTiled {
+            service.effectiveIntentStore.save(LayoutIntent(scope: scope, windowIDs: windows.reversed().map(\.id), placements: original, source: .command))
+        }
+        let commands = WindowCommandService(service: service, stageStore: store)
+        #expect(commands.toggleMaximize().changed)
+        #expect(writer.frames[windows[0].id] == Rect(x: 150, y: 0, width: 850, height: 800))
+        let saved = try #require(service.effectiveIntentStore.intent(for: scope))
+        #expect(saved.zoomReservesRail == true)
+        #expect(saved.restorePlacements == original)
+        let savedOrder = saved.windowIDs
+        #expect(commands.toggleFullscreen().changed)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.windowIDs == savedOrder)
+        #expect(writer.frames[windows[0].id] == Rect(x: 0, y: 0, width: 1000, height: 800))
+        #expect(service.effectiveIntentStore.intent(for: scope)?.restorePlacements == original)
+        #expect(commands.toggleMaximize().changed)
+        #expect(writer.frames[windows[0].id]?.x == 150)
+        #expect(commands.toggleMaximize().changed)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+        for window in provider.snapshots {
+            #expect(window.frame == original[window.id], "Restaurer \(mode) : \(window.id)")
+        }
+    }
+
+    @Test
+    func displayMarginsAndChangedVisibleAreaBoundTheMaximizedFrame() {
+        let display = DisplaySnapshot(id: DisplayID(rawValue: "upper-left"), index: 2, name: "Upper Left",
+            frame: Rect(x: -1920, y: -200, width: 1920, height: 1080),
+            visibleFrame: Rect(x: -1920, y: -178, width: 1920, height: 1056), isMain: false)
+        let config = RoadieConfig(tiling: TilingConfig(gapsOuter: 8, gapsOuterLeft: 150,
+            displayOverrides: [DisplayTilingOverride(displayName: display.name, gapsOuterLeft: 220)],
+            smartGapsSolo: true, smartGapsSoloSides: [.top, .right]))
+        let service = SnapshotService(provider: PowerUserProvider(displays: [display], windows: []),
+            config: config, railSettings: .load(raw: ""), stageStore: StageStore(path: tempPath("spec019-display-gap")))
+        #expect(service.maximizedFrame(on: display) == CGRect(x: -1700, y: -178, width: 1700, height: 1048))
+        var smaller = display
+        smaller.visibleFrame = Rect(x: -1600, y: 40, width: 1600, height: 900)
+        #expect(service.maximizedFrame(on: smaller) == CGRect(x: -1380, y: 40, width: 1380, height: 892))
+    }
+
+    @Test(arguments: ["resize", "overlay"])
+    func hiddenRailAndSmartGapsKeepFullReservation(layoutMode: String) throws {
+        let window = powerWindow(211, x: -950, y: 0, width: 300, height: 800)
+        let display = powerDisplay("left-screen", index: 1, x: -1000)
+        let provider = PowerUserProvider(displays: [display], windows: [window])
+        let runtime = RailRuntimeStateStore(path: tempPath("spec019-rail"))
+        runtime.setVisibleWidth(8, for: display.id)
+        var rail = RailSettings.load(raw: "")
+        rail.autoHide = true
+        rail.layoutMode = layoutMode
+        rail.dynamicLeftGap = true
+        rail.width = 180
+        rail.hideOnMaximized = true
+        let store = StageStore(path: tempPath("spec019-autohide"))
+        let writer = PowerUserWriter(provider: provider)
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsOuterLeft: 150, smartGapsSolo: true)),
+            railSettings: rail, railRuntimeStateStore: runtime, stageStore: store)
+        let commands = WindowCommandService(service: service, stageStore: store)
+        #expect(commands.toggleMaximize().changed)
+        #expect(writer.frames[window.id] == Rect(x: -820, y: 0, width: 820, height: 800))
+        _ = runtime.setPinned(true)
+        runtime.setVisibleWidth(180, for: display.id)
+        let snapshot = service.snapshot()
+        #expect(service.maximizedFrame(on: display) == CGRect(x: -820, y: 0, width: 820, height: 800))
+        #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true).isEmpty)
+        #expect(commands.toggleMaximize().changed)
+        #expect(service.effectiveIntentStore.intent(for: try #require(snapshot.windows.first?.scope))?.zoomedWindowID == nil)
+    }
+
+    @Test
+    func reservedZoomReflowsAfterRestartAndWiderRail() throws {
+        let windows = [powerWindow(221, x: 150), powerWindow(222, x: 550)]
+        let provider = PowerUserProvider(windows: windows)
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-restart"))
+        let intents = LayoutIntentStore(path: tempPath("spec019-intents"))
+        let config = RoadieConfig(tiling: TilingConfig(defaultStrategy: .spatialBsp, gapsOuter: 0, gapsOuterLeft: 150))
+        let service = SnapshotService(provider: provider, frameWriter: writer, config: config, railSettings: .load(raw: ""), intentStore: intents, stageStore: store)
+        #expect(WindowCommandService(service: service, stageStore: store).toggleMaximize().changed)
+        var rail = RailSettings.load(raw: ""); rail.width = 230
+        let restarted = SnapshotService(provider: provider, frameWriter: writer, config: config, railSettings: rail, intentStore: intents, stageStore: store)
+        let snapshot = restarted.snapshot()
+        let scope = try #require(snapshot.windows.first(where: { $0.window.id == windows[0].id })?.scope)
+        let plan = restarted.applyPlan(from: snapshot)
+        #expect(plan.commands.first(where: { $0.window.id == windows[0].id })?.frame == Rect(x: 230, y: 0, width: 770, height: 800))
+        let maintainer = LayoutMaintainer(service: restarted, mouseButtonsPressed: { false }, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        #expect(writer.frames[windows[0].id] == Rect(x: 230, y: 0, width: 770, height: 800))
+        #expect(intents.intent(for: scope)?.zoomReservesRail == true)
+    }
+
+
+    @Test(arguments: [WindowManagementMode.spatialBsp, .bsp, .float])
+    func reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode: WindowManagementMode) throws {
+        let display = powerDisplay()
+        let active = powerWindow(281, x: 150, y: 0, width: 350, height: 800)
+        let sibling = powerWindow(282, x: 510, y: 0, width: 490, height: 800)
+        let other = powerWindow(283, x: 999, y: 799, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [active, sibling, other])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-stage-focus"))
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: mode, focusedWindowID: active.id, members: [
+                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame),
+                    PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame)]),
+                PersistentStage(id: StageID(rawValue: "2"), mode: mode, focusedWindowID: other.id, members: [
+                    PersistentStageMember(windowID: other.id, bundleID: other.bundleID, title: other.title,
+                                          frame: Rect(x: 150, y: 100, width: 300, height: 300))])])], activeDisplayID: display.id))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0, gapsOuterLeft: 150, gapsInner: 10)),
+            railSettings: .load(raw: ""), stageStore: store)
+        _ = service.apply(service.applyPlan(from: service.snapshot()))
+        let original = Dictionary(uniqueKeysWithValues: provider.snapshots.filter { $0.id != other.id }.map { ($0.id, $0.frame) })
+        let scope = try #require(service.snapshot().windows.first(where: { $0.window.id == active.id })?.scope)
+        if mode == .bsp {
+            service.effectiveIntentStore.save(LayoutIntent(scope: scope, windowIDs: [active.id, sibling.id], placements: original, source: .command))
+        }
+        #expect(WindowCommandService(service: service, stageStore: store).toggleMaximize().changed)
+        let stages = StageCommandService(service: service, store: store)
+        #expect(stages.switchTo("2", displayID: display.id).changed)
+        #expect(stages.switchTo("1", displayID: display.id).changed)
+        #expect(writer.frames[active.id] == Rect(x: 150, y: 0, width: 850, height: 800))
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomReservesRail == true)
+        provider.focusedID = sibling.id
+        let maintainer = LayoutMaintainer(service: service, mouseButtonsPressed: { false }, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+        #expect(provider.snapshots.first(where: { $0.id == active.id })?.frame == original[active.id])
+        #expect(provider.snapshots.first(where: { $0.id == sibling.id })?.frame == original[sibling.id])
+    }
+
+    @Test
+    func explicitTargetDoesNotDependOnFocusOrAffectOtherDisplay() throws {
+        let left = powerDisplay()
+        let right = powerDisplay("right-screen", index: 2, x: 1000)
+        let windows = [powerWindow(231, x: 150), powerWindow(232, x: 550), powerWindow(233, x: 1100)]
+        let provider = PowerUserProvider(displays: [left, right], windows: windows)
+        provider.focusedID = windows[0].id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-target"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0)), railSettings: .load(raw: ""), stageStore: store)
+        #expect(WindowCommandService(service: service, stageStore: store).toggleMaximize(windowID: windows[1].id).changed)
+        #expect(writer.frames[windows[1].id] == Rect(x: 150, y: 0, width: 850, height: 800))
+        #expect(writer.frames[windows[2].id] == nil)
+        #expect(provider.focusedID == windows[1].id)
+    }
+
+    @Test(arguments: [WindowManagementMode.float, .bsp, .masterStack, .spatialBsp])
+    func windowOpenedDuringZoomIsVisibleAfterRestoration(mode: WindowManagementMode) throws {
+        let active = powerWindow(291, x: 150)
+        let sibling = powerWindow(292, x: 550)
+        let newcomer = powerWindow(293, x: 420, y: 180, width: 300, height: 300)
+        let provider = PowerUserProvider(windows: [active, sibling])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-new-float"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0)),
+            railSettings: .load(raw: ""), stageStore: store)
+        let commands = WindowCommandService(service: service, stageStore: store)
+        #expect(commands.toggleMaximize().changed)
+        provider.snapshots.append(newcomer)
+        let maintainer = LayoutMaintainer(service: service, mouseButtonsPressed: { false }, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        #expect(writer.frames[newcomer.id]?.x == 999)
+        let capturedScope = try #require(service.snapshot().windows.first(where: { $0.window.id == active.id })?.scope)
+        let captured = try #require(service.effectiveIntentStore.intent(for: capturedScope))
+        #expect(captured.zoomedWindowID == active.id)
+        #expect(captured.zoomReservesRail == true)
+        #expect(captured.restorePlacements?[newcomer.id] == newcomer.frame)
+        let replay = service.applyPlan(from: service.snapshot())
+        if let pending = replay.commands.first(where: { $0.window.id == newcomer.id }) {
+            #expect(!powerDisplay().visibleFrame.cgRect.contains(CGPoint(x: pending.frame.cgRect.midX, y: pending.frame.cgRect.midY)))
+        }
+        let toggleResult = commands.toggleMaximize()
+        #expect(toggleResult.message.contains("off"))
+        #expect(toggleResult.changed)
+        let restored = try #require(provider.snapshots.first(where: { $0.id == newcomer.id }))
+        #expect(powerDisplay().visibleFrame.cgRect.contains(restored.frame.cgRect))
+        if mode == .float { #expect(restored.frame == newcomer.frame) }
+    }
+
+    @Test
+    func closingFloatZoomTargetRestoresRemainingWindowsWithoutFocus() throws {
+        let active = powerWindow(301, x: 150)
+        let sibling = powerWindow(302, x: 550)
+        let provider = PowerUserProvider(windows: [active, sibling])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-close-float"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float, gapsOuter: 0)),
+            railSettings: .load(raw: ""), stageStore: store)
+        let scope = try #require(service.snapshot().windows.first?.scope)
+        #expect(WindowCommandService(service: service, stageStore: store).toggleMaximize().changed)
+        provider.snapshots.removeAll { $0.id == active.id }
+        provider.focusedID = nil
+        let maintainer = LayoutMaintainer(service: service, mouseButtonsPressed: { false }, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+        #expect(provider.snapshots.first?.frame == sibling.frame)
+    }
+
+    @Test
+    func olderIntentDecodesAndReservedIntentRoundTrips() throws {
+        let scope = StageScope(displayID: powerDisplay().id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        let id = WindowID(rawValue: 241)
+        let original = [id: Rect(x: 150, y: 0, width: 850, height: 800)]
+        let old = LayoutIntent(scope: scope, windowIDs: [id], placements: original, source: .command, zoomedWindowID: id)
+        let encoder = JSONEncoder(); let decoder = JSONDecoder()
+        let bytes = try encoder.encode(old)
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("zoomReservesRail"))
+        let decoded = try decoder.decode(LayoutIntent.self, from: bytes)
+        #expect(decoded.zoomReservesRail == nil)
+        #expect(decoded.restorePlacements == nil)
+        let reserved = LayoutIntent(scope: scope, windowIDs: [id], placements: original, source: .command,
+                                    zoomedWindowID: id, zoomReservesRail: true, restorePlacements: original)
+        #expect(try decoder.decode(LayoutIntent.self, from: encoder.encode(reserved)) == reserved)
+    }
+
+    @Test
+    func nativeFullscreenStartedDuringReservedZoomIsNeverResized() throws {
+        let active = powerWindow(311, x: 150)
+        let sibling = powerWindow(312, x: 550)
+        let provider = PowerUserProvider(windows: [active, sibling])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-native-transition"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float, gapsOuter: 0)),
+            railSettings: .load(raw: ""), stageStore: store)
+        let commands = WindowCommandService(service: service, stageStore: store)
+        #expect(commands.toggleMaximize().changed)
+        let framesBefore = writer.frameHistory
+        provider.snapshots[0].furniture = WindowFurniture(isNativeFullscreen: true)
+        #expect(!commands.toggleMaximize().changed)
+        #expect(writer.frameHistory == framesBefore)
+    }
+
+    @Test(arguments: [true, false])
+    func nativeFullscreenAndEmptyContainerAreRefused(native: Bool) {
+        var window = powerWindow(251, x: 100)
+        var furniture = WindowFurniture(isNativeFullscreen: native)
+        if !native { furniture.isResizable = false }
+        window.furniture = furniture
+        let provider = PowerUserProvider(windows: [window])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-native"))
+        let service = SnapshotService(provider: provider, frameWriter: writer, railSettings: .load(raw: ""), stageStore: store)
+        #expect(!WindowCommandService(service: service, stageStore: store).toggleMaximize().changed)
+        #expect(writer.frames.isEmpty)
+        var rail = RailSettings.load(raw: ""); rail.width = 1000
+        let narrow = SnapshotService(provider: provider, frameWriter: writer, railSettings: rail, stageStore: store)
+        #expect(narrow.maximizedFrame(on: powerDisplay()) == nil)
+    }
+}

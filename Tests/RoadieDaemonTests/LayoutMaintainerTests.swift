@@ -5009,3 +5009,24 @@ private final class ProbeBox: @unchecked Sendable {
     var value: Bool?
     init(_ value: Bool?) { self.value = value }
 }
+
+
+@Suite
+struct NavrailMaximizationRefusalTests {
+    @Test
+    func minimumWidthOverlappingRailDoesNotHideSiblingsOrPersistZoom() throws {
+        let left = powerWindow(261, x: 150, y: 0, width: 350, height: 800)
+        let sibling = powerWindow(262, x: 510, y: 0, width: 490, height: 800)
+        let provider = PowerUserProvider(windows: [left, sibling])
+        let writer = AlwaysClampedWriter(actual: Rect(x: 150, y: 0, width: 1000, height: 800))
+        let store = StageStore(path: tempPath("spec019-refusal"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0)), railSettings: .load(raw: ""), stageStore: store)
+        let scope = try #require(service.snapshot().windows.first?.scope)
+        let result = WindowCommandService(service: service, stageStore: store).toggleMaximize()
+        #expect(!result.changed)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+        #expect(provider.snapshots.first(where: { $0.id == sibling.id })?.frame == sibling.frame)
+        #expect(writer.attempts <= 2)
+    }
+}

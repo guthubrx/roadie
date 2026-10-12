@@ -43,7 +43,14 @@ roadie resize left|right|up|down
 roadie window display 2
 roadie window desktop 2 --follow
 roadie window reset
+roadie toggle maximize
+roadie toggle fullscreen
+roadie toggle native-fullscreen
 ```
+
+`roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. La bande reste réservée avec le masquage automatique. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.
+
+`roadie toggle fullscreen` utilise toute la zone utile, avec le rail au-dessus. `roadie toggle native-fullscreen` utilise le plein écran macOS. Les deux modes Roadie peuvent se remplacer directement ; répéter le mode actif restaure la disposition précédente.
 
 Cas d'usage :
 

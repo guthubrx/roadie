@@ -27,6 +27,10 @@ Roadie brings three ideas into one workflow:
 
 Roadie desktops and stages belong to Roadie. They do not create or control native macOS Spaces. SIP stays enabled. Window movement uses Accessibility. A private read-only system probe helps identify native fullscreen transitions; Roadie does not use private APIs to write or switch Spaces.
 
+`roadie toggle maximize` enlarges the active window while keeping the nav rail strip clear. Run it again to restore the layout. Siblings in the same stage are hidden while maximized. The full strip remains reserved with auto-hide enabled. The enabled title-bar menu also offers “Fenêtre → Maximiser / restaurer (garder le navrail)”.
+
+`roadie toggle fullscreen` uses the entire visible area, with the rail above it. `roadie toggle native-fullscreen` uses macOS fullscreen. Switching between the two Roadie zoom modes preserves the original layout; repeating the active mode restores it.
+
 ## What Roadie Does Today
 
 | Area | Current behavior |

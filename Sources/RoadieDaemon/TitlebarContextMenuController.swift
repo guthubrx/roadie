@@ -96,6 +96,7 @@ public enum WindowContextActionKind: String, Equatable, Codable, Sendable {
     case pinDesktop = "pin_desktop"
     case pinAllDesktops = "pin_all_desktops"
     case unpin
+    case maximize
     case affinityApp = "affinity_app"
     case affinityAppTitle = "affinity_app_title"
     case removeAffinityApp = "remove_affinity_app"
@@ -373,6 +374,14 @@ public final class TitlebarContextMenuController {
     ) {
         let parent = NSMenuItem(title: "Fenêtre", action: nil, keyEquivalent: "")
         let submenu = NSMenu(title: "Fenêtre")
+        addActionItem(
+            title: "Maximiser / restaurer (garder le navrail)",
+            kind: .maximize,
+            windowID: windowID,
+            sourceScope: sourceScope,
+            to: submenu
+        )
+        submenu.addItem(.separator())
         if let pin {
             let stateItem = NSMenuItem(
                 title: pin.pinScope == .desktop ? "Pin actuel : ce desktop" : "Pin actuel : tous les desktops",

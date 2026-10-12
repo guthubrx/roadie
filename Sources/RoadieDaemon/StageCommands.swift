@@ -1184,7 +1184,14 @@ public struct StageCommandService {
             for member in transition.targetStage?.members ?? [] {
                 guard let window = windowsByID[member.windowID] else { continue }
                 if fullscreenMemberID == nil || member.windowID == fullscreenMemberID {
-                    placement.restoring[member.windowID] = member.frame.cgRect
+                    if member.windowID == fullscreenMemberID,
+                       service.commandLayoutIntent(scope: targetScope)?.zoomReservesRail == true {
+                        if let frame = service.maximizedFrame(on: display) {
+                            placement.restoring[member.windowID] = frame
+                        }
+                    } else {
+                        placement.restoring[member.windowID] = member.frame.cgRect
+                    }
                 } else {
                     placement.hiding[member.windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
                 }

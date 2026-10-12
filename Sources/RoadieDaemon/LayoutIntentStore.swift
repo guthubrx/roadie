@@ -16,6 +16,10 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
     /// Posé par `toggleFullscreen`, lu par le moteur de disposition. nil = pas de zoom.
     /// L'encodage synthétisé utilise `encodeIfPresent` : la clé n'est écrite que si elle est posée.
     public var zoomedWindowID: WindowID?
+    /// Maximisation qui réserve la bande complète du navrail ; absent = plein écran existant.
+    public var zoomReservesRail: Bool?
+    /// Disposition avant le premier zoom, conservée lors du changement de mode.
+    public var restorePlacements: [WindowID: Rect]?
     /// Début d'absence du display de l'intent ; l'intent est purgé après 10 min (SPEC-016 T015).
     public var displayMissingSince: Date?
 
@@ -25,7 +29,9 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         placements: [WindowID: Rect],
         createdAt: Date = Date(),
         source: Source = .auto,
-        zoomedWindowID: WindowID? = nil
+        zoomedWindowID: WindowID? = nil,
+        zoomReservesRail: Bool? = nil,
+        restorePlacements: [WindowID: Rect]? = nil
     ) {
         self.scope = scope
         self.windowIDs = windowIDs
@@ -33,6 +39,8 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         self.createdAt = createdAt
         self.source = source
         self.zoomedWindowID = zoomedWindowID
+        self.zoomReservesRail = zoomReservesRail
+        self.restorePlacements = restorePlacements
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -42,6 +50,8 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         case createdAt
         case source
         case zoomedWindowID
+        case zoomReservesRail
+        case restorePlacements
         case displayMissingSince
     }
 
@@ -53,6 +63,8 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.source = (try container.decodeIfPresent(LayoutIntent.Source.self, forKey: .source)) ?? .auto
         self.zoomedWindowID = try container.decodeIfPresent(WindowID.self, forKey: .zoomedWindowID)
+        self.zoomReservesRail = try container.decodeIfPresent(Bool.self, forKey: .zoomReservesRail)
+        self.restorePlacements = try container.decodeIfPresent([WindowID: Rect].self, forKey: .restorePlacements)
         self.displayMissingSince = try container.decodeIfPresent(Date.self, forKey: .displayMissingSince)
     }
 }

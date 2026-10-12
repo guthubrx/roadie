@@ -482,68 +482,96 @@ public struct WindowCommandService {
     }
 
     public func toggleFullscreen() -> WindowCommandResult {
+        toggleZoom(reservingRail: false)
+    }
+
+    /// O(w log w) avec restauration d'arbre ; validation sans arbre bornée à O(w²).
+    public func toggleMaximize(windowID: WindowID? = nil) -> WindowCommandResult {
+        toggleZoom(reservingRail: true, windowID: windowID)
+    }
+
+    /// O(w) à l'entrée ; la sortie réutilise le coût du plan du scope (O(w log w), validation O(w²)).
+    private func toggleZoom(reservingRail: Bool, windowID: WindowID? = nil) -> WindowCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
-        guard let active = activeWindow(in: snapshot),
+        let name = reservingRail ? "maximize" : "fullscreen"
+        // La maximisation vise le focus réel, même si le plein écran natif le rend non tilable.
+        // Le repli de sélection du plein écran historique reste inchangé.
+        let preferredID = windowID ?? (reservingRail ? service.focusedWindowID() : nil)
+        let selected = preferredID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
+        if reservingRail, let selected,
+           selected.window.furniture?.isNativeFullscreen == true || selected.window.furniture?.isResizable == false {
+            return WindowCommandResult(message: "toggle maximize: failed, refused native-fullscreen or non-resizable window", changed: false)
+        }
+        guard let active = preferredID == nil ? activeWindow(in: snapshot) : selected,
               let scope = active.scope,
+              snapshot.state.activeScope(on: scope.displayID) == scope,
               let display = snapshot.displays.first(where: { $0.id == scope.displayID })
         else {
-            return WindowCommandResult(message: "toggle fullscreen: no active window", changed: false)
+            return WindowCommandResult(message: "toggle \(name): no active window", changed: false)
         }
-        // La commande reste dans le scope de la fenêtre active : seul lui est soustrait au maintien.
-        beginLayoutCommand("window.toggle_fullscreen", scopes: [scope])
-        defer { finishLayoutCommand("window.toggle_fullscreen", scopes: [scope]) }
+        guard !reservingRail || (active.window.isTileCandidate
+            && active.window.furniture?.isNativeFullscreen != true
+            && active.window.furniture?.isResizable != false) else {
+            return WindowCommandResult(message: "toggle maximize: failed, window unavailable for tiling", changed: false)
+        }
+        let cause = "window.toggle_\(name)"
+        beginLayoutCommand(cause, scopes: [scope])
+        defer { finishLayoutCommand(cause, scopes: [scope]) }
 
-        let visible = display.visibleFrame.cgRect.integral
-        let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
-        // Sortie du zoom si l'intent de commande marque cette fenêtre comme zoomée. Le repli
-        // par taille ne sert qu'à choisir le sens du basculement (zoomer une fenêtre qui
-        // remplit déjà la zone ne changerait rien) ; il ne classe pas la fenêtre en plein écran.
-        let isZoomed = service.commandLayoutIntent(scope: scope)?.zoomedWindowID == active.window.id
-            || framesAreClose(active.window.frame.cgRect, visible)
-        if isZoomed {
-            // L'intent zoomé est retiré AVANT de calculer le plan, sinon le plan rejouerait le zoom.
-            service.removeLayoutIntent(scope: scope)
-            let scopedWindows = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0) })
-            let fullPlan = service.applyPlan(from: snapshot, generation: generation)
-            let plan = ApplyPlan(commands: fullPlan.commands.filter { command in
-                scopedWindows[command.window.id]?.scope == scope
-            })
+        let previous = service.commandLayoutIntent(scope: scope)
+        let sameMode = previous?.zoomedWindowID == active.window.id
+            && (previous?.zoomReservesRail == true) == reservingRail
+        let implicitFullscreen = !reservingRail && previous?.zoomedWindowID == nil
+            && framesAreClose(active.window.frame.cgRect, display.visibleFrame.cgRect.integral)
+        if sameMode || implicitFullscreen {
+            let plan = service.restoreZoomLayoutIntent(scope: scope, from: snapshot, generation: generation)
             let result = service.apply(plan, generation: generation)
             _ = focusWindow(active.window)
             return WindowCommandResult(
-                message: "toggle fullscreen off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+                message: "toggle \(name) off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
                 changed: result.failed < result.attempted || plan.commands.isEmpty
             )
         }
 
-        guard let appliedFrame = service.setFrame(visible, of: active.window, generation: generation) else {
-            _ = focusWindow(active.window)
-            return WindowCommandResult(message: "toggle fullscreen on: changed=false", changed: false)
+        let target = reservingRail ? service.maximizedFrame(on: display) : display.visibleFrame.cgRect.integral
+        guard let target, !target.isEmpty,
+              let appliedFrame = service.setFrame(target, of: active.window, generation: generation) else {
+            return WindowCommandResult(message: "toggle \(name) on: failed, refused frame", changed: false)
         }
+        if reservingRail && (!display.visibleFrame.cgRect.contains(appliedFrame)
+            || appliedFrame.minX < target.minX || appliedFrame.isEmpty) {
+            _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation)
+            return WindowCommandResult(message: "toggle maximize: failed, refused incompatible application minimum size", changed: false)
+        }
+        let original = previous?.restorePlacements ?? (previous?.zoomedWindowID == nil ? previous?.placements : nil)
+            ?? Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
+                guard entry.scope == scope, entry.window.isTileCandidate,
+                      !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays) else { return nil }
+                return (entry.window.id, entry.window.frame)
+            })
         let zoomedFrame = Rect(appliedFrame)
         persistFrame(zoomedFrame, for: active.window, in: scope)
         let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot, generation: generation)
-        // Placements = cadres réellement appliqués (FR-012) : fenêtre zoomée, voisines cachées,
-        // autres fenêtres tilables du scope à leur cadre observé.
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
             return (entry.window.id, entry.window.frame)
         })
         placements.merge(hiddenFrames) { _, hidden in hidden }
         placements[active.window.id] = zoomedFrame
+        let ordered = previous.flatMap { $0.zoomedWindowID == nil ? nil : $0.windowIDs }
+            ?? service.orderedWindowIDs(in: scope, from: snapshot)
         service.effectiveIntentStore.save(LayoutIntent(
             scope: scope,
             windowIDs: ordered,
             placements: placements,
             source: .command,
-            zoomedWindowID: active.window.id
+            zoomedWindowID: active.window.id,
+            zoomReservesRail: reservingRail,
+            restorePlacements: original
         ))
         _ = focusWindow(active.window)
-        return WindowCommandResult(
-            message: "toggle fullscreen on: changed=true",
-            changed: true
-        )
+        return WindowCommandResult(message: "toggle \(name) on: changed=true", changed: true)
     }
 
     private func persistFrame(_ frame: Rect, for window: WindowSnapshot, in scopeID: StageScope) {

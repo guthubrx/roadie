@@ -10,6 +10,10 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 - [Événements et API de requêtes](events-query.md)
 - [Cas d’usage](use-cases.md)
 
+`roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. La bande reste réservée avec le masquage automatique. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.
+
+`roadie toggle fullscreen` utilise toute la zone utile, avec le rail au-dessus. `roadie toggle native-fullscreen` utilise le plein écran macOS. Les deux modes Roadie peuvent se remplacer directement ; répéter le mode actif restaure la disposition précédente.
+
 ## Fonctions Actuelles
 
 Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Chaque écran garde son bureau courant, son stage actif et sa disposition. SIP reste actif. Roadie ne pilote pas les Spaces natifs de macOS.

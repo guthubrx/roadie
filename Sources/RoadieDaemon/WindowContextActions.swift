@@ -75,6 +75,13 @@ public struct WindowContextActions {
         }
 
         switch action.kind {
+        case .maximize:
+            let result = WindowCommandService(
+                service: snapshotService,
+                stageStore: stageStore,
+                events: eventLog
+            ).toggleMaximize(windowID: action.windowID)
+            return WindowContextActionResult(message: result.message, changed: result.changed)
         case .affinityApp:
             return saveAffinity(kind: .app, window: entry.window, scope: scope, snapshot: snapshot)
         case .affinityAppTitle:

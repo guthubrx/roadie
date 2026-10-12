@@ -1196,8 +1196,8 @@ public extension SnapshotService {
             let effectiveMode = mode ?? stage.mode
             if effectiveMode.usesTreeEngine {
                 commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode, generation: generation).commands)
-            } else if effectiveMode.isTiled,
-               let intent = validIntent(for: scope, from: snapshot) {
+            } else if effectiveMode.isTiled || intentStore.intent(for: scope)?.zoomedWindowID != nil,
+                      let intent = validIntent(for: scope, from: snapshot) {
                 commands.append(contentsOf: applyPlan(from: snapshot, intent: intent).commands)
             } else {
                 let orderedWindowIDs = orderedWindowIDs(in: scope, from: snapshot, mode: effectiveMode)
@@ -1291,6 +1291,63 @@ public extension SnapshotService {
         return display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: placed.count, display: display))
     }
 
+    /// Zone utile avec marges de fenêtre seule et réservation complète du panneau, même masqué.
+    /// O(d) — d overrides d'écran ; le nombre de fenêtres ne change pas ce cadre.
+    func maximizedFrame(on display: DisplaySnapshot) -> CGRect? {
+        var gaps = outerGaps(windowCount: 1, display: display)
+        gaps.left = max(gaps.left, currentRailSettings().width)
+        let available = display.visibleFrame.cgRect.inset(by: gaps)
+        let minX = ceil(available.minX)
+        let minY = ceil(available.minY)
+        let width = floor(available.maxX) - minX
+        let height = floor(available.maxY) - minY
+        guard minX.isFinite, minY.isFinite, width.isFinite, height.isFinite,
+              width > 0, height > 0 else { return nil }
+        return CGRect(x: minX, y: minY, width: width, height: height)
+    }
+
+    /// Quitte le zoom par le mécanisme propre au mode : arbre, intent valide ou cadres float.
+    /// O(w log w) en mode arbre ; O(w²) pour valider les placements sans arbre.
+    func restoreZoomLayoutIntent(
+        scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.current
+    ) -> ApplyPlan {
+        let zoom = commandLayoutIntent(scope: scope)
+        removeLayoutIntent(scope: scope)
+        let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }
+        let mode = snapshot.state.stage(scope: scope)?.mode
+        if let saved = zoom?.restorePlacements, mode == .float {
+            return ApplyPlan(commands: entries.compactMap { entry in
+                guard let frame = saved[entry.window.id], frame.width > 0, frame.height > 0,
+                      !entry.window.frame.cgRect.matchesFrame(frame.cgRect) else { return nil }
+                return ApplyCommand(window: entry.window, frame: frame)
+            })
+        }
+        if let zoom, let saved = zoom.restorePlacements, mode?.usesTreeEngine != true {
+            let liveIDs = Set(entries.map(\.window.id))
+            let ordered = zoom.windowIDs.filter(liveIDs.contains)
+            if liveIDs == Set(ordered), liveIDs.isSubset(of: Set(saved.keys)) {
+                intentStore.save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))
+                _ = validIntent(for: scope, from: snapshot)
+            }
+        }
+        guard let mode else { return ApplyPlan(commands: []) }
+        if mode.usesTreeEngine {
+            return treeApplyPlan(for: scope, in: snapshot, mode: mode, generation: generation)
+        }
+        if mode.isTiled, let restored = validIntent(for: scope, from: snapshot) {
+            return applyPlan(from: snapshot, intent: restored)
+        }
+        return applyPlan(
+            from: snapshot,
+            scope: scope,
+            orderedWindowIDs: orderedWindowIDs(in: scope, from: snapshot, mode: mode),
+            mode: mode,
+            generation: generation
+        )
+    }
+
     /// Fenêtres placées par l'arbre : vivantes et hors plein écran natif (leur feuille reste). O(w).
     private func treePlacedWindowIDs(_ ids: [WindowID], in snapshot: DaemonSnapshot) -> [WindowID] {
         let placeable = Set(snapshot.windows.compactMap { entry in
@@ -1310,6 +1367,22 @@ public extension SnapshotService {
         source: LayoutIntent.Source,
         zoomedWindowID: WindowID? = nil
     ) {
+        // Une observation automatique actualise les cadres acceptés sans remplacer le zoom
+        // logique ni sa disposition à restaurer (nouvelle voisine, recalage de largeur du rail).
+        if source == .auto, zoomedWindowID == nil,
+           commandLayoutIntent(scope: scope)?.zoomedWindowID != nil {
+            intentStore.mutate { stored in
+                guard var zoom = stored[scope.description], zoom.source == .command,
+                      zoom.zoomedWindowID != nil else { return }
+                let liveIDs = Set(windowIDs)
+                let retained = zoom.windowIDs.filter(liveIDs.contains)
+                let retainedIDs = Set(retained)
+                zoom.windowIDs = retained + windowIDs.filter { !retainedIDs.contains($0) }
+                zoom.placements = placements
+                stored[scope.description] = zoom
+            }
+            return
+        }
         // Modes à arbre : aucun intent automatique persisté, l'arbre fait foi (R2, T080).
         if source == .auto, zoomedWindowID == nil,
            stageStore.state().scopes
@@ -1512,7 +1585,7 @@ public extension SnapshotService {
     }
 
     private func validIntent(for scope: StageScope, from snapshot: DaemonSnapshot) -> LayoutIntent? {
-        guard let intent = intentStore.intent(for: scope) else { return nil }
+        guard var intent = intentStore.intent(for: scope) else { return nil }
         let scopedIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
         })
@@ -1523,6 +1596,11 @@ public extension SnapshotService {
             guard scopedIDs.contains(zoomedWindowID), intent.placements[zoomedWindowID] != nil else {
                 removeInvalidIntent(scope: scope)
                 return nil
+            }
+            if intent.zoomReservesRail == true {
+                guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
+                      let frame = maximizedFrame(on: display) else { return nil }
+                intent.placements[zoomedWindowID] = Rect(frame)
             }
             return intent
         }

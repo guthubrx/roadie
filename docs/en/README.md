@@ -10,6 +10,10 @@ English guides for the current `main` sources. The [root README](../../README.md
 - [Events and Query API](events-query.md)
 - [Use cases](use-cases.md)
 
+`roadie toggle maximize` enlarges the active window while keeping the nav rail strip clear. Run it again to restore the layout. Siblings in the same stage are hidden while maximized. The full strip remains reserved with auto-hide enabled. The enabled title-bar menu also offers “Fenêtre → Maximiser / restaurer (garder le navrail)”.
+
+`roadie toggle fullscreen` uses the entire visible area, with the rail above it. `roadie toggle native-fullscreen` uses macOS fullscreen. Switching between the two Roadie zoom modes preserves the original layout; repeating the active mode restores it.
+
 ## Current Capabilities
 
 Roadie combines automatic tiling, named stages, and Roadie virtual desktops. Each display keeps its own current desktop, active stage, and layout. It keeps SIP enabled and does not control native macOS Spaces.

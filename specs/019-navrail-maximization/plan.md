@@ -1,0 +1,53 @@
+# Plan : Maximisation en laissant la place au navrail
+
+**Branche** : `019-navrail-maximization` | **Date** : 2026-10-12 | **Spec** : [spec.md](spec.md)
+
+## Résumé
+
+Étendre le zoom de commande existant avec une réservation explicite du rail. Garder le marqueur zoomedWindowID comme source de protection du scope. Calculer un seul cadre de maximisation à partir du display visible et des marges de fenêtre seule, avec une marge gauche au moins égale à RailSettings.width. Réserver la largeur complète, même en auto-hide. Persister des champs optionnels pour distinguer les modes et restaurer les placements précédents.
+
+## Contexte technique
+
+- Swift 6, SwiftPM, macOS 14+, AppKit et Accessibilité.
+- Dépendances existantes seulement : RoadieCore, RoadieAX, RoadieStages, RoadieTiler, TOMLKit.
+- Stockage : LayoutIntentStore JSON atomique et StageStore existants.
+- Tests : Swift Testing avec les fixtures PowerUserProvider/Writer et LayoutMaintainer existantes.
+- Coût : O(w) pour capture/restauration, O(w log w) pour les plans existants ; aucune boucle de scan nouvelle.
+- Contraintes : un scope ciblé, pas de Space natif créé, cadres réellement acceptés, compatibilité des anciens intents.
+
+## Contrôle constitutionnel
+
+PASS avant recherche et après conception : documentation française, worktree dédié, tests de comportements avant livraison, aucune nouvelle dépendance, aucune couche de service nouvelle. Articles XIX/XX : un calcul de cadre partagé et une extension de la bascule actuelle évitent deux mécaniques concurrentes. Les hooks de commit optionnels sont reportés à la livraison, selon le pipeline invoqué. Le numéro 018 est occupé par un autre worktree ; 019 est isolé. Le pointeur courant 017 désignait une session livrée ; la demande nouvelle ouvre 019.
+
+## Structure
+
+Artefacts : spec.md, plan.md, research.md, data-model.md, contracts/cli.md, quickstart.md, reuse-audit.md, tasks.md et checklist requirements.md.
+
+Code existant étendu :
+- Sources/RoadieDaemon/LayoutIntentStore.swift : champs optionnels zoomReservesRail et restorePlacements.
+- Sources/RoadieDaemon/WindowCommands.swift : toggleMaximize(windowID:), bascule commune des deux zooms, capture unique/restauration des cadres, validation des cadres acceptés avant masquage.
+- Sources/RoadieDaemon/DaemonSnapshot.swift : maximizedFrame(on:) et interprétation actualisée de l'intent réservé dans validIntent ; restoration du zoom partagé.
+- Sources/RoadieDaemon/LayoutMaintainer.swift : recalage et focus caché utilisant le cadre réservé ; sortie du zoom sur focus d'une voisine restaure la disposition sauvegardée.
+- Sources/RoadieDaemon/StageCommands.swift : retour de stage avec cadre réservé recalculé.
+- Sources/RoadieDaemon/CLICommandRouter.swift : route et aide toggle maximize.
+- Sources/RoadieDaemon/TitlebarContextMenuController.swift et WindowContextActions.swift : action maximisation ciblée, sous-menu Fenêtre existant.
+- Tests/RoadieDaemonTests : tests dans les suites existantes, sans nouvelles fixtures de stockage.
+- README.md, README.fr.md, docs/en/README.md, docs/fr/README.md et docs/en/cli.md, docs/fr/cli.md : comportement et commandes.
+
+## Réutilisation de l'existant
+
+WindowCommands.toggleFullscreen (484) fournit application, masquage, focus et événements. LayoutIntentStore (4) accepte déjà des propriétés optionnelles. SnapshotService.outerGaps (1913) gère les overrides et smart gaps ; maximizedFrame force seulement la bande complète du rail. RailPanel (169) définit cette bande via config.railWidth, lui-même égal à RailSettings.width : on réserve le panneau, sans ajouter la largeur de carte 224 qui reste son contenu. LayoutMaintainer.fullscreenEntries (2295) reconnaît déjà le marqueur logique. StageCommands.targetFullscreenMemberID (1231) préserve ce marqueur. Les menus et routeurs existants suffisent.
+
+## Ordre et vérification
+
+1. Tests de cadre réservé, transitions, restauration, persistance ancienne et refus.
+2. Modèle et commande commune ; cadre partagé et protection après maintien.
+3. Intégration CLI/menu ciblé et documents anglais/français.
+4. Tests complets, convergence exigence par exigence, audit v14 restreint.
+5. Commit des seuls fichiers du manifeste, fusion sur main, push vérifié.
+6. make install puis make restart avec signature conservée ; doctor/self-test et audit d'état.
+7. Retirer seulement le worktree/branche de 019 et ses temporaires, conserver 018 et les fichiers préexistants.
+
+## Divergences volontaires
+
+Aucune duplication de service. Le calcul maximizedFrame est une règle métier nouvelle (réservation entière indépendante de l'auto-hide), utilisée par les commandes, les plans, le maintien et les transitions de stage. La disposition sauvegardée est un dictionnaire optionnel ; pas de copie récursive d'intent ni de pile de zooms.

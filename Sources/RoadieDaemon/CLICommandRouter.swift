@@ -179,7 +179,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "bookmark set|focus|jump|clear|list NAME"),
         CLICommandSpec(usage: "move|warp|resize left|right|up|down"),
         CLICommandSpec(usage: "mode bsp|spatialBsp|masterStack|float"),
-        CLICommandSpec(usage: "toggle fullscreen|native-fullscreen"),
+        CLICommandSpec(usage: "toggle maximize|fullscreen|native-fullscreen"),
         CLICommandSpec(usage: "toggle floating", implemented: false),
         CLICommandSpec(usage: "window display N"),
         CLICommandSpec(usage: "window desktop N [--follow]"),
@@ -267,6 +267,8 @@ public final class CLICommandRouter {
         switch command {
         case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query":
             return true
+        case "toggle":
+            return args.dropFirst().first == "maximize"
         case "restore":
             return args.dropFirst().first == "unhide-all"
         case "state":
@@ -635,6 +637,8 @@ public final class CLICommandRouter {
             let windowCommands = WindowCommandService(service: service)
             let result: WindowCommandResult
             switch subject {
+            case "maximize":
+                result = windowCommands.toggleMaximize()
             case "fullscreen":
                 result = windowCommands.toggleFullscreen()
             case "native-fullscreen":

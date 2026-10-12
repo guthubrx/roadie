@@ -1,14 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `009-roadie-target-mode`.
+Current SpecKit feature: `019-navrail-maximization`.
 
-For additional context about technologies to be used, project structure,
-shell commands, contracts, and architectural decisions, read:
-
-- `specs/009-roadie-target-mode/spec.md`
-- `specs/009-roadie-target-mode/plan.md`
-- `specs/009-roadie-target-mode/research.md`
-- `specs/009-roadie-target-mode/data-model.md`
-- `specs/009-roadie-target-mode/contracts/`
+Contexte :
+- `specs/019-navrail-maximization/spec.md`
+- `specs/019-navrail-maximization/plan.md`
+- `specs/019-navrail-maximization/research.md`
+- `specs/019-navrail-maximization/data-model.md`
+- `specs/019-navrail-maximization/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

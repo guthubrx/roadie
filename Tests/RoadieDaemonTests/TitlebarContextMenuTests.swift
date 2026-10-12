@@ -531,3 +531,27 @@ private func ignoringMemberTimestamps(_ state: PersistentStageState) -> Persiste
     }
     return copy
 }
+
+
+@Suite
+struct NavrailMaximizationContextActionTests {
+    @Test
+    func menuActionMaximizesTheSelectedWindowInsteadOfFocusedWindow() throws {
+        let windows = [powerWindow(271, x: 150), powerWindow(272, x: 600)]
+        let provider = PowerUserProvider(windows: windows)
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-menu"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0)), railSettings: .load(raw: ""), stageStore: store)
+        let snapshot = service.snapshot()
+        let scope = try #require(snapshot.windows.first(where: { $0.window.id == windows[1].id })?.scope)
+        let actions = WindowContextActions(snapshotService: service, stageStore: store,
+            eventLog: EventLog(path: tempPath("spec019-menu-events")))
+        let action = WindowContextAction(windowID: windows[1].id, kind: .maximize, targetID: "", sourceScope: scope)
+        #expect(actions.execute(action).changed)
+        #expect(writer.frames[windows[1].id] == Rect(x: 150, y: 0, width: 850, height: 800))
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == windows[1].id)
+        #expect(actions.execute(action).changed)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
+    }
+}

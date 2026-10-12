@@ -43,7 +43,14 @@ roadie resize left|right|up|down
 roadie window display 2
 roadie window desktop 2 --follow
 roadie window reset
+roadie toggle maximize
+roadie toggle fullscreen
+roadie toggle native-fullscreen
 ```
+
+`roadie toggle maximize` enlarges the active window while keeping the nav rail strip clear. Run it again to restore the layout. Siblings in the same stage are hidden while maximized. The full strip remains reserved with auto-hide enabled. The enabled title-bar menu also offers “Fenêtre → Maximiser / restaurer (garder le navrail)”.
+
+`roadie toggle fullscreen` uses the entire visible area, with the rail above it. `roadie toggle native-fullscreen` uses macOS fullscreen. Switching between the two Roadie zoom modes preserves the original layout; repeating the active mode restores it.
 
 Use cases:
 

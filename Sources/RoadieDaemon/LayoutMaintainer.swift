@@ -288,10 +288,16 @@ public final class LayoutMaintainer {
             suspension.scopes = activeScopes(in: snapshot).filter(suspension.covers)
             tickExcludedScopes = settlingScopes.union(suspension.scopes)
         }
+        let closedZoomRestoration = closedZoomRestorationCommands(in: snapshot)
         let focusRestore = focusedHiddenRestore(in: snapshot)
 
         // 2. Calcul des placements depuis la copie de travail.
         var plan = PassPlan()
+        suppressKnownUnmovableFrames(in: ApplyPlan(commands: closedZoomRestoration), snapshot: snapshot)
+            .commands.forEach { plan.add($0, .layout) }
+        if let restoration = focusRestore?.restoration {
+            suppressKnownUnmovableFrames(in: restoration, snapshot: snapshot).commands.forEach { plan.add($0, .layout) }
+        }
         let hiddenInactive = hideInactiveStageCommands(in: snapshot)
         let hiddenSiblings = fullscreenSiblingHideCommands(in: snapshot)
         let restoredPins = pinRestoreCommands(in: snapshot)
@@ -1550,6 +1556,21 @@ public final class LayoutMaintainer {
         var activeHiddenWindowIDs: [WindowID]
         /// Fenêtre zoomée par une commande : elle reprend le cadre plein écran, sans disposition.
         var isFullscreen: Bool
+        var restoration: ApplyPlan?
+    }
+
+    /// La fermeture ou le départ de la fenêtre zoomée rend ses voisines visibles, même en float.
+    /// O(w + s) hors coût du plan réutilisé ; aucune observation supplémentaire.
+    private func closedZoomRestorationCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+        let liveScopes = Dictionary(snapshot.windows.compactMap { entry in
+            entry.scope.map { (entry.window.id, $0) }
+        }, uniquingKeysWith: { first, _ in first })
+        return activeScopes(in: snapshot).flatMap { scope -> [ApplyCommand] in
+            guard !tickExcludedScopes.contains(scope),
+                  let zoomedID = service.commandLayoutIntent(scope: scope)?.zoomedWindowID,
+                  liveScopes[zoomedID] != scope else { return [] }
+            return service.restoreZoomLayoutIntent(scope: scope, from: snapshot, generation: generations.current).commands
+        }
     }
 
     /// Détecte la fenêtre focalisée cachée (FR-002). Le focus sur une voisine cachée d'une fenêtre
@@ -1566,9 +1587,10 @@ public final class LayoutMaintainer {
               let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
         else { return nil }
 
+        var restoration: ApplyPlan?
         if let zoomedWindowID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID,
            zoomedWindowID != focusedWindowID {
-            service.removeLayoutIntent(scope: focusedScope)
+            restoration = service.restoreZoomLayoutIntent(scope: focusedScope, from: snapshot, generation: generations.current)
             tickFullscreen.removeAll { $0.entry.window.id == zoomedWindowID }
             events.append(RoadieEvent(type: "layout_zoom_exited", scope: focusedScope, details: [
                 "zoomedWindowID": String(zoomedWindowID.rawValue),
@@ -1586,7 +1608,8 @@ public final class LayoutMaintainer {
             scope: focusedScope,
             display: display,
             activeHiddenWindowIDs: activeHidden,
-            isFullscreen: tickFullscreen.contains { $0.entry.window.id == focusedWindowID }
+            isFullscreen: tickFullscreen.contains { $0.entry.window.id == focusedWindowID },
+            restoration: restoration
         )
     }
 
@@ -1596,6 +1619,9 @@ public final class LayoutMaintainer {
     private func focusRestoreCommand(_ restore: FocusRestore, plan: PassPlan, snapshot: DaemonSnapshot) -> ApplyCommand? {
         let window = restore.entry.window
         if restore.isFullscreen {
+            if service.commandLayoutIntent(scope: restore.scope)?.zoomReservesRail == true {
+                return reservedZoomCommand(for: window, on: restore.display)
+            }
             guard let target = fullscreenSizedRestoreTarget(for: window.frame.cgRect, on: restore.display) else { return nil }
             return ApplyCommand(window: window, frame: Rect(target))
         }
@@ -1646,7 +1672,11 @@ public final class LayoutMaintainer {
         let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
         // Focus réel du système (pas le focus mémorisé de la stage).
         let systemFocusedWindowID = service.focusedWindowID()
-        return snapshot.windows.compactMap { entry -> ApplyCommand? in
+        let intents = Dictionary(uniqueKeysWithValues: fullscreenScopes.compactMap { scope in
+            service.commandLayoutIntent(scope: scope).map { (scope, $0) }
+        })
+        var newlyRestorable: [StageScope: [WindowID: Rect]] = [:]
+        let commands = snapshot.windows.compactMap { entry -> ApplyCommand? in
             guard let scope = entry.scope,
                   fullscreenScopes.contains(scope),
                   !fullscreenWindowIDs.contains(entry.window.id),
@@ -1656,9 +1686,26 @@ public final class LayoutMaintainer {
                   let display = snapshot.displays.first(where: { $0.id == scope.displayID }),
                   !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { return nil }
+            if let saved = intents[scope]?.restorePlacements, saved[entry.window.id] == nil {
+                newlyRestorable[scope, default: [:]][entry.window.id] = entry.window.frame
+            }
             let frame = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
             return ApplyCommand(window: entry.window, frame: Rect(frame))
         }
+        // Une fenêtre ouverte pendant le zoom garde son cadre visible avant son premier masquage.
+        // Le store existant conserve la capture atomiquement, sans remplacer la disposition initiale.
+        if !newlyRestorable.isEmpty {
+            service.effectiveIntentStore.mutate { stored in
+                for (scope, additions) in newlyRestorable {
+                    guard var intent = stored[scope.description], intent.zoomedWindowID != nil,
+                          var saved = intent.restorePlacements else { continue }
+                    saved.merge(additions) { initial, _ in initial }
+                    intent.restorePlacements = saved
+                    stored[scope.description] = intent
+                }
+            }
+        }
+        return commands
     }
 
     /// Recalage d'une fenêtre zoomée par commande dont l'origine a glissé (redémarrage, changement
@@ -1669,11 +1716,28 @@ public final class LayoutMaintainer {
             guard let scope = entry.scope,
                   snapshot.state.activeScope(on: scope.displayID) == scope,
                   entry.window.furniture?.isNativeFullscreen != true,
-                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
-                  let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display)
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
             else { return nil }
+            if service.commandLayoutIntent(scope: scope)?.zoomReservesRail == true {
+                return reservedZoomCommand(for: entry.window, on: item.display)
+            }
+            guard let target = fullscreenSizedReanchorTarget(for: entry.window.frame.cgRect, on: item.display) else { return nil }
             return ApplyCommand(window: entry.window, frame: Rect(target))
         }
+    }
+
+    /// Recalage réservé : cible actualisée, avec les mêmes mémoires de refus que la disposition.
+    private func reservedZoomCommand(for window: WindowSnapshot, on display: DisplaySnapshot) -> ApplyCommand? {
+        guard let target = service.maximizedFrame(on: display) else { return nil }
+        let observed = window.frame.cgRect
+        if framesAreClose(observed, target, tolerance: LayoutTolerance.frameMatch), observed.minX >= target.minX,
+           display.visibleFrame.cgRect.contains(observed) { return nil }
+        let command = ApplyCommand(window: window, frame: Rect(target))
+        let id = window.id.rawValue
+        guard clampedFrames[id]?.matches(command: command) != true,
+              failedFrames[id]?.matches(command: command) != true,
+              revertedAppliedFrames[id]?.matches(command: command) != true else { return nil }
+        return command
     }
 
     /// Retour d'une fenêtre épinglée visible dans le scope actif à son dernier cadre. O(n).
@@ -2947,16 +3011,20 @@ public final class LayoutMaintainer {
         return frames
     }
 
-    /// Intent des scopes sans arbre touchés par une application sans refus. Les modes à arbre
-    /// n'enregistrent aucun intent automatique : l'arbre fait foi (R2).
+    /// Intent des scopes sans arbre touchés par une application sans refus. Un zoom de commande
+    /// conserve ses cadres acceptés aussi en mode arbre ; aucun intent automatique d'arbre normal (R2).
     private func persistLayoutIntent(in snapshot: DaemonSnapshot, result: ApplyResult, treeScopes: Set<StageScope>) {
         let resultFrames = Dictionary(uniqueKeysWithValues: result.items.compactMap { item -> (WindowID, Rect)? in
             guard item.status == .applied else { return nil }
             return (item.windowID, item.actual ?? item.requested)
         })
+        // Une lecture d'intent par scope arbre, puis uniquement des recherches en mémoire.
+        let zoomedTreeScopes = Set(treeScopes.filter {
+            service.commandLayoutIntent(scope: $0)?.zoomedWindowID != nil
+        })
         let touchedScopes = Set(snapshot.windows.compactMap { entry -> StageScope? in
             guard let scope = entry.scope,
-                  !treeScopes.contains(scope),
+                  !treeScopes.contains(scope) || zoomedTreeScopes.contains(scope),
                   resultFrames[entry.window.id] != nil || priorityWindowIDs.contains(entry.window.id)
             else { return nil }
             return snapshot.state.activeScope(on: scope.displayID) == scope ? scope : nil
