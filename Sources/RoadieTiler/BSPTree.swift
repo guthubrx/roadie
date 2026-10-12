@@ -376,6 +376,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     /// La frontière est celle du split ancêtre VISIBLE le plus proche qui sépare `window` de ce
     /// côté ; géométrie mesurée sans les feuilles `absent`. Le ratio est recalculé depuis `frame`,
     /// borné à [0,05 ; 0,95]. Arbre inchangé s'il n'y a pas de frontière de ce côté.
+    /// Avec `knownMinimums`, limite la frontière avant qu'une voisine refuse sa taille.
     // O(n²) au pire (recherche du chemin), n borné.
     public func adjustingFence(
         of window: WindowID,
@@ -383,7 +384,8 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         to frame: CGRect,
         in container: CGRect,
         innerGap: CGFloat = 0,
-        excluding absent: Set<WindowID> = []
+        excluding absent: Set<WindowID> = [],
+        knownMinimums: [WindowID: CGSize] = [:]
     ) -> BSPTree {
         let orientation: BSPOrientation = (edge == .left || edge == .right) ? .vertical : .horizontal
         // La fenêtre est du côté `first` quand la frontière est à sa droite ou en dessous.
@@ -404,7 +406,32 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             case .up: frame.minY - gap - origin
             }
             let ratio = min(max(Double(firstExtent / usable), Self.ratioBounds.lowerBound), Self.ratioBounds.upperBound)
-            return tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
+            let requested = tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, ratio) }
+            guard !knownMinimums.isEmpty else { return requested }
+            let before = tree.place(in: container, innerGap: innerGap)
+            func fits(_ candidate: BSPTree) -> Bool {
+                let frames = candidate.place(in: container, innerGap: innerGap)
+                return knownMinimums.allSatisfy { id, minimum in
+                    guard let original = before[id], let actual = frames[id] else { return true }
+                    // Une contrainte déjà infaisable ne doit pas empêcher tout geste,
+                    // mais la fenêtre concernée ne doit pas rétrécir davantage.
+                    return actual.width >= min(minimum.width, original.width)
+                        && actual.height >= min(minimum.height, original.height)
+                }
+            }
+            if fits(requested) { return requested }
+            var low = 0.0, high = 1.0
+            var accepted = tree
+            // O(16n) de plus : borne de 16 essais, uniquement au relâchement du geste.
+            // Les autres ratios et les feuilles absentes restent fixes.
+            for _ in 0..<16 {
+                let fraction = (low + high) / 2
+                let value = split.ratio + (ratio - split.ratio) * fraction
+                let candidate = tree.updatingSplit(at: split.path[...]) { orientation, _ in (orientation, value) }
+                if fits(candidate) { low = fraction; accepted = candidate }
+                else { high = fraction }
+            }
+            return accepted
         } ?? self
     }
 

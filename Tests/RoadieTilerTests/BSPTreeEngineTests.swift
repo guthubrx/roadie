@@ -237,6 +237,27 @@ struct BSPTreeEngineTests {
     // MARK: - Taille minimale (A2)
 
     @Test
+    func fenceRespectsKnownNeighborMinimumAndKeepsAbsentLeavesAndNestedRatios() {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.6,
+            first: .split(orientation: .vertical, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(99))),
+            second: .split(orientation: .horizontal, ratio: 0.3, first: .leaf(win(2)), second: .leaf(win(3))))
+        let updated = tree.adjustingFence(of: win(2), edge: .left, to: CGRect(x: 200, y: 0, width: 800, height: 180), in: container,
+            excluding: [win(99)], knownMinimums: [win(1): CGSize(width: 600, height: 0), win(99): CGSize(width: 9000, height: 9000)])
+        #expect(updated == tree)
+        #expect(updated.windowIDs.contains(win(99)))
+        #expect(updated.projected(excluding: [win(99)]).place(in: container, innerGap: 0)[win(1)]?.width == 600)
+    }
+
+    @Test
+    func alreadyInfeasibleHeightDoesNotBlockFeasibleWidthResize() {
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5, first: .leaf(win(1)), second: .leaf(win(2)))
+        let updated = tree.adjustingFence(of: win(1), edge: .right, to: CGRect(x: 0, y: 0, width: 800, height: 600), in: container,
+            knownMinimums: [win(1): CGSize(width: 100, height: 900), win(2): CGSize(width: 200, height: 0)])
+        #expect(updated.place(in: container, innerGap: 0)[win(1)]?.width == 800)
+        #expect(updated.place(in: container, innerGap: 0)[win(2)]?.width == 200)
+    }
+
+    @Test
     func minimumSizeCorrectionAdjustsNearestSplitOnConstrainedAxis() {
         // [[w1 / w2] | w3] : w2 exige 400 de haut → seul le split [w1 / w2] change.
         let tree = BSPTree.split(

@@ -1938,9 +1938,19 @@ struct LayoutMaintainerTests {
             frameWriter: writer,
             stageStore: store
         )
-        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store)
+        let clock = TestClock()
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), store: store, now: { clock.now })
 
         let tick = maintainer.tick()
+        let attempts = writer.attempts
+        for _ in 0..<20 {
+            clock.advance(0.1)
+            _ = maintainer.tick(cause: "deadline")
+        }
+        #expect(writer.attempts == attempts)
+        clock.advance(2)
+        _ = maintainer.tick()
+        #expect(writer.attempts > attempts)
         var state = store.state()
         let events = try String(contentsOfFile: eventPath, encoding: .utf8)
 
@@ -3393,6 +3403,7 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     var onWrite: () -> Void = {}
     /// Fenêtres dont la lecture AX fraîche échoue (T218).
     var unreadable: Set<WindowID> = []
+    var unwritable: Set<WindowID> = []
     /// Registre tenu par l'écrivain, comme `AXWindowFrameWriter` (commandes comprises, T219).
     var registry: WrittenFrameRegistry?
     var now: () -> Date = Date.init
@@ -3430,6 +3441,7 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     func setFrame(_ frame: CGRect, of window: WindowSnapshot) -> CGRect? {
         writes[window.id, default: []].append(Rect(frame))
         onWrite()
+        guard !unwritable.contains(window.id) else { return nil }
         if var forced = forcedResults[window.id], !forced.isEmpty {
             let actual = forced.removeFirst()
             forcedResults[window.id] = forced
@@ -4166,6 +4178,108 @@ struct TreeLayoutMaintainerTests {
         } else {
             Issue.record("arbre attendu")
         }
+    }
+
+    @Test(arguments: [false, true])
+    func recognizedBspGestureOverridesSavedGridAndSurvivesFocusChange(commandInProgress: Bool) {
+        let display = DisplaySnapshot(id: lotCDisplay().id, index: 1, name: "External", frame: Rect(x: 0, y: 0, width: 1000, height: 1000), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 1000), isMain: true)
+        let frames: [WindowID: Rect] = [
+            treeW1: Rect(x: 0, y: 0, width: 500, height: 499),
+            treeW2: Rect(x: 0, y: 500, width: 500, height: 500),
+            WindowID(rawValue: 3): Rect(x: 500, y: 0, width: 500, height: 499),
+            WindowID(rawValue: 4): Rect(x: 500, y: 500, width: 500, height: 500),
+        ]
+        let world = TreeWorld(displays: [display], frames: frames)
+        let tree = BSPTree.split(orientation: .vertical, ratio: 0.5,
+            first: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(treeW1), second: .leaf(treeW2)),
+            second: .split(orientation: .horizontal, ratio: 0.5, first: .leaf(WindowID(rawValue: 3)), second: .leaf(WindowID(rawValue: 4))))
+        let store = treeStore("bsp-four-quarters-gesture", display: display, tree: tree, frames: frames, mode: .bsp)
+        let gesture = GestureBox()
+        let activity = LayoutCommandActivity(path: tempPath("bsp-grid-command-activity"), enabled: true)
+        defer { activity.reset() }
+        let harness = TreeHarness("bsp-four-quarters-gesture", world: world, store: store, strategy: .bsp, takeGesture: gesture.take, commandActivity: activity)
+        _ = harness.maintainer.tick()
+        #expect(harness.service.hasValidLayoutIntent(scope: treeScope, in: harness.service.snapshot()))
+        harness.clock.advance(5)
+        if commandInProgress { activity.markActive(reason: "test", scopes: [treeScope], now: harness.clock.now, holdSeconds: 5) }
+        let id = WindowID(rawValue: 3)
+        gesture.session = GestureSession(windowID: 3, startFrame: frames[id]!.cgRect, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        world.frames[id] = Rect(x: 400, y: 0, width: 600, height: 499)
+        _ = harness.maintainer.tick(cause: "drag")
+        harness.clock.advance(0.5)
+        _ = harness.maintainer.tick(cause: "deadline")
+
+        #expect(world.frames[id] == Rect(x: 400, y: 0, width: 600, height: 499))
+        #expect(world.frames[treeW1]?.width == 400)
+        #expect(world.frames[treeW2]?.width == 400)
+        #expect(world.frames[WindowID(rawValue: 4)] == Rect(x: 400, y: 500, width: 600, height: 500))
+        #expect(harness.count("external_geometry_snapped_to_layout_model") == 0)
+        let settled = world.frames
+        world.focused = treeW2
+        world.frames[id] = frames[id]
+        harness.clock.advance(5)
+        _ = harness.maintainer.tick(cause: "ax:didActivateApplication")
+        #expect(world.frames == settled)
+    }
+
+    @Test
+    func knownMinimumLimitsGestureBeforeWritingRefusedNeighborSize() {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 650, height: 500)
+        world.minimumSizes[treeW1] = CGSize(width: 600, height: 0)
+        let store = treeStore("tree-known-minimum-gesture", tree: treeSideBySide, frames: world.frames)
+        let gesture = GestureBox()
+        let harness = TreeHarness("tree-known-minimum-gesture", world: world, store: store, takeGesture: gesture.take)
+        _ = harness.maintainer.tick(cause: "command:startup")
+        harness.clock.advance(0.11)
+        _ = harness.maintainer.tick(cause: "deadline")
+        harness.clock.advance(0.2)
+        _ = harness.maintainer.tick(cause: "deadline")
+        world.frames[treeW1] = Rect(x: 0, y: 0, width: 610, height: 500)
+        harness.clock.advance(2)
+        _ = harness.maintainer.tick(cause: "ax:AXWindowResized")
+        let start = world.frames[treeW2]!.cgRect
+        let previousWrites = world.writes[treeW1]?.count ?? 0
+        harness.clock.advance(5)
+        world.frames[treeW2] = Rect(x: 300, y: 0, width: 700, height: 500)
+        gesture.session = GestureSession(windowID: treeW2.rawValue, startFrame: start, startedAt: harness.clock.now, endedAt: harness.clock.now)
+        let tick = harness.maintainer.tick(cause: "drag")
+
+        #expect(tick.clamped == 0)
+        #expect((world.writes[treeW1]?.count ?? 0) == previousWrites)
+        #expect(world.frames[treeW1]?.width == 600)
+        #expect(world.frames[treeW2]?.x == 600)
+        harness.clock.advance(1)
+        #expect(harness.maintainer.tick().commands == 0)
+    }
+
+    @Test(arguments: [WindowManagementMode.bsp, .spatialBsp], [false, true])
+    func changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode: WindowManagementMode, geometryChanged: Bool) {
+        let target = lotCDisplay(id: "target", x: 1000)
+        let id = WindowID(rawValue: 9)
+        let world = TreeWorld(displays: [lotCDisplay(), target], frames: [id: Rect(x: 1200, y: 100, width: 300, height: 300)])
+        world.unwritable.insert(id)
+        let store = treeStore("drift-failure-recovery", tree: .leaf(id), frames: world.frames, mode: .bsp)
+        let harness = TreeHarness("drift-failure-recovery", world: world, store: store, strategy: targetMode)
+        #expect(harness.maintainer.tick().failed > 0)
+        #expect(store.state().scopes.first(where: { $0.displayID == lotCDisplay().id })?.stages.first?.mode == .bsp)
+        let initialWrites = world.totalWrites
+        for _ in 0..<20 {
+            harness.clock.advance(0.1)
+            _ = harness.maintainer.tick(cause: "deadline")
+        }
+        #expect(world.totalWrites == initialWrites)
+        if geometryChanged {
+            world.frames[id] = Rect(x: 1250, y: 100, width: 300, height: 300)
+            harness.clock.advance(0.2)
+            _ = harness.maintainer.tick(cause: "ax:AXWindowMoved")
+            #expect(world.totalWrites > initialWrites)
+        }
+        world.unwritable.remove(id)
+        harness.clock.advance(3.1)
+        #expect(harness.maintainer.tick().failed == 0)
+        #expect(harness.service.snapshot().windows.first(where: { $0.window.id == id })?.scope?.displayID == target.id)
+        #expect(harness.count("window.scope_reconciled_to_physical_display") + harness.count("window_manual_display_move_adopted") >= 1)
     }
 
     /// T231 : un clic hors du cadre, sur la poignée, doit conserver le redimensionnement au premier essai.

@@ -61,6 +61,8 @@ public final class LayoutMaintainer {
     private var cachedRulesVersion: String?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
+    /// Transfert échoué : attend avant de refaire la même réparation (même PID et même cadre).
+    private var failedDriftWindows: [WindowID: (window: WindowSnapshot, retryAt: Date)] = [:]
     /// Écritures réussies que l'application a annulées (modes sans arbre seulement, A3).
     private var revertedAppliedFrames: [UInt32: RevertedAppliedFrame] = [:]
     /// Référence d'observation des modes sans arbre (A3) : un changement s'y lit par différence.
@@ -177,6 +179,7 @@ public final class LayoutMaintainer {
             return MaintenanceTick(commands: 0, applied: 0, clamped: 0, failed: 0, accessibilityDenied: true)
         }
         let tickNow = now()
+        failedDriftWindows = failedDriftWindows.filter { tickNow < $0.value.retryAt }
         let cause = cause == "deadline" ? "deadline:\(dueDeadlineName(now: tickNow))" : cause
         forgetGoneWindows(liveWindowIDs: Set(snapshot.windows.map(\.window.id.rawValue)), now: tickNow)
         // Plein écran lu une seule fois, avant tout calcul de plan (R5).
@@ -197,6 +200,7 @@ public final class LayoutMaintainer {
             lastObservedFrames = scopedFrames(in: snapshot)
             clampedFrames.removeAll()
             failedFrames.removeAll()
+            failedDriftWindows.removeAll()
             revertedAppliedFrames.removeAll()
             events.append(RoadieEvent(type: "display.topology_settling", details: [
                 "from": lastDisplaySignature,
@@ -248,6 +252,14 @@ public final class LayoutMaintainer {
            let scope = snapshot.windows.first(where: { $0.window.id.rawValue == raw })?.scope,
            treeScopes.contains(scope) {
             generation = generations.next()
+        }
+        let resizedEntry = resizedGestureEntry(gesture, in: snapshot)
+        if let resizedEntry, let scope = resizedEntry.scope {
+            failedDriftWindows[resizedEntry.window.id] = nil
+            // Une commande antérieure ne doit pas consommer le geste manuel qui la suit.
+            suspension.resumed.insert(scope)
+            suspension.scopes.remove(scope)
+            tickExcludedScopes = settlingScopes.union(suspension.scopes)
         }
         let gestureWindowID = gesture?.windowID.map { WindowID(rawValue: $0) }
 
@@ -303,6 +315,7 @@ public final class LayoutMaintainer {
         })
         let nonTree = nonTreeLayout(
             in: snapshot,
+            manualResizeWindowIDs: resizedEntry.map { [$0.window.id] } ?? [],
             observedFrames: observedFrames,
             changedWindowIDs: windowIDs(changedWindowIDs, outside: tickExcludedScopes, in: snapshot),
             adoptedWindowIDs: Set(adoptedMoves.map(\.window.id) + driftMoves.map(\.window.id)),
@@ -336,6 +349,7 @@ public final class LayoutMaintainer {
         let scopesByID = Dictionary(snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } }, uniquingKeysWith: { first, _ in first })
         let treeDisplays = Set(treeScopes.map(\.displayID))
         let writable = plan.entries.compactMap { command, priority -> ApplyCommand? in
+            guard !defersFailedDrift(command.window, now: tickNow) else { return nil }
             guard let scope = scopesByID[command.window.id] else { return command }
             if settlingScopes.contains(scope) || suspension.covers(scope) { return nil }
             if priority != .layout, treeDisplays.contains(scope.displayID),
@@ -441,6 +455,7 @@ public final class LayoutMaintainer {
             ("drift_hold", lastDisplayTopologyChangedAt?.addingTimeInterval(LayoutTolerance.displayDriftReconcileHold))
         ].compactMap { name, at in at.map { (name, $0, false) } }
         due += membershipActivity.values.compactMap(\.burstEnd).map { ("burst", $0, true) }
+        due += failedDriftWindows.values.map { ("drift_retry", $0.retryAt, false) }
         for guardState in spaceGuards.values {
             due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
             due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))
@@ -652,6 +667,7 @@ public final class LayoutMaintainer {
     /// intent de commande, anti-rebond), réduite à produire des commandes pour le plan unifié.
     private func nonTreeLayout(
         in snapshot: DaemonSnapshot,
+        manualResizeWindowIDs: Set<WindowID>,
         observedFrames: [UInt32: Rect],
         changedWindowIDs: Set<WindowID>,
         adoptedWindowIDs: Set<WindowID>,
@@ -665,6 +681,21 @@ public final class LayoutMaintainer {
             return NonTreeLayout(
                 commands: nonTreeLayoutPlan(from: snapshot, priority: adoptedWindowIDs, excluding: excluded),
                 priorityWindowIDs: adoptedWindowIDs
+            )
+        }
+        let resized = windowIDs(manualResizeWindowIDs, outside: excluded, in: snapshot)
+        if !resized.isEmpty {
+            removeLayoutIntents(for: resized, in: snapshot)
+            priorityWindowIDs = []
+            manualResizeApplyAfter = nil
+            lastCommandIntentAt = nil
+            events.append(RoadieEvent(type: "manual_resize_detected", details: [
+                "windowIDs": resized.map { String($0.rawValue) }.sorted().joined(separator: ","),
+                "source": "gesture"
+            ]))
+            return NonTreeLayout(
+                commands: nonTreeLayoutPlan(from: snapshot, priority: resized, excluding: excluded),
+                manualResizeDetected: true, priorityWindowIDs: resized, persistCurrentIntents: true
             )
         }
         let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: excluded, in: snapshot)
@@ -797,6 +828,19 @@ public final class LayoutMaintainer {
     }
 
     // MARK: - Disposition des modes à arbre (A2, A4, A13, A14, A16, R9)
+
+    /// Un clic seul ne remplace jamais un intent : il faut une taille réellement changée. O(n).
+    private func resizedGestureEntry(_ gesture: GestureSession?, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
+        guard let gesture, let id = gesture.windowID, let start = gesture.startFrame,
+              let entry = snapshot.windows.first(where: { $0.window.id.rawValue == id }),
+              entry.window.isTileCandidate, let scope = entry.scope,
+              snapshot.state.activeScope(on: scope.displayID) == scope,
+              snapshot.state.stage(scope: scope)?.mode.isTiled == true
+        else { return nil }
+        let current = entry.window.frame.cgRect
+        return abs(current.width - start.width) > LayoutTolerance.frameMatch
+            || abs(current.height - start.height) > LayoutTolerance.frameMatch ? entry : nil
+    }
 
     /// Disposition des scopes à arbre : l'arbre fait foi. Pour chaque fenêtre dont la frame
     /// observée s'écarte de sa cible, dans l'ordre : session de geste, écho, réponse de
@@ -960,7 +1004,7 @@ public final class LayoutMaintainer {
         let adjusted = edges.reduce(tree) { tree, edge in
             tree.adjustingFence(
                 of: entry.window.id, edge: edge, to: current, in: geometry.container,
-                innerGap: geometry.innerGap, excluding: geometry.absent
+                innerGap: geometry.innerGap, excluding: geometry.absent, knownMinimums: treeMinimums
             )
         }
         guard adjusted != tree else { return true }
@@ -2990,6 +3034,13 @@ public final class LayoutMaintainer {
                 if let origin = move.origin,
                    let stageIndex = source.stages.firstIndex(where: { $0.id == move.source.stageID }) {
                     let members = source.stages[stageIndex].members
+                    // Le relevé intermédiaire a pu adopter le mode par défaut de cette stage
+                    // momentanément vide. L'échec doit rendre aussi son mode et son arbre.
+                    // Une stage remplie entre-temps garde les changements concurrents.
+                    if members.isEmpty && source.stages[stageIndex].mode == defaultMode {
+                        source.stages[stageIndex].mode = origin.mode
+                        source.stages[stageIndex].bspTree = origin.bspTree
+                    }
                     source.stages[stageIndex].members.insert(origin.member, at: min(origin.index, members.count))
                     if origin.wasFocused {
                         source.stages[stageIndex].focusedWindowID = move.window.id
@@ -3024,6 +3075,7 @@ public final class LayoutMaintainer {
             var reconciled: [ReconciledDisplayMove] = []
             for entry in snapshot.windows {
                 guard let sourceScope = entry.scope,
+                      !defersFailedDrift(entry.window, now: tickNow),
                       !excludedScopes.contains(sourceScope),
                       entry.pin == nil,
                       entry.window.isOnScreen,
@@ -3071,6 +3123,10 @@ public final class LayoutMaintainer {
         let movedIDs = Set(moves.map(\.window.id))
         let failed = result.items.filter { movedIDs.contains($0.windowID) && $0.status == .failed }
         if !failed.isEmpty {
+            let failedIDs = Set(failed.map(\.windowID))
+            for move in moves where failedIDs.contains(move.window.id) {
+                failedDriftWindows[move.window.id] = (move.window, now().addingTimeInterval(LayoutTolerance.recentRefusal))
+            }
             revertReconciledDisplayMoves(moves)
             events.append(RoadieEvent(type: "window.scope_reconcile_failed", details: [
                 "windows": moves.map { String($0.window.id.rawValue) }.sorted().joined(separator: ","),
@@ -3091,6 +3147,13 @@ public final class LayoutMaintainer {
                 "reason": "stable_visible_frame_on_different_display"
             ]))
         }
+    }
+
+    /// O(1) : un cadre changé ou une nouvelle identité permet une réparation immédiate.
+    private func defersFailedDrift(_ window: WindowSnapshot, now: Date) -> Bool {
+        guard let failure = failedDriftWindows[window.id] else { return false }
+        return now < failure.retryAt && window.pid == failure.window.pid
+            && window.frame.isClose(to: failure.window.frame, tolerance: LayoutTolerance.unchangedSinceRefusal)
     }
 
     /// Fenêtres des modes sans arbre dont le cadre a changé depuis la passe précédente (A3). Les
@@ -3207,6 +3270,8 @@ private struct ReconciledDisplayMove {
         var index: Int
         var wasFocused: Bool
         var previousFocusedWindowID: WindowID?
+        var mode: WindowManagementMode
+        var bspTree: BSPTree?
 
         /// Place du membre dans la stage `scope` de `state`, nil s'il n'y est pas.
         init?(in state: PersistentStageState, windowID: WindowID, scope: StageScope) {
@@ -3219,6 +3284,8 @@ private struct ReconciledDisplayMove {
             self.index = index
             self.wasFocused = stage.focusedWindowID == windowID
             self.previousFocusedWindowID = stage.previousFocusedWindowID
+            self.mode = stage.mode
+            self.bspTree = stage.bspTree
         }
     }
 
