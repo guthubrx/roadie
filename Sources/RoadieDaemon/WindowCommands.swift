@@ -11,19 +11,17 @@ public enum Direction: String, Sendable {
     case down
 }
 
-public struct WindowCommandResult: Equatable, Sendable {
+public struct WindowCommandResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil
+    /// (statut non posé, code de sortie lu dans le message).
+    public var outcome: CommandOutcome?
 
-    public init(message: String, changed: Bool) {
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
         self.message = message
         self.changed = changed
-    }
-
-    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
-    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
-    static func persistenceFailure(_ command: String, _ error: Error) -> WindowCommandResult {
-        WindowCommandResult(message: JSONPersistence.commandFailureMessage(command, error), changed: false)
+        self.outcome = outcome ?? (changed ? .changed : nil)
     }
 }
 
@@ -65,7 +63,7 @@ public struct WindowCommandService {
             return result
         }
         let ok = focusWindow(pair.neighbor.window)
-        let result = WindowCommandResult(message: ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
+        let result = WindowCommandResult.changedOrFailed(ok ? "focused \(pair.neighbor.window.id)" : "focus failed", changed: ok)
         appendWindowCommandEvent(
             verb: "focus",
             direction: direction,
@@ -80,12 +78,12 @@ public struct WindowCommandService {
     public func focusBackAndForth() -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot), let scope = active.scope else {
-            return WindowCommandResult(message: "focus back-and-forth: no active window", changed: false)
+            return WindowCommandResult(message: "focus back-and-forth: no active window", changed: false, outcome: .noOp)
         }
         var state = stageStore.state()
         let persistentScope = state.scope(displayID: scope.displayID, desktopID: scope.desktopID)
         guard let stage = persistentScope.stages.first(where: { $0.id == scope.stageID }) else {
-            return WindowCommandResult(message: "focus back-and-forth: no active stage", changed: false)
+            return WindowCommandResult(message: "focus back-and-forth: no active stage", changed: false, outcome: .noOp)
         }
         let targetID = stage.previousFocusedWindowID.flatMap { previous in
             snapshot.windows.first { $0.window.id == previous && $0.scope == scope }?.window.id
@@ -93,19 +91,19 @@ public struct WindowCommandService {
         guard let targetID,
               let target = snapshot.windows.first(where: { $0.window.id == targetID && $0.scope == scope })?.window
         else {
-            return WindowCommandResult(message: "focus back-and-forth: no previous window", changed: false)
+            return WindowCommandResult(message: "focus back-and-forth: no previous window", changed: false, outcome: .noOp)
         }
         let ok = focusWindow(target)
-        return WindowCommandResult(message: ok ? "focus back-and-forth \(target.id.rawValue)" : "focus back-and-forth failed", changed: ok)
+        return WindowCommandResult.changedOrFailed(ok ? "focus back-and-forth \(target.id.rawValue)" : "focus back-and-forth failed", changed: ok)
     }
 
     public func focus(windowID: WindowID) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let target = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
-            return WindowCommandResult(message: "focus: unknown window \(windowID.rawValue)", changed: false)
+            return WindowCommandResult(message: "focus: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
         let ok = focusWindow(target)
-        return WindowCommandResult(message: ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
+        return WindowCommandResult.changedOrFailed(ok ? "focused \(target.id.rawValue)" : "focus failed", changed: ok)
     }
 
     /// Fenêtre active et arbre de son scope, si ce scope utilise le moteur à arbre
@@ -148,7 +146,7 @@ public struct WindowCommandService {
         switch verb {
         case .resize:
             guard let geometry, let frame = frames[id], let edge = BSPEdge(rawValue: direction.rawValue) else {
-                let result = WindowCommandResult(message: "resize \(direction.rawValue): window not in tree", changed: false)
+                let result = WindowCommandResult(message: "resize \(direction.rawValue): window not in tree", changed: false, outcome: .noOp)
                 appendWindowCommandEvent(verb: "resize", direction: direction, snapshot: snapshot, active: active, scope: scope, result: result, extra: ["strategy": "tree"])
                 return result
             }
@@ -208,8 +206,8 @@ public struct WindowCommandService {
             )
         }
         _ = focusWindow(active.window)
-        let result = WindowCommandResult(
-            message: "\(verb.rawValue) \(direction.rawValue): tree changed=\(changed) applied=\(tick?.applied ?? 0) failed=\(tick?.failed ?? 0)",
+        let result = WindowCommandResult.changedOrFailed(
+            "\(verb.rawValue) \(direction.rawValue): tree changed=\(changed) applied=\(tick?.applied ?? 0) failed=\(tick?.failed ?? 0)",
             changed: changed
         )
         appendWindowCommandEvent(
@@ -294,8 +292,8 @@ public struct WindowCommandService {
             }
         }
         _ = focusWindow(pair.active.window)
-        let commandResult = WindowCommandResult(
-            message: "move \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        let commandResult = WindowCommandResult.changedOrFailed(
+            "move \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
         appendWindowCommandEvent(
@@ -344,7 +342,7 @@ public struct WindowCommandService {
             neighbor: pair.neighbor.window,
             direction: direction
         ) else {
-            let result = WindowCommandResult(message: "warp \(direction.rawValue): no structural change", changed: false)
+            let result = WindowCommandResult(message: "warp \(direction.rawValue): no structural change", changed: false, outcome: .noOp)
             appendWindowCommandEvent(
                 verb: "warp",
                 direction: direction,
@@ -372,8 +370,8 @@ public struct WindowCommandService {
             }
         }
         _ = focusWindow(pair.active.window)
-        let commandResult = WindowCommandResult(
-            message: "warp \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        let commandResult = WindowCommandResult.changedOrFailed(
+            "warp \(direction.rawValue): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
         appendWindowCommandEvent(
@@ -400,7 +398,7 @@ public struct WindowCommandService {
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
-            let result = WindowCommandResult(message: "no active window", changed: false)
+            let result = WindowCommandResult(message: "no active window", changed: false, outcome: .noOp)
             appendWindowCommandEvent(
                 verb: "resize",
                 direction: direction,
@@ -423,7 +421,8 @@ public struct WindowCommandService {
             _ = focusWindow(active.window)
             let result = WindowCommandResult(
                 message: "resize \(direction.rawValue): attempted=\(resizeResult.attempted) applied=\(resizeResult.applied) clamped=\(resizeResult.clamped) failed=\(resizeResult.failed)",
-                changed: false
+                changed: false,
+                outcome: .failed
             )
             appendWindowCommandEvent(
                 verb: "resize",
@@ -486,7 +485,7 @@ public struct WindowCommandService {
               let scope = active.scope,
               let display = snapshot.displays.first(where: { $0.id == scope.displayID })
         else {
-            return WindowCommandResult(message: "window reset: no active window", changed: false)
+            return WindowCommandResult(message: "window reset: no active window", changed: false, outcome: .noOp)
         }
         // La commande reste dans le scope de la fenêtre active : seul lui est soustrait au maintien.
         beginLayoutCommand("window.reset", scopes: [scope])
@@ -516,8 +515,8 @@ public struct WindowCommandService {
         let updatedSnapshot = service.snapshot()
         let result = service.apply(service.applyPlan(from: updatedSnapshot, generation: generation), generation: generation)
         _ = focusWindow(active.window)
-        return WindowCommandResult(
-            message: "window reset: zoom=\(zoomed) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return WindowCommandResult.changedOrFailed(
+            "window reset: zoom=\(zoomed) attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed == 0
         )
     }
@@ -542,19 +541,19 @@ public struct WindowCommandService {
         let selected = preferredID.flatMap { id in snapshot.windows.first { $0.window.id == id } }
         if reservingRail, let selected,
            selected.window.furniture?.isNativeFullscreen == true || selected.window.furniture?.isResizable == false {
-            return WindowCommandResult(message: "toggle maximize: failed, refused native-fullscreen or non-resizable window", changed: false)
+            return WindowCommandResult(message: "toggle maximize: failed, refused native-fullscreen or non-resizable window", changed: false, outcome: .failed)
         }
         guard let active = preferredID == nil ? activeWindow(in: snapshot) : selected,
               let scope = active.scope,
               snapshot.state.activeScope(on: scope.displayID) == scope,
               let display = snapshot.displays.first(where: { $0.id == scope.displayID })
         else {
-            return WindowCommandResult(message: "toggle \(name): no active window", changed: false)
+            return WindowCommandResult(message: "toggle \(name): no active window", changed: false, outcome: .noOp)
         }
         guard !reservingRail || (active.window.isTileCandidate
             && active.window.furniture?.isNativeFullscreen != true
             && active.window.furniture?.isResizable != false) else {
-            return WindowCommandResult(message: "toggle maximize: failed, window unavailable for tiling", changed: false)
+            return WindowCommandResult(message: "toggle maximize: failed, window unavailable for tiling", changed: false, outcome: .failed)
         }
         let cause = "window.toggle_\(name)"
         beginLayoutCommand(cause, scopes: [scope])
@@ -574,15 +573,15 @@ public struct WindowCommandService {
             }
             let result = service.apply(plan, generation: generation)
             _ = focusWindow(active.window)
-            return WindowCommandResult(
-                message: "toggle \(name) off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            return WindowCommandResult.changedOrFailed(
+                "toggle \(name) off: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
                 changed: result.failed < result.attempted || plan.commands.isEmpty
             )
         }
 
         let target = reservingRail ? service.maximizedFrame(on: display) : display.visibleFrame.cgRect.integral
         guard let target, !target.isEmpty else {
-            return WindowCommandResult(message: "toggle \(name) on: failed, refused frame", changed: false)
+            return WindowCommandResult(message: "toggle \(name) on: failed, refused frame", changed: false, outcome: .failed)
         }
         let original = previous?.restorePlacements ?? (previous?.zoomedWindowID == nil ? previous?.placements : nil)
             ?? Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
@@ -612,7 +611,11 @@ public struct WindowCommandService {
             do {
                 try service.effectiveIntentStore.saveChecked(zoomIntent(placements))
             } catch {
-                try? persistFrame(active.window.frame, for: active.window, in: scope)
+                do {
+                    try persistFrame(active.window.frame, for: active.window, in: scope)
+                } catch let rollback {
+                    throw PartialCommitError(cause: "\(error)", rollback: rollback)
+                }
                 throw error
             }
         } catch {
@@ -625,18 +628,29 @@ public struct WindowCommandService {
         guard let appliedFrame, !incompatible else {
             // Refus de l'application : fenêtre, intent et cadre mémorisé reviennent à l'état
             // d'avant, sinon la maintenance réappliquerait le zoom refusé.
+            // Retour arrière impossible : résultat partiel explicite (REL-021).
             if appliedFrame != nil { _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation) }
-            if let storedIntent {
-                try? service.effectiveIntentStore.saveChecked(storedIntent)
-            } else {
-                try? service.effectiveIntentStore.removeChecked(scope: scope)
+            var rollbackError: Error?
+            do {
+                if let storedIntent {
+                    try service.effectiveIntentStore.saveChecked(storedIntent)
+                } else {
+                    try service.effectiveIntentStore.removeChecked(scope: scope)
+                }
+            } catch {
+                rollbackError = error
             }
-            try? persistFrame(active.window.frame, for: active.window, in: scope)
-            return WindowCommandResult(
-                message: appliedFrame == nil ? "toggle \(name) on: failed, refused frame"
-                    : "toggle maximize: failed, refused incompatible application minimum size",
-                changed: false
-            )
+            do {
+                try persistFrame(active.window.frame, for: active.window, in: scope)
+            } catch {
+                rollbackError = rollbackError ?? error
+            }
+            let refusal = appliedFrame == nil ? "toggle \(name) on: failed, refused frame"
+                : "toggle maximize: failed, refused incompatible application minimum size"
+            if let rollbackError {
+                return .partial("\(refusal); partial, rollback failed: \(rollbackError)")
+            }
+            return .failure(refusal)
         }
         var applied = placements
         applied[active.window.id] = Rect(appliedFrame)
@@ -692,12 +706,12 @@ public struct WindowCommandService {
         defer { finishLayoutCommand("window.toggle_native_fullscreen") }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot) else {
-            return WindowCommandResult(message: "toggle native-fullscreen: no active window", changed: false)
+            return WindowCommandResult(message: "toggle native-fullscreen: no active window", changed: false, outcome: .noOp)
         }
         let changed = service.toggleNativeFullscreen(active.window)
         _ = focusWindow(active.window)
-        return WindowCommandResult(
-            message: "toggle native-fullscreen: changed=\(changed)",
+        return WindowCommandResult.changedOrNoOp(
+            "toggle native-fullscreen: changed=\(changed)",
             changed: changed
         )
     }
@@ -705,10 +719,10 @@ public struct WindowCommandService {
     public func sendToDisplay(_ displayIndex: Int) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot) else {
-            return WindowCommandResult(message: "no active window", changed: false)
+            return WindowCommandResult(message: "no active window", changed: false, outcome: .noOp)
         }
         guard let display = snapshot.displays.first(where: { $0.index == displayIndex }) else {
-            return WindowCommandResult(message: "unknown display \(displayIndex)", changed: false)
+            return WindowCommandResult(message: "unknown display \(displayIndex)", changed: false, outcome: .failed)
         }
         return send(active, to: display, focusMovedWindow: true)
     }
@@ -720,10 +734,10 @@ public struct WindowCommandService {
     ) -> WindowCommandResult {
         let snapshot = service.snapshot()
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
-            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): window unavailable", changed: false)
+            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): window unavailable", changed: false, outcome: .failed)
         }
         guard let display = snapshot.displays.first(where: { $0.id == targetDisplayID }) else {
-            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): display unavailable", changed: false)
+            return WindowCommandResult(message: "display \(targetDisplayID.rawValue): display unavailable", changed: false, outcome: .failed)
         }
         return send(entry, to: display, focusMovedWindow: focusMovedWindow)
     }
@@ -746,7 +760,7 @@ public struct WindowCommandService {
             stageID: targetActiveStageID
         )
         if sourceScope == targetScopeID {
-            return WindowCommandResult(message: "display \(display.index): already on target display", changed: false)
+            return WindowCommandResult(message: "display \(display.index): already on target display", changed: false, outcome: .noOp)
         }
 
         // Frame de transfert : centrée sur l'écran cible. Elle n'est pas écrite seule (T212) : elle
@@ -767,7 +781,9 @@ public struct WindowCommandService {
         )
         let removedPin: PersistentWindowPin?
         do {
-            removedPin = try stageStore.mutateChecked { state -> PersistentWindowPin? in
+            // Affectation écrite puis intents retirés ; si ce retrait échoue, l'affectation et le pin
+            // reviennent (REL-021) : le refus annoncé ne laisse rien.
+            removedPin = try service.commitStageTransfer(in: stageStore, { state -> PersistentWindowPin? in
                 for scopeIndex in state.scopes.indices {
                     state.scopes[scopeIndex].remove(windowID: active.window.id)
                 }
@@ -777,11 +793,7 @@ public struct WindowCommandService {
                 let pin = state.removePin(windowID: active.window.id)
                 state.suppressRulePlacement(window: transferredWindow)
                 return pin
-            }
-            if let sourceScope {
-                try service.removeLayoutIntentChecked(scope: sourceScope)
-            }
-            try service.removeLayoutIntentChecked(scope: targetScopeID)
+            }, clearingIntentsOf: { _ in [sourceScope, targetScopeID].compactMap { $0 } })
         } catch {
             return .persistenceFailure("display \(display.index)", error)
         }
@@ -807,7 +819,9 @@ public struct WindowCommandService {
                     result: result
                 )
             } catch {
-                return .persistenceFailure("display \(display.index)", error)
+                // Fenêtre déjà transférée : la commande a réussi. Sans intent, la maintenance
+                // recalcule la disposition que le plan vient d'appliquer (REL-021).
+                fputs("roadie: display \(display.index): layout intent not persisted: \(error)\n", stderr)
             }
         }
         if focusMovedWindow {
@@ -828,8 +842,8 @@ public struct WindowCommandService {
             ]
         ))
         appendManualPinRemovalEvent(removedPin, targetScope: targetScopeID)
-        return WindowCommandResult(
-            message: "display \(display.index): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return WindowCommandResult.changedOrFailed(
+            "display \(display.index): attempted=\(result.attempted) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.attempted > 0 && result.failed < result.attempted
         )
     }
@@ -963,28 +977,25 @@ public struct WindowCommandService {
         guard let active = activeWindow(in: snapshot),
               let display = activeDisplay(for: active, in: snapshot)
         else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false, outcome: .noOp)
         }
         guard let target = DisplayTopology.neighbor(from: display, direction: direction, in: snapshot.displays) else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false, outcome: .noOp)
         }
         let result = sendToDisplay(target.index)
-        return WindowCommandResult(
-            message: "\(verb) \(direction.rawValue): \(result.message)",
-            changed: result.changed
-        )
+        return WindowCommandResult(message: "\(verb) \(direction.rawValue): \(result.message)", changed: result.changed, outcome: result.outcome)
     }
 
     private func focusAdjacentDisplayWindow(_ direction: Direction, from snapshot: DaemonSnapshot) -> WindowCommandResult {
         guard let active = activeWindow(in: snapshot),
               let display = activeDisplay(for: active, in: snapshot)
         else {
-            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false)
+            return WindowCommandResult(message: "no neighbor \(direction.rawValue)", changed: false, outcome: .noOp)
         }
         guard let targetDisplay = DisplayTopology.neighbor(from: display, direction: direction, in: snapshot.displays),
               let targetScope = snapshot.state.activeScope(on: targetDisplay.id)
         else {
-            return WindowCommandResult(message: "display focus \(direction.rawValue): no display", changed: false)
+            return WindowCommandResult(message: "display focus \(direction.rawValue): no display", changed: false, outcome: .noOp)
         }
         let candidates = snapshot.windows.filter {
             $0.scope == targetScope && $0.window.isTileCandidate
@@ -999,7 +1010,7 @@ public struct WindowCommandService {
         }
         guard let target = rankedCandidates.min(by: { $0.score < $1.score })?.window else {
             let result = DisplayCommandService(service: service, store: stageStore, events: events).focus(direction)
-            return WindowCommandResult(message: result.message, changed: result.changed)
+            return WindowCommandResult(message: result.message, changed: result.changed, outcome: result.outcome)
         }
 
         do {
@@ -1015,8 +1026,8 @@ public struct WindowCommandService {
         }
 
         let ok = focusWindow(target.window)
-        return WindowCommandResult(
-            message: ok ? "focused \(target.window.id) on display \(targetDisplay.index)" : "focus failed",
+        return WindowCommandResult.changedOrFailed(
+            ok ? "focused \(target.window.id) on display \(targetDisplay.index)" : "focus failed",
             changed: ok
         )
     }

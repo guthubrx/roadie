@@ -34,10 +34,18 @@ public struct StateAuditReport: Equatable, Codable, Sendable {
 public struct StateHealReport: Equatable, Codable, Sendable {
     public var repaired: Int
     public var audit: StateAuditReport
+    /// Réparations non écrites (REL-021) : `repaired` vaut alors 0 et `failed` est vrai.
+    public var persistenceError: String?
 
-    public init(repaired: Int, audit: StateAuditReport) {
+    public init(repaired: Int, audit: StateAuditReport, persistenceError: String? = nil) {
         self.repaired = repaired
         self.audit = audit
+        self.persistenceError = persistenceError
+    }
+
+    /// Échec du rapport : audit en échec ou réparations non persistées.
+    public var failed: Bool {
+        audit.failed || persistenceError != nil
     }
 }
 
@@ -45,9 +53,10 @@ public struct StateAuditService {
     private let service: SnapshotService
     private let stageStore: StageStore
 
-    public init(service: SnapshotService = SnapshotService(), stageStore: StageStore = StageStore()) {
+    /// `stageStore` nil : celui du service (le même fichier en production, isolé en test).
+    public init(service: SnapshotService = SnapshotService(), stageStore: StageStore? = nil) {
         self.service = service
-        self.stageStore = stageStore
+        self.stageStore = stageStore ?? service.effectiveStageStore
     }
 
     public func run() -> StateAuditReport {
@@ -79,16 +88,25 @@ public struct StateAuditService {
         let liveManagedWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope == nil ? nil : entry.window.id
         })
-        let repaired = stageStore.mutate { state -> Int in
-            var repaired = 0
-            if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
-                state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
-                repaired += state.activeDisplayID == nil ? 0 : 1
+        // Écriture contrôlée (REL-021) : une réparation non écrite n'est pas comptée.
+        do {
+            let repaired = try stageStore.mutateChecked { state -> Int in
+                var repaired = 0
+                if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
+                    state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
+                    repaired += state.activeDisplayID == nil ? 0 : 1
+                }
+                repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
+                return repaired
             }
-            repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
-            return repaired
+            return StateHealReport(repaired: repaired, audit: run())
+        } catch {
+            return StateHealReport(
+                repaired: 0,
+                audit: run(),
+                persistenceError: JSONPersistence.commandFailureMessage("state heal", error)
+            )
         }
-        return StateHealReport(repaired: repaired, audit: run())
     }
 
     private func activeDisplayCheck(state: PersistentStageState, liveDisplayIDs: Set<DisplayID>) -> StateAuditCheck {

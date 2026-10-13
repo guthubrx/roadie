@@ -4,19 +4,17 @@ import RoadieAX
 import RoadieCore
 import RoadieTiler
 
-public struct StageCommandResult: Equatable, Sendable {
+public struct StageCommandResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil
+    /// (statut non posé, code de sortie lu dans le message).
+    public var outcome: CommandOutcome?
 
-    public init(message: String, changed: Bool) {
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
         self.message = message
         self.changed = changed
-    }
-
-    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
-    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
-    static func persistenceFailure(_ command: String, _ error: Error) -> StageCommandResult {
-        StageCommandResult(message: JSONPersistence.commandFailureMessage(command, error), changed: false)
+        self.outcome = outcome ?? (changed ? .changed : nil)
     }
 }
 
@@ -61,7 +59,7 @@ public struct StageCommandService {
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
         else {
-            return StageCommandResult(message: "stage assign: no active window", changed: false)
+            return StageCommandResult(message: "stage assign: no active window", changed: false, outcome: .noOp)
         }
 
         return assign(
@@ -76,19 +74,19 @@ public struct StageCommandService {
 
     public func assignPosition(_ position: Int) -> StageCommandResult {
         guard position > 0 else {
-            return StageCommandResult(message: "stage assign-position: requires a positive position", changed: false)
+            return StageCommandResult(message: "stage assign-position: requires a positive position", changed: false, outcome: .failed)
         }
         let snapshot = service.snapshot()
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
         else {
-            return StageCommandResult(message: "stage assign-position: no active window", changed: false)
+            return StageCommandResult(message: "stage assign-position: no active window", changed: false, outcome: .noOp)
         }
 
         var state = store.state()
         let scope = activeScope(displayID: displayID, in: &state)
         guard let stageID = stageID(atAssignablePosition: position, in: scope) else {
-            return StageCommandResult(message: "stage assign-position \(position): not found", changed: false)
+            return StageCommandResult(message: "stage assign-position \(position): not found", changed: false, outcome: .failed)
         }
         return assign(stageID.rawValue)
     }
@@ -98,7 +96,7 @@ public struct StageCommandService {
         guard let active = activeWindow(in: snapshot),
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)
         else {
-            return StageCommandResult(message: "stage assign-empty: no active window", changed: false)
+            return StageCommandResult(message: "stage assign-empty: no active window", changed: false, outcome: .noOp)
         }
 
         var state = store.state()
@@ -139,7 +137,7 @@ public struct StageCommandService {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
-            return StageCommandResult(message: "stage assign: unknown display", changed: false)
+            return StageCommandResult(message: "stage assign: unknown display", changed: false, outcome: .failed)
         }
 
         guard let stageID = parsedStageID(rawStageID) else {
@@ -300,7 +298,7 @@ public struct StageCommandService {
     public func list() -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage list: no display", changed: false)
+            return StageCommandResult(message: "stage list: no display", changed: false, outcome: .noOp)
         }
         // Lecture seule : pas de verrou exclusif ni d'écriture (FR-013).
         var state = store.state()
@@ -311,7 +309,7 @@ public struct StageCommandService {
             let active = stage.id == scope.activeStageID ? "*" : ""
             lines.append("\(active)\t\(stage.id.rawValue)\t\(stage.mode.rawValue)\t\(stage.members.count)\t\(stage.name)")
         }
-        return StageCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return StageCommandResult(message: lines.joined(separator: "\n"), changed: false, outcome: .noOp)
     }
 
     /// Identifiant de stage saisi par l'appelant : nil si vide, car `StageID` s'arrête sur une précondition (REL-001).
@@ -320,13 +318,13 @@ public struct StageCommandService {
     }
 
     private static func emptyStageIDResult(_ command: String) -> StageCommandResult {
-        StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false)
+        StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false, outcome: .failed)
     }
 
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage create: no display", changed: false)
+            return StageCommandResult(message: "stage create: no display", changed: false, outcome: .noOp)
         }
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage create")
@@ -343,7 +341,7 @@ public struct StageCommandService {
             return .persistenceFailure("stage create \(stageID.rawValue)", error)
         }
         guard created else {
-            return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
+            return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false, outcome: .noOp)
         }
         return StageCommandResult(message: "stage create \(stageID.rawValue): \(name ?? "Stage \(stageID.rawValue)")", changed: true)
     }
@@ -351,7 +349,7 @@ public struct StageCommandService {
     public func rename(_ rawStageID: String, to name: String) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage rename: no display", changed: false)
+            return StageCommandResult(message: "stage rename: no display", changed: false, outcome: .noOp)
         }
         return rename(rawStageID, to: name, displayID: display.id)
     }
@@ -372,7 +370,7 @@ public struct StageCommandService {
             return .persistenceFailure("stage rename \(stageID.rawValue)", error)
         }
         guard renamed else {
-            return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
+            return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false, outcome: .failed)
         }
         return StageCommandResult(message: "stage rename \(stageID.rawValue): \(name)", changed: true)
     }
@@ -380,7 +378,7 @@ public struct StageCommandService {
     public func reorder(_ rawStageID: String, to position: Int) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage reorder: no display", changed: false)
+            return StageCommandResult(message: "stage reorder: no display", changed: false, outcome: .noOp)
         }
         return reorder(rawStageID, to: position, displayID: display.id)
     }
@@ -401,7 +399,7 @@ public struct StageCommandService {
             return .persistenceFailure("stage reorder \(stageID.rawValue)", error)
         }
         guard reordered else {
-            return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
+            return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false, outcome: .failed)
         }
         return StageCommandResult(message: "stage reorder \(stageID.rawValue): position=\(position)", changed: true)
     }
@@ -409,7 +407,7 @@ public struct StageCommandService {
     public func delete(_ rawStageID: String) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage delete: no display", changed: false)
+            return StageCommandResult(message: "stage delete: no display", changed: false, outcome: .noOp)
         }
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage delete")
@@ -426,7 +424,7 @@ public struct StageCommandService {
             return .persistenceFailure("stage delete \(stageID.rawValue)", error)
         }
         guard deleted else {
-            return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false)
+            return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false, outcome: .failed)
         }
         return StageCommandResult(message: "stage delete \(stageID.rawValue)", changed: true)
     }
@@ -434,7 +432,7 @@ public struct StageCommandService {
     public func switchTo(_ rawStageID: String) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage switch: no display", changed: false)
+            return StageCommandResult(message: "stage switch: no display", changed: false, outcome: .noOp)
         }
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage switch")
@@ -445,7 +443,7 @@ public struct StageCommandService {
     public func switchTo(_ rawStageID: String, displayID: DisplayID) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
-            return StageCommandResult(message: "stage switch: unknown display", changed: false)
+            return StageCommandResult(message: "stage switch: unknown display", changed: false, outcome: .failed)
         }
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage switch")
@@ -455,16 +453,16 @@ public struct StageCommandService {
 
     public func switchToPosition(_ position: Int) -> StageCommandResult {
         guard position > 0 else {
-            return StageCommandResult(message: "stage switch-position: requires a positive position", changed: false)
+            return StageCommandResult(message: "stage switch-position: requires a positive position", changed: false, outcome: .failed)
         }
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage switch-position: no display", changed: false)
+            return StageCommandResult(message: "stage switch-position: no display", changed: false, outcome: .noOp)
         }
         var state = store.state()
         let scope = activeScope(displayID: display.id, in: &state)
         guard let stageID = stageID(atVisiblePosition: position, in: scope, liveWindowIDs: liveWindowIDs(in: snapshot)) else {
-            return StageCommandResult(message: "stage switch-position \(position): not found", changed: false)
+            return StageCommandResult(message: "stage switch-position \(position): not found", changed: false, outcome: .failed)
         }
         return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
@@ -512,8 +510,8 @@ public struct StageCommandService {
             "activatedApplication": String(activatedApplication),
             "durationMs": formatMs(elapsedMs(since: startedAt))
         ]))
-        return StageCommandResult(
-            message: "native fullscreen focus: window=\(windowID.rawValue) focused=\(focusedLiveWindow || focusedApplicationWindow) activated=\(activatedApplication)",
+        return StageCommandResult.changedOrNoOp(
+            "native fullscreen focus: window=\(windowID.rawValue) focused=\(focusedLiveWindow || focusedApplicationWindow) activated=\(activatedApplication)",
             changed: focusedLiveWindow || focusedApplicationWindow || activatedApplication
         )
     }
@@ -529,7 +527,7 @@ public struct StageCommandService {
     public func moveActiveStageToDisplay(_ target: StageDisplayMoveTarget, followFocus: Bool? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let sourceDisplay = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage move-to-display: no active display", changed: false)
+            return StageCommandResult(message: "stage move-to-display: no active display", changed: false, outcome: .noOp)
         }
         var state = store.state()
         let sourceScope = activeScope(displayID: sourceDisplay.id, in: &state)
@@ -599,7 +597,9 @@ public struct StageCommandService {
         let effectiveFollow = followFocus ?? config.focus.stageMoveFollowsFocus
         let move: (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)?
         do {
-            move = try store.mutateChecked { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)? in
+            // Stage déplacée puis intents des deux scopes retirés ; si ce retrait échoue, l'état
+            // reprend sa valeur d'avant (REL-021) : le refus annoncé ne laisse rien.
+            move = try service.commitStageTransfer(in: store, { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)? in
                 var sourceScope = activeScope(displayID: sourceDisplayID, in: &state)
                 var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
                 guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else { return nil }
@@ -635,7 +635,9 @@ public struct StageCommandService {
                 }
                 state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
                 return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID, targetScope.activeStageID == movingStage.id)
-            }
+            }, clearingIntentsOf: { move in
+                move.map { [StageScope(displayID: sourceDisplay.id, desktopID: $0.sourceDesktopID, stageID: $0.requestedStageID), $0.targetScopeID] } ?? []
+            })
         } catch {
             return .persistenceFailure("stage move-to-display \(stageID.rawValue)", error)
         }
@@ -670,12 +672,6 @@ public struct StageCommandService {
             placed += 1
         }
         var failed = movingStage.members.count - placed
-        do {
-            try intentStore.removeChecked(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
-            try intentStore.removeChecked(scope: targetScopeID)
-        } catch {
-            return .persistenceFailure("stage move-to-display \(requestedStageID.rawValue)", error)
-        }
         let result = service.applyCommandPlacement(placement, cause: "stage.move_display", generation: generation, events: events).result
         failed += result.failed
         if !move.activated {
@@ -699,8 +695,11 @@ public struct StageCommandService {
                     }
                 }
             } catch {
-                // Stage déplacée et masquée, mais frames de retour perdues : échec signalé.
-                return .persistenceFailure("stage move-to-display \(movingStage.id.rawValue)", error)
+                // Stage déplacée et masquée (effets déjà appliqués), mais frames de retour perdues :
+                // résultat partiel explicite, pas un refus (REL-021).
+                return .partial(JSONPersistence.commandFailureMessage(
+                    "stage move-to-display \(movingStage.id.rawValue): partial, stage moved but return frames", error
+                ))
             }
         }
         events.append(RoadieEvent(
@@ -750,14 +749,16 @@ public struct StageCommandService {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
-            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
+            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
         let window = sourceEntry.window
         let sourceScope = sourceEntry.scope
 
         let scope: StageScope
         do {
-            scope = try store.mutateChecked { state -> StageScope in
+            // Affectation écrite puis intents retirés ; si ce retrait échoue, l'affectation revient
+            // (REL-021) : le refus annoncé ne laisse rien.
+            scope = try service.commitStageTransfer(in: store, { state -> StageScope in
                 for scopeIndex in state.scopes.indices {
                     state.scopes[scopeIndex].remove(windowID: windowID)
                 }
@@ -767,11 +768,7 @@ public struct StageCommandService {
                 persistentScope.orderMembers(orderedWindowIDs, in: stageID)
                 state.update(persistentScope)
                 return StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
-            }
-            try intentStore.removeChecked(scope: scope)
-            if let sourceScope, sourceScope != scope {
-                try intentStore.removeChecked(scope: sourceScope)
-            }
+            }, clearingIntentsOf: { [$0, sourceScope].compactMap { $0 } })
         } catch {
             return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
@@ -796,7 +793,11 @@ public struct StageCommandService {
         do {
             try persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
         } catch {
-            return .persistenceFailure("stage place \(windowID.rawValue)", error)
+            // Fenêtre déjà placée (effets appliqués), mais disposition demandée non retenue :
+            // résultat partiel explicite, pas un refus (REL-021).
+            return .partial(JSONPersistence.commandFailureMessage(
+                "stage place \(windowID.rawValue): partial, window placed but layout intent", error
+            ))
         }
         _ = service.focus(window)
         events.append(RoadieEvent(
@@ -814,8 +815,8 @@ public struct StageCommandService {
                 "sourceFailed": String(sourceRelayout.result.failed)
             ]
         ))
-        return StageCommandResult(
-            message: "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count + sourceRelayout.plan.commands.count + isolated) applied=\(result.applied + sourceRelayout.result.applied + isolated) clamped=\(result.clamped + sourceRelayout.result.clamped) failed=\(result.failed + sourceRelayout.result.failed)",
+        return StageCommandResult.changedOrFailed(
+            "stage place: window=\(windowID.rawValue) commands=\(applyPlan.commands.count + sourceRelayout.plan.commands.count + isolated) applied=\(result.applied + sourceRelayout.result.applied + isolated) clamped=\(result.clamped + sourceRelayout.result.clamped) failed=\(result.failed + sourceRelayout.result.failed)",
             changed: result.failed < result.attempted
                 || sourceRelayout.result.failed < sourceRelayout.result.attempted
                 || applyPlan.commands.isEmpty
@@ -839,7 +840,7 @@ public struct StageCommandService {
         guard let sourceEntry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
         else {
-            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false)
+            return StageCommandResult(message: "stage place: unknown window \(windowID.rawValue)", changed: false, outcome: .failed)
         }
         let window = sourceEntry.window
         let sourceScope = sourceEntry.scope
@@ -849,7 +850,9 @@ public struct StageCommandService {
         let geometry = service.commandTreeGeometry(for: plannedScope, tree: current.bspTree(for: plannedScope) ?? .empty, in: snapshot)
         let scope: StageScope
         do {
-            scope = try store.mutateChecked { state -> StageScope in
+            // Affectation et arbres écrits puis intents retirés ; si ce retrait échoue, l'état
+            // revient (REL-021) : le refus annoncé ne laisse rien.
+            scope = try service.commitStageTransfer(in: store, { state -> StageScope in
                 state.remove(windowID: windowID)
                 var persistentScope = activeScope(displayID: displayID, in: &state)
                 let stageID = persistentScope.activeStageID
@@ -867,11 +870,7 @@ public struct StageCommandService {
                     for: scope
                 )
                 return scope
-            }
-            try intentStore.removeChecked(scope: scope)
-            if let sourceScope, sourceScope != scope {
-                try intentStore.removeChecked(scope: sourceScope)
-            }
+            }, clearingIntentsOf: { [$0, sourceScope].compactMap { $0 } })
         } catch {
             return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
@@ -938,7 +937,7 @@ public struct StageCommandService {
     public func cycle(_ direction: StageCycleDirection) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage \(direction.rawValue): no display", changed: false)
+            return StageCommandResult(message: "stage \(direction.rawValue): no display", changed: false, outcome: .noOp)
         }
         let nextStageID: StageID
         do {
@@ -968,13 +967,13 @@ public struct StageCommandService {
     public func switchVisible(_ direction: StageCycleDirection) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no display", changed: false)
+            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no display", changed: false, outcome: .noOp)
         }
         var state = store.state()
         let scope = activeScope(displayID: display.id, in: &state)
         let ordered = visibleStageIDs(in: scope, liveWindowIDs: liveWindowIDs(in: snapshot))
         guard !ordered.isEmpty else {
-            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no visible stage", changed: false)
+            return StageCommandResult(message: "stage switch-visible \(direction.rawValue): no visible stage", changed: false, outcome: .noOp)
         }
         let currentIndex = ordered.firstIndex(of: scope.activeStageID)
         let nextIndex: Int
@@ -991,7 +990,7 @@ public struct StageCommandService {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false)
+            return StageCommandResult(message: "mode \(mode.rawValue): no display", changed: false, outcome: .noOp)
         }
         // Seul l'écran de la commande est soustrait au maintien (FR-040).
         let commandScopes = Set([snapshot.state.activeScope(on: display.id)].compactMap { $0 })
@@ -1012,7 +1011,11 @@ public struct StageCommandService {
                     state.update(scope)
                 }
             } catch {
-                if let removedIntent { try? intentStore.saveChecked(removedIntent) }
+                do {
+                    if let removedIntent { try intentStore.saveChecked(removedIntent) }
+                } catch let rollback {
+                    throw PartialCommitError(cause: "\(error)", rollback: rollback)
+                }
                 throw error
             }
         } catch {
@@ -1186,8 +1189,8 @@ public struct StageCommandService {
                     "durationMs": formatMs(elapsedMs(since: startedAt))
                 ]
             ))
-            return StageCommandResult(
-                message: "stage switch \(stageID.rawValue): already active",
+            return StageCommandResult.changedOrNoOp(
+                "stage switch \(stageID.rawValue): already active",
                 changed: activeDisplayChanged || activatedNativeFullscreen
             )
         }
@@ -1383,8 +1386,8 @@ public struct StageCommandService {
             ]
         ))
 
-        return StageCommandResult(
-            message: "stage switch \(stageID.rawValue): hidden=\(transition.hiddenWindowIDs.count) shown=\(transition.targetMembers.count) applied=\(applied) layout=\(layoutAttempted)",
+        return StageCommandResult.changedOrNoOp(
+            "stage switch \(stageID.rawValue): hidden=\(transition.hiddenWindowIDs.count) shown=\(transition.targetMembers.count) applied=\(applied) layout=\(layoutAttempted)",
             changed: transition.previousID != stageID || applied > 0 || layoutAttempted > 0
         )
     }
@@ -1521,7 +1524,12 @@ public struct StageCommandService {
                 "failedWindowCount": String(failedWindowCount)
             ]))
         }
-        return StageCommandResult(message: message, changed: status == .moved || status == .partialFailure)
+        // Cible invalide : échec ; même écran ou stage absente : sans objet (REL-042).
+        return StageCommandResult(
+            message: message,
+            changed: status == .moved || status == .partialFailure,
+            outcome: status == .invalidTarget ? .failed : (status == .moved || status == .partialFailure ? .changed : .noOp)
+        )
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
@@ -1699,10 +1707,19 @@ public struct StageCommandService {
         return nextGeneratedStageID(in: scope)
     }
 
+    /// Plus grand identifiant numérique + 1. Une stage nommée `Int.max` ferait déborder l'addition
+    /// et arrêterait le daemon (REL-001) : l'identifiant devient alors non numérique et libre.
+    // O(s) - s = stages du scope.
     private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {
         let numericIDs = scope.stages.compactMap { Int($0.id.rawValue) }
-        let next = (numericIDs.max() ?? scope.stages.count) + 1
-        return StageID(rawValue: String(next))
+        let (next, overflow) = (numericIDs.max() ?? scope.stages.count).addingReportingOverflow(1)
+        guard overflow else { return StageID(rawValue: String(next)) }
+        let used = Set(scope.stages.map(\.id.rawValue))
+        var candidate = "stage-\(UUID().uuidString)"
+        while used.contains(candidate) {
+            candidate = "stage-\(UUID().uuidString)"
+        }
+        return StageID(rawValue: candidate)
     }
 
     private func isCustomStageName(_ name: String, id: StageID) -> Bool {
