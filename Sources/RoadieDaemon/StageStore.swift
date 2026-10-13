@@ -194,6 +194,20 @@ public struct StageStore: Sendable {
         )
     }
 
+    /// Comme `mutate`, mais lève `JSONPersistence.PersistenceError` si l'état n'a pas été écrit
+    /// (verrou impossible, fichier illisible, écriture en échec) : une commande n'annonce pas un
+    /// changement perdu (REL-021). `mutate` reste pour les chemins internes qui n'annoncent rien.
+    @discardableResult
+    public func mutateChecked<R>(_ body: (inout PersistentStageState) throws -> R) throws -> R {
+        try JSONPersistence.mutateChecked(
+            PersistentStageState.self,
+            at: url,
+            default: PersistentStageState(),
+            label: "stages",
+            body
+        )
+    }
+
     /// Migration SPEC-017 (A8) : passe les stages `mutableBsp` en `spatialBsp`, en une transaction.
     /// Avant la première écriture migrée, les octets d'origine sont copiés dans `<fichier>.pre-017`
     /// (une seule fois, jamais écrasée). L'arbre est construit par `infer` s'il est absent ou ne couvre

@@ -34,6 +34,7 @@ public struct StageCommandService {
     private let events: EventLog
     private let config: RoadieConfig
     private let commandActivity: LayoutCommandActivity
+    private var intentStore: LayoutIntentStore { service.effectiveIntentStore }
 
     public init(
         service: SnapshotService = SnapshotService(),
@@ -139,10 +140,14 @@ public struct StageCommandService {
             return Self.emptyStageIDResult("stage assign")
         }
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
-            store.mutate { state in
-                var scope = activeScope(displayID: displayID, in: &state)
-                scope.remove(windowID: windowID)
-                state.update(scope)
+            do {
+                try store.mutateChecked { state in
+                    var scope = activeScope(displayID: displayID, in: &state)
+                    scope.remove(windowID: windowID)
+                    state.update(scope)
+                }
+            } catch {
+                return persistenceFailure("stage assign \(stageID.rawValue)", error)
             }
             return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
         }
@@ -154,43 +159,61 @@ public struct StageCommandService {
             ? nil
             : service.commandTreeGeometry(for: rankedScope, tree: current.bspTree(for: rankedScope) ?? .empty, in: snapshot)
 
-        let (scope, removedPin) = store.mutate { state -> (PersistentStageScope, PersistentWindowPin?) in
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: windowID)
-            }
-            var scope = activeScope(displayID: displayID, in: &state)
-            let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
-            let pin = entry.scope == targetScope ? nil : state.removePin(windowID: windowID)
-            if entry.scope != targetScope {
-                state.suppressRulePlacement(window: window)
-            }
-            scope.assign(
-                window: window,
-                to: stageID,
-                insertionIndex: insertionIndex,
-                focusWindow: focusAssignedWindow,
-                defaultMode: config.tiling.defaultStrategy
-            )
-            state.update(scope)
-            // Stage cible à arbre : la fenêtre entre dans l'arbre au rang demandé (après `update`,
-            // qui remplace le scope entier).
-            if insertionIndex != nil, scope.stages.first(where: { $0.id == stageID })?.mode.usesTreeEngine == true {
-                if let sourceScope = entry.scope, sourceScope != targetScope, let sourceTree = state.bspTree(for: sourceScope) {
-                    state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+        let assigned: (scope: PersistentStageScope, pin: PersistentWindowPin?)
+        do {
+            assigned = try store.mutateChecked { state -> (PersistentStageScope, PersistentWindowPin?) in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: windowID)
                 }
-                state.setBSPTree(
-                    insertingRanked(
-                        windowID,
-                        in: scope.memberIDs(in: stageID),
-                        into: state.bspTree(for: targetScope) ?? .empty,
-                        geometry: rankedGeometry,
-                        fallback: display.visibleFrame.cgRect
-                    ),
-                    for: targetScope
+                var scope = activeScope(displayID: displayID, in: &state)
+                let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
+                let pin = entry.scope == targetScope ? nil : state.removePin(windowID: windowID)
+                if entry.scope != targetScope {
+                    state.suppressRulePlacement(window: window)
+                }
+                scope.assign(
+                    window: window,
+                    to: stageID,
+                    insertionIndex: insertionIndex,
+                    focusWindow: focusAssignedWindow,
+                    defaultMode: config.tiling.defaultStrategy
                 )
+                state.update(scope)
+                // Stage cible à arbre : la fenêtre entre dans l'arbre au rang demandé (après `update`,
+                // qui remplace le scope entier).
+                if insertionIndex != nil, scope.stages.first(where: { $0.id == stageID })?.mode.usesTreeEngine == true {
+                    if let sourceScope = entry.scope, sourceScope != targetScope, let sourceTree = state.bspTree(for: sourceScope) {
+                        state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+                    }
+                    state.setBSPTree(
+                        insertingRanked(
+                            windowID,
+                            in: scope.memberIDs(in: stageID),
+                            into: state.bspTree(for: targetScope) ?? .empty,
+                            geometry: rankedGeometry,
+                            fallback: display.visibleFrame.cgRect
+                        ),
+                        for: targetScope
+                    )
+                }
+                // Stage cible inactive, sans suivi du focus : focus de la stage active protégé dans la
+                // même transaction, pour qu'aucune écriture ne puisse échouer après celle-ci (REL-021).
+                if scope.activeStageID != stageID, !focusAssignedWindow {
+                    state.protectCommandFocus(
+                        displayID: displayID,
+                        desktopID: scope.desktopID,
+                        stageID: scope.activeStageID,
+                        windowID: scope.stages.first(where: { $0.id == scope.activeStageID })?.focusedWindowID,
+                        staleFocusedWindowID: windowID,
+                        duration: 3.0
+                    )
+                }
+                return (scope, pin)
             }
-            return (scope, pin)
+        } catch {
+            return persistenceFailure("stage assign \(stageID.rawValue)", error)
         }
+        let (scope, removedPin) = assigned
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
 
         var visibilityRepairFrame: CGRect?
@@ -204,6 +227,10 @@ public struct StageCommandService {
                 snapshot: service.snapshot(followFocus: false),
                 generation: generation
             )
+            // Bascule non persistée : la fenêtre est rangée mais la stage n'a pas été suivie (REL-021).
+            if !switchResult.changed, switchResult.message.hasPrefix("stage switch \(stageID.rawValue): failed") {
+                return switchResult
+            }
             var details = [
                 "stageID": stageID.rawValue,
                 "windowID": String(windowID.rawValue),
@@ -223,16 +250,6 @@ public struct StageCommandService {
                 changed: true
             )
         } else if scope.activeStageID != stageID {
-            store.mutate { state in
-                state.protectCommandFocus(
-                    displayID: displayID,
-                    desktopID: scope.desktopID,
-                    stageID: scope.activeStageID,
-                    windowID: scope.stages.first(where: { $0.id == scope.activeStageID })?.focusedWindowID,
-                    staleFocusedWindowID: windowID,
-                    duration: 3.0
-                )
-            }
             placement.hiding[windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: display, among: snapshot.displays)
         } else if let frame = visibleFrame(for: window.frame.cgRect, on: display) {
             visibilityRepairFrame = frame
@@ -300,6 +317,13 @@ public struct StageCommandService {
         StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false)
     }
 
+    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
+    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
+    private func persistenceFailure(_ command: String, _ error: Error) -> StageCommandResult {
+        fputs("roadie: \(command): \(error)\n", stderr)
+        return StageCommandResult(message: "\(command): failed, \(error)", changed: false)
+    }
+
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
@@ -308,11 +332,16 @@ public struct StageCommandService {
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage create")
         }
-        let created = store.mutate { state -> Bool in
-            var scope = activeScope(displayID: display.id, in: &state)
-            guard scope.createStage(stageID, name: name, mode: config.tiling.defaultStrategy) else { return false }
-            state.update(scope)
-            return true
+        let created: Bool
+        do {
+            created = try store.mutateChecked { state -> Bool in
+                var scope = activeScope(displayID: display.id, in: &state)
+                guard scope.createStage(stageID, name: name, mode: config.tiling.defaultStrategy) else { return false }
+                state.update(scope)
+                return true
+            }
+        } catch {
+            return persistenceFailure("stage create \(stageID.rawValue)", error)
         }
         guard created else {
             return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
@@ -332,11 +361,16 @@ public struct StageCommandService {
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage rename")
         }
-        let renamed = store.mutate { state -> Bool in
-            var scope = activeScope(displayID: displayID, in: &state)
-            guard scope.renameStage(stageID, to: name) else { return false }
-            state.update(scope)
-            return true
+        let renamed: Bool
+        do {
+            renamed = try store.mutateChecked { state -> Bool in
+                var scope = activeScope(displayID: displayID, in: &state)
+                guard scope.renameStage(stageID, to: name) else { return false }
+                state.update(scope)
+                return true
+            }
+        } catch {
+            return persistenceFailure("stage rename \(stageID.rawValue)", error)
         }
         guard renamed else {
             return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
@@ -356,11 +390,16 @@ public struct StageCommandService {
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage reorder")
         }
-        let reordered = store.mutate { state -> Bool in
-            var scope = activeScope(displayID: displayID, in: &state)
-            guard scope.reorderStage(stageID, to: position) else { return false }
-            state.update(scope)
-            return true
+        let reordered: Bool
+        do {
+            reordered = try store.mutateChecked { state -> Bool in
+                var scope = activeScope(displayID: displayID, in: &state)
+                guard scope.reorderStage(stageID, to: position) else { return false }
+                state.update(scope)
+                return true
+            }
+        } catch {
+            return persistenceFailure("stage reorder \(stageID.rawValue)", error)
         }
         guard reordered else {
             return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
@@ -376,11 +415,16 @@ public struct StageCommandService {
         guard let stageID = parsedStageID(rawStageID) else {
             return Self.emptyStageIDResult("stage delete")
         }
-        let deleted = store.mutate { state -> Bool in
-            var scope = activeScope(displayID: display.id, in: &state)
-            guard scope.deleteEmptyInactiveStage(stageID) else { return false }
-            state.update(scope)
-            return true
+        let deleted: Bool
+        do {
+            deleted = try store.mutateChecked { state -> Bool in
+                var scope = activeScope(displayID: display.id, in: &state)
+                guard scope.deleteEmptyInactiveStage(stageID) else { return false }
+                state.update(scope)
+                return true
+            }
+        } catch {
+            return persistenceFailure("stage delete \(stageID.rawValue)", error)
         }
         guard deleted else {
             return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false)
@@ -554,42 +598,47 @@ public struct StageCommandService {
         }
 
         let effectiveFollow = followFocus ?? config.focus.stageMoveFollowsFocus
-        let move = store.mutate { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)? in
-            var sourceScope = activeScope(displayID: sourceDisplayID, in: &state)
-            var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
-            guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else { return nil }
-            var movingStage = sourceScope.stages.remove(at: movingStageIndex)
-            let requestedStageID = movingStage.id
-            let sourceWasActive = sourceScope.activeStageID == requestedStageID
-            let targetConflict = targetScope.stages.first { $0.id == movingStage.id }
-            if let targetConflict,
-               !targetConflict.members.isEmpty || !targetConflict.groups.isEmpty {
-                movingStage.id = nextAvailableStageID(preferred: movingStage.id, in: targetScope)
-            } else if targetConflict != nil {
-                targetScope.stages.removeAll { $0.id == movingStage.id }
+        let move: (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)?
+        do {
+            move = try store.mutateChecked { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)? in
+                var sourceScope = activeScope(displayID: sourceDisplayID, in: &state)
+                var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
+                guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else { return nil }
+                var movingStage = sourceScope.stages.remove(at: movingStageIndex)
+                let requestedStageID = movingStage.id
+                let sourceWasActive = sourceScope.activeStageID == requestedStageID
+                let targetConflict = targetScope.stages.first { $0.id == movingStage.id }
+                if let targetConflict,
+                   !targetConflict.members.isEmpty || !targetConflict.groups.isEmpty {
+                    movingStage.id = nextAvailableStageID(preferred: movingStage.id, in: targetScope)
+                } else if targetConflict != nil {
+                    targetScope.stages.removeAll { $0.id == movingStage.id }
+                }
+                targetScope.stages.append(movingStage)
+                if effectiveFollow {
+                    targetScope.activeStageID = movingStage.id
+                } else if targetScope.activeStageID == movingStage.id {
+                    targetScope.activeStageID = targetScope.stages.first { $0.id != movingStage.id }?.id
+                        ?? nextAvailableStageID(preferred: StageID(rawValue: "1"), in: targetScope)
+                    targetScope.ensureStage(targetScope.activeStageID)
+                }
+                if sourceScope.stages.isEmpty {
+                    sourceScope.ensureStage(StageID(rawValue: "1"))
+                }
+                if sourceWasActive {
+                    sourceScope.activeStageID = sourceScope.stages.first?.id ?? StageID(rawValue: "1")
+                }
+                state.update(sourceScope)
+                state.update(targetScope)
+                let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
+                for member in movingStage.members {
+                    state.updatePinHomeScope(windowID: member.windowID, to: targetScopeID)
+                }
+                state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
+                return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID, targetScope.activeStageID == movingStage.id)
             }
-            targetScope.stages.append(movingStage)
-            if effectiveFollow {
-                targetScope.activeStageID = movingStage.id
-            } else if targetScope.activeStageID == movingStage.id {
-                targetScope.activeStageID = targetScope.stages.first { $0.id != movingStage.id }?.id
-                    ?? nextAvailableStageID(preferred: StageID(rawValue: "1"), in: targetScope)
-                targetScope.ensureStage(targetScope.activeStageID)
-            }
-            if sourceScope.stages.isEmpty {
-                sourceScope.ensureStage(StageID(rawValue: "1"))
-            }
-            if sourceWasActive {
-                sourceScope.activeStageID = sourceScope.stages.first?.id ?? StageID(rawValue: "1")
-            }
-            state.update(sourceScope)
-            state.update(targetScope)
-            let targetScopeID = StageScope(displayID: targetDisplay.id, desktopID: targetScope.desktopID, stageID: movingStage.id)
-            for member in movingStage.members {
-                state.updatePinHomeScope(windowID: member.windowID, to: targetScopeID)
-            }
-            state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
-            return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID, targetScope.activeStageID == movingStage.id)
+        } catch {
+            return persistenceFailure("stage move-to-display \(stageID.rawValue)", error)
         }
         guard let move else {
             return stageMoveResult(
@@ -622,21 +671,37 @@ public struct StageCommandService {
             placed += 1
         }
         var failed = movingStage.members.count - placed
-        service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
-        service.removeLayoutIntent(scope: targetScopeID)
+        do {
+            try intentStore.removeChecked(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
+            try intentStore.removeChecked(scope: targetScopeID)
+        } catch {
+            return persistenceFailure("stage move-to-display \(requestedStageID.rawValue)", error)
+        }
         let result = service.applyCommandPlacement(placement, cause: "stage.move_display", generation: generation, events: events).result
         failed += result.failed
         if !move.activated {
             // Frames de retour de la stage masquée (REL-023) : centrées sur l'écran cible, écrites après
             // l'application car le relevé du plan réécrit les frames des membres avec les frames vivantes.
-            store.mutate { state in
-                var scope = activeScope(displayID: targetDisplay.id, in: &state)
-                guard let index = scope.stages.firstIndex(where: { $0.id == movingStage.id }) else { return }
-                for memberIndex in scope.stages[index].members.indices {
-                    let frame = scope.stages[index].members[memberIndex].frame.cgRect
-                    scope.stages[index].members[memberIndex].frame = Rect(centeredFrame(frame, in: targetDisplay.visibleFrame.cgRect))
+            // Scope exact de la première transaction (le bureau actif a pu changer) et seuls les membres
+            // transférés encore présents dans la stage (R1-14). O(m), m = membres de la stage.
+            let movedIDs = Set(movingStage.members.map(\.windowID))
+            do {
+                try store.mutateChecked { state in
+                    guard let scopeIndex = state.scopes.firstIndex(where: {
+                        $0.displayID == targetScopeID.displayID && $0.desktopID == targetScopeID.desktopID
+                    }),
+                        let index = state.scopes[scopeIndex].stages.firstIndex(where: { $0.id == targetScopeID.stageID })
+                    else { return }
+                    for memberIndex in state.scopes[scopeIndex].stages[index].members.indices {
+                        let member = state.scopes[scopeIndex].stages[index].members[memberIndex]
+                        guard movedIDs.contains(member.windowID) else { continue }
+                        state.scopes[scopeIndex].stages[index].members[memberIndex].frame =
+                            Rect(centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect))
+                    }
                 }
-                state.update(scope)
+            } catch {
+                // Stage déplacée et masquée, mais frames de retour perdues : échec signalé.
+                return persistenceFailure("stage move-to-display \(movingStage.id.rawValue)", error)
             }
         }
         events.append(RoadieEvent(
@@ -691,20 +756,25 @@ public struct StageCommandService {
         let window = sourceEntry.window
         let sourceScope = sourceEntry.scope
 
-        let scope = store.mutate { state -> StageScope in
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: windowID)
+        let scope: StageScope
+        do {
+            scope = try store.mutateChecked { state -> StageScope in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: windowID)
+                }
+                var persistentScope = activeScope(displayID: displayID, in: &state)
+                let stageID = persistentScope.activeStageID
+                persistentScope.assign(window: window, to: stageID)
+                persistentScope.orderMembers(orderedWindowIDs, in: stageID)
+                state.update(persistentScope)
+                return StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
             }
-            var persistentScope = activeScope(displayID: displayID, in: &state)
-            let stageID = persistentScope.activeStageID
-            persistentScope.assign(window: window, to: stageID)
-            persistentScope.orderMembers(orderedWindowIDs, in: stageID)
-            state.update(persistentScope)
-            return StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
-        }
-        service.removeLayoutIntent(scope: scope)
-        if let sourceScope, sourceScope != scope {
-            service.removeLayoutIntent(scope: sourceScope)
+            try intentStore.removeChecked(scope: scope)
+            if let sourceScope, sourceScope != scope {
+                try intentStore.removeChecked(scope: sourceScope)
+            }
+        } catch {
+            return persistenceFailure("stage place \(windowID.rawValue)", error)
         }
         let updated = service.snapshot(followFocus: false)
         let sourceRelayout = relayoutActiveSourceScopes(
@@ -724,7 +794,11 @@ public struct StageCommandService {
             keepWindowID: windowID,
             generation: generation
         )
-        persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
+        do {
+            try persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
+        } catch {
+            return persistenceFailure("stage place \(windowID.rawValue)", error)
+        }
         _ = service.focus(window)
         events.append(RoadieEvent(
             type: "stage_place_window",
@@ -774,28 +848,33 @@ public struct StageCommandService {
         let currentScope = activeScope(displayID: displayID, in: &current)
         let plannedScope = StageScope(displayID: displayID, desktopID: currentScope.desktopID, stageID: currentScope.activeStageID)
         let geometry = service.commandTreeGeometry(for: plannedScope, tree: current.bspTree(for: plannedScope) ?? .empty, in: snapshot)
-        let scope = store.mutate { state -> StageScope in
-            state.remove(windowID: windowID)
-            var persistentScope = activeScope(displayID: displayID, in: &state)
-            let stageID = persistentScope.activeStageID
-            persistentScope.assign(window: window, to: stageID)
-            persistentScope.orderMembers(orderedWindowIDs, in: stageID)
-            state.update(persistentScope)
-            let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
-            // Arbres mis à jour après `update`, qui remplace le scope entier.
-            if let sourceScope, sourceScope != scope, let sourceTree = state.bspTree(for: sourceScope) {
-                state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+        let scope: StageScope
+        do {
+            scope = try store.mutateChecked { state -> StageScope in
+                state.remove(windowID: windowID)
+                var persistentScope = activeScope(displayID: displayID, in: &state)
+                let stageID = persistentScope.activeStageID
+                persistentScope.assign(window: window, to: stageID)
+                persistentScope.orderMembers(orderedWindowIDs, in: stageID)
+                state.update(persistentScope)
+                let scope = StageScope(displayID: displayID, desktopID: persistentScope.desktopID, stageID: stageID)
+                // Arbres mis à jour après `update`, qui remplace le scope entier.
+                if let sourceScope, sourceScope != scope, let sourceTree = state.bspTree(for: sourceScope) {
+                    state.setBSPTree(sourceTree.removing(windowID), for: sourceScope)
+                }
+                let tree = state.bspTree(for: scope) ?? .empty
+                state.setBSPTree(
+                    treeMutation?(tree) ?? insertingRanked(windowID, in: orderedWindowIDs, into: tree, geometry: geometry, fallback: display.visibleFrame.cgRect),
+                    for: scope
+                )
+                return scope
             }
-            let tree = state.bspTree(for: scope) ?? .empty
-            state.setBSPTree(
-                treeMutation?(tree) ?? insertingRanked(windowID, in: orderedWindowIDs, into: tree, geometry: geometry, fallback: display.visibleFrame.cgRect),
-                for: scope
-            )
-            return scope
-        }
-        service.removeLayoutIntent(scope: scope)
-        if let sourceScope, sourceScope != scope {
-            service.removeLayoutIntent(scope: sourceScope)
+            try intentStore.removeChecked(scope: scope)
+            if let sourceScope, sourceScope != scope {
+                try intentStore.removeChecked(scope: sourceScope)
+            }
+        } catch {
+            return persistenceFailure("stage place \(windowID.rawValue)", error)
         }
         // Plan unique (A15, T212) : scope d'origine et scope cible disposés dans une seule écriture
         // groupée, puis le focus.
@@ -862,22 +941,27 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage \(direction.rawValue): no display", changed: false)
         }
-        let nextStageID = store.mutate { state -> StageID in
-            var scope = activeScope(displayID: display.id, in: &state)
-            for id in (1...6).map({ StageID(rawValue: String($0)) }) {
-                scope.ensureStage(id, mode: config.tiling.defaultStrategy)
+        let nextStageID: StageID
+        do {
+            nextStageID = try store.mutateChecked { state -> StageID in
+                var scope = activeScope(displayID: display.id, in: &state)
+                for id in (1...6).map({ StageID(rawValue: String($0)) }) {
+                    scope.ensureStage(id, mode: config.tiling.defaultStrategy)
+                }
+                let ordered = selectableStageIDs(in: scope)
+                let currentIndex = ordered.firstIndex(of: scope.activeStageID) ?? 0
+                let nextIndex: Int
+                switch direction {
+                case .next:
+                    nextIndex = (currentIndex + 1) % ordered.count
+                case .prev:
+                    nextIndex = (currentIndex - 1 + ordered.count) % ordered.count
+                }
+                state.update(scope)
+                return ordered[nextIndex]
             }
-            let ordered = selectableStageIDs(in: scope)
-            let currentIndex = ordered.firstIndex(of: scope.activeStageID) ?? 0
-            let nextIndex: Int
-            switch direction {
-            case .next:
-                nextIndex = (currentIndex + 1) % ordered.count
-            case .prev:
-                nextIndex = (currentIndex - 1 + ordered.count) % ordered.count
-            }
-            state.update(scope)
-            return ordered[nextIndex]
+        } catch {
+            return persistenceFailure("stage \(direction.rawValue)", error)
         }
         return switchDisplay(display, to: nextStageID, snapshot: snapshot)
     }
@@ -914,15 +998,20 @@ public struct StageCommandService {
         let commandScopes = Set([snapshot.state.activeScope(on: display.id)].compactMap { $0 })
         beginLayoutCommand("stage.mode", scopes: commandScopes)
         defer { finishLayoutCommand("stage.mode", scopes: commandScopes) }
-        let modeScope = store.mutate { state -> StageScope in
-            var scope = activeScope(displayID: display.id, in: &state)
-            let stageID = scope.activeStageID
-            scope.setMode(mode, for: stageID)
-            state.update(scope)
-            return StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
+        let modeScope: StageScope
+        do {
+            modeScope = try store.mutateChecked { state -> StageScope in
+                var scope = activeScope(displayID: display.id, in: &state)
+                let stageID = scope.activeStageID
+                scope.setMode(mode, for: stageID)
+                state.update(scope)
+                return StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
+            }
+            try intentStore.removeChecked(scope: modeScope)
+        } catch {
+            return persistenceFailure("mode \(mode.rawValue)", error)
         }
         let stageID = modeScope.stageID
-        service.removeLayoutIntent(scope: modeScope)
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false), generation: generation), generation: generation)
         events.append(RoadieEvent(
             type: "stage_mode",
@@ -994,17 +1083,21 @@ public struct StageCommandService {
                         ?? targetStage?.focusedWindowID
                         ?? targetMembers.last?.windowID
                     let persistStartedAt = Date()
-                    store.mutate { state in
-                        _ = activeScope(displayID: display.id, in: &state)
-                        state.focusDisplay(display.id)
-                        state.protectCommandFocus(
-                            displayID: display.id,
-                            desktopID: scope.desktopID,
-                            stageID: stageID,
-                            windowID: targetFocusedWindowID,
-                            staleFocusedWindowID: snapshot.focusedWindowID,
-                            duration: 3.0
-                        )
+                    do {
+                        try store.mutateChecked { state in
+                            _ = activeScope(displayID: display.id, in: &state)
+                            state.focusDisplay(display.id)
+                            state.protectCommandFocus(
+                                displayID: display.id,
+                                desktopID: scope.desktopID,
+                                stageID: stageID,
+                                windowID: targetFocusedWindowID,
+                                staleFocusedWindowID: snapshot.focusedWindowID,
+                                duration: 3.0
+                            )
+                        }
+                    } catch {
+                        return persistenceFailure("stage switch \(stageID.rawValue)", error)
                     }
                     let persistMs = elapsedMs(since: persistStartedAt)
 
@@ -1070,7 +1163,11 @@ public struct StageCommandService {
                 }
             }
             if activeDisplayChanged {
-                store.mutate { $0.focusDisplay(display.id) }
+                do {
+                    try store.mutateChecked { $0.focusDisplay(display.id) }
+                } catch {
+                    return persistenceFailure("stage switch \(stageID.rawValue)", error)
+                }
             }
             events.append(RoadieEvent(
                 type: "stage_switch_noop",
@@ -1102,59 +1199,64 @@ public struct StageCommandService {
         let persistStartedAt = Date()
         // Transaction : relit l'état frais, bascule la stage active et protège le focus.
         // Ni AX ni événement dans le bloc (verrou d'état tenu).
-        let transition = store.mutate { state -> StageSwitchTransition in
-            var scope = activeScope(displayID: display.id, in: &state)
-            let activeDisplayChanged = state.activeDisplayID != display.id
-            let previousID = scope.activeStageID
-            scope.ensureStage(stageID, mode: config.tiling.defaultStrategy)
-            state.focusDisplay(display.id)
-            // O(v * M), v = fenêtres visibles, M = membres de l'écran (recherche du membre par fenêtre).
-            for window in visibleWindows {
-                scope.updateFrame(window: window)
-            }
+        let transition: StageSwitchTransition
+        do {
+            transition = try store.mutateChecked { state -> StageSwitchTransition in
+                var scope = activeScope(displayID: display.id, in: &state)
+                let activeDisplayChanged = state.activeDisplayID != display.id
+                let previousID = scope.activeStageID
+                scope.ensureStage(stageID, mode: config.tiling.defaultStrategy)
+                state.focusDisplay(display.id)
+                // O(v * M), v = fenêtres visibles, M = membres de l'écran (recherche du membre par fenêtre).
+                for window in visibleWindows {
+                    scope.updateFrame(window: window)
+                }
 
-            let previousMembers = Set(scope.memberIDs(in: previousID))
-            let targetMembers = Set(scope.memberIDs(in: stageID))
-            let targetStage = scope.stages.first(where: { $0.id == stageID })
-            let targetLiveMemberIDs = targetStage?.members.compactMap { member -> WindowID? in
-                windowsByID[member.windowID] == nil ? nil : member.windowID
-            } ?? []
-            let targetFocusedWindowID = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
-                ?? targetLiveMemberIDs.last
-                ?? targetStage?.focusedWindowID
-                ?? targetStage?.members.last?.windowID
-            let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
-            // Toutes les fenêtres de la stage cible ont disparu (application absente, autre
-            // Space, absence courte) : la bascule a lieu quand même, puis on tente de faire
-            // revenir l'application. Sans cela, la stage resterait inatteignable pendant la
-            // grâce des membres absents.
-            let targetMissing = !targetMembers.isEmpty && targetLiveMemberIDs.isEmpty
-            let nativeFullscreenMember = targetMissing
-                ? targetStage?.members.first { $0.presentationState == .nativeFullscreen }
-                : nil
-            scope.activeStageID = stageID
-            state.update(scope)
-            state.protectCommandFocus(
-                displayID: display.id,
-                desktopID: scope.desktopID,
-                stageID: stageID,
-                windowID: targetFocusedWindowID,
-                staleFocusedWindowID: nativeFullscreenMember == nil
-                    ? snapshot.focusedWindowID.flatMap { hiddenWindowIDs.contains($0) ? $0 : nil }
-                    : nil,
-                duration: 3.0
-            )
-            return StageSwitchTransition(
-                desktopID: scope.desktopID,
-                previousID: previousID,
-                activeDisplayChanged: activeDisplayChanged,
-                targetMembers: targetMembers,
-                targetStage: targetStage,
-                targetFocusedWindowID: targetFocusedWindowID,
-                hiddenWindowIDs: hiddenWindowIDs,
-                targetMissing: targetMissing,
-                nativeFullscreenMember: nativeFullscreenMember
-            )
+                let previousMembers = Set(scope.memberIDs(in: previousID))
+                let targetMembers = Set(scope.memberIDs(in: stageID))
+                let targetStage = scope.stages.first(where: { $0.id == stageID })
+                let targetLiveMemberIDs = targetStage?.members.compactMap { member -> WindowID? in
+                    windowsByID[member.windowID] == nil ? nil : member.windowID
+                } ?? []
+                let targetFocusedWindowID = targetStage?.focusedWindowID.flatMap { windowsByID[$0] == nil ? nil : $0 }
+                    ?? targetLiveMemberIDs.last
+                    ?? targetStage?.focusedWindowID
+                    ?? targetStage?.members.last?.windowID
+                let hiddenWindowIDs = previousMembers.subtracting(targetMembers)
+                // Toutes les fenêtres de la stage cible ont disparu (application absente, autre
+                // Space, absence courte) : la bascule a lieu quand même, puis on tente de faire
+                // revenir l'application. Sans cela, la stage resterait inatteignable pendant la
+                // grâce des membres absents.
+                let targetMissing = !targetMembers.isEmpty && targetLiveMemberIDs.isEmpty
+                let nativeFullscreenMember = targetMissing
+                    ? targetStage?.members.first { $0.presentationState == .nativeFullscreen }
+                    : nil
+                scope.activeStageID = stageID
+                state.update(scope)
+                state.protectCommandFocus(
+                    displayID: display.id,
+                    desktopID: scope.desktopID,
+                    stageID: stageID,
+                    windowID: targetFocusedWindowID,
+                    staleFocusedWindowID: nativeFullscreenMember == nil
+                        ? snapshot.focusedWindowID.flatMap { hiddenWindowIDs.contains($0) ? $0 : nil }
+                        : nil,
+                    duration: 3.0
+                )
+                return StageSwitchTransition(
+                    desktopID: scope.desktopID,
+                    previousID: previousID,
+                    activeDisplayChanged: activeDisplayChanged,
+                    targetMembers: targetMembers,
+                    targetStage: targetStage,
+                    targetFocusedWindowID: targetFocusedWindowID,
+                    hiddenWindowIDs: hiddenWindowIDs,
+                    targetMissing: targetMissing,
+                    nativeFullscreenMember: nativeFullscreenMember
+                )
+            }
+        } catch {
+            return persistenceFailure("stage switch \(stageID.rawValue)", error)
         }
         let persistMs = elapsedMs(since: persistStartedAt)
         let targetScope = StageScope(displayID: display.id, desktopID: transition.desktopID, stageID: stageID)
@@ -1456,18 +1558,19 @@ public struct StageCommandService {
         return result
     }
 
+    /// Lève si l'intent de la commande n'a pas été écrit (REL-021).
     private func persistCommandIntent(
         scope: StageScope,
         orderedWindowIDs: [WindowID],
         layout: LayoutPlan,
         result: ApplyResult
-    ) {
+    ) throws {
         var placements = Dictionary(uniqueKeysWithValues: layout.placements.map { ($0.key, Rect($0.value)) })
         for item in result.items {
             placements[item.windowID] = item.actual ?? item.requested
         }
         guard Set(placements.keys) == Set(orderedWindowIDs) else { return }
-        service.saveLayoutIntent(scope: scope, windowIDs: orderedWindowIDs, placements: placements, source: .command)
+        try intentStore.saveChecked(LayoutIntent(scope: scope, windowIDs: orderedWindowIDs, placements: placements, source: .command))
     }
 
     private func layoutPlan(
