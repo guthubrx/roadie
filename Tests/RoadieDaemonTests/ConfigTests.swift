@@ -897,6 +897,79 @@ struct ConfigTests {
         #expect(report.items.isEmpty == false)
     }
 
+    // MARK: - SPEC-023 : taille des étiquettes et lecture des clés connues
+
+    @Test
+    func labelFontSizeDefaultsToThirteenAndIsClampedAtDecoding() throws {
+        #expect(TargetModeConfig().labelFontSize == 13)
+        #expect(TargetGridConfig().labelFontSize == 13)
+        #expect(TargetModeConfig(labelFontSize: 5).labelFontSize == 8)
+        #expect(TargetModeConfig(labelFontSize: 99).labelFontSize == 48)
+        #expect(TargetGridConfig(labelFontSize: 5).labelFontSize == 8)
+        #expect(TargetGridConfig(labelFontSize: 99).labelFontSize == 48)
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-label-font-\(UUID().uuidString).toml")
+        try """
+        [experimental.target_mode]
+        label_font_size = 5
+
+        [experimental.target_grid]
+        label_font_size = 99
+        """.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let config = try RoadieConfigLoader.load(from: url.path)
+        #expect(config.experimental.targetMode.labelFontSize == 8)
+        #expect(config.experimental.targetGrid.labelFontSize == 48)
+
+        let defaults = try RoadieConfigLoader.load(from: "/nonexistent/roadie-\(UUID().uuidString).toml")
+        #expect(defaults.experimental.targetMode.labelFontSize == 13)
+        #expect(defaults.experimental.targetGrid.labelFontSize == 13)
+    }
+
+    @Test
+    func labelFontSizeAcceptsIntegerAndFloatAndIsNotFlaggedUnknown() throws {
+        let report = try validate("""
+        [experimental.target_mode]
+        label_font_size = 20
+
+        [experimental.target_grid]
+        label_font_size = 18.5
+        """)
+        #expect(report.items.allSatisfy { $0.level == .ok }, "\(report.items)")
+        #expect(!report.items.contains { $0.message.contains("clé inconnue") })
+    }
+
+    @Test
+    func labelFontSizeAsStringIsReportedAsTypeError() throws {
+        let report = try validate("""
+        [experimental.target_mode]
+        label_font_size = "grand"
+        """)
+        #expect(report.hasErrors)
+    }
+
+    @Test
+    func knownScalarKeysExposeScalarsOnly() {
+        let known = RoadieConfigLoader.knownScalarKeys()
+        let grid = known["experimental.target_grid"] ?? []
+        #expect(grid.contains("rows"))
+        #expect(grid.contains("label_font_size"))
+        #expect(known["experimental.target_mode"]?.contains("label_font_size") == true)
+        #expect(known["tiling"]?.contains("display_overrides") == false)
+        #expect(known["tiling"]?.contains("gaps_inner") == true)
+        #expect(known["rules"] == nil)
+        #expect(known["tiling.display_overrides"] == nil)
+    }
+
+    @Test
+    func ineffectiveKeysAndEditDistanceAreExposed() {
+        #expect(RoadieConfigLoader.ineffectiveKeys()["desktops"]?.contains("count") == true)
+        #expect(RoadieConfigLoader.editDistance("stage", "stagee") == 1)
+        #expect(RoadieConfigLoader.editDistance("", "abc") == 3)
+        #expect(RoadieConfigLoader.editDistance("rows", "rows") == 0)
+    }
+
     @Test
     func mouseFollowerMovesToWindowCenterOnlyWhenEnabled() {
         let window = WindowSnapshot(

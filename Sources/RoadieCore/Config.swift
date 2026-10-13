@@ -566,6 +566,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// Raccourci global du mode recherche (SPEC-021), forme normalisée `command+control+alt+f` ;
     /// vide = désactivé. Défaut : la hyper key (Cmd+Option+Ctrl) + F, comme le conseille Homerow.
     public var searchHotkey: String
+    /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
+    public var labelFontSize: Double
 
     public static let defaultSearchHotkey = "command+control+alt+f"
 
@@ -577,7 +579,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         overlayDurationSeconds: Double = 3,
         appMouseActionsEnabled: Bool = false,
         scrollModeEnabled: Bool = false,
-        searchHotkey: String = TargetModeConfig.defaultSearchHotkey
+        searchHotkey: String = TargetModeConfig.defaultSearchHotkey,
+        labelFontSize: Double = 13
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -587,6 +590,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.appMouseActionsEnabled = appMouseActionsEnabled
         self.scrollModeEnabled = scrollModeEnabled
         self.searchHotkey = TargetGridConfig.normalizedKey(searchHotkey, fallback: "")
+        self.labelFontSize = min(48, max(8, labelFontSize))
     }
 
     /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
@@ -609,6 +613,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case appMouseActionsEnabled = "app_mouse_actions_enabled"
         case scrollModeEnabled = "scroll_mode_enabled"
         case searchHotkey = "search_hotkey"
+        case labelFontSize = "label_font_size"
     }
 
     public init(from decoder: Decoder) throws {
@@ -621,7 +626,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             overlayDurationSeconds: try c.decodeFlexibleDouble(forKey: .overlayDurationSeconds) ?? 3,
             appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
             scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false,
-            searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey
+            searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey,
+            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13
         )
     }
 }
@@ -737,6 +743,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
     public var focusFollowGrid: Bool
     public var labelPlacement: TargetGridLabelPlacement
     public var defaultScope: TargetGridScope
+    /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
+    public var labelFontSize: Double
 
     public init(
         enabled: Bool = false,
@@ -764,7 +772,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         mouseFollowGrid: Bool = false,
         focusFollowGrid: Bool = false,
         labelPlacement: TargetGridLabelPlacement = .callout,
-        defaultScope: TargetGridScope = .display
+        defaultScope: TargetGridScope = .display,
+        labelFontSize: Double = 13
     ) {
         self.enabled = enabled
         self.mode = mode
@@ -792,6 +801,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         self.focusFollowGrid = focusFollowGrid
         self.labelPlacement = labelPlacement
         self.defaultScope = defaultScope
+        self.labelFontSize = min(48, max(8, labelFontSize))
     }
 
     enum CodingKeys: String, CodingKey {
@@ -821,6 +831,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         case focusFollowGrid = "focus_follow_grid"
         case labelPlacement = "label_placement"
         case defaultScope = "default_scope"
+        case labelFontSize = "label_font_size"
     }
 
     public init(from decoder: Decoder) throws {
@@ -851,7 +862,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
             mouseFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .mouseFollowGrid) ?? false,
             focusFollowGrid: try c.decodeIfPresent(Bool.self, forKey: .focusFollowGrid) ?? false,
             labelPlacement: try c.decodeIfPresent(TargetGridLabelPlacement.self, forKey: .labelPlacement) ?? .callout,
-            defaultScope: try c.decodeIfPresent(TargetGridScope.self, forKey: .defaultScope) ?? .display
+            defaultScope: try c.decodeIfPresent(TargetGridScope.self, forKey: .defaultScope) ?? .display,
+            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13
         )
     }
 
@@ -1039,6 +1051,43 @@ public struct TitlebarContextMenuConfig: Equatable, Codable, Sendable {
 }
 
 public enum RoadieConfigLoader {
+    /// Clés qui sont des listes ou des tableaux de tables : hors du catalogue de réglages scalaires (SPEC-023).
+    private static let nonScalarKeys: [String: Set<String>] = [
+        "tiling": ["display_overrides", "smart_gaps_solo_sides", "allowed_subroles"],
+        "stage_manager": ["workspaces"],
+        "exclusions": ["floating_bundles"],
+        "fx.borders": ["stage_overrides"],
+        "width_adjustment": ["presets"],
+        "experimental.app_targets": ["include_roles", "additional_boost_bundle_ids"]
+    ]
+
+    /// Tables qui sont elles-mêmes des tableaux de tables ou leurs sous-tables.
+    private static let nonScalarTables: Set<String> = [
+        "tiling.display_overrides", "stage_manager.workspaces", "fx.borders.stage_overrides",
+        "fx.rail.preview.stage_overrides", "rules", "rules.match", "rules.action"
+    ]
+
+    /// Clés scalaires reconnues par le validateur, par chemin de table TOML complet.
+    /// Les tables sans clé scalaire sont omises. Complexité : O(k) — k nombre de clés connues.
+    public static func knownScalarKeys() -> [String: Set<String>] {
+        var result: [String: Set<String>] = [:]
+        for (table, keys) in ConfigValidationRules.knownKeys where !nonScalarTables.contains(table) {
+            let scalars = keys.subtracting(nonScalarKeys[table] ?? [])
+            if !scalars.isEmpty { result[table] = scalars }
+        }
+        return result
+    }
+
+    /// Clés décodées mais lues nulle part dans le daemon, par chemin de table.
+    public static func ineffectiveKeys() -> [String: Set<String>] {
+        ConfigValidationRules.ineffectiveKeys
+    }
+
+    /// Distance de Levenshtein, partagée avec le validateur (aucune seconde implémentation).
+    public static func editDistance(_ lhs: String, _ rhs: String) -> Int {
+        ConfigValidationRules.editDistance(lhs, rhs)
+    }
+
     public static func defaultConfigPath() -> String {
         (NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath as String)
     }
@@ -1213,7 +1262,7 @@ private enum ConfigValidationRules {
 
     /// Clés réellement lues, par table. Une table absente de ce dictionnaire n'est pas vérifiée.
     /// Source : les `CodingKeys` de ce fichier, `WindowRule.swift` et `RailSettings.swift`.
-    private static let knownKeys: [String: Set<String>] = {
+    static let knownKeys: [String: Set<String>] = {
         let labelKeys: Set<String> = ["enabled", "template", "color", "font_size", "font_family", "weight", "alignment", "opacity", "offset_x", "offset_y"]
         let gapKeys: Set<String> = ["gaps_outer", "gaps_outer_top", "gaps_outer_right", "gaps_outer_bottom", "gaps_outer_left"]
         return [
@@ -1243,9 +1292,9 @@ private enum ConfigValidationRules {
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
-            "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope"],
+            "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
             "rules": ["id", "enabled", "priority", "stop_processing", "match", "action"],
             "rules.match": ["app", "app_regex", "title", "title_regex", "role", "subrole", "display", "desktop", "stage", "is_floating"],
@@ -1254,7 +1303,7 @@ private enum ConfigValidationRules {
     }()
 
     /// Clés décodées mais lues nulle part dans le daemon (vérifié par recherche dans `Sources/`).
-    private static let ineffectiveKeys: [String: Set<String>] = [
+    static let ineffectiveKeys: [String: Set<String>] = [
         "desktops": ["enabled", "count", "back_and_forth", "mode"],
         "stage_manager": ["enabled", "hide_strategy"],
         // Anciennes clés d'en-tête du rail : sans effet, la hauteur dépend des tailles de police.
@@ -1366,7 +1415,7 @@ private enum ConfigValidationRules {
     }
 
     /// Distance de Levenshtein. Complexité : O(a * b) en temps, O(b) en mémoire.
-    private static func editDistance(_ lhs: String, _ rhs: String) -> Int {
+    static func editDistance(_ lhs: String, _ rhs: String) -> Int {
         let a = Array(lhs)
         let b = Array(rhs)
         if a.isEmpty { return b.count }
@@ -1498,7 +1547,8 @@ private enum ConfigValidationRules {
             "height",
             "leading_exclusion",
             "trailing_exclusion",
-            "overlay_duration_seconds"
+            "overlay_duration_seconds",
+            "label_font_size"
         ]
         var items: [ConfigValidationItem] = []
         var currentTable = ""
@@ -1574,6 +1624,13 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: "experimental.target_mode.overlay_duration_seconds",
                 message: "must be between 0.2 and 30"
+            ))
+        }
+        if config.labelFontSize < 8 || config.labelFontSize > 48 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_mode.label_font_size",
+                message: "must be between 8 and 48"
             ))
         }
         if !config.enabled &&
@@ -1655,6 +1712,13 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: "experimental.target_grid.max_depth",
                 message: "must be between 1 and 20"
+            ))
+        }
+        if config.labelFontSize < 8 || config.labelFontSize > 48 {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_grid.label_font_size",
+                message: "must be between 8 and 48"
             ))
         }
         if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {

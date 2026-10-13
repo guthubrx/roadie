@@ -96,6 +96,16 @@ stages_position = "center"
 [fx.rail.stage_labels]
 enabled = true
 
+# EN: Target mode (letters and search). label_font_size: label text size in points, 8 to 48.
+# FR: Mode cible (lettres et recherche). label_font_size : taille du texte des étiquettes en points, de 8 à 48.
+[experimental.target_mode]
+label_font_size = 13
+
+# EN: Recursive grid. label_font_size: label text size in points, 8 to 48.
+# FR: Grille récursive. label_font_size : taille du texte des étiquettes en points, de 8 à 48.
+[experimental.target_grid]
+label_font_size = 13
+
 # EN: Window rules. Check them with: roadie rules validate
 # FR: Règles de fenêtres. Vérifier avec : roadie rules validate
 [[rules]]
