@@ -547,6 +547,13 @@ saisie : tape quelques lettres d'un element de n'importe quelle fenetre visible,
 puis Retour pour le cliquer (Maj-Retour clic droit, Cmd-Retour Cmd-clic, deux
 Retour double-clic).
 
+Un `/` en premier caractère fait passer la même barre en **mode commande** :
+`/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` ouvre une
+fenêtre de réglages (catégories à gauche, recherche, changements appliqués tout
+de suite) et `/set table.clé valeur` modifie un réglage sans l'ouvrir (par exemple
+`/set target_grid.rows 4`). Le fichier de configuration garde ses commentaires.
+Voir [Mode commande et fenêtre de réglages](docs/fr/features.md).
+
 Roadie fournit aussi deux grilles recursives :
 
 - **Grille Ecran** pour cibler un ecran complet.

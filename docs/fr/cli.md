@@ -269,6 +269,12 @@ Cibles (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
 visibles), comme le raccourci `search_hotkey` (Hyper+F par defaut). Voir
 `docs/fr/features.md`, section Mode recherche.
 
+Dans cette barre, un `/` en premier caractère ouvre le mode commande. Ses
+commandes (`/move`, `/stage`, `/screen`, `/bm`, `/grid`, `/doctor`, `/set`,
+`/settings`...) appellent les mêmes services que les commandes `roadie`
+ci-dessus, sans passer par le socket. Elles exigent que le daemon tourne. Voir
+`docs/fr/features.md`, section Mode commande (`/`) et fenêtre de réglages.
+
 `targets pick` applique l'action seulement si la requete pointe vers une cible
 unique. En cas d'ambiguite, la commande affiche les candidates et ne change pas
 le layout.

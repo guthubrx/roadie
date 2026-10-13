@@ -363,6 +363,157 @@ Le mode lettres classique reste limite a la fenetre active. Pour l'etendre a
 toutes les fenetres visibles : `scope = "visible_windows"` dans
 `[experimental.app_targets]`.
 
+### Mode commande (`/`) et fenêtre de réglages
+
+La barre du mode recherche sait aussi lancer des commandes, à la manière des
+commandes `/` de Codex ou de Claude. Un `/` en **premier caractère** fait passer
+la barre en mode commande. Sans `/` au début, la barre reste en mode recherche,
+sans aucun changement. Pour chercher un texte qui commence par `/`, tape un
+espace avant. Effacer le `/` ramène au mode recherche.
+
+En mode commande :
+
+- la barre liste les commandes avec une courte description ; la liste se filtre
+  pendant la frappe (casse et accents ignorés) ;
+- **Tab** complète la commande ou l'argument (commande, numéro ou nom de stage,
+  nom de bookmark, nom de réglage, catégorie, direction), ou avance dans la
+  liste. Maj-Tab revient en arrière ;
+- **Flèche haut** et **Flèche bas** parcourent l'historique des 50 dernières
+  commandes. L'historique est conservé après un redémarrage, dans
+  `~/.local/state/roadies/command-history.json` ;
+- **Retour** exécute la commande sur la fenêtre, le stage, l'écran et le bureau
+  actifs à cet instant. En cas de succès, la barre se ferme. En cas d'échec, elle
+  reste ouverte et affiche une erreur courte avec la forme attendue ; une commande
+  inconnue propose la plus proche ;
+- **Échap** ferme la barre sans action.
+
+Chaque commande a le même effet que la commande `roadie` correspondante : aucune
+action nouvelle n'est créée. Les directions s'écrivent en français (`gauche`,
+`droite`, `haut`, `bas`) ou en anglais (`left`, `right`, `up`, `down`). `N` est un
+nombre entier supérieur ou égal à 1.
+
+| Commande | Alias | Forme | Effet |
+|----------|-------|-------|-------|
+| `/move` | | `/move DIR` | déplace la fenêtre active |
+| `/swap` | | `/swap DIR` | inverse la fenêtre active avec sa voisine |
+| `/resize` | | `/resize DIR` | redimensionne la fenêtre active |
+| `/full` | | `/full` | plein écran natif |
+| `/max` | | `/max` | agrandit la fenêtre |
+| `/stage` | `/s` | `/stage N` ou `/stage NOM` | affiche ce stage |
+| | | `/stage new [NOM]` | crée un stage |
+| | | `/stage rename NOM` | renomme le stage courant |
+| | | `/stage send N` | envoie la fenêtre active dans le stage N |
+| `/screen` | | `/screen DIR` ou `/screen N` | focus sur un autre écran |
+| `/send` | | `/send N` | envoie la fenêtre active sur l'écran N |
+| `/desktop` | `/d` | `/desktop N` | active le bureau N |
+| `/layout` | | `/layout bsp\|spatial\|master\|float` | change la disposition du stage |
+| `/balance` | | `/balance` | équilibre la disposition |
+| `/split` | | `/split h\|v` | règle le sens de coupe |
+| `/bm` | `/b` | `/bm NOM` | va au bookmark NOM |
+| | | `/bm set NOM` | pose le bookmark NOM sur la fenêtre active |
+| `/grid` | | `/grid` ou `/grid fenêtre` | ouvre la grille de l'écran ou de la fenêtre active |
+| `/letters` | | `/letters` | ouvre le mode lettres |
+| `/doctor` | | `/doctor` | diagnostic ; résultat affiché dans la barre |
+| `/heal` | | `/heal` | répare l'état du daemon |
+| `/reload` | | `/reload` | recharge la configuration |
+| `/restart` | | `/restart` | redémarre le daemon (aucun résultat affiché) |
+| `/settings` | | `/settings [catégorie]` | ouvre la fenêtre de réglages |
+| `/set` | | `/set nom [valeur\|défaut]` | lit ou modifie un réglage |
+
+`/grid`, `/letters` et `/restart` s'exécutent après la fermeture de la barre.
+Avec un seul écran ou un seul bureau, `/screen` et `/desktop` répondent qu'il n'y
+a pas d'autre cible. Sans fenêtre active, les commandes qui en demandent une
+répondent « Aucune fenêtre active ». Un refus est inscrit dans le journal
+d'événements (`command.rejected`) avec le nom de la commande et un code de
+raison, sans la saisie brute.
+
+#### Fenêtre de réglages (`/settings`)
+
+`/settings` ouvre la fenêtre « Réglages Roadie ». `/settings catégorie` l'ouvre
+sur cette catégorie (identifiant sans accent ou libellé, casse ignorée). Sans
+argument, elle s'ouvre sur la dernière catégorie vue (Général la première fois).
+Une seconde demande ramène la même fenêtre au premier plan.
+
+- **Colonne de gauche** : une zone de recherche, puis les catégories : Général,
+  Tuilage, Stages et bureaux, Mode lettres, Grille, Recherche, Rail, Bordures,
+  Focus et souris, Règles, Avancé.
+- **Zone de droite** : les réglages de la catégorie. Chaque réglage montre un nom
+  lisible, une description, un contrôle adapté (interrupteur, nombre avec limites,
+  liste de choix, texte, couleur) et un bouton **Rétablir** quand la valeur
+  diffère du défaut.
+- **Recherche** : filtre les réglages de toutes les catégories par nom et par
+  description, casse et accents ignorés.
+- **Sans bouton Enregistrer** : un changement est écrit dans le fichier de
+  configuration et s'applique tout de suite, sans redémarrage. Une valeur refusée
+  laisse le champ à l'ancienne valeur et affiche la cause sous le réglage.
+- **Suivi du fichier** : une modification faite ailleurs (à la main, par `/set`)
+  apparaît dans la fenêtre sans la rouvrir.
+- **Fermeture** : Échap, Cmd+W ou le bouton de fermeture. L'application qui était
+  au premier plan reprend le focus.
+- **Général** ne contient aucun réglage : il montre le chemin et l'état du
+  fichier de configuration, avec les actions Ouvrir, Recharger et Diagnostic.
+- **Règles** et les listes ou tableaux de tables du fichier (règles, stages
+  nommés, hooks, surcharges par écran) sont en **lecture seule**, avec un bouton
+  « Ouvrir le fichier de configuration ». Si le fichier est invalide, un bandeau
+  l'indique et les contrôles sont désactivés.
+
+#### Réglage en ligne (`/set`)
+
+Un réglage se nomme `table.clé` : le chemin de la table du fichier, sans le
+préfixe `experimental.` ni `fx.`, puis la clé. Exemples : `target_grid.rows`,
+`app_targets.max_targets`, `rail.header.display.font_size`. La fenêtre, `/set` et
+la complétion de la barre utilisent les mêmes noms.
+
+| Saisie | Effet |
+|--------|-------|
+| `/set` | liste les catégories |
+| `/set nom` | affiche la valeur actuelle, le défaut et la plage ou les choix permis (`target_grid.rows = 4 (défaut 3, de 2 à 12)`) |
+| `/set nom valeur` | valide, écrit dans le fichier et applique |
+| `/set nom défaut` | rétablit la valeur par défaut |
+
+Conversions de la valeur :
+
+- **Booléen** : `true`, `false`, `oui`, `non`, `on`, `off`, `1`, `0`.
+- **Nombre** : point ou virgule décimale. Une valeur hors plage est refusée, tout
+  comme un nombre non entier pour un entier.
+- **Choix** : une valeur de la liste, sinon refus avec la liste.
+- **Couleur** : `#RRGGBB` ou `#RRGGBBAA`.
+- **Texte** : la fin de la saisie, sans les espaces de bord.
+- **Liste ou tableau de tables** : refus (« lecture seule : modifier le fichier de
+  configuration »).
+
+Un refus laisse le fichier intact et la barre donne la raison. Roadie journalise
+chaque réglage modifié (`settings.changed`, nom du réglage et résultat), jamais sa
+valeur.
+
+#### Fichier de configuration
+
+Le fichier est modifié **ligne à ligne** : seule la ligne de la clé change, avec
+son indentation et son commentaire de fin de ligne. Les commentaires, l'ordre et
+les réglages inconnus sont conservés. Une clé absente est ajoutée à la fin de sa
+table ; une table absente, à la fin du fichier. Le texte résultat est validé avant
+l'écriture, qui est atomique. À la première écriture de la session de Roadie, une
+copie `roadies.toml.bak-<horodatage>` est créée dans le même dossier.
+
+#### Taille des étiquettes
+
+Deux réglages agrandissent les étiquettes : `target_mode.label_font_size`
+(`[experimental.target_mode]`, mode lettres et recherche) et
+`target_grid.label_font_size` (`[experimental.target_grid]`, grille). Valeur en
+points, défaut 13, plage 8 à 48. Le texte, le cadre et l'espace autour grandissent
+en proportion ; sans valeur posée, l'aspect est celui d'avant.
+
+#### Limites
+
+- Les listes et les tableaux de tables du fichier restent à éditer à la main ; la
+  fenêtre les montre en lecture seule.
+- `/float` et `/close` n'existent pas : Roadie n'a pas ces actions. `/layout float`
+  règle la disposition du stage.
+- Le mode commande et la fenêtre de réglages sont dessinés par le daemon : ils
+  exigent que `roadied` tourne.
+- Les clés sans effet (par exemple `desktops.*`, `stage_manager.enabled`) ne sont
+  pas montrées. L'interface de la fenêtre est en français uniquement.
+
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
 les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne
@@ -378,6 +529,7 @@ overlay_duration_seconds = 3
 app_mouse_actions_enabled = false
 scroll_mode_enabled = false
 search_hotkey = "command+control+alt+f"
+label_font_size = 13   # taille des étiquettes en points (8 à 48)
 ```
 
 ```toml
@@ -404,6 +556,7 @@ rows = 3
 columns = 3
 max_depth = 3
 hint_characters = "azeqsdwxc"
+label_font_size = 13   # taille des étiquettes en points (8 à 48)
 ```
 
 Cas d'usage :

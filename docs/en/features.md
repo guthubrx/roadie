@@ -354,6 +354,158 @@ have a click handler.
 Classic label mode stays limited to the active window. To extend it to every
 visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
 
+### Command mode (`/`) and settings window
+
+The search bar can also run commands, in the spirit of the `/` commands of Codex
+or Claude. A `/` as the **first character** switches the bar to command mode.
+Without a leading `/`, the bar stays in search mode, unchanged. To search for
+text that starts with `/`, type a space first. Deleting the `/` returns to search
+mode.
+
+In command mode:
+
+- the bar lists the commands with a short description; the list filters as you
+  type (case and accents ignored);
+- **Tab** completes the command or argument (command, stage number or name,
+  bookmark name, setting name, category, direction), or moves through the list.
+  Shift-Tab goes back;
+- **Up** and **Down** browse the history of the last 50 commands. The history
+  survives a restart, in `~/.local/state/roadies/command-history.json`;
+- **Return** runs the command on the window, stage, display and desktop that are
+  active at that moment. On success, the bar closes. On failure, it stays open
+  and shows a short error with the expected form; an unknown command suggests the
+  closest one;
+- **Esc** closes the bar without action.
+
+Each command has the same effect as the matching `roadie` command: no new action
+is created. Directions are accepted in French (`gauche`, `droite`, `haut`, `bas`)
+or English (`left`, `right`, `up`, `down`). `N` is an integer greater than or
+equal to 1.
+
+| Command | Alias | Form | Effect |
+|---------|-------|------|--------|
+| `/move` | | `/move DIR` | moves the active window |
+| `/swap` | | `/swap DIR` | swaps the active window with its neighbor |
+| `/resize` | | `/resize DIR` | resizes the active window |
+| `/full` | | `/full` | native fullscreen |
+| `/max` | | `/max` | maximizes the window |
+| `/stage` | `/s` | `/stage N` or `/stage NAME` | shows that stage |
+| | | `/stage new [NAME]` | creates a stage |
+| | | `/stage rename NAME` | renames the current stage |
+| | | `/stage send N` | sends the active window to stage N |
+| `/screen` | | `/screen DIR` or `/screen N` | focuses another display |
+| `/send` | | `/send N` | sends the active window to display N |
+| `/desktop` | `/d` | `/desktop N` | activates desktop N |
+| `/layout` | | `/layout bsp\|spatial\|master\|float` | changes the stage layout |
+| `/balance` | | `/balance` | balances the layout |
+| `/split` | | `/split h\|v` | sets the split direction |
+| `/bm` | `/b` | `/bm NAME` | jumps to bookmark NAME |
+| | | `/bm set NAME` | sets bookmark NAME on the active window |
+| `/grid` | | `/grid` or `/grid fenêtre` | opens the display grid or the active window grid |
+| `/letters` | | `/letters` | opens letter mode |
+| `/doctor` | | `/doctor` | diagnostics; result shown in the bar |
+| `/heal` | | `/heal` | repairs the daemon state |
+| `/reload` | | `/reload` | reloads the configuration |
+| `/restart` | | `/restart` | restarts the daemon (no result shown) |
+| `/settings` | | `/settings [category]` | opens the settings window |
+| `/set` | | `/set name [value\|défaut]` | reads or changes a setting |
+
+`/grid`, `/letters` and `/restart` run after the bar closes. With a single
+display or desktop, `/screen` and `/desktop` say there is no other target.
+Commands that need an active window are refused when there is none. A refusal is
+written to the event log (`command.rejected`) with the command name and a reason
+code, never the raw input.
+
+The command names, the category names and the `défaut` and `fenêtre` keywords are
+French. The settings window itself is in French only.
+
+#### Settings window (`/settings`)
+
+`/settings` opens the "Réglages Roadie" window. `/settings category` opens it on
+that category (identifier without accent, or label, case ignored). With no
+argument, it opens on the last category viewed (Général the first time). A second
+request brings the same window to the front.
+
+- **Left column**: a search field, then the categories: Général (General),
+  Tuilage (Tiling), Stages et bureaux (Stages and desktops), Mode lettres (Letter
+  mode), Grille (Grid), Recherche (Search), Rail, Bordures (Borders), Focus et
+  souris (Focus and mouse), Règles (Rules), Avancé (Advanced).
+- **Right area**: the settings of the category. Each setting shows a readable
+  name, a description, a matching control (switch, number with limits, choice
+  list, text, color), and a **Rétablir** (Reset) button when the value differs
+  from the default.
+- **Search**: filters the settings of every category by name and description,
+  ignoring case and accents.
+- **No Save button**: a change is written to the configuration file and applies
+  at once, without a restart. A refused value leaves the field at the old value
+  and shows the cause under the setting.
+- **File tracking**: a change made elsewhere (by hand, by `/set`) appears in the
+  window without reopening it.
+- **Closing**: Esc, Cmd+W or the close button. The app that was in front gets the
+  focus back.
+- **Général** has no setting: it shows the path and state of the configuration
+  file, with the actions Open, Reload and Diagnostics.
+- **Règles** and the lists or arrays of tables of the file (rules, named stages,
+  hooks, per-display overrides) are **read-only**, with an "Ouvrir le fichier de
+  configuration" (Open the configuration file) button. If the file is invalid, a
+  banner says so and the controls are disabled.
+
+#### Inline setting (`/set`)
+
+A setting is named `table.key`: the path of the file table, without the
+`experimental.` or `fx.` prefix, then the key. Examples: `target_grid.rows`,
+`app_targets.max_targets`, `rail.header.display.font_size`. The window, `/set` and
+the bar completion use the same names.
+
+| Input | Effect |
+|-------|--------|
+| `/set` | lists the categories |
+| `/set name` | shows the current value, the default, and the allowed range or choices (`target_grid.rows = 4 (défaut 3, de 2 à 12)`) |
+| `/set name value` | validates, writes to the file and applies |
+| `/set name défaut` | restores the default value |
+
+Value conversions:
+
+- **Boolean**: `true`, `false`, `oui`, `non`, `on`, `off`, `1`, `0`.
+- **Number**: decimal point or comma. A value out of range is refused, as is a
+  non-integer for an integer setting.
+- **Choice**: a value from the list, otherwise refused with the list.
+- **Color**: `#RRGGBB` or `#RRGGBBAA`.
+- **Text**: the rest of the input, without edge spaces.
+- **List or array of tables**: refused ("lecture seule : modifier le fichier de
+  configuration", read-only: edit the configuration file).
+
+A refusal leaves the file intact and the bar gives the reason. Roadie logs every
+changed setting (`settings.changed`, setting name and result), never its value.
+
+#### Configuration file
+
+The file is edited **line by line**: only the key's line changes, with its
+indentation and trailing comment. Comments, order and unknown settings are kept.
+A missing key is added at the end of its table; a missing table, at the end of
+the file. The resulting text is validated before writing, and the write is
+atomic. On the first write of a Roadie session, a `roadies.toml.bak-<timestamp>`
+copy is created in the same folder.
+
+#### Label size
+
+Two settings enlarge the labels: `target_mode.label_font_size`
+(`[experimental.target_mode]`, letter and search modes) and
+`target_grid.label_font_size` (`[experimental.target_grid]`, grid). Value in
+points, default 13, range 8 to 48. The text, the frame and the space around grow
+in proportion; with no value set, the look is the same as before.
+
+#### Limits
+
+- Lists and arrays of tables of the file still have to be edited by hand; the
+  window shows them read-only.
+- `/float` and `/close` do not exist: Roadie has no such actions. `/layout float`
+  sets the stage layout.
+- Command mode and the settings window are drawn by the daemon: they require
+  `roadied` to be running.
+- Settings with no effect (for example `desktops.*`, `stage_manager.enabled`) are
+  not shown.
+
 Keyboard Target building blocks are independently configurable. The CLI foundation
 and picker stay enabled by default, while the future visual overlay, app mouse
 actions, and app scroll mode stay off until the user opts in.
@@ -368,6 +520,7 @@ overlay_duration_seconds = 3
 app_mouse_actions_enabled = false
 scroll_mode_enabled = false
 search_hotkey = "command+control+alt+f"
+label_font_size = 13   # label size in points (8 to 48)
 ```
 
 ```toml
@@ -394,6 +547,7 @@ rows = 3
 columns = 3
 max_depth = 3
 hint_characters = "azeqsdwxc"
+label_font_size = 13   # label size in points (8 to 48)
 ```
 
 Use cases:

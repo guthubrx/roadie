@@ -555,6 +555,13 @@ or agents.
 few letters of any element in any visible window, then press Return to click it
 (Shift-Return right-click, Cmd-Return Cmd-click, Return twice double-click).
 
+A `/` as the first character switches the same bar to **command mode**:
+`/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` opens a
+settings window (categories on the left, search, changes applied at once) and
+`/set table.key value` changes a setting without opening it (for example
+`/set target_grid.rows 4`). The configuration file keeps its comments. See
+[Command mode and settings window](docs/en/features.md).
+
 Roadie also provides two spatial grid modes:
 
 - **Display Grid** targets a whole display.
