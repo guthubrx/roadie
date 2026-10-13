@@ -86,7 +86,7 @@ Passage 1 (2026-10-13, agent Converge en lecture seule + contre-revue Codex de l
 - [x] T038 [P] [US5] Tests d'effet du lanceur (vrai routeur, faux fournisseur) pour `/move`, `/swap`, `/resize` en plus des argv (SC-004).
 - [x] T039 [US1] Fenêtre de réglages : si `roadies.toml` est absent à l'ouverture, surveiller le dossier parent et armer la surveillance du fichier dès sa création ; la valeur de « Diagnostic » reste synchrone (limite documentée : exécutée sur le thread principal comme `doctor` par le socket).
 
-- [ ] T040 [US6] (Converge passage 2) `/heal` et `/reload` en échec (code de sortie non nul, ou `status=failed` avec code 0) donnent `.failed` avec usage, événement `command.rejected` (code `router_failed`) et aucune entrée d'historique ; `/doctor` garde `.info`. Corrections mineures du passage 2 : sorties du routeur traduites sur le chemin d'information, no-ops traduits rendus visibles (échecs), hauteur de la zone de résumé en lecture seule qui suit le contenu, test décoratif de l'instance partagée remplacé, doublon de commentaire retiré.
+- [x] T040 [US6] (Converge passage 2) `/heal` et `/reload` en échec (code de sortie non nul, ou `status=failed` avec code 0) donnent `.failed` avec usage, événement `command.rejected` (code `router_failed`) et aucune entrée d'historique ; `/doctor` garde `.info`. Corrections mineures du passage 2 : sorties du routeur traduites sur le chemin d'information, no-ops traduits rendus visibles (échecs), hauteur de la zone de résumé en lecture seule qui suit le contenu, test décoratif de l'instance partagée remplacé, doublon de commentaire retiré.
 
 Passage 1 de Converge : T027 à T039. Passage 2 : verdict « non convergé » pour T040 seule ; passage 3 après T040.
 

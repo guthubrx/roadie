@@ -257,13 +257,21 @@ struct SlashCommandRunnerTests {
         let runner = fixture.runner { argv in
             seen.append(argv)
             return argv == ["daemon", "heal"]
-                ? CLIResponse(exitCode: 0, stdout: "heal ok\n")
+                // Forme réelle de `daemon heal` (Formatters.daemonHeal) : `status=ok` n'est pas un refus de rechargement.
+                ? CLIResponse(exitCode: 0, stdout: "status=ok\nstateRepaired=0\nhealthFailed=false\n")
                 : CLIResponse(exitCode: 0, stdout: "status=applied\n")
         }
-        #expect(runner.execute("heal") == .info(["heal ok"]))
+        #expect(runner.execute("heal") == .info(["status=ok", "stateRepaired=0", "healthFailed=false"]))
         #expect(runner.execute("reload") == .info(["Configuration rechargée."]))
         #expect(seen == [["daemon", "heal"], ["config", "reload"]])
         #expect(runner.loadHistory() == ["heal", "reload"])
+    }
+
+    @Test
+    func doctorStatusLineIsNotTranslatedAsAReloadRefusal() {
+        let fixture = Fixture()
+        let runner = fixture.runner { _ in CLIResponse(exitCode: 0, stdout: "status=needs-attention\nwarn\tcheck\tmessage\n") }
+        #expect(runner.execute("doctor") == .info(["status=needs-attention", "warn\tcheck\tmessage"]))
     }
 
     @Test

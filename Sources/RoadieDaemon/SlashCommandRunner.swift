@@ -185,8 +185,11 @@ public final class SlashCommandRunner {
     private func routedInfo(_ argv: [String], command: String) -> SlashOutcome {
         let response = route(argv)
         let text = response.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? response.stderr : response.stdout
-        let lines = Self.lines(text).map(Self.translated)
-        let reloadRefused = text.contains("status=") && !text.contains("status=applied")
+        let isReload = argv.starts(with: ["config", "reload"])
+        // `status=`/`error=` ne se traduisent que pour `config reload` : `doctor` et `daemon heal` écrivent aussi `status=ok`.
+        let lines = Self.lines(text).map { isReload ? Self.translated($0) : $0 }
+        // Seul `config reload` dit `status=applied` en cas de succès ; `daemon heal` écrit `status=ok`.
+        let reloadRefused = isReload && text.contains("status=") && !text.contains("status=applied")
         if argv.first != "doctor", response.exitCode != 0 || reloadRefused {
             let message = lines.first { $0.hasPrefix("Rechargement refusé :") } ?? lines.first ?? "La commande a échoué."
             return reject(command, "router_failed", SlashError(message: message, usage: Self.usage(command)))

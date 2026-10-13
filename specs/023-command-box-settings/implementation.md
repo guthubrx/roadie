@@ -42,7 +42,7 @@ Suite complète (`./scripts/test`, scratch `/tmp/roadie-build-023-base`) : **102
 
 ### Passage 1 (agent Converge, lecture seule + contre-revue Codex de l'implémentation)
 Verdict : non convergé, 13 tâches ajoutées (T027 à T039). Défauts les plus graves corrigés :
-- touches (`#`, `+`, `~`…) laissées à l'application active en mode commande, et ponctuation entrée dans la recherche (FR-010) : indicateur de mode lu par le tap, décodeur du mode recherche rétabli à l'identique (`d` 16141d94) ;
+- touches (`#`, `+`, `~`…) laissées à l'application active en mode commande, et ponctuation entrée dans la recherche (FR-010) : indicateur de mode lu par le tap, décodeur du mode recherche rétabli à l'identique (16141d94) ;
 - `/set` sur fichier invalide, illisible (UTF-8), lien symbolique, permissions, relecture avant `rename`, commentaire de fin de ligne perdu au rétablissement (`d05348f9`) ;
 - réglages en lecture seule sans valeur, bouton Rétablir faux, surveillance d'un fichier absent (`d05348f9`, `a4615c2d`) ;
 - `/heal`, `/reload`, messages et usage des échecs, échec des actions différées journalisé, tests d'effet (`0554db16`).
@@ -53,3 +53,6 @@ Les 13 tâches sont prouvées dans le code et les tests. Un manque de classe (d)
 
 ### Incident disque
 Le disque est monté à 100 % pendant le lot N1 (ENOSPC) : le code du lot n'a pu être compilé qu'après avoir supprimé les dossiers `/tmp/roadie-build-023-{a,b,c,d,e,f,g,i,j,k}` (environ 5 Go). Le lot a ensuite été vérifié par la suite complète.
+
+### Passage 3
+T040 corrigé (`/heal`, `/reload` en échec = erreur visible, sans historique, journalisé sans saisie). En relisant le correctif, défaut trouvé et corrigé avant commit : la traduction `status=` → « Rechargement refusé. » s'appliquait aussi à `/doctor` et `/heal` (qui écrivent `status=ok`) ; elle est désormais limitée à `config reload`, avec deux tests sur les vraies formes de sortie. Verdict : CONVERGED (les 40 tâches de code cochées ; T015 et T025, validation à l'écran, restent à faire).
