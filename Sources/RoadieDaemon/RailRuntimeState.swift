@@ -43,15 +43,15 @@ public struct RailRuntimeStateStore: Sendable {
     }
 
     public func save(_ state: RailRuntimeState) {
-        mutate { $0 = state }
+        _ = mutate { $0 = state }
     }
 
     public func setVisibleWidth(_ width: Double, for displayID: DisplayID) {
-        mutate { $0.visibleWidths[displayID.rawValue] = width }
+        _ = mutate { $0.visibleWidths[displayID.rawValue] = width }
     }
 
     @discardableResult
-    public func setPinned(_ pinned: Bool) -> RailRuntimeState {
+    public func setPinned(_ pinned: Bool) -> RailRuntimeState? {
         mutate { state in
             state.isPinned = pinned
             return state
@@ -59,7 +59,7 @@ public struct RailRuntimeStateStore: Sendable {
     }
 
     @discardableResult
-    public func togglePinned() -> RailRuntimeState {
+    public func togglePinned() -> RailRuntimeState? {
         mutate { state in
             state.isPinned.toggle()
             return state
@@ -67,7 +67,7 @@ public struct RailRuntimeStateStore: Sendable {
     }
 
     @discardableResult
-    public func showStageLabels(for seconds: Double, now: Date = Date()) -> RailRuntimeState {
+    public func showStageLabels(for seconds: Double, now: Date = Date()) -> RailRuntimeState? {
         mutate { state in
             state.stageLabelsVisibleUntil = seconds > 0 ? now.addingTimeInterval(seconds).timeIntervalSince1970 : nil
             return state
@@ -75,7 +75,7 @@ public struct RailRuntimeStateStore: Sendable {
     }
 
     @discardableResult
-    public func hideStageLabels() -> RailRuntimeState {
+    public func hideStageLabels() -> RailRuntimeState? {
         mutate { state in
             state.stageLabelsVisibleUntil = 0
             return state
@@ -83,8 +83,14 @@ public struct RailRuntimeStateStore: Sendable {
     }
 
     /// Transaction exclusive entre processus (rail, CLI, daemon) : SPEC-016 FR-013.
-    @discardableResult
-    private func mutate<R>(_ body: (inout RailRuntimeState) -> R) -> R {
-        JSONPersistence.mutate(RailRuntimeState.self, at: url, default: RailRuntimeState(), label: "rail runtime state", body)
+    /// nil si l'état n'a pas pu être écrit (verrou, fichier illisible, écriture) : l'appelant
+    /// n'annonce pas un succès perdu (REL-021). L'erreur part sur stderr.
+    private func mutate<R>(_ body: (inout RailRuntimeState) -> R) -> R? {
+        do {
+            return try JSONPersistence.mutateChecked(RailRuntimeState.self, at: url, default: RailRuntimeState(), label: "rail runtime state", body)
+        } catch {
+            fputs("roadie: \(error)\n", stderr)
+            return nil
+        }
     }
 }

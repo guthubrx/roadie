@@ -251,17 +251,10 @@ public final class CLICommandRouter {
 
     /// Fin d'une commande d'action : message sur stdout, code 0 si changement ou action
     /// sans objet, 1 si la commande a échoué (FR-039).
-    /// `RailRuntimeStateStore` rend la valeur calculée même si l'écriture a échoué (REL-021) :
-    /// on relit le fichier pour ne pas annoncer un succès perdu. Rend `false` après avoir écrit l'erreur.
-    private func railMutationPersisted(_ expected: RailRuntimeState, _ store: RailRuntimeStateStore) -> Bool {
-        let stored = store.load()
-        guard stored.isPinned == expected.isPinned,
-              stored.stageLabelsVisibleUntil == expected.stageLabelsVisibleUntil
-        else {
-            err("roadie: rail state not persisted (rail.json unreadable or not writable); see roadied stderr")
-            return false
-        }
-        return true
+    /// `RailRuntimeStateStore` rend nil si l'état n'a pas été écrit (REL-021) : code 1, pas de succès perdu.
+    private func railNotPersisted() -> Int32 {
+        err("roadie: rail state not persisted (rail.json unreadable or not writable); see roadied stderr")
+        return 1
     }
 
     private func finish(_ message: String, changed: Bool) -> Int32 {
@@ -567,32 +560,27 @@ public final class CLICommandRouter {
                 let pinned = runtimeStore.load().isPinned
                 out((RailSettings.load().statusLines + ["runtime.pinned=\(pinned)"]).joined(separator: "\n"))
             case "pin":
-                let state = runtimeStore.setPinned(true)
-                guard railMutationPersisted(state, runtimeStore) else { return 1 }
+                guard let state = runtimeStore.setPinned(true) else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "unpin":
-                let state = runtimeStore.setPinned(false)
-                guard railMutationPersisted(state, runtimeStore) else { return 1 }
+                guard let state = runtimeStore.setPinned(false) else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "toggle":
-                let state = runtimeStore.togglePinned()
-                guard railMutationPersisted(state, runtimeStore) else { return 1 }
+                guard let state = runtimeStore.togglePinned() else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "labels":
                 let subcommand = args.dropFirst(2).first ?? "show"
                 let settings = RailSettings.load().stageLabel
                 switch subcommand {
                 case "show":
-                    let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds)
-                    guard railMutationPersisted(state, runtimeStore) else { return 1 }
+                    guard let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds) else { return railNotPersisted() }
                     if settings.visibilitySeconds <= 0 {
                         out("rail labels visible=always")
                     } else {
                         out("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
                     }
                 case "hide":
-                    let state = runtimeStore.hideStageLabels()
-                    guard railMutationPersisted(state, runtimeStore) else { return 1 }
+                    guard let state = runtimeStore.hideStageLabels() else { return railNotPersisted() }
                     out("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
                 case "status":
                     let state = runtimeStore.load()
