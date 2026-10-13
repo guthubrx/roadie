@@ -394,11 +394,12 @@ struct StatePersistenceTests {
         log.append(RoadieEvent(type: "second"))
         let afterTwo = service.readAvailable(from: EventSubscriptionCursor()).cursor
 
-        // Rotation : le fichier repart plus court que le curseur.
+        // Rotation : le fichier repart plus court que le curseur. L'ancien fichier a disparu, donc
+        // la rupture est signalée avant la reprise (REL-018).
         try FileManager.default.removeItem(atPath: path)
         log.append(RoadieEvent(type: "third"))
         let afterRotation = service.readAvailable(from: afterTwo)
-        #expect(afterRotation.events.map(\.type) == ["third"])
+        #expect(afterRotation.events.map(\.type) == [EventSubscriptionService.gapEventType, "third"])
 
         // Ligne partielle : non consommée tant que le saut de ligne n'est pas écrit.
         let handle = try #require(FileHandle(forWritingAtPath: path))

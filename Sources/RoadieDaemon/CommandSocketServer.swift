@@ -208,8 +208,11 @@ public enum CommandSocketClient {
     }
 
     /// Choix daemon ou local. Repli local seulement si l'absence du daemon est établie
-    /// (ni pid vivant, ni socket qui accepte une connexion) ; daemon présent mais muet = erreur,
-    /// jamais de double exécution.
+    /// (réservation locale obtenue, ni pid vivant, ni socket qui accepte une connexion) ; daemon
+    /// présent mais muet = erreur, jamais de double exécution.
+    /// La réservation partagée (`roadied.local.lock`) est prise AVANT les sondes et tenue pendant
+    /// tout `local()` : un daemon qui démarre attend sa libération avant d'écrire son pid et de
+    /// lancer ses composants (REL-015, protocole décrit dans `ComponentLockFile`).
     public static func execute(
         argv: [String],
         cwd: String?,
@@ -217,10 +220,21 @@ public enum CommandSocketClient {
         lockPath: String = defaultLockPath,
         local: () -> CLIResponse
     ) -> CLIResponse {
-        guard CLICommandRouter.isDaemonRouted(argv),
-              isDaemonLockHeld(path: lockPath) || isDaemonSocketAccepting(path: socketPath)
-        else {
-            return local()
+        guard CLICommandRouter.isDaemonRouted(argv) else { return local() }
+        let localLockPath = ComponentLockFile.localExecutionLockPath(forLockPath: lockPath)
+        switch reserveLocalExecution(path: localLockPath) {
+        case .failed(let reason):
+            return CLIResponse(exitCode: 73, stderr: "roadie: cannot reserve local execution on \(localLockPath): \(reason)\n")
+        case .reserved(let fd):
+            defer {
+                _ = flock(fd, LOCK_UN)
+                close(fd)
+            }
+            if !isDaemonLockHeld(path: lockPath), !isDaemonSocketAccepting(path: socketPath) {
+                return local()
+            }
+        case .heldByDaemon:
+            break
         }
         switch send(CommandSocketRequest(argv: argv, cwd: cwd), path: socketPath) {
         case .unreachable:
@@ -232,6 +246,31 @@ public enum CommandSocketClient {
         case .response(let response):
             return CLIResponse(exitCode: response.exitCode, stdout: response.stdout, stderr: response.stderr)
         }
+    }
+
+    enum LocalReservation {
+        /// Réservation partagée tenue sur ce descripteur.
+        case reserved(Int32)
+        /// Un daemon tient la réservation en exclusif : il est présent (même sans pid ni socket).
+        case heldByDaemon
+        case failed(String)
+    }
+
+    /// Prend `roadied.local.lock` en partage, sans attendre. Le répertoire est créé au besoin : un
+    /// premier daemon peut le créer au même moment.
+    static func reserveLocalExecution(path: String) -> LocalReservation {
+        try? FileManager.default.createDirectory(
+            atPath: (path as NSString).deletingLastPathComponent,
+            withIntermediateDirectories: true
+        )
+        let fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { return .failed(String(cString: strerror(errno))) }
+        guard flock(fd, LOCK_SH | LOCK_NB) == 0 else {
+            let err = errno
+            close(fd)
+            return err == EWOULDBLOCK ? .heldByDaemon : .failed(String(cString: strerror(err)))
+        }
+        return .reserved(fd)
     }
 
     /// Vrai si un daemon tient le verrou `roadied.lock` : son fichier pid voisin (`roadied.pid`,
@@ -252,7 +291,8 @@ public enum CommandSocketClient {
     /// entre `flock` et l'écriture du pid). Aucun `flock` ici (voir `isDaemonLockHeld`) : un socket
     /// périmé sans écouteur refuse la connexion (ECONNREFUSED), donc ne fait pas croire à un daemon.
     /// La connexion est refermée sans requête : le serveur la traite comme un client muet.
-    /// Limite : un daemon qui tient le verrou mais n'a pas encore ouvert son socket n'est pas vu.
+    /// Un daemon qui tient le verrou mais n'a pas encore ouvert son socket est vu par la
+    /// réservation locale (`reserveLocalExecution`).
     static func isDaemonSocketAccepting(path: String, timeout: TimeInterval = connectTimeout) -> Bool {
         guard let fd = connect(to: path, timeout: timeout) else { return false }
         close(fd)

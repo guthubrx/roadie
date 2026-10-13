@@ -73,48 +73,60 @@ public struct EventSubscriptionService: Sendable {
     /// Lit les événements complets écrits depuis `cursor`. Le curseur désigne un fichier (inode) et
     /// un décalage : si le journal a tourné entre deux lectures, la fin de l'ancienne génération
     /// (`.1`, `.2`...) est lue d'abord, puis les générations suivantes depuis 0, chaque événement
-    /// une seule fois (REL-018). Une génération déjà supprimée par la rétention n'est pas récupérable :
-    /// la lecture reprend alors au début du fichier courant.
-    // O(octets nouveaux) ; la recherche de l'ancienne génération coûte au plus `maxBackupsScanned` stat.
+    /// une seule fois (REL-018). Si des événements ont pu être perdus (ancienne génération déjà
+    /// supprimée par la rétention, fichier tronqué sur place), un événement `events.gap` est émis
+    /// en tête, quels que soient les filtres, puis la lecture reprend au début du fichier courant.
+    /// Les générations sont ouvertes une fois et identifiées par l'inode de leur descripteur
+    /// (`fstat`) : une rotation entre l'identification et la lecture ne fait pas lire un autre
+    /// fichier. Une génération qui désigne déjà le fichier ouvert comme courant arrête la remontée :
+    /// son contenu est lu une seule fois, comme fichier courant.
+    // O(octets nouveaux) ; la recherche de l'ancienne génération coûte au plus `maxBackupsScanned` ouvertures.
     public func readAvailable(from cursor: EventSubscriptionCursor, options: EventSubscriptionOptions = EventSubscriptionOptions()) -> (events: [RoadieEventEnvelope], cursor: EventSubscriptionCursor) {
         guard FileManager.default.fileExists(atPath: url.path),
-              let handle = try? FileHandle(forReadingFrom: url)
+              let handle = try? FileHandle(forReadingFrom: url),
+              let currentInode = Self.inode(of: handle)
         else {
             return ([], cursor)
         }
         defer { try? handle.close() }
-        var info = stat()
-        guard fstat(handle.fileDescriptor, &info) == 0 else { return ([], cursor) }
-        let currentInode = UInt64(info.st_ino)
         var events: [RoadieEventEnvelope] = []
+        var gap: [RoadieEventEnvelope] = []
         var offset = cursor.offset
         if let known = cursor.inode, known != currentInode {
             // Rotation : finir l'ancienne génération, puis les intermédiaires, puis le fichier courant depuis 0.
-            if let first = (1...Self.maxBackupsScanned).first(where: { Self.inode(atPath: "\(url.path).\($0)") == known }) {
-                for index in stride(from: first, through: 1, by: -1) {
+            let generations = Self.openGenerations(of: url.path, upTo: known)
+            defer { generations.forEach { try? $0.handle.close() } }
+            if let first = generations.lastIndex(where: { $0.inode == known }) {
+                for index in stride(from: first, through: 0, by: -1) {
+                    guard generations[index].inode != currentInode else { break }
                     let from = index == first ? cursor.offset : 0
-                    events += Self.completeLines(atPath: "\(url.path).\(index)", from: from).compactMap { decodeEnvelope($0) }
+                    events += Self.completeLines(of: generations[index].handle, from: from).compactMap { decodeEnvelope($0) }
                 }
+            } else {
+                gap = [Self.gapEvent(reason: "rotated_generation_missing", lostAfterOffset: cursor.offset)]
             }
             offset = 0
         }
         do {
             // Même fichier mais plus court que le curseur : remplacé sur place, on relit depuis 0.
             let size = try handle.seekToEnd()
-            if size < offset { offset = 0 }
+            if size < offset {
+                gap = [Self.gapEvent(reason: "file_truncated", lostAfterOffset: offset)]
+                offset = 0
+            }
             try handle.seek(toOffset: offset)
             let data = try handle.readToEnd() ?? Data()
             // On n'avance que jusqu'au dernier saut de ligne : une ligne en cours d'écriture
             // sera lue entière au prochain appel.
             guard let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")) else {
-                return (filtered(events, options), EventSubscriptionCursor(offset: offset, inode: currentInode))
+                return (gap + filtered(events, options), EventSubscriptionCursor(offset: offset, inode: currentInode))
             }
             let complete = data[data.startIndex..<lastNewline]
             let newOffset = offset + UInt64(complete.count + 1)
             if let raw = String(data: complete, encoding: .utf8) {
                 events += raw.split(separator: "\n").compactMap { decodeEnvelope(String($0)) }
             }
-            return (filtered(events, options), EventSubscriptionCursor(offset: newOffset, inode: currentInode))
+            return (gap + filtered(events, options), EventSubscriptionCursor(offset: newOffset, inode: currentInode))
         } catch {
             return ([], cursor)
         }
@@ -126,6 +138,42 @@ public struct EventSubscriptionService: Sendable {
 
     /// Nombre maximal de générations `.N` examinées pour retrouver l'ancien fichier d'un curseur.
     private static let maxBackupsScanned = 10
+
+    /// Type de l'événement émis quand des événements ont pu être perdus entre deux lectures.
+    public static let gapEventType = "events.gap"
+
+    /// Générations `.1`, `.2`... ouvertes (indice 0 = `.1`) jusqu'à celle d'inode `known`.
+    /// Une génération absente est sautée : pendant une rotation, `.1` manque un court instant.
+    private static func openGenerations(of path: String, upTo known: UInt64) -> [(handle: FileHandle, inode: UInt64)] {
+        var generations: [(handle: FileHandle, inode: UInt64)] = []
+        for index in 1...maxBackupsScanned {
+            guard let handle = FileHandle(forReadingAtPath: "\(path).\(index)") else { continue }
+            guard let inode = inode(of: handle) else {
+                try? handle.close()
+                continue
+            }
+            generations.append((handle, inode))
+            if inode == known { break }
+        }
+        return generations
+    }
+
+    private static func gapEvent(reason: String, lostAfterOffset: UInt64) -> RoadieEventEnvelope {
+        let now = Date()
+        return RoadieEventEnvelope(
+            id: "events_gap_\(Int(now.timeIntervalSince1970 * 1000))",
+            timestamp: now,
+            type: gapEventType,
+            scope: .system,
+            subject: AutomationSubject(kind: "system", id: "roadie"),
+            correlationId: nil,
+            cause: .system,
+            payload: [
+                "reason": .string(reason),
+                "lostAfterOffset": .int(Int(clamping: lostAfterOffset))
+            ]
+        )
+    }
 
     private func filtered(_ events: [RoadieEventEnvelope], _ options: EventSubscriptionOptions) -> [RoadieEventEnvelope] {
         events.filter { event in
@@ -139,10 +187,14 @@ public struct EventSubscriptionService: Sendable {
         return stat(path, &info) == 0 ? UInt64(info.st_ino) : nil
     }
 
-    /// Lignes complètes (terminées par un saut de ligne) de `path` à partir de `offset`.
-    private static func completeLines(atPath path: String, from offset: UInt64) -> [String] {
-        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else { return [] }
-        defer { try? handle.close() }
+    /// Inode du fichier effectivement ouvert, insensible à un renommage ultérieur.
+    private static func inode(of handle: FileHandle) -> UInt64? {
+        var info = stat()
+        return fstat(handle.fileDescriptor, &info) == 0 ? UInt64(info.st_ino) : nil
+    }
+
+    /// Lignes complètes (terminées par un saut de ligne) de `handle` à partir de `offset`.
+    private static func completeLines(of handle: FileHandle, from offset: UInt64) -> [String] {
         guard (try? handle.seek(toOffset: offset)) != nil,
               let data = try? handle.readToEnd(),
               let lastNewline = data.lastIndex(of: UInt8(ascii: "\n")),
