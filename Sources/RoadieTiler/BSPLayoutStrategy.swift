@@ -2,10 +2,10 @@ import CoreGraphics
 import RoadieCore
 
 public struct BSPLayoutStrategy: LayoutStrategy {
-    private let titleBarSeamGap: CGFloat = 1
-
     public init() {}
 
+    /// O(n) sans fenêtre prioritaire (ratio constant). Avec priorité, `splitRatio` parcourt
+    /// chaque sous-liste : O(n²) en dwindle, O(n log n) en balanced (redimensionnement manuel).
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
         guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }
@@ -83,13 +83,16 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
-        let usableWidth = max(0, rect.width - innerGap)
+        // Espacement borné au conteneur (REL-033), comme `BSPTree` : l'espacement demandé
+        // reste transmis aux splits descendants.
+        let effectiveGap = BSPTree.gap(for: .vertical, in: rect, innerGap: innerGap)
+        let usableWidth = max(0, rect.width - effectiveGap)
         let ratio = splitRatio(
             left: leftWindows,
             right: rightWindows,
             rect: rect,
             horizontal: true,
-            innerGap: innerGap,
+            innerGap: effectiveGap,
             currentFrames: currentFrames,
             priorityWindowIDs: priorityWindowIDs,
             newWindowIDs: newWindowIDs
@@ -97,7 +100,7 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         let leftWidth = floor(usableWidth * ratio)
         let rightWidth = usableWidth - leftWidth
         let leftRect = CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height)
-        let rightRect = CGRect(x: rect.minX + leftWidth + innerGap, y: rect.minY, width: rightWidth, height: rect.height)
+        let rightRect = CGRect(x: rect.minX + leftWidth + effectiveGap, y: rect.minY, width: rightWidth, height: rect.height)
 
         split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
         split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)
@@ -114,7 +117,8 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         splitPolicy: String,
         placements: inout [WindowID: CGRect]
     ) {
-        let effectiveGap = max(innerGap, titleBarSeamGap)
+        // Couture de barre de titre et borne au conteneur (REL-033) : voir `BSPTree.gap`.
+        let effectiveGap = BSPTree.gap(for: .horizontal, in: rect, innerGap: innerGap)
         let usableHeight = max(0, rect.height - effectiveGap)
         let ratio = splitRatio(
             left: topWindows,
@@ -145,6 +149,9 @@ public struct BSPLayoutStrategy: LayoutStrategy {
         priorityWindowIDs: Set<WindowID>,
         newWindowIDs: Set<WindowID>
     ) -> CGFloat {
+        // Sans fenêtre prioritaire, tous les chemins ci-dessous rendent 0,5 : O(1) au lieu
+        // de parcourir les sous-listes (PERF-008). Avec priorité : O(taille du split).
+        guard !priorityWindowIDs.isEmpty else { return 0.5 }
         // Nouvelle fenetre : split 50/50 plutot qu'heriter de la frame macOS arbitraire.
         // Exception : si un resize explicite (priority)
         // est en cours dans ce split, on laisse le calcul priority habituel.

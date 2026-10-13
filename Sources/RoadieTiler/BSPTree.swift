@@ -114,7 +114,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     static let ratioBounds: ClosedRange<Double> = 0.05...0.95
 
     /// Écart minimal entre deux fenêtres empilées : la barre de titre du bas ne touche pas la
-    /// fenêtre du haut (même valeur que `BSPLayoutStrategy.titleBarSeamGap`).
+    /// fenêtre du haut (`BSPLayoutStrategy` utilise aussi `BSPTree.gap`).
     static let titleBarSeamGap: CGFloat = 1
 
     /// Étendue minimale (points) gardée par chaque enfant quand l'espacement est trop grand pour
