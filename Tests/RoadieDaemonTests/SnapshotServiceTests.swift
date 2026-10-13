@@ -3336,7 +3336,7 @@ struct SnapshotServiceTests {
                 PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "missing"), stages: [
                     PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: WindowID(rawValue: 99), members: [
                         PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
-                        PersistentStageMember(windowID: stale.id, bundleID: stale.bundleID, title: stale.title, frame: stale.frame),
+                        PersistentStageMember(windowID: stale.id, bundleID: stale.bundleID, title: stale.title, frame: stale.frame, pid: stale.pid),
                     ]),
                     PersistentStage(id: StageID(rawValue: "2"), members: [
                         PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
@@ -3366,7 +3366,7 @@ struct SnapshotServiceTests {
             stageStore: stageStore
         )
 
-        let report = StateAuditService(service: service, stageStore: stageStore).heal()
+        let report = StateAuditService(service: service, stageStore: stageStore).heal(isProcessAlive: { $0 != stale.pid })  // REL-002 : retrait sur preuve de fermeture
         var healed = stageStore.state()
         let scope = healed.scope(displayID: display, desktopID: DesktopID(rawValue: 1))
 

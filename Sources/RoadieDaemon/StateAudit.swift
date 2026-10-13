@@ -71,7 +71,8 @@ public struct StateAuditService {
         return StateAuditReport(checks: checks)
     }
 
-    public func heal() -> StateHealReport {
+    /// `isProcessAlive` : preuve de fermeture d'un membre absent du relevé (injectable en test).
+    public func heal(isProcessAlive: (Int32) -> Bool = ProcessLiveness.isAlive) -> StateHealReport {
         // Snapshot (AX) hors verrou, réparation sur l'état relu sous verrou (SPEC-016 FR-013).
         let snapshot = service.snapshot()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
@@ -84,7 +85,7 @@ public struct StateAuditService {
                 state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
                 repaired += state.activeDisplayID == nil ? 0 : 1
             }
-            repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs)
+            repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
             return repaired
         }
         return StateHealReport(repaired: repaired, audit: run())
@@ -206,7 +207,17 @@ public struct StateAuditService {
         return snapshot.displays.first(where: \.isMain)?.id ?? snapshot.displays.first?.id
     }
 
-    private func repairScopes(_ state: inout PersistentStageState, liveWindowIDs: Set<WindowID>) -> Int {
+    /// Un membre absent du relevé n'est retiré que sur preuve de fermeture : pid connu et mort.
+    /// Le relevé ne liste que les fenêtres à l'écran ; une fenêtre réduite, sur un autre Space,
+    /// d'une application qui ne répond pas ou d'un écran débranché y manque sans être fermée.
+    /// Sans pid connu (anciens fichiers), la grâce du snapshot (30 min) s'en charge (REL-002).
+    /// La déduplication s'applique à tous les membres, visibles ou non.
+    /// Complexite : O(total_members) avec lookup Set O(1) par membre.
+    private func repairScopes(
+        _ state: inout PersistentStageState,
+        liveWindowIDs: Set<WindowID>,
+        isProcessAlive: (Int32) -> Bool
+    ) -> Int {
         var repaired = 0
         var seenWindowIDs: Set<WindowID> = []
 
@@ -224,14 +235,11 @@ public struct StateAuditService {
             for stageIndex in state.scopes[scopeIndex].stages.indices {
                 let beforeCount = state.scopes[scopeIndex].stages[stageIndex].members.count
                 state.scopes[scopeIndex].stages[stageIndex].members.removeAll { member in
-                    if !liveWindowIDs.contains(member.windowID) {
+                    if !liveWindowIDs.contains(member.windowID),
+                       let pid = member.pid, !isProcessAlive(pid) {
                         return true
                     }
-                    if seenWindowIDs.contains(member.windowID) {
-                        return true
-                    }
-                    seenWindowIDs.insert(member.windowID)
-                    return false
+                    return !seenWindowIDs.insert(member.windowID).inserted
                 }
                 repaired += beforeCount - state.scopes[scopeIndex].stages[stageIndex].members.count
 
