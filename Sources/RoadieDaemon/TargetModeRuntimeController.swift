@@ -168,17 +168,38 @@ public final class TargetModeRuntimeController: NSObject {
             finish(TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled"), command: command.name)
             return
         }
-        // Toutes les fenêtres visibles, quelle que soit la portée du mode lettres (FR-009).
+        // Barre immédiate (FR-009) : cibles Roadie tout de suite, puis toutes les fenêtres visibles, lues
+        // en arrière-plan, chacune affichée dès qu'elle est lue. 2 s par fenêtre au moins : la barre
+        // n'attend plus la plus lente, une page chargée peut donc être lue en entier.
         var appTargets = service.effectiveConfig.experimental.appTargets
         appTargets.scope = "visible_windows"
+        appTargets.timeoutMs = max(appTargets.timeoutMs, 2000)
+        let scanConfig = appTargets
         let targets = TargetHintService(service: service, appTargetsConfig: appTargets)
-        let options = TargetQueryOptions(source: .all, maxResults: 500, includeAppTargets: true)
-        let overlay = targets.overlayState(options: options, labelsOnly: true, visible: true)
+        let roadieTargets = targets.list(TargetQueryOptions(source: .roadie, maxResults: TargetSearchModel.maxTargets)).targets
+        let events = events
         events.append(RoadieEvent(type: "target_mode.search_started", details: [
-            "targetCount": String(overlay.report.targets.count)
+            "targetCount": String(roadieTargets.count)
         ]))
         currentSession = TargetOverlayPresenter.startSearch(
-            targets: overlay.report.targets,
+            targets: roadieTargets,
+            alphabet: appTargets.hintCharacters,
+            load: { deliver, done in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let scan = LiveAppTargetProvider().scanVisibleWindows(config: scanConfig) { window in
+                        DispatchQueue.main.async {
+                            events.append(RoadieEvent(type: "targets.app_scan", details: window.stats.eventDetails))
+                            MainActor.assumeIsolated { deliver(window.targets, window.order) }
+                        }
+                    }
+                    DispatchQueue.main.async {
+                        for stats in scan.skipped {
+                            events.append(RoadieEvent(type: "targets.app_scan", details: stats.eventDetails))
+                        }
+                        MainActor.assumeIsolated { done() }
+                    }
+                }
+            },
             activate: { target, verb in
                 targets.activate(target: target, action: verb)
             },

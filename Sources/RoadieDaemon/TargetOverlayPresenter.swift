@@ -131,16 +131,27 @@ public enum TargetOverlayPresenter {
 
     /// Mode recherche (SPEC-021) : barre de saisie, filtrage, mise en avant, validation au clavier.
     @discardableResult
+    /// Barre immédiate (SPEC-021) : la session s'ouvre avec `targets`, puis `load` lit les fenêtres en
+    /// arrière-plan. Il appelle `deliver(cibles, rang de fenêtre)` pour chaque fenêtre lue, puis `done`.
     public static func startSearch(
         targets: [RoadieTarget],
+        alphabet: String,
+        load: (
+            _ deliver: @escaping @MainActor @Sendable ([RoadieTarget], Int) -> Void,
+            _ done: @escaping @MainActor @Sendable () -> Void
+        ) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
-        let session = TargetSearchSession(targets: targets, activate: activate, onFinish: onFinish)
+        let session = TargetSearchSession(targets: targets, alphabet: alphabet, activate: activate, onFinish: onFinish)
         if let immediate = session.start() {
             onFinish(immediate)
             return nil
         }
+        load(
+            { [weak session] targets, order in session?.append(targets, windowOrder: order) },
+            { [weak session] in session?.finishLoading() }
+        )
         return session
     }
 
@@ -728,24 +739,43 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     var runLoopSource: CFRunLoopSource?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
+    /// Écran du pointeur à l'ouverture, celui de la barre.
+    private let pointerScreen: CGRect?
+    /// Des fenêtres sont encore en cours de lecture.
+    private var isLoading = true
 
     init(
         targets: [RoadieTarget],
+        alphabet: String,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
-        // Écran du pointeur (celui de la barre) d'abord, ordre gardé dans chaque groupe : la première
-        // correspondance mise en avant est sous les yeux, pas sur un autre moniteur. O(n).
         let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
-        let isOnPointerScreen = { (target: RoadieTarget) -> Bool in
-            guard let screen, let frame = (target.clickFrame ?? target.frame)?.cgRect else { return false }
-            let ns = RoadieScreenCoordinate.axRectToNS(frame)
-            return screen.contains(CGPoint(x: ns.midX, y: ns.midY))
-        }
-        self.model = TargetSearchModel(targets: targets.filter(isOnPointerScreen) + targets.filter { !isOnPointerScreen($0) })
+        let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
+        self.pointerScreen = pointerScreen
+        self.model = TargetSearchModel(targets: targets, alphabet: alphabet) { Self.rank($0, windowOrder: -1, pointerScreen: pointerScreen) }
         self.activate = activate
         self.onFinish = onFinish
+    }
+
+    /// Écran du pointeur d'abord : la première correspondance mise en avant est sous les yeux, pas sur
+    /// un autre moniteur. Puis les fenêtres de l'avant vers l'arrière (cibles Roadie : -1).
+    private static func rank(_ target: RoadieTarget, windowOrder: Int, pointerScreen: CGRect?) -> Int {
+        guard let pointerScreen, let frame = (target.clickFrame ?? target.frame)?.cgRect else { return 100_000 + windowOrder }
+        let ns = RoadieScreenCoordinate.axRectToNS(frame)
+        return (pointerScreen.contains(CGPoint(x: ns.midX, y: ns.midY)) ? 0 : 100_000) + windowOrder
+    }
+
+    func append(_ targets: [RoadieTarget], windowOrder: Int) {
+        guard !finished else { return }
+        model.append(targets) { Self.rank($0, windowOrder: windowOrder, pointerScreen: pointerScreen) }
+        render()
+    }
+
+    func finishLoading() {
+        guard !finished else { return }
+        isLoading = false
+        render()
     }
 
     func start() -> TargetActionResult? {
@@ -831,7 +861,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 isHighlighted: target.id == highlightedID
             )
         }
-        let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties)
+        let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading)
         let mouse = NSEvent.mouseLocation
         let barWindow = windows.first { $0.frame.contains(mouse) } ?? windows.first
         for window in windows {
@@ -1104,6 +1134,7 @@ private struct TargetSearchBar {
     var query: String
     var matchCount: Int
     var properties: String?
+    var isLoading: Bool
 }
 
 private final class TargetOverlayView: NSView {
@@ -1153,7 +1184,7 @@ private final class TargetOverlayView: NSView {
             text = properties
         } else {
             let count = bar.matchCount == 0 ? "aucune correspondance" : "\(bar.matchCount) correspondance\(bar.matchCount > 1 ? "s" : "")"
-            text = "🔍 \(bar.query)▏   \(count)"
+            text = "🔍 \(bar.query)▏   \(count)\(bar.isLoading ? " · lecture…" : "")"
         }
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedSystemFont(ofSize: 15, weight: .medium),

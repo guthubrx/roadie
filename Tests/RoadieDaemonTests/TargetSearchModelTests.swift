@@ -77,7 +77,8 @@ struct TargetSearchModelTests {
 
     @Test
     func shiftLabelJumpsToThatTarget() {
-        var model = TargetSearchModel(targets: sample + [target("SA", "Settings")])
+        // Étiquettes données par le modèle : A, S, D… puis AA, AS… ; la 19e est « SA ».
+        var model = TargetSearchModel(targets: (0..<20).map { target("T\($0)", "Item \($0)") })
         let first = model.typeLabel("s")
         let firstLabel = model.highlighted?.label
         let second = model.typeLabel("a")
@@ -86,6 +87,18 @@ struct TargetSearchModelTests {
         #expect(first && second && !unknown)
         #expect(firstLabel == "S")
         #expect(secondLabel == "SA")
+    }
+
+    @Test
+    func lateWindowsKeepLabelsAndTheHighlightedTarget() {
+        var model = TargetSearchModel(targets: [target("A", "Alpha"), target("B", "Beta")], rank: { _ in 5 })
+        model.next()
+        model.append([target("C", "Gamma")], rank: { _ in 1 })
+        model.append([target("D", "Delta")], rank: { _ in 9 })
+
+        #expect(model.targets.map(\.id) == ["app:C", "app:A", "app:B", "app:D"])
+        #expect(model.targets.map(\.label) == ["D", "A", "S", "F"])
+        #expect(model.highlighted?.id == "app:B")
     }
 
     @Test
@@ -133,7 +146,7 @@ struct TargetSearchModelTests {
         leaf.searchText = "Subscriptions"
         var model = TargetSearchModel(targets: [target("S", "My subscriptions list"), leaf])
         model.type("subscr")
-        #expect(model.highlighted?.label == "A")
+        #expect(model.highlighted?.id == "app:A")
     }
 
     @Test

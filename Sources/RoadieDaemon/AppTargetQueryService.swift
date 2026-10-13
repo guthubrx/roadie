@@ -311,6 +311,15 @@ public struct CFIdentitySet {
     }
 }
 
+/// Résultat du parcours d'une fenêtre visible (SPEC-021) ; `order` : rang de la fenêtre, de l'avant
+/// vers l'arrière.
+public struct VisibleWindowScan: Sendable {
+    public var order: Int
+    public var targets: [RoadieTarget]
+    public var stats: AppTargetScanStats
+    public var partial: Bool
+}
+
 public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     public init() {}
 
@@ -346,16 +355,37 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         )
     }
 
+    /// Portée `visible_windows` du mode lettres : toutes les fenêtres lues, puis étiquetées ensemble.
+    private func visibleWindowsCandidates(config: AppTargetsConfig) -> AppTargetQueryReport {
+        let scan = scanVisibleWindows(config: config)
+        guard !scan.results.isEmpty else {
+            return AppTargetQueryReport(error: "no_visible_window", windowScans: scan.skipped)
+        }
+        let partial = scan.results.contains(where: \.partial)
+        return AppTargetQueryReport(
+            targets: Self.labeled(scan.results.flatMap(\.targets), config: config),
+            partial: partial,
+            error: partial ? "partial_timeout_or_limit" : nil,
+            windowScans: scan.skipped + scan.results.map(\.stats)
+        )
+    }
+
     /// Toutes les fenêtres à l'écran (SPEC-021) : un parcours par fenêtre, en parallèle, avec la même
-    /// échéance ; la durée est celle de la fenêtre la plus lente, pas la somme. Un élément caché par une
-    /// fenêtre de devant n'a pas de lettre. `max_targets` s'applique à chaque fenêtre.
+    /// échéance ; la durée est celle de la fenêtre la plus lente, pas la somme. `onWindow` reçoit chaque
+    /// fenêtre dès qu'elle est lue, depuis le fil de son parcours (mode recherche : la barre est déjà
+    /// ouverte). Cibles sans étiquette ; un élément caché par une fenêtre de devant est retiré.
+    /// `max_targets` s'applique à chaque fenêtre. `results` suit l'ordre des fenêtres, de l'avant vers
+    /// l'arrière ; `skipped` liste les fenêtres écartées avant parcours (raison dans `stopReason`).
     /// Complexité : O(w * n) appels AX répartis sur w fils, n éléments lus par fenêtre ; occlusion
     /// O(c * w), c cibles, w fenêtres à l'écran (quelques dizaines au plus).
-    private func visibleWindowsCandidates(config: AppTargetsConfig) -> AppTargetQueryReport {
+    public func scanVisibleWindows(
+        config: AppTargetsConfig,
+        onWindow: @Sendable (VisibleWindowScan) -> Void = { _ in }
+    ) -> (results: [VisibleWindowScan], skipped: [AppTargetScanStats]) {
+        guard AXIsProcessTrusted() else { return ([], []) }
         let windows = Self.visibleWindows()
         var elementsByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
         var jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)] = []
-        // Fenêtre écartée avant parcours : statistique vide, raison dans `stopReason`.
         var skipped: [AppTargetScanStats] = []
         for (order, window) in windows.enumerated() {
             if elementsByPID[window.pid] == nil {
@@ -373,38 +403,26 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             }
             jobs.append((order, window.id, element, app))
         }
-        guard !jobs.isEmpty else {
-            return AppTargetQueryReport(error: "no_visible_window", windowScans: skipped)
-        }
 
         let startedAt = Date()
+        let frames = windows.map(\.frame)
         let batch = WindowScanBatch(jobs: jobs)
         DispatchQueue.concurrentPerform(iterations: jobs.count) { index in
             let job = batch.jobs[index]
-            batch.results[index] = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
-        }
-        let results = Array(batch.results)
-
-        var targets: [RoadieTarget] = []
-        var stats = skipped
-        var partial = false
-        for (index, job) in jobs.enumerated() {
-            guard let result = results[index] else { continue }
-            stats.append(result.stats)
-            partial = partial || result.pass.stopReason != "complete"
-            let inFront = windows.prefix(job.order).map(\.frame)
-            for var target in AppTargetQueryService.targets(from: result.pass.candidates, config: config)
+            let scan = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
+            let inFront = Array(frames.prefix(job.order))
+            var targets: [RoadieTarget] = []
+            for var target in AppTargetQueryService.targets(from: scan.pass.candidates, config: config)
             where !AppTargetQueryService.isCovered(target, by: inFront) {
                 target.scope.windowId = job.id
                 targets.append(target)
             }
+            let result = VisibleWindowScan(order: job.order, targets: targets, stats: scan.stats,
+                                           partial: scan.pass.stopReason != "complete")
+            batch.results[index] = result
+            onWindow(result)
         }
-        return AppTargetQueryReport(
-            targets: Self.labeled(targets, config: config),
-            partial: partial,
-            error: partial ? "partial_timeout_or_limit" : nil,
-            windowScans: stats
-        )
+        return (Array(batch.results).compactMap(\.self), skipped)
     }
 
     private struct WindowScan {
@@ -416,7 +434,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     /// et écrit seulement sa case de `results`. Les éléments AX se lisent depuis n'importe quel fil.
     private final class WindowScanBatch: @unchecked Sendable {
         let jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]
-        let results: UnsafeMutableBufferPointer<WindowScan?>
+        let results: UnsafeMutableBufferPointer<VisibleWindowScan?>
 
         init(jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]) {
             self.jobs = jobs
