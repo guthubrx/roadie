@@ -25,7 +25,7 @@ Statut : constats lus dans le code le 2026-10-13. « Non vérifié » = à confi
   - Le décodeur accepte aussi `/ . - _ , :` et les lettres accentuées comme texte. Il décode le **caractère produit** par la touche (`event.characters`), pas la touche physique : sur AZERTY, `/` s'obtient avec Maj et arrive comme texte `/`. Le test de décodage ajoute les cas `/` (avec et sans Maj), `.`, `-`, `é`.
   - `SearchKeyInput` expose en plus la nature de la touche de navigation (tabulation, flèche, contrôle) sans changer `Kind` : les tests existants restent valides.
   - En mode commande : Tab = compléter, Maj-Tab = suggestion précédente, Flèche haut/bas = historique, Ctrl-N / Ctrl-P = suggestion suivante/précédente, Shift + lettre = lettre majuscule dans la saisie, Retour = exécuter (sans attente de second Retour), Échap = fermer.
-  - Un texte à chercher qui commence par `/` se tape précédé d'un espace (espaces ignorés par la recherche).
+  - **Mode recherche inchangé (FR-010)** : seul le `/` d'une saisie vide ouvre le mode commande. En mode recherche, `. - _ , :` et un `/` hors du premier caractère restent ignorés comme avant et laissés à l'application active ; un indicateur thread-safe lu par le tap indique le mode commande, où toute touche sans Commande est avalée et tout caractère imprimable est du texte (T027, T030).
 - **Tests** : transition `/` puis effacement ; Maj + lettre, Tab, flèches et Retour en mode commande ; mêmes touches en mode recherche inchangées ; décodage AZERTY du `/`.
 - **Rejeté** : une seconde session de saisie (duplique la barre et le tap clavier).
 
