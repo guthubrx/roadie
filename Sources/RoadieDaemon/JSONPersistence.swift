@@ -71,6 +71,13 @@ enum JSONPersistence {
         let description: String
     }
 
+    /// Message d'une commande dont l'état n'a pas été écrit (REL-021), journalisé sur stderr.
+    /// « failed » donne au CLI un code de sortie non nul (`CLICommandRouter.actionExitCode`).
+    static func commandFailureMessage(_ command: String, _ error: Error) -> String {
+        fputs("roadie: \(command): \(error)\n", stderr)
+        return "\(command): failed, \(error)"
+    }
+
     /// Comme `mutate`, mais une modification non persistee (verrou impossible, fichier illisible,
     /// ecriture en echec) leve `PersistenceError` au lieu d'un succes silencieux (REL-021).
     /// Verrou impossible ou fichier illisible : `body` n'est pas execute. Ecriture en echec :

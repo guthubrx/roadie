@@ -33,8 +33,13 @@ public struct WindowBookmarkCommandService {
             return WindowCommandResult(message: "bookmark set \(name): no active tiled window", changed: false)
         }
 
-        let bookmark = store.mutate { state in
-            state.setBookmark(name: name, window: active.window, scope: scope)
+        let bookmark: PersistentWindowBookmark
+        do {
+            bookmark = try store.mutateChecked { state in
+                state.setBookmark(name: name, window: active.window, scope: scope)
+            }
+        } catch {
+            return .persistenceFailure("bookmark set \(name)", error)
         }
         events.append(RoadieEvent(
             type: "window.bookmark_set",
@@ -62,7 +67,12 @@ public struct WindowBookmarkCommandService {
                     changed: false
                 )
             }
-            let removed = store.mutate { $0.removeBookmark(named: name) }
+            let removed: PersistentWindowBookmark?
+            do {
+                removed = try store.mutateChecked { $0.removeBookmark(named: name) }
+            } catch {
+                return .persistenceFailure("bookmark focus \(name)", error)
+            }
             if let removed {
                 events.append(RoadieEvent(
                     type: "window.bookmark_pruned",
@@ -86,35 +96,40 @@ public struct WindowBookmarkCommandService {
 
         // Scopes relus et modifiés sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
         // Le bloc renvoie les membres utiles aux appels AX faits après la transaction.
-        let plan = store.mutate { state -> BookmarkFocusPlan in
-            var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
-            targetPersistentScope.ensureStage(targetScope.stageID)
-            let previousDesktopID = state.currentDesktopID(for: display.id)
-            var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
-            let previousStageID = previousPersistentScope.activeStageID
-            let result = BookmarkFocusPlan(
-                previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
-                previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
-                targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
-                // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
-                targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
-            )
-            for window in visibleWindows {
-                if previousDesktopID == targetScope.desktopID {
-                    targetPersistentScope.updateFrame(window: window)
-                } else {
-                    previousPersistentScope.updateFrame(window: window)
+        let plan: BookmarkFocusPlan
+        do {
+            plan = try store.mutateChecked { state -> BookmarkFocusPlan in
+                var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
+                targetPersistentScope.ensureStage(targetScope.stageID)
+                let previousDesktopID = state.currentDesktopID(for: display.id)
+                var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
+                let previousStageID = previousPersistentScope.activeStageID
+                let result = BookmarkFocusPlan(
+                    previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
+                    previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
+                    targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
+                    // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
+                    targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
+                )
+                for window in visibleWindows {
+                    if previousDesktopID == targetScope.desktopID {
+                        targetPersistentScope.updateFrame(window: window)
+                    } else {
+                        previousPersistentScope.updateFrame(window: window)
+                    }
                 }
+                targetPersistentScope.activeStageID = targetScope.stageID
+                targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
+                if previousDesktopID != targetScope.desktopID {
+                    state.update(previousPersistentScope)
+                }
+                state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
+                state.focusDisplay(display.id)
+                state.update(targetPersistentScope)
+                return result
             }
-            targetPersistentScope.activeStageID = targetScope.stageID
-            targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
-            if previousDesktopID != targetScope.desktopID {
-                state.update(previousPersistentScope)
-            }
-            state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
-            state.focusDisplay(display.id)
-            state.update(targetPersistentScope)
-            return result
+        } catch {
+            return .persistenceFailure("bookmark focus \(name)", error)
         }
 
         // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage du signet
@@ -138,6 +153,8 @@ public struct WindowBookmarkCommandService {
         let ok = service.focus(targetEntry.window)
         if ok {
             mouseFollower.follow(targetEntry.window)
+            // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le
+            // snapshot suivant réécrit (`updateBookmarkObservation` à chaque passe).
             store.mutate { $0.updateBookmarkObservation(window: targetEntry.window, scope: targetScope) }
         }
         events.append(RoadieEvent(
@@ -158,7 +175,13 @@ public struct WindowBookmarkCommandService {
 
     public func clear(_ rawName: String) -> WindowCommandResult {
         let name = PersistentWindowBookmark.normalizedName(rawName)
-        guard let removed = store.mutate({ $0.removeBookmark(named: name) }) else {
+        let removal: PersistentWindowBookmark?
+        do {
+            removal = try store.mutateChecked { $0.removeBookmark(named: name) }
+        } catch {
+            return .persistenceFailure("bookmark clear \(name)", error)
+        }
+        guard let removed = removal else {
             return WindowCommandResult(message: "bookmark clear \(name): not found", changed: false)
         }
         events.append(RoadieEvent(

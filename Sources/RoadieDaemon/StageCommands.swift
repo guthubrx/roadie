@@ -12,6 +12,12 @@ public struct StageCommandResult: Equatable, Sendable {
         self.message = message
         self.changed = changed
     }
+
+    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
+    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
+    static func persistenceFailure(_ command: String, _ error: Error) -> StageCommandResult {
+        StageCommandResult(message: JSONPersistence.commandFailureMessage(command, error), changed: false)
+    }
 }
 
 public enum StageDisplayMoveTarget: Equatable, Sendable {
@@ -317,11 +323,8 @@ public struct StageCommandService {
         StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false)
     }
 
-    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
-    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
     private func persistenceFailure(_ command: String, _ error: Error) -> StageCommandResult {
-        fputs("roadie: \(command): \(error)\n", stderr)
-        return StageCommandResult(message: "\(command): failed, \(error)", changed: false)
+        .persistenceFailure(command, error)
     }
 
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {

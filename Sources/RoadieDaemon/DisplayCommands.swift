@@ -33,13 +33,19 @@ public struct DisplayCommandService {
     }
 
     private func focus(_ display: DisplaySnapshot, in snapshot: DaemonSnapshot, label: String) -> StageCommandResult {
-        let (desktopID, scope) = store.mutate { state in
-            state.focusDisplay(display.id)
-            let desktopID = state.currentDesktopID(for: display.id)
-            let scope = state.scope(displayID: display.id, desktopID: desktopID)
-            state.update(scope)
-            return (desktopID, scope)
+        let transaction: (DesktopID, PersistentStageScope)
+        do {
+            transaction = try store.mutateChecked { state in
+                state.focusDisplay(display.id)
+                let desktopID = state.currentDesktopID(for: display.id)
+                let scope = state.scope(displayID: display.id, desktopID: desktopID)
+                state.update(scope)
+                return (desktopID, scope)
+            }
+        } catch {
+            return .persistenceFailure("display focus \(label)", error)
         }
+        let (desktopID, scope) = transaction
 
         let activeScope = StageScope(displayID: display.id, desktopID: desktopID, stageID: scope.activeStageID)
         let focusedID = scope.stages.first { $0.id == scope.activeStageID }?.focusedWindowID

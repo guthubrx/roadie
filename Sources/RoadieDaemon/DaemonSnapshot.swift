@@ -1377,13 +1377,33 @@ public extension SnapshotService {
 
     /// Quitte le zoom par le mécanisme propre au mode : arbre, intent valide ou cadres float.
     /// O(w log w) en mode arbre ; O(w²) pour valider les placements sans arbre.
+    /// Maintenance : un échec d'écriture des intents est journalisé et la sortie de zoom continue.
     func restoreZoomLayoutIntent(
         scope: StageScope,
         from snapshot: DaemonSnapshot,
         generation: UInt64 = PlacementGeneration.shared.current
     ) -> ApplyPlan {
+        restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.remove(scope:), save: intentStore.save)
+    }
+
+    /// Variante des commandes (REL-021) : lève si l'intent n'a pas été écrit, avant tout plan.
+    func restoreZoomLayoutIntentChecked(
+        scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.current
+    ) throws -> ApplyPlan {
+        try restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.removeChecked(scope:), save: intentStore.saveChecked)
+    }
+
+    private func restoreZoom(
+        scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        generation: UInt64,
+        remove: (StageScope) throws -> Void,
+        save: (LayoutIntent) throws -> Void
+    ) rethrows -> ApplyPlan {
         let zoom = commandLayoutIntent(scope: scope)
-        removeLayoutIntent(scope: scope)
+        try remove(scope)
         let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }
         let mode = snapshot.state.stage(scope: scope)?.mode
         if let saved = zoom?.restorePlacements, mode == .float {
@@ -1397,7 +1417,7 @@ public extension SnapshotService {
             let liveIDs = Set(entries.map(\.window.id))
             let ordered = zoom.windowIDs.filter(liveIDs.contains)
             if liveIDs == Set(ordered), liveIDs.isSubset(of: Set(saved.keys)) {
-                intentStore.save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))
+                try save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))
                 _ = validIntent(for: scope, from: snapshot)
             }
         }
@@ -1429,6 +1449,7 @@ public extension SnapshotService {
         saveLayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: .auto)
     }
 
+    /// Maintenance : un échec d'écriture est journalisé sur stderr, comme `LayoutIntentStore.save`.
     func saveLayoutIntent(
         scope: StageScope,
         windowIDs: [WindowID],
@@ -1436,11 +1457,33 @@ public extension SnapshotService {
         source: LayoutIntent.Source,
         zoomedWindowID: WindowID? = nil
     ) {
+        do {
+            try saveLayoutIntentChecked(
+                scope: scope,
+                windowIDs: windowIDs,
+                placements: placements,
+                source: source,
+                zoomedWindowID: zoomedWindowID
+            )
+        } catch {
+            fputs("roadie: \(error)\n", stderr)
+        }
+    }
+
+    /// Variante des commandes (REL-021) : lève `JSONPersistence.PersistenceError` si l'intent
+    /// n'a pas été écrit, au lieu d'un succès silencieux.
+    func saveLayoutIntentChecked(
+        scope: StageScope,
+        windowIDs: [WindowID],
+        placements: [WindowID: Rect],
+        source: LayoutIntent.Source,
+        zoomedWindowID: WindowID? = nil
+    ) throws {
         // Une observation automatique actualise les cadres acceptés sans remplacer le zoom
         // logique ni sa disposition à restaurer (nouvelle voisine, recalage de largeur du rail).
         if source == .auto, zoomedWindowID == nil,
            commandLayoutIntent(scope: scope)?.zoomedWindowID != nil {
-            intentStore.mutate { stored in
+            try intentStore.mutateChecked { stored in
                 guard var zoom = stored[scope.description], zoom.source == .command,
                       zoom.zoomedWindowID != nil else { return }
                 let liveIDs = Set(windowIDs)
@@ -1459,7 +1502,7 @@ public extension SnapshotService {
                .stages.first(where: { $0.id == scope.stageID })?.mode.usesTreeEngine == true {
             return
         }
-        intentStore.save(LayoutIntent(
+        try intentStore.saveChecked(LayoutIntent(
             scope: scope,
             windowIDs: windowIDs,
             placements: placements,
@@ -1468,14 +1511,21 @@ public extension SnapshotService {
         ))
     }
 
+    /// Maintenance : échec journalisé par le store, sans effet sur l'appelant.
     func removeLayoutIntent(scope: StageScope) {
         intentStore.remove(scope: scope)
     }
 
-    func removeLayoutIntents(in snapshot: DaemonSnapshot) {
+    /// Variante des commandes (REL-021) : lève si la suppression n'a pas été écrite.
+    func removeLayoutIntentChecked(scope: StageScope) throws {
+        try intentStore.removeChecked(scope: scope)
+    }
+
+    /// Commande `balance` (REL-021) : lève dès qu'une suppression n'a pas été écrite.
+    func removeLayoutIntents(in snapshot: DaemonSnapshot) throws {
         for display in snapshot.displays {
             guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
-            intentStore.remove(scope: scope)
+            try intentStore.removeChecked(scope: scope)
         }
     }
 

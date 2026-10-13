@@ -129,8 +129,9 @@ public struct LayoutIntentStore: Sendable {
         try JSONPersistence.mutate([String: LayoutIntent].self, at: url, default: [:], label: "layout intent", body)
     }
 
+    /// Comme `mutate`, mais lève si rien n'a été écrit (commandes, REL-021).
     @discardableResult
-    private func mutateChecked<R>(_ body: (inout [String: LayoutIntent]) throws -> R) throws -> R {
+    func mutateChecked<R>(_ body: (inout [String: LayoutIntent]) throws -> R) throws -> R {
         try JSONPersistence.mutateChecked([String: LayoutIntent].self, at: url, default: [:], label: "layout intent", body)
     }
 

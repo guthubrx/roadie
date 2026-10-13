@@ -173,8 +173,13 @@ public struct WindowContextActions {
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
         let homeScope = snapshot.state.activeScope(on: sourceScope.displayID) ?? sourceScope
-        let mutation = stageStore.mutate { state in
-            state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+        let mutation: PinMutation
+        do {
+            mutation = try stageStore.mutateChecked { state in
+                state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+            }
+        } catch {
+            return persistenceFailure("pin", error)
         }
 
         let eventType = mutation.created ? "window.pin_added" : (mutation.scopeChanged ? "window.pin_scope_changed" : "window.pin_added")
@@ -193,18 +198,23 @@ public struct WindowContextActions {
         sourceScope: StageScope,
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
-        let removal = stageStore.mutate { state -> (pin: PersistentWindowPin, target: StageScope)? in
-            guard let removed = state.removePin(windowID: window.id) else { return nil }
-            let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
-            let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: window.id)
+        let removal: (pin: PersistentWindowPin, target: StageScope)?
+        do {
+            removal = try stageStore.mutateChecked { state -> (pin: PersistentWindowPin, target: StageScope)? in
+                guard let removed = state.removePin(windowID: window.id) else { return nil }
+                let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
+                let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: window.id)
+                }
+                var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
+                persistentScope.ensureStage(target.stageID)
+                persistentScope.assign(window: window, to: target.stageID)
+                state.update(persistentScope)
+                return (removed, target)
             }
-            var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
-            persistentScope.ensureStage(target.stageID)
-            persistentScope.assign(window: window, to: target.stageID)
-            state.update(persistentScope)
-            return (removed, target)
+        } catch {
+            return persistenceFailure("unpin", error)
         }
         guard let (removed, target) = removal else {
             return WindowContextActionResult(message: "window is not pinned", changed: false)
@@ -342,10 +352,14 @@ public struct WindowContextActions {
             return StageCommandResult(message: "desktop/stage assign: unknown display", changed: false)
         }
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
-            stageStore.mutate { state in
-                for scopeIndex in state.scopes.indices {
-                    state.scopes[scopeIndex].remove(windowID: windowID)
+            do {
+                try stageStore.mutateChecked { state in
+                    for scopeIndex in state.scopes.indices {
+                        state.scopes[scopeIndex].remove(windowID: windowID)
+                    }
                 }
+            } catch {
+                return .persistenceFailure("desktop/stage assign", error)
             }
             return StageCommandResult(message: "desktop/stage assign: stale window pruned", changed: true)
         }
@@ -354,20 +368,24 @@ public struct WindowContextActions {
         let stageManagerConfig = ConfigReloadService.shared.currentConfig().stageManager
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
         let sourceScope = snapshot.windows.first(where: { $0.window.id == windowID })?.scope
-        let targetIsVisible = stageStore.mutate { state -> Bool in
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: windowID)
+        let targetIsVisible: Bool
+        do {
+            targetIsVisible = try stageStore.mutateChecked { state -> Bool in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: windowID)
+                }
+                var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+                targetScope.applyConfiguredStages(stageManagerConfig)
+                targetScope.ensureStage(stageID)
+                targetScope.assign(window: window, to: stageID)
+                state.update(targetScope)
+                state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
+                return state.currentDesktopID(for: displayID) == desktopID && targetScope.activeStageID == stageID
             }
-            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageManagerConfig)
-            targetScope.ensureStage(stageID)
-            targetScope.assign(window: window, to: stageID)
-            state.update(targetScope)
-            state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
-            return state.currentDesktopID(for: displayID) == desktopID && targetScope.activeStageID == stageID
+            try snapshotService.removeLayoutIntentChecked(scope: targetStageScope)
+        } catch {
+            return .persistenceFailure("desktop/stage assign \(desktopID.rawValue)/\(stageID.rawValue)", error)
         }
-
-        snapshotService.removeLayoutIntent(scope: targetStageScope)
         // Plan unique (A15, T223) : masquage (si la cible n'est pas affichée) et disposition des
         // scopes touchés en une écriture groupée. Une cible affichée est posée par la disposition.
         var placement = CommandPlacement(layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 }))
@@ -390,6 +408,12 @@ public struct WindowContextActions {
             message: "desktop/stage assign \(desktopID.rawValue)/\(stageID.rawValue): window=\(windowID.rawValue) layout=\(result.attempted)",
             changed: true
         )
+    }
+
+    /// État non persisté (REL-021) : aucun événement ; « failed » donne au CLI un code de sortie
+    /// non nul.
+    private func persistenceFailure(_ action: String, _ error: Error) -> WindowContextActionResult {
+        WindowContextActionResult(message: JSONPersistence.commandFailureMessage(action, error), changed: false)
     }
 
     private func desktopIDs(in state: PersistentStageState, displayID: DisplayID) -> [DesktopID] {

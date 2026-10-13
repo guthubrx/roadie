@@ -19,6 +19,12 @@ public struct WindowCommandResult: Equatable, Sendable {
         self.message = message
         self.changed = changed
     }
+
+    /// État de la commande non persisté (REL-021) : rien n'est annoncé et aucun effet système
+    /// (frames, focus) ne suit. « failed » donne au CLI un code de sortie non nul.
+    static func persistenceFailure(_ command: String, _ error: Error) -> WindowCommandResult {
+        WindowCommandResult(message: JSONPersistence.commandFailureMessage(command, error), changed: false)
+    }
 }
 
 public struct WindowCommandService {
@@ -178,16 +184,23 @@ public struct WindowCommandService {
                 }
             }
         }
-        let changed = stageStore.mutate { state -> Bool in
-            let existing = state.bspTree(for: scope) ?? .empty
-            let mutated = mutation(existing)
-            guard mutated != existing else { return false }
-            state.setBSPTree(mutated, for: scope)
-            return true
+        let changed: Bool
+        do {
+            changed = try stageStore.mutateChecked { state -> Bool in
+                let existing = state.bspTree(for: scope) ?? .empty
+                let mutated = mutation(existing)
+                guard mutated != existing else { return false }
+                state.setBSPTree(mutated, for: scope)
+                return true
+            }
+            if changed {
+                try service.removeLayoutIntentChecked(scope: scope)
+            }
+        } catch {
+            return .persistenceFailure("\(verb.rawValue) \(direction.rawValue)", error)
         }
         var tick: MaintenanceTick?
         if changed {
-            service.removeLayoutIntent(scope: scope)
             tick = service.applyTreeScope(
                 scope,
                 cause: "window.\(verb.rawValue).\(direction.rawValue)",
@@ -249,7 +262,11 @@ public struct WindowCommandService {
             )
             return result
         }
-        service.removeLayoutIntent(scope: scope)
+        do {
+            try service.removeLayoutIntentChecked(scope: scope)
+        } catch {
+            return .persistenceFailure("move \(direction.rawValue)", error)
+        }
         let ordered = swappedWindowIDs(
             in: snapshot,
             scope: scope,
@@ -264,13 +281,17 @@ public struct WindowCommandService {
         )
         let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: result) {
-            persistIntentAfterCommand(
-                from: snapshot,
-                scope: scope,
-                orderedWindowIDs: ordered,
-                plan: plan,
-                result: result
-            )
+            do {
+                try persistIntentAfterCommand(
+                    from: snapshot,
+                    scope: scope,
+                    orderedWindowIDs: ordered,
+                    plan: plan,
+                    result: result
+                )
+            } catch {
+                return .persistenceFailure("move \(direction.rawValue)", error)
+            }
         }
         _ = focusWindow(pair.active.window)
         let commandResult = WindowCommandResult(
@@ -311,7 +332,11 @@ public struct WindowCommandService {
             )
             return result
         }
-        service.removeLayoutIntent(scope: scope)
+        do {
+            try service.removeLayoutIntentChecked(scope: scope)
+        } catch {
+            return .persistenceFailure("warp \(direction.rawValue)", error)
+        }
         guard let plan = structuralWarpPlan(
             in: snapshot,
             scope: scope,
@@ -334,13 +359,17 @@ public struct WindowCommandService {
         let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: snapshot)
-            persistIntentAfterCommand(
-                from: snapshot,
-                scope: scope,
-                orderedWindowIDs: ordered,
-                plan: plan,
-                result: result
-            )
+            do {
+                try persistIntentAfterCommand(
+                    from: snapshot,
+                    scope: scope,
+                    orderedWindowIDs: ordered,
+                    plan: plan,
+                    result: result
+                )
+            } catch {
+                return .persistenceFailure("warp \(direction.rawValue)", error)
+            }
         }
         _ = focusWindow(pair.active.window)
         let commandResult = WindowCommandResult(
@@ -382,7 +411,11 @@ public struct WindowCommandService {
             return result
         }
         let frame = resizedFrame(active.window.frame.cgRect, direction: direction)
-        service.removeLayoutIntent(scope: scope)
+        do {
+            try service.removeLayoutIntentChecked(scope: scope)
+        } catch {
+            return .persistenceFailure("resize \(direction.rawValue)", error)
+        }
         let resizeResult = service.apply(ApplyPlan(commands: [
             ApplyCommand(window: active.window, frame: Rect(frame)),
         ]), generation: generation)
@@ -411,13 +444,17 @@ public struct WindowCommandService {
         let result = service.apply(plan, generation: generation)
         if shouldPersistCommandIntent(after: resizeResult), shouldPersistCommandIntent(after: result) {
             let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)
-            persistIntentAfterCommand(
-                from: updatedSnapshot,
-                scope: scope,
-                orderedWindowIDs: ordered,
-                plan: plan,
-                result: result
-            )
+            do {
+                try persistIntentAfterCommand(
+                    from: updatedSnapshot,
+                    scope: scope,
+                    orderedWindowIDs: ordered,
+                    plan: plan,
+                    result: result
+                )
+            } catch {
+                return .persistenceFailure("resize \(direction.rawValue)", error)
+            }
         }
         _ = focusWindow(active.window)
         let commandResult = WindowCommandResult(
@@ -455,7 +492,11 @@ public struct WindowCommandService {
         beginLayoutCommand("window.reset", scopes: [scope])
         defer { finishLayoutCommand("window.reset", scopes: [scope]) }
 
-        service.removeLayoutIntent(scope: scope)
+        do {
+            try service.removeLayoutIntentChecked(scope: scope)
+        } catch {
+            return .persistenceFailure("window reset", error)
+        }
         let zoomed = service.reset(active.window)
         Thread.sleep(forTimeInterval: 0.08)
 
@@ -525,7 +566,12 @@ public struct WindowCommandService {
         let implicitFullscreen = !reservingRail && previous?.zoomedWindowID == nil
             && framesAreClose(active.window.frame.cgRect, display.visibleFrame.cgRect.integral)
         if sameMode || implicitFullscreen {
-            let plan = service.restoreZoomLayoutIntent(scope: scope, from: snapshot, generation: generation)
+            let plan: ApplyPlan
+            do {
+                plan = try service.restoreZoomLayoutIntentChecked(scope: scope, from: snapshot, generation: generation)
+            } catch {
+                return .persistenceFailure("toggle \(name) off", error)
+            }
             let result = service.apply(plan, generation: generation)
             _ = focusWindow(active.window)
             return WindowCommandResult(
@@ -551,7 +597,13 @@ public struct WindowCommandService {
                 return (entry.window.id, entry.window.frame)
             })
         let zoomedFrame = Rect(appliedFrame)
-        persistFrame(zoomedFrame, for: active.window, in: scope)
+        do {
+            try persistFrame(zoomedFrame, for: active.window, in: scope)
+        } catch {
+            // Cadre non mémorisé : la fenêtre reprend sa géométrie, comme pour un refus de taille.
+            _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation)
+            return .persistenceFailure("toggle \(name) on", error)
+        }
         let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot, generation: generation)
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
@@ -561,23 +613,27 @@ public struct WindowCommandService {
         placements[active.window.id] = zoomedFrame
         let ordered = previous.flatMap { $0.zoomedWindowID == nil ? nil : $0.windowIDs }
             ?? service.orderedWindowIDs(in: scope, from: snapshot)
-        service.effectiveIntentStore.save(LayoutIntent(
-            scope: scope,
-            windowIDs: ordered,
-            placements: placements,
-            source: .command,
-            zoomedWindowID: active.window.id,
-            zoomReservesRail: reservingRail,
-            restorePlacements: original
-        ))
+        do {
+            try service.effectiveIntentStore.saveChecked(LayoutIntent(
+                scope: scope,
+                windowIDs: ordered,
+                placements: placements,
+                source: .command,
+                zoomedWindowID: active.window.id,
+                zoomReservesRail: reservingRail,
+                restorePlacements: original
+            ))
+        } catch {
+            return .persistenceFailure("toggle \(name) on", error)
+        }
         _ = focusWindow(active.window)
         return WindowCommandResult(message: "toggle \(name) on: changed=true", changed: true)
     }
 
-    private func persistFrame(_ frame: Rect, for window: WindowSnapshot, in scopeID: StageScope) {
+    private func persistFrame(_ frame: Rect, for window: WindowSnapshot, in scopeID: StageScope) throws {
         var updated = window
         updated.frame = frame
-        stageStore.mutate { state in
+        try stageStore.mutateChecked { state in
             var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
             scope.updateFrame(window: updated)
             state.update(scope)
@@ -688,22 +744,26 @@ public struct WindowCommandService {
             role: active.window.role,
             furniture: active.window.furniture
         )
-        let removedPin = stageStore.mutate { state -> PersistentWindowPin? in
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: active.window.id)
+        let removedPin: PersistentWindowPin?
+        do {
+            removedPin = try stageStore.mutateChecked { state -> PersistentWindowPin? in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: active.window.id)
+                }
+                var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
+                targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
+                state.update(targetScope)
+                let pin = state.removePin(windowID: active.window.id)
+                state.suppressRulePlacement(window: transferredWindow)
+                return pin
             }
-            var targetScope = state.scope(displayID: display.id, desktopID: targetDesktopID)
-            targetScope.assign(window: transferredWindow, to: targetScope.activeStageID)
-            state.update(targetScope)
-            let pin = state.removePin(windowID: active.window.id)
-            state.suppressRulePlacement(window: transferredWindow)
-            return pin
+            if let sourceScope {
+                try service.removeLayoutIntentChecked(scope: sourceScope)
+            }
+            try service.removeLayoutIntentChecked(scope: targetScopeID)
+        } catch {
+            return .persistenceFailure("display \(display.index)", error)
         }
-
-        if let sourceScope {
-            service.removeLayoutIntent(scope: sourceScope)
-        }
-        service.removeLayoutIntent(scope: targetScopeID)
 
         // Plan unique (A15, T212) : fenêtre transférée, scope d'origine et scope cible dans une seule
         // écriture groupée, puis le focus.
@@ -717,13 +777,17 @@ public struct WindowCommandService {
         )
         let updatedSnapshot = snapshotByUpdating(windowID: active.window.id, to: Rect(transferFrame), in: observed)
         if shouldPersistCommandIntent(after: result) {
-            persistIntentsAfterDisplayMove(
-                from: updatedSnapshot,
-                targetScope: targetScopeID,
-                sourceScope: sourceScope,
-                plan: plan,
-                result: result
-            )
+            do {
+                try persistIntentsAfterDisplayMove(
+                    from: updatedSnapshot,
+                    targetScope: targetScopeID,
+                    sourceScope: sourceScope,
+                    plan: plan,
+                    result: result
+                )
+            } catch {
+                return .persistenceFailure("display \(display.index)", error)
+            }
         }
         if focusMovedWindow {
             _ = focusWindow(active.window)
@@ -814,7 +878,7 @@ public struct WindowCommandService {
         sourceScope: StageScope?,
         plan: ApplyPlan,
         result: ApplyResult
-    ) {
+    ) throws {
         let scopes = Set([targetScope, sourceScope].compactMap { $0 })
         guard !scopes.isEmpty else { return }
         let resultFrames = Dictionary(uniqueKeysWithValues: result.items.compactMap { item -> (WindowID, Rect)? in
@@ -837,7 +901,7 @@ public struct WindowCommandService {
             }
             let ordered = service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)
             guard Set(placements.keys) == Set(ordered) else { continue }
-            service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
+            try service.saveLayoutIntentChecked(scope: scope, windowIDs: ordered, placements: placements, source: .command)
         }
     }
 
@@ -917,12 +981,16 @@ public struct WindowCommandService {
             return WindowCommandResult(message: result.message, changed: result.changed)
         }
 
-        stageStore.mutate { state in
-            state.focusDisplay(targetDisplay.id)
-            if var scope = state.scopes.first(where: { $0.displayID == targetScope.displayID && $0.desktopID == targetScope.desktopID }) {
-                scope.setFocusedWindow(target.window.id, in: targetScope.stageID)
-                state.update(scope)
+        do {
+            try stageStore.mutateChecked { state in
+                state.focusDisplay(targetDisplay.id)
+                if var scope = state.scopes.first(where: { $0.displayID == targetScope.displayID && $0.desktopID == targetScope.desktopID }) {
+                    scope.setFocusedWindow(target.window.id, in: targetScope.stageID)
+                    state.update(scope)
+                }
             }
+        } catch {
+            return .persistenceFailure("display focus \(direction.rawValue)", error)
         }
 
         let ok = focusWindow(target.window)
@@ -940,6 +1008,8 @@ public struct WindowCommandService {
         return snapshot.displays.first { $0.frame.cgRect.contains(active.window.frame.center) }
     }
 
+    /// Écriture gardée en `mutate` (REL-021) : elle suit le focus déjà donné et ne fait que noter
+    /// la fenêtre focalisée, que le snapshot suivant réécrit depuis le focus réel (followFocus).
     private func focusWindow(_ window: WindowSnapshot) -> Bool {
         let ok = service.focus(window)
         if ok {
@@ -1058,7 +1128,7 @@ public struct WindowCommandService {
         orderedWindowIDs: [WindowID],
         plan: ApplyPlan,
         result: ApplyResult
-    ) {
+    ) throws {
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
             return (entry.window.id, entry.window.frame)
@@ -1074,7 +1144,7 @@ public struct WindowCommandService {
             }
         }
         guard Set(placements.keys) == Set(orderedWindowIDs) else { return }
-        service.saveLayoutIntent(
+        try service.saveLayoutIntentChecked(
             scope: scope,
             windowIDs: orderedWindowIDs.sorted(),
             placements: placements,
