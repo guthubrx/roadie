@@ -83,7 +83,7 @@ Le Mode Cibles propose des labels clavier, une recherche, une inspection, une ac
 
 Le mode modulaire sépare `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu` et `target-mode` en processus distincts. Le lanceur standard démarre l’ensemble. Un usage limité aux stages ou aux effets visuels avec un autre gestionnaire demande encore des profils de démarrage dédiés.
 
-La gestion des Spaces natifs, les raccourcis globaux intégrés et un installateur public validé par Apple restent hors du périmètre actuel. Certaines commandes listées, comme `window close` et `toggle floating`, signalent explicitement qu’elles ne sont pas implémentées. La refonte abandonnée des popovers d’épinglage ne fait pas partie des fonctions livrées.
+La gestion des Spaces natifs, un moteur général de raccourcis intégré et un installateur public validé par Apple restent hors du périmètre actuel. Le seul raccourci global intégré à Roadie est `search_hotkey`, qui ouvre le mode recherche. Certaines commandes listées, comme `window close` et `toggle floating`, signalent explicitement qu’elles ne sont pas implémentées. La refonte abandonnée des popovers d’épinglage ne fait pas partie des fonctions livrées.
 
 ## Documentation
 
@@ -529,7 +529,10 @@ Interactions supportées :
 - Drag une thumbnail vers une autre stage pour y déplacer la fenêtre.
 - Drag une thumbnail vers la scène active pour la ramener.
 - Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
-- Utiliser les chevrons au-dessus et au-dessous d’une stage pour réordonner les stages.
+- Glisser une fenêtre d’application par sa barre de titre vers une stage pour l’y déplacer.
+- Glisser une fenêtre d’application par sa barre de titre vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.
+- Glisser une stage avec le bouton droit de la souris pour réordonner les stages.
+- Faire un clic droit sur une stage, sans glisser, pour ouvrir son menu : renommer la stage, l’envoyer vers un autre écran ou envoyer une fenêtre vers une autre stage.
 
 Le rendu du rail se configure dans `~/.config/roadies/roadies.toml`.
 

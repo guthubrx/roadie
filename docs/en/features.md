@@ -37,7 +37,7 @@ components:
 - `rail`: renders the stage rail and thumbnails;
 - `border`: draws the focus border overlay;
 - `focus-mouse`: handles focus-follows-mouse;
-- `titlebar-menu`: handles title-bar drag/drop and context actions;
+- `titlebar-menu`: shows the title-bar right-click context menu (drag and drop onto the rail is handled by `rail`);
 - `target-mode`: exposes keyboard targets, grids, and target activation.
 
 Restore safety is not a separate component: it runs inside `roadied run` and `roadied tiler`. The old `roadied restore-safety` command still exists, but it only prints a message and exits with code 0.
@@ -139,7 +139,9 @@ Main interactions:
 - drag a thumbnail to another stage to move that window there;
 - drag a thumbnail into the active workspace to summon it;
 - drag an application window by its title bar onto a stage to move it there;
-- drag an application window by its title bar onto empty rail space to create or use an empty stage.
+- drag an application window by its title bar onto empty rail space to create or use an empty stage;
+- drag a stage with the right mouse button to reorder it;
+- right-click a stage without dragging to open its menu: rename the stage, send it to another display, or send a window to another stage.
 
 macOS-reserved areas such as the menu bar are ignored by empty rail click handling.
 
