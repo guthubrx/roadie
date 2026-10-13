@@ -68,7 +68,7 @@ Statut : constats lus dans le code le 2026-10-13. « Non vérifié » = à confi
 - **Décision** :
   - `NSWindow` (titre « Réglages Roadie », redimensionnable, taille minimale 760×520) avec un `NSHostingController` SwiftUI.
   - Fenêtre unique conservée par un contrôleur statique ; une seconde demande appelle `makeKeyAndOrderFront`.
-  - **Activation et focus** : à l'ouverture, mémoriser l'application au premier plan (`NSWorkspace.shared.frontmostApplication`), puis `NSApp.activate()`. À la fermeture (Échap, Cmd + W, bouton), réactiver l'application mémorisée si elle tourne encore. La fenêtre ne fait pas partie du tuilage : elle ne reçoit aucune commande de la boîte.
+  - **Activation et focus (corrigé le 2026-10-13, T041)** : `NSApp.activate()` est refusé à un processus d'arrière-plan (macOS 14) : la fenêtre restait derrière les fenêtres de l'application active, invisible (constaté sur l'écran de l'utilisateur : fenêtre au rang 14 derrière Teams et T3 Code). La fenêtre est donc un `NSPanel` `.nonactivatingPanel` flottant : `orderFrontRegardless()` + `makeKey()`, sans jamais activer le daemon, centré sur l'écran du pointeur. L'application de l'utilisateur reste l'application active ; il n'y a plus de focus à restaurer. La fenêtre ne fait pas partie du tuilage : elle ne reçoit aucune commande de la boîte.
   - **Spaces** : `collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]`, pour qu'elle s'ouvre sur le bureau courant, y compris sur un Space plein écran.
   - Politique `accessory` conservée : pas d'icône dans le Dock.
   - Pas de menu principal : la fenêtre gère elle-même Échap (`cancelOperation`) et Cmd + W (`performKeyEquivalent`). Échap pendant l'édition d'un champ texte ne ferme pas la fenêtre.

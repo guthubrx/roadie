@@ -90,6 +90,8 @@ Passage 1 (2026-10-13, agent Converge en lecture seule + contre-revue Codex de l
 
 Passage 1 de Converge : T027 à T039. Passage 2 : verdict « non convergé » pour T040 seule ; passage 3 après T040.
 
+- [x] T041 [US1] Correctif (constaté par l'utilisateur) : `/settings` n'affichait rien à l'écran car la fenêtre restait derrière les fenêtres de l'application active. `SettingsWindowController` : `NSPanel` non activant, flottant, `orderFrontRegardless` + `makeKey`, centré sur l'écran du pointeur (`centeredFrame`, testé), restauration du focus supprimée (inutile). Preuve : test jetable (rang 2 sur 37 fenêtres à l'écran, clavier reçu, application active inchangée).
+
 ## Dependencies & Execution Order
 
 - Phase 1 : T001 et T002 d'abord. T003, T004, T005 parallèles. T006 après T002 + T004 + T005. T007 après T003 + T004.

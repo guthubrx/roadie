@@ -65,6 +65,9 @@ Restants, avec justification (constitution XVIII et XIX) :
 - TEST-005 à TEST-009, MIN-003, MIN-004 : faibles, laissés (choix de l'auteur).
 `audits/latest` n'est pas commité : la branche `022-audit-remediation` le modifie aussi (évite un conflit de fusion).
 
+## Correctif T041 (2026-10-13, signalé par l'utilisateur : « le panneau ne s'est pas ouvert »)
+Diagnostic par données réelles : les événements montraient `command_box_settings` (la boîte avait bien reconnu `/settings`), et `CGWindowListCopyWindowInfo` montrait la fenêtre « Roadie » 860 x 632 présente et à l'écran mais au rang 14, derrière Teams (rang 0) et T3 Code (rang 2) qui couvrent tout l'écran externe ; l'application active était Teams. Cause : `NSApp.activate()` ne peut pas activer un processus d'arrière-plan depuis macOS 14, donc `makeKeyAndOrderFront` ne la plaçait pas devant. C'était un des points « à vérifier à l'écran » du rapport : le test unitaire ne pouvait pas le voir. Correction : panneau non activant flottant, centré sur l'écran du pointeur (voir research R7). À revalider par l'utilisateur à l'écran.
+
 ## Livraison (2026-10-13)
 - Intégration : fast-forward de `023-command-box-settings` dans `main` (base `acc10e13`, cible `282d2559`), push sans force vers `origin/main`, SHA distant lu par `git ls-remote` = `282d255936a1b09fcd8fabdf32a66ed50e3daf86` = SHA local.
 - Installation : `make install` (signature : remplacement de la signature existante, identifiant `com.roadie.roadied`) puis `make restart` ; `roadie query health` : process, daemon-status (`accessibility=true`, `config_valid=true`) et self-test `ok`, 7 fenêtres tuilées ; `roadie config show` expose `label_font_size = 13` pour `target_mode` et `target_grid`.

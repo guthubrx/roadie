@@ -1,8 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// Fenêtre unique « Réglages Roadie » (SPEC-023, research R7). Le daemon reste `.accessory` :
-/// la fenêtre active le processus à l'ouverture et rend le focus à l'application précédente à la fermeture.
+/// Fenêtre unique « Réglages Roadie » (SPEC-023, research R7). Le daemon reste `.accessory` et ne s'active jamais :
+/// depuis macOS 14, un processus d'arrière-plan ne peut pas prendre le premier plan (`NSApp.activate()` est refusé), et une
+/// `NSWindow` ordinaire restait alors derrière les fenêtres de l'application active, invisible. La fenêtre est donc un panneau
+/// qui n'active pas l'application (`.nonactivatingPanel`), placé devant toutes les fenêtres et sur l'écran du pointeur ; il
+/// reçoit quand même le clavier, et l'application de l'utilisateur garde son rôle d'application active.
 @MainActor
 public final class SettingsWindowController: NSObject, NSWindowDelegate {
     public static let shared = SettingsWindowController()
@@ -12,22 +15,32 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var watcher: RailFileWatcher?
     /// Surveille le dossier du fichier tant que celui-ci est absent ; arrêtée dès sa création.
     private var directoryWatcher: RailFileWatcher?
-    /// Application au premier plan avant l'ouverture, réactivée à la fermeture.
-    private var previousApplication: NSRunningApplication?
 
     /// Ouvre la fenêtre, ou la ramène devant. `nil` : dernière catégorie vue (Général à la première ouverture).
     public func show(category: SettingCategory?) {
         model.prepareForShow(category: category)
         let window = self.window ?? makeWindow()
         self.window = window
-        if let front = NSWorkspace.shared.frontmostApplication, front != .current {
-            previousApplication = front
-        }
         armWatchers()
         // Fenêtre déjà au premier plan : `windowDidBecomeKey` ne viendra pas, on relit ici.
         if window.isKeyWindow { model.refresh() }
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
+        if !window.isVisible {
+            let screens = NSScreen.screens.map(\.visibleFrame)
+            window.setFrame(Self.centeredFrame(size: window.frame.size, screens: screens, pointer: NSEvent.mouseLocation), display: false)
+        }
+        // `orderFrontRegardless` : devant toutes les fenêtres sans activer l'application ; `makeKey` : clavier au panneau.
+        window.orderFrontRegardless()
+        window.makeKey()
+    }
+
+    /// Cadre de la fenêtre, centré dans l'écran qui contient le pointeur (le premier écran à défaut). Pur : testable sans écran.
+    /// Complexité : O(s), s = nombre d'écrans.
+    nonisolated static func centeredFrame(size: NSSize, screens: [CGRect], pointer: CGPoint) -> CGRect {
+        guard let area = screens.first(where: { $0.contains(pointer) }) ?? screens.first else {
+            return CGRect(origin: .zero, size: size)
+        }
+        let width = min(size.width, area.width), height = min(size.height, area.height)
+        return CGRect(x: area.midX - width / 2, y: area.midY - height / 2, width: width, height: height)
     }
 
     /// Le watcher du fichier ne démarre pas si le fichier est absent : dans ce cas, le dossier parent est surveillé
@@ -63,7 +76,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         hosting.sizingOptions = []
         let window = SettingsWindow(
             contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -73,8 +86,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.contentMinSize = NSSize(width: 760, height: 520)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        window.isFloatingPanel = true
+        window.hidesOnDeactivate = false
+        window.becomesKeyOnlyIfNeeded = false
         window.delegate = self
-        window.center()
         return window
     }
 
@@ -88,15 +103,14 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         watcher?.stop()
         directoryWatcher?.stop()
         directoryWatcher = nil
-        if let previous = previousApplication, !previous.isTerminated {
-            _ = previous.activate(from: .current, options: [])
-        }
-        previousApplication = nil
     }
 }
 
 /// Sans menu principal dans le daemon, la fenêtre gère elle-même Cmd + W, Échap et les raccourcis d'édition.
-private final class SettingsWindow: NSWindow {
+private final class SettingsWindow: NSPanel {
+    /// Un panneau ne devient « key » que s'il le dit : sans cela, ses champs ne recevraient pas le clavier.
+    override var canBecomeKey: Bool { true }
+
     /// Raccourcis du menu Édition, absents du daemon : sans eux, coller dans un champ est impossible.
     private static let editActions: [String: Selector] = [
         "x": #selector(NSText.cut(_:)),
