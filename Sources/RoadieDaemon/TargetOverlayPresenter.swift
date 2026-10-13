@@ -1347,7 +1347,9 @@ private final class TargetOverlayView: NSView {
         let label = badge.label.isEmpty ? "?" : badge.label
         let textSize = label.size(withAttributes: Self.textAttributes)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        (badge.isHighlighted ? NSColor.systemGreen.withAlphaComponent(0.85)
+        // Recherche : fond vert pour la cible choisie et, sous 3 résultats, pour chaque résultat ; seule
+        // la bordure distingue la cible choisie (épaisse et blanche).
+        (badge.isHighlighted || badge.isFramed ? NSColor.systemGreen.withAlphaComponent(0.85)
             : NSColor(calibratedWhite: 0.04, alpha: CGFloat(style.labelBackgroundOpacity))).setFill()
         path.fill()
         (badge.isHighlighted ? NSColor.white : badge.isActive ? NSColor.systemBlue : tint(for: badge.kind)).setStroke()
