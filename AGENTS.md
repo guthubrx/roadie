@@ -1,12 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `019-navrail-maximization`.
+Current SpecKit feature: `020-cef-web-hints`.
 
 Contexte :
-- `specs/019-navrail-maximization/spec.md`
-- `specs/019-navrail-maximization/plan.md`
-- `specs/019-navrail-maximization/research.md`
-- `specs/019-navrail-maximization/data-model.md`
-- `specs/019-navrail-maximization/contracts/`
+- `specs/020-cef-web-hints/spec.md`
+- `specs/020-cef-web-hints/plan.md`
+- `specs/020-cef-web-hints/research.md`
+- `specs/020-cef-web-hints/data-model.md`
+- `specs/020-cef-web-hints/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

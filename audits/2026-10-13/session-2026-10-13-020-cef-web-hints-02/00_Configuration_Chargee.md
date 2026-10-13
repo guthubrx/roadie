@@ -1,0 +1,17 @@
+# Configuration Audit v14.0
+- AUDIT_SCOPE       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints (diff main, merge-base 1bdd65e : Sources/RoadieDaemon/AppTargetQueryService.swift, Tests/RoadieDaemonTests/AppTargetQueryServiceTests.swift, Tests/RoadieDaemonTests/TargetHintServiceTests.swift)
+- SCOPE_MODE        : diff (DIFF_BASE=main)
+- AUDIT_MODE        : fix (sans commit, consigne appelant)
+- AUDIT_GRID        : all
+- MODULES_ACTIFS    : [00,01,02,03,04,05,06,07,08,09,10,11,12]
+- MAX_CYCLES        : 1 (+ cycle-scoring en lecture seule)
+- MAX_FIXES_PER_CYCLE : 10
+- MAX_RETRY_PER_FINDING : 2
+- AUTO_COMMIT       : false (consigne appelant)
+- Sélection 9.1     : élargie aux MEDIUM/LOW non ambigus (consigne appelant : « corrections non ambiguës uniquement »)
+- BASELINE_PATH     : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/audits/baseline.json (absent = vide)
+- SESSION_DIR       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/audits/2026-10-13/session-2026-10-13-020-cef-web-hints-02/
+- Session précédente : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/audits/2026-10-13/session-2026-10-13-020-cef-web-hints-01/ (A, 99,6)
+- Spec              : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/specs/020-cef-web-hints/ (tasks.md T012, research.md « Corrections après retour utilisateur »)
+- Choix figés       : CFIdentitySet, seuils 4 points (isHintable) et 1 point (hidesContent), duplicatesTarget à 80 %, pas de boost en zone web, timeout utilisateur 500 ms
+- Tests             : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/scripts/test (swift test, HOME temporaire)

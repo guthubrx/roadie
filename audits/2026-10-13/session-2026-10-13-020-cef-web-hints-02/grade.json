@@ -1,0 +1,22 @@
+{
+  "grade": "A",
+  "date": "2026-10-13",
+  "spec": "020",
+  "scope": "diff 020-cef-web-hints vs main (2e audit, après T012) : AppTargetQueryService.swift et ses tests (AppTargetQueryServiceTests.swift, TargetHintServiceTests.swift)",
+  "coverage_percent": 100,
+  "justification": "Score 99.7/100. Aucun CRITICAL/HIGH. TEST-001 (test CFIdentitySet sans collision) et MIN-001 corrigés ; reste QUAL-001 (MEDIUM, scan() à 109 lignes).",
+  "metrics": {
+    "security": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "reliability": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "tests": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "performance": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "complexity": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "quality": {"grade": "A", "numeric": 97, "findings_count": 1},
+    "architecture": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "ai_hygiene": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "duplication": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "minimalism": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "observability": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "supply_chain": {"grade": "A", "numeric": 100, "findings_count": 0}
+  }
+}

@@ -1,0 +1,240 @@
+{
+ "$schema": "audit-code-v14/aggregated-findings",
+ "meta": {
+  "version": "v14.0",
+  "timestamp": "2026-10-13T05:46:00Z",
+  "start_timestamp": "2026-10-13T05:40:00Z",
+  "end_timestamp": "2026-10-13T05:46:00Z",
+  "duration_ms": 360000,
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints (diff vs main, merge-base 1bdd65e : AppTargetQueryService.swift, AppTargetQueryServiceTests.swift, TargetHintServiceTests.swift)",
+  "audit_mode": "fix",
+  "audit_grid": "all",
+  "scope_mode": "diff",
+  "diff_base": "main",
+  "cycle": 1,
+  "modules_actifs": [
+   "00",
+   "01",
+   "02",
+   "03",
+   "04",
+   "05",
+   "06",
+   "07",
+   "08",
+   "09",
+   "10",
+   "11",
+   "12"
+  ],
+  "score_global": "A",
+  "score_numeric": 99.4,
+  "release_blocked": false,
+  "scores": {
+   "security": "A",
+   "reliability": "A",
+   "tests": "A",
+   "performance": "A",
+   "complexity": "A",
+   "quality": "A",
+   "architecture": "A",
+   "ai_hygiene": "A",
+   "duplication": "A",
+   "minimalism": "A",
+   "observability": "A",
+   "supply_chain": "A",
+   "llm_security": "N/A",
+   "ux": "N/A"
+  },
+  "repository": {
+   "files_count": 3,
+   "languages": [
+    "swift"
+   ],
+   "frameworks": [
+    "swiftpm",
+    "swift-testing",
+    "appkit",
+    "accessibility"
+   ],
+   "type": "macos-daemon",
+   "has_ui": false,
+   "has_llm_integration": false,
+   "db_type": null,
+   "ci_system": null,
+   "container": false
+  }
+ },
+ "execution_metrics": {
+  "files_scanned": 3,
+  "files_total": 3,
+  "lines_analyzed": 316,
+  "tools_used": [
+   "manual-read",
+   "grep",
+   "git-diff",
+   "swift test",
+   "swift script (mesure CFHash)",
+   "fingerprint.py"
+  ],
+  "coverage_estimate_percent": 100,
+  "sampling_method": null,
+  "phases_completed": [
+   "00",
+   "01",
+   "02",
+   "03",
+   "04",
+   "05",
+   "06",
+   "07",
+   "08",
+   "09",
+   "10",
+   "11",
+   "12"
+  ],
+  "phases_skipped": [],
+  "warnings": [
+   "Objections de specs/020-cef-web-hints/adversarial-review-codex.md non re-signalees (alias boost / CFHash, couverture de scan() par mesure, comptage remplace par surfaces, boost en zone web, vue web integree).",
+   "Choix valides par mesure et par l'utilisateur non remis en cause : CFIdentitySet, seuils 4 points (isHintable) et 1 point (hidesContent), duplicatesTarget a 80 %, pas d'attributs boost en zone web, timeout utilisateur 500 ms.",
+   "Hors perimetre de code : specs/020-cef-web-hints/plan.md:28 annonce encore 'regle des feuilles O(f)' ; valeur reelle O(m + p + u * d) (deja signale en session 01).",
+   "Aucun commit (consigne de l'appelant) : commit_sha null.",
+   "Severite de selection 9.1 elargie aux MEDIUM/LOW par la consigne de l'appelant ('corrections non ambigues uniquement') : TEST-001 et MIN-001 corriges ; QUAL-001 (choix de structure) non applique."
+  ]
+ },
+ "summary": {
+  "critical": 0,
+  "high": 0,
+  "medium": 2,
+  "low": 1,
+  "info": 0,
+  "total": 3,
+  "by_category": {
+   "quality": 1,
+   "tests": 1,
+   "minimalism": 1
+  }
+ },
+ "supply_chain": {
+  "slsa_level": null,
+  "slsa_target": null,
+  "sbom_ready": null,
+  "vulnerable_deps_count": 0,
+  "license_issues_count": 0
+ },
+ "duplicated_code": {
+  "jscpd_percentage": null,
+  "duplicated_lines": 0,
+  "max_block_lines": 0,
+  "total_occurrences": 0,
+  "critical_blocks": []
+ },
+ "ai_hygiene": {
+  "suspected_ai_ratio_percent": null,
+  "dead_code_files": 0,
+  "incomplete_implementations": 0,
+  "critical_todos": 0
+ },
+ "llm_governance": {
+  "applicable": false
+ },
+ "slos": {
+  "defined": false
+ },
+ "findings": [
+  {
+   "id": "QUAL-001",
+   "category": "quality",
+   "subcategory": "function_length",
+   "severity": "MEDIUM",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 356,
+   "title": "scan() passe de 53 a 109 lignes (seuil 50), persistant depuis la session 01",
+   "description": "Session 01 : 99 lignes. T012 ajoute le cadre lu pour tout element de zone web, la propagation de retainedFrame, le test duplicatesTarget, l'arret de descente sous 4 points avec marqueur hidesContent et la limite max_targets des feuilles. Les regles elementaires sont pures et testees, mais leur combinaison (lignes 396-447 et 452-462) n'est testable qu'a travers AX : la condition de la ligne 440 et la limite de la ligne 457 n'ont aucun test.",
+   "evidence": "private func scan(window: AXUIElement, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {\n    let windowFrame = copyFrame(window)\n    // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.\n    var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?)] =",
+   "exploitability": "N/A",
+   "impact": "Lisibilite et testabilite : 109 lignes, pile a 5 champs, 4 conditions croisees (inWeb, isCandidate, isPending, retained). Une regression de la ligne 440 ou 457 ne serait vue qu'a la mesure manuelle.",
+   "path_type": "hot",
+   "remediation": "Extraire le post-traitement (lignes 452-462 : focusableLeaves, limite max_targets, ajustement de rejectedRoles) en fonction statique pure, et la decision de descente de zone web (ligne 440) en predicat statique. Tester les deux sans AX. Choix de structure : non applique en mode fix.",
+   "verification": "./scripts/test vert ; tests purs : limite max_targets des feuilles, rejectedRoles apres ajout, descente refusee sous 4 points.",
+   "effort": "S",
+   "regression_risk": "LOW",
+   "references": [
+    "Module 05 checklist 2 (fonctions > 50 lignes)",
+    "audits/2026-10-13/session-2026-10-13-020-cef-web-hints-01 QUAL-001"
+   ],
+   "status": "open",
+   "fixed_at": null,
+   "commit_sha": null,
+   "fingerprint": "513d20814569"
+  },
+  {
+   "id": "TEST-001",
+   "category": "tests",
+   "subcategory": "non_discriminating_test",
+   "severity": "MEDIUM",
+   "file": "Tests/RoadieDaemonTests/AppTargetQueryServiceTests.swift",
+   "line": 186,
+   "title": "Le test de CFIdentitySet ne contient aucune collision de hash",
+   "description": "identitySetUsesRealEqualityNotOnlyTheHash doit proteger la correction T012(a) : deux elements AX distincts au meme CFHash. Ses quatre valeurs ont des hash distincts sauf la paire egale. L'ancien Set<CFHashCode> donne le meme resultat [true, false, true, true] : un retour au hash seul passerait le test.",
+   "evidence": "var set = CFIdentitySet()\nlet inserted = [\n    set.insert(\"abc\" as CFString),\n    set.insert(\"abc\" as CFString),\n    set.insert(\"abd\" as CFString),\n    set.insert(NSNumber(value: 1)),\n]\n#expect(inserted == [true, false, true, true])",
+   "exploitability": "N/A",
+   "impact": "Regression silencieuse possible du defaut qui retirait toute la zone de contenu Bluejay (12 elements CFEqual=false au meme CFHash, research.md).",
+   "path_type": "cold",
+   "remediation": "Ajouter une paire de meme CFHash et CFEqual faux : deux CFString de 149 caracteres qui different hors des fenetres hachees (debut, milieu, fin). Verifier l'egalite des hash dans le test pour qu'il signale un changement de l'algorithme CFString.",
+   "verification": "Mesure : CFHash egaux, CFEqual faux. Simulation de l'ancien Set<CFHashCode> sur les nouvelles entrees : [true, false, true, true, true, false], donc le test echoue en cas de regression. ./scripts/test : 836 tests, exit 0.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "Module 06 checklist 3",
+    "specs/020-cef-web-hints/tasks.md T012(a)"
+   ],
+   "status": "fixed",
+   "fixed_at": "2026-10-13T05:44:30Z",
+   "commit_sha": null,
+   "fingerprint": "d5d0f3305e84"
+  },
+  {
+   "id": "MIN-001",
+   "category": "minimalism",
+   "subcategory": "unused_default",
+   "severity": "LOW",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 47,
+   "title": "Valeurs par defaut focusableAdded/rejectedRoles jamais utilisees, persistant",
+   "description": "Les deux seuls appels de AppTargetScanStats.init (AppTargetQueryService.swift:313 et TargetHintServiceTests.swift:142) passent les deux valeurs. Les defauts ne servent aucun appel et laissent oublier ces champs sans erreur de compilation.",
+   "evidence": "sawWebArea: Bool, focusableAdded: Int = 0, rejectedRoles: String = \"\", elapsedMs: Int, stopReason: String, retries: Int",
+   "exploitability": "N/A",
+   "impact": "Aucun impact runtime ; un futur appel pourrait omettre les champs SPEC-020 sans alerte.",
+   "path_type": "cold",
+   "removable_lines_estimate": 0,
+   "remediation": "Retirer `= 0` et `= \"\"` de la signature.",
+   "verification": "grep des appels (2, tous complets) ; ./scripts/test : 836 tests, exit 0.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "Constitution Article XIX.2",
+    "audits/2026-10-13/session-2026-10-13-020-cef-web-hints-01 MIN-001"
+   ],
+   "status": "fixed",
+   "fixed_at": "2026-10-13T05:44:30Z",
+   "commit_sha": null,
+   "fingerprint": "ef18c4ac8f7a"
+  }
+ ],
+ "suppressed": [],
+ "positive_findings": [
+  "Seuil d'affichage partage et ecrit : isHintable (AppTargetQueryService.swift:201) reprend la garde > 4 points de TargetOverlayPresenter.swift:878, avec le renvoi au site.",
+  "Regles T012 extraites en fonctions statiques pures et testees sans AX : duplicatesTarget, isHintable, hidesContent, CFIdentitySet (AppTargetQueryService.swift:191-259, AppTargetQueryServiceTests.swift:166-207).",
+  "OBS-001 de la session 01 corrige par T012(d) : les feuilles ne s'ajoutent que sous max_targets (AppTargetQueryService.swift:457), donc focusableAdded ne compte plus de feuilles sans lettre."
+ ],
+ "roadmap": {
+  "immediate": [],
+  "short_term": [],
+  "medium_term": [
+   "QUAL-001"
+  ],
+  "long_term": []
+ }
+}

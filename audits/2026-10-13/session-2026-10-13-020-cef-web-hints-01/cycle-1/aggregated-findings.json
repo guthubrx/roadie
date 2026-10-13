@@ -1,0 +1,271 @@
+{
+ "$schema": "audit-code-v14/aggregated-findings",
+ "meta": {
+  "version": "v14.0",
+  "timestamp": "2026-10-13T05:23:00Z",
+  "start_timestamp": "2026-10-13T05:08:00Z",
+  "end_timestamp": "2026-10-13T05:23:00Z",
+  "duration_ms": 900000,
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints (diff vs main, merge-base 1bdd65e : AppTargetQueryService.swift, AppTargetQueryServiceTests.swift, TargetHintServiceTests.swift)",
+  "audit_mode": "fix",
+  "audit_grid": "all",
+  "scope_mode": "diff",
+  "diff_base": "main",
+  "cycle": 1,
+  "modules_actifs": [
+   "00",
+   "01",
+   "02",
+   "03",
+   "04",
+   "05",
+   "06",
+   "07",
+   "08",
+   "09",
+   "10",
+   "11",
+   "12"
+  ],
+  "score_global": "A",
+  "score_numeric": 98.4,
+  "release_blocked": true,
+  "scores": {
+   "security": "A",
+   "reliability": "A",
+   "tests": "A",
+   "performance": "A",
+   "complexity": "A",
+   "quality": "A",
+   "architecture": "A",
+   "ai_hygiene": "A",
+   "duplication": "A",
+   "minimalism": "A",
+   "observability": "A",
+   "supply_chain": "A",
+   "llm_security": "N/A",
+   "ux": "N/A"
+  },
+  "repository": {
+   "files_count": 3,
+   "languages": [
+    "swift"
+   ],
+   "frameworks": [
+    "swiftpm",
+    "swift-testing",
+    "appkit",
+    "accessibility"
+   ],
+   "type": "macos-daemon",
+   "has_ui": false,
+   "has_llm_integration": false,
+   "db_type": null,
+   "ci_system": null,
+   "container": false
+  }
+ },
+ "execution_metrics": {
+  "files_scanned": 3,
+  "files_total": 3,
+  "lines_analyzed": 238,
+  "tools_used": [
+   "manual-read",
+   "grep",
+   "git-diff",
+   "swift test",
+   "fingerprint.py"
+  ],
+  "coverage_estimate_percent": 100,
+  "sampling_method": null,
+  "phases_completed": [
+   "00",
+   "01",
+   "02",
+   "03",
+   "04",
+   "05",
+   "06",
+   "07",
+   "08",
+   "09",
+   "10",
+   "11",
+   "12"
+  ],
+  "phases_skipped": [],
+  "warnings": [
+   "Objections de specs/020-cef-web-hints/adversarial-review-codex.md non re-signalees (alias boost / CFHash, couverture de scan() par mesure T009, inCandidate/retained, rejectedRoles sur !retained).",
+   "Choix valides par mesure non remis en cause : regle feuille focalisable, marqueurs path.?, leavesKeptUnderCandidates, pas de boost en zone web, champs focusableAdded/rejectedRoles.",
+   "Ecriture concurrente observee : un bloc jetable 'FORENSIC-020c' (ecriture /tmp par element dans scan()) a ete ajoute puis retire par un autre agent pendant l'audit (07:20-07:21 CEST). Absent de l'etat final ; suite de tests relancee sur l'etat final.",
+   "Aucun commit (consigne de l'appelant) : commit_sha null.",
+   "PERF-001 contre-audite : CONFIRME (pile restante non bornee par construction, borne non documentee) ; corrige, statut fixed."
+  ]
+ },
+ "summary": {
+  "critical": 0,
+  "high": 1,
+  "medium": 1,
+  "low": 2,
+  "info": 0,
+  "total": 4,
+  "by_category": {
+   "performance": 1,
+   "quality": 1,
+   "observability": 1,
+   "minimalism": 1
+  }
+ },
+ "supply_chain": {
+  "slsa_level": null,
+  "slsa_target": null,
+  "sbom_ready": null,
+  "vulnerable_deps_count": 0,
+  "license_issues_count": 0
+ },
+ "duplicated_code": {
+  "jscpd_percentage": null,
+  "duplicated_lines": 0,
+  "max_block_lines": 0,
+  "total_occurrences": 0,
+  "critical_blocks": []
+ },
+ "ai_hygiene": {
+  "suspected_ai_ratio_percent": null,
+  "dead_code_files": 0,
+  "incomplete_implementations": 0,
+  "critical_todos": 0
+ },
+ "llm_governance": {
+  "applicable": false
+ },
+ "slos": {
+  "defined": false
+ },
+ "findings": [
+  {
+   "id": "PERF-001",
+   "category": "performance",
+   "subcategory": "algorithmic_complexity",
+   "severity": "HIGH",
+   "counter_audit": "CONFIRMED",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 177,
+   "title": "Anti-pattern #2 : recherche lineaire dans unexplored pour chaque element en attente",
+   "description": "focusableLeaves parcourait tout `unexplored` (pile restante d'un parcours coupe) pour chaque chemin de `pending` : O(p * u). La complexite etait annotee, mais sans borne ecrite ; la pile restante n'est pas bornee par construction (une liste web de plusieurs centaines d'enfants y reste entiere apres un timeout).",
+   "evidence": "return Set(pending.filter { path in\n    !containers.contains(path) && !unexplored.contains { $0.hasPrefix(path + \".\") }\n})",
+   "complexity_current": "O(m + p * u)",
+   "complexity_target": "O(m + p + u * d)",
+   "exploitability": "LIKELY",
+   "impact": "Cout quadratique sur les parcours coupes (timeout/limit) : p et u de l'ordre de centaines dans Bluejay (3 317 elements, 72 feuilles). Impact pratique faible devant les appels AX (~0,17 ms par element) ; non-conformite Article XVIII.",
+   "path_type": "hot",
+   "remediation": "Indexer hors boucle les ancetres stricts de chaque chemin reste dans la pile dans le Set `containers` (d = profondeur, bornee par max_depth), puis filtrer `pending` en O(1) par element.",
+   "remediation_code": "for path in unexplored {\n    var ancestor = Substring(path)\n    while let dot = ancestor.lastIndex(of: \".\") {\n        ancestor = ancestor[..<dot]\n        containers.insert(String(ancestor))\n    }\n}\nreturn Set(pending.filter { !containers.contains($0) })",
+   "verification": "./scripts/test : 833 tests, 90 suites, exit 0 avant et apres ; expectation ajoutee (descendant profond reste dans la pile, piege 0.1 / 0.10) dans aFocusableElementWithUnreadableChildrenIsNotProvenALeaf.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "Constitution Article XVIII",
+    "specs/020-cef-web-hints/plan.md (Constitution Check XVIII)"
+   ],
+   "fingerprint": "964d3b8de24d",
+   "status": "fixed",
+   "fixed_at": "2026-10-13T05:22:30Z",
+   "commit_sha": null
+  },
+  {
+   "id": "QUAL-001",
+   "category": "quality",
+   "subcategory": "function_length",
+   "severity": "MEDIUM",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 320,
+   "title": "scan() passe de 53 a 99 lignes (seuil 50)",
+   "description": "Le diff ajoute a scan() la classification zone web, les marqueurs, la file `pending`, le compteur de roles et le post-traitement des feuilles. La fonction privee melange appels AX et regles pures ; le post-traitement (focusableLeaves, leavesKeptUnderCandidates, ajustement de rejectedRoles) n'est testable qu'a travers AX.",
+   "evidence": "private func scan(window: AXUIElement, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {\n    let windowFrame = copyFrame(window)\n    // `inWeb` : sous une `AXWebArea` ; `retainedAncestor` : plus proche cible de zone web ajoutee.\n    var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedAncestor: String?)] =",
+   "exploitability": "N/A",
+   "impact": "Lisibilite et testabilite : une fonction de 99 lignes avec 5 champs de pile a lire d'un bloc.",
+   "path_type": "hot",
+   "remediation": "Extraire le post-traitement (selection des feuilles et ajustement des roles) en fonction statique pure de AppTargetQueryService, prenant `pending` (chemin, ancetre retenu, role), `markers` et `unexplored`, et retournant les indices retenus. Le corps de scan() redescend vers ~85 lignes et la regle devient testable sans AX.",
+   "verification": "./scripts/test vert ; nouveau test pur sur l'ajustement de rejectedRoles.",
+   "effort": "S",
+   "regression_risk": "LOW",
+   "references": [
+    "Module 05 checklist 2 (fonctions > 50 lignes)"
+   ],
+   "fingerprint": "725b87cf1b61",
+   "status": "open",
+   "fixed_at": null,
+   "commit_sha": null
+  },
+  {
+   "id": "OBS-001",
+   "category": "observability",
+   "subcategory": "misleading_metric",
+   "severity": "LOW",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 411,
+   "title": "Arret limit : focusableAdded et candidates comptent des feuilles jamais affichees",
+   "description": "Avec stopReason=limit, les cibles historiques atteignent exactement max_targets ; targets(from:) garde ces cibles d'abord puis coupe a max_targets, donc aucune feuille ne recoit de lettre. Les feuilles sont pourtant ajoutees a pass.candidates, comptees dans focusableAdded et retirees de rejectedRoles.",
+   "evidence": "for item in pending where kept.contains(item.path) {\n    pass.candidates.append(item.candidate)\n    pass.focusableAdded += 1\n    pass.rejectedRoles[item.candidate.role, default: 0] -= 1\n}",
+   "exploitability": "THEORETICAL",
+   "impact": "Mesure trompeuse dans targets.app_scan pour une page web qui atteint max_targets en cibles historiques (focusableAdded > 0 sans lettre). Travail inutile (selection des feuilles) dans ce cas.",
+   "path_type": "hot",
+   "remediation": "Avant la selection des feuilles, sortir si `pass.stopReason == \"limit\"` (les feuilles restent comptees dans rejectedRoles) ; ou documenter dans data-model que focusableAdded compte des candidats, pas des lettres. Choix de semantique : non applique.",
+   "verification": "Test pur apres extraction (QUAL-001) : stopReason=limit => focusableAdded=0.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "specs/020-cef-web-hints/data-model.md",
+    "specs/020-cef-web-hints/research.md (Priorite)"
+   ],
+   "fingerprint": "73c6ca37fd72",
+   "status": "open",
+   "fixed_at": null,
+   "commit_sha": null
+  },
+  {
+   "id": "MIN-001",
+   "category": "minimalism",
+   "subcategory": "unused_default",
+   "severity": "LOW",
+   "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+   "line": 47,
+   "title": "Valeurs par defaut focusableAdded/rejectedRoles jamais utilisees",
+   "description": "Les deux seuls appels de AppTargetScanStats.init (AppTargetQueryService.swift:286-288 et TargetHintServiceTests.swift:142-146) passent les deux valeurs. Les defauts ne servent aucun appel et permettraient d'oublier ces champs sans erreur de compilation.",
+   "evidence": "sawWebArea: Bool, focusableAdded: Int = 0, rejectedRoles: String = \"\", elapsedMs: Int, stopReason: String, retries: Int",
+   "exploitability": "N/A",
+   "impact": "Aucun impact runtime ; un futur appel pourrait omettre les champs SPEC-020 sans alerte.",
+   "path_type": "cold",
+   "removable_lines_estimate": 0,
+   "remediation": "Retirer `= 0` et `= \"\"` de la signature.",
+   "verification": "swift build ; ./scripts/test vert.",
+   "effort": "XS",
+   "regression_risk": "LOW",
+   "references": [
+    "Constitution Article XIX.2"
+   ],
+   "fingerprint": "ef18c4ac8f7a",
+   "status": "open",
+   "fixed_at": null,
+   "commit_sha": null
+  }
+ ],
+ "suppressed": [],
+ "positive_findings": [
+  "Regles de decision extraites en fonctions statiques pures et testees sans AX : keepsFocusableLeaf, focusableLeaves, leavesKeptUnderCandidates, rejectedRoleSummary (AppTargetQueryService.swift:159-207, AppTargetQueryServiceTests.swift:110-175).",
+  "Hors zone web, aucun appel AX en plus : isFocusSettable n'est evalue que si inWeb et non candidat (AppTargetQueryService.swift:367) ; attributs boost coupes en zone web sur mesure (research.md).",
+  "Evenement targets.app_scan sans texte utilisateur : rejectedRoles ne contient que des noms de roles et des compteurs (AppTargetQueryService.swift:200-207)."
+ ],
+ "roadmap": {
+  "immediate": [],
+  "short_term": [
+   "OBS-001"
+  ],
+  "medium_term": [
+   "QUAL-001",
+   "MIN-001"
+  ],
+  "long_term": []
+ }
+}

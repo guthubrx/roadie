@@ -1,0 +1,70 @@
+{
+  "grade": "A",
+  "date": "2026-10-13",
+  "spec": "020",
+  "scope": "diff 020-cef-web-hints vs main : AppTargetQueryService.swift et ses tests (AppTargetQueryServiceTests.swift, TargetHintServiceTests.swift)",
+  "coverage_percent": 100,
+  "justification": "Score 99.6/100. PERF-001 (HIGH, recherche lineaire dans focusableLeaves) corrige ; restent 1 MEDIUM (longueur de scan) et 2 LOW (mesure en arret limit, defauts inutiles).",
+  "metrics": {
+    "security": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "reliability": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "tests": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "performance": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "complexity": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "quality": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 1
+    },
+    "architecture": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "duplication": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 99,
+      "findings_count": 1
+    },
+    "observability": {
+      "grade": "A",
+      "numeric": 99,
+      "findings_count": 1
+    },
+    "supply_chain": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    }
+  }
+}

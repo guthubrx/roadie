@@ -1,0 +1,5 @@
+[2026-10-13T05:42Z] baseline ./scripts/test : 836 tests, 90 suites, exit 0
+[2026-10-13T05:43Z] TEST-001 observation : CFHash égaux et CFEqual faux pour deux CFString de 149 caractères (différence en position 48) ; paires du test existant sans collision
+[2026-10-13T05:44Z] TEST-001 tentative 1 : paire en collision + précondition CFHash ajoutées au test ; MIN-001 tentative 1 : défauts retirés
+[2026-10-13T05:45Z] ./scripts/test : 836 tests, 90 suites, exit 0
+[2026-10-13T05:45Z] simulation ancien Set<CFHashCode> sur les nouvelles entrées : [true, false, true, true, true, false] -> le test échoue en cas de régression. TEST-001, MIN-001 fixed, sans commit.

@@ -1,0 +1,5 @@
+[2026-10-13T05:16Z] baseline ./scripts/test : 833 tests, 90 suites, exit 0
+[2026-10-13T05:20Z] PERF-001 tentative 1 : Set des ancêtres de unexplored dans containers
+[2026-10-13T05:21Z] ./scripts/test : exit 0 (833 tests) ; fichier modifié en parallèle par un autre agent (bloc FORENSIC-020c ajouté puis retiré)
+[2026-10-13T05:21Z] ./scripts/test sur l'état final sans bloc forensique : exit 0 (833 tests)
+[2026-10-13T05:22Z] expectation ajoutée ; ./scripts/test : exit 0 (833 tests, 90 suites). PERF-001 fixed, sans commit.

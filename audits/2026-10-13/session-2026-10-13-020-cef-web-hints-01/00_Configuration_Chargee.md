@@ -1,0 +1,14 @@
+# Configuration Audit v14.0
+- AUDIT_SCOPE       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints (diff main, merge-base 1bdd65e : Sources/RoadieDaemon/AppTargetQueryService.swift, Tests/RoadieDaemonTests/AppTargetQueryServiceTests.swift, Tests/RoadieDaemonTests/TargetHintServiceTests.swift)
+- SCOPE_MODE        : diff (DIFF_BASE=main ; main a avancé à 675cb9f sans toucher ces 3 fichiers)
+- AUDIT_MODE        : fix (sans commit, consigne appelant)
+- AUDIT_GRID        : all
+- MODULES_ACTIFS    : [00,01,02,03,04,05,06,07,08,09,10,11,12]
+- MAX_CYCLES        : 1 (+ cycle-scoring en lecture seule)
+- MAX_FIXES_PER_CYCLE : 10
+- MAX_RETRY_PER_FINDING : 2
+- AUTO_COMMIT       : false (consigne appelant)
+- BASELINE_PATH     : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/audits/baseline.json (absent = vide)
+- SESSION_DIR       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/audits/2026-10-13/session-2026-10-13-020-cef-web-hints-01/
+- Spec              : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/specs/020-cef-web-hints/ (objections de adversarial-review-codex.md non re-signalées)
+- Tests             : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/020-cef-web-hints/scripts/test (swift test, HOME temporaire)
