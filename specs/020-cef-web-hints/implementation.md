@@ -82,3 +82,8 @@ T3 Code 150 (`limit`, 55 ms), Finder 58 (`timeout`, 510 ms). Validation utilisat
 - Anti-doublon bidirectionnel ajouté. Essai « élaguer seulement le contenu caché » : régression (cartes sans lettre, validation utilisateur), retiré.
 - `timeout_ms` 500 → 700 (choix utilisateur, marge) ; sauvegarde `~/.config/roadies/roadies.toml.bak-020-20261013-071312`.
 - Audit 02 : note A (99,7) ; QUAL-001 (`scan()` long) laissé ouvert, découpage non demandé.
+
+### Retour utilisateur : croix et chevron de la vue détaillée (2026-10-13)
+- Cause (code) : `VideoDetailView/index.tsx` (lignes 2566-2567, 2577-2578) affiche réduire et fermer en `<img onClick>` : ni rôle, ni action, ni focus pour Chromium ; aucun signal distinctif côté Roadie (une règle « image avec texte alternatif » aurait posé des lettres sur toutes les vignettes).
+- Correction côté Bluejay, choix utilisateur : branche `pr/030-detail-buttons-role` (`86eaa82`, poussée), `role="button"` sur les 4 images ; intégration `c9f9aaf` ; Bluejay reconstruit et réinstallé (sauvegarde `~/.local/share/bluejay-backups/BlueJay-20261013-080854.app`). Aucun changement Roadie.
+- Validation utilisateur : lettres sur la croix et le chevron, action OK.
