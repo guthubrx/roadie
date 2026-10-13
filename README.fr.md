@@ -542,6 +542,11 @@ ecrans, desktops, bookmarks et, en option, les zones applicatives Accessibility.
 Ces cibles peuvent etre cherchees, inspectees, activees et exportees en JSON
 pour des scripts ou des agents.
 
+Le **mode recherche** (Hyper+F par defaut, `search_hotkey`) ouvre une barre de
+saisie : tape quelques lettres d'un element de n'importe quelle fenetre visible,
+puis Retour pour le cliquer (Maj-Retour clic droit, Cmd-Retour Cmd-clic, deux
+Retour double-clic).
+
 Roadie fournit aussi deux grilles recursives :
 
 - **Grille Ecran** pour cibler un ecran complet.
@@ -554,6 +559,7 @@ plus un fallback grille.
 
 ```bash
 roadie targets interactive --source all --include-app-targets
+roadie targets search
 roadie grid interactive --scope display
 roadie grid interactive --scope focused_window
 roadie record start demo --duration 10

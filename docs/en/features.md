@@ -304,6 +304,56 @@ CEF apps (Grayjay, Bluejay) answer no external request: their tree only exists
 when the app starts CEF with `--force-renderer-accessibility` (built into
 Bluejay on macOS).
 
+### Search mode (Hyper+F)
+
+Search mode follows the Homerow idea: type text instead of reading labels. A
+global shortcut opens an input bar at the bottom of the pointer's display. Each
+letter filters the targets; Return clicks the green target.
+
+- **Shortcut**: `search_hotkey` in `[experimental.target_mode]`, default
+  `command+control+alt+f` (Hyper+F when Caps Lock is a Karabiner hyper key).
+  Accepted aliases: `hyper` (= `command+control+alt`) and `ctrl`. An empty
+  string disables the shortcut. Changes apply without a restart, including after
+  a keyboard layout change. `roadie targets search` opens the same session.
+- **All visible windows**: the bar opens immediately with the Roadie targets.
+  Windows of the current Space are read in parallel in the background (at least
+  2 s per window) and each one is added as soon as it is read; the bar shows
+  `lecture…` meanwhile. An element hidden by a window in front gets no label.
+  Targets on the pointer's display come first.
+- **Matching** ignores case, accents, and spaces (`watchlater` finds
+  `Watch Later`). It covers the title, value, role and, for web targets, the
+  text of their children (T3 Code thread row, video card).
+- **Display**: no label while the bar is empty. Result labels are green; the
+  selected target has a thick frame. With 9 results or fewer, labels become
+  `A`, `S`, `D`... and every result is framed.
+- **Validating in another window**: Roadie focuses the window, waits until its
+  app is active (at most 0.5 s), then clicks.
+
+| Key | Effect |
+|-----|--------|
+| letters, digits, space | filter |
+| Tab, Down, Ctrl-N | next result |
+| Shift-Tab, Up, Ctrl-P | previous result |
+| Shift + label | select that result (`Shift+S` with few results) |
+| Return | click |
+| Return twice (under 0.35 s) | double-click |
+| Shift-Return | right-click |
+| Cmd-Return | Cmd-click (new tab) |
+| `*` or `;` | show every target |
+| `?` | details of the green target (role, title, text, id) |
+| Esc | close without action |
+
+Search closes by itself after 60 s without a key press. Clicks require
+`app_mouse_actions_enabled = true` and the bar requires `overlay_enabled = true`.
+
+A web leaf without an action (focusable-element rule) is clicked at the center
+of its first visible image or text, not at the center of the element: the center
+of a Bluejay History row does not react; only the thumbnail, title, and author
+have a click handler.
+
+Classic label mode stays limited to the active window. To extend it to every
+visible window, set `scope = "visible_windows"` in `[experimental.app_targets]`.
+
 Keyboard Target building blocks are independently configurable. The CLI foundation
 and picker stay enabled by default, while the future visual overlay, app mouse
 actions, and app scroll mode stay off until the user opts in.
@@ -317,12 +367,13 @@ overlay_labels_only = true
 overlay_duration_seconds = 3
 app_mouse_actions_enabled = false
 scroll_mode_enabled = false
+search_hotkey = "command+control+alt+f"
 ```
 
 ```toml
 [experimental.app_targets]
 enabled = false
-scope = "frontmost_window"
+scope = "frontmost_window"   # or "visible_windows"
 max_targets = 150
 timeout_ms = 120
 hint_characters = "asdfghjkl"
@@ -349,12 +400,13 @@ Use cases:
 
 - jump to a bookmarked window or stage without remembering its ID;
 - search for a target with `targets pick` and fail cleanly on ambiguity;
+- type a few letters (Hyper+F) to click an element of any visible window;
 - send the active window to a target selected by label;
 - give an agent a JSON API that is more robust than screenshots;
 - inspect why a target is stale, pinned, floating, or excluded from tiling.
 
 Even when `experimental.app_targets.enabled = true`, `click`, `double-click`,
-and `right-click` on application targets are refused until
+`right-click`, and `command-click` on application targets are refused until
 `experimental.target_mode.app_mouse_actions_enabled = true`.
 
 Still intentionally bounded: deep application control remains experimental,

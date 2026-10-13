@@ -309,6 +309,60 @@ Les applications CEF (Grayjay, Bluejay) ne repondent a aucune demande externe :
 leur arbre n'existe que si l'application lance CEF avec
 `--force-renderer-accessibility` (option integree a Bluejay sur macOS).
 
+### Mode recherche (Hyper+F)
+
+Le mode recherche reprend l'idee de Homerow : on tape un texte au lieu de lire
+des etiquettes. Un raccourci global ouvre une barre de saisie en bas de l'ecran
+du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
+
+- **Raccourci** : `search_hotkey` dans `[experimental.target_mode]`, par defaut
+  `command+control+alt+f` (Hyper+F quand Caps Lock est une hyper key Karabiner).
+  Alias acceptes : `hyper` (= `command+control+alt`) et `ctrl`. Une chaine vide
+  desactive le raccourci. Un changement prend effet sans redemarrage, y compris
+  apres un changement de disposition clavier. `roadie targets search` ouvre la
+  meme session.
+- **Toutes les fenetres visibles** : la barre s'ouvre tout de suite avec les
+  cibles Roadie. Les fenetres de l'espace courant sont lues en parallele en
+  arriere-plan (2 s par fenetre au moins) et chacune s'ajoute des qu'elle est
+  lue ; la barre affiche `lecture…` en attendant. Un element cache par une
+  fenetre placee devant n'a pas de label. Les cibles de l'ecran du pointeur
+  passent en premier.
+- **Correspondance** : casse, accents et espaces ignores (`watchlater` trouve
+  `Watch Later`). Elle porte sur le titre, la valeur, le role et, pour les
+  cibles web, le texte de leurs enfants (ligne de fil T3 Code, carte video).
+- **Affichage** : aucune etiquette tant que la barre est vide. Les etiquettes
+  des resultats sont vertes ; la cible choisie a un cadre epais. A 9 resultats
+  ou moins, les etiquettes deviennent `A`, `S`, `D`... et chaque resultat est
+  encadre.
+- **Valider sur une autre fenetre** : Roadie focalise la fenetre, attend que
+  son application soit active (0,5 s au plus), puis clique.
+
+| Touche | Effet |
+|--------|-------|
+| lettres, chiffres, espace | filtrer |
+| Tab, Fleche bas, Ctrl-N | resultat suivant |
+| Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
+| Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |
+| Retour | clic |
+| Retour deux fois (moins de 0,35 s) | double-clic |
+| Maj-Retour | clic droit |
+| Cmd-Retour | Cmd-clic (nouvel onglet) |
+| `*` ou `;` | afficher toutes les cibles |
+| `?` | fiche de la cible en vert (role, titre, texte, id) |
+| Echap | fermer sans action |
+
+La recherche se ferme seule apres 60 s sans frappe. Les clics exigent
+`app_mouse_actions_enabled = true` et la barre `overlay_enabled = true`.
+
+Une feuille web sans action (regle des elements focalisables) est cliquee au
+centre de sa premiere image ou de son premier texte visible, pas au centre de
+l'element : le centre d'une ligne de l'Historique de Bluejay ne reagit pas,
+seuls la vignette, le titre et l'auteur ont un gestionnaire de clic.
+
+Le mode lettres classique reste limite a la fenetre active. Pour l'etendre a
+toutes les fenetres visibles : `scope = "visible_windows"` dans
+`[experimental.app_targets]`.
+
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
 les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne
@@ -323,12 +377,13 @@ overlay_labels_only = true
 overlay_duration_seconds = 3
 app_mouse_actions_enabled = false
 scroll_mode_enabled = false
+search_hotkey = "command+control+alt+f"
 ```
 
 ```toml
 [experimental.app_targets]
 enabled = false
-scope = "frontmost_window"
+scope = "frontmost_window"   # ou "visible_windows"
 max_targets = 150
 timeout_ms = 120
 hint_characters = "asdfghjkl"
@@ -355,12 +410,13 @@ Cas d'usage :
 
 - sauter vers une fenetre bookmarkee ou une stage sans memoriser son ID;
 - chercher une cible par texte avec `targets pick` et refuser proprement les ambiguities;
+- taper quelques lettres (Hyper+F) pour cliquer un element de n'importe quelle fenetre visible;
 - envoyer la fenetre active vers une cible affichee par label;
 - fournir a un agent une API JSON plus robuste qu'une capture d'ecran;
 - inspecter pourquoi une cible est stale, pinnee, flottante ou hors tiling.
 
 Meme si `experimental.app_targets.enabled = true`, les actions `click`,
-`double-click` et `right-click` sur les zones applicatives sont refusees tant que
+`double-click`, `right-click` et `command-click` sur les zones applicatives sont refusees tant que
 `experimental.target_mode.app_mouse_actions_enabled = false`.
 
 Ce qui reste volontairement borne : le controle applicatif profond. Les app

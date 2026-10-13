@@ -33,27 +33,27 @@
 
 ## Phase 4: User Story 2 - Variantes de clic (Priority: P2)
 
-- [ ] T010 [US2] Ajouter `command-click` à `TargetActionVerb` (`Sources/RoadieDaemon/TargetHintService.swift`) et le Cmd-clic à `AppTargetQueryService.click` ; dans le modèle : Retour = action par défaut, Maj = clic droit, Cmd = Cmd-clic, deux Retour en moins de 0,35 s = double-clic ; tests dans `TargetSearchModelTests.swift`.
+- [x] T010 [US2] Ajouter `command-click` à `TargetActionVerb` (`Sources/RoadieDaemon/TargetHintService.swift`) et le Cmd-clic à `AppTargetQueryService.click` ; dans le modèle : Retour = action par défaut, Maj = clic droit, Cmd = Cmd-clic, deux Retour en moins de 0,35 s = double-clic ; tests dans `TargetSearchModelTests.swift`.
 
 ---
 
 ## Phase 5: User Story 3 - Tout afficher et propriétés (Priority: P3)
 
-- [ ] T011 [US3] `?` : la barre affiche rôle, titre, valeur, id de la cible mise en avant jusqu'à la frappe suivante (modèle + affichage) ; test du modèle.
+- [x] T011 [US3] `?` : la barre affiche rôle, titre, valeur, id de la cible mise en avant jusqu'à la frappe suivante (modèle + affichage) ; test du modèle.
 
 ---
 
 ## Phase 5b: Toutes les fenêtres visibles (ajout du 2026-10-13)
 
 - [x] T015 [US1] Point de clic des feuilles web : premier `AXImage`/`AXStaticText` visible du candidat (`clickFrame`), dans `Sources/RoadieDaemon/AppTargetQueryService.swift` et `RoadieTarget` ; test dans `AppTargetQueryServiceTests.swift`. Validé par l'utilisateur dans l'Historique Bluejay (double Commande et Hyper+F).
-- [ ] T016 [US1] Portée `visible_windows` dans `LiveAppTargetProvider` : fenêtres à l'écran (CG, couche 0, de l'avant vers l'arrière), élément AX par numéro de fenêtre (`RoadieAX`), parcours parallèles avec l'échéance commune, retrait des éléments cachés par une fenêtre de devant, `scope.windowId` sur chaque cible, statistiques par fenêtre. `scope` accepte `visible_windows` (validation de la config). Tests des fonctions pures (occlusion).
-- [ ] T017 [US1] Le mode recherche utilise `visible_windows` ; le clic d'une cible d'une autre fenêtre la focalise d'abord (`WindowCommandService.focus`), attend l'application active, puis clique. Résultat observable : Hyper+F trouve et active un élément d'une fenêtre non active.
+- [x] T016 [US1] Portée `visible_windows` dans `LiveAppTargetProvider` : fenêtres à l'écran (CG, couche 0, de l'avant vers l'arrière), élément AX par numéro de fenêtre (`RoadieAX`), parcours parallèles avec l'échéance commune, retrait des éléments cachés par une fenêtre de devant, `scope.windowId` sur chaque cible, statistiques par fenêtre. `scope` accepte `visible_windows` (validation de la config). Tests des fonctions pures (occlusion).
+- [x] T017 [US1] Le mode recherche utilise `visible_windows` ; le clic d'une cible d'une autre fenêtre la focalise d'abord (`WindowCommandService.focus`), attend l'application active, puis clique. Résultat observable : Hyper+F trouve et active un élément d'une fenêtre non active.
 
 ## Phase 6: Polish & vérification
 
-- [ ] T012 [P] Documenter le mode recherche et `search_hotkey` dans `docs/fr/features.md`, `docs/en/features.md`, `examples/roadies.toml`.
-- [ ] T013 `./scripts/test` (suite complète) et `./scripts/with-xcode swift build`. Résultat observable : 0 échec.
-- [ ] T014 Installer (`make install`, `make restart`), mesurer et faire valider : Hyper+F dans Bluejay (« subscr » + Retour, titre de vidéo, Maj-Retour, Cmd-Retour), T3 Code et Finder (mode lettres classique inchangé : 150 et 58), changement de `search_hotkey` à chaud. Consigner dans `specs/021-target-search-mode/implementation.md`.
+- [x] T012 [P] Documenter le mode recherche et `search_hotkey` dans `docs/fr/features.md`, `docs/en/features.md`, `examples/roadies.toml`.
+- [x] T013 `./scripts/test` (suite complète) et `./scripts/with-xcode swift build`. Résultat observable : 0 échec.
+- [x] T014 Installer (`make install`, `make restart`), mesurer et faire valider : Hyper+F dans Bluejay (« subscr » + Retour, titre de vidéo, Maj-Retour, Cmd-Retour), T3 Code et Finder (mode lettres classique inchangé : 150 et 58), changement de `search_hotkey` à chaud. Consigner dans `specs/021-target-search-mode/implementation.md`.
 
 ## Dependencies & Execution Order
 

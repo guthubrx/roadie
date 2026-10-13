@@ -139,10 +139,11 @@ picker_enabled = true
 overlay_enabled = true
 overlay_duration_seconds = 10
 app_mouse_actions_enabled = true
+search_hotkey = "command+control+alt+f"   # "" disables; aliases "hyper", "ctrl"
 
 [experimental.app_targets]
 enabled = true
-scope = "frontmost_window"
+scope = "frontmost_window"   # or "visible_windows" (label mode on every visible window)
 max_targets = 150
 timeout_ms = 120
 

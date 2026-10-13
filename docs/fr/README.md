@@ -25,7 +25,7 @@ Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Ch
 - **Outils de fenêtre :** bordure de focus, focus à la souris, actions de barre de titre, épinglages, signets et groupes persistants.
 - **Exécution fiable :** socket local, écritures atomiques, cache partagé, rechargement validé de la configuration, récupération des fenêtres masquées et requêtes de santé.
 - **Automatisation :** CLI, règles TOML, requêtes JSON, événements JSONL et diagnostics de performance en lecture seule.
-- **Modes facultatifs :** cibles clavier, découverte expérimentale des zones applicatives, grilles écran/fenêtre et macros courtes.
+- **Modes facultatifs :** cibles clavier, recherche Hyper+F dans toutes les fenêtres visibles, découverte expérimentale des zones applicatives, grilles écran/fenêtre et macros courtes.
 - **Exécution modulaire :** processus séparés pour le tiling, le rail, la bordure, le focus, les actions de barre de titre et les cibles. Les profils limités au rôle de compagnon restent à définir.
 
 ## Mettre À Jour Et Contrôler

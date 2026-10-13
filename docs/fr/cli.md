@@ -248,6 +248,8 @@ roadie targets activate TARGET_ID_OR_LABEL --action send-active
 roadie targets activate TARGET_ID_OR_LABEL --action click
 roadie targets activate TARGET_ID_OR_LABEL --action double-click
 roadie targets activate TARGET_ID_OR_LABEL --action right-click
+roadie targets activate TARGET_ID_OR_LABEL --action command-click
+roadie targets search
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -262,6 +264,10 @@ implicite.
 
 La section `[experimental.target_mode]` permet aussi de couper tout le Mode
 Cibles (`enabled = false`) ou seulement le picker (`picker_enabled = false`).
+
+`targets search` ouvre le mode recherche (barre de saisie, toutes les fenetres
+visibles), comme le raccourci `search_hotkey` (Hyper+F par defaut). Voir
+`docs/fr/features.md`, section Mode recherche.
 
 `targets pick` applique l'action seulement si la requete pointe vers une cible
 unique. En cas d'ambiguite, la commande affiche les candidates et ne change pas

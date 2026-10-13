@@ -248,6 +248,8 @@ roadie targets activate TARGET_ID_OR_LABEL --action send-active
 roadie targets activate TARGET_ID_OR_LABEL --action click
 roadie targets activate TARGET_ID_OR_LABEL --action double-click
 roadie targets activate TARGET_ID_OR_LABEL --action right-click
+roadie targets activate TARGET_ID_OR_LABEL --action command-click
+roadie targets search
 roadie targets show --json --labels-only
 roadie targets hide
 ```
@@ -258,6 +260,10 @@ roadie targets hide
 `click`, `double-click`, and `right-click` also require
 `[experimental.target_mode].app_mouse_actions_enabled = true`. Unsupported
 actions return structured errors instead of silently falling back.
+
+`targets search` opens search mode (input bar, every visible window), like the
+`search_hotkey` shortcut (Hyper+F by default). See `docs/en/features.md`,
+Search mode section.
 
 The `[experimental.target_mode]` section can also disable all Keyboard Target
 commands (`enabled = false`) or only the picker (`picker_enabled = false`).

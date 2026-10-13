@@ -551,6 +551,10 @@ displays, desktops, bookmarks, and optional Accessibility application zones.
 Targets can be searched, inspected, activated, and exported as JSON for scripts
 or agents.
 
+**Search mode** (Hyper+F by default, `search_hotkey`) opens an input bar: type a
+few letters of any element in any visible window, then press Return to click it
+(Shift-Return right-click, Cmd-Return Cmd-click, Return twice double-click).
+
 Roadie also provides two spatial grid modes:
 
 - **Display Grid** targets a whole display.
@@ -562,6 +566,7 @@ recording can store the best target context plus a grid fallback.
 
 ```bash
 roadie targets interactive --source all --include-app-targets
+roadie targets search
 roadie grid interactive --scope display
 roadie grid interactive --scope focused_window
 roadie record start demo --duration 10
