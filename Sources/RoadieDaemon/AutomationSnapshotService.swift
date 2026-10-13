@@ -126,7 +126,9 @@ public struct AutomationSnapshotService: Sendable {
                 stageId: scoped.scope?.stageID.rawValue,
                 frame: scoped.window.frame,
                 isFocused: scoped.window.id == snapshot.focusedWindowID,
-                isFloating: scoped.scope == nil,
+                // Classification unique des règles (REL-007) ; inconnu (fenêtre gardée pour un
+                // écran débranché) rendu `false` pour garder un booléen dans le JSON public.
+                isFloating: LayoutMaintainer.ruleFloatingState(of: scoped, in: snapshot.state) ?? false,
                 presentationState: states[scoped.window.id] ?? .normal
             )
         }

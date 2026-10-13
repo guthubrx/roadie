@@ -1809,7 +1809,7 @@ public final class LayoutMaintainer {
     /// Une candidate sans scope (membre gardé pour un écran débranché, ou aucun écran) donne nil :
     /// son état n'est pas observable, aucune règle `is_floating` ne lui correspond, donc aucune
     /// règle `is_floating = true` ne la déplace hors de sa stage d'origine (`scope == nil` n'est pas
-    /// une preuve de flottement, contrairement à `AutomationSnapshotService`). O(1).
+    /// une preuve de flottement). `AutomationSnapshotService` publie la même valeur, nil rendu faux. O(1).
     public static func ruleFloatingState(of entry: ScopedWindowSnapshot, in state: RoadieState) -> Bool? {
         guard entry.window.isTileCandidate else { return true }
         guard let scope = entry.scope else { return nil }
