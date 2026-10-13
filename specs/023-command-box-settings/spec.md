@@ -173,7 +173,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - Aucune fenêtre active : les commandes qui en demandent une sont refusées avec un message clair.
 - Un seul écran : `/screen` dit qu'il n'y a pas d'autre écran, sans erreur technique. Les bureaux se créent à la demande : `/desktop N` n'échoue pas pour un bureau absent.
 - Une commande non implémentée par Roadie (par exemple fermer une fenêtre) n'est pas proposée.
-- Le mode recherche de texte reste inchangé quand le texte ne commence pas par `/`. Un texte qui doit commencer par `/` se tape précédé d'un espace.
+- Le mode recherche de texte reste inchangé quand le texte ne commence pas par `/` : les caractères que la recherche ignorait avant (`.`, `-`, `_`, `,`, `:` et `/` hors du premier caractère) restent ignorés et gardent leur comportement d'avant. Le premier `/` d'une saisie vide ouvre le mode commande.
 - La fenêtre de réglages est ouverte quand l'utilisateur change d'écran ou de bureau : elle reste ouverte.
 
 ## Requirements *(mandatory)*
