@@ -1,0 +1,10 @@
+{
+  "removed": "/tmp/roadie-build-022-audit3",
+  "resolved_path": "/private/tmp/roadie-build-022-audit3",
+  "absent_verified": true,
+  "logical_bytes_removed": 676376524,
+  "free_bytes_before": 31204556800,
+  "free_bytes_after": 31925284864,
+  "timestamp": "2026-10-13T15:00:12.115364+00:00",
+  "processes_stopped_or_restarted": false
+}

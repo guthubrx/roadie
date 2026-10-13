@@ -1,0 +1,5 @@
+REL-045 labels=9 unique=1
+REL-048 cells=9 path=AAAA resolvable=false
+REL-049 configured=true actual=false
+MIN-008 y=-100.0 expected=-100.0
+4 pure probes passed; no system event posted

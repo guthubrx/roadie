@@ -1,0 +1,31 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-10-13 16:33:27.486.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-13 16:33:27.493.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-13 16:33:27.493.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-13 16:33:27.493.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.007) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite Audit022R4LotT6Tests started.
+􀟈  Test tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) started.
+􀟈  Test successfulRemovalIsStillReportedAsApplied() started.
+􀟈  Test tailKeepsCompleteLinesWhenAnotherLineIsInvalidUTF8() started.
+􀟈  Test refusedRemovalIsNotReportedAsApplied() started.
+􀟈  Test case passing 2 arguments glyph → "é", keptBytes → 1 to tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) started.
+􀟈  Test case passing 2 arguments glyph → "😀", keptBytes → 1 to tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) started.
+􀟈  Test case passing 2 arguments glyph → "😀", keptBytes → 2 to tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) started.
+􀟈  Test case passing 2 arguments glyph → "😀", keptBytes → 3 to tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) started.
+􁁛  Test tailKeepsCompleteLinesWhenAnotherLineIsInvalidUTF8() passed after 0.003 seconds.
+􁁛  Test tailSurvivesUTF8CharacterCutByChunkBoundary(glyph:keptBytes:) with 4 test cases passed after 0.005 seconds.
+roadie: cleanup failed for /tmp/roadie-build-022-audit3/tmp/roadie-t6-admin-73791848-CD12-49EB-8B42-5466A5317267/.roadies/events.jsonl.5: Error Domain=NSCocoaErrorDomain Code=513 "The file couldn’t be saved because you don’t have permission."
+roadie: cleanup failed for /private/tmp/roadie-build-022-audit3/tmp/roadie-t6-admin-73791848-CD12-49EB-8B42-5466A5317267/.config/roadies/roadies.toml.bak-2: Error Domain=NSCocoaErrorDomain Code=513 "The file couldn’t be saved because you don’t have permission."
+roadie: cleanup failed for /private/tmp/roadie-build-022-audit3/tmp/roadie-t6-admin-73791848-CD12-49EB-8B42-5466A5317267/.config/roadies/roadies.toml.bak-1: Error Domain=NSCocoaErrorDomain Code=513 "The file couldn’t be saved because you don’t have permission."
+roadie: cleanup failed for /private/tmp/roadie-build-022-audit3/tmp/roadie-t6-admin-73791848-CD12-49EB-8B42-5466A5317267/.config/roadies/roadies.toml.bak-0: Error Domain=NSCocoaErrorDomain Code=513 "The file couldn’t be saved because you don’t have permission."
+roadie: cleanup failed for /private/tmp/roadie-build-022-audit3/tmp/roadie-t6-admin-73791848-CD12-49EB-8B42-5466A5317267/.config/roadies/.DS_Store: Error Domain=NSCocoaErrorDomain Code=513 "The file couldn’t be saved because you don’t have permission."
+􁁛  Test successfulRemovalIsStillReportedAsApplied() passed after 0.014 seconds.
+􁁛  Test refusedRemovalIsNotReportedAsApplied() passed after 0.014 seconds.
+􁁛  Suite Audit022R4LotT6Tests passed after 0.014 seconds.
+􁁛  Test run with 4 tests in 1 suite passed after 0.015 seconds.

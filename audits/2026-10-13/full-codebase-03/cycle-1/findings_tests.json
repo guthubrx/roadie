@@ -1,0 +1,559 @@
+{
+  "module": "06",
+  "findings": [
+    {
+      "id": "REL-021",
+      "category": "reliability",
+      "subcategory": "partial_commit_reported_as_failure",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+      "line": 187,
+      "title": "Les commandes de fenêtre conservent encore des écritures après un échec annoncé sans changement",
+      "description": "Le retour arrière introduit pour les transferts ne couvre pas WindowCommandService.treeCommand. Cette fonction écrit bspTree, puis retire l’intent dans une seconde transaction. Un échec du retrait laisse le nouvel arbre sur disque. Le catch reçoit PersistenceError, pas PartialCommitError, et annonce changed=false. Les chemins move/warp/resize sans arbre ont la variante inverse : ils appliquent les cadres avant persistIntentAfterCommand et annoncent le même refus si cette dernière écriture échoue. La sortie de zoom supprime aussi l’intent avant d’écrire son remplacement, sans transaction commune.",
+      "evidence": "            changed = try stageStore.mutateChecked { state -> Bool in\n                let existing = state.bspTree(for: scope) ?? .empty\n                let mutated = mutation(existing)\n                guard mutated != existing else { return false }\n                state.setBSPTree(mutated, for: scope)\n                return true\n            }\n            if changed {\n                try service.removeLayoutIntentChecked(scope: scope)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Scénario déterministe sans course : fixture isolée avec StageStore inscriptible, une stage spatialBsp active et deux feuilles gauche/droite, fenêtre gauche focalisée. Écrire « { pas du json » dans le fichier du LayoutIntentStore puis appeler WindowCommandService.move(.right). Le snapshot reste possible (prune fait une lecture de repli), activeTree trouve les deux feuilles, mutateChecked permute et persiste les feuilles, removeLayoutIntentChecked lève. Résultat : changed=false, outcome=failed, alors que le BSP persistant est permuté. Une prochaine passe de maintien peut appliquer ce mouvement. Ne pas exécuter contre le daemon de travail.",
+      "additional_scenarios": [
+        "Mode bsp sans arbre, deux fenêtres en colonnes : reprendre T3Writer.onFirstFrame pour corrompre intents.json pendant le premier setFrame, qui réussit. Appeler windows.move(.right) : les cadres sont déplacés, puis persistIntentAfterCommand échoue et le résultat annonce changed=false/.failed. Même ordre dans warp et resize.",
+        "Zoom BSP sans arbre avec restorePlacements complet et IDs vivants identiques : restoreZoomLayoutIntentChecked retire d’abord l’intent. Une panne de disque (ENOSPC) sur la sauvegarde suivante interrompt la commande avant le plan AX, mais l’intent et ses restorePlacements sont déjà perdus. Ce dernier scénario est confirmé par lecture de la séquence ; aucune panne disque n’a été injectée."
+      ],
+      "impact": "Le résultat ne décrit pas l’état conservé. Une opération refusée peut être appliquée plus tard par le maintien ; la disposition de retour d’un zoom peut être perdue.",
+      "path_type": "cold",
+      "remediation": "Réutiliser commitStageTransfer pour la mutation d’arbre et le retrait d’intent. Pour move/warp/resize, écrire l’intent avant l’effet, puis restaurer l’état antérieur si tous les cadres sont refusés, ou annoncer explicitement le résultat partiel. Pour la sortie de zoom, remplacer/supprimer l’intent en une seule mutateChecked, sans suppression intermédiaire.",
+      "remediation_code": "let changed = try service.commitStageTransfer(in: stageStore, { state -> Bool in\n    let existing = state.bspTree(for: scope) ?? .empty\n    let mutated = mutation(existing)\n    guard mutated != existing else { return false }\n    state.setBSPTree(mutated, for: scope)\n    return true\n}, clearingIntentsOf: { $0 ? [scope] : [] })",
+      "verification": "Ajouter une fixture spatialBsp à deux feuilles et intents corrompus ; vérifier résultat ET égalité de l’arbre après refus. Pour le BSP sans arbre, injecter l’échec dans onFirstFrame et comparer cadres, intent et changed/outcome. Pour la sortie de zoom, provoquer l’échec de la sauvegarde du remplacement et vérifier que l’intent initial et restorePlacements restent présents.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture actuelle complète de WindowCommands, StageStore, JSONPersistence, FileLock et LayoutIntentStore ; chaîne restoreZoom relue et concordante avec runtime_full ; pas d’exécution",
+      "original_related_ids": [
+        "REL-021"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 194,
+          "evidence": "            if changed {\n                try service.removeLayoutIntentChecked(scope: scope)\n            }\n        } catch {\n            return .persistenceFailure(\"\\(verb.rawValue) \\(direction.rawValue)\", error)",
+          "note": "Pas de rollback avant persistenceFailure."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 64,
+          "evidence": "\n    /// Échec de persistance (REL-021). Un retour arrière lui-même en échec (`PartialCommitError`)\n    /// est signalé comme résultat partiel. « failed » reste dans le message pour les journaux.\n    static func persistenceFailure(_ command: String, _ error: Error) -> Self {\n        let message = JSONPersistence.commandFailureMessage(command, error)\n        return error is PartialCommitError ? .partial(message) : .failure(message)\n    }",
+          "note": "Seul PartialCommitError produit changed=true/failed."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 280,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: result) {\n            do {\n                try persistIntentAfterCommand(\n                    from: snapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )",
+          "note": "Effet AX avant sauvegarde move ; catch à la ligne 291."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 357,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: result) {\n            let ordered = service.orderedWindowIDs(in: scope, from: snapshot)\n            do {\n                try persistIntentAfterCommand(\n                    from: snapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )\n            } catch {\n                return .persistenceFailure(\"warp \\(direction.rawValue)\", error)",
+          "note": "Même chemin pour warp."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 443,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: resizeResult), shouldPersistCommandIntent(after: result) {\n            let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)\n            do {\n                try persistIntentAfterCommand(\n                    from: updatedSnapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )\n            } catch {\n                return .persistenceFailure(\"resize \\(direction.rawValue)\", error)",
+          "note": "Même chemin pour resize."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1390,
+          "evidence": "    func restoreZoomLayoutIntentChecked(\n        scope: StageScope,\n        from snapshot: DaemonSnapshot,\n        generation: UInt64 = PlacementGeneration.shared.current\n    ) throws -> ApplyPlan {\n        try restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.removeChecked(scope:), save: intentStore.saveChecked)",
+          "note": "Entrée throwing de la restauration."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1404,
+          "evidence": "    ) rethrows -> ApplyPlan {\n        let zoom = commandLayoutIntent(scope: scope)\n        try remove(scope)\n        let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }\n        let mode = snapshot.state.stage(scope: scope)?.mode\n        if let saved = zoom?.restorePlacements, mode == .float {\n            return ApplyPlan(commands: entries.compactMap { entry in\n                guard let frame = saved[entry.window.id], frame.width > 0, frame.height > 0,\n                      !entry.window.frame.cgRect.matchesFrame(frame.cgRect) else { return nil }",
+          "note": "Suppression de l’intent avant calcul du remplacement."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1416,
+          "evidence": "        if let zoom, let saved = zoom.restorePlacements, mode?.usesTreeEngine != true {\n            let liveIDs = Set(entries.map(\\.window.id))\n            let ordered = zoom.windowIDs.filter(liveIDs.contains)\n            if liveIDs == Set(ordered), liveIDs.isSubset(of: Set(saved.keys)) {\n                try save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))\n                _ = validIntent(for: scope, from: snapshot)\n            }",
+          "note": "Seconde écriture indépendante du remplacement."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+          "line": 175,
+          "evidence": "        #expect(fixture.store.state() == before)\n    }\n\n    /// Avant la correction : la fenêtre était déplacée, puis l'échec de l'intent final annonçait un refus.\n    @Test\n    func windowTransferSucceedsWhenFinalIntentCannotBeWrittenAfterMoving() throws {\n        let fixture = try T3Fixture(\"t3-window-late\")\n        defer { fixture.cleanUp() }\n        fixture.writer.onFirstFrame = { _ = try? fixture.corruptIntents() }\n\n        let result = fixture.windows.sendToDisplay(2)\n\n        #expect(result.changed, \"\\(result.message)\")\n        #expect(result.outcome == .changed)",
+          "note": "Le test d’échec tardif couvre sendToDisplay ; il ne couvre pas move/warp/resize. Le mode des stages principales de cette fixture est bsp, sans arbre."
+        }
+      ],
+      "tests_reviewed": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift (intégral)",
+        "Tests/RoadieDaemonTests/Audit022R3Tests.swift:16-27 (refus avant move, mode BSP sans arbre)",
+        "Tests/RoadieDaemonTests/TreeAuthorityTests.swift:1-98,190-250"
+      ],
+      "discovery_command": "rg -n \"mutateChecked|removeLayoutIntentChecked|persistIntentAfterCommand|persistenceFailure\" Sources/RoadieDaemon/WindowCommands.swift",
+      "source_id": "REL-021",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-commands-completion.json",
+      "origin": "résiduel",
+      "fingerprint": "4e2acc9bbd09"
+    },
+    {
+      "id": "REL-043",
+      "suggested_canonical_id": "REL-043",
+      "category": "reliability",
+      "subcategory": "incorrect_command_outcome",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+      "line": 713,
+      "title": "Des résultats explicites ne correspondent pas au résultat métier",
+      "description": "toggleNativeFullscreen convertit false en noOp. Pourtant, dans l’écrivain AX, false signifie fenêtre/bouton introuvable ou AXPress refusé. La garde « aucune fenêtre active » existe déjà et traite séparément l’action sans objet. La commande CLI termine donc avec le code 0 pour ce refus. Dans les commandes de groupe, le résultat booléen de focus est ignoré : focaliser un ID qui ne fait pas partie du groupe renvoie changed=true sans changer le membre actif.",
+      "evidence": "        let changed = service.toggleNativeFullscreen(active.window)\n        _ = focusWindow(active.window)\n        return WindowCommandResult.changedOrNoOp(\n            \"toggle native-fullscreen: changed=\\(changed)\",\n            changed: changed\n        )",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Fixture isolée avec une fenêtre active et un WindowFrameWriting dont toggleNativeFullscreen renvoie false (par exemple l’implémentation par défaut du protocole). Exécuter CLICommandRouter.run([\"toggle\", \"native-fullscreen\"]). Le résultat est noOp/code 0 malgré le refus. Équivalent réel : fenêtre encore sélectionnée mais AXPress retourne cannotComplete ou son bouton fullscreen n’est pas disponible. Variante groupe : groupe pair avec membres [1,2], fenêtre 3 existante ; group focus pair 3 laisse activeWindowID=1 mais annonce changed=true/code 0.",
+      "impact": "Les scripts et le retour utilisateur prennent un refus pour un succès. Les notifications de changement peuvent aussi être émises sans changement du groupe.",
+      "path_type": "cold",
+      "remediation": "Pour le plein écran natif, utiliser changedOrFailed après la garde d’absence de fenêtre. Pour les groupes, transmettre le succès de focus et comparer le groupe avant/après ; annoncer failed si la cible n’est pas membre, noOp si la valeur demandée est déjà présente, changed seulement en cas de modification.",
+      "remediation_code": "return WindowCommandResult.changedOrFailed(\n    changed ? \"toggle native-fullscreen: changed=true\" : \"toggle native-fullscreen: action refused\",\n    changed: changed\n)",
+      "verification": "Ajouter au test CLI une fenêtre active et un écrivain qui refuse toggleNativeFullscreen ; attendre code 1/outcome failed. Conserver le cas sans fenêtre active en code 0/noOp. Dans invalidGroupCommandsLeaveStateUntouched, vérifier aussi le résultat de focus du membre absent ; vérifier noOp sur focus déjà actif.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture de la chaîne commande → écrivain AX → statut CLI ; aucune action AX exécutée",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 1058,
+          "evidence": "    private func press(_ buttonAttribute: String, of window: WindowSnapshot) -> Bool {\n        let pid = window.pid\n        var windows: PIDWindows?\n        guard let element = element(pid: pid, id: window.id, title: window.title, frame: window.frame, windows: &windows),\n              let button = elementAttribute(element, buttonAttribute, pid: pid)\n        else { return false }\n        let error = AXUIElementPerformAction(button, kAXPressAction as CFString)\n        registry.noteResult(error, pid: pid)\n        return error == .success",
+          "note": "false couvre l’échec de l’action AX."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2007,
+          "evidence": "    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {\n        invalidateSharedSnapshot()\n        return frameWriter.toggleNativeFullscreen(window)\n    }",
+          "note": "Le SnapshotService propage le booléen sans transformation."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 313,
+          "evidence": "    private func finish(_ result: some CommandResult) -> Int32 {\n        out(result.message)\n        return Self.actionExitCode(outcome: result.outcome)\n    }\n\n    /// Statut explicite (REL-042) : 1 pour un échec, 0 sinon, sans lire le message, qui peut\n    /// contenir une valeur utilisateur (stage nommée « failed »). O(1).\n    nonisolated static func actionExitCode(outcome: CommandOutcome?) -> Int32 {\n        outcome == .failed ? 1 : 0",
+          "note": "Le code de sortie est désormais déterminé exclusivement par outcome."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 720,
+          "evidence": "            let result: WindowCommandResult\n            switch subject {\n            case \"maximize\":\n                result = windowCommands.toggleMaximize()\n            case \"fullscreen\":\n                result = windowCommands.toggleFullscreen()\n            case \"native-fullscreen\":\n                result = windowCommands.toggleNativeFullscreen()\n            case \"floating\":\n                out(\"roadie: \\(args.joined(separator: \" \")) is not implemented in this build\")\n                return 1\n            default:\n                return usageError()\n            }\n            return finish(result)\n        case \"--version\", \"version\":",
+          "note": "Routage toggle native-fullscreen."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "line": 60,
+          "evidence": "    public func focus(windowID: WindowID, in id: String) -> WindowGroupCommandResult {\n        mutateGroup(id: id, createIfMissing: false) { _ = $0.focus(windowID) }\n    }",
+          "note": "Le retour du focus de groupe est ignoré."
+        },
+        {
+          "file": "Sources/RoadieStages/RoadieState.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+          "line": 223,
+          "evidence": "    public mutating func focus(_ windowID: WindowID) -> Bool {\n        guard windowIDs.contains(windowID) else { return false }\n        activeWindowID = windowID\n        return true\n    }",
+          "note": "La cible hors groupe produit false sans mutation."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "line": 135,
+          "evidence": "        events.append(RoadieEvent(\n            type: createIfMissing ? \"window.grouped\" : \"window.ungrouped\",\n            scope: scopeID,\n            details: [\"groupID\": id, \"members\": group.windowIDs.map(\\.description).joined(separator: \",\")]\n        ))\n        return WindowGroupCommandResult(message: \"group \\(id): members=\\(group.windowIDs.map(\\.description).joined(separator: \",\"))\", changed: true)",
+          "note": "Annonce systématique changed=true après mutateGroup."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "line": 105,
+          "evidence": "\n        let dissolveMissing = groups.dissolve(id: \"absent\")\n        #expect(!dissolveMissing.changed)\n        #expect(dissolveMissing.message == \"group dissolve absent: not found\")\n\n        // Focus d'une fenêtre qui n'est pas membre : l'état actif ne bouge pas.\n        _ = groups.focus(windowID: three, in: \"pair\")\n        #expect(storedGroup(\"pair\", in: store)?.activeWindowID == one)\n\n        #expect(storedGroups(store).filter { $0.id != \"pair\" }.isEmpty)\n        #expect(storedGroup(\"pair\", in: store) == before.first { $0.id == \"pair\" })\n    }\n\n    @Test\n    func addingTheSameMemberTwiceDoesNotDuplicateIt() {\n        let (groups, store) = makeService()",
+          "note": "Le test du membre absent vérifie le store, mais ignore le résultat de commande."
+        }
+      ],
+      "tests_reviewed": [
+        "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift (intégral)",
+        "Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift:25-82,194-218 (écrivain toujours vrai)",
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift:292-334 (statut seulement)"
+      ],
+      "discovery_command": "rg -n \"changedOrNoOp|toggleNativeFullscreen|func focus\" Sources/RoadieDaemon/WindowCommands.swift Sources/RoadieDaemon/WindowGroupCommands.swift Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "source_id": "CMD-NEW-01",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-commands-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "aeb11c3f2b63"
+    },
+    {
+      "id": "REL-044",
+      "category": "reliability",
+      "subcategory": "command_outcome_adapter",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TargetHintService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+      "line": 485,
+      "title": "Les actions de cible perdent le statut métier de la commande",
+      "description": "La conversion de StageCommandResult vers TargetActionResult ne consulte pas outcome. activateSwitch transforme un noOp de stage déjà active en switch_failed parce que changed est faux. La branche focus écran retire au contraire le statut failed en ne fournissant jamais error. CLICommandRouter calcule alors le code de sortie sur error et inverse le résultat métier. La suppression des mots-clés de REL-042 est bien effective ; ce défaut se situe dans un autre adaptateur.",
+      "evidence": "        if let refused = refusedOutsideCurrentDesktop(target, displayID: displayID) { return refused }\n        let result = StageCommandService(service: service, store: stageStore, events: eventLog).switchTo(stageID, displayID: DisplayID(rawValue: displayID))\n        return TargetActionResult(changed: result.changed, message: result.message, target: target, error: result.changed ? nil : \"switch_failed\")",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 465,
+          "note": "Le résultat du focus écran est converti sans error, même si outcome vaut failed."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1192,
+          "note": "Déjà active, sans changement écran ni activation native : changedOrNoOp donne noOp."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayCommands.swift",
+          "line": 46,
+          "note": "Une mutation checked refusée rend persistenceFailure."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 67,
+          "note": "persistenceFailure rend failed, même pour un résultat partiel changed=true."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 1430,
+          "note": "targets pick : code de sortie 0 si error nil, sinon 1."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 1474,
+          "note": "targets activate utilise la même règle."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Avec target_mode et picker activés, rester sur une stage S déjà active sur son écran E, sans membre fullscreen natif. Exécuter roadie targets pick \"stage:E/D/S\" --action switch --json (E/D/S remplacés par l’id exact affiché dans targets list). StageCommandService rend already active et outcome=noOp ; TargetHintService rend switch_failed et la CLI sort avec 1. Cas inverse : si le StageStore est illisible ou refuse une écriture, activer une cible display via targets pick ou targets activate ; DisplayCommandService rend persistenceFailure, mais TargetActionResult.error reste nil et la CLI sort avec 0. Le scénario de stockage se vérifie avec un StageStore temporaire injecté, sans toucher à l’état réel.",
+      "impact": "Les scripts et le mode cible reçoivent de faux échecs pour une action idempotente et de faux succès pour un échec réel de sauvegarde. Aucune nouvelle perte de données démontrée.",
+      "path_type": "hot",
+      "remediation": "Faire dépendre error du statut explicite outcome pour toutes les conversions de résultats métier en TargetActionResult. Conserver changed indépendamment : un résultat partiel peut changer l’état et rester failed. Ajouter une conversion commune et tester les trajets targets pick/activate.",
+      "remediation_code": "private func targetResult<R: CommandResult>(_ result: R, target: RoadieTarget, failureCode: String) -> TargetActionResult {\n    TargetActionResult(changed: result.changed, message: result.message, target: target,\n                       error: result.outcome == .failed ? failureCode : nil)\n}\n// activateSwitch : return targetResult(result, target: target, failureCode: \"switch_failed\")\n// focus écran : return targetResult(result, target: target, failureCode: \"display_focus_failed\")\n// Appliquer la même conversion à focus fenêtre, bookmark et send-active.",
+      "verification": "Tester la conversion des trois outcomes et de changed=true/outcome=failed. Sur le vrai routeur avec services injectés : stage déjà active -> error nil, exitCode 0 ; StageStore refusant la sauvegarde lors du focus écran -> error non nil, exitCode 1.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du producteur, de l’adaptateur et du trajet CLI ; scénario non exécuté",
+      "runtime_reproduced": false,
+      "source_id": "TARGETS-NEW-001",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-targets-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "9af8cef52743"
+    },
+    {
+      "id": "REL-045",
+      "category": "reliability",
+      "subcategory": "configuration_validation",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieCore/Config.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 1567,
+      "title": "Les alphabets de ciblage acceptent des lettres identiques qui désignent plusieurs cellules",
+      "evidence": "    private static func validateTargetGrid(_ config: TargetGridConfig) -> [ConfigValidationItem] {\n        var items: [ConfigValidationItem] = []\n        if config.hintCharacters.count < config.rows * config.columns {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.target_grid.hint_characters\",\n                message: \"must contain at least rows*columns characters\"\n            ))\n        }",
+      "description": "La validation compte les caractères bruts sans imposer leur unicité après conversion en majuscules. TargetHintService.labels conserve les doublons et uppercased les labels. TargetGridService.frame choisit ensuite le premier index correspondant au label. Un alphabet assez long mais répété produit plusieurs cellules portant le même chemin ; les suivantes ne sont pas adressables et le clic retombe sur la première.",
+      "proof": "Lecture des validateurs, de labels/appendLabels, et des chemins cells/cell/frame/perform. Aucun retrait des doublons sur ces chemins. Exemple accepté : grille 3x3, hint_characters=\"aaaaaaaaa\". Les neuf cellules sont nommées A, et frame(for:\"A\") utilise index=0.",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1548,
+          "evidence": "        if config.hintCharacters.count < 2 {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.app_targets.hint_characters\",\n                message: \"must contain at least two characters\"\n            ))"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 518,
+          "evidence": "    public static func labels(count: Int, alphabet: String = \"asdfghjkl\") -> [String] {\n        guard count > 0 else { return [] }\n        let chars = Array(alphabet.isEmpty ? \"asdfghjkl\" : alphabet).map(String.init)\n        var result: [String] = []\n        var width = 1\n        while result.count < count {\n            appendLabels(prefix: \"\", width: width, chars: chars, into: &result, limit: count)\n            width += 1\n        }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 539,
+          "evidence": "    private static func appendLabels(prefix: String, width: Int, chars: [String], into result: inout [String], limit: Int) {\n        guard result.count < limit else { return }\n        if width == 0 {\n            result.append(prefix.uppercased())\n            return\n        }\n        for char in chars {\n            appendLabels(prefix: prefix + char, width: width - 1, chars: chars, into: &result, limit: limit)\n            if result.count >= limit { return }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetGridService.swift",
+          "line": 359,
+          "evidence": "    private static func frame(for path: String, in root: CGRect, rows: Int, columns: Int, maxDepth: Int, alphabet: String) -> CGRect? {\n        guard path.count <= maxDepth else { return nil }\n        var frame = root\n        let labels = pathLabels(rows: rows, columns: columns, alphabet: alphabet)\n        for label in path.map({ String($0) }) {\n            guard let index = labels.firstIndex(of: label) else { return nil }\n            let row = index / columns\n            let column = index % columns\n            frame = CGRect("
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "status": "open",
+      "path_type": "cold",
+      "scenario": "Configurer [experimental.target_grid] enabled=true et hint_characters=\"aaaaaaaaa\" avec la grille 3x3 par défaut. config validate ne signale pas d’erreur sur cette valeur. Le rapport de grille produit neuf cellules A. Demander grid click A clique toujours le centre de la cellule en haut à gauche. Variante app_targets : hint_characters=\"aA\" donne deux cibles portant A.",
+      "impact": "La grille personnalisée peut cliquer une autre cellule que celle repérée visuellement. Les labels d’application peuvent devenir ambigus. Réglage utilisateur spécifique requis.",
+      "remediation": "Valider des labels normalisés, distincts et composés d’un seul caractère après conversion en majuscules. Pour la grille, vérifier au moins rows*columns labels utilisables distincts ; pour les applications, au moins deux. Refuser l’alphabet invalide lors de son chargement ou de l’activation, pas seulement dans un rapport optionnel.",
+      "remediation_code": "let labels = config.hintCharacters.map { String($0).uppercased() }\nlet validAlphabet = labels.allSatisfy { $0.count == 1 } && Set(labels).count == labels.count\n// Rejeter si !validAlphabet ; vérifier ensuite le nombre de labels distincts requis.",
+      "verification": "Tester les alphabets \"aaaaaaaaa\", \"aA\", un caractère dont les majuscules comportent plusieurs caractères, et un alphabet unique valide. Vérifier l’unicité des cell.path et l’aller-retour cell(path) vers le centre de chaque cellule.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)",
+      "source_id": "MODEL-NEW-002",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-models-completion.json",
+      "exploitation_scenario": "Configurer [experimental.target_grid] enabled=true et hint_characters=\"aaaaaaaaa\" avec la grille 3x3 par défaut. config validate ne signale pas d’erreur sur cette valeur. Le rapport de grille produit neuf cellules A. Demander grid click A clique toujours le centre de la cellule en haut à gauche. Variante app_targets : hint_characters=\"aA\" donne deux cibles portant A.",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "6a6f7e48fd0a"
+    },
+    {
+      "id": "REL-046",
+      "category": "reliability",
+      "subcategory": "concurrency",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowDragActivity.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+      "line": 95,
+      "title": "Un lecteur peut supprimer une nouvelle activité de glisser écrite par un autre processus",
+      "description": "isActive lit le fichier partagé puis le supprime s’il était expiré au moment de la lecture. NSLock protège seulement cette instance. Ni l’écriture atomique du producteur ni le lecteur d’un autre processus ne partagent ce verrou. Le rename du producteur peut donc être suivi par la suppression basée sur l’ancienne lecture. La course est distincte de REL-036, qui corrige le cache de l’échéance.",
+      "evidence": "        let stored = readLocked()\n        // Le fichier partagé fait foi, y compris quand `release` raccourcit l'échéance (REL-036) ;\n        // la mémoire locale ne sert que si le fichier est absent ou illisible.\n        if let stored { activeUntil = stored.expiry }\n        if now <= activeUntil {\n            return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))\n        }\n        activeWindowID = nil\n        activeUntil = .distantPast\n        try? FileManager.default.removeItem(at: url)",
+      "exploitability": "LIKELY",
+      "path_type": "hot",
+      "status": "open",
+      "confirmation": "Plausible : ordre concurrent déduit du code ; aucun test concurrent ni processus réel exécuté.",
+      "exploitation_scenario": "Processus A : lire à la ligne 86 un fichier dont l’échéance est passée, puis être suspendu avant la ligne 95. Processus B : exécuter markActive ou finish ; writeActiveUntilLocked écrit par rename une nouvelle échéance, et finish peut aussi écrire la preuve de dépôt. Processus A : reprendre et supprimer le chemin à la ligne 95. Le nouveau contenu de B est perdu. Le lecteur A ou un troisième lecteur voit ensuite un fichier absent et n’a pas l’échéance récente en mémoire. En mode séparé, la preuve de dépôt lue par lastDrop peut aussi être perdue.",
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 7,
+          "note": "NSLock local à chaque instance."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 101,
+          "note": "Écriture atomique sans FileLock partagé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 225,
+          "note": "L’activité suspend les passes avant le plan."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 252,
+          "note": "lastDrop empêche de retraiter un geste déjà consommé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 617,
+          "note": "Le contrôleur termine un dépôt en publiant droppedWindowID."
+        }
+      ],
+      "impact": "La nouvelle suspension ou la preuve de dépôt peut disparaître. La garde globale de bouton de souris limite les écritures pendant l’appui ; elle ne restaure pas la grâce de relâchement ni la preuve perdue après le dépôt.",
+      "remediation": "Garder isActive en lecture seule : ignorer l’échéance expirée sans supprimer le fichier, comme LayoutCommandActivity.activity. Le prochain producteur remplace le petit fichier. Si une purge physique est exigée, elle doit être coordonnée avec les écritures par le même verrou interprocessus.",
+      "remediation_code": "public func isActive(now: Date = Date(), includingReleaseGrace: Bool = true) -> Bool {\n    guard enabled else { return false }\n    lock.lock()\n    defer { lock.unlock() }\n    let stored = readLocked()\n    if let stored { activeUntil = stored.expiry }\n    if now <= activeUntil {\n        return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))\n    }\n    activeWindowID = nil\n    activeUntil = .distantPast\n    return false\n}",
+      "verification": "Test avec deux instances partageant un fichier et une barrière entre lecture et branche expirée du lecteur : écrire une nouvelle activité puis laisser le lecteur finir. Vérifier que le fichier récent et la preuve de dépôt sont conservés. Vérifier aussi les tests REL-036 et les scénarios de dépôt interprocessus.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "SPEC-017 A17 et T216 : preuve de dépôt partagée",
+        "LayoutCommandActivity.swift:66–78 : lecture sans suppression"
+      ],
+      "verification_status": "plausible : entrelacement interprocessus établi par lecture ; course non reproduite",
+      "source_id": "RUNTIME-NEW-002",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-runtime-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "46b95b327917"
+    },
+    {
+      "id": "REL-049",
+      "category": "reliability",
+      "subcategory": "configuration_table_scope",
+      "severity": "MEDIUM",
+      "status": "open",
+      "exploitability": "CONFIRMED",
+      "file": "Sources/RoadieDaemon/RailSettings.swift",
+      "line": 377,
+      "title": "Une table de règles peut écraser les réglages du rail qui la précèdent",
+      "description": "Le parseur propre au rail ne reconnaît que les en-têtes [table]. Lorsqu’il rencontre [[rules]], il conserve current. Les clés de la règle sont alors insérées dans la section précédente jusqu’au prochain en-tête simple. Ce problème préexiste au quatrième tour ; il est nouvellement relevé dans ce complément.",
+      "evidence": "            if trimmed.hasPrefix(\"[\"), trimmed.hasSuffix(\"]\"), !trimmed.hasPrefix(\"[[\") {\n                current = String(trimmed.dropFirst().dropLast())\n                continue\n            }\n            guard let current, let equals = trimmed.firstIndex(of: \"=\") else { continue }\n            let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)\n            let value = trimmed[trimmed.index(after: equals)...]\n                .trimmingCharacters(in: .whitespaces)\n                .trimmingCharacters(in: CharacterSet(charactersIn: \"\\\"\"))\n            sections[current, default: [:]][key] = value",
+      "scenario": "Charger exactement : [fx.rail.stage_labels]\\nenabled = true\\n[[rules]]\\nid = \"disabled-terminal\"\\nenabled = false\\n[rules.match]\\napp = \"Terminal\"\\n[rules.action]\\nfloating = true\\n (remplacer les \\n par des retours à la ligne). Le TOML est composé de tables et clés supportées. RailSettings.load(raw:) renvoie stageLabel.enabled=false car le deuxième enabled écrase le premier. Ajouter ou désactiver cette règle masque donc les noms des stages.",
+      "impact": "Configuration valide mais comportement visuel incorrect et dépendant de l’ordre des tables. Le même écrasement peut toucher un en-tête du rail qui partage une clé avec une table de règles.",
+      "path_type": "cold",
+      "remediation": "Quitter explicitement la section courante lors de tout en-tête [[...]]. À plus long terme, lire ces sections avec TOMLKit, déjà utilisé par la validation, afin de ne pas maintenir deux interprétations de TOML.",
+      "remediation_code": "private static func sections(from raw: String) -> [String: [String: String]] {\n    var sections: [String: [String: String]] = [:]\n    var current: String?\n    for line in raw.components(separatedBy: .newlines) {\n        let trimmed = stripComment(from: line).trimmingCharacters(in: .whitespacesAndNewlines)\n        guard !trimmed.isEmpty else { continue }\n        if trimmed.hasPrefix(\"[[\"), trimmed.hasSuffix(\"]]\") {\n            current = nil\n            continue\n        }\n        if trimmed.hasPrefix(\"[\"), trimmed.hasSuffix(\"]\") {\n            current = String(trimmed.dropFirst().dropLast())\n            continue\n        }\n        guard let current, let equals = trimmed.firstIndex(of: \"=\") else { continue }\n        let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)\n        let value = trimmed[trimmed.index(after: equals)...]\n            .trimmingCharacters(in: .whitespaces)\n            .trimmingCharacters(in: CharacterSet(charactersIn: \"\\\"\"))\n        sections[current, default: [:]][key] = value\n    }\n    return sections\n}",
+      "verification": "Ajouter un test de RailSettings.load(raw:) avec le scénario : stageLabel.enabled reste true, alors que RoadieConfigLoader lit rules[0].enabled=false. Vérifier aussi deux règles successives et une table [[fx.rail.preview.stage_overrides]]. Aucun de ces tests n’a été exécuté pendant ce complément.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "block_release": false,
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift",
+          "line": 223,
+          "note": "enabled est lu dans la section fx.rail.stage_labels produite par ce parseur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1090,
+          "note": "La validation utilise TOMLDecoder ; les tables rail et rules ainsi que leurs clés enabled sont connues aux lignes 1180, 1191, 1229 et 1244."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 820,
+          "note": "Le rafraîchissement charge RailSettings puis RailVisualConfig directement."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailVisualConfig.swift",
+          "line": 302,
+          "note": "enabled est transmis tel quel à RailStageLabelConfig."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 181,
+          "note": "Le dessin des noms est conditionné par config.stageLabel.enabled."
+        }
+      ],
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)",
+      "source_id": "UI-NEW-001",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-ui-completion.json",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift",
+      "exploitation_scenario": "Charger exactement : [fx.rail.stage_labels]\\nenabled = true\\n[[rules]]\\nid = \"disabled-terminal\"\\nenabled = false\\n[rules.match]\\napp = \"Terminal\"\\n[rules.action]\\nfloating = true\\n (remplacer les \\n par des retours à la ligne). Le TOML est composé de tables et clés supportées. RailSettings.load(raw:) renvoie stageLabel.enabled=false car le deuxième enabled écrase le premier. Ajouter ou désactiver cette règle masque donc les noms des stages.",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "26175d8aaa61"
+    },
+    {
+      "id": "REL-047",
+      "category": "reliability",
+      "subcategory": "macro_scroll_fidelity",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+      "line": 412,
+      "title": "Le replay de molette abandonne la position et les modificateurs enregistrés",
+      "description": "macroTapCallback stocke point et modifiers pour scrollWheel. Le lecteur .scroll ne lit que scrollDeltaY. Il ne renseigne ni location ni flags sur l’événement construit. Une macro composée uniquement de défilement dépend donc de la position et des modificateurs du bureau au moment du replay, et non des valeurs capturées.",
+      "evidence": "        case .scroll:\n            guard let delta = event.scrollDeltaY else { return }\n            if let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0) {\n                postEvent(scroll)\n            }",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 572,
+          "note": "Le capteur stocke point, modifiers et scrollDeltaY."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 294,
+          "note": "Le replay annonce changed=true sans détecter cette perte."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Activer record et replay, avec include_mouse_moves=false. Enregistrer seulement un défilement sur la fenêtre A ; pour le cas des modificateurs, maintenir Maj pendant ce défilement. Déplacer ensuite le pointeur sur une fenêtre B et relâcher Maj avant roadie record replay NAME. La branche .scroll ne réapplique aucune des deux valeurs enregistrées. Une sonde à postEvent permet de vérifier directement que location et flags ne correspondent pas aux valeurs de TargetMacroEvent.",
+      "impact": "Le défilement rejoué peut viser une autre zone et perdre la variante demandée par le modificateur. Chemin expérimental et ponctuel : sévérité LOW.",
+      "path_type": "cold",
+      "remediation": "Avant émission, affecter la position enregistrée et les flags enregistrés au CGEvent de molette. Préserver le comportement de compatibilité lorsque point est absent d’un ancien fichier.",
+      "remediation_code": "case .scroll:\n    guard let delta = event.scrollDeltaY,\n          let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0) else { return }\n    if let point = event.point?.cgPoint { scroll.location = point }\n    scroll.flags = CGEventFlags(rawValue: event.modifiers)\n    postEvent(scroll)",
+      "verification": "Injecter postEvent, rejouer un scroll avec une position distinctive et maskShift, puis vérifier location, flags et delta du CGEvent reçu. Ajouter le cas de point absent. Valider séparément le routage réel de molette sur macOS.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "perte des champs confirmée par lecture ; routage CGEvent réel non exécuté",
+      "runtime_reproduced": false,
+      "source_id": "TARGETS-NEW-002",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-targets-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "705076c4f2a6"
+    },
+    {
+      "id": "REL-048",
+      "category": "reliability",
+      "subcategory": "recursive_grid_depth",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+      "line": 543,
+      "title": "La grille récursive affiche un niveau qui ne peut pas être activé",
+      "description": "La branche recursive ajoute une lettre sans borner path à maxDepth. cells accepte parentPath de longueur maxDepth puis crée des chemins de longueur maxDepth+1. Ces cellules sont affichées mais frame(for:) refuse ensuite leur chemin. Après leur sélection, l’overlay devient vide et la confirmation renvoie unknown_grid_path.",
+      "evidence": "        case .characters(let value):\n            guard let label = value.uppercased().first.map(String.init),\n                  labels.contains(label)\n            else { return }\n            markActivity()\n            path += label\n            if config.mode == .autoClick && path.count >= config.maxDepth {\n                finishActivating(path)\n            } else {\n                show(path: path)\n                wakeMouseIfNeeded()",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetGridService.swift",
+          "line": 274,
+          "note": "Le parent est accepté si sa profondeur égale maxDepth."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetGridService.swift",
+          "line": 289,
+          "note": "Chaque cellule ajoute encore une lettre au chemin accepté."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetGridService.swift",
+          "line": 355,
+          "note": "L’activation refuse path.count > maxDepth."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetGridService.swift",
+          "line": 225,
+          "note": "La confirmation du chemin trop profond renvoie unknown_grid_path."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 751,
+          "note": "Le mode par défaut est recursive, maxDepth vaut 3 à la ligne 762."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Activer experimental.target_grid.enabled=true et garder mode=\"recursive\", max_depth=3, grille 3x3. Ouvrir roadie grid interactive sur un grand écran. Taper quatre fois A : après la troisième frappe, les neuf cellules de profondeur 4 sont encore montrées ; la quatrième les sélectionne puis vide la grille. Appuyer Espace : perform refuse AAAA avec unknown_grid_path. Une reproduction pure consiste à demander cells(parentPath:\"AAA\",maxDepth:3), puis cell(path:leCheminRenvoyé,maxDepth:3) : le premier renvoie des cellules et le second nil.",
+      "impact": "L’utilisateur choisit une cellule affichée mais ne peut pas cliquer dessus. Retour arrière ou réinitialisation permet de récupérer. Chemin expérimental, sévérité LOW.",
+      "path_type": "cold",
+      "remediation": "Ne jamais produire d’enfant au-delà de maxDepth. En mode recursive, bloquer la saisie d’une nouvelle subdivision à la profondeur maximale et garder la cellule courante visible et activable par Espace.",
+      "remediation_code": "// Au début de cells :\nguard parentPath.count < maxDepth else { return [] }\n// Avant path += label dans la session :\nguard path.count < config.maxDepth else { return }\n// Dans show : à maxDepth, afficher la cellule courante avec un état terminal\n// sans labels de subdivision ; conserver la confirmation du chemin courant.",
+      "verification": "Test pur de cohérence : tout chemin rendu par cells doit être accepté par cell avec la même configuration. Tester le niveau maxDepth-1 puis maxDepth. Tester la session recursive : la frappe supplémentaire ne change pas path et Espace active la dernière cellule valide.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)",
+      "runtime_reproduced": false,
+      "source_id": "TARGETS-NEW-003",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-targets-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "056dcbba3277"
+    },
+    {
+      "id": "REL-050",
+      "category": "reliability",
+      "subcategory": "fragile_startup_check",
+      "severity": "LOW",
+      "file": "scripts/start",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start",
+      "line": 79,
+      "title": "Le démarrage peut être annoncé en échec avant la fin de son initialisation",
+      "description": "scripts/start attend exactement 1 seconde après le lancement du daemon puis teste le fichier pid. Si la machine est lente ou sous charge (CI, accès disque lent), le daemon peut ne pas avoir encore écrit roadied.pid et la vérification signale une erreur alors que le daemon démarre correctement. scripts/roadiedctl start utilise pour le même rôle une boucle de sondage de 30 × 0,1 s avec critère de convergence pid = verrou.",
+      "evidence": "# Le daemon écrit lui-même roadied.pid après avoir pris le verrou d'instance.\nsleep 1\npid=\"$(cat \"$pidfile\" 2>/dev/null || true)\"\nif [[ -z \"$pid\" ]] || ! ps -p \"$pid\" >/dev/null 2>&1; then\n  echo \"roadied failed to start; logs: $log_dir/roadied.stderr.log\" >&2\n  exit 1\nfi",
+      "exploitability": "LIKELY",
+      "verification_status": "plausible : délai fixe confirmé ; démarrage lent non reproduit",
+      "exploitation_scenario": "Lancer 'make dev-start' sur une machine à disque lent ou avec charge CPU élevée. Le daemon démarre mais n'a pas encore écrit roadied.pid après 1 s. Le script retourne exit 1 avec un message d'erreur trompeur, alors que le daemon continue de s'initialiser.",
+      "impact": "Rapport d'échec de démarrage trompeur lors de 'make dev-start'. L'utilisateur peut relancer inutilement alors que le daemon tourne déjà.",
+      "path_type": "cold",
+      "remediation": "Sonder le PID et le verrou avec un délai borné configurable, puis annoncer explicitement une absence de disponibilité dans ce délai. Ne pas annoncer avec certitude un échec du processus encore vivant.",
+      "remediation_code": "",
+      "verification": "Ajouter un test shell avec faux daemon et écriture du PID retardée. Vérifier succès après convergence et message de délai dépassé si le processus reste en initialisation. Ne pas lancer le vrai daemon pour ce test.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/roadiedctl",
+          "line": 58,
+          "note": "Boucle de sondage 30 × 0,1 s utilisée dans start_roadied"
+        }
+      ],
+      "source_id": "REL-401",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-security-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "8f7f00d03dfd"
+    }
+  ]
+}

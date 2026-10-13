@@ -1,0 +1,253 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-002",
+      "status": "résolu",
+      "reason": "La réparation ne retire un membre absent qu'avec PID connu et déclaré mort par isProcessAlive. La déduplication reste indépendante de la visibilité. Confirmé identique au tour 3 : aucune régression introduite par les commits du tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+          "line": 255,
+          "note": "removeAll with guard liveWindowIDs + PID mort ; lecture en tour 4 confirme le code intact."
+        }
+      ]
+    },
+    {
+      "id": "REL-005",
+      "status": "résolu",
+      "reason": "applyPersistedMetadata, introduit au tour 3, copie noms, modes, stages vides et labels de desktop depuis l'état persisté vers RoadieState avant retour de reconcile. AutomationSnapshotService.stageSnapshots lit ensuite ce RoadieState enrichi. Présent et intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 564,
+          "note": "Appel applyPersistedMetadata(to:&state, from:persistedStages) juste avant le retour de Reconciliation."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 582,
+          "note": "Commentaire REL-005 explicite ; copie noms/modes pour stages existantes, crée les stages vides manquantes, restaure activeStageID des desktops non courants."
+        }
+      ]
+    },
+    {
+      "id": "REL-006",
+      "status": "résolu",
+      "reason": "spatialSortOrder calcule des bandes fixes (primaire, secondaire) avant le tri puis ordonne par (bande_primaire, bande_secondaire, id). Comparateur total et stable ; confirmé intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2116,
+          "note": "Commentaire REL-006 ; alignmentBands calculées en amont, tri (primary, secondary, id)."
+        }
+      ]
+    },
+    {
+      "id": "REL-007",
+      "status": "résolu",
+      "reason": "WindowRuleMatchContext reçoit role, subrole et isFloating depuis ruleFloatingState. Classification flottante unique partagée entre placement et snapshot automation. Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1882,
+          "note": "Commentaire REL-007 ; role, subrole, isFloating passés au contexte de placement."
+        }
+      ]
+    },
+    {
+      "id": "REL-008",
+      "status": "résolu",
+      "reason": "applyRulePlacement retourne .deferred quand la destination est indisponible ; continue saute le marquage dans observedRulePlacementWindowIDs. La fenêtre reste retentable après reconnexion de l'écran. Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1892,
+          "note": "Commentaire REL-008 ; branche .deferred avec continue avant insertion dans observedRulePlacementWindowIDs."
+        }
+      ]
+    },
+    {
+      "id": "REL-009",
+      "status": "résolu",
+      "reason": "persistLayoutIntent ne parcourt que stage.windowIDs pour fusionner resultFrames dans placements. Les résultats des autres écrans ne polluent plus la garde d'égalité. Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3141,
+          "note": "Commentaire REL-009 ; boucle for id in stage.windowIDs restreinte, O(k) par stage."
+        }
+      ]
+    },
+    {
+      "id": "REL-029",
+      "status": "résolu",
+      "reason": "render sérialise tous les champs d'action : manage, exclude, floating, layout, gap_override, scratchpad, emit_event en plus des assignations et follow. Commentaire REL-029 en ligne. Confirmé par lecture de WindowRuleAffinityService.swift en tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 192,
+          "note": "Commentaire REL-029 ; appendBool manage, exclude, floating, layout gap_override, scratchpad, emit_event tous présents."
+        }
+      ]
+    },
+    {
+      "id": "PERF-001",
+      "status": "résolu",
+      "reason": "framesLeaveLargeUntiledCells utilise sweep-line avec intervalles préindexés et cumul par colonne. Plus aucun frames.contains dans la boucle des cellules. O(n² + n log n) au lieu de O(n³). Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1794,
+          "note": "Intervalles préindexés, rowDelta, centerRange ; aucun frames.contains dans la boucle interne."
+        }
+      ]
+    },
+    {
+      "id": "PERF-004",
+      "status": "résolu",
+      "reason": "siblingIDSet = Set(siblingEntries.map(ˆ.window.id)) construit une fois hors de la boucle. stage.windowIDs.filter(siblingIDSet.contains) préserve l'ordre en O(n+m). Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2690,
+          "note": "siblingIDSet puis filter(siblingIDSet.contains) ; O(n+m)."
+        }
+      ]
+    },
+    {
+      "id": "MIN-002",
+      "status": "résolu",
+      "reason": "Les neuf surcharges remplacées par une seule fonction générique SnapshotEncoding.json<T: Encodable>. Intact dans le tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2231,
+          "note": "public static func json<T: Encodable>(_ value: T, pretty: Bool = true) throws -> String"
+        }
+      ]
+    },
+    {
+      "id": "PERF-009",
+      "status": "résolu",
+      "reason": "minimumSizes est construit par lookup direct clampedFrames[id.rawValue] (O(1) par ID), puis une passe sur result.items pour les clamped. Plus de knownMinimumSize(of:in:) qui parcourait result.items à chaque ID. Complexité O(n+r) par scope. Commentaire en ligne confirme la correction de PERF-901.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2787,
+          "note": "Commentaire O(n) par scope avec l'index ; avant : O(n·r). Lookup direct clampedFrames[id.rawValue], plus de helper à recherche répétée."
+        }
+      ]
+    },
+    {
+      "id": "REL-035",
+      "status": "résolu",
+      "reason": "Trois corrections appliquées dans WindowRuleAffinityService : (1) append ne supprime plus les chaînes vides (guard let value only, commentaire REL-035) ; (2) toml échappe guillemets, barres inverses et tous les caractères de contrôle U+0000..U+001F et U+007F (commentaire REL-035) ; (3) saveRules relit le texte produit via un fichier temporaire et compare les règles avant l'écriture atomique réelle (commentaire REL-035). Confirmé par lecture complète de WindowRuleAffinityService.swift en tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 207,
+          "note": "append : guard let value else { return } — chaîne vide conservée, commentaire REL-035."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 219,
+          "note": "toml : cases 0x22, 0x5C, 0x00...0x1F, 0x7F échappés ; commentaire REL-035."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 150,
+          "note": "saveRules : write temp, loadRulesFile(temp), guard reloaded == rules.sorted else throw, puis write final ; commentaire REL-035."
+        }
+      ]
+    },
+    {
+      "id": "REL-036",
+      "status": "résolu",
+      "reason": "isActive ne prend plus le maximum entre l'échéance mémorisée et celle du fichier : if let stored { activeUntil = stored.expiry } remplace max(). Le fichier partagé fait foi, y compris quand release raccourcit l'échéance. suspensionEnd utilise readLocked()?.expiry ?? activeUntil sans max. Commentaires REL-036 explicites. Confirmé par lecture complète de WindowDragActivity.swift en tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 87,
+          "note": "Commentaire REL-036 ; if let stored { activeUntil = stored.expiry } — sans max."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 66,
+          "note": "suspensionEnd : let expiry = readLocked()?.expiry ?? activeUntil — sans max."
+        }
+      ]
+    },
+    {
+      "id": "PERF-901",
+      "status": "résolu",
+      "reason": "Finding ouvert en audit02 (sous-agent runtime). Résolu par le même correctif que PERF-009 : knownMinimumSize(of:in:) supprimé, remplacé par index direct clampedFrames et passe unique sur result.items. Complexité O(n+r) par scope confirmée par commentaire en ligne.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2787,
+          "note": "Même emplacement que PERF-009 : helper knownMinimumSize absent, lookup O(1) par ID."
+        }
+      ]
+    },
+    {
+      "id": "REL-901",
+      "status": "résolu",
+      "reason": "Finding ouvert en audit02 (sous-agent runtime). Résolu par le même correctif que REL-035 : append corrigé (guard nil seulement), toml étendu aux caractères de contrôle, saveRules valide le round-trip. Confirmé par lecture complète de WindowRuleAffinityService.swift en tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 207,
+          "note": "Même emplacement que REL-035 ; guard let value, commentaire REL-035."
+        }
+      ]
+    },
+    {
+      "id": "REL-902",
+      "status": "résolu",
+      "reason": "Finding ouvert en audit02 (sous-agent runtime). Résolu par le même correctif que REL-036 : isActive et suspensionEnd ne prennent plus le maximum, le fichier fait foi. Confirmé par lecture complète de WindowDragActivity.swift en tour 4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 87,
+          "note": "Même emplacement que REL-036 ; if let stored { activeUntil = stored.expiry }, commentaire REL-036."
+        }
+      ]
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    "REL-005 : applyPersistedMetadata (DaemonSnapshot.swift:582) couvre les quatre sous-cas en un seul passage O(s + d·l) : noms et modes des stages existantes, création des stages vides persistées, restauration des stages actives des desktops non courants, propagation des labels. AutomationSnapshotService.stageSnapshots lit le RoadieState enrichi sans code supplémentaire.",
+    "REL-035 + REL-036 (tour 4) : les deux correctifs sont défensifs par construction — round-trip check avant écriture atomique pour REL-035, fichier seul comme source de vérité pour REL-036 — ce qui rend les régressions silencieuses impossibles sans faire échouer le code entourant.",
+    "StateAudit.swift:228-232 : le commentaire de repairScopes documente explicitement la politique de grâce des membres absents, la déduplication indépendante de la visibilité et le comportement sur anciens fichiers sans PID, ce qui servira de référence pour de futurs tests de régression."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-runtime.json"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": "384-415 (make : création stage active) ; 555-610 (reconcile : appel applyPersistedMetadata + corps de la fonction)"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+      "ranges": "Fingerprints et descriptions des 10 IDs audit01 ; lecture sélective des champs id, fingerprint, evidence"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json",
+      "ranges": "Fingerprints et descriptions des IDs PERF-009, REL-035, REL-036"
+    }
+  ],
+  "warnings": [
+    "Aucun build, test ou benchmark exécuté par cet agent, conformément au brief. Le coordinateur gère swift build/test.",
+    "Aucune fenêtre réelle déplacée ; aucun processus arrêté, relancé ou interrogé pour en modifier l'état.",
+    "PERF-901, REL-901, REL-902 (findings du sous-agent runtime en audit02) sont marqués résolus par inférence depuis les correctifs tour 4 (PERF-009, REL-035, REL-036). Le coordinateur doit vérifier qu'aucun autre site d'appel au pattern max(activeUntil, ...) ou knownMinimumSize ne subsiste.",
+    "LayoutMaintainer.swift n'a pas été relu en intégralité dans ce tour ; les lignes citées (2690, 2787, 1882, 1892, 3141) proviennent des lectures partielles de la session précédente, dont les constats sont considérés stables car les commits tour 4 ne touchent pas ces lignes selon git log."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "note": "Checklists 1-6 appliquées sur les quatre fichiers lus en intégralité et les extraits de DaemonSnapshot. Aucune ligne à comportement constant identifiée. Les commentaires REL-005, REL-029, REL-035, REL-036 sont des annotations de contrat qui servent de preuve lors des contre-audits. AutomationSnapshotService.stageStore : utilisé uniquement pour activeDisplayID (ligne 57) mais présent par injection de dépendance — suppression hors périmètre de cet audit."
+  }
+}

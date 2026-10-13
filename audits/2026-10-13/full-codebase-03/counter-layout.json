@@ -1,0 +1,95 @@
+{
+  "finding_id": "RUNTIME-NEW-001",
+  "proposed_id": "PERF-011",
+  "verdict": "CONFIRMED",
+  "severity": "HIGH",
+  "confidence": "Élevée sur la répétition et sa complexité par lecture statique ; aucun benchmark ni scénario exécuté.",
+  "summary": "authoritativeModelScopes valide le même intent une fois par fenêtre changée. La déduplication des scopes intervient après compactMap. Un intent valide non zoomé impose un examen complet des paires à chaque validation.",
+  "grep_commands": [
+    "rg -n 'authoritativeModelScopes|hasValidLayoutIntent|changedWindow|multiple|BSP|bsp' Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "rg -n 'external_geometry_snapped_to_layout_model|[Aa]uthoritative|[Ee]xternal.*[Gg]eometry' Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+    "rg -n 'struct LayoutIntentStore|func intent\\(|usesTreeEngine|observedChange|intentOverlapArea' Sources/RoadieCore Sources/RoadieStages Sources/RoadieDaemon/LayoutIntent*"
+  ],
+  "evidence": [
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 3348,
+      "evidence": "        Set(snapshot.windows.compactMap { entry -> StageScope? in\n            guard windowIDs.contains(entry.window.id),\n                  let scope = entry.scope,\n                  let stage = snapshot.state.stage(scope: scope),\n                  stage.mode == .bsp,\n                  snapshot.state.activeScope(on: scope.displayID) == scope,\n                  service.hasValidLayoutIntent(scope: scope, in: snapshot)\n            else { return nil }\n            return scope\n        })"
+    },
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 740,
+      "evidence": "        if !changedWindowIDs.isEmpty {\n            if changedFramesMatchSavedIntent(in: snapshot, frames: observedFrames, changedWindowIDs: changedWindowIDs) {\n                return NonTreeLayout()\n            }\n            let modeledScopes = authoritativeModelScopes(for: changedWindowIDs, in: snapshot)\n            if !modeledScopes.isEmpty {",
+      "note": "La garde changedWindowIDs.count >= 2 est plus tard, ligne 756. Elle ne borne pas cet appel."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1762,
+      "evidence": "        let container = display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: intent.windowIDs.count, display: display))\n        let frames = intent.windowIDs.compactMap { intent.placements[$0]?.cgRect }\n        guard frames.count == intent.windowIDs.count else { return false }\n        guard frames.allSatisfy({ container.contains($0, tolerance: LayoutTolerance.intentContainerSlack) }) else { return false }\n        guard !framesContainSignificantOverlap(frames) else { return false }",
+      "note": "Les cadres examinés sont ceux enregistrés dans intent.placements, pas les cadres observés divergents."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1884,
+      "evidence": "    private func framesContainSignificantOverlap(_ frames: [CGRect]) -> Bool {\n        guard frames.count > 1 else { return false }\n        for index in frames.indices {\n            for otherIndex in frames.index(after: index)..<frames.endIndex {\n                if frames[index].intersection(frames[otherIndex]).area > LayoutTolerance.intentOverlapArea {\n                    return true\n                }\n            }\n        }",
+      "note": "Sans chevauchement significatif, aucune sortie anticipée : n(n−1)/2 paires par validation."
+    }
+  ],
+  "call_chain": "LayoutMaintainer.tick:332 → nonTreeLayout:744 → authoritativeModelScopes:3354 → SnapshotService.hasValidLayoutIntent:1569 → validIntent:1707 → intentStillTilesCurrentContainer:1749 → framesContainSignificantOverlap:1884.",
+  "refutation_attempts": [
+    "k borné à 1 : non. changedWindows collecte tous les IDs différents (3332-3341). La garde k>=2 arrive après la validation (756). Les filtres de visibilité et d’écho (704-716) n’imposent aucun quota.",
+    "BSP exclu par le moteur à arbre : non. WindowManagementMode.swift:35-36 réserve usesTreeEngine à spatialBsp et mutableBsp. Le mode bsp atteint ce chemin.",
+    "Garde souris/geste : oui pour certains cas, sans réfuter le scénario externe. Une souris enfoncée arrête tick:231-235. Un redimensionnement reconnu comme geste prend la branche 718-730. Un déplacement effectué par l’application, sans geste, ne prend aucune de ces branches.",
+    "Suspension, changement de membres ou écran : ces gardes existent. Un écran stable, des membres inchangés et aucune commande active les évitent. Les déplacements restent sur le même écran, donc adoptManualDisplayMoves:2162-2168 ne les adopte pas.",
+    "Intent invalidé après le premier appel : vrai pour certains intents invalides en mode writer. Ce contre-audit retient un intent valide. validIntent:1731-1739 le rend sans suppression. Sa validité géométrique ne dépend pas des cadres observés.",
+    "Cache de validation : aucun dans hasValidLayoutIntent ou validIntent. LayoutIntentStore.intent:86-88 charge l’intent ; load:138-139 délègue la lecture. Même un cache de fichier ne mémoriserait pas le résultat des contrôles géométriques exécutés ensuite.",
+    "Sortie anticipée du validateur : un zoom ou un intent absent évite le coût, mais le scénario utilise un intent non zoomé valide. L’absence de chevauchement force le parcours de toutes les paires.",
+    "Borne n<20 : DaemonSnapshot.swift:1881-1883 parle de fenêtres typiquement <20. Ce commentaire ne contient aucune garde et ne justifie pas la répétition k fois. Les tailles raisonnables sont vérifiées après les paires (1772-1773), et ce contrôle est désactivé pour un intent de commande valide (1731-1733)."
+  ],
+  "complexity": {
+    "variables": "N = fenêtres du snapshot ; n = fenêtres d’un scope BSP ; k = fenêtres changées de ce scope, k<=n.",
+    "confirmed_portion": "Exactement k × n(n−1)/2 comparaisons de paires pour un intent valide non chevauchant du scope. Cette partie est Θ(k·n²). Si N=n et k=n, cette partie est Θ(n³).",
+    "qualification": "Le verdict ne chiffre pas la latence. Il ne prétend pas établir la borne supérieure de tous les autres traitements du tick. Les constructions de scopedIDs ajoutent des parcours du snapshot à chaque validation.",
+    "target": "Dédupliquer les scopes avant validation : une validation par scope. Pour un seul scope, la partie des paires passe de Θ(k·n²) à Θ(n²)."
+  },
+  "concrete_scenario": [
+    "Configuration BSP, un écran 1000×500, gapsOuter=0, gapsInner=10, aucune règle de déplacement, aucun zoom, aucune épingle ni activité de commande.",
+    "Deux fenêtres standard visibles ID 1 et 2 dans le stage actif. Intent enregistré : ID 1=(0,0,495,500), ID 2=(505,0,495,500). Premier tick avec ces mêmes cadres pour établir lastObservedFrames. Aucun bouton souris pressé, aucune session de geste.",
+    "Sans changer les IDs, le stage ou l’écran, l’application fournit au tick suivant ID 1=(0,0,700,500), ID 2=(710,0,290,500). Les deux changements dépassent observedChange=16. Les centres restent sur le même écran.",
+    "Le contrôle hasMatchingIntent échoue, car les cadres observés divergent. L’intent enregistré reste valide. authoritativeModelScopes appelle donc deux fois le même validateur avant de rendre un Set contenant un seul scope.",
+    "Le même raisonnement vaut pour k fenêtres d’un scope de n fenêtres dont les cadres enregistrés restent valides. Aucun test de ce scénario n’a été lancé."
+  ],
+  "tests_reviewed": [
+    "LayoutMaintainerTests.swift:574-618 décrit déjà deux fenêtres changées après une suspension de glisser, puis attend leur retour au modèle. Le code du test a été lu, pas exécuté.",
+    "LayoutMaintainerTests.swift:621-689 et 908-972 couvrent le retour d’une fenêtre modifiée au modèle enregistré, automatique ou de commande. Ils ne comptent pas les validations.",
+    "LayoutMaintainerTests.swift:4190-4226 couvre le geste reconnu qui contourne le retour au modèle. Cela confirme la limitation au scénario sans geste ; cela ne réfute pas celui-ci."
+  ],
+  "remediation_code": "private func authoritativeModelScopes(\n    for windowIDs: Set<WindowID>,\n    in snapshot: DaemonSnapshot\n) -> Set<StageScope> {\n    let candidates = Set(snapshot.windows.compactMap { entry -> StageScope? in\n        guard windowIDs.contains(entry.window.id),\n              let scope = entry.scope,\n              snapshot.state.stage(scope: scope)?.mode == .bsp,\n              snapshot.state.activeScope(on: scope.displayID) == scope\n        else { return nil }\n        return scope\n    })\n    return Set(candidates.filter { scope in\n        service.hasValidLayoutIntent(scope: scope, in: snapshot)\n    })\n}",
+  "remediation_status": "Proposition complète de remplacement de la méthode, non appliquée et non compilée.",
+  "files_read_full": [
+    "Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "Sources/RoadieCore/WindowManagementMode.swift"
+  ],
+  "full_read_detail": "LayoutMaintainer.swift lu sans troncature sur les plages contiguës 1-3695. DaemonSnapshot.swift a été lu intégralement lors du contre-audit précédent de cette session ; zones 1532-1555, 1562-1572, 1707-1778 et 1881-1894 relues ici.",
+  "files_read_partial": [
+    {
+      "file": "Sources/RoadieDaemon/LayoutIntentStore.swift",
+      "lines": "1-145"
+    },
+    {
+      "file": "Sources/RoadieAX/WrittenFrameRegistry.swift",
+      "lines": "100-145"
+    },
+    {
+      "file": "Sources/RoadieCore/LayoutTolerance.swift",
+      "lines": "1-20, 70-90"
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+      "lines": "570-705, 880-975, 4185-4226"
+    }
+  ],
+  "limits": "Analyse statique uniquement. Aucun test, build, benchmark, modification de code ou Git, ni arrêt/relance de processus. Aucun autre finding recherché. Aucun échange avec l’auditeur initial.",
+  "execution_metrics_warning": "contre-audit RUNTIME-NEW-001 / PERF-011: CONFIRME"
+}

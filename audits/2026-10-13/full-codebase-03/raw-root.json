@@ -1,0 +1,45 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-042",
+      "status": "résolu",
+      "reason": "finish lit outcome; actionExitCode compare uniquement .failed. Les noms utilisateur ne déterminent plus le code. Tests T3 et T9 verts : no-op avec failed/not found/unknown et vrais refus de persistance.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 312,
+          "note": "finish puis actionExitCode, uniquement le statut explicite."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT9Tests.swift:198",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift:320"
+      ]
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift:325 — les identifiants de fenêtre de la CLI exigent une valeur strictement positive.",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift:312 — le code de sortie dépend du statut explicite du résultat."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TestEnvironment.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT9Tests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/test",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/with-xcode"
+  ],
+  "files_read_partial": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT6Tests.swift"
+  ],
+  "warnings": [
+    "Le routeur possède des actions hors protocole CommandResult (cibles et rapports) avec leurs propres champs erreur : l’introduction de CommandOutcome ne les supprime pas."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "note": "Helpers de CommandResult portent une règle sur statut/persistance; pas de suppression proposée sans modifier le contrat."
+  }
+}

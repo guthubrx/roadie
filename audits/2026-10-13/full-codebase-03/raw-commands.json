@@ -1,0 +1,317 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-001",
+      "status": "résolu",
+      "reason": "Les deux chemins résiduels signalés dans l'audit02 sont corrigés dans le tour 4 (commit f0acacd4). 1) nextGeneratedStageID utilise addingReportingOverflow(1) et génère un identifiant UUID libre en cas de dépassement (StageCommands.swift:1715). 2) CLICommandRouter.windowID refuse toute valeur ≤ 0, bloquant stage summon 0 et group add/remove/focus avec window ID 0 (CLICommandRouter.swift:327). Les deux sous-cas ont chacun leurs propres tests dans Audit022R4LotT3Tests.swift.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1715,
+          "note": "addingReportingOverflow(1) ; identifiant UUID libre si overflow."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 327,
+          "note": "guard value > 0 : zéro refusé, précondition WindowID(0) jamais atteinte."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift: assignEmptyAfterIntMaxStageCreatesFreeStageThroughCLI; assignEmptyKeepsOrdinaryGenerationRules; zeroWindowIDIsAUsageErrorForSummonAndGroupCommands"
+      ]
+    },
+    {
+      "id": "REL-016",
+      "status": "résolu",
+      "reason": "Aucune régression. DesktopCommands.swift:146 continue de refuser le bureau actuel dans les deux entrées publiques. Le corps partagé moveWindow (MIN-004) est inchangé pour ce comportement.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 146,
+          "note": "guard active.scope?.desktopID != desktopID || active.scope?.displayID != displayID"
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: assignActiveWindowToCurrentDesktopDoesNothing (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-017",
+      "status": "résolu",
+      "reason": "Aucune régression. DisplayParkingService.swift:259 conserve son regroupement secondaire par bureau (stagesByDesktop) et son scope propre par bureau.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+          "line": 259,
+          "note": "REL-017 : regroupement secondaire par bureau ; scope distinct par desktopID."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: reconnectRestoresStagesIntoTheirOwnDesktops (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-020",
+      "status": "résolu",
+      "reason": "Aucune régression. HiddenWindowPlacement.isHiddenOrLegacyOffscreen:38 conserve sa garde d'intersection avec tous les écrans.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+          "line": 41,
+          "note": "return !displays.contains { $0.frame.cgRect.intersects(frame) }"
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: leftDisplayWindowIsNotLegacyOffscreen (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-021",
+      "status": "résolu",
+      "reason": "Tous les cas de commit partiel signalés dans REL-102 sont corrigés dans le tour 4 (commit f0acacd4). La fonction commitStageTransfer (LayoutCommandService.swift:468) écrit l'état puis retire les intents atomiquement ; un échec du retrait tente de restaurer l'état précédent et lève PartialCommitError si le retour arrière échoue lui-même. La fonction applyAfterIntent (LayoutCommandService.swift:351) écrit l'intent avant l'effet AX et le restaure si tous les cadres sont refusés. Les transferts de bureau (DesktopCommands.swift:192), de fenêtre (WindowCommands.swift:786) et de stage (StageCommands.swift:602, 761, 855) utilisent tous commitStageTransfer. Les erreurs de persistance tardive (intents de layout après transfert d'écran) sont journalisées mais laissées sans code d'échec car l'état est déjà correctement persisté.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 468,
+          "note": "commitStageTransfer : mutateChecked d'état, puis mutateChecked d'intents ; rollback si échec."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 351,
+          "note": "applyAfterIntent : saveLayoutIntentChecked avant apply ; restauration de l'intent précédent si tout échoue."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 192,
+          "note": "moveWindow utilise commitStageTransfer ; commentaire REL-021."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 786,
+          "note": "Transfert d'écran via commitStageTransfer ; commentaire REL-021."
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 602,
+          "note": "move-to-display via commitStageTransfer ; commentaire REL-021."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift: zoomParentMovesNothingWhenIntentCannotBeWritten; zoomParentRestoresPreviousIntentWhenFrameIsRefused; zoomParentReportsPartialResultWhenRollbackFails; zoomParentStillZoomsWhenWritable; insertAndSplitMoveNothingWhenIntentCannotBeWritten"
+      ]
+    },
+    {
+      "id": "REL-023",
+      "status": "résolu",
+      "reason": "Aucune régression. StageCommands.swift:664-670 conserve ses branches restoring/hiding selon activation effective.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 669,
+          "note": "Stage inactive : commentaire REL-023 ; placement.hiding utilisé."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotDTests.swift: noFollowMoveKeepsMovedStageHiddenThenRestoresItOnTargetDisplay (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-026",
+      "status": "résolu",
+      "reason": "Aucune régression. WidthAdjustmentService.swift:47-54 conserve la sélection de la fenêtre focalisée avant l'écran/scope.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 45,
+          "note": "Commentaire REL-026 ; focusedEntry sélectionné en premier."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: widthTargetsFocusedWindowOnSecondDisplay (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-027",
+      "status": "résolu",
+      "reason": "Aucune régression. WidthAdjustmentService.swift:76-78 conserve le ratio de référence depuis la fenêtre active avant le calcul de nudge/preset.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 76,
+          "note": "Commentaire REL-027 ; referenceEntry depuis activeID."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: relativeWidthStartsFromFocusedWindow (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-028",
+      "status": "résolu",
+      "reason": "Aucune régression. WindowBookmarkCommands.swift:64 conserve sa garde processIsDead avant suppression du signet.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+          "line": 63,
+          "note": "Commentaire REL-028 ; processIsDead requis avant retrait."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotJTests.swift: absentWindowWithLiveProcessKeepsBookmark (inchangé)"
+      ]
+    },
+    {
+      "id": "PERF-005",
+      "status": "résolu",
+      "reason": "Aucune régression. Les ensembles scopedIDSet (StageCommands.swift:1561) et orderedSet (StageCommands.swift:1616) restent construits hors boucle. La partition visible/vide (stageID(atAssignablePosition:):1672) reste O(s). Commentaires PERF-005 présents.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1551,
+          "note": "Commentaire : O(n), avant O(n²), PERF-005."
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1615,
+          "note": "Commentaire : O(n), orderedSet hors boucle, PERF-005."
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1670,
+          "note": "Commentaire : O(s), avant O(s²), PERF-005."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotDTests.swift: assignPositionKeepsVisibleThenEmptyOrderAndSkipsParked (inchangé)"
+      ]
+    },
+    {
+      "id": "TEST-003",
+      "status": "résolu",
+      "reason": "Aucune régression. WindowGroupCommandTests.swift:26+ vérifie toujours les membres et activeWindowID après chaque étape. Les 6 tests et leurs helpers sont présents.",
+      "evidence": [
+        {
+          "file": "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "line": 35,
+          "note": "storedGroup(...).windowIDs et activeWindowID vérifiés après create/add/focus/remove/dissolve."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift: fichier intégral inchangé"
+      ]
+    },
+    {
+      "id": "MIN-004",
+      "status": "résolu",
+      "reason": "Aucune régression. DesktopCommands.swift:176 conserve le corps partagé moveWindow. Le tour 4 n'a modifié que le contenu de ce corps (commitStageTransfer), sans réintroduire la duplication.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 176,
+          "note": "Corps partagé moveWindow ; commentaire MIN-004."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotGTests.swift: assignActiveWindowToOtherDesktopStillHidesWindow (inchangé)"
+      ]
+    },
+    {
+      "id": "REL-101",
+      "status": "résolu",
+      "reason": "Corrigé dans le commit f0acacd4 du tour 4. nextGeneratedStageID utilise addingReportingOverflow(1) et génère un identifiant UUID libre non conflit en cas de dépassement. Le commentaire à la ligne 1710 référence explicitement REL-001. Le test assignEmptyAfterIntMaxStageCreatesFreeStageThroughCLI vérifie le scénario exact du constat initial (stage Int.max créée, puis assign-empty devait déclencher une erreur fatale).",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1713,
+          "note": "private func nextGeneratedStageID: addingReportingOverflow(1) + UUID fallback."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift: assignEmptyAfterIntMaxStageCreatesFreeStageThroughCLI; assignEmptyKeepsOrdinaryGenerationRules"
+      ]
+    },
+    {
+      "id": "REL-102",
+      "status": "résolu",
+      "reason": "Tous les chemins de commit partiel signalés sont corrigés dans le commit f0acacd4 du tour 4. zoomParent écrit l'intent avant l'effet AX via applyAfterIntent (LayoutCommandService.swift:248) ; DesktopCommands.moveWindow, WindowCommands et StageCommands.moveToDisplay utilisent commitStageTransfer qui rollback l'état si le retrait d'intents échoue. Le scénario inverse (intent écrit, AX refusé) est couvert par le rollback d'applyAfterIntent. Les tests T3 vérifient les trois chemins : refus d'écriture initiale, rollback réussi, rollback échoué (PartialCommitError).",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 248,
+          "note": "zoomParent : applyAfterIntent, intent écrit avant l'effet AX."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 475,
+          "note": "commitStageTransfer : store.mutateChecked (état), puis effectiveIntentStore.mutateChecked (intents) ; rollback si échec."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 192,
+          "note": "moveWindow via commitStageTransfer : commentaire REL-021."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift: zoomParentMovesNothingWhenIntentCannotBeWritten; zoomParentRestoresPreviousIntentWhenFrameIsRefused; zoomParentReportsPartialResultWhenRollbackFails; zoomParentStillZoomsWhenWritable"
+      ]
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    "Sources/RoadieDaemon/LayoutCommandService.swift:468 : commitStageTransfer fournit un rollback atomique complet (état avant/après capturés, vérification d'égalité) pour tout transfert de scope, avec propagation de PartialCommitError si le retour arrière lui-même échoue.",
+    "Sources/RoadieDaemon/LayoutCommandService.swift:351 : applyAfterIntent écrit l'intent avant l'effet AX, met à jour les frames réelles après succès partiel et restaure l'intent précédent si tous les cadres sont refusés — la commande ne laisse jamais d'état incohérent.",
+    "Sources/RoadieDaemon/CLICommandRouter.swift:326 : windowID refuse value == 0 avec une précondition explicite dans le commentaire (REL-001), prévenant l'erreur fatale Swift pour stage summon 0 et les commandes group.",
+    "Sources/RoadieDaemon/StageCommands.swift:1710 : nextGeneratedStageID documente la contrainte par un commentaire précis (REL-001) et gère proprement le fallback UUID sans boucle infinie (UUID.uuidString est non numérique, donc non conflit avec les identifiants numériques)."
+  ],
+  "files_read_full": [
+    "Sources/RoadieDaemon/StageCommands.swift",
+    "Sources/RoadieDaemon/DesktopCommands.swift",
+    "Sources/RoadieDaemon/LayoutCommandService.swift",
+    "Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+    "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+    "Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+    "Sources/RoadieDaemon/WindowContextActions.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": ["22-70", "299-330", "406-432", "1121-1144", "1353-1390"],
+      "purpose": "outcome/exit code, finish(), heal, summon, group add/remove/focus"
+    },
+    {
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "ranges": ["780-830"],
+      "purpose": "transfert d'écran via commitStageTransfer"
+    },
+    {
+      "file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+      "ranges": ["255-275"],
+      "purpose": "REL-017 : regroupement par bureau"
+    },
+    {
+      "file": "Sources/RoadieDaemon/StateAudit.swift",
+      "ranges": ["22-50", "107-108"],
+      "purpose": "StateAuditReport.persistenceError et heal"
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+      "ranges": ["1-140"],
+      "purpose": "Tests REL-001/REL-021 du tour 4"
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+      "ranges": ["grep résultats"],
+      "purpose": "TEST-003 : vérification membres et activeWindowID"
+    }
+  ],
+  "warnings": [
+    "Aucun build ni test exécuté par ce sous-agent ; exécution centralisée par le coordinateur.",
+    "La correction REL-101 (addingReportingOverflow) n'a pas été vérifiée par exécution en processus isolé (scénario fatal volontairement non déclenché) ; confirmée par lecture du code et du test CLI.",
+    "Les persistIntentsAfterDisplayMove de WindowCommands.swift:822 journalisent un échec de persistance tardive sans code d'erreur — comportement documenté et intentionnel (état déjà persisté via commitStageTransfer) ; aucun constat ouvert.",
+    "Duplication : périmètre inchangé depuis l'audit02 ; aucun nouveau bloc dupliqué observé dans les fichiers lus."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Le code ajouté dans le tour 4 (commitStageTransfer, applyAfterIntent, corrections overflow) est fonctionnellement justifié et ne contient pas de branches défensives inutiles. Aucune ligne supprimable à comportement constant identifiée dans le périmètre relu."
+  }
+}

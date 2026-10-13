@@ -1,0 +1,445 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-021",
+      "status": "partiel",
+      "reason": "Les transferts et zoomParent sont corrigés, mais la lecture intégrale révèle les chemins WindowCommandService.treeCommand et move/warp/resize encore susceptibles d’annoncer aucun changement après persistance ou effet AX. La sortie de zoom a aussi deux écritures dépendantes sans rollback. Voir finding REL-021 de ce complément. Le statut résolu du premier raw-commands doit être remplacé.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 187,
+          "note": "bspTree écrit avant le retrait d’intent, sans rollback."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 280,
+          "note": "Effet AX avant sauvegarde ; catch renvoie changed=false."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1406,
+          "note": "remove avant save du remplacement à la ligne 1420."
+        }
+      ],
+      "tests": [
+        "Audit022R4LotT3Tests couvre les transferts et zoomParent, pas ces résiduels."
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "REL-021",
+      "category": "reliability",
+      "subcategory": "partial_commit_reported_as_failure",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+      "line": 187,
+      "title": "Les commandes de fenêtre conservent encore des écritures après un échec annoncé sans changement",
+      "description": "Le retour arrière introduit pour les transferts ne couvre pas WindowCommandService.treeCommand. Cette fonction écrit bspTree, puis retire l’intent dans une seconde transaction. Un échec du retrait laisse le nouvel arbre sur disque. Le catch reçoit PersistenceError, pas PartialCommitError, et annonce changed=false. Les chemins move/warp/resize sans arbre ont la variante inverse : ils appliquent les cadres avant persistIntentAfterCommand et annoncent le même refus si cette dernière écriture échoue. La sortie de zoom supprime aussi l’intent avant d’écrire son remplacement, sans transaction commune.",
+      "evidence": "            changed = try stageStore.mutateChecked { state -> Bool in\n                let existing = state.bspTree(for: scope) ?? .empty\n                let mutated = mutation(existing)\n                guard mutated != existing else { return false }\n                state.setBSPTree(mutated, for: scope)\n                return true\n            }\n            if changed {\n                try service.removeLayoutIntentChecked(scope: scope)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Scénario déterministe sans course : fixture isolée avec StageStore inscriptible, une stage spatialBsp active et deux feuilles gauche/droite, fenêtre gauche focalisée. Écrire « { pas du json » dans le fichier du LayoutIntentStore puis appeler WindowCommandService.move(.right). Le snapshot reste possible (prune fait une lecture de repli), activeTree trouve les deux feuilles, mutateChecked permute et persiste les feuilles, removeLayoutIntentChecked lève. Résultat : changed=false, outcome=failed, alors que le BSP persistant est permuté. Une prochaine passe de maintien peut appliquer ce mouvement. Ne pas exécuter contre le daemon de travail.",
+      "additional_scenarios": [
+        "Mode bsp sans arbre, deux fenêtres en colonnes : reprendre T3Writer.onFirstFrame pour corrompre intents.json pendant le premier setFrame, qui réussit. Appeler windows.move(.right) : les cadres sont déplacés, puis persistIntentAfterCommand échoue et le résultat annonce changed=false/.failed. Même ordre dans warp et resize.",
+        "Zoom BSP sans arbre avec restorePlacements complet et IDs vivants identiques : restoreZoomLayoutIntentChecked retire d’abord l’intent. Une panne de disque (ENOSPC) sur la sauvegarde suivante interrompt la commande avant le plan AX, mais l’intent et ses restorePlacements sont déjà perdus. Ce dernier scénario est confirmé par lecture de la séquence ; aucune panne disque n’a été injectée."
+      ],
+      "impact": "Le résultat ne décrit pas l’état conservé. Une opération refusée peut être appliquée plus tard par le maintien ; la disposition de retour d’un zoom peut être perdue.",
+      "path_type": "cold",
+      "remediation": "Réutiliser commitStageTransfer pour la mutation d’arbre et le retrait d’intent. Pour move/warp/resize, écrire l’intent avant l’effet, puis restaurer l’état antérieur si tous les cadres sont refusés, ou annoncer explicitement le résultat partiel. Pour la sortie de zoom, remplacer/supprimer l’intent en une seule mutateChecked, sans suppression intermédiaire.",
+      "remediation_code": "let changed = try service.commitStageTransfer(in: stageStore, { state -> Bool in\n    let existing = state.bspTree(for: scope) ?? .empty\n    let mutated = mutation(existing)\n    guard mutated != existing else { return false }\n    state.setBSPTree(mutated, for: scope)\n    return true\n}, clearingIntentsOf: { $0 ? [scope] : [] })",
+      "verification": "Ajouter une fixture spatialBsp à deux feuilles et intents corrompus ; vérifier résultat ET égalité de l’arbre après refus. Pour le BSP sans arbre, injecter l’échec dans onFirstFrame et comparer cadres, intent et changed/outcome. Pour la sortie de zoom, provoquer l’échec de la sauvegarde du remplacement et vérifier que l’intent initial et restorePlacements restent présents.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture actuelle complète de WindowCommands, StageStore, JSONPersistence, FileLock et LayoutIntentStore ; chaîne restoreZoom relue et concordante avec runtime_full ; pas d’exécution",
+      "original_related_ids": [
+        "REL-021"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 194,
+          "evidence": "            if changed {\n                try service.removeLayoutIntentChecked(scope: scope)\n            }\n        } catch {\n            return .persistenceFailure(\"\\(verb.rawValue) \\(direction.rawValue)\", error)",
+          "note": "Pas de rollback avant persistenceFailure."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 64,
+          "evidence": "\n    /// Échec de persistance (REL-021). Un retour arrière lui-même en échec (`PartialCommitError`)\n    /// est signalé comme résultat partiel. « failed » reste dans le message pour les journaux.\n    static func persistenceFailure(_ command: String, _ error: Error) -> Self {\n        let message = JSONPersistence.commandFailureMessage(command, error)\n        return error is PartialCommitError ? .partial(message) : .failure(message)\n    }",
+          "note": "Seul PartialCommitError produit changed=true/failed."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 280,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: result) {\n            do {\n                try persistIntentAfterCommand(\n                    from: snapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )",
+          "note": "Effet AX avant sauvegarde move ; catch à la ligne 291."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 357,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: result) {\n            let ordered = service.orderedWindowIDs(in: scope, from: snapshot)\n            do {\n                try persistIntentAfterCommand(\n                    from: snapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )\n            } catch {\n                return .persistenceFailure(\"warp \\(direction.rawValue)\", error)",
+          "note": "Même chemin pour warp."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 443,
+          "evidence": "        let result = service.apply(plan, generation: generation)\n        if shouldPersistCommandIntent(after: resizeResult), shouldPersistCommandIntent(after: result) {\n            let ordered = service.orderedWindowIDs(in: scope, from: updatedSnapshot)\n            do {\n                try persistIntentAfterCommand(\n                    from: updatedSnapshot,\n                    scope: scope,\n                    orderedWindowIDs: ordered,\n                    plan: plan,\n                    result: result\n                )\n            } catch {\n                return .persistenceFailure(\"resize \\(direction.rawValue)\", error)",
+          "note": "Même chemin pour resize."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1390,
+          "evidence": "    func restoreZoomLayoutIntentChecked(\n        scope: StageScope,\n        from snapshot: DaemonSnapshot,\n        generation: UInt64 = PlacementGeneration.shared.current\n    ) throws -> ApplyPlan {\n        try restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.removeChecked(scope:), save: intentStore.saveChecked)",
+          "note": "Entrée throwing de la restauration."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1404,
+          "evidence": "    ) rethrows -> ApplyPlan {\n        let zoom = commandLayoutIntent(scope: scope)\n        try remove(scope)\n        let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }\n        let mode = snapshot.state.stage(scope: scope)?.mode\n        if let saved = zoom?.restorePlacements, mode == .float {\n            return ApplyPlan(commands: entries.compactMap { entry in\n                guard let frame = saved[entry.window.id], frame.width > 0, frame.height > 0,\n                      !entry.window.frame.cgRect.matchesFrame(frame.cgRect) else { return nil }",
+          "note": "Suppression de l’intent avant calcul du remplacement."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1416,
+          "evidence": "        if let zoom, let saved = zoom.restorePlacements, mode?.usesTreeEngine != true {\n            let liveIDs = Set(entries.map(\\.window.id))\n            let ordered = zoom.windowIDs.filter(liveIDs.contains)\n            if liveIDs == Set(ordered), liveIDs.isSubset(of: Set(saved.keys)) {\n                try save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))\n                _ = validIntent(for: scope, from: snapshot)\n            }",
+          "note": "Seconde écriture indépendante du remplacement."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+          "line": 175,
+          "evidence": "        #expect(fixture.store.state() == before)\n    }\n\n    /// Avant la correction : la fenêtre était déplacée, puis l'échec de l'intent final annonçait un refus.\n    @Test\n    func windowTransferSucceedsWhenFinalIntentCannotBeWrittenAfterMoving() throws {\n        let fixture = try T3Fixture(\"t3-window-late\")\n        defer { fixture.cleanUp() }\n        fixture.writer.onFirstFrame = { _ = try? fixture.corruptIntents() }\n\n        let result = fixture.windows.sendToDisplay(2)\n\n        #expect(result.changed, \"\\(result.message)\")\n        #expect(result.outcome == .changed)",
+          "note": "Le test d’échec tardif couvre sendToDisplay ; il ne couvre pas move/warp/resize. Le mode des stages principales de cette fixture est bsp, sans arbre."
+        }
+      ],
+      "tests_reviewed": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift (intégral)",
+        "Tests/RoadieDaemonTests/Audit022R3Tests.swift:16-27 (refus avant move, mode BSP sans arbre)",
+        "Tests/RoadieDaemonTests/TreeAuthorityTests.swift:1-98,190-250"
+      ],
+      "discovery_command": "rg -n \"mutateChecked|removeLayoutIntentChecked|persistIntentAfterCommand|persistenceFailure\" Sources/RoadieDaemon/WindowCommands.swift"
+    },
+    {
+      "id": "CMD-NEW-01",
+      "suggested_canonical_id": "REL-043",
+      "category": "reliability",
+      "subcategory": "incorrect_command_outcome",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+      "line": 713,
+      "title": "Des résultats explicites ne correspondent pas au résultat métier",
+      "description": "toggleNativeFullscreen convertit false en noOp. Pourtant, dans l’écrivain AX, false signifie fenêtre/bouton introuvable ou AXPress refusé. La garde « aucune fenêtre active » existe déjà et traite séparément l’action sans objet. La commande CLI termine donc avec le code 0 pour ce refus. Dans les commandes de groupe, le résultat booléen de focus est ignoré : focaliser un ID qui ne fait pas partie du groupe renvoie changed=true sans changer le membre actif.",
+      "evidence": "        let changed = service.toggleNativeFullscreen(active.window)\n        _ = focusWindow(active.window)\n        return WindowCommandResult.changedOrNoOp(\n            \"toggle native-fullscreen: changed=\\(changed)\",\n            changed: changed\n        )",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Fixture isolée avec une fenêtre active et un WindowFrameWriting dont toggleNativeFullscreen renvoie false (par exemple l’implémentation par défaut du protocole). Exécuter CLICommandRouter.run([\"toggle\", \"native-fullscreen\"]). Le résultat est noOp/code 0 malgré le refus. Équivalent réel : fenêtre encore sélectionnée mais AXPress retourne cannotComplete ou son bouton fullscreen n’est pas disponible. Variante groupe : groupe pair avec membres [1,2], fenêtre 3 existante ; group focus pair 3 laisse activeWindowID=1 mais annonce changed=true/code 0.",
+      "impact": "Les scripts et le retour utilisateur prennent un refus pour un succès. Les notifications de changement peuvent aussi être émises sans changement du groupe.",
+      "path_type": "cold",
+      "remediation": "Pour le plein écran natif, utiliser changedOrFailed après la garde d’absence de fenêtre. Pour les groupes, transmettre le succès de focus et comparer le groupe avant/après ; annoncer failed si la cible n’est pas membre, noOp si la valeur demandée est déjà présente, changed seulement en cas de modification.",
+      "remediation_code": "return WindowCommandResult.changedOrFailed(\n    changed ? \"toggle native-fullscreen: changed=true\" : \"toggle native-fullscreen: action refused\",\n    changed: changed\n)",
+      "verification": "Ajouter au test CLI une fenêtre active et un écrivain qui refuse toggleNativeFullscreen ; attendre code 1/outcome failed. Conserver le cas sans fenêtre active en code 0/noOp. Dans invalidGroupCommandsLeaveStateUntouched, vérifier aussi le résultat de focus du membre absent ; vérifier noOp sur focus déjà actif.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture de la chaîne commande → écrivain AX → statut CLI ; aucune action AX exécutée",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 1058,
+          "evidence": "    private func press(_ buttonAttribute: String, of window: WindowSnapshot) -> Bool {\n        let pid = window.pid\n        var windows: PIDWindows?\n        guard let element = element(pid: pid, id: window.id, title: window.title, frame: window.frame, windows: &windows),\n              let button = elementAttribute(element, buttonAttribute, pid: pid)\n        else { return false }\n        let error = AXUIElementPerformAction(button, kAXPressAction as CFString)\n        registry.noteResult(error, pid: pid)\n        return error == .success",
+          "note": "false couvre l’échec de l’action AX."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2007,
+          "evidence": "    func toggleNativeFullscreen(_ window: WindowSnapshot) -> Bool {\n        invalidateSharedSnapshot()\n        return frameWriter.toggleNativeFullscreen(window)\n    }",
+          "note": "Le SnapshotService propage le booléen sans transformation."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 313,
+          "evidence": "    private func finish(_ result: some CommandResult) -> Int32 {\n        out(result.message)\n        return Self.actionExitCode(outcome: result.outcome)\n    }\n\n    /// Statut explicite (REL-042) : 1 pour un échec, 0 sinon, sans lire le message, qui peut\n    /// contenir une valeur utilisateur (stage nommée « failed »). O(1).\n    nonisolated static func actionExitCode(outcome: CommandOutcome?) -> Int32 {\n        outcome == .failed ? 1 : 0",
+          "note": "Le code de sortie est désormais déterminé exclusivement par outcome."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 720,
+          "evidence": "            let result: WindowCommandResult\n            switch subject {\n            case \"maximize\":\n                result = windowCommands.toggleMaximize()\n            case \"fullscreen\":\n                result = windowCommands.toggleFullscreen()\n            case \"native-fullscreen\":\n                result = windowCommands.toggleNativeFullscreen()\n            case \"floating\":\n                out(\"roadie: \\(args.joined(separator: \" \")) is not implemented in this build\")\n                return 1\n            default:\n                return usageError()\n            }\n            return finish(result)\n        case \"--version\", \"version\":",
+          "note": "Routage toggle native-fullscreen."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "line": 60,
+          "evidence": "    public func focus(windowID: WindowID, in id: String) -> WindowGroupCommandResult {\n        mutateGroup(id: id, createIfMissing: false) { _ = $0.focus(windowID) }\n    }",
+          "note": "Le retour du focus de groupe est ignoré."
+        },
+        {
+          "file": "Sources/RoadieStages/RoadieState.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+          "line": 223,
+          "evidence": "    public mutating func focus(_ windowID: WindowID) -> Bool {\n        guard windowIDs.contains(windowID) else { return false }\n        activeWindowID = windowID\n        return true\n    }",
+          "note": "La cible hors groupe produit false sans mutation."
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+          "line": 135,
+          "evidence": "        events.append(RoadieEvent(\n            type: createIfMissing ? \"window.grouped\" : \"window.ungrouped\",\n            scope: scopeID,\n            details: [\"groupID\": id, \"members\": group.windowIDs.map(\\.description).joined(separator: \",\")]\n        ))\n        return WindowGroupCommandResult(message: \"group \\(id): members=\\(group.windowIDs.map(\\.description).joined(separator: \",\"))\", changed: true)",
+          "note": "Annonce systématique changed=true après mutateGroup."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "line": 105,
+          "evidence": "\n        let dissolveMissing = groups.dissolve(id: \"absent\")\n        #expect(!dissolveMissing.changed)\n        #expect(dissolveMissing.message == \"group dissolve absent: not found\")\n\n        // Focus d'une fenêtre qui n'est pas membre : l'état actif ne bouge pas.\n        _ = groups.focus(windowID: three, in: \"pair\")\n        #expect(storedGroup(\"pair\", in: store)?.activeWindowID == one)\n\n        #expect(storedGroups(store).filter { $0.id != \"pair\" }.isEmpty)\n        #expect(storedGroup(\"pair\", in: store) == before.first { $0.id == \"pair\" })\n    }\n\n    @Test\n    func addingTheSameMemberTwiceDoesNotDuplicateIt() {\n        let (groups, store) = makeService()",
+          "note": "Le test du membre absent vérifie le store, mais ignore le résultat de commande."
+        }
+      ],
+      "tests_reviewed": [
+        "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift (intégral)",
+        "Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift:25-82,194-218 (écrivain toujours vrai)",
+        "Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift:292-334 (statut seulement)"
+      ],
+      "discovery_command": "rg -n \"changedOrNoOp|toggleNativeFullscreen|func focus\" Sources/RoadieDaemon/WindowCommands.swift Sources/RoadieDaemon/WindowGroupCommands.swift Sources/RoadieAX/SystemSnapshotProvider.swift"
+    },
+    {
+      "id": "CMD-NEW-02",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "severity_review_required": true,
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 1524,
+      "title": "La réconciliation retrie tous les candidats de même signature pour chaque membre disparu",
+      "description": "L’index bundle+titre évite une recherche dans toutes les fenêtres si les signatures sont distinctes. Dans un groupe de signatures identiques, chaque membre disparu appelle bestReplacement, qui alloue, calcule puis trie toute la liste disponible pour lire seulement les deux meilleurs scores. Le commentaire O(M+W) est donc faux dans ce cas. Cette fonction est appelée par chaque réconciliation de snapshot, sous verrou exclusif dans le producteur.",
+      "evidence": "    let available = candidates.filter { !claimed.contains($0.id) }\n    guard !available.isEmpty else { return nil }\n\n    // Proximité de cadre exigée même pour un candidat unique (SPEC-016 FR-006) : un titre\n    // identique ne suffit pas.\n    let scored = available\n        .map { window in (window: window, score: frameDistance(member.frame, window.frame)) }\n        .sorted { lhs, rhs in lhs.score < rhs.score }\n    guard let best = scored.first else { return nil }\n    let second = scored.dropFirst().first?.score ?? .greatestFiniteMagnitude",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Construire une PersistentStageState avec m membres absents portant tous le même bundle et titre, ancien pid nul ou mort, et des IDs différents des fenêtres vivantes. Fournir w fenêtres vivantes de la même signature, avec cadres en ordre non trié et les deux meilleures distances séparées de moins de 120 : chaque rapprochement est ambigu, aucune fenêtre n’est réclamée. Chaque ancien membre filtre et retrie les mêmes w candidats. Appeler reconcileWindowIDs(with:..., isProcessAlive:{_ in false}) en fixture isolée. Ce cas correspond à une application relancée avec plusieurs fenêtres de titre générique ; les tests actuels couvrent l’ambiguïté sur un membre et deux candidats.",
+      "impact": "Travail O(m*w log w) dans la branche de rapprochement et allocations répétées ; ce travail retient le verrou d’état. Le surcoût apparaît pendant le rapprochement de fenêtres après disparition/relance, pas quand tous les IDs sont encore présents. Aucune latence réelle n’a été mesurée.",
+      "path_type": "hot",
+      "frequency_notes": "Appel depuis chaque snapshot (DaemonSnapshot.reconcile:371), dont le producteur sous StageStore.mutate:272. Branche conditionnée aux IDs disparus et au pid ancien mort/inconnu. L’événement qui ouvre cette branche est rare ; sévérité finale à arbitrer par le coordinateur selon module 01. Aucun plafond cardinalité n’a été trouvé dans les fichiers lus.",
+      "complexity_current": "O(M + W + Σ(m_s * w_s log w_s)) ; O(m*w log w) si tous les membres/candidats ont la même signature",
+      "complexity_target": "O(M + W + Σ(m_s * w_s)) après suppression des tris ; éventuel index géométrique séparé à évaluer seulement si les groupes sont volumineux",
+      "remediation": "Calculer seulement les deux minima en un passage, sans filter/map/sorted intermédiaires, en conservant les exclusions claimed, le seuil 360 et l’écart 120. Corriger le commentaire de complexité. Mesurer séparément le cas courant et le cas ambigu ; un index géométrique est une étape ultérieure, pas une condition de cette correction.",
+      "remediation_code": "private func bestReplacement(\n    for member: PersistentStageMember,\n    in candidates: [WindowSnapshot],\n    claimed: Set<WindowID>\n) -> WindowSnapshot? {\n    var best: (window: WindowSnapshot, score: Double)?\n    var second = Double.greatestFiniteMagnitude\n    for candidate in candidates where !claimed.contains(candidate.id) {\n        let score = frameDistance(member.frame, candidate.frame)\n        if score < (best?.score ?? .greatestFiniteMagnitude) {\n            second = best?.score ?? .greatestFiniteMagnitude\n            best = (candidate, score)\n        } else if score < second {\n            second = score\n        }\n    }\n    guard let best, best.score <= 360, second - best.score >= 120 else { return nil }\n    return best.window\n}",
+      "verification": "Conserver les tests proches/ambigus/exclus, ajouter plusieurs membres et candidats de même signature, comparer les appariements au comportement actuel. Mesurer des cardinalités croissantes et le nombre de comparaisons ; ne pas annoncer de gain de durée sans mesure. Retour arrière : rétablir bestReplacement si une équivalence sur données valides échoue.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "structure et complexité confirmées par lecture ; aucun benchmark exécuté ; HIGH provisoire soumis au contre-audit indépendant",
+      "counter_audit_pending": true,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageStore.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 639,
+          "evidence": "                for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {\n                    let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]\n                    guard !liveWindowIDs.contains(member.windowID),\n                          member.pid.map(isProcessAlive) != true,\n                          let replacement = bestReplacement(\n                              for: member,\n                              in: windowsBySignature[StableWindowSignature(member: member)] ?? [],\n                              claimed: claimedWindowIDs\n                          )",
+          "note": "Appel du tri pour chaque membre disparu."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 270,
+          "evidence": "            // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode\n            // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent\n            // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont\n            // dupliques N fois (un par composant) dans events.jsonl.\n            appendReconciliationEvents(result)\n            // Une destruction est consommée quand la fenêtre a quitté la liste vivante : avant,\n            // elle bloque seulement sa réinsertion (liste CoreGraphics en retard sur AX).",
+          "note": "Réconciliation tenue sous le verrou de StageStore.mutate."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 367,
+          "evidence": "        }\n        let activeDisplayIDBeforeMissingReconciliation = persistedStages.activeDisplayID\n        let liveWindowIDs = stageManagedWindowIDs\n        let mouseLocation = input.mouseLocation\n        persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })\n        let missingWindows = persistedStages.pruneMissingWindows(\n            keeping: liveWindowIDs,\n            liveDisplayIDs: liveDisplayIDs,\n            missingGrace: Self.stageMembershipMissingGrace,\n            lastObservedAt: input.lastObservedWindowAt,",
+          "note": "Entrée de la réconciliation des identifiants."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+          "line": 185,
+          "evidence": "    func reconcileWindowIDsRefusesTwoNearCandidatesWithSmallScoreGap() {\n        let scope = PersistentStageScope(displayID: DisplayID(rawValue: \"main\"), stages: [\n            PersistentStage(id: StageID(rawValue: \"1\"), members: [member(10, title: \"Default\")]),\n        ])\n        var state = stateWith(scopes: [scope])\n\n        state.reconcileWindowIDs(with: [\n            window(110, title: \"Default\", x: 50),\n            window(120, title: \"Default\", x: 100),\n        ])\n\n        let index = state.stageScopeIndex()\n        #expect(index[WindowID(rawValue: 10)]?.stageID == StageID(rawValue: \"1\"))\n        #expect(index[WindowID(rawValue: 110)] == nil)\n        #expect(index[WindowID(rawValue: 120)] == nil)\n    }",
+          "note": "Ambiguïté déjà prévue et testée, sans test de cardinalité."
+        }
+      ],
+      "discovery_command": "rg -n \"bestReplacement|reconcileWindowIDs|sorted\" Sources/RoadieDaemon/StageStore.swift Sources/RoadieDaemon/DaemonSnapshot.swift"
+    }
+  ],
+  "positive_findings": [
+    "DisplayParkingService.swift:257-294 : la restauration regroupe bien par bureau d’origine ; REL-017 confirmé résolu après lecture intégrale actuelle.",
+    "JSONPersistence.swift:125-151 : mutateChecked refuse l’exécution du corps si verrou ou décodage échoue, puis propage tout échec d’écriture ; cause racine résiduelle dans les appelants multi-écritures, pas dans cette primitive.",
+    "FileLock.swift:82-94 : withLock libère le verrou par defer ; les usages JSONPersistence ont une libération explicite même sur erreur.",
+    "LayoutCommandService.swift:468-500 : commitStageTransfer conserve avant/après, restaure conditionnellement et expose PartialCommitError en cas d’échec du rollback ; sa réutilisation sur treeCommand évite une nouvelle abstraction.",
+    "WindowGroupCommandTests.swift : la lecture intégrale confirme les assertions sur membres et focus persistés (TEST-003 résolu). Le manque de vérification de statut sur membre absent explique CMD-NEW-01 sans réouvrir TEST-003.",
+    "RestoreSafetyService.swift : lecture intégrale des exclusions plein écran natif, des fenêtres introuvables, du marqueur de reprise, de la réservation sous verrou puis des opérations AX hors verrou."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RulesCommandService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayParkingService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileLock.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RestoreSafetyService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowPresentationStateResolver.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayTopology.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutIntentStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT3Tests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": [
+        {
+          "start": 1,
+          "end": 88
+        },
+        {
+          "start": 300,
+          "end": 328
+        },
+        {
+          "start": 705,
+          "end": 735
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        {
+          "start": 190,
+          "end": 300
+        },
+        {
+          "start": 345,
+          "end": 385
+        },
+        {
+          "start": 1380,
+          "end": 1455
+        },
+        {
+          "start": 1500,
+          "end": 1535
+        },
+        {
+          "start": 1995,
+          "end": 2022
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "ranges": [
+        {
+          "start": 1040,
+          "end": 1082
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift",
+      "ranges": [
+        {
+          "start": 270,
+          "end": 340
+        },
+        {
+          "start": 455,
+          "end": 505
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+      "ranges": [
+        {
+          "start": 189,
+          "end": 245
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift",
+      "ranges": [
+        {
+          "start": 1,
+          "end": 125
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift",
+      "ranges": [
+        {
+          "start": 1,
+          "end": 125
+        },
+        {
+          "start": 180,
+          "end": 222
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+      "ranges": [
+        {
+          "start": 130,
+          "end": 235
+        }
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TreeAuthorityTests.swift",
+      "ranges": [
+        {
+          "start": 1,
+          "end": 98
+        },
+        {
+          "start": 190,
+          "end": 250
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    "Complément ciblé à la lecture complète de 11 fichiers de production présents dans raw-commands audit02 mais absents de files_read_full audit03. Les lectures antérieures audit02 ne sont pas comptées. 12 fichiers production sont lus intégralement ici avec LayoutIntentStore, plus 4 fichiers de tests.",
+    "Aucun test, build, benchmark, linter ou JSCPD exécuté par ce sous-agent, conformément au mandat. Aucun processus arrêté/relancé. Aucun code applicatif modifié.",
+    "REL-042 reste résolu pour sa cause précise (déduction d’échec à partir des mots du message). CMD-NEW-01 est un défaut distinct de choix du statut métier, à renuméroter REL-043 si retenu.",
+    "L’ancien identifiant local REL-102 dans raw-commands audit02 relève déjà de REL-021 : pas de nouveau doublon pour les chemins de persistance résiduels.",
+    "CMD-NEW-02 HIGH est provisoire : contre-audit indépendant et arbitrage de fréquence requis avant inclusion au rapport final. Aucun benchmark ni nombre de fenêtres réel de la machine n’a été mesuré.",
+    "Doublons : lecture manuelle des fichiers complets ; aucune mesure quantitative de duplication n’a été effectuée dans ce complément.",
+    "Les cas d’échecs AX réels, ENOSPC, permission tardive et courses interprocessus sont vérifiés par lecture des chaînes et des fixtures existantes, sans injection ni action sur les fenêtres de travail.",
+    "La correction de synthèse « jamais d’état incohérent » dans positive_findings du premier raw-commands est trop générale : elle doit être limitée aux helpers et chemins effectivement couverts."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Aucun bloc de lignes supprimable à comportement constant identifié après lecture complète de ce complément. Les wrappers de stores apportent typage, valeur initiale, lock et politique d’échec ; la centralisation de JSONPersistence est utile. La fragilité résiduelle vient de chemins qui n’utilisent pas les primitives communes existantes. Réutiliser commitStageTransfer et le mécanisme d’intent avant effet réduit le nombre de règles transactionnelles distinctes.",
+    "virtues": {
+      "future_cognitive_load": "Réduite par les primitives partagées ; augmentée localement par les exceptions de séquencement relevées dans REL-021.",
+      "volume_justification": "Les mécanismes de sauvegarde, de reprise et de compatibilité ont un besoin concret documenté.",
+      "abstractions": "StageStore, LayoutIntentStore et JSONPersistence portent des règles de persistance ; pas de nouvelle abstraction recommandée.",
+      "human_accountability": "Les invariants principaux sont commentés. Le commentaire O(M+W) et les affirmations de résultat intégral doivent être corrigés selon les findings.",
+      "opaque_zones": "Aucune zone inexpliquée identifiée dans les fichiers complets ; limites d’exécution et de mesure déclarées."
+    }
+  }
+}

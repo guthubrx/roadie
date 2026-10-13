@@ -1,0 +1,9 @@
+{
+  "head": "4643ae4df4b3390218e9d9acebaa87f878c40b9c",
+  "tracked_files_hashed": 709,
+  "changed_tracked_files": [],
+  "git_status": "?? audits/2026-10-13/full-codebase-03/\n",
+  "only_output_directory_untracked": true,
+  "scratch_removed": true,
+  "verification_scope": "Fichiers suivis dans le worktree, état Git et présence du scratch. Aucun audit exhaustif du système de fichiers hors worktree."
+}

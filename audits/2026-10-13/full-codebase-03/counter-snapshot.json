@@ -1,0 +1,144 @@
+{
+  "finding_id": "PERF-010",
+  "verdict": "CONFIRMED",
+  "severity": "HIGH",
+  "category": "performance",
+  "subcategory": "algorithmic_complexity",
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation",
+  "counter_audit_mode": "indépendant, posture de réfutation, lecture seule du code",
+  "summary": "La reconstruction de RoadieState effectue un parcours quadratique évitable pour w fenêtres distinctes non épinglées dans un seul scope, même si ce scope était déjà persisté. Aucun plafond de fenêtres applicable à cette boucle n’a été trouvé.",
+  "grep_commands": [
+    "rg -n 'assignWindow|removeWindow|func snapshot|func sharedSnapshot|for window|windows\\(|prefix\\(|maxWindows|windowLimit' Sources/RoadieDaemon/DaemonSnapshot.swift Sources/RoadieStages/RoadieState.swift Tests",
+    "rg -n 'func windows\\(|protocol SystemSnapshotProviding|class LiveSystemSnapshotProvider|struct LiveSystemSnapshotProvider|producerSnapshot\\(|max.*[Ww]indow|[Ww]indow.*[Ll]imit|[Ww]indow.*[Cc]ap|snapshot.*[Pp]erformance|[Ss]napshot.*[Bb]enchmark' Sources Tests/RoadieStagesTests Tests/RoadieDaemonTests"
+  ],
+  "evidence": [
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 381,
+      "evidence": "        var state = RoadieState()\n        var scopedWindows: [ScopedWindowSnapshot] = []\n        for display in displays {",
+      "interpretation": "Chaque réconciliation reconstruit le conteneur runtime à partir de zéro."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 413,
+      "evidence": "        // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.\n        var stageIndex = persistedStages.stageScopeIndex()\n        for window in windows {\n            guard stageManagedWindowIDs.contains(window.id) else {\n                scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))\n                continue\n            }",
+      "interpretation": "L’index inverse accélère la recherche du scope persistant. Il ne remplace pas les recherches dans RoadieState."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 514,
+      "evidence": "            try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)\n            if window.isTileCandidate, pin == nil {\n                try? state.assignWindow(window.id, to: scope)\n            }\n            try? state.setGroups(persistedStage?.groups ?? [], for: scope)",
+      "interpretation": "Toutes les fenêtres gérées non épinglées sont réaffectées, y compris celles dont knownScope existait déjà."
+    },
+    {
+      "file": "Sources/RoadieStages/RoadieState.swift",
+      "line": 77,
+      "evidence": "    public mutating func assignWindow(_ windowID: WindowID, to scope: StageScope) throws {\n        guard displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID] != nil else {\n            throw RoadieStateError.unknownStage(scope)\n        }\n        removeWindow(windowID)\n        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.insert(windowID)\n        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.focusedWindowID = windowID",
+      "interpretation": "Aucune garde ne court-circuite le retrait lorsque cet identifiant n’a jamais été inséré dans cet état."
+    },
+    {
+      "file": "Sources/RoadieStages/RoadieState.swift",
+      "line": 99,
+      "evidence": "            for desktopID in desktopIDs {\n                guard let desktop = displays[displayID]?.desktops[desktopID] else { continue }\n                let stageIDs = Array(desktop.stages.keys)\n                for stageID in stageIDs {\n                    displays[displayID]?.desktops[desktopID]?.stages[stageID]?.remove(windowID)\n                }\n            }",
+      "interpretation": "Le retrait parcourt tous les stages déjà créés, même pour un nouvel identifiant absent partout."
+    },
+    {
+      "file": "Sources/RoadieStages/RoadieState.swift",
+      "line": 171,
+      "evidence": "    public mutating func insert(_ windowID: WindowID) {\n        windowIDs.removeAll { $0 == windowID }\n        windowIDs.append(windowID)\n    }\n\n    public mutating func remove(_ windowID: WindowID) {\n        windowIDs.removeAll { $0 == windowID }",
+      "interpretation": "Dans un unique stage sans groupe, remove puis insert exécutent chacun un parcours complet de la liste croissante."
+    }
+  ],
+  "complexity": {
+    "variable": "w = fenêtres distinctes gérées et non épinglées affectées à un seul scope",
+    "scenario_bounds": "Un écran, un desktop, un stage, aucun groupe. Ces dimensions sont constantes. Les fenêtres ont des identifiants distincts.",
+    "derivation": "Avant la i-ème affectation, le tableau contient i−1 identifiants. StageState.remove examine les i−1 entrées sans trouver le nouvel ID. StageState.insert les examine encore. La somme vaut 2 × Σ(i−1), pour i allant de 1 à w, soit w × (w−1) tests d’égalité. Cette sous-partie est donc Θ(w²). Les éventuelles copies de valeurs et les autres travaux de réconciliation ne suppriment pas cette borne inférieure.",
+    "scope_precision": "Le verdict porte sur la construction runtime de RoadieState. Il ne prétend pas établir une borne supérieure O(w²) pour toutes les autres branches de snapshot, notamment les insertions d’arbres.",
+    "current": "Θ(w²) pour les deux parcours removeAll dans le scénario décrit",
+    "target": "O(w + s) attendu pour une construction groupée avec ensembles/index, s étant le nombre de scopes",
+    "measured_latency": null
+  },
+  "refutation_attempts": [
+    {
+      "hypothesis": "Le cache empêche l’exécution répétée du bloc.",
+      "result": "Partiellement vrai pour les lecteurs, insuffisant pour réfuter.",
+      "proof": "DaemonSnapshot.swift:179-188 retourne le snapshot récent seulement dans sharedSnapshot. snapshot:196-197 et producerSnapshot:203-204 appellent directement la production complète. LayoutMaintainer.swift:177-180 appelle producerSnapshot à chaque tick. Le cache possède une expiration et des invalidations, DaemonSnapshot.swift:2245-2252 et 2301-2314."
+    },
+    {
+      "hypothesis": "L’index stageIndex rend les affectations O(1).",
+      "result": "Réfutée.",
+      "proof": "DaemonSnapshot.swift:413-421 emploie cet index pour knownScope, mais la ligne 516 appelle toujours RoadieState.assignWindow pour la reconstruction. Cet appel ne reçoit pas l’index."
+    },
+    {
+      "hypothesis": "Les gardes limitent w à une constante faible.",
+      "result": "Aucune borne applicable trouvée.",
+      "proof": "DaemonSnapshot.swift:416-441 exclut les fenêtres non gérées et les écrans indisponibles ; 515 exclut les épingles. SystemSnapshotProvider.swift:637-700 transforme la liste CG complète et filtre les attributs individuels, sans prefix, quota ni maximum de cardinalité. Le nombre de fenêtres simultanées reste limité par les ressources du système, pas par une borne algorithmique faible documentée dans ce chemin."
+    },
+    {
+      "hypothesis": "Une borne de taille des fenêtres limite leur nombre à la surface de l’écran.",
+      "result": "Réfutée pour la construction du snapshot.",
+      "proof": "SystemSnapshotProvider.swift:675-679 impose une taille minimale par fenêtre, mais aucune obligation de non-chevauchement. Les fenêtres peuvent se superposer ; la boucle de reconstruction précède le placement. Le commentaire typiquement <20 dans DaemonSnapshot.swift:1881-1883 concerne une autre fonction de vérification des overlaps et ne constitue pas une garde pour assignWindow."
+    },
+    {
+      "hypothesis": "Le chemin est mort ou réservé à une migration.",
+      "result": "Réfutée.",
+      "proof": "snapshot appelle reconcile dans les deux modes persistStateChanges, DaemonSnapshot.swift:264-283. La migration est séparée et conditionnelle à 226-228. LayoutMaintainer.swift:180 montre le chemin producteur normal."
+    }
+  ],
+  "trigger_scenario": {
+    "runtime_sequence": [
+      "Conserver un écran connecté et un stage actif.",
+      "Ouvrir w fenêtres standard distinctes, redimensionnables, non exclues par la configuration, et non épinglées ; les affecter au même stage. Les fenêtres peuvent se superposer.",
+      "Laisser le daemon effectuer une passe normale de maintenance, ou demander un snapshot complet.",
+      "La reconstruction passe w fois par assignWindow, même si toutes les appartenances étaient déjà connues."
+    ],
+    "deterministic_reproduction_design": "Avec le FakeProvider existant dans SnapshotServiceTests.swift:10-21, fournir un écran et w WindowSnapshot aux identifiants distincts, isTileCandidate=true, subrole=AXStandardWindow, furniture=nil et des titres ordinaires. Utiliser une configuration sans exclusion, sans épinglage, et de préférence un mode sans arbre pour isoler le coût. Appeler SnapshotService.snapshot(followFocus:false) avec des stores isolés et persistStateChanges=false. Le cas direct RoadieState.ensureDisplay suivi de w assignWindow reproduit exactement les deux parcours croissants. Ce scénario n’a pas été exécuté pendant le contre-audit.",
+    "executed": false
+  },
+  "tests_reviewed": [
+    {
+      "file": "Tests/RoadieStagesTests/RoadieStateTests.swift",
+      "lines": "1-69, fichier complet",
+      "observation": "Les tests couvrent notamment le déplacement d’un identifiant entre stages et la conservation de l’appartenance. Ils ne fournissent ni plafond de cardinalité ni mesure de complexité."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "lines": "1-110 et 4290-4380 seulement",
+      "observation": "Les tests 4299-4327 et 4332-4365 montrent les appels évités par le cache puis la reprise des scans après expiration/invalidation. Ils utilisent une fenêtre et ne réfutent pas le coût d’une reconstruction complète."
+    }
+  ],
+  "remediation_direction": "Créer un chemin de construction groupée du runtime : accumuler les identifiants par scope dans l’ordre du relevé et construire chaque StageState en une passe avec un Set de déduplication. Le constructeur StageState actuel (159-168) doit aussi changer, car il appelle insert dans une boucle. Conserver assignWindow pour le déplacement interactif si nécessaire. Préserver l’ordre, le focus final et les groupes persistés. Cette direction est une proposition, pas un correctif implémenté.",
+  "severity_rationale": "HIGH conservé selon le module v14 04 : parcours linéaires répétés évitables sur une collection sans plafond de cardinalité applicable. Le chemin est récurrent dans un daemon local ; aucun caractère distant ni chiffre de latence n’est affirmé.",
+  "files_read_full": [
+    "Sources/RoadieStages/RoadieState.swift",
+    "Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "Tests/RoadieStagesTests/RoadieStateTests.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "lines": "1-35, 606-790"
+    },
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "lines": "145-185"
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "lines": "1-110, 4290-4380"
+    }
+  ],
+  "audit_modules_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/00.Generic/audit-code-v14/01-anti-hallucination.md",
+    "/Users/moi/Nextcloud/10.Scripts/00.Generic/audit-code-v14/04-complexite-algorithmique.md"
+  ],
+  "limits": [
+    "Analyse statique. Aucun test, build, benchmark ni profilage exécuté.",
+    "Aucune durée CPU ou latence utilisateur mesurée.",
+    "Le fournisseur système et LayoutMaintainer ont été lus sur les plages déclarées, pas intégralement.",
+    "Aucune recherche de nouveaux findings ; ce verdict porte uniquement sur PERF-010.",
+    "Aucun processus arrêté ou relancé, aucun fichier source modifié.",
+    "Le premier affichage global a été tronqué ; les deux fichiers cibles ont ensuite été relus sans troncature, RoadieState en entier et DaemonSnapshot par plages contiguës 1-2457."
+  ],
+  "execution_metrics_warning": "contre-audit PERF-010: CONFIRME"
+}

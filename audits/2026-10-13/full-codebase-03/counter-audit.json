@@ -1,0 +1,14 @@
+{
+  "PERF-010": {
+    "verdict": "CONFIRMED",
+    "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-snapshot.json"
+  },
+  "PERF-011": {
+    "verdict": "CONFIRMED",
+    "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-layout.json"
+  },
+  "PERF-012": {
+    "verdict": "CONFIRMED",
+    "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-reconcile.json"
+  }
+}

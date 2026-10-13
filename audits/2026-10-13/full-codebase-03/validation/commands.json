@@ -1,0 +1,28 @@
+{
+  "command": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/with-xcode",
+    "swift",
+    "test",
+    "--scratch-path",
+    "/tmp/roadie-build-022-audit3",
+    "--cache-path",
+    "/tmp/roadie-build-022-audit3/cache",
+    "--config-path",
+    "/tmp/roadie-build-022-audit3/config",
+    "--security-path",
+    "/tmp/roadie-build-022-audit3/security",
+    "--disable-sandbox",
+    "--skip-update",
+    "--force-resolved-versions",
+    "--skip",
+    "CLICommandRouterTests|Audit022LotITests|Audit022R2LotCTests|Audit022R4LotT6Tests",
+    "--jobs",
+    "4"
+  ],
+  "environment_overrides": {
+    "TMPDIR": "/tmp/roadie-build-022-audit3/tmp/",
+    "CLANG_MODULE_CACHE_PATH": "/tmp/roadie-build-022-audit3/module-cache",
+    "SWIFTPM_MODULECACHE_OVERRIDE": "/tmp/roadie-build-022-audit3/module-cache"
+  },
+  "excluded_reason": "Trois suites \u00e9crivent des sockets /tmp hors scratch; la suite T6 arr\u00eate des processus."
+}
