@@ -15,6 +15,10 @@ public struct WrittenFrame: Sendable, Equatable {
     public var writesInGeneration: Int
     /// Seconde observation réelle d'un refus de taille (A14) ; nil tant qu'il est en attente.
     public var refusalConfirmedAt: Date?
+    /// Codes AX bruts des phases atteintes par cette tentative, sans lecture supplémentaire.
+    public var axResultCodes: [String: Int32]?
+    /// Booléen AXFullScreen frais avant l'écriture ; nil si cet attribut était illisible ou absent.
+    public var nativeFullscreenReading: Bool?
 
     /// Refus en attente : la frame relue s'écarte de la frame demandée.
     public var hasRefusal: Bool {
@@ -40,11 +44,15 @@ public final class WrittenFrameRegistry: @unchecked Sendable {
     /// Enregistre une écriture. Une nouvelle génération repart à une écriture et efface la frame
     /// acceptée ; la même génération incrémente le compteur. Chaque écriture attend sa propre
     /// confirmation de refus. O(1).
-    public func record(windowID: UInt32, requested: CGRect, readBack: CGRect?, generation: UInt64, at date: Date) {
+    public func record(
+        windowID: UInt32, requested: CGRect, readBack: CGRect?, generation: UInt64, at date: Date,
+        axResultCodes: [String: Int32]? = nil, nativeFullscreenReading: Bool? = nil
+    ) {
         lock.withLock {
             var entry = WrittenFrame(
                 requested: requested, readBack: readBack, accepted: nil, writtenAt: date,
-                generation: generation, writesInGeneration: 1, refusalConfirmedAt: nil
+                generation: generation, writesInGeneration: 1, refusalConfirmedAt: nil,
+                axResultCodes: axResultCodes, nativeFullscreenReading: nativeFullscreenReading
             )
             if let previous = entries[windowID], previous.generation == generation {
                 entry.accepted = previous.accepted

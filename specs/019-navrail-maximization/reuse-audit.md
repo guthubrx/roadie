@@ -97,3 +97,11 @@ Les méthodes privées ajoutées ont été recherchées par nom et responsabilit
 ## Correction de visibilité — 2026-10-13
 
 Statut : PASS. Réutiliser maximizedFrame, currentRailSettings, visibleWidths, isPinned et le callback onVisibleWidthChanged existants. Aucun store/type/helper nouveau. relayoutAfterRailWidthChange et currentRailSettings deviennent internes pour partager la configuration et tester le chemin réel. railHiddenDisplayIDs ajoute une liste des zooms rail-aware pour ignorer seulement l'heuristique maximized, sans ignorer nativeFullscreen. Sources inspectées : DaemonSnapshot, RailRuntimeState, RailPanel, RailController et tests de SPEC-019. Le choix de réserve permanente est remplacé par la demande explicite de visibilité dynamique ; pas de doublon ni arbitrage à demander.
+
+
+## Correction des placements — 2026-10-13
+
+Statut : PASS pour le plan. REUTILISER : LayoutMaintainer (observation, focus restore, masque, refus), WrittenFrameRegistry (budget/générations), SnapshotService (application, furniture native), RestoreSafetyService (snapshot/run marker/reprise). Les tests LayoutMaintainerTests et RestoreSafetyServiceTests portent déjà les fixtures utiles. Aucun nouveau store, service ni dépendance prévu. Les refus AX restent soumis au diagnostic avant correctif ; aucun wrapper ou retry global à créer.
+
+
+Arbitrages de correction : étendre le marqueur de run existant par une date optionnelle est nécessaire pour distinguer arrêt demandé et restauration complète (deux états auparavant confondus). Étendre WrittenFrame par des statuts AX optionnels garde les diagnostics au point d’écriture existant et évite une dépendance AX -> Daemon, un callback ou un nouveau store. Aucun budget ni retry augmenté. Traces : IDs/codes/cadres/génération seulement, sans titres/applications. Les champs inconnus restent nil et les données anciennes sont compatibles.

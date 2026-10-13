@@ -56,3 +56,17 @@ Aucune duplication de service. Le calcul maximizedFrame est une règle métier d
 ## Correction du 2026-10-13 — Visibilité du rail
 
 Le besoin utilisateur précise que le rail masqué libère toute sa bande. Réutiliser visibleWidths et isPinned du RailRuntimeStateStore. Une largeur absente au démarrage auto-hide non épinglé signifie repliée ; pin impose la réservation immédiatement malgré une largeur périmée. Le callback existant onVisibleWidthChanged relance déjà resize ; l'étendre à la seule fenêtre maximisée en overlay. Écarter le zoom rail-aware de l'heuristique hide_on_maximized pour éviter une boucle, tout en gardant le plein écran natif prioritaire. Le getter currentRailSettings et le callback restent internes et deviennent accessibles aux tests ; aucune nouvelle abstraction ni stockage.
+
+
+## Correction des placements observés depuis 5 h 50
+
+Réutiliser les chemins existants : LayoutMaintainer.changedWindows/nonTreeLayout/focusedHiddenRestore, WrittenFrameRegistry/générations et règles de refus, SnapshotService et RestoreSafetyService.unhideAll/run marker. Exclure les observations de fenêtres inactives/masquées des intentions manuelles. Résoudre l’activation avant le masque des voisines. Diagnostiquer les refus AX à partir des états natifs et de la disponibilité, sans augmenter arbitrairement le budget ni masquer un échec. Restauration basée sur visibilité réelle, diagnostics arrêt/crash fidèles. Fixtures synthétiques avant corrections ; sources réparties entre responsables sans chevauchement ; aucun build pendant des écritures. Suite complète, revue adverse, convergence puis livraison intégrée.
+
+
+Précisions après revue : le filtre des faux redimensionnements agit sur le chemin de resize et préserve les signaux d’adoption/dérive. Le focus d’une voisine visible autant que cachée doit être couvert. La garde de restauration native utilise un état natif fiable ; isOnScreen seul ne suffit pas car les fenêtres parkées doivent être restaurées. Les journaux privés restent locaux, la revue utilise le code et les documents synthétiques.
+
+
+Mise en œuvre précisée : préflight AXFullScreen au point commun d’écriture, sous timeout/quarantaine actuels, avant consommation du budget. Les codes de phase déjà retournés par les appels AX sont enregistrés dans WrittenFrame puis ajoutés aux événements de refus compatibles ; aucune lecture de diagnostic supplémentaire. Restaurer avec un marqueur optionnel de demande d’arrêt ; publier crash après réservation de la reprise seulement si cette demande est absente. Refus réels et native-skipped identifiés par IDs/compteur. Les causes précises des refus historiques Grayjay/iTerm ne sont pas établies ; les protections et les traces réduisent le risque sans prétendre contrôler une application qui refuse AX.
+
+
+Le focus validé du snapshot inclut un repli ; confirmer l’activation visible par la cause et le focus réel partagé avec le masque. Conserver la restauration historique du focus caché au poll. Aucun champ de snapshot ni nouvelle mémoire de focus créé. Le centrage de repli ne doit pas changer une voisine visible dont restorePlacement est déjà respecté.

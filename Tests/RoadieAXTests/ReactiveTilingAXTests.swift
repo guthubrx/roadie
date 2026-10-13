@@ -12,7 +12,10 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
     var enumerations = 0
     var windows: [pid_t: AXApplicationWindows] = [:]
     var enhancedUserInterface = false
+    var nativeFullscreen: Bool?
+    var nativeFullscreenReadError: AXError?
     var setErrors: [String: AXError] = [:]
+    var readBackError: AXError?
     var readBack = CGRect(x: 0, y: 0, width: 100, height: 100)
 
     func enumerateWindows(pid: pid_t) -> AXApplicationWindows? {
@@ -22,6 +25,11 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
 
     func value(of attribute: String, on element: AXUIElement) -> (AXError, CFTypeRef?) {
         calls.append("get \(attribute)")
+        if attribute == "AXFullScreen" {
+            if let error = nativeFullscreenReadError { return (error, nil) }
+            if let nativeFullscreen { return (.success, nativeFullscreen ? kCFBooleanTrue : kCFBooleanFalse) }
+            return (.attributeUnsupported, nil)
+        }
         return attribute == AXWindowFrameWriter.enhancedUserInterface
             ? (.success, enhancedUserInterface ? kCFBooleanTrue : kCFBooleanFalse)
             : (.attributeUnsupported, nil)
@@ -29,6 +37,7 @@ private final class SpyAXFrameIO: AXFrameIO, @unchecked Sendable {
 
     func values(of attributes: [String], on element: AXUIElement) -> (AXError, [AnyObject]) {
         calls.append("read \(attributes.joined(separator: ","))")
+        if let error = readBackError { return (error, []) }
         var origin = readBack.origin
         var size = readBack.size
         return (.success, [AXValueCreate(.cgPoint, &origin)!, AXValueCreate(.cgSize, &size)!])
@@ -81,6 +90,56 @@ private struct WriterFixture {
 
 @Suite
 struct AXWindowFrameWriterTests {
+    @Test
+    func freshNativeFullscreenPreventsWritesWithoutConsumingTheBudget() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [501])
+        fixture.io.nativeFullscreen = true
+        var snapshot = window(501, pid: 50)
+        snapshot.furniture = WindowFurniture(isNativeFullscreen: false)
+        let target = CGRect(x: 10, y: 20, width: 300, height: 200)
+        fixture.io.readBack = target
+
+        #expect(fixture.writer.setFrame(target, of: snapshot, generation: 7) == nil)
+        #expect(fixture.io.calls == ["get AXFullScreen"])
+        #expect(fixture.frames.entry(for: 501) == nil)
+
+        // La sortie du plein écran rend le placement possible dans la même génération.
+        fixture.io.nativeFullscreen = false
+        #expect(fixture.writer.setFrame(target, of: snapshot, generation: 7) == target)
+        #expect(fixture.frames.entry(for: 501)?.writesInGeneration == 1)
+        #expect(fixture.frames.entry(for: 501)?.nativeFullscreenReading == false)
+        #expect(fixture.frames.entry(for: 501)?.axResultCodes?["nativeFullscreen"] == AXError.success.rawValue)
+        #expect(fixture.io.frameWrites == ["set AXSize", "set AXPosition", "set AXSize"])
+    }
+
+    @Test
+    func hiddenOrdinaryWindowStillMovesWhenNativeFullscreenIsUnavailable() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [501])
+        var snapshot = window(501, pid: 50)
+        snapshot.isOnScreen = false
+        let target = CGRect(x: -2000, y: 20, width: 300, height: 200)
+        fixture.io.readBack = target
+
+        #expect(fixture.writer.setFrame(target, of: snapshot, generation: 7) == target)
+        #expect(fixture.io.frameWrites == ["set AXSize", "set AXPosition", "set AXSize"])
+        #expect(fixture.frames.entry(for: 501)?.writesInGeneration == 1)
+        #expect(fixture.frames.entry(for: 501)?.nativeFullscreenReading == nil)
+        #expect(fixture.frames.entry(for: 501)?.axResultCodes?["nativeFullscreen"] == AXError.attributeUnsupported.rawValue)
+    }
+
+    @Test
+    func unresponsiveNativeFullscreenReadStopsBeforeWriting() {
+        let fixture = WriterFixture()
+        fixture.io.windows[50] = index(pid: 50, ids: [501])
+        fixture.io.nativeFullscreenReadError = .cannotComplete
+
+        #expect(fixture.writer.setFrame(CGRect(x: 10, y: 20, width: 300, height: 200), of: window(501, pid: 50), generation: 7) == nil)
+        #expect(fixture.io.calls == ["get AXFullScreen"])
+        #expect(fixture.frames.entry(for: 501) == nil)
+    }
+
     @Test
     func writesSizeThenPositionThenSizeThenReadsBackOnce() {
         let fixture = WriterFixture()
@@ -140,6 +199,7 @@ struct AXWindowFrameWriterTests {
     func refusedSizeStillMovesTheWindow() {
         let fixture = WriterFixture()
         fixture.io.windows[53] = index(pid: 53, ids: [531])
+        fixture.io.nativeFullscreen = false
         fixture.io.setErrors[kAXSizeAttribute] = .attributeUnsupported
         let readBack = CGRect(x: 10, y: 10, width: 500, height: 400)
         fixture.io.readBack = readBack
@@ -147,6 +207,31 @@ struct AXWindowFrameWriterTests {
         let applied = fixture.writer.setFrame(CGRect(x: 10, y: 10, width: 300, height: 200), of: window(531, pid: 53))
         #expect(applied == readBack)
         #expect(fixture.io.frameWrites == ["set AXSize", "set AXPosition", "set AXSize"])
+        #expect(fixture.frames.entry(for: 531)?.writesInGeneration == 1)
+        #expect(fixture.frames.entry(for: 531)?.nativeFullscreenReading == false)
+        #expect(fixture.frames.entry(for: 531)?.axResultCodes == [
+            "nativeFullscreen": AXError.success.rawValue,
+            "sizeBefore": AXError.attributeUnsupported.rawValue,
+            "position": AXError.success.rawValue,
+            "sizeAfter": AXError.attributeUnsupported.rawValue,
+            "readBack": AXError.success.rawValue,
+        ])
+    }
+
+    @Test
+    func failedReadBackRecordsItsAXCodeWithoutAnotherWrite() {
+        let fixture = WriterFixture()
+        fixture.io.windows[53] = index(pid: 53, ids: [531])
+        fixture.io.nativeFullscreen = false
+        fixture.io.readBackError = .failure
+        let target = CGRect(x: 10, y: 10, width: 300, height: 200)
+
+        #expect(fixture.writer.setFrame(target, of: window(531, pid: 53), generation: 7) == nil)
+        #expect(fixture.frames.entry(for: 531)?.axResultCodes?["readBack"] == AXError.failure.rawValue)
+        #expect(fixture.frames.entry(for: 531)?.nativeFullscreenReading == false)
+        #expect(fixture.frames.entry(for: 531)?.writesInGeneration == 1)
+        #expect(fixture.io.frameWrites == ["set AXSize", "set AXPosition", "set AXSize"])
+        #expect(fixture.io.calls.filter { $0.hasPrefix("read") } == ["read AXPosition,AXSize"])
     }
 
     @Test
@@ -264,6 +349,7 @@ struct AXWindowFrameWriterTests {
     func failedAttemptsAfterTheAXCallCountTowardsTheBudget() {
         let fixture = WriterFixture()
         fixture.io.windows[59] = index(pid: 59, ids: [591])
+        fixture.io.nativeFullscreen = false
         // Position refusée (pas un délai dépassé, qui mettrait l'application en quarantaine).
         fixture.io.setErrors[kAXPositionAttribute] = .failure
         let target = CGRect(x: 0, y: 0, width: 300, height: 200)
@@ -273,6 +359,11 @@ struct AXWindowFrameWriterTests {
         #expect(writer.setFrame(target, of: window(591, pid: 59), generation: 9) == nil)
         #expect(fixture.frames.entry(for: 591)?.writesInGeneration == 2)
         #expect(fixture.frames.entry(for: 591)?.readBack == nil)
+        #expect(fixture.frames.entry(for: 591)?.axResultCodes == [
+            "nativeFullscreen": AXError.success.rawValue,
+            "sizeBefore": AXError.success.rawValue,
+            "position": AXError.failure.rawValue,
+        ])
         #expect(fixture.frames.isOverBudget(windowID: 591, generation: 9))
 
         let writesBefore = fixture.io.frameWrites.count
@@ -285,6 +376,24 @@ struct AXWindowFrameWriterTests {
 struct WrittenFrameRegistryTests {
     private let requested = CGRect(x: 0, y: 0, width: 800, height: 600)
     private let start = Date(timeIntervalSince1970: 2_000)
+
+    @Test
+    func diagnosticsBelongToTheirAttemptAndDoNotCarryIntoTheNextGeneration() {
+        let registry = WrittenFrameRegistry()
+        let codes = ["position": AXError.failure.rawValue]
+        registry.record(
+            windowID: 1, requested: requested, readBack: nil, generation: 1, at: start,
+            axResultCodes: codes, nativeFullscreenReading: false
+        )
+        #expect(registry.entry(for: 1)?.axResultCodes == codes)
+        #expect(registry.entry(for: 1)?.nativeFullscreenReading == false)
+        #expect(registry.entry(for: 1)?.writesInGeneration == 1)
+
+        registry.record(windowID: 1, requested: requested, readBack: requested, generation: 2, at: start)
+        #expect(registry.entry(for: 1)?.axResultCodes == nil)
+        #expect(registry.entry(for: 1)?.nativeFullscreenReading == nil)
+        #expect(registry.entry(for: 1)?.writesInGeneration == 1)
+    }
 
     @Test
     func classifiesEchoAppResponseAndExternalChange() {

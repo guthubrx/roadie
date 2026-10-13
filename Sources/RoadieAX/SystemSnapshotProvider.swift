@@ -950,12 +950,21 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
                    !registry.isQuarantined(pid),
                    let element = element(pid: pid, id: update.window.id, title: update.window.title,
                                          frame: update.window.frame, windows: &windows, reserved: reserved) {
-                    if enhancedUI == nil {
-                        let app = AXMessaging.application(pid)
-                        enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
-                    }
-                    if !registry.isQuarantined(pid) {
-                        applied = write(update, generation: generation, on: element, pid: pid)
+                    // Le snapshot peut précéder l'entrée en plein écran natif. Un état vrai
+                    // relu interdit toute écriture et ne consomme pas le budget de placement.
+                    let (nativeError, nativeValue) = io.value(of: "AXFullScreen", on: element)
+                    let nativeFullscreen = nativeError == .success ? nativeValue.flatMap(AXReadValue.flag) : nil
+                    if !registry.noteResult(nativeError, pid: pid), nativeFullscreen != true {
+                        if enhancedUI == nil {
+                            let app = AXMessaging.application(pid)
+                            enhancedUI = (app, disableEnhancedUserInterface(app, pid: pid))
+                        }
+                        if !registry.isQuarantined(pid) {
+                            applied = write(
+                                update, generation: generation, on: element, pid: pid,
+                                nativeCode: nativeError.rawValue, nativeFullscreen: nativeFullscreen
+                            )
+                        }
                     }
                 }
                 results.updateValue(applied, forKey: update.window.id)
@@ -1153,30 +1162,43 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// redimensionnable) n'arrete pas l'ecriture ; une position refusee, une fenetre detruite ou
     /// un delai depasse l'arretent. Puis une seule relecture. Toute tentative qui a atteint l'appel
     /// AX est enregistree dans le registre, meme en echec : elle compte au budget A13 (T213).
-    private func write(_ update: WindowFrameUpdate, generation: UInt64, on element: AXUIElement, pid: pid_t) -> CGRect? {
+    private func write(
+        _ update: WindowFrameUpdate, generation: UInt64, on element: AXUIElement, pid: pid_t,
+        nativeCode: Int32, nativeFullscreen: Bool?
+    ) -> CGRect? {
         var position = update.frame.origin
         var size = update.frame.size
         guard let axPosition = AXValueCreate(.cgPoint, &position),
               let axSize = AXValueCreate(.cgSize, &size)
         else { return nil }
 
-        for (attribute, value) in [(kAXSizeAttribute, axSize), (kAXPositionAttribute, axPosition), (kAXSizeAttribute, axSize)] {
+        var codes = ["nativeFullscreen": nativeCode]
+        for (phase, attribute, value) in [("sizeBefore", kAXSizeAttribute, axSize), ("position", kAXPositionAttribute, axPosition), ("sizeAfter", kAXSizeAttribute, axSize)] {
             let error = io.setValue(value, of: attribute, on: element)
-            if registry.noteResult(error, pid: pid) { return record(update, readBack: nil, generation: generation) }
+            codes[phase] = error.rawValue
+            if registry.noteResult(error, pid: pid) {
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+            }
             if error == .invalidUIElement {
                 windowIndex.invalidate(pid: pid)
-                return record(update, readBack: nil, generation: generation)
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
             }
-            if error != .success, attribute == kAXPositionAttribute { return record(update, readBack: nil, generation: generation) }
+            if error != .success, attribute == kAXPositionAttribute {
+                return record(update, readBack: nil, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
+            }
         }
-        return record(update, readBack: frame(of: element, pid: pid), generation: generation)
+        let readBack = frame(of: element, pid: pid) { codes["readBack"] = $0.rawValue }
+        return record(update, readBack: readBack, generation: generation, codes: codes, nativeFullscreen: nativeFullscreen)
     }
 
     /// Inscrit une tentative d'ecriture au registre et rend sa frame relue (nil en echec). O(1).
-    private func record(_ update: WindowFrameUpdate, readBack: CGRect?, generation: UInt64) -> CGRect? {
+    private func record(
+        _ update: WindowFrameUpdate, readBack: CGRect?, generation: UInt64,
+        codes: [String: Int32], nativeFullscreen: Bool?
+    ) -> CGRect? {
         writtenFrames.record(
             windowID: update.window.id.rawValue, requested: update.frame, readBack: readBack,
-            generation: generation, at: now()
+            generation: generation, at: now(), axResultCodes: codes, nativeFullscreenReading: nativeFullscreen
         )
         return readBack
     }
@@ -1185,8 +1207,9 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
 
     /// Lit le cadre AX en un seul aller-retour. Avec un pid, un delai depasse met l'application
     /// de cote et arrete la lecture.
-    func frame(of element: AXUIElement, pid: pid_t?) -> CGRect? {
+    func frame(of element: AXUIElement, pid: pid_t?, onResult: ((AXError) -> Void)? = nil) -> CGRect? {
         let (error, values) = io.values(of: Self.frameAttributeNames, on: element)
+        onResult?(error)
         if let pid {
             if registry.noteResult(error, pid: pid) { return nil }
             if AXReadValue.noteEmbeddedErrors(in: values, pid: pid, registry: registry) { return nil }

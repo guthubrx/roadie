@@ -38,3 +38,17 @@ Dépendances : T001 -> tests T002/T004 -> T003/T005/T006 -> T007/T008/T009 -> T0
 - [x] T014 Étendre Sources/RoadieDaemon/DaemonSnapshot.swift et RailController.swift : cible basée sur visibilité et callback overlay ciblé ; empêcher la boucle hide_on_maximized.
 - [x] T015 Mettre les six README/guides CLI anglais/français et le guide de test de la spec en cohérence.
 - [x] T016 Exécuter la suite Swift complète, relire les changements et vérifier la convergence.
+
+
+## Correction des placements — 2026-10-13
+
+- [x] T017 Confirmer les causes dans les données depuis 5 h 50 et actualiser spec/plan/reuse-audit ; résultat observable : lien de chaque anomalie au chemin existant et hypothèses restantes nommées.
+- [x] T018 Ajouter les reproductions avant correction dans Tests/RoadieDaemonTests/LayoutMaintainerTests.swift puis corriger Sources/RoadieDaemon/LayoutMaintainer.swift : filtre du resize dans son chemin dédié sans supprimer les signaux d’adoption/dérive, stage inactive jamais resize manuel, activation d’une voisine visible ou cachée avant masque, zoom et vraie action de focus conservés (FR-010,011).
+- [x] T019 Reproduire les refus transitoires/natifs et corriger le point identifié d’application AX existant ; vérifier reprise bornée, refus explicite et budget conservé (FR-012).
+- [x] T020 Ajouter les scénarios restart/crash avant correction dans Tests/RoadieDaemonTests/RestoreSafetyServiceTests.swift puis corriger Sources/RoadieDaemon/RestoreSafetyService.swift et le chemin lifecycle existant si nécessaire : visibilité réelle, garde native et diagnostics fidèles ; fixture native, visible, parkée et refus réel (FR-013).
+- [x] T021 Actualiser guide de vérification et mémoire de session, lancer tests ciblés puis suite Swift complète, revue, analyse et convergence exigence par exigence (FR-010 à013, SC-004).
+
+
+## Convergence
+
+- [x] T022 Vérifier deux passes après un focus AX absent avec repli mémorisé dans une stage zoomée, puis exiger un focus système réel pour quitter le zoom au profit d’une voisine visible ou cachée ; garder CmdTab caché au polling avec preuve de focus réel (FR-011). Rejouer la suite complète et la revue avant livraison.

@@ -72,3 +72,15 @@ Je veux utiliser toute la zone disponible à côté du navrail pour une fenêtre
 - La largeur du panneau est celle de sa configuration ; le contenu des cartes ne définit pas une autre surface de fenêtre.
 - Le rail reste à gauche. Les marges de fenêtre seule existantes sont conservées lorsque le rail est visible. Elles sont supprimées lorsque le rail est masqué.
 - Aucun changement automatique de raccourci externe, de permission ou de configuration de masquage.
+
+
+## US4 — Placement stable après activation et changement de stage (P1)
+
+Correction demandée le 2026-10-13 après observation depuis 5 h 50.
+
+- **FR-010** : les déplacements automatiques de masquage, changement de stage et rail ne sont pas interprétés comme un redimensionnement manuel. Ils ne suppriment pas la disposition ou le zoom sauvegardés d’une stage inactive. Un vrai geste garde son effet.
+- **FR-011** : l’activation volontaire d’une voisine ou d’une nouvelle fenêtre dans une stage zoomée la rend visible et restaure la disposition sans la cacher auparavant. Le focus maintenu sur la cible ne quitte pas le zoom.
+- **FR-012** : un changement d’état natif ou une fenêtre momentanément indisponible ne provoque pas des écritures répétées vers un cadre inapplicable. Les reprises restent bornées et utilisent la génération du changement réel. Un refus durable reste explicite ; il ne devient pas un faux placement réussi.
+- **FR-013** : la restauration de sécurité traite les fenêtres effectivement cachées. Elle préserve les fenêtres déjà visibles ou en plein écran natif. Un arrêt intentionnel et une reprise après crash gardent des diagnostics fidèles et les refus réels restent conservés pour reprise.
+
+Scénarios : quitter/revenir à une stage zoomée ; activation d’une nouvelle fenêtre ou Cmd-Tab vers une voisine ; fenêtre nouvellement créée à cadre AX transitoire ; entrée/sortie native ; restart avec une fenêtre déjà visible et un refus véritable. Les tests doivent conserver budget AX, protection native, autres scopes et restauration des proportions.

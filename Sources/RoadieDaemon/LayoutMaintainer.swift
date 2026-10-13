@@ -289,7 +289,12 @@ public final class LayoutMaintainer {
             tickExcludedScopes = settlingScopes.union(suspension.scopes)
         }
         let closedZoomRestoration = closedZoomRestorationCommands(in: snapshot)
-        let focusRestore = focusedHiddenRestore(in: snapshot)
+        // Réutilise la lecture courante du masquage, une seule fois et seulement avec un plein écran actif.
+        let hasActiveFullscreen = tickFullscreen.contains { item in
+            item.entry.scope.map { snapshot.state.activeScope(on: $0.displayID) == $0 } == true
+        }
+        let systemFocusedWindowID = hasActiveFullscreen ? service.focusedWindowID() : nil
+        let focusRestore = focusedHiddenRestore(in: snapshot, cause: cause, systemFocusedWindowID: systemFocusedWindowID)
 
         // 2. Calcul des placements depuis la copie de travail.
         var plan = PassPlan()
@@ -299,7 +304,7 @@ public final class LayoutMaintainer {
             suppressKnownUnmovableFrames(in: restoration, snapshot: snapshot).commands.forEach { plan.add($0, .layout) }
         }
         let hiddenInactive = hideInactiveStageCommands(in: snapshot)
-        let hiddenSiblings = fullscreenSiblingHideCommands(in: snapshot)
+        let hiddenSiblings = fullscreenSiblingHideCommands(in: snapshot, systemFocusedWindowID: systemFocusedWindowID)
         let restoredPins = pinRestoreCommands(in: snapshot)
         let reanchoredZoomed = zoomReanchorCommands(in: snapshot)
         hiddenInactive.forEach { plan.add($0, .hide) }
@@ -602,7 +607,7 @@ public final class LayoutMaintainer {
         result = result.merged(with: resolution.result)
         let nonTreeAll = nonTreeCommands.commands + repairPlan.commands + resolution.commands
         record(result, from: ApplyPlan(commands: nonTreeAll))
-        appendItemEvents(result.merged(with: ApplyResult.filtering(directResult) { layoutWindowIDs.contains($0.windowID) }))
+        appendItemEvents(result.merged(with: ApplyResult.filtering(directResult) { layoutWindowIDs.contains($0.windowID) }), generation: generation)
         result = result.merged(with: directResult)
         result.applied += resolution.hidden
         return PlanApplication(
@@ -689,7 +694,22 @@ public final class LayoutMaintainer {
                 priorityWindowIDs: adoptedWindowIDs
             )
         }
-        let resized = windowIDs(manualResizeWindowIDs, outside: excluded, in: snapshot)
+        // Le signal de déplacement reste intact pour l'adoption multiécran. Seuls les candidats
+        // au redimensionnement sont limités aux fenêtres visibles de la stage active. O(w).
+        let visibleActiveIDs = Set(snapshot.windows.compactMap { entry -> WindowID? in
+            guard let scope = entry.scope, snapshot.state.activeScope(on: scope.displayID) == scope,
+                  entry.window.isTileCandidate, entry.window.isOnScreen,
+                  !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays)
+            else { return nil }
+            return entry.window.id
+        })
+        let changedWindowIDs = Set(changedWindowIDs.intersection(visibleActiveIDs).filter { id in
+            if let previous = lastObservedFrames?[id.rawValue],
+               HiddenWindowPlacement.isHidden(previous.cgRect, in: snapshot.displays) { return false }
+            guard let observed = observedFrames[id.rawValue] else { return false }
+            return writtenFrames.classify(windowID: id.rawValue, observed: observed.cgRect, now: now) != .echo
+        })
+        let resized = windowIDs(manualResizeWindowIDs, outside: excluded, in: snapshot).intersection(visibleActiveIDs)
         if !resized.isEmpty {
             removeLayoutIntents(for: resized, in: snapshot)
             priorityWindowIDs = []
@@ -704,7 +724,7 @@ public final class LayoutMaintainer {
                 manualResizeDetected: true, priorityWindowIDs: resized, persistCurrentIntents: true
             )
         }
-        let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: excluded, in: snapshot)
+        let unexcludedPriorityWindowIDs = windowIDs(priorityWindowIDs, outside: excluded, in: snapshot).intersection(visibleActiveIDs)
         if unexcludedPriorityWindowIDs != priorityWindowIDs {
             priorityWindowIDs = unexcludedPriorityWindowIDs
             if priorityWindowIDs.isEmpty {
@@ -840,6 +860,7 @@ public final class LayoutMaintainer {
         guard let gesture, let id = gesture.windowID, let start = gesture.startFrame,
               let entry = snapshot.windows.first(where: { $0.window.id.rawValue == id }),
               entry.window.isTileCandidate, let scope = entry.scope,
+              !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays),
               snapshot.state.activeScope(on: scope.displayID) == scope,
               snapshot.state.stage(scope: scope)?.mode.isTiled == true
         else { return nil }
@@ -902,7 +923,7 @@ public final class LayoutMaintainer {
             return nil
         }
         if writesUsed(id, generation: generation) >= LayoutTolerance.writeBudgetPerGeneration {
-            acceptObserved(command, reason: "write_budget_exhausted")
+            acceptObserved(command, generation: generation, reason: "write_budget_exhausted")
             return nil
         }
         guard sameTarget, let entry else { return command }
@@ -916,12 +937,12 @@ public final class LayoutMaintainer {
             reportEcho(command, entry: entry)
             return nil
         case .appResponse:
-            acceptObserved(command, reason: "app_response")
+            acceptObserved(command, generation: generation, reason: "app_response")
             return nil
         case .external:
             // Changement externe : une réécriture par génération, puis acceptation (A4, A13).
             guard externalReverts[id] != generation else {
-                acceptObserved(command, reason: "external_change_repeated")
+                acceptObserved(command, generation: generation, reason: "external_change_repeated")
                 return nil
             }
             externalReverts[id] = generation
@@ -958,17 +979,26 @@ public final class LayoutMaintainer {
         }
     }
 
-    private func acceptObserved(_ command: ApplyCommand, reason: String) {
+    private func acceptObserved(_ command: ApplyCommand, generation: UInt64, reason: String) {
         let id = command.window.id.rawValue
         let observed = command.window.frame.cgRect
         if let accepted = writtenFrames.entry(for: id)?.accepted, Self.matches(accepted, observed) { return }
         writtenFrames.accept(windowID: id, frame: observed)
-        events.append(RoadieEvent(type: "layout_app_response_accepted", details: [
+        var details = [
             "windowID": String(id),
             "requested": frameDescription(command.frame),
             "actual": frameDescription(command.window.frame),
             "reason": reason
-        ]))
+        ]
+        // Diagnostic déjà enregistré, uniquement pour cette génération et cette demande, à la tolérance de cadre près.
+        if let entry = writtenFrames.entry(for: id), entry.generation == generation,
+           Self.matches(entry.requested, command.frame.cgRect) {
+            details["axWriteAttempts"] = String(entry.writesInGeneration)
+            details["axReadBack"] = entry.readBack.map { frameDescription(Rect($0)) } ?? "-"
+            details["axNativeFullscreenReading"] = entry.nativeFullscreenReading.map { String($0) } ?? "unknown"
+            for (phase, code) in entry.axResultCodes ?? [:] { details["ax.\(phase)"] = String(code) }
+        }
+        events.append(RoadieEvent(type: "layout_app_response_accepted", details: details))
     }
 
     /// Une seule trace par écriture : la frame observée est celle que Roadie a relue. O(1).
@@ -1573,23 +1603,36 @@ public final class LayoutMaintainer {
         }
     }
 
-    /// Détecte la fenêtre focalisée cachée (FR-002). Le focus sur une voisine cachée d'une fenêtre
-    /// zoomée sort du zoom : changement d'état logique (A15) ; l'intent de zoom est retiré et la
-    /// fenêtre zoomée quitte le plein écran de la passe, le scope est redisposé normalement.
-    private func focusedHiddenRestore(in snapshot: DaemonSnapshot) -> FocusRestore? {
+    /// Focus sur une voisine du zoom : sortie logique avant le masquage, qu'elle soit déjà cachée
+    /// ou encore visible (activation d'application, nouvelle fenêtre). Sinon, restaure le focus caché.
+    /// O(w) hors coût du plan réutilisé ; conserve les exclusions de scope et le focus du snapshot.
+    private func focusedHiddenRestore(in snapshot: DaemonSnapshot, cause: String, systemFocusedWindowID: WindowID?) -> FocusRestore? {
         guard let focusedWindowID = snapshot.focusedWindowID,
               let focusedEntry = snapshot.windows.first(where: { $0.window.id == focusedWindowID }),
               let focusedScope = focusedEntry.scope,
               snapshot.state.activeScope(on: focusedScope.displayID) == focusedScope,
               focusedEntry.window.isTileCandidate,
-              HiddenWindowPlacement.isHidden(focusedEntry.window.frame.cgRect, in: snapshot.displays),
               !tickExcludedScopes.contains(focusedScope),
               let display = snapshot.displays.first(where: { $0.id == focusedScope.displayID })
         else { return nil }
 
+        let zoomedID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID
+        // Un repli mémorisé ne devient pas une activation après le masquage de la voisine.
+        if let zoomedID, zoomedID != focusedWindowID {
+            guard systemFocusedWindowID == focusedWindowID else { return nil }
+        }
+        let isHidden = HiddenWindowPlacement.isHidden(focusedEntry.window.frame.cgRect, in: snapshot.displays)
+        let isNativeZoom = tickFullscreen.contains {
+            $0.entry.window.id == zoomedID && $0.entry.window.furniture?.isNativeFullscreen == true
+        }
+        let activatesFocus = cause.contains("didActivateApplication") || cause.contains("AXFocusedWindowChanged")
+            || cause.contains("AXWindowCreated")
+        let confirmedVisibleFocus = activatesFocus && systemFocusedWindowID == focusedWindowID
+        let isZoomSibling = zoomedID != nil && zoomedID != focusedWindowID && !isNativeZoom && confirmedVisibleFocus
+        guard isHidden || isZoomSibling else { return nil }
         var restoration: ApplyPlan?
-        if let zoomedWindowID = service.commandLayoutIntent(scope: focusedScope)?.zoomedWindowID,
-           zoomedWindowID != focusedWindowID {
+        if let zoomedWindowID = zoomedID,
+           zoomedWindowID != focusedWindowID, !isNativeZoom {
             restoration = service.restoreZoomLayoutIntent(scope: focusedScope, from: snapshot, generation: generations.current)
             tickFullscreen.removeAll { $0.entry.window.id == zoomedWindowID }
             events.append(RoadieEvent(type: "layout_zoom_exited", scope: focusedScope, details: [
@@ -1625,7 +1668,9 @@ public final class LayoutMaintainer {
             guard let target = fullscreenSizedRestoreTarget(for: window.frame.cgRect, on: restore.display) else { return nil }
             return ApplyCommand(window: window, frame: Rect(target))
         }
-        guard !plan.contains(window.id) else { return nil }
+        // Une voisine déjà visible quitte le zoom sans changer son cadre lorsqu'il est restauré.
+        guard HiddenWindowPlacement.isHidden(window.frame.cgRect, in: snapshot.displays),
+              !plan.contains(window.id) else { return nil }
         let command = ApplyCommand(window: window, frame: Rect(centeredVisibleFrame(for: window.frame.cgRect, on: restore.display)))
         return failedFrames[window.id.rawValue]?.matches(command: command) == true ? nil : command
     }
@@ -1662,7 +1707,7 @@ public final class LayoutMaintainer {
 
     /// Masquage des voisines d'une fenêtre en plein écran dans son scope actif. La fenêtre qui a le
     /// focus du système n'est jamais cachée : l'utilisateur vient de la choisir (FR-002). O(n).
-    private func fullscreenSiblingHideCommands(in snapshot: DaemonSnapshot) -> [ApplyCommand] {
+    private func fullscreenSiblingHideCommands(in snapshot: DaemonSnapshot, systemFocusedWindowID: WindowID?) -> [ApplyCommand] {
         let fullscreenItems = tickFullscreen.filter { item in
             guard let scope = item.entry.scope else { return false }
             return snapshot.state.activeScope(on: scope.displayID) == scope
@@ -1670,8 +1715,7 @@ public final class LayoutMaintainer {
         guard !fullscreenItems.isEmpty else { return [] }
         let fullscreenWindowIDs = Set(tickFullscreen.map(\.entry.window.id))
         let fullscreenScopes = Set(fullscreenItems.compactMap(\.entry.scope))
-        // Focus réel du système (pas le focus mémorisé de la stage).
-        let systemFocusedWindowID = service.focusedWindowID()
+        // Focus réel relevé une fois avant la sortie du zoom et partagé avec cette décision.
         let intents = Dictionary(uniqueKeysWithValues: fullscreenScopes.compactMap { scope in
             service.commandLayoutIntent(scope: scope).map { (scope, $0) }
         })
@@ -2485,7 +2529,7 @@ public final class LayoutMaintainer {
         }
     }
 
-    private func appendItemEvents(_ result: ApplyResult) {
+    private func appendItemEvents(_ result: ApplyResult, generation: UInt64) {
         for item in result.items {
             switch item.status {
             case .clamped:
@@ -2495,10 +2539,18 @@ public final class LayoutMaintainer {
                     "actual": item.actual.map(frameDescription) ?? "-"
                 ]))
             case .failed:
-                events.append(RoadieEvent(type: "layout_failed", details: [
+                var details = [
                     "windowID": String(item.windowID.rawValue),
                     "requested": frameDescription(item.requested)
-                ]))
+                ]
+                if let entry = writtenFrames.entry(for: item.windowID.rawValue), entry.generation == generation,
+                   Self.matches(entry.requested, item.requested.cgRect) {
+                    details["axWriteAttempts"] = String(entry.writesInGeneration)
+                    details["axReadBack"] = entry.readBack.map { frameDescription(Rect($0)) } ?? "-"
+                    details["axNativeFullscreenReading"] = entry.nativeFullscreenReading.map { String($0) } ?? "unknown"
+                    for (phase, code) in entry.axResultCodes ?? [:] { details["ax.\(phase)"] = String(code) }
+                }
+                events.append(RoadieEvent(type: "layout_failed", details: details))
             case .applied:
                 break
             }

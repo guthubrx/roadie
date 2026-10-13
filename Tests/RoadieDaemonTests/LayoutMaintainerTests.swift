@@ -3202,7 +3202,7 @@ extension LayoutMaintainerTests {
             state.update(scope)
         }
         currentTime = currentTime.addingTimeInterval(0.1)
-        _ = maintainer.tick()
+        let afterSwitch = maintainer.tick()
         // Au-delà de l'anti-rebond des gestes (0,35 s) mais bien avant la fin d'une stabilisation
         // de membres (2 s) : la nouvelle stage doit déjà être disposée.
         currentTime = currentTime.addingTimeInterval(0.5)
@@ -3210,7 +3210,8 @@ extension LayoutMaintainerTests {
         let events = (try? String(contentsOfFile: eventPath, encoding: .utf8)) ?? ""
 
         #expect(!events.contains("\"type\":\"layout_stage_membership_settling\""))
-        #expect(switched.commands >= 2)
+        #expect(afterSwitch.commands + switched.commands >= 2)
+        #expect(!afterSwitch.manualResizeDetected && !switched.manualResizeDetected)
         #expect(writer.requestedFrames[WindowID(rawValue: 3)] == Rect(x: 0, y: 0, width: 495, height: 500))
         #expect(writer.requestedFrames[WindowID(rawValue: 4)] == Rect(x: 505, y: 0, width: 495, height: 500))
     }
@@ -3406,6 +3407,9 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
     var unwritable: Set<WindowID> = []
     /// Registre tenu par l'écrivain, comme `AXWindowFrameWriter` (commandes comprises, T219).
     var registry: WrittenFrameRegistry?
+    var axResultCodes: [String: Int32]?
+    var nativeFullscreenReading: Bool?
+    var registryGenerationOverride: UInt64?
     var now: () -> Date = Date.init
     var accessibilityTrusted = true
     private(set) var writes: [WindowID: [Rect]] = [:]
@@ -3464,7 +3468,9 @@ private final class TreeWorld: SystemSnapshotProviding, WindowFrameWriting, @unc
         for update in updates {
             let actual = setFrame(update.frame, of: update.window)
             results[update.window.id] = actual
-            registry?.record(windowID: update.window.id.rawValue, requested: update.frame, readBack: actual, generation: generation, at: now())
+            registry?.record(windowID: update.window.id.rawValue, requested: update.frame, readBack: actual,
+                generation: registryGenerationOverride ?? generation, at: now(), axResultCodes: axResultCodes,
+                nativeFullscreenReading: nativeFullscreenReading)
         }
         return results
     }
@@ -5028,5 +5034,262 @@ struct NavrailMaximizationRefusalTests {
         #expect(service.effectiveIntentStore.intent(for: scope)?.zoomedWindowID == nil)
         #expect(provider.snapshots.first(where: { $0.id == sibling.id })?.frame == sibling.frame)
         #expect(writer.attempts <= 2)
+    }
+}
+
+@Suite
+struct PlacementTransitionRegressionTests {
+    @Test(arguments: [WindowManagementMode.bsp, .masterStack])
+    func hidingInactiveStagePreservesIntentAndDoesNotBecomeResize(mode: WindowManagementMode) throws {
+        let display = powerDisplay()
+        let active = powerWindow(401, x: 0, y: 0, width: 1000, height: 800)
+        let parked = powerWindow(402, x: 999, y: 799)
+        let provider = PowerUserProvider(windows: [active, parked])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("placement-stage-hide"))
+        let intents = LayoutIntentStore(path: tempPath("placement-stage-hide-intents"))
+        let eventPath = tempPath("placement-stage-hide-events")
+        let first = StageID(rawValue: "1"), second = StageID(rawValue: "2")
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: display.id,
+            activeStageID: first, stages: [
+                PersistentStage(id: first, mode: mode, focusedWindowID: active.id, members: [
+                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame)]),
+                PersistentStage(id: second, mode: .spatialBsp, focusedWindowID: parked.id, members: [
+                    PersistentStageMember(windowID: parked.id, bundleID: parked.bundleID, title: parked.title, frame: parked.frame)])])],
+            activeDisplayID: display.id))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0)),
+            intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: first)
+        let saved = LayoutIntent(scope: scope, windowIDs: [active.id], placements: [active.id: active.frame],
+            createdAt: Date().addingTimeInterval(-60), source: .command)
+        intents.save(saved)
+        store.mutate { state in
+            var persistent = state.scope(displayID: display.id)
+            persistent.activeStageID = second
+            state.update(persistent)
+        }
+        provider.focusedID = parked.id
+        provider.snapshots[0].frame = Rect(x: 999, y: 799, width: 1000, height: 800)
+        provider.snapshots[1].frame = display.visibleFrame
+        let switched = maintainer.tick(cause: "command:stage.switch")
+        #expect(!switched.manualResizeDetected)
+        #expect(intents.intent(for: scope) == saved)
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(!events.contains("\"type\":\"manual_resize_detected\""))
+    }
+
+    @Test(arguments: [WindowManagementMode.bsp, .masterStack])
+    func explicitResizeOfActiveVisibleWindowStillWorks(mode: WindowManagementMode) throws {
+        let window = powerWindow(411, x: 0, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(windows: [window])
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("placement-real-resize"))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0)), stageStore: store)
+        let gesture = GestureBox()
+        let maintainer = LayoutMaintainer(service: service, takeGesture: { gesture.take() }, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        provider.snapshots[0].frame.width = 800
+        gesture.session = GestureSession(windowID: window.id.rawValue, startFrame: window.frame.cgRect,
+            startedAt: Date().addingTimeInterval(-1), endedAt: Date())
+        #expect(maintainer.tick().manualResizeDetected)
+    }
+
+    @Test(arguments: [WindowManagementMode.float, .bsp, .spatialBsp], [false, true])
+    func focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode: WindowManagementMode, newcomer: Bool) throws {
+        let zoomed = powerWindow(421, x: 0, y: 0, width: 1000, height: 800)
+        let sibling = powerWindow(422, x: 500, y: 100)
+        let provider = PowerUserProvider(windows: [zoomed, sibling])
+        provider.focusedID = sibling.id
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("placement-visible-focus"))
+        let intents = LayoutIntentStore(path: tempPath("placement-visible-focus-intents"))
+        let eventPath = tempPath("placement-visible-focus-events")
+        let scope = StageScope(displayID: powerDisplay().id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        var original = [zoomed.id: Rect(x: 0, y: 0, width: 400, height: 800)]
+        if !newcomer { original[sibling.id] = sibling.frame }
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: scope.displayID,
+            activeStageID: scope.stageID, stages: [PersistentStage(id: scope.stageID, mode: mode, focusedWindowID: sibling.id,
+                members: [PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame),
+                          PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame)].filter {
+                              !newcomer || $0.windowID != sibling.id
+                          })])],
+            activeDisplayID: scope.displayID))
+        intents.save(LayoutIntent(scope: scope, windowIDs: newcomer ? [zoomed.id] : [zoomed.id, sibling.id],
+            placements: newcomer ? [zoomed.id: zoomed.frame] : [zoomed.id: zoomed.frame, sibling.id: sibling.frame], source: .command,
+            zoomedWindowID: zoomed.id, zoomReservesRail: true, restorePlacements: original))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 0)), intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, events: EventLog(path: eventPath), spaceProbe: { _ in false })
+        _ = maintainer.tick(cause: "ax:didActivateApplication")
+        #expect(intents.intent(for: scope)?.zoomedWindowID == nil)
+        #expect(provider.focusedID == sibling.id)
+        #expect(writer.frameHistory[sibling.id, default: []].allSatisfy { powerDisplay().visibleFrame.cgRect.contains($0.cgRect) })
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"layout_zoom_exited\""))
+        #expect(!events.contains("\"type\":\"fullscreen_stage_siblings_hidden\""))
+    }
+}
+
+
+private final class PlacementFocusTransitionProvider: SystemSnapshotProviding, @unchecked Sendable {
+    let base: PowerUserProvider
+    private var focusRead = 0
+    private let focusIDs: [WindowID]
+
+    init(base: PowerUserProvider, focusIDs: [WindowID]) { self.base = base; self.focusIDs = focusIDs }
+    func permissions(prompt: Bool) -> PermissionSnapshot { base.permissions(prompt: prompt) }
+    func displays() -> [DisplaySnapshot] { base.displays() }
+    func windows() -> [WindowSnapshot] { base.windows() }
+    func focusedWindowID() -> WindowID? {
+        defer { focusRead += 1 }
+        return focusIDs[min(focusRead, focusIDs.count - 1)]
+    }
+}
+
+extension PlacementTransitionRegressionTests {
+    @Test
+    func focusChangesDuringPassDoNotProduceHideThenRestore() throws {
+        let zoomed = powerWindow(431, x: 0, y: 0, width: 1000, height: 800)
+        let sibling = powerWindow(432, x: 500, y: 100)
+        let base = PowerUserProvider(windows: [zoomed, sibling])
+        let provider = PlacementFocusTransitionProvider(base: base, focusIDs: [zoomed.id, sibling.id])
+        let writer = PowerUserWriter(provider: base)
+        let store = StageStore(path: tempPath("placement-focus-transition"))
+        let intents = LayoutIntentStore(path: tempPath("placement-focus-transition-intents"))
+        let scope = StageScope(displayID: powerDisplay().id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        intents.save(LayoutIntent(scope: scope, windowIDs: [zoomed.id, sibling.id],
+            placements: [zoomed.id: zoomed.frame, sibling.id: sibling.frame], source: .command,
+            zoomedWindowID: zoomed.id, zoomReservesRail: true,
+            restorePlacements: [zoomed.id: Rect(x: 100, y: 100, width: 300, height: 300), sibling.id: sibling.frame]))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float, gapsOuter: 0)), intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, spaceProbe: { _ in false })
+        _ = maintainer.tick(cause: "ax:didActivateApplication")
+        #expect(writer.frameHistory[sibling.id, default: []].isEmpty)
+        #expect(intents.intent(for: scope)?.zoomedWindowID == zoomed.id)
+        _ = maintainer.tick(cause: "ax:didActivateApplication")
+        #expect(intents.intent(for: scope)?.zoomedWindowID == nil)
+        #expect(base.snapshots.first(where: { $0.id == sibling.id })?.frame == sibling.frame)
+        #expect(writer.frameHistory[sibling.id, default: []].allSatisfy { powerDisplay().visibleFrame.cgRect.contains($0.cgRect) })
+    }
+}
+
+
+extension PlacementTransitionRegressionTests {
+    @Test
+    func externallyRestoredHiddenWindowIsNotAnInferredResize() {
+        let active = powerWindow(441, x: 100)
+        let hidden = powerWindow(442, x: 999, y: 799)
+        let provider = PowerUserProvider(windows: [active, hidden])
+        let writer = PowerUserWriter(provider: provider)
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float)),
+            stageStore: StageStore(path: tempPath("placement-hidden-to-visible")))
+        let maintainer = LayoutMaintainer(service: service, spaceProbe: { _ in false })
+        _ = maintainer.tick()
+        provider.snapshots[1].frame = Rect(x: 500, y: 100, width: 300, height: 300)
+        #expect(!maintainer.tick(cause: "command:stage.restore").manualResizeDetected)
+    }
+}
+
+
+extension PlacementTransitionRegressionTests {
+    @Test(arguments: [true, false])
+    func failedPlacementReportsOnlyMatchingGenerationDiagnostics(matchingGeneration: Bool) throws {
+        let world = TreeWorld(frames: [treeW1: Rect(x: 80, y: 40, width: 300, height: 300), treeW2: treeRight])
+        world.unwritable.insert(treeW1)
+        world.axResultCodes = ["nativeFullscreen": 0, "sizeBefore": 0, "position": -25204]
+        world.nativeFullscreenReading = false
+        if !matchingGeneration { world.registryGenerationOverride = UInt64.max }
+        let harness = TreeHarness("placement-failure-diagnostic", world: world,
+            store: treeStore("placement-failure-diagnostic", tree: treeSideBySide, frames: world.frames))
+        _ = harness.maintainer.tick(cause: "command:startup")
+        let details = try placementEventDetails("layout_failed", text: harness.events)
+        if matchingGeneration {
+            #expect(details["ax.position"] == "-25204")
+            #expect(details["axWriteAttempts"] == "1")
+            #expect(details["axNativeFullscreenReading"] == "false")
+            #expect(details["axReadBack"] == "-")
+        } else {
+            #expect(details["ax.position"] == nil)
+            #expect(details["axWriteAttempts"] == nil)
+        }
+    }
+
+    @Test(arguments: [true, false])
+    func acceptedResponseReportsOnlyMatchingRequestDiagnostics(matchingRequest: Bool) throws {
+        let world = TreeWorld(frames: [treeW1: treeLeft, treeW2: treeRight])
+        let harness = TreeHarness("placement-accept-diagnostic", world: world,
+            store: treeStore("placement-accept-diagnostic", tree: treeSideBySide, frames: world.frames))
+        _ = harness.maintainer.tick(cause: "command:startup")
+        let observed = Rect(x: 80, y: 30, width: 300, height: 300)
+        world.frames[treeW1] = observed
+        var recorded = treeLeft.cgRect
+        if !matchingRequest { recorded.size.width += 30 }
+        for _ in 0..<LayoutTolerance.writeBudgetPerGeneration {
+            harness.registry.record(windowID: treeW1.rawValue, requested: recorded, readBack: observed.cgRect,
+                generation: harness.generations.current, at: harness.clock.now,
+                axResultCodes: ["position": 0, "sizeAfter": -25205, "readBack": 0], nativeFullscreenReading: false)
+        }
+        _ = harness.maintainer.tick(cause: "ax:AXWindowMoved")
+        let details = try placementEventDetails("layout_app_response_accepted", text: harness.events)
+        if matchingRequest {
+            #expect(details["ax.sizeAfter"] == "-25205")
+            #expect(details["axWriteAttempts"] == String(LayoutTolerance.writeBudgetPerGeneration))
+            #expect(details["axReadBack"] == "80,30 300x300")
+        } else {
+            #expect(details["ax.sizeAfter"] == nil)
+        }
+        #expect(world.totalWrites == 0)
+    }
+}
+
+private func placementEventDetails(_ type: String, text: String) throws -> [String: String] {
+    let events = text.split(separator: "\n").compactMap { line in
+        try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any]
+    }
+    let event = try #require(events.first { $0["type"] as? String == type })
+    return try #require(event["details"] as? [String: String])
+}
+
+
+extension PlacementTransitionRegressionTests {
+    @Test
+    func rememberedVisibleSiblingWithoutSystemFocusDoesNotExitZoom() {
+        let display = powerDisplay()
+        let zoomed = powerWindow(451, x: 0, y: 0, width: 1000, height: 800)
+        let sibling = powerWindow(452, x: 500, y: 100)
+        let provider = PowerUserProvider(windows: [zoomed, sibling])
+        provider.focusedID = nil
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("placement-remembered-focus"))
+        let intents = LayoutIntentStore(path: tempPath("placement-remembered-focus-intents"))
+        let scope = StageScope(displayID: display.id, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
+        store.save(PersistentStageState(scopes: [PersistentStageScope(displayID: display.id,
+            activeStageID: scope.stageID, stages: [PersistentStage(id: scope.stageID, mode: .float,
+                focusedWindowID: sibling.id, members: [
+                    PersistentStageMember(windowID: zoomed.id, bundleID: zoomed.bundleID, title: zoomed.title, frame: zoomed.frame),
+                    PersistentStageMember(windowID: sibling.id, bundleID: sibling.bundleID, title: sibling.title, frame: sibling.frame)])])],
+            activeDisplayID: display.id))
+        intents.save(LayoutIntent(scope: scope, windowIDs: [zoomed.id, sibling.id],
+            placements: [zoomed.id: zoomed.frame, sibling.id: sibling.frame], source: .command,
+            zoomedWindowID: zoomed.id, zoomReservesRail: true,
+            restorePlacements: [zoomed.id: Rect(x: 100, y: 100, width: 300, height: 300), sibling.id: sibling.frame]))
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .float)), intentStore: intents, stageStore: store)
+        let maintainer = LayoutMaintainer(service: service, spaceProbe: { _ in false })
+        for pass in 1...3 {
+            _ = maintainer.tick(cause: "ax:didActivateApplication")
+            let recordedZoom = intents.intent(for: scope)?.zoomedWindowID
+            let frame = provider.snapshots.first(where: { $0.id == sibling.id })?.frame
+            print("nil-focus-fixture pass=\(pass) systemFocus=\(String(describing: provider.focusedID)) zoom=\(String(describing: recordedZoom)) siblingFrame=\(String(describing: frame))")
+            #expect(recordedZoom == zoomed.id)
+            #expect(frame.map { HiddenWindowPlacement.isHidden($0.cgRect, in: [display]) } == true)
+        }
+        #expect(writer.frameHistory[sibling.id, default: []].contains { HiddenWindowPlacement.isHidden($0.cgRect, in: [display]) })
     }
 }

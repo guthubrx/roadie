@@ -655,30 +655,11 @@ private func runRestoreWatcher(pid: Int32, pollMs: UInt32, graceMs: UInt32) -> N
     guard restore.shouldRestoreAfterProcessExit(pid: pid) else {
         exit(0)
     }
-    EventLog().append(RoadieEventEnvelope(
-        id: "restore_\(UUID().uuidString)",
-        type: "restore.crash_detected",
-        scope: .restore,
-        subject: AutomationSubject(kind: "process", id: String(pid)),
-        cause: .system,
-        payload: [:]
-    ))
     do {
         // nil : une nouvelle instance a déjà repris le marqueur (et restauré au démarrage).
+        // Le service publie les événements de crash après réservation du marqueur ; un arrêt
+        // volontaire avec restauration incomplète reste repris sans être qualifié de crash.
         guard let result = try restore.recoverAfterProcessExit(pid: pid) else { exit(0) }
-        EventLog().append(RoadieEventEnvelope(
-            id: "restore_\(UUID().uuidString)",
-            type: "restore.crash_completed",
-            scope: .restore,
-            subject: AutomationSubject(kind: "process", id: String(pid)),
-            cause: .system,
-            payload: [
-                "attempted": .int(result.attempted),
-                "applied": .int(result.applied),
-                "failed": .int(result.failed),
-                "missing": .int(result.missing)
-            ]
-        ))
         exit(result.failed == 0 ? 0 : 1)
     } catch {
         fputs("roadied: restore watcher apply failed: \(error)\n", stderr)

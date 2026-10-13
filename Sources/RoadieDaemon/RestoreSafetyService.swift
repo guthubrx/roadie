@@ -38,6 +38,9 @@ public struct RestoreSafetyRunMarker: Codable, Equatable, Sendable {
     public var pid: Int32
     public var startedAt: Date
     public var cleanExitAt: Date?
+    /// Arrêt volontaire demandé, même si la restauration reste incomplète. Un marqueur
+    /// ancien sans ce champ garde la détection de crash et la reprise habituelles.
+    public var shutdownRequestedAt: Date?
     public var snapshotPath: String
     /// pid du processus qui restaure hors verrou pour ce marqueur (watcher). Tant qu'il vit,
     /// un nouveau démarrage ne relance pas la même restauration. Absent des anciens fichiers.
@@ -129,7 +132,7 @@ public struct RestoreSafetyService {
     /// le plus à droite disparaît). Un membre absent du snapshot (le provider ne liste que les
     /// fenêtres à l'écran) est cherché par l'écriture AX parmi toutes les fenêtres de son pid.
     /// Un membre introuvable dont le processus n'est pas prouvé mort compte comme échec.
-    // O(n + m), n = fenêtres live, m = membres de stage.
+    // O(n + m + f log f), n = fenêtres live, m = membres, f = échecs.
     public func unhideAll() -> RestoreSafetyApplyResult {
         // Génération ouverte à l'entrée de la commande (A13, T223).
         let generation = PlacementGeneration.shared.next()
@@ -143,7 +146,16 @@ public struct RestoreSafetyService {
 
         var targets: [WindowSnapshot] = []
         var targetIDs = Set<UInt32>()
+        let nativeMemberIDs = Set(state.scopes.flatMap(\.stages).flatMap(\.members)
+            .filter { $0.presentationState == .nativeFullscreen }.map { $0.windowID.rawValue })
+        var skippedNativeIDs = Set<UInt32>()
         func addTarget(_ window: WindowSnapshot) {
+            // L'état AX actuel prime sur l'ancien état du membre (sortie du plein écran).
+            // macOS gère ces Spaces : les déplacer par AX ne restaure pas un parking Roadie.
+            guard !(window.furniture?.isNativeFullscreen ?? nativeMemberIDs.contains(window.id.rawValue)) else {
+                skippedNativeIDs.insert(window.id.rawValue)
+                return
+            }
             if targetIDs.insert(window.id.rawValue).inserted { targets.append(window) }
         }
         let liveByID = Dictionary(current.windows.map { ($0.window.id.rawValue, $0.window) }, uniquingKeysWith: { first, _ in first })
@@ -159,10 +171,12 @@ public struct RestoreSafetyService {
                 addTarget(entry.window)
             }
         }
-        var unreachable = 0
+        var unreachableIDs = Set<UInt32>()
         for member in Self.hiddenStageMembers(state) where !targetIDs.contains(member.windowID.rawValue) {
             if let live = liveByID[member.windowID.rawValue] {
                 if !Self.isVisible(live.frame, displays: displays) { addTarget(live) }
+            } else if nativeMemberIDs.contains(member.windowID.rawValue) {
+                skippedNativeIDs.insert(member.windowID.rawValue)
             } else if let pid = member.pid {
                 // pid mort : fenêtre fermée, rien à restaurer.
                 guard ProcessLiveness.isAlive(pid) else { continue }
@@ -178,7 +192,7 @@ public struct RestoreSafetyService {
                 ))
             } else if targetIDs.insert(member.windowID.rawValue).inserted {
                 // Sans pid connu (ancien fichier), ni adressable ni prouvée fermée.
-                unreachable += 1
+                unreachableIDs.insert(member.windowID.rawValue)
             }
         }
 
@@ -190,14 +204,17 @@ public struct RestoreSafetyService {
         }
         let result = service.apply(ApplyPlan(commands: commands), generation: generation)
         // Un cadre ajusté par l'application compte comme succès s'il est visible, sinon échec.
-        let clampedHidden = result.items.filter { item in
+        let clampedHiddenItems = result.items.filter { item in
             item.status == .clamped && !(item.actual.map { Self.isVisible($0, displays: displays) } ?? false)
-        }.count
+        }
+        let clampedHidden = clampedHiddenItems.count
+        let failedIDs = Set(result.items.filter { $0.status == .failed }.map { $0.windowID.rawValue })
+            .union(clampedHiddenItems.map { $0.windowID.rawValue }).union(unreachableIDs)
         let report = RestoreSafetyApplyResult(
             path: path,
-            attempted: result.attempted + unreachable,
+            attempted: result.attempted + unreachableIDs.count,
             applied: result.applied + result.clamped - clampedHidden,
-            failed: result.failed + clampedHidden + unreachable,
+            failed: result.failed + clampedHidden + unreachableIDs.count,
             missing: unknown
         )
         eventLog.append(RoadieEventEnvelope(
@@ -211,7 +228,9 @@ public struct RestoreSafetyService {
                 "applied": .int(report.applied),
                 "failed": .int(report.failed),
                 "clamped_hidden": .int(clampedHidden),
-                "unreachable": .int(unreachable),
+                "unreachable": .int(unreachableIDs.count),
+                "failed_window_ids": .array(failedIDs.sorted().map { .int(Int($0)) }),
+                "native_fullscreen_skipped": .int(skippedNativeIDs.count),
                 "unknown_frame": .int(report.missing)
             ]
         ))
@@ -242,15 +261,27 @@ public struct RestoreSafetyService {
         return needsRecovery ? unhideAll() : nil
     }
 
-    /// Arrêt propre : restaure les fenêtres masquées puis marque l'arrêt propre, seulement si
+    /// Arrêt volontaire : note la demande, restaure les fenêtres puis marque l'arrêt propre si
     /// aucune fenêtre connue n'est restée cachée (`failed` couvre aussi les membres
     /// introuvables sans preuve de fermeture). Sinon le marqueur reste « non propre » et le
     /// watcher (ou le prochain démarrage) retente.
     public func finishRun(pid: Int32) -> RestoreSafetyApplyResult {
+        do {
+            try FileLock.withLock(path: recoveryLockPath) {
+                guard var marker = runMarker(), marker.pid == pid else { return }
+                marker.shutdownRequestedAt = Date()
+                try writeMarker(marker)
+            }
+        } catch {
+            fputs("roadied: restore safety shutdown marker failed: \(error)\n", stderr)
+        }
         let result = unhideAll()
         guard result.failed == 0 else { return result }
         do {
-            _ = try markCleanExit(pid: pid)
+            try FileLock.withLock(path: recoveryLockPath) {
+                if let marker = runMarker(), marker.pid != pid { return }
+                _ = try markCleanExit(pid: pid)
+            }
         } catch {
             fputs("roadied: restore safety clean exit failed: \(error)\n", stderr)
         }
@@ -263,22 +294,40 @@ public struct RestoreSafetyService {
     /// marqueur est revérifié : il n'est marqué propre que s'il est toujours le nôtre.
     public func recoverAfterProcessExit(pid: Int32) throws -> RestoreSafetyApplyResult? {
         let owner = ProcessInfo.processInfo.processIdentifier
-        let reserved = try FileLock.withLock(path: recoveryLockPath) { () throws -> Bool in
-            guard var marker = runMarker(), marker.pid == pid, !marker.cleanExit else { return false }
+        let reserved = try FileLock.withLock(path: recoveryLockPath) { () throws -> RestoreSafetyRunMarker? in
+            guard var marker = runMarker(), marker.pid == pid, !marker.cleanExit else { return nil }
             if let other = marker.recoveryOwnerPID, other != owner, ProcessLiveness.isAlive(other) {
-                return false
+                return nil
             }
             marker.recoveryOwnerPID = owner
             try writeMarker(marker)
-            return true
+            return marker
         }
-        guard reserved else { return nil }
+        guard let reserved else { return nil }
+        // Un rollback incomplet après un arrêt demandé doit être repris, sans inventer un
+        // crash. Publier après réservation évite aussi un faux crash si le démarrage a gagné.
+        if reserved.shutdownRequestedAt == nil {
+            eventLog.append(RoadieEventEnvelope(
+                id: "restore_\(UUID().uuidString)", type: "restore.crash_detected", scope: .restore,
+                subject: AutomationSubject(kind: "process", id: String(pid)), cause: .system, payload: [:]
+            ))
+        }
         let result = unhideAll()
         try FileLock.withLock(path: recoveryLockPath) {
             guard var marker = runMarker(), marker.pid == pid, marker.recoveryOwnerPID == owner else { return }
             marker.recoveryOwnerPID = nil
             if result.failed == 0 { marker.cleanExitAt = Date() }
             try writeMarker(marker)
+        }
+        if reserved.shutdownRequestedAt == nil {
+            eventLog.append(RoadieEventEnvelope(
+                id: "restore_\(UUID().uuidString)", type: "restore.crash_completed", scope: .restore,
+                subject: AutomationSubject(kind: "process", id: String(pid)), cause: .system,
+                payload: [
+                    "attempted": .int(result.attempted), "applied": .int(result.applied),
+                    "failed": .int(result.failed), "missing": .int(result.missing)
+                ]
+            ))
         }
         return result
     }

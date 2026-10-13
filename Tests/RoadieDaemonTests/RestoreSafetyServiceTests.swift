@@ -337,6 +337,124 @@ struct RestoreSafetyCoverageTests {
         #expect(fixture.writer.requested[WindowID(rawValue: 2)] == [visibleFrame])
     }
 
+    @Test(arguments: [false, true])
+    func nativeFullscreenWindowIsNotResizedByUnhideAll(parked: Bool) {
+        var native = hiddenWindow(2, frame: parked ? hiddenFrame : visibleFrame)
+        native.isOnScreen = !parked
+        native.furniture = WindowFurniture(isResizable: true, isNativeFullscreen: true)
+        let fixture = makeFixture(liveWindows: [native], hiddenMember: member(2, pid: alivePID))
+        defer { cleanup(fixture) }
+        fixture.writer.unreachable = [native.id]
+
+        let result = fixture.service.unhideAll()
+
+        #expect(result.attempted == 0)
+        #expect(result.applied == 0)
+        #expect(result.failed == 0)
+        #expect(fixture.writer.requested[native.id] == nil)
+    }
+
+    @Test
+    func absentNativeFullscreenMemberIsLeftToMacOS() {
+        var native = member(2, pid: alivePID)
+        native.presentationState = .nativeFullscreen
+        let fixture = makeFixture(hiddenMember: native)
+        defer { cleanup(fixture) }
+        fixture.writer.unreachable = [native.windowID]
+
+        let result = fixture.service.unhideAll()
+
+        #expect(result.attempted == 0)
+        #expect(result.failed == 0)
+        #expect(fixture.writer.requested[native.windowID] == nil)
+    }
+
+    @Test
+    func parkedWindowThatLeftNativeFullscreenIsStillRestored() {
+        var previousNative = member(2, pid: alivePID)
+        previousNative.presentationState = .nativeFullscreen
+        var parked = hiddenWindow(2, frame: hiddenFrame)
+        parked.isOnScreen = false
+        parked.furniture = WindowFurniture(isResizable: true, isNativeFullscreen: false)
+        let fixture = makeFixture(liveWindows: [parked], hiddenMember: previousNative)
+        defer { cleanup(fixture) }
+
+        let result = fixture.service.unhideAll()
+
+        #expect(result.applied == 1)
+        #expect(result.failed == 0)
+        #expect(fixture.writer.requested[parked.id] == [visibleFrame])
+    }
+
+    @Test
+    func failedIntentionalShutdownKeepsRecoveryPendingWithoutCrashEvents() throws {
+        let fixture = makeFixture(hiddenMember: member(2, pid: alivePID))
+        defer { cleanup(fixture) }
+        fixture.writer.unreachable = [WindowID(rawValue: 2)]
+        _ = try fixture.service.markRunStarted(pid: 42)
+
+        let shutdown = fixture.service.finishRun(pid: 42)
+        let marker = try #require(fixture.service.runMarker())
+        let requestedAt = try #require(marker.shutdownRequestedAt)
+        let recovery = try fixture.service.recoverAfterProcessExit(pid: 42)
+        let events = try eventObjects(fixture)
+
+        #expect(shutdown.failed == 1)
+        #expect(requestedAt >= marker.startedAt)
+        #expect(recovery?.failed == 1)
+        #expect(fixture.service.runMarker()?.cleanExit == false)
+        #expect(fixture.service.shouldRestoreAfterProcessExit(pid: 42))
+        #expect(!events.contains { ($0["type"] as? String)?.hasPrefix("restore.crash_") == true })
+        #expect(events.filter { $0["type"] as? String == "restore.unhide_all_failed" }.count == 2)
+
+        fixture.writer.unreachable = []
+        let retry = try fixture.service.startRun(pid: 43)
+        #expect(retry?.applied == 1)
+        #expect(retry?.failed == 0)
+        #expect(fixture.service.runMarker()?.pid == 43)
+    }
+
+    @Test
+    func realCrashStillReportsItsRecoveryAndRejectedWindow() throws {
+        let fixture = makeFixture(hiddenMember: member(2, pid: alivePID))
+        defer { cleanup(fixture) }
+        fixture.writer.unreachable = [WindowID(rawValue: 2)]
+        _ = try fixture.service.markRunStarted(pid: 42)
+
+        let recovery = try fixture.service.recoverAfterProcessExit(pid: 42)
+        let events = try eventObjects(fixture)
+        let failure = try #require(events.first { $0["type"] as? String == "restore.unhide_all_failed" })
+        let payload = try #require(failure["payload"] as? [String: Any])
+
+        #expect(recovery?.failed == 1)
+        #expect(fixture.service.runMarker()?.cleanExit == false)
+        #expect(events.contains { $0["type"] as? String == "restore.crash_detected" })
+        #expect(events.contains { $0["type"] as? String == "restore.crash_completed" })
+        #expect(payload["failed_window_ids"] as? [Int] == [2])
+        #expect(payload["failed"] as? Int == 1)
+    }
+
+    @Test
+    func missingMemberWithoutPIDIsIdentifiedInFailureDiagnostic() throws {
+        let fixture = makeFixture(hiddenMember: member(2, pid: nil))
+        defer { cleanup(fixture) }
+
+        let result = fixture.service.unhideAll()
+        let events = try eventObjects(fixture)
+        let failure = try #require(events.first { $0["type"] as? String == "restore.unhide_all_failed" })
+        let payload = try #require(failure["payload"] as? [String: Any])
+
+        #expect(result.failed == 1)
+        #expect(payload["failed_window_ids"] as? [Int] == [2])
+        #expect(payload["unreachable"] as? Int == 1)
+    }
+
+    private func eventObjects(_ fixture: Fixture) throws -> [[String: Any]] {
+        try String(contentsOfFile: fixture.paths[3], encoding: .utf8).split(separator: "\n").compactMap {
+            try JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
+        }
+    }
+
     @Test
     func unreachableMemberOfLiveProcessBlocksCleanExit() throws {
         let fixture = makeFixture(hiddenMember: member(2, pid: alivePID))
