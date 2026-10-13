@@ -1,0 +1,16 @@
+{
+  "exit_code": 0,
+  "duration_seconds": 55.947,
+  "scratch_path": "/tmp/roadie-build-022-audit2",
+  "tests_passed": 1044,
+  "tests_excluded": 42,
+  "excluded_suites": [
+    "CLICommandRouterTests",
+    "Audit022LotITests",
+    "Audit022R2LotCTests"
+  ],
+  "probe_compile_exit_code": 0,
+  "probe_exit_code": 0,
+  "build_succeeded": true,
+  "scratch_cleaned": true
+}

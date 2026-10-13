@@ -1,0 +1,486 @@
+{
+  "scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation",
+  "mode": "readonly",
+  "counter_audits": [
+    {
+      "candidate": "stage_generated_id_overflow",
+      "verdict": "CONFIRMED",
+      "severity": "HIGH",
+      "exploitability": "CONFIRMED",
+      "path_type": "cold",
+      "verification_status": "Confirmé par lecture indépendante ; aucune commande de crash exécutée.",
+      "conclusion": "L’identifiant numérique Int.max est accepté et conservé. Si aucune stage vide sans nom ne peut être réutilisée, assign-empty calcule Int.max + 1 et arrête le processus qui traite la commande.",
+      "exploitation_scenario": "Sur un écran actif avec une fenêtre gérée active, un état ne contenant que la stage 1 occupée et la configuration workspaces vide : roadie stage create 9223372036854775807 Overflow, puis roadie stage assign-empty. Dans un état différent, nommer ou occuper chaque autre stage vide éligible avant assign-empty. La valeur doit être exactement Int.max sur macOS 64 bits ; une valeur au-delà ne passe pas Int(String) et ne suffit pas.",
+      "refutation_attempts": [
+        "StageID ne vérifie que la non-vacuité de la chaîne, pas sa valeur numérique.",
+        "Le routeur create ne vérifie que la présence et la non-vacuité. parsedStageID conserve la chaîne.",
+        "PersistentStageScope.createStage refuse uniquement un doublon ; aucun plafond numérique.",
+        "nextEmptyStageID peut effectivement éviter le crash si une autre stage est vide sans nom : condition incluse dans le scénario.",
+        "Le nom Overflow empêche la réutilisation de la stage Int.max comme stage vide.",
+        "assignEmpty exige une fenêtre active gérée ; condition incluse dans le scénario.",
+        "Les tests des positions Int.min/Int.max et des identifiants vides ne couvrent pas un identifiant numérique Int.max.",
+        "Le do/catch de CLICommandRouter.run intercepte les erreurs Swift, pas un trap arithmétique."
+      ],
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1695,
+          "end_line": 1705,
+          "evidence": "    private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {\n        if let empty = scope.stages.first(where: { isSelectableStage($0) && $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {\n            return empty.id\n        }\n        return nextGeneratedStageID(in: scope)\n    }\n\n    private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {\n        let numericIDs = scope.stages.compactMap { Int($0.id.rawValue) }\n        let next = (numericIDs.max() ?? scope.stages.count) + 1\n        return StageID(rawValue: String(next))",
+          "note": "Réutilisation éventuelle, puis addition non protégée."
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 96,
+          "end_line": 107,
+          "evidence": "    public func assignEmpty() -> StageCommandResult {\n        let snapshot = service.snapshot()\n        guard let active = activeWindow(in: snapshot),\n              let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays)\n        else {\n            return StageCommandResult(message: \"stage assign-empty: no active window\", changed: false)\n        }\n\n        var state = store.state()\n        let scope = activeScope(displayID: displayID, in: &state)\n        let stageID = nextEmptyStageID(in: scope)\n        return assign(stageID.rawValue)",
+          "note": "Atteignable après la garde de fenêtre active."
+        },
+        {
+          "file": "Sources/RoadieCore/Identifiers.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+          "line": 29,
+          "end_line": 35,
+          "evidence": "public struct StageID: RawRepresentable, Hashable, Codable, Sendable, Comparable, CustomStringConvertible {\n    public let rawValue: String\n\n    public init(rawValue: String) {\n        precondition(!rawValue.isEmpty, \"StageID must not be empty\")\n        self.rawValue = rawValue\n    }",
+          "note": "Aucun plafond numérique pour StageID."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 989,
+          "end_line": 996,
+          "evidence": "        case \"create\":\n            guard let stageID = args.dropFirst().first, !stageID.isEmpty else {\n                err(\"roadie: stage create requires a stage id\")\n                return 64\n            }\n            let name = args.dropFirst(2).isEmpty ? nil : args.dropFirst(2).joined(separator: \" \")\n            let result = StageCommandService(service: service).create(stageID, name: name)\n            return finish(result.message, changed: result.changed)",
+          "note": "create transmet l’identifiant et le nom."
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageStore.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 1137,
+          "end_line": 1141,
+          "evidence": "    public mutating func createStage(_ id: StageID, name: String? = nil, mode: WindowManagementMode = .bsp) -> Bool {\n        guard !stages.contains(where: { $0.id == id }) else { return false }\n        stages.append(PersistentStage(id: id, name: name, mode: mode))\n        return true\n    }",
+          "note": "Création sans plafond numérique."
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 273,
+          "end_line": 283,
+          "evidence": "public struct StageManagerConfig: Equatable, Codable, Sendable {\n    public var enabled: Bool\n    public var hideStrategy: String\n    public var defaultStage: String\n    public var workspaces: [StageDefinition]\n\n    public init(enabled: Bool = true, hideStrategy: String = \"corner\", defaultStage: String = \"1\", workspaces: [StageDefinition] = []) {\n        self.enabled = enabled\n        self.hideStrategy = hideStrategy\n        self.defaultStage = defaultStage\n        self.workspaces = workspaces",
+          "note": "Configuration par défaut sans stages supplémentaires imposées."
+        }
+      ],
+      "remediation": "Protéger l’addition et choisir un identifiant libre en cas de saturation ; conserver les identifiants de stage libres et textuels.",
+      "verification": "Tester assignEmpty avec une stage Int.max nommée, une fenêtre active et aucune autre stage vide sans nom ; attendre un identifiant libre et aucun trap. Ajouter un contre-exemple avec une stage vide sans nom, qui doit être réutilisée.",
+      "original_finding_relation": "Même famille de validation que REL-001. Les deux cas exacts de REL-001 (position Int.min et identifiant vide) sont corrigés ; cette variante constitue une ouverture distincte de la même famille.",
+      "limits": [
+        "Pas de crash réel ni de build/test lancé.",
+        "Aucune fréquence d’apparition mesurée ; la commande est locale et conditionnelle, pas une attaque distante."
+      ]
+    },
+    {
+      "candidate": "bsp_dwindle_quadratic_rescan",
+      "source_id": "PERF-MODELS-001",
+      "verdict": "CONFIRMED",
+      "severity": "HIGH",
+      "exploitability": "CONFIRMED",
+      "path_type": "hot",
+      "verification_status": "Classe de complexité confirmée par lecture ; aucune latence ou allocation mesurée.",
+      "conclusion": "En mode bsp avec split_policy=dwindle, la récursion traite des suffixes de n, n-1, … fenêtres. Sans fenêtre prioritaire, splitRatio balaie encore ces suffixes avant de rendre invariablement 0.5. Les sous-tableaux sont des vues, ce qui évite leurs copies mais ne supprime pas les balayages.",
+      "exploitation_scenario": "Configurer [tiling] split_policy=\"dwindle\", choisir une stage en mode bsp, ouvrir n fenêtres gérées puis demander roadie layout plan, ou déclencher le maintien sans redimensionnement prioritaire. La requête LayoutRequest(mode:.bsp, windowIDs: IDs, splitPolicy:\"dwindle\") avec les ensembles par défaut vides présente également le coût.",
+      "refutation_attempts": [
+        "Le moteur spatialBsp utilise une autre stratégie, mais bsp reste un mode actif explicite ; aucune migration ne remplace automatiquement ce mode dans LayoutPlanner.",
+        "Le découpage équilibré coûte moins cher, mais dwindle choisit explicitement leftCount=1.",
+        "Les retours anticipés de splitRatio ne suffisent pas : les contains de priorité vide parcourent déjà tout le suffixe.",
+        "Le conteneur peut devenir nul ou sans espace, mais split ne s’arrête pas sur sa taille ; la garde usableExtent arrive après les balayages.",
+        "LayoutRequest conserve tous les identifiants fournis. DaemonSnapshot ne les limite pas numériquement.",
+        "Les commentaires ailleurs dans le dépôt évoquent « typiquement <20 » fenêtres et « ~60–100 » membres ; ils décrivent une hypothèse et aucune limite contrôlée. Le fournisseur AX traite toutes les fenêtres admissibles.",
+        "Le test dwindle à 4 fenêtres valide les cadres attendus, pas la croissance du coût.",
+        "Le correctif proposé pour le cas sans priorité est sémantiquement sûr : toutes les branches accessibles sans priorité rendent déjà 0.5."
+      ],
+      "evidence": [
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 38,
+          "end_line": 47,
+          "evidence": "        guard windows.count > 1 else {\n            placements[first] = rect.integral\n            return\n        }\n\n        let leftCount = splitPolicy == \"dwindle\" ? 1 : windows.count / 2\n        let leftWindows = windows.prefix(leftCount)\n        let rightWindows = windows.dropFirst(leftCount)\n        let horizontal = rect.width >= rect.height\n",
+          "note": "Découpage 1 + reste, récursion de profondeur n."
+        },
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 151,
+          "end_line": 159,
+          "evidence": "        let anyPriority = left.contains { priorityWindowIDs.contains($0) }\n            || right.contains { priorityWindowIDs.contains($0) }\n        if !anyPriority {\n            let leftHasNew = left.contains { newWindowIDs.contains($0) }\n            let rightHasNew = right.contains { newWindowIDs.contains($0) }\n            if leftHasNew || rightHasNew {\n                return 0.5\n            }\n        }",
+          "note": "Recherches linéaires des priorités et nouvelles fenêtres par niveau."
+        },
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 161,
+          "end_line": 169,
+          "evidence": "        guard let leftFrame = unionFrame(for: left, in: currentFrames),\n              let rightFrame = unionFrame(for: right, in: currentFrames)\n        else { return 0.5 }\n\n        let usableExtent = horizontal ? rect.width - innerGap : rect.height - innerGap\n        guard usableExtent > 0 else { return 0.5 }\n\n        let priorityLeftFrame = unionPriorityFrame(for: left, in: currentFrames, priorityWindowIDs: priorityWindowIDs)\n        let priorityRightFrame = unionPriorityFrame(for: right, in: currentFrames, priorityWindowIDs: priorityWindowIDs)",
+          "note": "Union des cadres des suffixes, également répétée."
+        },
+        {
+          "file": "Sources/RoadieTiler/LayoutGeometry.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutGeometry.swift",
+          "line": 4,
+          "end_line": 11,
+          "evidence": "func unionFrame(for windowIDs: ArraySlice<WindowID>, in frames: [WindowID: CGRect]) -> CGRect? {\n    let knownFrames = windowIDs.compactMap { frames[$0] }\n    guard var result = knownFrames.first else { return nil }\n    for frame in knownFrames.dropFirst() {\n        result = result.union(frame)\n    }\n    return result\n}",
+          "note": "unionFrame balaie la tranche."
+        },
+        {
+          "file": "Sources/RoadieTiler/LayoutTypes.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutTypes.swift",
+          "line": 74,
+          "end_line": 84,
+          "evidence": "    public static func plan(_ request: LayoutRequest) -> LayoutPlan {\n        switch request.mode {\n        case .bsp:\n            return BSPLayoutStrategy().plan(request)\n        case .masterStack:\n            return MasterStackLayoutStrategy(masterRatio: CGFloat(request.masterRatio)).plan(request)\n        case .float:\n            return FloatLayoutStrategy().plan(request)\n        case .spatialBsp, .mutableBsp:\n            // `mutableBsp` n'est plus qu'un alias décodable de l'arbre (SPEC-017 A8, FR-018).\n            return SpatialBSPLayoutStrategy().plan(request)",
+          "note": "Le mode bsp sélectionne réellement cette stratégie."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1674,
+          "end_line": 1686,
+          "evidence": "        return LayoutPlanner.plan(LayoutRequest(\n            scope: scope,\n            mode: effectiveMode,\n            container: display.visibleFrame.cgRect,\n            windowIDs: liveOrderedWindowIDs,\n            currentFrames: currentFrames,\n            priorityWindowIDs: priorityWindowIDs,\n            newWindowIDs: newWindowIDs,\n            splitPolicy: config.tiling.splitPolicy,\n            outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),\n            innerGap: config.tiling.gapsInner,\n            masterRatio: config.tiling.masterRatio\n        ))",
+          "note": "La configuration et les fenêtres vivantes parviennent à la stratégie."
+        },
+        {
+          "file": "Sources/RoadieStages/RoadieState.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+          "line": 159,
+          "end_line": 174,
+          "evidence": "    public init(id: StageID, name: String, mode: WindowManagementMode = .bsp, windowIDs: [WindowID] = [], groups: [WindowGroup] = []) {\n        self.id = id\n        self.name = name\n        self.mode = mode\n        self.windowIDs = []\n        self.focusedWindowID = nil\n        self.groups = groups\n        for windowID in windowIDs {\n            insert(windowID)\n        }\n    }\n\n    public mutating func insert(_ windowID: WindowID) {\n        windowIDs.removeAll { $0 == windowID }\n        windowIDs.append(windowID)\n    }",
+          "note": "Aucun plafond du nombre de membres à l’insertion."
+        }
+      ],
+      "complexity_current": "O(n²) dans le cas sans priorité, avec dwindle ; cas balanced O(n log n) pour les mêmes balayages.",
+      "complexity_target": "O(n) pour le cas sans priorité ; la branche avec priorités demande un traitement distinct par agrégats.",
+      "remediation": "Retourner 0.5 avant tout balayage lorsque priorityWindowIDs est vide. Pour les priorités présentes, pré-calculer les résumés des sous-arbres si ce chemin est optimisé.",
+      "remediation_code": "guard !priorityWindowIDs.isEmpty else { return 0.5 }",
+      "remediation_placement": "Première instruction de splitRatio, avant anyPriority.",
+      "verification": "Comparer tous les cadres avant/après pour dwindle et balanced, ensembles de nouveautés vides ou non, cadres fournis ou absents. Mesurer durée et allocations pour n=10, 100 et 1000 sans priorité ; vérifier la croissance linéaire du calcul ciblé. Revenir au calcul précédent si un cadre diffère.",
+      "severity_reason": "HIGH selon le module 04 v14 pour une recherche linéaire répétée sans borne imposée. Fonctionnement interactif réel, mais aucune panne de performance mesurée ne justifie CRITICAL.",
+      "limits": [
+        "Pas de benchmark exécuté.",
+        "Le correctif ciblé ne prétend pas éliminer le coût de la branche avec priorités ni la profondeur de pile O(n).",
+        "Aucune affirmation de latence perceptible sur un nombre usuel de fenêtres."
+      ]
+    },
+    {
+      "candidate": "minimum_size_result_rescan",
+      "verdict": "CONFIRMED",
+      "severity": "HIGH",
+      "exploitability": "CONFIRMED",
+      "path_type": "hot",
+      "verification_status": "Lecture complète de la cible et des gardes ; tests de chemin lus, pas exécutés.",
+      "conclusion": "Chaque identifiant retenu par orderedIDs appelle knownMinimumSize, qui reparcourt la totalité de result.items. La construction de minimumSizes coûte donc O(n*r). Le résultat inclut le premier placement puis la réparation des voisines ; les gardes ne plafonnent ni n ni r.",
+      "exploitation_scenario": "Stage active bsp ou masterStack, avec au moins deux résultats clamped et des cadres encore en conflit après stabilisation/réparation. Les n membres visibles sont traités ; chaque membre balaie les r résultats, y compris ceux des autres fenêtres ou scopes. Le test gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden décrit un chemin concret avec 3 fenêtres, dont deux refusent le rétrécissement.",
+      "refutation_attempts": [
+        "La garde clampedItems.count>=2 est réelle et restreint la fréquence ; elle ne borne pas la taille des collections.",
+        "Les modes à arbre et float sont écartés ; bsp et masterStack restent admis.",
+        "La résolution exige un scope actif et un conflit réel de cadres ; elle ne tourne pas à chaque passage normal.",
+        "Le commentaire « n petit » à la fonction ne donne aucune limite vérifiable.",
+        "Les deux essais de réparation bornent le nombre de tentatives mais se produisent après la construction O(n*r).",
+        "Le rejet par aire minimale intervient dans minimumSizeArrangement, appelé après la construction des minima.",
+        "PERF-004 d’origine ciblait siblingIDs.filter/contains dans clampedSiblingRepairPlan ; ce point est corrigé par un Set. Le nouveau candidat porte sur une autre fonction, une autre ligne et une autre collection.",
+        "Les tests du chemin conditionnel confirment sa destination fonctionnelle, pas une borne du nombre de fenêtres."
+      ],
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2776,
+          "end_line": 2786,
+          "evidence": "            // Conteneur du plan : union des cadres demandés, marges extérieures déjà appliquées.\n            let container = orderedIDs\n                .compactMap { requestedFrames[$0] ?? liveFrames[$0] }\n                .reduce(CGRect.null) { $0.union($1) }\n                .intersection(visibleFrame)\n            var minimumSizes = orderedIDs.reduce(into: [WindowID: CGSize]()) { sizes, id in\n                sizes[id] = knownMinimumSize(of: id, in: result)\n            }\n            // Deux essais au plus : le premier peut révéler de nouveaux minimums.\n            var arranged = false\n            for _ in 0..<2 {",
+          "note": "Appel du helper pour chaque identifiant."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2852,
+          "end_line": 2862,
+          "evidence": "    private func knownMinimumSize(of windowID: WindowID, in result: ApplyResult) -> CGSize {\n        var size = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)\n        if let known = clampedFrames[windowID.rawValue] {\n            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))\n        }\n        for item in result.items where item.windowID == windowID && item.status == .clamped {\n            if let actual = item.actual {\n                size = Self.largest(size, Self.minimumSize(requested: item.requested, actual: actual))\n            }\n        }\n        return size",
+          "note": "Le helper reparcourt tous les résultats à chaque appel."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2750,
+          "end_line": 2758,
+          "evidence": "        for (optionalScope, scopedClampedItems) in clampedScopes {\n            guard let scope = optionalScope,\n                  scopedClampedItems.count >= 2,\n                  snapshot.state.activeScope(on: scope.displayID) == scope,\n                  let stage = snapshot.state.stage(scope: scope),\n                  stage.mode.isTiled,\n                  !stage.mode.usesTreeEngine,\n                  let display = snapshot.displays.first(where: { $0.id == scope.displayID })\n            else { continue }",
+          "note": "Gardes de scope et mode, sans plafond n/r."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 603,
+          "end_line": 613,
+          "evidence": "            result = result.merged(with: repairResult)\n            var details = [\n                \"commands\": String(repairPlan.commands.count),\n                \"windowIDs\": repairPlan.commands.map { String($0.window.id.rawValue) }.sorted().joined(separator: \",\")\n            ]\n            if let source { details[\"source\"] = source }\n            events.append(RoadieEvent(type: \"layout_clamped_scope_repaired\", details: details))\n        }\n        let resolution = resolveInfeasibleClampedScopes(from: result, in: snapshot)\n        result = result.merged(with: resolution.result)\n        let nonTreeAll = nonTreeCommands.commands + repairPlan.commands + resolution.commands",
+          "note": "Branche atteinte après la réparation des voisines."
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2687,
+          "end_line": 2692,
+          "evidence": "            }\n            guard !siblingEntries.isEmpty else { continue }\n            // Index des voisines hors boucle : O(n + m) au lieu de O(n · m), ordre de la stage conservé (PERF-004).\n            let siblingIDSet = Set(siblingEntries.map(\\.window.id))\n            let siblingIDs = stage.windowIDs.filter(siblingIDSet.contains)\n            guard !siblingIDs.isEmpty else { continue }",
+          "note": "PERF-004 original réparé indépendamment par index Set."
+        }
+      ],
+      "complexity_current": "O(n*r) pour la seule construction des minima ; la résolution complète garde par ailleurs son solveur O(n³) documenté.",
+      "complexity_target": "O(n+r) pour cette construction avec index des minima par fenêtre ; ne pas annoncer que toute la résolution devient linéaire.",
+      "remediation": "Indexer les minima des résultats une fois avant la boucle des scopes. Pour chaque fenêtre, combiner par maximum sur chaque axe le minimum par défaut, le refus mémorisé et le minimum indexé. Conserver tous les résultats répétés du même ID, car ils peuvent révéler des minima différents.",
+      "verification": "Comparer les dictionnaires produits sur IDs absents, refus sans actual, doublons du même ID, minima par axes différents et mémoire existante. Mesurer le nombre de visites pour n/r croissants. Revenir au helper précédent si un minimum change.",
+      "severity_reason": "HIGH selon le module 04 v14, comme le constat PERF-004 initial portant sur la même branche interactive. Chemin chaud conditionnel de reprise locale, pas un endpoint public ni une boucle exécutée sans garde. Aucune dégradation mesurée ne justifie CRITICAL.",
+      "original_finding_relation": "Nouveau constat ; PERF-004 exact est résolu.",
+      "limits": [
+        "Aucun benchmark ni test exécuté.",
+        "Fréquence réelle et coût perceptible non mesurés.",
+        "Les autres coûts du solveur de disposition ne sont pas évalués comme un nouveau constat dans ce contre-audit."
+      ]
+    },
+    {
+      "candidate": "stage_summon_zero_window_id",
+      "verdict": "CONFIRMED",
+      "severity": "HIGH",
+      "exploitability": "CONFIRMED",
+      "path_type": "cold",
+      "verification_status": "Confirmé par lecture intégrale indépendante du routeur ; commande non exécutée.",
+      "conclusion": "UInt32(\"0\") réussit. Dès qu’un écran est déterminé, le routeur construit WindowID(rawValue:0), qui viole une précondition fatale. Aucune recherche de fenêtre réelle ne précède cette construction.",
+      "exploitation_scenario": "Avec un écran actif et un daemon fonctionnel : roadie stage summon 0. Le routage stage passe par le daemon. Sans daemon, le même routeur local est vulnérable, mais l’impact se limite alors au processus CLI.",
+      "refutation_attempts": [
+        "Les nombres négatifs et les valeurs au-delà de UInt32.max échouent à la conversion ; zéro reste valide pour UInt32.",
+        "La garde de présence d’écran peut refuser la commande sur une machine sans écran ; le scénario impose cet écran.",
+        "Le serveur valide JSON, version et commande admise, pas le contenu de l’identifiant de fenêtre.",
+        "La garde number>0 du fournisseur AX protège les fenêtres énumérées, pas cette entrée CLI.",
+        "Le catch du routeur ne capture pas les préconditions fatales.",
+        "Les tests de validation du lot I portent sur stage create vide et les positions reorder, pas summon 0."
+      ],
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 1063,
+          "end_line": 1067,
+          "evidence": "        case \"summon\":\n            guard let rawWindowID = args.dropFirst().first, let id = UInt32(rawWindowID) else {\n                err(\"roadie: stage summon requires a window id\")\n                return 64\n            }",
+          "note": "Conversion UInt32 sans test id>0."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 1070,
+          "end_line": 1077,
+          "evidence": "            guard let activeDisplayID = state.activeDisplayID ?? snapshot.focusedWindowID.flatMap({ focusedID in\n                snapshot.windows.first { $0.window.id == focusedID }?.scope?.displayID\n            }) ?? snapshot.displays.first?.id else {\n                err(\"roadie: stage summon: no active display\")\n                return 1\n            }\n            let result = StageCommandService(service: service).summon(windowID: WindowID(rawValue: id), displayID: activeDisplayID)\n            return finish(result.message, changed: result.changed)",
+          "note": "Construction fatale après seule garde de l’écran."
+        },
+        {
+          "file": "Sources/RoadieCore/Identifiers.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+          "line": 44,
+          "end_line": 50,
+          "evidence": "public struct WindowID: RawRepresentable, Hashable, Codable, Sendable, Comparable, CustomStringConvertible {\n    public let rawValue: UInt32\n\n    public init(rawValue: UInt32) {\n        precondition(rawValue > 0, \"WindowID must be positive\")\n        self.rawValue = rawValue\n    }",
+          "note": "Précondition de positivité de WindowID."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 286,
+          "end_line": 295,
+          "evidence": "        case \"focus\", \"move\", \"warp\", \"wrap\", \"resize\", \"balance\", \"stage\", \"desktop\", \"display\", \"window\", \"layout\", \"rules\", \"query\", \"bookmark\":\n            return true\n        case \"toggle\":\n            return args.dropFirst().first == \"maximize\"\n        case \"restore\":\n            return args.dropFirst().first == \"unhide-all\"\n        case \"state\":\n            return [\"dump\", \"audit\"].contains(args.dropFirst().first ?? \"\")\n        // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).\n        case \"config\":",
+          "note": "stage est routé au daemon."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 166,
+          "end_line": 178,
+          "evidence": "            return CommandSocketResponse(exitCode: 64, stderr: \"roadie: invalid request\\n\")\n        }\n        guard request.version == Self.protocolVersion else {\n            return CommandSocketResponse(exitCode: 70, stderr: \"roadie: protocol version \\(request.version) not supported\\n\")\n        }\n        guard CLICommandRouter.isDaemonRouted(request.argv) else {\n            return CommandSocketResponse(exitCode: 64, stderr: \"roadie: command not accepted by roadied: \\(request.argv.first ?? \"\")\\n\")\n        }\n        let argv = Self.resolvingPaths(request.argv, cwd: request.cwd)\n        let router = self.router\n        let result = DispatchQueue.main.sync {\n            MainActor.assumeIsolated { router.run(argv) }\n        }",
+          "note": "La validation du serveur transmet argv au routeur sans valider le paramètre."
+        }
+      ],
+      "remediation": "Refuser zéro avant de construire WindowID. Réutiliser un parseur positif pour les autres commandes CLI qui construisent ce type.",
+      "remediation_code": "guard let rawWindowID = args.dropFirst().first, let id = UInt32(rawWindowID), id > 0 else {\n    err(\"roadie: stage summon requires a positive window id\")\n    return 64\n}",
+      "verification": "Tester le routeur avec un fournisseur injecté qui possède un écran, pour 0, -1, 1 et UInt32.max. Zéro et négatif doivent rendre 64 sans trap ; les valeurs positives doivent suivre les traitements existants.",
+      "original_finding_relation": "Même famille de validation que REL-001 ; les deux entrées exactes de ce constat initial sont corrigées.",
+      "limits": [
+        "Aucun crash réel déclenché.",
+        "Le cas group ... 0 est aussi visible dans le routeur, mais group n’est pas routé au daemon : ne pas lui attribuer le même impact."
+      ]
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/WindowManagementMode.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutTypes.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutGeometry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadie/main.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "ranges": [
+        [
+          1065,
+          1225
+        ],
+        [
+          1360,
+          1402
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        [
+          1636,
+          1695
+        ],
+        [
+          1830,
+          1890
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "ranges": [
+        [
+          90,
+          180
+        ],
+        [
+          273,
+          305
+        ],
+        [
+          1250,
+          1290
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+      "ranges": [
+        [
+          150,
+          181
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "ranges": [
+        [
+          632,
+          714
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "ranges": [
+        [
+          160,
+          182
+        ],
+        [
+          214,
+          245
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/LayoutPlannerTests.swift",
+      "ranges": [
+        [
+          66,
+          110
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+      "ranges": [
+        [
+          1060,
+          1100
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+      "ranges": [
+        [
+          170,
+          235
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift",
+      "ranges": [
+        [
+          1,
+          75
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+      "ranges": [
+        [
+          418,
+          442
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+      "ranges": [
+        [
+          1720,
+          1840
+        ],
+        [
+          3215,
+          3310
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+      "ranges": [
+        [
+          400,
+          451
+        ],
+        [
+          680,
+          735
+        ]
+      ]
+    }
+  ],
+  "tests_executed": [],
+  "benchmarks_executed": [],
+  "warnings": [
+    "Lecture intégrale des quatre fichiers cibles terminée par tranches non tronquées après une première commande dont la sortie était tronquée.",
+    "Aucune source modifiée ; seul counter-audit.json est écrit.",
+    "Aucun build, test, commande du daemon, démarrage, arrêt ou redémarrage de processus système.",
+    "Les recherches de bornes couvrent le chemin lu et les documents README/docs recherchés ; elles ne constituent pas une preuve exhaustive de toutes les limitations de macOS.",
+    "Contre-audit statique : aucune latence, fréquence de production ou allocation inventée.",
+    "contre-audit stage_generated_id_overflow: CONFIRMED",
+    "contre-audit bsp_dwindle_quadratic_rescan: CONFIRMED",
+    "contre-audit minimum_size_result_rescan: CONFIRMED",
+    "contre-audit stage_summon_zero_window_id: CONFIRMED"
+  ]
+}

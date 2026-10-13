@@ -1,0 +1,467 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-003",
+      "status": "résolu",
+      "reason": "La fermeture résout désormais la lettre dans overlay.report.targets, puis transmet exactement la cible conservée à activate(target:action:).",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 255,
+          "note": "Résolution de la liste effectivement affichée, puis activate(target:) à la ligne 263."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103"
+      ]
+    },
+    {
+      "id": "REL-004",
+      "status": "résolu",
+      "reason": "Affichage et activation utilisent la même fermeture rootFor ; un index différent de celui de la racine figée résout le nouvel écran.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 348,
+          "note": "Racine choisie par index."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 358,
+          "note": "Affichage depuis rootFor."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 372,
+          "note": "Clic depuis le même rootFor."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:124",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147"
+      ]
+    },
+    {
+      "id": "REL-010",
+      "status": "résolu",
+      "reason": "AXRaise doit réussir. Une erreur de mise au premier plan ou de fenêtre focalisée doit être compensée par une confirmation explicite de l’état réel.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 1072,
+          "note": "Collecte des résultats frontmost, focusedWindow et raise ; relecture conditionnelle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 322,
+          "note": "AXFocusDecision.succeeded exige raise == .success."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022LotJTests.swift:10",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022R2LotGTests.swift:31",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022R2LotGTests.swift:38"
+      ]
+    },
+    {
+      "id": "REL-012",
+      "status": "partiel",
+      "reason": "La portée visible_windows refuse désormais les fenêtres absentes/non focalisées et les éléments déplacés ou remplacés. La portée frontmost_window ne renseigne cependant aucun windowId : elle saute entièrement le contrôle de focus. Une fenêtre recouverte conserve son cadre et peut provoquer un clic sur la fenêtre de devant.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 426,
+          "note": "frontmostWindowCandidates ne renseigne pas le scope de fenêtre."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 807,
+          "note": "Attente du focus conditionnée par windowId et pid."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 819,
+          "note": "Le seul contrôle restant porte sur les coordonnées AX."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 506,
+          "note": "visible_windows, contrairement à frontmost_window, renseigne windowId."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:14",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:15",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift:17"
+      ]
+    },
+    {
+      "id": "REL-013",
+      "status": "résolu",
+      "reason": "Chaque stage porte désormais displayId ; chaque groupe porte displayId et desktopId. Le contrat conserve le décodage des anciens JSON grâce à des champs optionnels.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 103,
+          "note": "displayId présent dans chaque AutomationStageSnapshot."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 146,
+          "note": "Portée composite présente dans AutomationGroupSnapshot."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationSnapshot.swift",
+          "line": 75,
+          "note": "Champ displayId ajouté au modèle public."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift:78",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ]
+    },
+    {
+      "id": "REL-024",
+      "status": "résolu",
+      "reason": "Le replay traite une paire down/up applicative comme un geste avant toute émission. Un échec sémantique retombe sur les événements bruts, dont le relâchement. Le nombre de replis apparaît dans la réponse.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 327,
+          "note": "Tentative sémantique avant émission ; sinon replay de chaque événement."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 292,
+          "note": "Nombre de replis annoncé."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:61",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:78"
+      ]
+    },
+    {
+      "id": "REL-025",
+      "status": "résolu",
+      "reason": "Le bouton est enregistré et les événements bruts conservent leurs drapeaux. Seuls clic gauche, droit ou Commande-clic sont sémantiques ; les combinaisons non représentables restent brutes.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 527,
+          "note": "Bouton conservé par le capteur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 356,
+          "note": "Sélection des combinaisons sémantiques fidèles."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 390,
+          "note": "Type, bouton et flags préservés au replay."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:101",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:120",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:159"
+      ]
+    },
+    {
+      "id": "TEST-001",
+      "status": "résolu",
+      "reason": "Les réponses sont décodées en types métier. Les tests vérifient les IDs, les scopes, les membres du groupe et les règles ; null ou un tableau vide ne passent plus.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift",
+          "line": 52,
+          "note": "Décodage et assertions de contenu des cinq familles de réponses."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:10",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ]
+    },
+    {
+      "id": "TEST-002",
+      "status": "résolu",
+      "reason": "Le contrôleur est réellement instancié avec un présentateur espion. Ses fermetures de sélection et de clic sont appelées. Les adaptateurs de focus, de géométrie et d’émission souris sont testés avec erreurs et replis. Les frontières natives Carbon/AX/CGEvent restent à valider manuellement, limite explicite distincte de l’absence ancienne de tests de raccordement.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 103,
+          "note": "Activation de la liste filtrée réellement transmise au présentateur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 147,
+          "note": "Activation de grille puis inspection des vrais CGEvent construits."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift",
+          "line": 14,
+          "note": "Échec de focus et replay observés à la frontière système."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift",
+          "line": 17,
+          "note": "Références AX et relecture du contenu cliqué."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:61",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift:17"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "REL-201",
+      "original_id": "REL-012",
+      "category": "reliability",
+      "subcategory": "target_focus",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "line": 807,
+      "title": "La portée frontmost_window saute encore le contrôle de focus",
+      "description": "Les cibles de frontmostWindowCandidates sont converties sans scope.windowId. TargetHintService ne demande donc aucun focus et LiveAppTargetProvider.click ne vérifie pas le focus. La relecture du cadre ne détecte pas une fenêtre recouverte : son élément AX peut rester valide aux mêmes coordonnées.",
+      "evidence": "        if let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) {\n            switch waitForFocus(windowID, pid, 0.5) {\n            case .focused:\n                break\n            case .windowGone:\n                return TargetActionResult(changed: false, message: \"stale_target: \\(target.id)\", target: target, error: \"stale_target\")\n            case .timedOut:\n                return TargetActionResult(changed: false, message: \"focus_failed: \\(target.id)\", target: target, error: \"focus_failed\")",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 426,
+          "note": "Production des cibles sans windowId."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 284,
+          "note": "targets(from:) conserve le scope vide par défaut."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 438,
+          "note": "La demande de focus est également conditionnelle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 645,
+          "note": "frontmost_window est la portée par défaut."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Configurer target_mode.overlay_enabled=true, target_mode.app_mouse_actions_enabled=true, app_targets.scope=\"frontmost_window\". Avec deux fenêtres flottantes, ouvrir `roadie targets interactive --source app --include-app-targets --action click` sur A. Cliquer à la souris la barre de titre de B pour recouvrir un bouton de A, sans déplacer A ni fermer son overlay. Valider la lettre du bouton de A. La cible ne porte aucun windowId, son cadre AX est inchangé et le clic part sur B.",
+      "impact": "Une action validée sur A peut toucher une autre fenêtre. La réponse annonce changed=true malgré le focus absent.",
+      "path_type": "hot",
+      "remediation": "Renseigner windowId aussi dans frontmostWindowCandidates. Refuser ensuite tout clic applicatif sans identité de fenêtre ; ne pas considérer la vérification du focus comme optionnelle.",
+      "remediation_code": "// Dans frontmostWindowCandidates, après la résolution de window :\nguard let windowID = axWindowElements(pid: app.processIdentifier).first(where: { CFEqual($0.value, window) })?.key else {\n    return AppTargetQueryReport(error: \"no_focused_window\")\n}\n// Appliquer ce scope à chaque cible convertie avant de la retourner :\nlet targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config).map { candidate in\n    var target = candidate\n    target.scope.windowId = windowID\n    return target\n}\n// Dans click, avant le switch sur waitForFocus :\nguard let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) else {\n    return TargetActionResult(changed: false, message: \"stale_target: \\(target.id)\", target: target, error: \"stale_target\")\n}",
+      "verification": "Tester une cible sans windowId avec currentFrame inchangé et un émetteur espion : zéro événement, erreur explicite. Tester que le constructeur frontmost_window fournit le windowId ; répéter manuellement le recouvrement A/B sur macOS.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture complète ; scénario GUI non exécuté",
+      "runtime_reproduced": false
+    },
+    {
+      "id": "REL-202",
+      "category": "reliability",
+      "subcategory": "target_scope",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TargetHintService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+      "line": 473,
+      "title": "Les actions de stage perdent le bureau de la cible",
+      "description": "Les cibles de stage portent un écran, un bureau et une stage. La liste --include-hidden inclut les stages des autres bureaux et leur propose switch et send-active. Les deux actions ne transmettent que displayId et stageId ; StageCommandService choisit ensuite le bureau actuellement actif.",
+      "evidence": "    private func activateSwitch(_ target: RoadieTarget) -> TargetActionResult {\n        guard target.kind == .stage,\n              let displayID = target.scope.displayId,\n              let stageID = target.scope.stageId\n        else {\n            return TargetActionResult(changed: false, message: \"unsupported_action: switch for \\(target.kind.rawValue)\", target: target, error: \"unsupported_action\")\n        }\n        let result = StageCommandService(service: service, store: stageStore, events: eventLog).switchTo(stageID, displayID: DisplayID(rawValue: displayID))\n        return TargetActionResult(changed: result.changed, message: result.message, target: target, error: result.changed ? nil : \"switch_failed\")",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 495,
+          "note": "send-active perd lui aussi desktopId."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 600,
+          "note": "Stages des autres bureaux accessibles avec includeHidden."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1058,
+          "note": "switchDisplay choisit activeScope."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1646,
+          "note": "activeScope lit currentDesktopID."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Sur un écran E, créer les bureaux 1 et 2 avec chacun une stage 2 ; rester sur le bureau 1, stage 1. Exécuter `roadie targets pick \"stage:E/2/2\" --include-hidden --action switch`. La stage 2 du bureau 1 est sélectionnée. Avec --action send-active, la fenêtre va dans la stage 2 du bureau 1 au lieu de celle du bureau 2.",
+      "impact": "Le client sélectionne un identifiant composite exact mais modifie un autre espace de travail. Les scopes homonymes rendent le résultat trompeur.",
+      "path_type": "hot",
+      "remediation": "Propager le StageScope complet aux actions. Comme correction minimale, refuser explicitement les cibles d’un autre bureau et ne plus leur proposer ces actions tant que la bascule inter-bureaux n’est pas prise en charge.",
+      "remediation_code": "// Garde à placer dans activateSwitch et activateSendActive, après les identifiants :\nlet display = DisplayID(rawValue: displayID)\nguard let desktopID = target.scope.desktopId,\n      stageStore.state().currentDesktopID(for: display).rawValue == desktopID else {\n    return TargetActionResult(\n        changed: false, message: \"target_desktop_not_active: \\(target.id)\",\n        target: target, error: \"target_desktop_not_active\"\n    )\n}",
+      "verification": "Fixture avec bureaux 1 et 2 et stages homonymes. Choisir stage:E/2/2 pendant que 1 est actif. Vérifier soit une action sur le scope exact, soit un refus explicite ; le bureau 1 et ses membres ne doivent pas être modifiés.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture de la construction de cible et des appels jusqu’à activeScope ; scénario non exécuté",
+      "runtime_reproduced": false
+    },
+    {
+      "id": "REL-203",
+      "category": "reliability",
+      "subcategory": "macro_truncation",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+      "line": 475,
+      "title": "Une macro tronquée peut rejouer un appui sans son relâchement",
+      "description": "Le capteur coupe strictement au nombre maximal d’événements et sauvegarde aussi la séquence dès que la durée expire. Il ne complète ni ne retire les gestes encore ouverts. Le replay parcourt cette séquence sans relâcher les boutons ou touches restés appuyés en fin de lecture.",
+      "evidence": "    func append(_ event: TargetMacroEvent) {\n        guard events.count < maxEvents else { return }\n        events.append(event)\n    }",
+      "related_locations": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 274,
+          "note": "Sauvegarde de capture.events sans équilibrage."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 336,
+          "note": "Dernier événement émis, puis fin du replay sans nettoyage."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 937,
+          "note": "max_events accepte la valeur 1."
+        }
+      ],
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Configurer target_record.enabled=true, replay_enabled=true, max_events=1 et include_ax_context=false. Enregistrer un clic gauche ; le down est conservé et le up est rejeté par maxEvents. Rejouer le fichier : replay émet seulement leftMouseDown. Même cas si la durée expire pendant un appui.",
+      "impact": "La macro laisse une séquence de saisie synthétique non équilibrée, susceptible de maintenir une sélection ou un glisser jusqu’à un relâchement ultérieur. Chemin expérimental et ponctuel, sévérité abaissée à LOW.",
+      "path_type": "cold",
+      "remediation": "Suivre les appuis bruts réellement émis et garantir leur relâchement à la fin du replay avec defer. Équilibrer également les enregistrements tronqués, ou signaler leur incomplétude.",
+      "remediation_code": "// Dans replay(events:), suivre les appuis bruts (le chemin sémantique ne les ajoute pas) :\nvar heldMouse: [TargetMacroMouseButton: TargetMacroEvent] = [:]\nvar heldKeys: [Int: TargetMacroEvent] = [:]\ndefer {\n    for var held in heldMouse.values { held.kind = .mouseUp; replay(held) }\n    for var held in heldKeys.values { held.kind = .keyUp; replay(held) }\n}\n// Immédiatement après replay(event) :\nswitch event.kind {\ncase .mouseDown: heldMouse[event.mouseButton] = event\ncase .mouseUp: heldMouse[event.mouseButton] = nil\ncase .keyDown: if let code = event.keyCode { heldKeys[code] = event }\ncase .keyUp: if let code = event.keyCode { heldKeys[code] = nil }\ndefault: break\n}",
+      "verification": "Émetteur espion : rejouer [mouseDown] puis [keyDown] et vérifier le relâchement final correspondant. Rejouer une paire complète et vérifier qu’aucun relâchement supplémentaire n’est émis. Tester une capture atteignant max_events juste après un down.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "séquence déséquilibrée confirmée par lecture ; effet natif sur le bureau non reproduit",
+      "runtime_reproduced": false
+    }
+  ],
+  "positive_findings": [
+    "03 : les clics applicatifs sont désactivés indépendamment de la lecture des cibles et contrôlés avant action (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift:417). Le nom de macro est restreint aux lettres, chiffres, tirets et underscores (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift:422).",
+    "04 : fusion des lots triés de recherche en O(n + b log b), avec plafond explicite de 500 cibles (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetSearchModel.swift:39).",
+    "06 : les résultats AX ne confondent plus erreur de levée de fenêtre et succès ; tests ciblés des erreurs (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift:1082).",
+    "06 : tests du contrôleur et du replay avec événements CGEvent observables sans clic réel (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147).",
+    "08 : registre des éléments AX remplacé à chaque parcours et protégé par un verrou ; ajouts des générations dépassées ignorés (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift:344). Réévaluation géométrique limitée à deux appels et un budget commun (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift:865)."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetGridService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetInspectionService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetOverlayPresenter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetSearchHotkey.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetSearchModel.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationQueryService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/AXWindowEventObserver.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/PermissionSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SpaceProbe.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/WrittenFrameRegistry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/AppTargetQueryServiceTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetMacroServiceTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022LotJTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022R2LotGTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/spec.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r1.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r2.md"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "ranges": [
+        "629-690",
+        "890-962",
+        "1526-1577"
+      ],
+      "purpose": "Défauts de portée, limites macro et validation alphabets."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationSnapshot.swift",
+      "ranges": [
+        "65-180"
+      ],
+      "purpose": "Contrat des scopes de stage/groupe."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+      "ranges": [
+        "105-161",
+        "200-290",
+        "430-460",
+        "1049-1127",
+        "1643-1660"
+      ],
+      "purpose": "Confirmation des scopes choisis par switch et assign."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": [
+        "250-306",
+        "1340-1380",
+        "1464-1480"
+      ],
+      "purpose": "Routage et options de targets pick ; construction du scénario."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetHintServiceTests.swift",
+      "ranges": [
+        "1-175",
+        "230-345"
+      ],
+      "purpose": "Cas de scope et de résolution couverts."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/009-roadie-target-mode/spec.md",
+      "ranges": [
+        "Recherche ciblée record/replay, FR-027 à FR-033"
+      ],
+      "purpose": "Contrat de macro et troncature."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/cli.md",
+      "ranges": [
+        "Recherche ciblée macro et record"
+      ],
+      "purpose": "Commandes utilisateur du scénario."
+    }
+  ],
+  "warnings": [
+    "Aucun build ni test exécuté par cet agent. Lecture des suites seulement ; exécution centralisée par le coordinateur.",
+    "Ni clic, ni focus, ni événement clavier réel, ni interruption de processus. Pas de validation native de Carbon, CGEventTap, AX ni de la disposition multi-écrans.",
+    "Le résiduel de REL-012 ne remet pas en cause les corrections de visible_windows ; il touche la portée frontmost_window, absente des fixtures de focus.",
+    "Scan sensible local : pas d’authentification, paiement, migration DB ou intégration LLM dans les 16 fichiers de production attribués. Nom de macro, données capturées et permissions AX relus ; aucune injection shell démontrée.",
+    "Performance lue statiquement ; aucun profil ni mesure de latence exécuté. Le placement des badges vérifie les rectangles déjà placés (O(b²) au pire) ; la recherche est bornée à 500 cibles et le mode lettres à maxResults configuré. Coût GUI non mesuré, pas de HIGH inféré sans scénario de charge vérifié."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Pas de suppression proposée dans cette revue ciblée : les interfaces ajoutées permettent des tests de comportement aux frontières natives. Les modèles séparés de recherche et de grille servent des interactions distinctes. Le module 12 global reste à consolider par le coordinateur."
+  }
+}

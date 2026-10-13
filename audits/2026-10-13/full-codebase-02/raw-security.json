@@ -1,0 +1,539 @@
+{
+  "original_statuses": [
+    {
+      "id": "OBS-001",
+      "status": "résolu",
+      "reason": "La rotation de stdout/stderr conserve l’inode : copie vers .1 puis troncature du fichier courant. La copie doit réussir avant la troncature; applied reflète son résultat. La perte possible entre copie et troncature est explicitement documentée.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 129,
+          "note": "Politique copy-truncate et limite documentée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 151,
+          "note": "Copie puis troncature sur le fichier courant"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 255,
+          "note": "Descripteur O_APPEND conservé, nouvelle ligne visible et seconde rotation vérifiées"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+          "line": 57,
+          "note": "Fichier courant présent et vide, sauvegarde correcte"
+        }
+      ]
+    },
+    {
+      "id": "REL-015",
+      "status": "résolu",
+      "reason": "La CLI tient une réservation partagée avant ses sondes et pendant toute exécution locale. Le daemon prend cette réservation en exclusif avant son PID et ses composants. Le socket complète le PID informatif. Le script start conserve le PID d’un processus encore vivant.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 223,
+          "note": "Réservation couvrant local()"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ComponentLockFile.swift",
+          "line": 98,
+          "note": "Exclusivité avant publication du PID"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+          "line": 128,
+          "note": "Verrou roadied configuré avec guardsLocalExecution"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start",
+          "line": 54,
+          "note": "PID vivant conservé"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 44,
+          "note": "Démarrage attend la fin de la commande locale"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 79,
+          "note": "Daemon sans PID ni socket bloque le repli"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 99,
+          "note": "Expiration bornée et libération des verrous"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 55,
+          "note": "Socket vivant sans PID"
+        }
+      ]
+    },
+    {
+      "id": "REL-018",
+      "status": "résolu",
+      "reason": "Le curseur associe décalage et inode; les générations sont ouvertes sous verrou partagé, identifiées sur leur descripteur, puis lues dans l’ordre avant le courant. Les inodes doublons sont écartés. Une génération disparue ou une troncature détectée émet events.gap, même hors des filtres. Les lignes partielles ne font pas avancer le curseur.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 99,
+          "note": "Recherche de l’ancienne génération, lecture des suivantes et gap"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 159,
+          "note": "Ouverture sous le verrou partagé de rotation"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 183,
+          "note": "Déduplication des inodes"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 123,
+          "note": "Curseur avancé uniquement sur lignes terminées"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 192,
+          "note": "Queue non lue et nouveau fichier plus long"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 216,
+          "note": "Deux rotations successives"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 150,
+          "note": "Génération perdue signalée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 188,
+          "note": "Troncature signalée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotCTests.swift",
+          "line": 35,
+          "note": "Rotation pendant collecte : chaque événement une fois"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotCTests.swift",
+          "line": 79,
+          "note": "Écrivain bloqué pendant collecte"
+        }
+      ]
+    },
+    {
+      "id": "REL-032",
+      "status": "partiel",
+      "reason": "L’instance Roadie.app ou tmux monolithique est maintenant arrêtée par scripts/stop avant les suppressions. Le mode modulaire fourni par scripts/start-modular lance aussi cinq processus avec leurs propres PID. scripts/stop ne lit que roadied.pid ou daemon-status.json : ces composants restent actifs et la désinstallation poursuit ses suppressions.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/uninstall",
+          "line": 30,
+          "note": "Arrêt via stop puis suppression"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/stop",
+          "line": 22,
+          "note": "Un seul PID considéré : roadied ou daemon-status"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start-modular",
+          "line": 47,
+          "note": "Six composants lancés séparément"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+          "line": 479,
+          "note": "Verrous et processus distincts pour rail, border, focus-mouse, titlebar-menu et target-mode"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 191,
+          "note": "Arrêt Roadie.app couvert"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 225,
+          "note": "Refus si daemon ne sort pas"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 124,
+          "note": "Tests ne copient ni uninstall ni start-modular; pas de scénario de désinstallation modulaire"
+        }
+      ]
+    },
+    {
+      "id": "PERF-007",
+      "status": "résolu",
+      "reason": "readLine cherche le saut de ligne dans le seul fragment reçu. Chaque octet est parcouru une fois pour cette recherche : le coût quadratique du préfixe a disparu. La taille de réponse reste Int.max; le défaut algorithmique constaté est corrigé, sans assertion de gain de latence mesuré.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 384,
+          "note": "Recherche limitée au nouveau fragment"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 316,
+          "note": "Limite de réponse encore Int.max"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 140,
+          "note": "Fragments assemblés et données après newline ignorées"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 151,
+          "note": "Newline à la frontière de fragment"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 164,
+          "note": "Fin de flux et bornes de taille"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "REL-301",
+      "category": "reliability",
+      "subcategory": "incomplete_shutdown",
+      "severity": "MEDIUM",
+      "file": "scripts/uninstall",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/uninstall",
+      "line": 30,
+      "title": "La désinstallation laisse les composants modulaires actifs",
+      "description": "La désinstallation délègue l’arrêt à scripts/stop, qui ne traite que le PID du daemon central. Le lanceur modulaire fournit aussi rail, border, focus-mouse, titlebar-menu et target-mode, chacun dans un processus distinct. Après l’arrêt du tiler, ces composants continuent de fonctionner alors que la désinstallation supprime les binaires et peut supprimer l’état.",
+      "evidence": "# 2. Arrêter le LaunchAgent ET toute instance autonome (Roadie.app, tmux) avec la procédure de\n# scripts/stop. Si l'arrêt n'est pas confirmé, rien n'est supprimé : une instance encore vivante\n# continuerait à gérer les fenêtres et à recréer ses fichiers d'état.\nif ! \"$script_dir/stop\"; then\n  echo \"ERREUR : roadied n'est pas arrêté (voir ci-dessus). Désinstallation interrompue, rien n'a été supprimé.\" >&2\n  exit 1\nfi\n\n# 3. Supprimer le LaunchAgent et les binaires installés.\nrm -f \"$plist\" \"$local_bin_dir/roadied\" \"$local_bin_dir/roadie\"",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture; scénario non exécuté",
+      "exploitation_scenario": "Dans un environnement isolé, lancer scripts/start-modular puis scripts/uninstall. Le PID roadied du tiler est arrêté. Les processus enregistrés dans rail.pid, border.pid, focus-mouse.pid, titlebar-menu.pid et target-mode.pid ne sont jamais inspectés; ils restent actifs après les suppressions.",
+      "impact": "Des overlays et le focus souris continuent après la désinstallation. La suppression facultative de l’état peut retirer leurs fichiers de verrou alors qu’ils les détiennent encore.",
+      "path_type": "cold",
+      "remediation": "Étendre l’arrêt aux composants réellement lancés, avec vérification de chaque exécutable et attente bornée; refuser toute suppression tant qu’un composant reste vivant. Une protection minimale sûre est de refuser la désinstallation lorsqu’un PID modulaire est encore vivant.",
+      "remediation_code": "for component in rail border focus-mouse titlebar-menu target-mode; do\n  component_pidfile=\"$HOME/.roadies/$component.pid\"\n  [[ -f \"$component_pidfile\" ]] || continue\n  component_pid=\"$(cat \"$component_pidfile\")\"\n  if [[ \"$component_pid\" =~ ^[1-9][0-9]*$ ]] && ps -p \"$component_pid\" -o comm= >/dev/null 2>&1; then\n    echo \"Désinstallation refusée : $component est encore actif (PID $component_pid).\" >&2\n    exit 1\n  fi\ndone",
+      "verification": "Ajouter un test de cycle de vie simulé avec tiler et cinq composants actifs. Exiger soit leur arrêt vérifié, soit un échec sans aucune suppression. Ajouter le cas composant résistant à l’arrêt.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/stop",
+          "line": 22
+        },
+        {
+          "file": "scripts/start-modular",
+          "line": 47
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 479
+        }
+      ],
+      "original_id": "REL-032"
+    },
+    {
+      "id": "OBS-301",
+      "category": "observability",
+      "subcategory": "utf8_tail",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/EventLog.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventLog.swift",
+      "line": 228,
+      "title": "Un caractère UTF-8 coupé rend la fin du journal entièrement vide",
+      "description": "tail lit des blocs de 64 Kio depuis la fin puis décode tous les octets collectés avant de sélectionner les dernières lignes. La frontière du bloc peut couper un caractère UTF-8 de la première ligne partielle. Le décodage échoue alors et retourne une liste vide, même lorsque les dernières lignes demandées sont complètes et valides.",
+      "evidence": "            let lineCount = data.reduce(0) { $0 + ($1 == 10 ? 1 : 0) }\n            if lineCount > limit { break }\n        }\n\n        guard let raw = String(data: data, encoding: .utf8) else { return [] }\n        return Array(raw.split(separator: \"\\n\").suffix(limit).map(String.init))",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et reproduit isolément par le coordinateur sur les objets Swift de la branche",
+      "exploitation_scenario": "Créer un journal UTF-8 de plus de 64 Kio dont les deux dernières lignes se trouvent dans le dernier bloc et dont l’octet situé à taille-65536 est le second octet de « é ». Appeler EventLog(path: chemin).tail(limit: 1). Les deux newlines arrêtent la lecture après un bloc; String(data:encoding:) échoue sur le préfixe UTF-8 incomplet et retourne [].",
+      "impact": "events tail et les synthèses de performance qui utilisent envelopes peuvent annoncer un journal vide ou zéro échantillon par intermittence.",
+      "path_type": "cold",
+      "remediation": "Sélectionner les dernières lignes sur les octets avant le décodage UTF-8. Ainsi le préfixe partiel qui ne fait pas partie du résultat n’invalide pas les lignes finales.",
+      "remediation_code": "return data.split(separator: 0x0A)\n    .suffix(limit)\n    .compactMap { String(data: Data($0), encoding: .utf8) }",
+      "verification": "Ajouter un journal de plus de 64 Kio avec la coupe au milieu de é puis d’un emoji, suivi de plusieurs lignes JSON complètes. Exiger les dernières lignes demandées et les événements décodés, sans résultat vide.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/EventLog.swift",
+          "line": 213
+        },
+        {
+          "file": "Sources/RoadieDaemon/PerformanceLogService.swift",
+          "line": 54
+        }
+      ],
+      "runtime_evidence": {
+        "log": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/validation/probe-results.log",
+        "probe_source": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/validation/AuditPureProbes.swift",
+        "result": "tail renvoie [] lorsque la dernière tranche commence sur le second octet de é, malgré la dernière ligne ok2 valide; preuve transmise par le coordinateur, non réexécutée par ce sous-agent"
+      }
+    },
+    {
+      "id": "OBS-302",
+      "category": "observability",
+      "subcategory": "false_cleanup_success",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/FileAdministration.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+      "line": 220,
+      "title": "Le nettoyage annonce applied malgré une suppression refusée",
+      "description": "Plusieurs branches ignorent l’erreur de removeItem puis placent applied à true sans vérifier le résultat. Le rapport texte et le JSON annoncent alors une suppression réussie alors que le fichier existe encore. Le correctif de rotation stdout/stderr ne couvre pas ces branches de suppression.",
+      "evidence": "            var action = FileAdminAction(\n                kind: .delete,\n                path: url.path,\n                reason: reason,\n                sizeBytes: recursiveSize(url)\n            )\n            if !dryRun {\n                try? manager.removeItem(at: url)\n                action.applied = true\n            }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture; scénario non exécuté",
+      "exploitation_scenario": "Dans un dossier de configuration temporaire non inscriptible, conserver plus de trois sauvegardes roadies.toml.bak-* puis appeler FileAdministrationService(configPath: chemin).run(dryRun: false) sans privilèges administrateur. removeItem échoue mais chaque action concernée porte applied=true.",
+      "impact": "Le diagnostic de nettoyage fournit une fausse réussite et masque les fichiers qui occupent encore le disque.",
+      "path_type": "cold",
+      "remediation": "Positionner applied uniquement après réussite de la suppression et conserver une erreur explicite dans le rapport ou stderr. Appliquer le même traitement aux sauvegardes d’événements et aux .DS_Store.",
+      "remediation_code": "if !dryRun {\n    do {\n        try manager.removeItem(at: url)\n        action.applied = true\n    } catch {\n        action.applied = false\n        fputs(\"roadie: cleanup failed for \\(url.path): \\(error)\\n\", stderr)\n    }\n}",
+      "verification": "Tester une suppression refusée par les permissions ou un FileManager simulé en échec. Exiger applied=false, un diagnostic et le fichier encore présent; conserver le test de suppression réussie.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 120
+        },
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 203
+        },
+        {
+          "file": "Sources/RoadieDaemon/Formatters.swift",
+          "line": 369
+        }
+      ]
+    },
+    {
+      "id": "REL-302",
+      "category": "reliability",
+      "subcategory": "temporary_directory_cleanup",
+      "severity": "LOW",
+      "file": "scripts/test",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/test",
+      "line": 11,
+      "title": "Le lanceur de tests laisse son dossier HOME temporaire",
+      "description": "Le script enregistre un trap EXIT pour supprimer tmp_home puis utilise exec pour remplacer son shell. Quand exec réussit, ce shell ne passe pas par EXIT. Le wrapper exécute lui aussi exec, sans reprendre le nettoyage; le dossier temporaire est donc conservé après chaque lancement.",
+      "evidence": "tmp_home=\"$(mktemp -d \"${TMPDIR:-/tmp}/roadie-test-home.XXXXXX\")\"\ncleanup() {\n  rm -rf \"$tmp_home\"\n}\ntrap cleanup EXIT\n\nHOME=\"$tmp_home\" exec \"$script_dir/with-xcode\" swift test \"$@\"",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture; scénario non exécuté",
+      "exploitation_scenario": "Lancer scripts/test dans un environnement isolé avec un faux scripts/with-xcode qui termine normalement. Le dossier roadie-test-home.* créé au début reste présent après le code de sortie 0. Le même chemin de contrôle s’applique au lancement réel de swift test.",
+      "impact": "Les exécutions de tests accumulent des dossiers HOME temporaires et les éventuels fichiers qu’elles y créent.",
+      "path_type": "cold",
+      "remediation": "Garder le shell parent pour qu’il exécute son trap à la fin; retirer exec de la dernière ligne. Le code de sortie de la commande reste propagé par set -e.",
+      "remediation_code": "trap cleanup EXIT\nHOME=\"$tmp_home\" \"$script_dir/with-xcode\" swift test \"$@\"",
+      "verification": "Tester le wrapper avec une commande simulée qui termine en 0 puis en 1; vérifier le code de sortie et l’absence du répertoire temporaire dans les deux cas.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/with-xcode",
+          "line": 47
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    {
+      "module": "03",
+      "text": "Le socket Unix naît en 0600 pendant bind; aucune fenêtre de permission plus large.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+        "line": 112,
+        "note": "umask local au bind"
+      }
+    },
+    {
+      "module": "03",
+      "text": "Le watcher est lancé avec un tableau d’arguments fixes et un PID noyau, sans construction de shell; les descripteurs hors stdout/stderr ne sont pas hérités.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+        "line": 624,
+        "note": "posix_spawn et CLOEXEC_DEFAULT"
+      }
+    },
+    {
+      "module": "03",
+      "text": "La seule dépendance Swift tierce déclarée, TOMLKit, est verrouillée à une révision exacte dans Package.resolved.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Package.resolved",
+        "line": 10,
+        "note": "Version 0.6.0, révision ec6198d37d495efc6acd4dffbd262cdca7ff9b3f"
+      }
+    },
+    {
+      "module": "06",
+      "text": "Le protocole d’exclusion CLI/daemon documente l’ordre des verrous et borne l’attente de démarrage; les scénarios sans PID et de démarrage concurrent sont testés.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ComponentLockFile.swift",
+        "line": 20,
+        "note": "Invariants et délai documentés"
+      }
+    },
+    {
+      "module": "06",
+      "text": "Les ruptures dues à la rétention du journal sont explicites et échappent aux filtres des abonnés.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+        "line": 110,
+        "note": "events.gap"
+      }
+    },
+    {
+      "module": "08",
+      "text": "Le lecteur de protocole ne rescane plus les octets reçus; la recherche du newline est linéaire.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+        "line": 393,
+        "note": "Recherche dans le fragment uniquement"
+      }
+    },
+    {
+      "module": "12",
+      "text": "Les fonctions de démarrage des composants sont partagées entre modes monolithique et modulaire; elles portent une responsabilité de cycle de vie concrète.",
+      "evidence": {
+        "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+        "line": 171,
+        "note": "Source unique des démarrages"
+      }
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ComponentLockFile.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ProcessLiveness.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventLog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/Metrics.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/PerformanceLogService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonHealth.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TestEnvironment.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/SelfTest.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TreeDump.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadie/main.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Package.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Package.resolved",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Makefile",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/build-app-bundle",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/doctor",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/install",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/logs",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/measure-layout-reactivity",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/package-dmg",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/roadie",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/roadied",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/roadiedctl",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start-modular",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/status",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/stop",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/test",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/uninstall",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/with-xcode",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/btt/roadie-record-toggle.sh",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_measure_layout_reactivity.py",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/fixtures/layout-reactivity.jsonl",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ComponentLockFileTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ConfigReloadTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotCTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/AutomationEventTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/spec.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r1.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r2.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/assets/roadie-logo.svg"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/CLICommandRouterTests.swift",
+      "ranges": [
+        "193-305"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+      "ranges": [
+        "345-461"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": [
+        "480-505",
+        "1180-1245"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/Formatters.swift",
+      "ranges": [
+        "358-376"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "ranges": [
+        "255-325"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        "100-220"
+      ]
+    }
+  ],
+  "warnings": [
+    "Aucun build ni test exécuté par ce sous-agent; les résultats dynamiques relèvent du coordinateur. Les tests mentionnés ont été lus.",
+    "Aucun lancement, arrêt ou redémarrage de daemon; aucun script de cycle de vie exécuté. Les scénarios de processus restent validés par lecture.",
+    "Double scan statique sécurité/secrets et confidentialité réalisé avec deux groupes de motifs (secret/password/token/Process/posix_spawn/URLSession, puis permissions/O_CREAT/umask/log/payload). Aucun secret ni injection confirmé dans les sources et scripts de ce périmètre.",
+    "Modèle de menace local : socket Unix, même compte et autre compte local. Pas de HTTP/API web, authentification web, paiement ou intégration LLM détectés dans le périmètre attribué. Les migrations de persistance sont déléguées à un autre domaine.",
+    "CVE de TOMLKit et chaîne d’outils non vérifiées auprès de bases externes; aucun scanner SCA exécuté. Présence d’un lockfile ne signifie pas absence de vulnérabilités.",
+    "Historique Git complet non scanné pour secrets par ce sous-agent; seules les sources/scripts présents ont été recherchés.",
+    "Permissions effectives et ACL du HOME de production non inspectées; logs créés en 0644 dans un répertoire utilisateur. Aucune fuite inter-comptes affirmée sans preuve des permissions des parents.",
+    "Packaging lu; application et DMG non construits, signatures/non-répudiation Gatekeeper non vérifiées; PNG non inspectés comme code.",
+    "Concurrence ConfigReloadService.currentConfig/reload : une course de publication est concevable au niveau API, mais aucun appelant de production concurrent n’a été établi. Le scan d’app en arrière-plan reçoit une configuration capturée; constat non retenu.",
+    "Réponse du socket encore sans plafond de taille (Int.max). Le défaut O(n²) PERF-007 est corrigé; aucun gain de latence ou borne mémoire mesuré.",
+    "Le script de désinstallation modulaire n’a aucun test correspondant dans scripts/tests/test_lifecycle.py; ce fichier couvre l’arrêt monolithique et le redémarrage."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 2,
+    "conclusion": "Checklists 1-6 parcourues. Le champ privé localStateURL et son affectation ne sont jamais lus (FileAdministration.swift:62,74); leur retrait ne change pas le comportement, en conservant le paramètre public localStatePath pour compatibilité. Pas de nouvelle abstraction injustifiée trouvée. Les types de protocole, curseurs et verrous portent un contrat réel. La complexité ajoutée aux verrous et rotations est justifiée par les cas de concurrence testés. Les scripts de cycle de vie gardent toutefois des contrats divergents, illustrés par REL-301."
+  }
+}
