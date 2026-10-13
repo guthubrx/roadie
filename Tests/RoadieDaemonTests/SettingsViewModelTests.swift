@@ -1,0 +1,221 @@
+import Foundation
+import Testing
+import RoadieCore
+@testable import RoadieDaemon
+
+@Suite
+@MainActor
+struct SettingsViewModelTests {
+    private let fixture = """
+    [fx.borders]
+    enabled = false
+    thickness = 2 # points
+
+    [experimental.target_grid]
+    # Grille de clic.
+    rows = 3
+    columns = 3
+    hint_characters = "azeqsdwxcrtyfghvbnuiopjklm" # 26 lettres : la grille 4 × 3 reste valide
+    """
+
+    /// Modèle sur un fichier de configuration temporaire (jamais `~/.config`).
+    private func makeModel(_ text: String? = nil) throws -> (SettingsViewModel, URL) {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-settings-view-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let config = directory.appendingPathComponent("roadies.toml")
+        try (text ?? fixture).write(to: config, atomically: true, encoding: .utf8)
+        let log = EventLog(path: directory.appendingPathComponent("events.jsonl").path)
+        let service = SettingsService(configPath: config.path, eventLog: log, afterWrite: {})
+        return (SettingsViewModel(service: service), config)
+    }
+
+    private func descriptor(_ id: String) throws -> SettingDescriptor {
+        try #require(SettingsCatalog.find(id: id))
+    }
+
+    @Test
+    func opensOnGeneralThenRemembersTheLastCategory() throws {
+        let (model, _) = try makeModel()
+        model.prepareForShow(category: nil)
+        #expect(model.category == .general)
+        #expect(model.sections.isEmpty)
+
+        model.select(.grille)
+        #expect(model.sections.map(\.category) == [.grille])
+        #expect(model.sections.first?.descriptors == SettingsCatalog.descriptors(in: .grille))
+
+        // Fermeture puis réouverture sans catégorie : la dernière vue reste.
+        model.prepareForShow(category: nil)
+        #expect(model.category == .grille)
+        model.prepareForShow(category: .rail)
+        #expect(model.category == .rail)
+    }
+
+    @Test
+    func searchGroupsMatchesByCategoryAndEmptyQueryReturnsToCategory() throws {
+        let (model, _) = try makeModel()
+        model.select(.grille)
+        model.query = "bordure"
+        #expect(model.isSearching)
+        #expect(model.sections.map(\.category) == [.bordures])
+        let ids = model.sections.flatMap(\.descriptors).map(\.id)
+        #expect(ids.count == 6)
+        #expect(ids.allSatisfy { $0.hasPrefix("borders.") })
+
+        model.query = ""
+        #expect(!model.isSearching)
+        #expect(model.sections.map(\.category) == [.grille])
+    }
+
+    @Test
+    func searchListsReadOnlyEntriesAfterEditableOnes() throws {
+        let (model, _) = try makeModel()
+        model.query = "stage"
+        for section in model.sections {
+            let flags = section.descriptors.map { $0.readOnlyReason != nil }
+            #expect(flags == flags.sorted { !$0 && $1 })
+        }
+        // Choisir une catégorie quitte la recherche.
+        model.select(.regles)
+        #expect(model.query.isEmpty)
+    }
+
+    @Test
+    func validEditIsAppliedAndReadBack() throws {
+        let (model, config) = try makeModel()
+        model.select(.grille)
+        let rows = try descriptor("target_grid.rows")
+        #expect(model.value(rows) == .int(3))
+        #expect(!model.isDefault(rows))
+
+        model.drafts[rows.id] = "4"
+        #expect(model.text(for: rows) == "4")
+        model.commitDraft(rows)
+        #expect(model.errors[rows.id] == nil)
+        #expect(model.drafts[rows.id] == nil)
+        #expect(model.value(rows) == .int(4))
+        #expect(model.text(for: rows) == "4")
+        #expect(try String(contentsOf: config, encoding: .utf8).contains("rows = 4\n"))
+        // Relecture du fichier (comme après le signal du watcher).
+        model.refresh()
+        #expect(model.value(rows) == .int(4))
+        #expect(!model.isDefault(rows))
+    }
+
+    @Test
+    func rejectedEditShowsTheCauseAndKeepsTheOriginalValue() throws {
+        let (model, config) = try makeModel()
+        model.select(.grille)
+        let rows = try descriptor("target_grid.rows")
+        let before = try String(contentsOf: config, encoding: .utf8)
+
+        model.drafts[rows.id] = "99"
+        model.commitDraft(rows)
+        let error = try #require(model.errors[rows.id])
+        #expect(error.contains("hors plage"))
+        #expect(model.text(for: rows) == "3")
+        #expect(try String(contentsOf: config, encoding: .utf8) == before)
+
+        // Une édition valide efface la cause.
+        model.apply(rows, raw: "5")
+        #expect(model.errors[rows.id] == nil)
+        #expect(model.value(rows) == .int(5))
+    }
+
+    @Test
+    func toggleAndStepperApplyAtOnce() throws {
+        let (model, _) = try makeModel()
+        model.select(.bordures)
+        let enabled = try descriptor("borders.enabled")
+        model.apply(enabled, raw: "true")
+        #expect(model.value(enabled) == .bool(true))
+
+        model.select(.grille)
+        let rows = try descriptor("target_grid.rows")
+        model.step(rows, by: 1)
+        #expect(model.value(rows) == .int(4))
+        model.step(rows, by: -1)
+        #expect(model.value(rows) == .int(3))
+    }
+
+    @Test
+    func resetRestoresTheDefault() throws {
+        let (model, config) = try makeModel()
+        model.select(.bordures)
+        let thickness = try descriptor("borders.thickness")
+        model.apply(thickness, raw: "5")
+        #expect(model.value(thickness) == .double(5))
+        #expect(!model.isDefault(thickness))
+
+        model.reset(thickness)
+        #expect(model.isDefault(thickness))
+        #expect(model.value(thickness) == thickness.defaultValue)
+        #expect(!(try String(contentsOf: config, encoding: .utf8)).contains("thickness ="))
+        model.refresh()
+        #expect(model.isDefault(thickness))
+    }
+
+    @Test
+    func invalidFileLocksTheControls() throws {
+        let (model, config) = try makeModel("""
+        [experimental.target_grid]
+        rows = "beaucoup"
+        """)
+        #expect(model.isLocked)
+        #expect(model.validity.errorCount > 0)
+        #expect(!model.validity.messages.isEmpty)
+        #expect(model.validityText.hasPrefix("\(model.validity.errorCount) erreur"))
+
+        let before = try String(contentsOf: config, encoding: .utf8)
+        let columns = try descriptor("target_grid.columns")
+        model.apply(columns, raw: "4")
+        model.reset(columns)
+        #expect(try String(contentsOf: config, encoding: .utf8) == before)
+    }
+
+    @Test
+    func readOnlyEntriesCannotBeEdited() throws {
+        let (model, config) = try makeModel()
+        model.select(.regles)
+        let entries = try #require(model.sections.first?.descriptors)
+        #expect(!entries.isEmpty)
+        #expect(entries.allSatisfy { $0.readOnlyReason != nil })
+
+        let before = try String(contentsOf: config, encoding: .utf8)
+        for entry in entries {
+            model.apply(entry, raw: "x")
+            model.reset(entry)
+        }
+        #expect(try String(contentsOf: config, encoding: .utf8) == before)
+        #expect(model.errors.isEmpty)
+    }
+
+    @Test
+    func externalChangeIsReadBackWithoutLosingTheSearch() throws {
+        let (model, config) = try makeModel()
+        let rows = try descriptor("target_grid.rows")
+        model.select(.grille)
+        model.query = "lignes"
+        try fixture.replacingOccurrences(of: "rows = 3", with: "rows = 7")
+            .write(to: config, atomically: true, encoding: .utf8)
+
+        model.refresh()
+        #expect(model.value(rows) == .int(7))
+        #expect(model.query == "lignes")
+        #expect(model.category == .grille)
+    }
+
+    @Test
+    func emptyingAnOptionalFieldRestoresItsDefault() throws {
+        let (model, _) = try makeModel()
+        model.select(.tuilage)
+        let top = try descriptor("tiling.gaps_outer_top")
+        model.apply(top, raw: "4")
+        #expect(model.text(for: top) == "4")
+        model.drafts[top.id] = ""
+        model.commitDraft(top)
+        #expect(model.isDefault(top))
+        #expect(model.text(for: top) == "")
+    }
+}
