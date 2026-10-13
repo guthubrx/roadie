@@ -561,6 +561,7 @@ public struct SnapshotService {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
         reconcileTrees(in: &persistedStages, input: input)
+        applyPersistedMetadata(to: &state, from: persistedStages)
         return Reconciliation(
             state: state,
             scopedWindows: scopedWindows,
@@ -569,6 +570,33 @@ public struct SnapshotService {
             prunedPins: prunedPins,
             prunedBookmarks: prunedBookmarks
         )
+    }
+
+    /// REL-005 : l'état runtime reprend, pour chaque écran présent, les desktops, labels et stages
+    /// persistés (nom et mode), stages vides comprises. Sans cela, il ne contient que la stage
+    /// active et celles des fenêtres vivantes, sous un nom générique. Les fenêtres assignées plus
+    /// haut, le focus et la stage active ne changent pas.
+    // O(s + d·l) - s stages persistées, d desktops runtime, l labels persistés (bornés).
+    private func applyPersistedMetadata(to state: inout RoadieState, from persistedStages: PersistentStageState) {
+        var displays = state.displays
+        for scope in persistedStages.scopes where displays[scope.displayID] != nil {
+            var desktop = displays[scope.displayID]?.desktops[scope.desktopID]
+                ?? DesktopState(id: scope.desktopID, activeStageID: scope.activeStageID)
+            for persisted in scope.stages {
+                if desktop.stages[persisted.id] == nil {
+                    desktop.stages[persisted.id] = StageState(id: persisted.id, name: persisted.name, mode: persisted.mode)
+                } else {
+                    desktop.stages[persisted.id]?.name = persisted.name
+                }
+            }
+            displays[scope.displayID]?.desktops[scope.desktopID] = desktop
+        }
+        for (displayID, display) in displays {
+            for desktopID in display.desktops.keys {
+                displays[displayID]?.desktops[desktopID]?.label = persistedStages.label(displayID: displayID, desktopID: desktopID)
+            }
+        }
+        state = RoadieState(displays: displays)
     }
 
     /// Réconciliation unique des arbres des stages à arbre, sous le verrou du snapshot (SPEC-017
@@ -1653,7 +1681,7 @@ public extension SnapshotService {
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: LayoutTolerance.intentContainerSlack) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
-        guard !framesLeaveLargeUntiledCells(
+        guard !Self.framesLeaveLargeUntiledCells(
             frames,
             in: container,
             allowedGap: CGFloat(config.tiling.gapsInner) + LayoutTolerance.intentUntiledGapSlack
@@ -1674,7 +1702,13 @@ public extension SnapshotService {
         }
     }
 
-    private func framesLeaveLargeUntiledCells(
+    /// Vrai si une cellule de la grille des bords (largeur et hauteur > tolérance, dans le
+    /// conteneur) n'a son centre dans aucun cadre élargi de 1 pt : un trou de disposition.
+    /// Chaque cadre couvre un intervalle contigu de colonnes et un de lignes de centres, trouvés une
+    /// fois par dichotomie. Chaque colonne cumule ensuite les intervalles de lignes des cadres qui la
+    /// couvrent (tableau de différences) au lieu de tester tous les cadres pour chaque cellule.
+    // Avant : O(n³) (O(n²) cellules × n cadres). Après : O(n²) temps, O(n) mémoire - n cadres.
+    static func framesLeaveLargeUntiledCells(
         _ frames: [CGRect],
         in container: CGRect,
         allowedGap: CGFloat
@@ -1683,36 +1717,61 @@ public extension SnapshotService {
         let tolerance = max(LayoutTolerance.untiledCell, allowedGap)
         let xEdges = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })
         let yEdges = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })
+        let columnCount = max(0, xEdges.count - 1)
+        let rowCount = max(0, yEdges.count - 1)
+        guard columnCount > 0, rowCount > 0 else { return false }
+        // Centres calculés comme `midX`/`midY` de la cellule : mêmes valeurs que le test point par point.
+        let xCenters = (0..<columnCount).map {
+            CGRect(x: xEdges[$0], y: 0, width: xEdges[$0 + 1] - xEdges[$0], height: 0).midX
+        }
+        let yCenters = (0..<rowCount).map {
+            CGRect(x: 0, y: yEdges[$0], width: 0, height: yEdges[$0 + 1] - yEdges[$0]).midY
+        }
+        // Centres c avec minimum - 1 <= c <= maximum + 1 (tolérance 1 pt), centres triés.
+        let spans: [(columns: Range<Int>, rows: Range<Int>)] = frames.compactMap { frame in
+            let columns = centerRange(xCenters, from: frame.minX - 1, to: frame.maxX + 1)
+            let rows = centerRange(yCenters, from: frame.minY - 1, to: frame.maxY + 1)
+            return columns.isEmpty || rows.isEmpty ? nil : (columns, rows)
+        }
 
-        for xIndex in 0..<max(0, xEdges.count - 1) {
-            let minX = xEdges[xIndex]
-            let maxX = xEdges[xIndex + 1]
-            let width = maxX - minX
+        var rowDelta = [Int](repeating: 0, count: rowCount + 1)
+        for column in 0..<columnCount {
+            let width = xEdges[column + 1] - xEdges[column]
             guard width > tolerance else { continue }
-            for yIndex in 0..<max(0, yEdges.count - 1) {
-                let minY = yEdges[yIndex]
-                let maxY = yEdges[yIndex + 1]
-                let height = maxY - minY
-                guard height > tolerance else { continue }
-                let cell = CGRect(x: minX, y: minY, width: width, height: height)
-                guard container.contains(cell, tolerance: 1),
-                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })
-                else { continue }
-                return true
+            for index in rowDelta.indices { rowDelta[index] = 0 }
+            for span in spans where span.columns.contains(column) {
+                rowDelta[span.rows.lowerBound] += 1
+                rowDelta[span.rows.upperBound] -= 1
+            }
+            var coveringFrames = 0
+            for row in 0..<rowCount {
+                coveringFrames += rowDelta[row]
+                let height = yEdges[row + 1] - yEdges[row]
+                guard coveringFrames == 0, height > tolerance else { continue }
+                let cell = CGRect(x: xEdges[column], y: yEdges[row], width: width, height: height)
+                if container.contains(cell, tolerance: 1) { return true }
             }
         }
         return false
     }
 
-    private func frameContainsCellCenter(_ frame: CGRect, cell: CGRect, tolerance: CGFloat) -> Bool {
-        let point = CGPoint(x: cell.midX, y: cell.midY)
-        return point.x >= frame.minX - tolerance
-            && point.y >= frame.minY - tolerance
-            && point.x <= frame.maxX + tolerance
-            && point.y <= frame.maxY + tolerance
+    /// Indices des valeurs triées comprises dans [lower, upper]. O(log n) par dichotomie.
+    private static func centerRange(_ sorted: [CGFloat], from lower: CGFloat, to upper: CGFloat) -> Range<Int> {
+        func firstIndex(where isPast: (CGFloat) -> Bool) -> Int {
+            var low = 0
+            var high = sorted.count
+            while low < high {
+                let middle = (low + high) / 2
+                if isPast(sorted[middle]) { high = middle } else { low = middle + 1 }
+            }
+            return low
+        }
+        let start = firstIndex { $0 >= lower }
+        let end = firstIndex { $0 > upper }
+        return start < end ? start..<end : start..<start
     }
 
-    private func sortedEdges(_ values: [CGFloat]) -> [CGFloat] {
+    private static func sortedEdges(_ values: [CGFloat]) -> [CGFloat] {
         let sorted = values.sorted()
         return sorted.reduce(into: [CGFloat]()) { result, value in
             if result.last.map({ abs($0 - value) > 1 }) ?? true {
@@ -1944,9 +2003,7 @@ private extension SnapshotService {
 
         let horizontal = container.width >= container.height
         let leftCount = windowIDs.count / 2
-        let sorted = windowIDs.sorted { lhs, rhs in
-            spatiallyComesBefore(lhs, rhs, frames: frames, horizontal: horizontal)
-        }
+        let sorted = spatialSortOrder(windowIDs, frames: frames, horizontal: horizontal)
         let left = Array(sorted.prefix(leftCount))
         let right = Array(sorted.dropFirst(leftCount))
 
@@ -1966,31 +2023,45 @@ private extension SnapshotService {
             + spatiallyOrdered(right, frames: frames, container: rightRect)
     }
 
-    func spatiallyComesBefore(
-        _ lhs: WindowID,
-        _ rhs: WindowID,
-        frames: [WindowID: CGRect],
-        horizontal: Bool
-    ) -> Bool {
-        guard let lhsFrame = frames[lhs], let rhsFrame = frames[rhs] else {
-            return lhs < rhs
+    /// Ordre total (REL-006). L'ancien comparateur changeait d'axe selon l'écart de deux centres :
+    /// relation non transitive, résultat dépendant de l'ordre d'entrée. Les bandes sont formées une
+    /// seule fois sur l'axe principal, puis sur l'axe secondaire dans chaque bande principale. Tri par
+    /// bande principale, bande secondaire, puis ID : comme avant, deux fenêtres alignées sur les deux
+    /// axes restent dans l'ordre de leurs ID. Fenêtre sans cadre : après les autres, par ID.
+    // O(n log n) - n fenêtres du conteneur.
+    func spatialSortOrder(_ windowIDs: [WindowID], frames: [WindowID: CGRect], horizontal: Bool) -> [WindowID] {
+        let placed = windowIDs.compactMap { id in
+            frames[id].map { (id: id, primary: horizontal ? $0.midX : $0.midY, secondary: horizontal ? $0.midY : $0.midX) }
         }
-        if horizontal {
-            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midX < rhsFrame.midX
+        .sorted { ($0.primary, $0.id) < ($1.primary, $1.id) }
+        let primaryBands = alignmentBands(placed.map(\.primary))
+        var keys: [(primary: Int, secondary: Int, id: WindowID)] = []
+        var runStart = 0
+        while runStart < placed.count {
+            var runEnd = runStart + 1
+            while runEnd < placed.count, primaryBands[runEnd] == primaryBands[runStart] { runEnd += 1 }
+            let run = placed[runStart..<runEnd].sorted { ($0.secondary, $0.id) < ($1.secondary, $1.id) }
+            for (entry, secondaryBand) in zip(run, alignmentBands(run.map(\.secondary))) {
+                keys.append((primaryBands[runStart], secondaryBand, entry.id))
             }
-            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midY < rhsFrame.midY
-            }
-        } else {
-            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midY < rhsFrame.midY
-            }
-            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midX < rhsFrame.midX
-            }
+            runStart = runEnd
         }
-        return lhs < rhs
+        let unplaced = windowIDs.filter { frames[$0] == nil }.sorted()
+        return keys.sorted { ($0.primary, $0.secondary, $0.id) < ($1.primary, $1.secondary, $1.id) }.map(\.id) + unplaced
+    }
+
+    /// Bande de chaque valeur triée : une bande s'ouvre quand une valeur dépasse de plus de
+    /// `spatialAlignment` la valeur qui a ouvert la bande courante. O(n).
+    func alignmentBands(_ sortedValues: [CGFloat]) -> [Int] {
+        var band = 0
+        var bandStart = sortedValues.first ?? 0
+        return sortedValues.map { value in
+            if value - bandStart > LayoutTolerance.spatialAlignment {
+                band += 1
+                bandStart = value
+            }
+            return band
+        }
     }
 
     func rects(for windowIDs: [WindowID], in frames: [WindowID: CGRect]) -> [CGRect] {
@@ -2072,66 +2143,11 @@ private extension CGRect {
 }
 
 public enum SnapshotEncoding {
-    public static func json(_ snapshot: DaemonSnapshot, pretty: Bool = true) throws -> String {
+    /// Encodage JSON commun des sorties CLI : clés triées, indenté par défaut.
+    public static func json<T: Encodable>(_ value: T, pretty: Bool = true) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(snapshot)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ plan: ApplyPlan, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(plan)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ result: ApplyResult, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(result)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: StateAuditReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: StateHealReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: DaemonHealthReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: DaemonHealReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ metrics: RoadieMetrics, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(metrics)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ dump: TreeDump, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(dump)
+        let data = try encoder.encode(value)
         return String(decoding: data, as: UTF8.self)
     }
 }
