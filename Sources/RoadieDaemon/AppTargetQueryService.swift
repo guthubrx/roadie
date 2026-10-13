@@ -320,8 +320,35 @@ public struct VisibleWindowScan: Sendable {
     public var partial: Bool
 }
 
+/// Issue de l'attente du focus avant un clic sur la cible d'une fenêtre (REL-012).
+public enum AppWindowFocusWait: Equatable, Sendable {
+    case focused
+    /// La fenêtre n'existe plus dans son application.
+    case windowGone
+    /// La fenêtre n'est pas devenue active dans le délai.
+    case timedOut
+}
+
 public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
-    public init() {}
+    /// Points d'injection des tests (REL-012, TEST-002) : attente du focus et émission des événements
+    /// souris, sans AX ni CGEvent réels.
+    private let waitForFocus: @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait
+    private let postEvent: @Sendable (CGEvent) -> Void
+
+    public init() {
+        self.init(
+            waitForFocus: { Self.waitUntilFocused(windowID: $0, pid: $1, timeout: $2) },
+            postEvent: { $0.post(tap: .cghidEventTap) }
+        )
+    }
+
+    init(
+        waitForFocus: @escaping @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait,
+        postEvent: @escaping @Sendable (CGEvent) -> Void
+    ) {
+        self.waitForFocus = waitForFocus
+        self.postEvent = postEvent
+    }
 
     public func candidates(config: AppTargetsConfig) -> AppTargetQueryReport {
         guard AXIsProcessTrusted() else {
@@ -342,7 +369,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             return AppTargetQueryReport(error: "no_frontmost_application")
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        guard let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute) else {
+        guard let window = Self.copyElementAttribute(appElement, kAXFocusedWindowAttribute) else {
             return AppTargetQueryReport(error: "no_focused_window")
         }
         let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
@@ -706,8 +733,16 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         guard let frame = (target.clickFrame ?? target.frame)?.cgRect else {
             return TargetActionResult(changed: false, message: "app click: no frame", target: target, error: "no_frame")
         }
+        // REL-012 : sans fenêtre active, le clic tomberait sur une autre fenêtre ou application.
         if let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) {
-            waitUntilFocused(windowID: windowID, pid: pid, timeout: 0.5)
+            switch waitForFocus(windowID, pid, 0.5) {
+            case .focused:
+                break
+            case .windowGone:
+                return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+            case .timedOut:
+                return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
+            }
         }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {
@@ -728,9 +763,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
 
     /// Cible d'une autre fenêtre (SPEC-021) : `TargetHintService` vient de la focaliser. Le clic attend
     /// que son application soit active et que la fenêtre soit la sienne, sinon une application peut
-    /// ne prendre le premier clic que pour s'activer. Au-delà du délai, le clic part quand même.
-    private func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) {
-        guard let expected = axWindowElements(pid: pid)[windowID] else { return }
+    /// ne prendre le premier clic que pour s'activer. Fenêtre disparue ou délai dépassé : pas de clic
+    /// (REL-012).
+    private static func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) -> AppWindowFocusWait {
+        guard let expected = axWindowElements(pid: pid)[windowID] else { return .windowGone }
         let system = AXUIElementCreateSystemWide()
         let appElement = AXUIElementCreateApplication(pid)
         let deadline = Date().addingTimeInterval(timeout)
@@ -739,10 +775,11 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             if let app = copyElementAttribute(system, kAXFocusedApplicationAttribute),
                AXUIElementGetPid(app, &focusedPID) == .success, focusedPID == pid,
                let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute), CFEqual(window, expected) {
-                return
+                return .focused
             }
             Thread.sleep(forTimeInterval: 0.02)
         } while Date() < deadline
+        return .timedOut
     }
 
     private func postClick(
@@ -761,11 +798,11 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             downEvent?.flags = flags
             upEvent?.flags = flags
         }
-        downEvent?.post(tap: .cghidEventTap)
-        upEvent?.post(tap: .cghidEventTap)
+        if let downEvent { postEvent(downEvent) }
+        if let upEvent { postEvent(upEvent) }
     }
 
-    private func copyElementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+    private static func copyElementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value

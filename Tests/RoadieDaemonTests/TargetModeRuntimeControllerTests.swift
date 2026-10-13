@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
@@ -94,5 +95,119 @@ struct TargetModeRuntimeControllerTests {
         let target = GridFocusPicker.targetWindow(intersectingAXFrame: CGRect(x: 90, y: 90, width: 130, height: 60), in: snapshot)
 
         #expect(target?.window.id == top.window.id)
+    }
+
+    // TEST-002 / REL-003 : la lettre validée active la cible de la liste affichée (filtrée), pas
+    // celle qui porte la même lettre dans une liste reconstruite sans les options.
+    @Test @MainActor
+    func interactiveLetterActivatesTargetOfDisplayedFilteredList() throws {
+        let service = targetModeService(name: "rel003-filtered", displays: [powerDisplay()])
+        let presenter = SpyTargetModeOverlayPresenter()
+        let controller = TargetModeRuntimeController(service: service, events: EventLog(), presenter: presenter)
+
+        controller.handle(TargetModeRuntimeCommand(name: "targets.interactive", arguments: [
+            "source": "roadie",
+            "filter": "firefox",
+            "action": "inspect",
+        ]))
+        let shown = try #require(presenter.interactiveState?.report.targets.first)
+        let activate = try #require(presenter.interactiveActivate)
+        let unfiltered = TargetHintService(service: service).list(TargetQueryOptions(source: .all))
+
+        #expect(unfiltered.targets.first { $0.label == shown.label }?.id != shown.id)
+        #expect(activate(shown.label.lowercased()).target?.id == shown.id)
+        #expect(activate("ZZZ").error == "unknown_target")
+    }
+
+    // TEST-002 / REL-004 : après une flèche vers l'écran 2, la grille affichée est celle de l'écran 2.
+    @Test @MainActor
+    func gridFollowsDisplaySelectedByArrows() throws {
+        let service = targetModeService(name: "rel004-grid", displays: [
+            powerDisplay("display-1", index: 1, x: 0),
+            powerDisplay("display-2", index: 2, x: 1000),
+        ])
+        let presenter = SpyTargetModeOverlayPresenter()
+        let controller = TargetModeRuntimeController(service: service, events: EventLog(), presenter: presenter)
+
+        controller.handle(TargetModeRuntimeCommand(name: "grid.interactive", arguments: [
+            "display": "1",
+            "scope": "display",
+        ]))
+        let stateProvider = try #require(presenter.gridStateProvider)
+
+        #expect(stateProvider(nil, "").report.targets.first?.scope.displayId == "display-1")
+        #expect(stateProvider(1, "").report.targets.first?.scope.displayId == "display-1")
+        #expect(stateProvider(2, "").report.targets.first?.scope.displayId == "display-2")
+        #expect(stateProvider(2, "").report.targets.first?.frame?.x ?? 0 >= 1000)
+    }
+}
+
+@MainActor
+private func targetModeService(name: String, displays: [DisplaySnapshot]) -> SnapshotService {
+    let displayID = displays[0].id
+    let stageID = StageID(rawValue: "1")
+    let first = powerWindow(1, x: 100, app: "iTerm")
+    let second = powerWindow(2, x: 500, app: "Firefox")
+    let store = StageStore(path: tempPath(name))
+    store.save(PersistentStageState(scopes: [
+        PersistentStageScope(displayID: displayID, activeStageID: stageID, stages: [
+            PersistentStage(id: stageID, members: [
+                PersistentStageMember(windowID: first.id, bundleID: first.bundleID, title: first.title, frame: first.frame),
+                PersistentStageMember(windowID: second.id, bundleID: second.bundleID, title: second.title, frame: second.frame),
+            ]),
+        ]),
+    ], activeDisplayID: displayID))
+    let provider = PowerUserProvider(displays: displays, windows: [first, second])
+    let config = RoadieConfig(experimental: ExperimentalConfig(
+        targetMode: TargetModeConfig(overlayEnabled: true),
+        targetGrid: TargetGridConfig(enabled: true)
+    ))
+    return SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: config, stageStore: store)
+}
+
+/// Présentation espionne : conserve la liste affichée et les fermetures, sans overlay réel.
+@MainActor
+private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
+    var interactiveState: TargetOverlayState?
+    var interactiveActivate: (@MainActor (String) -> TargetActionResult)?
+    var gridStateProvider: (@MainActor (Int?, String) -> TargetOverlayState)?
+
+    func startInteractive(
+        _ state: TargetOverlayState,
+        duration: TimeInterval,
+        activate: @escaping @MainActor (String) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        interactiveState = state
+        interactiveActivate = activate
+        return nil
+    }
+
+    func startGridInteractive(
+        initialPath: String,
+        duration: TimeInterval,
+        config: TargetGridConfig,
+        displayIndex: Int?,
+        stateProvider: @escaping @MainActor (Int?, String) -> TargetOverlayState,
+        activate: @escaping @MainActor (Int?, String) -> TargetActionResult,
+        focusAt: @escaping @MainActor (CGRect) -> Void,
+        displayNeighbor: @escaping @MainActor (Int?, TargetGridArrowDirection) -> Int?,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        gridStateProvider = stateProvider
+        return nil
+    }
+
+    func startSearch(
+        targets: [RoadieTarget],
+        alphabet: String,
+        load: (
+            _ deliver: @escaping @MainActor @Sendable ([RoadieTarget], Int) -> Void,
+            _ done: @escaping @MainActor @Sendable () -> Void
+        ) -> Void,
+        activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        nil
     }
 }

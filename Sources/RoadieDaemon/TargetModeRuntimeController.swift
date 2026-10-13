@@ -56,17 +56,107 @@ public struct TargetModeRuntimeCommand: Equatable, Sendable {
     }
 }
 
+/// Ouverture des overlays du mode cible. Point d'injection des tests (TEST-002) : un espion reçoit
+/// la liste affichée et les fermetures d'activation, sans fenêtre ni tap clavier réels.
+@MainActor
+protocol TargetModeOverlayPresenting {
+    func startInteractive(
+        _ state: TargetOverlayState,
+        duration: TimeInterval,
+        activate: @escaping @MainActor (String) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle?
+
+    func startGridInteractive(
+        initialPath: String,
+        duration: TimeInterval,
+        config: TargetGridConfig,
+        displayIndex: Int?,
+        stateProvider: @escaping @MainActor (Int?, String) -> TargetOverlayState,
+        activate: @escaping @MainActor (Int?, String) -> TargetActionResult,
+        focusAt: @escaping @MainActor (CGRect) -> Void,
+        displayNeighbor: @escaping @MainActor (Int?, TargetGridArrowDirection) -> Int?,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle?
+
+    func startSearch(
+        targets: [RoadieTarget],
+        alphabet: String,
+        load: (
+            _ deliver: @escaping @MainActor @Sendable ([RoadieTarget], Int) -> Void,
+            _ done: @escaping @MainActor @Sendable () -> Void
+        ) -> Void,
+        activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle?
+}
+
+/// Présentation réelle : délègue à `TargetOverlayPresenter`.
+struct LiveTargetModeOverlayPresenter: TargetModeOverlayPresenting {
+    func startInteractive(
+        _ state: TargetOverlayState,
+        duration: TimeInterval,
+        activate: @escaping @MainActor (String) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        TargetOverlayPresenter.startInteractive(state, duration: duration, activate: activate, onFinish: onFinish)
+    }
+
+    func startGridInteractive(
+        initialPath: String,
+        duration: TimeInterval,
+        config: TargetGridConfig,
+        displayIndex: Int?,
+        stateProvider: @escaping @MainActor (Int?, String) -> TargetOverlayState,
+        activate: @escaping @MainActor (Int?, String) -> TargetActionResult,
+        focusAt: @escaping @MainActor (CGRect) -> Void,
+        displayNeighbor: @escaping @MainActor (Int?, TargetGridArrowDirection) -> Int?,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        TargetOverlayPresenter.startGridInteractive(
+            initialPath: initialPath,
+            duration: duration,
+            config: config,
+            displayIndex: displayIndex,
+            stateProvider: stateProvider,
+            activate: activate,
+            focusAt: focusAt,
+            displayNeighbor: displayNeighbor,
+            onFinish: onFinish
+        )
+    }
+
+    func startSearch(
+        targets: [RoadieTarget],
+        alphabet: String,
+        load: (
+            _ deliver: @escaping @MainActor @Sendable ([RoadieTarget], Int) -> Void,
+            _ done: @escaping @MainActor @Sendable () -> Void
+        ) -> Void,
+        activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        TargetOverlayPresenter.startSearch(targets: targets, alphabet: alphabet, load: load, activate: activate, onFinish: onFinish)
+    }
+}
+
 @MainActor
 public final class TargetModeRuntimeController: NSObject {
     private let service: SnapshotService
     private let events: EventLog
+    private let presenter: any TargetModeOverlayPresenting
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
 
-    public init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
+    public convenience init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
+        self.init(service: service, events: events, presenter: LiveTargetModeOverlayPresenter())
+    }
+
+    init(service: SnapshotService, events: EventLog, presenter: any TargetModeOverlayPresenting) {
         self.service = service
         self.events = events
+        self.presenter = presenter
     }
 
     public func start() {
@@ -99,7 +189,8 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "target_mode.runtime_stopped"))
     }
 
-    private func handle(_ command: TargetModeRuntimeCommand?) {
+    /// Interne (et non privé) : les tests l'appellent sans notification distribuée.
+    func handle(_ command: TargetModeRuntimeCommand?) {
         guard let command else {
             events.append(RoadieEvent(type: "target_mode.command_rejected", details: ["reason": "invalid_payload"]))
             return
@@ -149,11 +240,18 @@ public final class TargetModeRuntimeController: NSObject {
             "targetCount": String(overlay.report.targets.count),
             "duration": String(format: "%.2f", duration)
         ]))
-        currentSession = TargetOverlayPresenter.startInteractive(
+        currentSession = presenter.startInteractive(
             overlay,
             duration: duration,
             activate: { label in
-                targets.activate(label, action: action)
+                // REL-003 : la lettre désigne une cible de la liste affichée (source, filtre, cibles
+                // d'app). Activer cette cible conservée, sans relire ni réétiqueter une autre liste.
+                guard let selected = overlay.report.targets.first(where: {
+                    $0.label.caseInsensitiveCompare(label) == .orderedSame
+                }) else {
+                    return TargetActionResult(changed: false, message: "unknown_target: \(label)", error: "unknown_target")
+                }
+                return targets.activate(target: selected, action: action)
             },
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
@@ -181,7 +279,7 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "target_mode.search_started", details: [
             "targetCount": String(roadieTargets.count)
         ]))
-        currentSession = TargetOverlayPresenter.startSearch(
+        currentSession = presenter.startSearch(
             targets: roadieTargets,
             alphabet: appTargets.hintCharacters,
             load: { deliver, done in
@@ -236,17 +334,24 @@ public final class TargetModeRuntimeController: NSObject {
             "path": initialPath,
             "duration": String(format: "%.2f", duration)
         ]))
-        currentSession = TargetOverlayPresenter.startGridInteractive(
+        // REL-004 : racine figée tant que l'écran choisi reste le sien ; après une flèche vers un autre
+        // écran, grille de cet écran entier. Affichage et clic lisent la même racine.
+        let rootFor: @MainActor (Int?) -> TargetGridRoot? = { selectedDisplayIndex in
+            guard let frozenRoot else { return nil }
+            guard let selectedDisplayIndex, selectedDisplayIndex != frozenRoot.display.index else { return frozenRoot }
+            return grid.root(displayIndex: selectedDisplayIndex, scope: .display)
+        }
+        currentSession = presenter.startGridInteractive(
             initialPath: initialPath,
             duration: duration,
             config: config,
             displayIndex: displayIndex,
             stateProvider: { selectedDisplayIndex, parentPath in
-                if let frozenRoot {
+                if let root = rootFor(selectedDisplayIndex) {
                     return TargetOverlayState(
                         visible: true,
                         labelsOnly: true,
-                        report: grid.targets(root: frozenRoot, parentPath: parentPath)
+                        report: grid.targets(root: root, parentPath: parentPath)
                     )
                 }
                 return TargetOverlayState(
@@ -256,8 +361,8 @@ public final class TargetModeRuntimeController: NSObject {
                 )
             },
             activate: { selectedDisplayIndex, selectedPath in
-                if let frozenRoot {
-                    return grid.perform(.click, path: selectedPath, root: frozenRoot)
+                if let root = rootFor(selectedDisplayIndex) {
+                    return grid.perform(.click, path: selectedPath, root: root)
                 }
                 return grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
             },
