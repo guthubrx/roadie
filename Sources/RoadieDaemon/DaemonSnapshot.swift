@@ -574,20 +574,27 @@ public struct SnapshotService {
 
     /// REL-005 : l'état runtime reprend, pour chaque écran présent, les desktops, labels et stages
     /// persistés (nom et mode), stages vides comprises. Sans cela, il ne contient que la stage
-    /// active et celles des fenêtres vivantes, sous un nom générique. Les fenêtres assignées plus
-    /// haut, le focus et la stage active ne changent pas.
+    /// active et celles des fenêtres vivantes, sous un nom générique. Une stage déjà créée (stage 1
+    /// par défaut d'un desktop, stage d'une fenêtre vivante) reçoit aussi le nom et le mode
+    /// persistés ; ses fenêtres et son focus ne changent pas. Un desktop non courant reprend sa
+    /// stage active persistée ; celle du desktop courant reste celle décidée plus haut (focus suivi).
     // O(s + d·l) - s stages persistées, d desktops runtime, l labels persistés (bornés).
     private func applyPersistedMetadata(to state: inout RoadieState, from persistedStages: PersistentStageState) {
         var displays = state.displays
-        for scope in persistedStages.scopes where displays[scope.displayID] != nil {
-            var desktop = displays[scope.displayID]?.desktops[scope.desktopID]
+        for scope in persistedStages.scopes {
+            guard let display = displays[scope.displayID] else { continue }
+            var desktop = display.desktops[scope.desktopID]
                 ?? DesktopState(id: scope.desktopID, activeStageID: scope.activeStageID)
             for persisted in scope.stages {
                 if desktop.stages[persisted.id] == nil {
                     desktop.stages[persisted.id] = StageState(id: persisted.id, name: persisted.name, mode: persisted.mode)
                 } else {
                     desktop.stages[persisted.id]?.name = persisted.name
+                    desktop.stages[persisted.id]?.mode = persisted.mode
                 }
+            }
+            if scope.desktopID != display.currentDesktopID, desktop.stages[scope.activeStageID] != nil {
+                desktop.activeStageID = scope.activeStageID
             }
             displays[scope.displayID]?.desktops[scope.desktopID] = desktop
         }
@@ -605,7 +612,7 @@ public struct SnapshotService {
     /// retour (FR-007). Elle est retirée à la purge du membre, à son départ de la stage, à son
     /// épinglage ou sur destruction confirmée. Une fenêtre vivante sans feuille coupe la feuille
     /// active selon la forme de cette feuille (R3). Ne lit aucune géométrie de fenêtre (FR-003).
-    // O(Σ m·f) - m membres et f feuilles par stage à arbre (insertion O(f)), bornés.
+    // O(Σ (f + m)) par stage à arbre sans insertion, voir `reconciledTree`.
     private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) {
         let side: BSPInsertionSide = input.config.windowPlacement.newWindowSide == "left" ? .left : .right
         let innerGap = CGFloat(input.config.tiling.gapsInner)
@@ -617,28 +624,53 @@ public struct SnapshotService {
             for stageIndex in persistentScope.stages.indices where persistentScope.stages[stageIndex].mode.usesTreeEngine {
                 let stage = persistentScope.stages[stageIndex]
                 let kept = Set(stage.members.map(\.windowID)).subtracting(input.destroyedWindowIDs).subtracting(pinned)
-                var tree = stage.bspTree ?? .empty
-                for id in tree.windowIDs where !kept.contains(id) {
-                    tree = tree.removing(id)
-                }
-                let absent = Set(tree.windowIDs).subtracting(input.stageManagedWindowIDs)
-                var anchor = Self.bspInsertionAnchor(
-                    tree: tree,
+                let tree = Self.reconciledTree(
+                    stage.bspTree ?? .empty,
+                    stage: stage,
+                    kept: kept,
                     live: input.stageManagedWindowIDs,
                     globalFocus: input.providerFocusedID,
-                    stage: stage
+                    side: side,
+                    container: container,
+                    innerGap: innerGap
                 )
-                for member in stage.members where kept.contains(member.windowID)
-                    && input.stageManagedWindowIDs.contains(member.windowID)
-                    && !tree.contains(member.windowID) {
-                    tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
-                    anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
-                }
                 let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
                 guard next != stage.bspTree else { continue }
                 persistedStages.scopes[scopeIndex].stages[stageIndex].bspTree = next
             }
         }
+    }
+
+    /// Arbre d'une stage après réconciliation : feuilles hors de `kept` retirées, puis membres
+    /// vivants sans feuille insérés dans l'ordre des membres. Les feuilles sont collectées une
+    /// seule fois ; l'ensemble `leaves` sert à l'appartenance et suit les insertions (PERF-002).
+    /// La projection retire toutes les feuilles d'un coup, avec le même arbre que des retraits
+    /// successifs : chaque retrait remplace un split par son côté restant.
+    // Avant : O(f² + k·f + m·f) sur un arbre en chaîne (deux lectures de `windowIDs`, un `removing`
+    // par feuille retirée, un `contains` par membre). Après : O(f + m) sans insertion, plus
+    // O(f²) par insertion réelle (`inserting`, voir BSPTree) - f feuilles, k retirées, m membres.
+    static func reconciledTree(
+        _ initial: BSPTree,
+        stage: PersistentStage,
+        kept: Set<WindowID>,
+        live: Set<WindowID>,
+        globalFocus: WindowID?,
+        side: BSPInsertionSide,
+        container: CGRect,
+        innerGap: CGFloat
+    ) -> BSPTree {
+        var leaves = Set(initial.windowIDs)
+        let removed = leaves.subtracting(kept)
+        var tree = initial.projected(excluding: removed)
+        leaves.subtract(removed)
+        let absent = leaves.subtracting(live)
+        var anchor = bspInsertionAnchor(leaves: leaves, live: live, globalFocus: globalFocus, stage: stage)
+        for member in stage.members where kept.contains(member.windowID) && live.contains(member.windowID) {
+            guard leaves.insert(member.windowID).inserted else { continue }
+            tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
+            anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
+        }
+        return tree
     }
 
     /// Migration SPEC-017 (T082, A8) des stages `mutableBsp`, une fois par processus producteur :
@@ -1608,14 +1640,14 @@ public extension SnapshotService {
     /// de l'arbre parmi le focus global, le focus de la stage et son focus précédent ; `nil` sinon
     /// (insertion sur la première feuille). Le focus global seul ne suffit pas : c'est souvent la
     /// nouvelle fenêtre elle-même, et la stage l'a déjà adoptée comme focus (le précédent reste).
-    // O(f) - f = feuilles de l'arbre.
+    // O(f) - f = feuilles de l'arbre, déjà collectées par l'appelant.
     fileprivate static func bspInsertionAnchor(
-        tree: BSPTree,
+        leaves: Set<WindowID>,
         live: Set<WindowID>,
         globalFocus: WindowID?,
         stage: PersistentStage
     ) -> WindowID? {
-        let anchors = Set(tree.windowIDs).intersection(live)
+        let anchors = leaves.intersection(live)
         return [globalFocus, stage.focusedWindowID, stage.previousFocusedWindowID]
             .lazy
             .compactMap { $0 }
