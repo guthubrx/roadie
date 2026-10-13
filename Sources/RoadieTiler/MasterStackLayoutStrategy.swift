@@ -4,6 +4,11 @@ import RoadieCore
 public struct MasterStackLayoutStrategy: LayoutStrategy {
     public var masterRatio: CGFloat
 
+    /// Étendue minimale (points) gardée par chaque tuile quand l'espacement est trop grand
+    /// pour le conteneur (REL-031). 10 points : avec un ratio borné à 0,1...0,9, chaque côté
+    /// d'un partage garde au moins 1 point.
+    static let minimumTileExtent: CGFloat = 10
+
     public init(masterRatio: CGFloat = 0.6) {
         self.masterRatio = masterRatio.clamped(to: 0.1...0.9)
     }
@@ -19,12 +24,19 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
         }
 
         let stack = windows.dropFirst()
-        let usableWidth = max(0, rect.width - gap)
+        // REL-031 : un espacement plus grand que le conteneur poussait des tuiles hors de
+        // `rect`. Chaque espacement est borné pour laisser `minimumTileExtent` à chaque tuile ;
+        // un espacement qui tient déjà dans le conteneur reste inchangé.
+        let horizontalGap = min(gap, max(0, rect.width - 2 * Self.minimumTileExtent))
+        let verticalGap = stack.count > 1
+            ? min(gap, max(0, (rect.height - CGFloat(stack.count) * Self.minimumTileExtent) / CGFloat(stack.count - 1)))
+            : 0
+        let usableWidth = max(0, rect.width - horizontalGap)
         let ratio = adaptiveMasterRatio(
             master: master,
             stack: stack,
             rect: rect,
-            gap: gap,
+            gap: horizontalGap,
             usableWidth: usableWidth,
             currentFrames: request.currentFrames,
             priorityWindowIDs: request.priorityWindowIDs
@@ -35,19 +47,19 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
             master: CGRect(x: rect.minX, y: rect.minY, width: masterWidth, height: rect.height).integral
         ]
 
-        let usableHeight = max(0, rect.height - gap * CGFloat(stack.count - 1))
+        let usableHeight = max(0, rect.height - verticalGap * CGFloat(stack.count - 1))
         let baseHeight = floor(usableHeight / CGFloat(stack.count))
         var y = rect.minY
         for (index, windowID) in stack.enumerated() {
             let isLast = index == stack.count - 1
             let height = isLast ? rect.maxY - y : baseHeight
             placements[windowID] = CGRect(
-                x: rect.minX + masterWidth + gap,
+                x: rect.minX + masterWidth + horizontalGap,
                 y: y,
                 width: stackWidth,
                 height: height
             ).integral
-            y += height + gap
+            y += height + verticalGap
         }
 
         return LayoutPlan(placements: placements)
