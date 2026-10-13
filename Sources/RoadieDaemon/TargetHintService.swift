@@ -271,6 +271,9 @@ public struct TargetHintService {
         var report = Self.report(from: snapshot, state: state, options: options)
         if options.source == .app || (options.source == .all && (appTargetsConfig.enabled || options.includeAppTargets)) {
             let appReport = appTargetService.query(config: appTargetsConfig, enabledOverride: options.includeAppTargets)
+            if let scan = appReport.scan {
+                eventLog.append(RoadieEvent(type: "targets.app_scan", details: scan.eventDetails))
+            }
             report.targets.append(contentsOf: appReport.targets)
             report.partial = report.partial || appReport.partial
             report.error = report.error ?? appReport.error

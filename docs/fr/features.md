@@ -276,6 +276,24 @@ Les zones applicatives sensibles peuvent etre listees en mode experimental via
 Accessibility. Ce mode est desactive par defaut pour eviter de scanner les apps
 pendant les chemins chauds du window manager.
 
+Les applications Electron (T3 Code, Slack, Discord...) ne publient leur contenu
+Accessibility qu'a la demande. Quand le boost AX est actif (`ax_boost_enabled` ou
+`additional_boost_bundle_ids`), Roadie pose `AXManualAccessibility` sur
+l'application Electron au premier plan a chaque session. L'application construit
+son arbre en arriere-plan : juste apres son lancement, la premiere session peut ne
+montrer que la fenetre (Roadie reessaie au plus 300 ms) ; les suivantes sont
+completes. Une arborescence web est profonde : prevoir `max_depth = 30` et
+`timeout_ms = 250`. Seuls les elements visibles
+dans la fenetre recoivent un label. Couper le boost coupe aussi cette demande.
+
+Chaque parcours ecrit un evenement `targets.app_scan` (elements lus, profondeur
+atteinte, duree, raison d'arret) dans `~/.roadies/events.jsonl`. Il sert a regler
+`max_depth` et `timeout_ms` :
+
+```bash
+grep '"targets.app_scan"' ~/.roadies/events.jsonl | tail -3
+```
+
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
 les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne

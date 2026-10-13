@@ -272,6 +272,24 @@ Application-sensitive zones can be listed experimentally through Accessibility.
 This mode is disabled by default so app scanning does not run on window-manager
 hot paths.
 
+Electron apps (T3 Code, Slack, Discord...) only publish their Accessibility
+content on request. When the AX boost is active (`ax_boost_enabled` or
+`additional_boost_bundle_ids`), Roadie sets `AXManualAccessibility` on the
+frontmost Electron app on each session. The app builds its tree in the
+background: right after launch, the first session may only show the window
+(Roadie retries for at most 300 ms); later sessions are complete. Web trees are
+deep: use `max_depth = 30` and `timeout_ms = 250`. Only
+elements visible inside the window get a label. Turning the boost off also turns
+this request off.
+
+Each scan writes a `targets.app_scan` event (elements read, depth reached,
+duration, stop reason) to `~/.roadies/events.jsonl`. Use it to tune `max_depth`
+and `timeout_ms`:
+
+```bash
+grep '"targets.app_scan"' ~/.roadies/events.jsonl | tail -3
+```
+
 Keyboard Target building blocks are independently configurable. The CLI foundation
 and picker stay enabled by default, while the future visual overlay, app mouse
 actions, and app scroll mode stay off until the user opts in.

@@ -63,4 +63,46 @@ struct AppTargetQueryServiceTests {
         #expect(result.changed)
         #expect(result.message == "right-click app:1/0")
     }
+
+    @Test
+    func scanIsRetriedOnlyWhileAFullyExploredElectronTreeHasNoWebArea() {
+        #expect(AppTargetQueryService.shouldRetryScan(isElectron: true, sawWebArea: false, exploredFully: true, retries: 0))
+        #expect(AppTargetQueryService.shouldRetryScan(isElectron: true, sawWebArea: false, exploredFully: true, retries: 1))
+        #expect(!AppTargetQueryService.shouldRetryScan(isElectron: true, sawWebArea: false, exploredFully: true, retries: 2))
+        #expect(!AppTargetQueryService.shouldRetryScan(isElectron: true, sawWebArea: true, exploredFully: true, retries: 0))
+        #expect(!AppTargetQueryService.shouldRetryScan(isElectron: true, sawWebArea: false, exploredFully: false, retries: 0))
+        #expect(!AppTargetQueryService.shouldRetryScan(isElectron: false, sawWebArea: false, exploredFully: true, retries: 0))
+    }
+
+    @Test
+    func electronBundlesAreDetectedByTheirFramework() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let electron = root.appendingPathComponent("Electron.app")
+        let native = root.appendingPathComponent("Native.app")
+        try FileManager.default.createDirectory(
+            at: electron.appendingPathComponent("Contents/Frameworks/Electron Framework.framework"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: native.appendingPathComponent("Contents/Frameworks"), withIntermediateDirectories: true)
+
+        #expect(AppTargetQueryService.isElectronBundle(at: electron))
+        #expect(!AppTargetQueryService.isElectronBundle(at: native))
+        #expect(!AppTargetQueryService.isElectronBundle(at: nil))
+    }
+
+    @Test
+    func elementsAreClippedToTheWindowSoTheirClickPointStaysInside() {
+        let window = Rect(x: 100, y: 100, width: 400, height: 300)
+
+        #expect(AppTargetQueryService.visibleFrame(Rect(x: 150, y: 150, width: 20, height: 20), in: window)
+            == Rect(x: 150, y: 150, width: 20, height: 20))
+        let clipped = AppTargetQueryService.visibleFrame(Rect(x: 480, y: 380, width: 60, height: 60), in: window)
+        #expect(clipped == Rect(x: 480, y: 380, width: 20, height: 20))
+        #expect(clipped.map { window.cgRect.contains(CGPoint(x: $0.cgRect.midX, y: $0.cgRect.midY)) } == true)
+        #expect(AppTargetQueryService.visibleFrame(Rect(x: 150, y: 900, width: 20, height: 20), in: window) == nil)
+        #expect(AppTargetQueryService.visibleFrame(Rect(x: 500, y: 150, width: 20, height: 20), in: window) == nil)
+        #expect(AppTargetQueryService.visibleFrame(Rect(x: 150, y: 900, width: 20, height: 20), in: nil)
+            == Rect(x: 150, y: 900, width: 20, height: 20))
+    }
 }

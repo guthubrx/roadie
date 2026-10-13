@@ -135,6 +135,39 @@ struct TargetHintServiceTests {
     }
 
     @Test
+    func appScanStatisticsAreLoggedOnlyWhenTheProviderReportsThem() throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).jsonl").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let log = EventLog(path: path)
+        let stats = AppTargetScanStats(
+            bundleID: "com.example.electron", isElectron: true, manualAccessibility: "enabled",
+            visited: 412, candidates: 57, offscreen: 18, maxDepthReached: 8, atMaxDepth: 31,
+            sawWebArea: true, elapsedMs: 240, stopReason: "complete", retries: 1
+        )
+        let measured = TargetHintService(
+            eventLog: log,
+            appTargetService: AppTargetQueryService(provider: ScannedAppTargetProvider(scan: stats)),
+            appTargetsConfig: AppTargetsConfig(enabled: true)
+        )
+        let silent = TargetHintService(
+            eventLog: log,
+            appTargetService: AppTargetQueryService(provider: ScannedAppTargetProvider(scan: nil)),
+            appTargetsConfig: AppTargetsConfig(enabled: true)
+        )
+
+        _ = measured.list(TargetQueryOptions(source: .app))
+        _ = silent.list(TargetQueryOptions(source: .app))
+
+        let scans = log.tail(limit: 50)
+            .compactMap { try? JSONDecoder.roadieTest.decode(RoadieEvent.self, from: Data($0.utf8)) }
+            .filter { $0.type == "targets.app_scan" }
+        #expect(scans.count == 1)
+        #expect(scans.first?.details == stats.eventDetails)
+        #expect(scans.first?.details["stopReason"] == "complete")
+        #expect(scans.first?.details["retries"] == "1")
+    }
+
+    @Test
     func appMouseActionsAreDisabledIndependentlyFromAppTargetDiscovery() {
         let targets = TargetHintService(
             appTargetService: AppTargetQueryService(provider: SingleAppTargetProvider()),
@@ -300,4 +333,24 @@ func roadieState(displayID: DisplayID, activeStageID: StageID, windows: [StageSc
     }
     try? state.switchStage(activeStageID, in: displayID, desktopID: DesktopID(rawValue: 1))
     return state
+}
+
+private struct ScannedAppTargetProvider: AppTargetProviding {
+    var scan: AppTargetScanStats?
+
+    func candidates(config: AppTargetsConfig) -> AppTargetQueryReport {
+        AppTargetQueryReport(targets: [], scan: scan)
+    }
+
+    func click(_ target: RoadieTarget, action: TargetActionVerb) -> TargetActionResult {
+        TargetActionResult(changed: false, message: "unused", target: target)
+    }
+}
+
+private extension JSONDecoder {
+    static let roadieTest: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
 }
