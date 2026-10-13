@@ -83,6 +83,10 @@ L'utilisateur appuie sur Hyper + F. Une zone de saisie apparaît en bas de l'éc
 - **FR-006**: `*` et `;` MUST afficher toutes les cibles ; `?` MUST afficher les propriétés de la cible mise en avant.
 - **FR-007**: Le mode lettres existant MUST rester inchangé.
 - **FR-008**: Le texte des enfants rattaché aux cibles web MUST rester dans le budget de parcours existant (`timeout_ms`).
+- **FR-009** (ajout du 2026-10-13) : Le mode recherche MUST couvrir toutes les fenêtres visibles de l'espace courant, pas seulement la fenêtre active. Les fenêtres sont lues en parallèle, avec la même échéance `timeout_ms`. Un élément caché par une fenêtre placée devant n'a pas de lettre.
+- **FR-010** (ajout du 2026-10-13) : Valider une cible d'une autre fenêtre MUST focaliser cette fenêtre, attendre que son application soit active (0,5 s au plus), puis cliquer.
+- **FR-011** (ajout du 2026-10-13) : Le mode lettres MUST garder la fenêtre active par défaut. `app_targets.scope = "visible_windows"` MUST l'étendre aux fenêtres visibles.
+- **FR-012** (correctif du 2026-10-13) : Une feuille web sans action (règle « feuille focalisable ») MUST être cliquée au centre de sa première image ou de son premier texte visible, et non au centre de l'élément. Mesure Bluejay : le centre d'une ligne de l'Historique ne réagit pas ; seuls la vignette, le titre et l'auteur ont un gestionnaire de clic.
 
 ## Success Criteria *(mandatory)*
 

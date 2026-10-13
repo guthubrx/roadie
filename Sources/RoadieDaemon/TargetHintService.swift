@@ -281,7 +281,7 @@ public struct TargetHintService {
         var report = Self.report(from: snapshot, state: state, options: options)
         if options.source == .app || (options.source == .all && (appTargetsConfig.enabled || options.includeAppTargets)) {
             let appReport = appTargetService.query(config: appTargetsConfig, enabledOverride: options.includeAppTargets)
-            if let scan = appReport.scan {
+            for scan in [appReport.scan].compactMap(\.self) + appReport.windowScans {
                 eventLog.append(RoadieEvent(type: "targets.app_scan", details: scan.eventDetails))
             }
             report.targets.append(contentsOf: appReport.targets)
@@ -434,6 +434,10 @@ public struct TargetHintService {
         case .sendActive:
             result = activateSendActive(target)
         case .click, .doubleClick, .rightClick, .commandClick:
+            // Cible d'une fenêtre visible quelconque (SPEC-021) : focaliser puis cliquer.
+            if let windowID = target.scope.windowId, target.source == .app {
+                _ = WindowCommandService(service: service, stageStore: stageStore).focus(windowID: WindowID(rawValue: windowID))
+            }
             result = appTargetService.click(target, action: action)
         case .inspect:
             result = TargetActionResult(changed: false, message: "inspect \(target.id)", target: target)

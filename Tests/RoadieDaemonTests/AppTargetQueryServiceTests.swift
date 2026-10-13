@@ -244,4 +244,39 @@ struct AppTargetQueryServiceTests {
         #expect(targets.first?.clickFrame == thumbnail)
         #expect(targets.last?.clickFrame == nil)
     }
+
+    @Test
+    func aTargetHiddenByAWindowInFrontGetsNoLabel() {
+        let front = Rect(x: 0, y: 0, width: 500, height: 500)
+        let hidden = RoadieTarget(id: "app:1/w2.0", kind: .appElement, title: "A", source: .app,
+                                  frame: Rect(x: 100, y: 100, width: 50, height: 20), actions: [.click])
+        var visible = hidden
+        visible.frame = Rect(x: 600, y: 100, width: 50, height: 20)
+        // Seul le point de clic compte : une ligne qui déborde reste visible si sa vignette l'est.
+        var row = hidden
+        row.frame = Rect(x: 400, y: 100, width: 400, height: 20)
+        row.clickFrame = Rect(x: 700, y: 100, width: 50, height: 20)
+
+        #expect(AppTargetQueryService.isCovered(hidden, by: [front]))
+        #expect(!AppTargetQueryService.isCovered(visible, by: [front]))
+        #expect(!AppTargetQueryService.isCovered(row, by: [front]))
+        #expect(!AppTargetQueryService.isCovered(hidden, by: []))
+    }
+
+    @Test
+    func theProcessOfAnAppTargetIsReadFromItsID() {
+        let target = RoadieTarget(id: "app:69714/w812.0.6", kind: .appElement, title: "A", source: .app, actions: [.click])
+        let window = RoadieTarget(id: "window:12", kind: .window, title: "W", source: .roadie, actions: [.focus])
+
+        #expect(AppTargetQueryService.pid(of: target) == 69714)
+        #expect(AppTargetQueryService.pid(of: window) == nil)
+    }
+
+    @Test
+    func aRowWithItsOwnButtonsKeepsItsTextButAPageContainerDoesNot() {
+        let window = Rect(x: 0, y: 0, width: 2248, height: 2114)
+        #expect(AppTargetQueryService.keepsContainerText(Rect(x: 0, y: 0, width: 522, height: 114), in: window))
+        #expect(!AppTargetQueryService.keepsContainerText(Rect(x: 0, y: 0, width: 2000, height: 2000), in: window))
+        #expect(!AppTargetQueryService.keepsContainerText(nil, in: window))
+    }
 }

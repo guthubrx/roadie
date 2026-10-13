@@ -506,6 +506,15 @@ struct AXApplicationWindows {
     }
 }
 
+/// Élément AX de chaque fenêtre d'une application, par CGWindowID (SPEC-021, cibles de toutes les
+/// fenêtres visibles). Vide si l'application est mise de côté ou ne répond pas. O(m).
+public func axWindowElements(pid: pid_t) -> [CGWindowID: AXUIElement] {
+    guard let windows = AXApplicationWindows(pid: pid) else { return [:] }
+    var elements: [CGWindowID: AXUIElement] = [:]
+    for entry in windows.entries { if let id = entry.id { elements[id] = entry.element } }
+    return elements
+}
+
 /// Index des fenêtres AX par application, posé par le dernier snapshot et réutilisé par
 /// l'écrivain (SPEC-017 R8) : une écriture ne réénumère plus `kAXWindows`. Vidé pour un pid
 /// à la création ou destruction d'une fenêtre, à la fin de l'application ou sur un élément

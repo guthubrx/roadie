@@ -734,7 +734,16 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
-        self.model = TargetSearchModel(targets: targets)
+        // Écran du pointeur (celui de la barre) d'abord, ordre gardé dans chaque groupe : la première
+        // correspondance mise en avant est sous les yeux, pas sur un autre moniteur. O(n).
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
+        let isOnPointerScreen = { (target: RoadieTarget) -> Bool in
+            guard let screen, let frame = (target.clickFrame ?? target.frame)?.cgRect else { return false }
+            let ns = RoadieScreenCoordinate.axRectToNS(frame)
+            return screen.contains(CGPoint(x: ns.midX, y: ns.midY))
+        }
+        self.model = TargetSearchModel(targets: targets.filter(isOnPointerScreen) + targets.filter { !isOnPointerScreen($0) })
         self.activate = activate
         self.onFinish = onFinish
     }

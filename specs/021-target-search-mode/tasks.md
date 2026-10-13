@@ -43,6 +43,12 @@
 
 ---
 
+## Phase 5b: Toutes les fenêtres visibles (ajout du 2026-10-13)
+
+- [x] T015 [US1] Point de clic des feuilles web : premier `AXImage`/`AXStaticText` visible du candidat (`clickFrame`), dans `Sources/RoadieDaemon/AppTargetQueryService.swift` et `RoadieTarget` ; test dans `AppTargetQueryServiceTests.swift`. Validé par l'utilisateur dans l'Historique Bluejay (double Commande et Hyper+F).
+- [ ] T016 [US1] Portée `visible_windows` dans `LiveAppTargetProvider` : fenêtres à l'écran (CG, couche 0, de l'avant vers l'arrière), élément AX par numéro de fenêtre (`RoadieAX`), parcours parallèles avec l'échéance commune, retrait des éléments cachés par une fenêtre de devant, `scope.windowId` sur chaque cible, statistiques par fenêtre. `scope` accepte `visible_windows` (validation de la config). Tests des fonctions pures (occlusion).
+- [ ] T017 [US1] Le mode recherche utilise `visible_windows` ; le clic d'une cible d'une autre fenêtre la focalise d'abord (`WindowCommandService.focus`), attend l'application active, puis clique. Résultat observable : Hyper+F trouve et active un élément d'une fenêtre non active.
+
 ## Phase 6: Polish & vérification
 
 - [ ] T012 [P] Documenter le mode recherche et `search_hotkey` dans `docs/fr/features.md`, `docs/en/features.md`, `examples/roadies.toml`.

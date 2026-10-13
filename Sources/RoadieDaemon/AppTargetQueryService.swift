@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import RoadieAX
 import RoadieCore
 
 public struct AppTargetQueryReport: Codable, Equatable, Sendable {
@@ -8,12 +9,18 @@ public struct AppTargetQueryReport: Codable, Equatable, Sendable {
     public var error: String?
     /// Statistiques du parcours AX ; absentes quand aucun parcours n'a eu lieu.
     public var scan: AppTargetScanStats?
+    /// Portée `visible_windows` (SPEC-021) : statistiques de chaque fenêtre parcourue.
+    public var windowScans: [AppTargetScanStats]
 
-    public init(targets: [RoadieTarget] = [], partial: Bool = false, error: String? = nil, scan: AppTargetScanStats? = nil) {
+    public init(
+        targets: [RoadieTarget] = [], partial: Bool = false, error: String? = nil, scan: AppTargetScanStats? = nil,
+        windowScans: [AppTargetScanStats] = []
+    ) {
         self.targets = targets
         self.partial = partial
         self.error = error
         self.scan = scan
+        self.windowScans = windowScans
     }
 }
 
@@ -206,8 +213,6 @@ public struct AppTargetQueryService {
         return shared >= 0.8 * ancestorArea && shared >= 0.8 * leafArea
     }
 
-    /// Même seuil que l'affichage (`TargetOverlayPresenter`, plus de 4 points) : en dessous, aucune
-    /// lettre n'est dessinée. Chromium réduit à 1 point les éléments défilés hors d'une liste.
     /// Texte de recherche d'une cible web : fragments des `AXStaticText` descendants, sans répéter
     /// le titre ou la valeur, borné à `limit` caractères (SPEC-021).
     public static func searchText(_ fragments: [String], excluding own: [String], limit: Int = 500) -> String {
@@ -219,6 +224,29 @@ public struct AppTargetQueryService {
             kept.append(trimmed)
         }
         return String(kept.joined(separator: " ").prefix(limit))
+    }
+
+    /// Un candidat qui contient d'autres candidats garde son texte s'il occupe au plus un quart de la
+    /// fenêtre : une ligne avec ses boutons, pas un conteneur de page.
+    public static func keepsContainerText(_ frame: Rect?, in windowFrame: Rect?) -> Bool {
+        guard let frame, let windowFrame else { return false }
+        return frame.width * frame.height * 4 <= windowFrame.width * windowFrame.height
+    }
+
+    /// Point de clic d'une cible caché par une fenêtre placée devant la sienne (SPEC-021).
+    /// Complexité : O(f), f fenêtres devant.
+    public static func isCovered(_ target: RoadieTarget, by framesInFront: [Rect]) -> Bool {
+        guard let frame = (target.clickFrame ?? target.frame)?.cgRect else { return false }
+        let point = CGPoint(x: frame.midX, y: frame.midY)
+        return framesInFront.contains { $0.cgRect.contains(point) }
+    }
+
+    /// Même seuil que l'affichage (`TargetOverlayPresenter`, plus de 4 points) : en dessous, aucune
+    /// lettre n'est dessinée. Chromium réduit à 1 point les éléments défilés hors d'une liste.
+    /// Processus d'une cible d'application : son id vaut `app:<pid>/<chemin>`.
+    public static func pid(of target: RoadieTarget) -> pid_t? {
+        guard target.id.hasPrefix("app:"), let slash = target.id.firstIndex(of: "/") else { return nil }
+        return pid_t(target.id[target.id.index(target.id.startIndex, offsetBy: 4)..<slash])
     }
 
     public static func isHintable(_ visible: Rect) -> Bool {
@@ -283,35 +311,169 @@ public struct CFIdentitySet {
     }
 }
 
-public struct LiveAppTargetProvider: AppTargetProviding {
+public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     public init() {}
 
     public func candidates(config: AppTargetsConfig) -> AppTargetQueryReport {
         guard AXIsProcessTrusted() else {
             return AppTargetQueryReport(error: "accessibility_denied")
         }
-        guard config.scope == "frontmost_window" else {
+        switch config.scope {
+        case "frontmost_window":
+            return frontmostWindowCandidates(config: config)
+        case "visible_windows":
+            return visibleWindowsCandidates(config: config)
+        default:
             return AppTargetQueryReport(error: "unsupported_scope")
         }
+    }
+
+    private func frontmostWindowCandidates(config: AppTargetsConfig) -> AppTargetQueryReport {
         guard let app = NSWorkspace.shared.frontmostApplication else {
             return AppTargetQueryReport(error: "no_frontmost_application")
         }
-        let effectiveBoost = config.axBoostEnabled || config.additionalBoostBundleIDs.contains(app.bundleIdentifier ?? "")
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
         guard let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute) else {
             return AppTargetQueryReport(error: "no_focused_window")
         }
+        let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
+        let partial = result.pass.stopReason != "complete"
+        return AppTargetQueryReport(
+            targets: Self.labeled(AppTargetQueryService.targets(from: result.pass.candidates, config: config), config: config),
+            partial: partial,
+            error: partial ? "partial_timeout_or_limit" : nil,
+            scan: result.stats
+        )
+    }
 
-        // Complexité : O(r * n), n = éléments lus par passe (borné par max_targets, max_depth et
-        // timeout_ms), r ≤ 3 passes. Seule une application Electron dont l'arbre est vide relance.
-        // Les relances et leurs attentes partagent une échéance : timeout_ms + 300 ms au total, à un
-        // appel AX près (un appel synchrone lent n'est pas interrompu).
+    /// Toutes les fenêtres à l'écran (SPEC-021) : un parcours par fenêtre, en parallèle, avec la même
+    /// échéance ; la durée est celle de la fenêtre la plus lente, pas la somme. Un élément caché par une
+    /// fenêtre de devant n'a pas de lettre. `max_targets` s'applique à chaque fenêtre.
+    /// Complexité : O(w * n) appels AX répartis sur w fils, n éléments lus par fenêtre ; occlusion
+    /// O(c * w), c cibles, w fenêtres à l'écran (quelques dizaines au plus).
+    private func visibleWindowsCandidates(config: AppTargetsConfig) -> AppTargetQueryReport {
+        let windows = Self.visibleWindows()
+        var elementsByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
+        var jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)] = []
+        // Fenêtre écartée avant parcours : statistique vide, raison dans `stopReason`.
+        var skipped: [AppTargetScanStats] = []
+        for (order, window) in windows.enumerated() {
+            if elementsByPID[window.pid] == nil {
+                elementsByPID[window.pid] = axWindowElements(pid: window.pid)
+            }
+            let app = NSRunningApplication(processIdentifier: window.pid)
+            guard let element = elementsByPID[window.pid]?[window.id], let app else {
+                skipped.append(AppTargetScanStats(
+                    bundleID: app?.bundleIdentifier ?? "pid:\(window.pid)", isElectron: false, manualAccessibility: "skipped",
+                    visited: 0, candidates: 0, offscreen: 0, maxDepthReached: 0, atMaxDepth: 0, sawWebArea: false,
+                    focusableAdded: 0, rejectedRoles: "window=\(window.id),axWindows=\(elementsByPID[window.pid]?.count ?? 0)",
+                    elapsedMs: 0, stopReason: app == nil ? "no_app" : "no_ax_window", retries: 0
+                ))
+                continue
+            }
+            jobs.append((order, window.id, element, app))
+        }
+        guard !jobs.isEmpty else {
+            return AppTargetQueryReport(error: "no_visible_window", windowScans: skipped)
+        }
+
         let startedAt = Date()
+        let batch = WindowScanBatch(jobs: jobs)
+        DispatchQueue.concurrentPerform(iterations: jobs.count) { index in
+            let job = batch.jobs[index]
+            batch.results[index] = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
+        }
+        let results = Array(batch.results)
+
+        var targets: [RoadieTarget] = []
+        var stats = skipped
+        var partial = false
+        for (index, job) in jobs.enumerated() {
+            guard let result = results[index] else { continue }
+            stats.append(result.stats)
+            partial = partial || result.pass.stopReason != "complete"
+            let inFront = windows.prefix(job.order).map(\.frame)
+            for var target in AppTargetQueryService.targets(from: result.pass.candidates, config: config)
+            where !AppTargetQueryService.isCovered(target, by: inFront) {
+                target.scope.windowId = job.id
+                targets.append(target)
+            }
+        }
+        return AppTargetQueryReport(
+            targets: Self.labeled(targets, config: config),
+            partial: partial,
+            error: partial ? "partial_timeout_or_limit" : nil,
+            windowScans: stats
+        )
+    }
+
+    private struct WindowScan {
+        var pass: ScanPass
+        var stats: AppTargetScanStats
+    }
+
+    /// `@unchecked Sendable` : pendant `concurrentPerform`, chaque fil lit `jobs` sans le modifier
+    /// et écrit seulement sa case de `results`. Les éléments AX se lisent depuis n'importe quel fil.
+    private final class WindowScanBatch: @unchecked Sendable {
+        let jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]
+        let results: UnsafeMutableBufferPointer<WindowScan?>
+
+        init(jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)]) {
+            self.jobs = jobs
+            results = .allocate(capacity: jobs.count)
+            results.initialize(repeating: nil)
+        }
+
+        deinit {
+            results.deinitialize()
+            results.deallocate()
+        }
+    }
+
+    /// Fenêtres normales à l'écran (couche 0), de l'avant vers l'arrière, hors fenêtres de Roadie.
+    private static func visibleWindows() -> [(id: CGWindowID, pid: pid_t, frame: Rect)] {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return [] }
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        return raw.compactMap { info in
+            guard let id = info[kCGWindowNumber as String] as? UInt32, id > 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? Int32, pid != ownPID,
+                  // Sans application (cadres de l'outil `borders`) : ni parcourue, ni masquante.
+                  NSRunningApplication(processIdentifier: pid) != nil,
+                  info[kCGWindowLayer as String] as? Int ?? 0 == 0,
+                  info[kCGWindowAlpha as String] as? Double ?? 1 > 0,
+                  !["roadied", "roadie"].contains(info[kCGWindowOwnerName as String] as? String ?? ""),
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
+                  rect.width > 40, rect.height > 40
+            else { return nil }
+            return (id, pid, Rect(rect))
+        }
+    }
+
+    private static func labeled(_ targets: [RoadieTarget], config: AppTargetsConfig) -> [RoadieTarget] {
+        var targets = targets
+        let labels = TargetHintService.labels(count: targets.count, alphabet: config.hintCharacters)
+        for index in targets.indices {
+            targets[index].label = labels[index]
+        }
+        return targets
+    }
+
+    /// Parcours d'une fenêtre, avec ses relances Electron.
+    /// Complexité : O(r * n), n = éléments lus par passe (borné par max_targets, max_depth et
+    /// timeout_ms), r ≤ 3 passes. Seule une application Electron dont l'arbre est vide relance.
+    /// Les relances et leurs attentes partagent une échéance : timeout_ms + 300 ms au total, à un
+    /// appel AX près (un appel synchrone lent n'est pas interrompu).
+    private func scanWindow(
+        _ window: AXUIElement, app: NSRunningApplication, rootPath: String, config: AppTargetsConfig, startedAt: Date
+    ) -> WindowScan {
+        let effectiveBoost = config.axBoostEnabled || config.additionalBoostBundleIDs.contains(app.bundleIdentifier ?? "")
         let timeout = TimeInterval(config.timeoutMs) / 1000
         let retryDeadline = startedAt.addingTimeInterval(timeout + 0.3)
         let isElectron = AppTargetQueryService.isElectronBundle(at: app.bundleURL)
         let manualAccessibility = effectiveBoost && isElectron ? requestPublication(app.processIdentifier) : "skipped"
-        var pass = scan(window: window, pid: app.processIdentifier, config: config, boost: effectiveBoost,
+        var pass = scan(window: window, rootPath: rootPath, pid: app.processIdentifier, config: config, boost: effectiveBoost,
                         deadline: startedAt.addingTimeInterval(timeout))
         var retries = 0
         while AppTargetQueryService.shouldRetryScan(
@@ -322,36 +484,25 @@ public struct LiveAppTargetProvider: AppTargetProviding {
         ), Date().addingTimeInterval(0.15) < retryDeadline {
             Thread.sleep(forTimeInterval: 0.15)
             retries += 1
-            pass = scan(window: window, pid: app.processIdentifier, config: config, boost: effectiveBoost, deadline: retryDeadline)
+            pass = scan(window: window, rootPath: rootPath, pid: app.processIdentifier, config: config, boost: effectiveBoost,
+                        deadline: retryDeadline)
         }
-
-        var targets = AppTargetQueryService.targets(from: pass.candidates, config: config)
-        let labels = TargetHintService.labels(count: targets.count, alphabet: config.hintCharacters)
-        for index in targets.indices {
-            targets[index].label = labels[index]
-        }
-        let partial = pass.stopReason != "complete"
-        return AppTargetQueryReport(
-            targets: targets,
-            partial: partial,
-            error: partial ? "partial_timeout_or_limit" : nil,
-            scan: AppTargetScanStats(
-                bundleID: app.bundleIdentifier ?? "",
-                isElectron: isElectron,
-                manualAccessibility: manualAccessibility,
-                visited: pass.visited,
-                candidates: pass.candidates.count,
-                offscreen: pass.offscreen,
-                maxDepthReached: pass.maxDepthReached,
-                atMaxDepth: pass.atMaxDepth,
-                sawWebArea: pass.sawWebArea,
-                focusableAdded: pass.focusableAdded,
-                rejectedRoles: AppTargetQueryService.rejectedRoleSummary(pass.rejectedRoles),
-                elapsedMs: Int(Date().timeIntervalSince(startedAt) * 1000),
-                stopReason: pass.stopReason,
-                retries: retries
-            )
-        )
+        return WindowScan(pass: pass, stats: AppTargetScanStats(
+            bundleID: app.bundleIdentifier ?? "",
+            isElectron: isElectron,
+            manualAccessibility: manualAccessibility,
+            visited: pass.visited,
+            candidates: pass.candidates.count,
+            offscreen: pass.offscreen,
+            maxDepthReached: pass.maxDepthReached,
+            atMaxDepth: pass.atMaxDepth,
+            sawWebArea: pass.sawWebArea,
+            focusableAdded: pass.focusableAdded,
+            rejectedRoles: AppTargetQueryService.rejectedRoleSummary(pass.rejectedRoles),
+            elapsedMs: Int(Date().timeIntervalSince(startedAt) * 1000),
+            stopReason: pass.stopReason,
+            retries: retries
+        ))
     }
 
     /// Electron ne publie son arbre AX qu'à la demande d'un outil d'assistance
@@ -378,12 +529,12 @@ public struct LiveAppTargetProvider: AppTargetProviding {
     }
 
     /// Complexité : O(n + m + p + u * d), n = éléments lus ; voir `focusableLeaves` pour m, p, u, d.
-    private func scan(window: AXUIElement, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
+    private func scan(window: AXUIElement, rootPath: String, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
         let windowFrame = copyFrame(window)
         // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.
         // `textOwner` : chemin du plus proche candidat web, qui reçoit le texte des `AXStaticText` (SPEC-021).
         var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?)] =
-            [(window, "0", 0, false, nil, nil)]
+            [(window, rootPath, 0, false, nil, nil)]
         var pass = ScanPass()
         var seen = CFIdentitySet()
         let ignoredActions: Set<String> = ["AXShowMenu", "AXScrollToVisible", "AXShowDefaultUI", "AXShowAlternateUI"]
@@ -495,15 +646,18 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             markers: markers,
             unexplored: stack.map(\.path)
         )
-        // Texte des enfants : seulement pour un candidat qui ne contient aucun autre candidat (le
-        // conteneur de page de Bluejay recevrait sinon tout le texte de la page).
+        // Texte des enfants : chaque texte va à son plus proche candidat. Un grand conteneur ne le garde
+        // pas (le conteneur de page de Bluejay recevrait sinon tout le texte de la page) ; une ligne qui
+        // contient ses propres boutons le garde (fil de T3 Code avec épingle et menu, mesure du 2026-10-13).
         var containers = Set<String>()
         for index in markers.indices.dropLast()
             where !AppTargetQueryService.keepsFocusableLeaf(path: markers[index], nextFocusablePath: markers[index + 1]) {
             containers.insert(markers[index])
         }
         func withText(_ candidate: AppElementCandidate, at path: String) -> AppElementCandidate {
-            guard let fragments = texts[path], !containers.contains(path) else { return candidate }
+            guard let fragments = texts[path],
+                  !containers.contains(path) || AppTargetQueryService.keepsContainerText(candidate.frame, in: windowFrame)
+            else { return candidate }
             var updated = candidate
             updated.searchText = AppTargetQueryService.searchText(fragments, excluding: [candidate.title, candidate.value ?? ""])
             return updated
@@ -534,6 +688,9 @@ public struct LiveAppTargetProvider: AppTargetProviding {
         guard let frame = (target.clickFrame ?? target.frame)?.cgRect else {
             return TargetActionResult(changed: false, message: "app click: no frame", target: target, error: "no_frame")
         }
+        if let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) {
+            waitUntilFocused(windowID: windowID, pid: pid, timeout: 0.5)
+        }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {
         case .click:
@@ -549,6 +706,25 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             return TargetActionResult(changed: false, message: "app click: unsupported \(action.rawValue)", target: target, error: "unsupported_action")
         }
         return TargetActionResult(changed: true, message: "app \(action.rawValue) \(target.id)", target: target)
+    }
+
+    /// Cible d'une autre fenêtre (SPEC-021) : `TargetHintService` vient de la focaliser. Le clic attend
+    /// que son application soit active et que la fenêtre soit la sienne, sinon une application peut
+    /// ne prendre le premier clic que pour s'activer. Au-delà du délai, le clic part quand même.
+    private func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) {
+        guard let expected = axWindowElements(pid: pid)[windowID] else { return }
+        let system = AXUIElementCreateSystemWide()
+        let appElement = AXUIElementCreateApplication(pid)
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            var focusedPID: pid_t = 0
+            if let app = copyElementAttribute(system, kAXFocusedApplicationAttribute),
+               AXUIElementGetPid(app, &focusedPID) == .success, focusedPID == pid,
+               let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute), CFEqual(window, expected) {
+                return
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        } while Date() < deadline
     }
 
     private func postClick(

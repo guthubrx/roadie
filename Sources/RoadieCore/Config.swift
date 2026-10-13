@@ -627,6 +627,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
 }
 
 public struct AppTargetsConfig: Equatable, Codable, Sendable {
+    /// `frontmost_window` : fenêtre active ; `visible_windows` : toutes les fenêtres à l'écran (SPEC-021).
+    public static let scopes: Set<String> = ["frontmost_window", "visible_windows"]
+
     public var enabled: Bool
     public var scope: String
     public var maxTargets: Int
@@ -1593,11 +1596,11 @@ private enum ConfigValidationRules {
 
     private static func validateAppTargets(_ config: AppTargetsConfig) -> [ConfigValidationItem] {
         var items: [ConfigValidationItem] = []
-        if config.scope != "frontmost_window" {
+        if !AppTargetsConfig.scopes.contains(config.scope) {
             items.append(ConfigValidationItem(
                 level: .warning,
                 path: "experimental.app_targets.scope",
-                message: "only frontmost_window is supported currently"
+                message: "supported scopes: frontmost_window, visible_windows"
             ))
         }
         if config.hintCharacters.count < 2 {

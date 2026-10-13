@@ -168,7 +168,10 @@ public final class TargetModeRuntimeController: NSObject {
             finish(TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled"), command: command.name)
             return
         }
-        let targets = TargetHintService(service: service)
+        // Toutes les fenêtres visibles, quelle que soit la portée du mode lettres (FR-009).
+        var appTargets = service.effectiveConfig.experimental.appTargets
+        appTargets.scope = "visible_windows"
+        let targets = TargetHintService(service: service, appTargetsConfig: appTargets)
         let options = TargetQueryOptions(source: .all, maxResults: 500, includeAppTargets: true)
         let overlay = targets.overlayState(options: options, labelsOnly: true, visible: true)
         events.append(RoadieEvent(type: "target_mode.search_started", details: [
