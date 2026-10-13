@@ -76,11 +76,11 @@ L'utilisateur tape `/` dans la boîte. La boîte passe en mode commande et liste
 
 ### User Story 4 - Modifier un réglage avec `/set` (Priority: P2)
 
-L'utilisateur tape `/set grille.lignes 4`. Roadie change ce réglage et l'applique. `/set grille.lignes` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
+L'utilisateur tape `/set grille.rows 4`. Roadie change ce réglage et l'applique. `/set grille.rows` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
 
 **Why this priority**: c'est le second usage demandé de `/settings` : régler sans ouvrir la fenêtre. Elle dépend de la fenêtre (P1) pour partager la même liste de réglages.
 
-**Independent Test**: `/set grille.lignes 4`, Retour, puis ouvrir la grille : 4 lignes. `/set grille.lignes`, Retour : la boîte affiche « 4 (défaut 3, de 1 à 10) ».
+**Independent Test**: `/set grille.rows 4`, Retour, puis ouvrir la grille : 4 lignes. `/set grille.rows`, Retour : la boîte affiche « 4 (défaut 3, de 2 à 12) ».
 
 **Acceptance Scenarios**:
 
@@ -95,7 +95,7 @@ L'utilisateur tape `/set grille.lignes 4`. Roadie change ce réglage et l'appliq
 
 ### User Story 5 - Commandes de fenêtre, stage, écran, bureau et disposition (Priority: P2)
 
-L'utilisateur dispose des commandes de navigation et de disposition : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/float`, `/stage`, `/screen`, `/send`, `/desktop`, `/layout`, `/balance`, `/split`.
+L'utilisateur dispose des commandes de navigation et de disposition : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/stage`, `/screen`, `/send`, `/desktop`, `/layout`, `/balance`, `/split`.
 
 **Why this priority**: ce sont les actions les plus utiles. Elles remplacent des raccourcis difficiles à retenir. Elles ne bloquent pas le reste.
 
@@ -104,9 +104,9 @@ L'utilisateur dispose des commandes de navigation et de disposition : `/move`, `
 **Acceptance Scenarios**:
 
 1. **Given** une fenêtre active, **When** l'utilisateur lance `/move gauche`, `/swap droite` ou `/resize haut`, **Then** l'action a le même effet que la commande `roadie` correspondante.
-2. **Given** une fenêtre active, **When** l'utilisateur lance `/full`, `/max` ou `/float`, **Then** la fenêtre passe en plein écran natif, agrandie, ou flottante, comme avec la commande `roadie` correspondante.
+2. **Given** une fenêtre active, **When** l'utilisateur lance `/full` ou `/max`, **Then** la fenêtre passe en plein écran natif, ou est agrandie, comme avec la commande `roadie` correspondante.
 3. **Given** des stages existants, **When** l'utilisateur lance `/stage 2` ou `/stage` suivi du nom, **Then** ce stage devient visible. `/stage new` crée un stage. `/stage rename NOM` renomme le stage courant. `/stage send 3` envoie la fenêtre active dans le stage 3.
-4. **Given** plusieurs écrans, **When** l'utilisateur lance `/screen droite` ou `/send écran droite`, **Then** le focus ou la fenêtre active passe à l'écran de droite.
+4. **Given** plusieurs écrans, **When** l'utilisateur lance `/screen droite` ou `/send 2`, **Then** le focus passe à l'écran de droite, ou la fenêtre active passe à l'écran numéro 2.
 5. **Given** plusieurs bureaux, **When** l'utilisateur lance `/desktop 2`, **Then** le bureau 2 devient actif.
 6. **Given** un stage, **When** l'utilisateur lance `/layout bsp|spatial|master|float`, `/balance` ou `/split h|v`, **Then** la disposition change comme avec la commande `roadie` correspondante.
 7. **Given** les directions, **When** l'utilisateur les tape en français (gauche, droite, haut, bas) ou en anglais (left, right, up, down), **Then** les deux formes sont acceptées.
@@ -186,7 +186,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-002**: En mode commande, la boîte MUST lister les commandes avec une description courte et MUST filtrer cette liste pendant la frappe, sans tenir compte de la casse ni des accents.
 - **FR-003**: Retour MUST exécuter la commande saisie. En cas de succès, la boîte MUST se fermer. En cas d'échec, la boîte MUST rester ouverte avec un message d'erreur court qui donne la forme attendue.
 - **FR-004**: Une commande MUST agir sur la fenêtre, le stage, l'écran et le bureau qui étaient actifs à l'ouverture de la boîte.
-- **FR-005**: Les commandes de ce périmètre MUST avoir le même effet que la commande `roadie` correspondante : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/float`, `/stage` (numéro, nom, `new`, `rename`, `send`), `/screen`, `/send`, `/desktop`, `/layout`, `/balance`, `/split`, `/bm`, `/grid`, `/letters`, `/doctor`, `/heal`, `/reload`, `/restart`.
+- **FR-005**: Les commandes de ce périmètre MUST avoir le même effet que la commande `roadie` correspondante : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/stage` (numéro, nom, `new`, `rename`, `send`), `/screen`, `/send` (numéro d'écran), `/desktop`, `/layout`, `/balance`, `/split`, `/bm`, `/grid`, `/letters`, `/doctor`, `/heal`, `/reload`, `/restart`.
 - **FR-006**: Les directions MUST être acceptées en français (gauche, droite, haut, bas) et en anglais (left, right, up, down).
 - **FR-007**: Tab MUST compléter une commande ou un argument. Flèche haut et Flèche bas MUST parcourir l'historique des commandes en mode commande. L'historique MUST garder les 50 dernières commandes, y compris après un redémarrage.
 - **FR-008**: Des alias courts MUST exister pour les commandes les plus fréquentes : `/s` (stage), `/d` (desktop), `/b` (bm).
@@ -210,7 +210,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-020**: `/settings` sans argument MUST ouvrir la fenêtre ; `/settings catégorie` MUST l'ouvrir sur cette catégorie.
 - **FR-021**: `/set nom valeur` MUST écrire la valeur dans le fichier de configuration après validation ; `/set nom` MUST afficher la valeur actuelle, la valeur par défaut et la plage permise ; `/set nom défaut` MUST rétablir la valeur par défaut.
 - **FR-022**: Une valeur invalide MUST laisser le fichier intact, et la boîte MUST donner la raison du refus.
-- **FR-023**: Les noms de réglage MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
+- **FR-023**: Un nom de réglage MUST avoir la forme `catégorie.clé`, où `clé` est le nom de la clé dans le fichier de configuration. Les noms MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
 - **FR-024**: Une modification MUST conserver les commentaires, l'ordre et les réglages inconnus du fichier de configuration. Seule la ligne concernée change.
 
 **Taille des étiquettes**
@@ -227,7 +227,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 ### Key Entities
 
 - **Commande de la boîte** : nom, alias, description courte, forme des arguments, effet. Exemple : `stage`, alias `s`, argument numéro ou nom.
-- **Réglage** : nom stable (par exemple `grille.lignes`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
+- **Réglage** : nom stable (par exemple `grille.rows`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
 - **Catégorie** : nom affiché, ordre, liste de réglages.
 - **Historique de commandes** : les 50 dernières commandes tapées, de la plus récente à la plus ancienne.
 
@@ -238,7 +238,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **SC-001**: Caps Lock + F, `/settings`, Retour ouvre la fenêtre en moins de 1 seconde.
 - **SC-002**: Un réglage changé dans la fenêtre prend effet en moins de 2 secondes, sans redémarrage.
 - **SC-003**: Les étiquettes du mode lettres à 20 points sont visiblement plus grosses qu'à 13 points ; sans réglage, l'aspect est identique à l'actuel (validation utilisateur à l'écran).
-- **SC-004**: Les 13 familles de commandes de FR-005 ont chacune un test qui montre le même effet que la commande `roadie` correspondante.
+- **SC-004**: Chaque commande de FR-005 a un test qui montre le même effet que la commande `roadie` correspondante.
 - **SC-005**: Après 20 modifications par `/set` et par la fenêtre, le fichier de configuration garde tous ses commentaires et ses réglages inconnus (comparaison avant/après de ces lignes).
 - **SC-006**: Le mode recherche de texte de la SPEC-021 passe tous ses tests actuels, sans changement.
 - **SC-007**: Chaque réglage simple du fichier de configuration apparaît dans une seule catégorie de la fenêtre ; aucun réglage simple ne manque.
@@ -248,9 +248,12 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 
 - La boîte et la fenêtre sont dessinées par Roadie lui-même (pas d'application tierce).
 - Les commandes passent par les mêmes services que la ligne de commande `roadie` : aucune action nouvelle n'est créée, seulement un nouveau moyen de les lancer.
+- Les réglages sans effet connus de Roadie (par exemple `desktops.*`, `stage_manager.enabled`) ne sont pas montrés dans la fenêtre.
+- La catégorie « Général » ne contient pas de réglage : elle montre le fichier de configuration (chemin, état de validité) et les actions « Ouvrir », « Recharger » et « Diagnostic ».
 - Les listes de tables du fichier (règles, stages nommés, hooks, surcharges) restent à éditer à la main dans cette version. La fenêtre les montre en lecture seule.
 - L'unité de la taille des étiquettes est le point (la taille du texte). Les limites exactes sont fixées dans le plan.
 - Les noms des commandes et des réglages sont en français (avec alias anglais pour les directions) ; une traduction anglaise complète de la fenêtre est hors périmètre.
+- Il n'existe pas de commande « mettre une fenêtre en flottant » dans Roadie aujourd'hui (la ligne de commande la déclare non implémentée) : `/float` n'est pas proposée. `/layout float` règle la disposition du stage.
 - La commande « fermer une fenêtre » n'existe pas dans Roadie aujourd'hui (la ligne de commande la déclare non implémentée) : elle est hors périmètre.
 - Le raccourci Caps Lock + F reste celui de la SPEC-021 et reste réglable.
 
