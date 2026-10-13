@@ -204,6 +204,9 @@ public final class TitlebarContextMenuController {
     @discardableResult
     public func handleRightMouseDown(at point: CGPoint, source: String = "unknown") -> Bool {
         let settings = TitlebarContextMenuSettings(config: configLoader().experimental.titlebarContextMenu)
+        // Menu désactivé (défaut) : aucun relevé des fenêtres ni réconciliation d'état à chaque
+        // clic droit. Les moniteurs restent installés pour suivre un rechargement à chaud.
+        guard settings.enabled else { return false }
         let snapshot = snapshotService.snapshot()
         let axPoint = Self.appKitPointToAX(point)
         let hit = Self.hitTest(point: axPoint, snapshot: snapshot, settings: settings)
@@ -249,7 +252,7 @@ public final class TitlebarContextMenuController {
         guard settings.enabled else {
             return TitlebarHitTest(screenPoint: point, windowID: nil, isEligible: false, reason: .disabled)
         }
-        guard let entry = window(at: point, in: snapshot) else {
+        guard let entry = FocusFollowsMousePicker.frontWindow(at: point, in: snapshot) else {
             return TitlebarHitTest(screenPoint: point, windowID: nil, isEligible: false, reason: .noWindow)
         }
         if settings.managedWindowsOnly, entry.scope == nil {
@@ -304,12 +307,6 @@ public final class TitlebarContextMenuController {
             window: entry.window,
             scope: entry.scope
         )
-    }
-
-    // Complexite : O(n). `snapshot.windows` suit l'ordre CG (devant vers derriere) : la premiere
-    // fenetre qui contient le point est celle que l'utilisateur voit, meme si une plus petite est cachee dessous.
-    nonisolated private static func window(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        snapshot.windows.first { $0.window.isOnScreen && $0.window.frame.cgRect.contains(point) }
     }
 
     private func buildMenu(
@@ -418,24 +415,7 @@ public final class TitlebarContextMenuController {
         let item = NSMenuItem(title: title, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
         item.representedObject = kind.rawValue
         item.isEnabled = isEnabled
-        let target = TitlebarMenuActionTarget { [weak self] targetID in
-            guard let self else { return }
-            let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)
-            let result = self.actions.execute(action)
-            self.events.append(RoadieEvent(
-                type: result.changed ? "titlebar_context_menu.action" : "titlebar_context_menu.failed",
-                scope: sourceScope,
-                details: [
-                    "windowID": String(windowID.rawValue),
-                    "kind": kind.rawValue,
-                    "targetID": targetID,
-                    "result": result.changed ? "changed" : "failed",
-                    "message": result.message
-                ]
-            ))
-        }
-        item.target = target
-        menuTargets.append(target)
+        item.target = actionTarget(windowID: windowID, kind: kind, sourceScope: sourceScope)
         menu.addItem(item)
     }
 
@@ -454,24 +434,7 @@ public final class TitlebarContextMenuController {
         for destination in filtered {
             let item = NSMenuItem(title: destination.label, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
             item.representedObject = destination.id
-            let target = TitlebarMenuActionTarget { [weak self] targetID in
-                guard let self else { return }
-                let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)
-                let result = self.actions.execute(action)
-                self.events.append(RoadieEvent(
-                    type: result.changed ? "titlebar_context_menu.action" : "titlebar_context_menu.failed",
-                    scope: sourceScope,
-                    details: [
-                        "windowID": String(windowID.rawValue),
-                        "kind": kind.rawValue,
-                        "targetID": targetID,
-                        "result": result.changed ? "changed" : "failed",
-                        "message": result.message
-                    ]
-                ))
-            }
-            item.target = target
-            menuTargets.append(target)
+            item.target = actionTarget(windowID: windowID, kind: kind, sourceScope: sourceScope)
             submenu.addItem(item)
         }
         parent.submenu = submenu
@@ -503,24 +466,7 @@ public final class TitlebarContextMenuController {
             for destination in stages {
                 let item = NSMenuItem(title: destination.label, action: #selector(TitlebarMenuActionTarget.choose(_:)), keyEquivalent: "")
                 item.representedObject = destination.id
-                let target = TitlebarMenuActionTarget { [weak self] targetID in
-                    guard let self else { return }
-                    let action = WindowContextAction(windowID: windowID, kind: .desktopStage, targetID: targetID, sourceScope: sourceScope)
-                    let result = self.actions.execute(action)
-                    self.events.append(RoadieEvent(
-                        type: result.changed ? "titlebar_context_menu.action" : "titlebar_context_menu.failed",
-                        scope: sourceScope,
-                        details: [
-                            "windowID": String(windowID.rawValue),
-                            "kind": WindowContextActionKind.desktopStage.rawValue,
-                            "targetID": targetID,
-                            "result": result.changed ? "changed" : "failed",
-                            "message": result.message
-                        ]
-                    ))
-                }
-                item.target = target
-                menuTargets.append(target)
+                item.target = actionTarget(windowID: windowID, kind: .desktopStage, sourceScope: sourceScope)
                 stageMenu.addItem(item)
             }
             desktopItem.submenu = stageMenu
@@ -528,6 +474,32 @@ public final class TitlebarContextMenuController {
         }
         parent.submenu = submenu
         menu.addItem(parent)
+    }
+
+    /// Cible d'un élément de menu, retenue jusqu'au prochain menu. L'identifiant de destination
+    /// arrive par `representedObject`.
+    private func actionTarget(windowID: WindowID, kind: WindowContextActionKind, sourceScope: StageScope?) -> TitlebarMenuActionTarget {
+        let target = TitlebarMenuActionTarget { [weak self] targetID in
+            self?.executeAndLog(WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope))
+        }
+        menuTargets.append(target)
+        return target
+    }
+
+    /// Exécute l'action choisie dans le menu et journalise son résultat, quel que soit le sous-menu.
+    func executeAndLog(_ action: WindowContextAction) {
+        let result = actions.execute(action)
+        events.append(RoadieEvent(
+            type: result.changed ? "titlebar_context_menu.action" : "titlebar_context_menu.failed",
+            scope: action.sourceScope,
+            details: [
+                "windowID": String(action.windowID.rawValue),
+                "kind": action.kind.rawValue,
+                "targetID": action.targetID,
+                "result": result.changed ? "changed" : "failed",
+                "message": result.message
+            ]
+        ))
     }
 
     private func desktopSort(_ lhs: String, _ rhs: String) -> Bool {

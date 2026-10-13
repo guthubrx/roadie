@@ -371,32 +371,12 @@ final class RailPanel: NSPanel {
     }
 
     func action(at screenPoint: CGPoint) -> RailAction? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                let local = card.convert(contentPoint, from: contentView)
-                return card.action(at: local)
-            }
-            view = current.superview
-        }
-        return nil
+        guard let (card, local) = stageCard(at: screenPoint) else { return nil }
+        return card.action(at: local)
     }
 
     func stageID(at screenPoint: CGPoint) -> StageID? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                return card.stageID
-            }
-            view = current.superview
-        }
-        return nil
+        stageCard(at: screenPoint)?.0.stageID
     }
 
     func stageReorderPosition(at screenPoint: CGPoint, sourceStageID: StageID) -> Int? {
@@ -471,28 +451,18 @@ final class RailPanel: NSPanel {
     }
 
     func stageDragPayload(at screenPoint: CGPoint) -> RailStageDragPayload? {
-        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }
-        let windowPoint = convertPoint(fromScreen: screenPoint)
-        let contentPoint = contentView.convert(windowPoint, from: nil)
-        var view = contentView.hitTest(contentPoint)
-        while let current = view {
-            if let card = current as? StageCardView {
-                let local = card.convert(contentPoint, from: contentView)
-                let width = max(1, card.bounds.width)
-                let height = max(1, card.bounds.height)
-                return RailStageDragPayload(
-                    stageID: card.stageID,
-                    image: card.snapshotImage(),
-                    grabUnit: CGPoint(
-                        x: min(max(local.x / width, 0), 1),
-                        y: min(max(local.y / height, 0), 1)
-                    ),
-                    windowID: card.windowID(at: local)
-                )
-            }
-            view = current.superview
-        }
-        return nil
+        guard let (card, local) = stageCard(at: screenPoint) else { return nil }
+        let width = max(1, card.bounds.width)
+        let height = max(1, card.bounds.height)
+        return RailStageDragPayload(
+            stageID: card.stageID,
+            image: card.snapshotImage(),
+            grabUnit: CGPoint(
+                x: min(max(local.x / width, 0), 1),
+                y: min(max(local.y / height, 0), 1)
+            ),
+            windowID: card.windowID(at: local)
+        )
     }
 
     func hasDirectRailInteraction(at screenPoint: CGPoint) -> Bool {

@@ -419,10 +419,10 @@ public final class RailController {
         stageHeader.isEnabled = false
         menu.addItem(stageHeader)
 
-        let renameTarget = RailStageRenameMenuTarget { [weak self] in
+        let renameTarget = RailMenuActionTarget { [weak self] in
             self?.promptRenameStage(stageID: stageID, displayID: displayID, currentName: currentName)
         }
-        let renameItem = NSMenuItem(title: "Renommer \"\(currentName)\"...", action: #selector(RailStageRenameMenuTarget.choose(_:)), keyEquivalent: "")
+        let renameItem = NSMenuItem(title: "Renommer \"\(currentName)\"...", action: #selector(RailMenuActionTarget.choose(_:)), keyEquivalent: "")
         renameItem.target = renameTarget
         stageMenuTargets.append(renameTarget)
         menu.addItem(renameItem)
@@ -773,7 +773,12 @@ public final class RailController {
             rebuildPanels()
             return
         }
-        guard target.stageID != drag.sourceStageID else { return }
+        guard Self.railDropMovesWindow(
+            sourceDisplayID: drag.displayID,
+            sourceStageID: drag.sourceStageID,
+            targetDisplayID: targetDisplayID,
+            targetStageID: target.stageID
+        ) else { return }
         print("rail drag window \(drag.windowID.rawValue) -> stage \(target.stageID.rawValue) index \(target.insertionIndex)")
         fflush(stdout)
         perform(.moveWindow(drag.windowID, target.stageID, target.insertionIndex, false), displayID: targetDisplayID)
@@ -1096,6 +1101,18 @@ public final class RailController {
         return hidden
     }
 
+    /// Un dépôt de vignette ne déplace rien s'il retombe sur la stage d'origine du même écran.
+    /// Les identifiants de stage sont locaux à un écran : la même valeur sur un autre écran
+    /// désigne une autre stage, le dépôt doit partir.
+    nonisolated static func railDropMovesWindow(
+        sourceDisplayID: DisplayID,
+        sourceStageID: StageID,
+        targetDisplayID: DisplayID,
+        targetStageID: StageID
+    ) -> Bool {
+        sourceDisplayID != targetDisplayID || sourceStageID != targetStageID
+    }
+
     nonisolated public static func stageDisplayMoveTargets(
         sourceDisplayID: DisplayID,
         in snapshot: DaemonSnapshot
@@ -1278,19 +1295,6 @@ struct RailWindowDropTarget {
 
 @MainActor
 final class RailMenuActionTarget: NSObject {
-    private let handler: () -> Void
-
-    init(handler: @escaping () -> Void) {
-        self.handler = handler
-    }
-
-    @objc func choose(_ sender: NSMenuItem) {
-        handler()
-    }
-}
-
-@MainActor
-final class RailStageRenameMenuTarget: NSObject {
     private let handler: () -> Void
 
     init(handler: @escaping () -> Void) {

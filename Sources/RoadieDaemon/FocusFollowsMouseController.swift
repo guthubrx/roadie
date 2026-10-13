@@ -221,9 +221,13 @@ public final class UserInputActivity: @unchecked Sendable {
 public enum FocusFollowsMousePicker {
     /// Au clic, inclut une bande de 8 points autour du cadre pour les poignées de resize.
     /// Le contenu d'une fenêtre reste prioritaire ; dans un interstice, prend le bord le plus proche.
+    /// Une fenêtre visible sous le point qui n'est pas éligible (non gérée, panneau, stage
+    /// inactive) masque celles de derrière : aucune cible.
     /// O(n), uniquement pour les gestes : le focus au mouvement garde son test strict.
     public static func gestureTargetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        if let interior = targetWindow(at: point, in: snapshot) { return interior }
+        if let front = frontWindow(at: point, in: snapshot) {
+            return isEligible(front, in: snapshot) ? front : nil
+        }
         func distance(_ entry: ScopedWindowSnapshot) -> CGFloat {
             let frame = entry.window.frame.cgRect
             let dx = max(frame.minX - point.x, point.x - frame.maxX, 0)
@@ -231,9 +235,7 @@ public enum FocusFollowsMousePicker {
             return dx * dx + dy * dy
         }
         return snapshot.windows.filter { entry in
-            guard let scope = entry.scope else { return false }
-            return entry.window.isTileCandidate
-                && snapshot.state.activeScope(on: scope.displayID) == scope
+            isEligible(entry, in: snapshot)
                 && entry.window.frame.cgRect.insetBy(dx: -8, dy: -8).contains(point)
         }.min { lhs, rhs in
             let left = distance(lhs), right = distance(rhs)
@@ -245,16 +247,23 @@ public enum FocusFollowsMousePicker {
         }
     }
 
+    /// Fenêtre que l'utilisateur voit sous le point, si elle est gérée dans la stage active.
+    /// Une fenêtre plus petite cachée derrière n'est jamais choisie.
+    // O(n) - n = fenêtres du snapshot.
     public static func targetWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
-        snapshot.windows
-            .filter { entry in
-                guard let scope = entry.scope else { return false }
-                return entry.window.isTileCandidate
-                    && snapshot.state.activeScope(on: scope.displayID) == scope
-                    && entry.window.frame.cgRect.contains(point)
-            }
-            .min { lhs, rhs in
-                lhs.window.frame.width * lhs.window.frame.height < rhs.window.frame.width * rhs.window.frame.height
-            }
+        guard let front = frontWindow(at: point, in: snapshot), isEligible(front, in: snapshot) else { return nil }
+        return front
+    }
+
+    /// Première fenêtre visible qui contient le point. `snapshot.windows` suit l'ordre CoreGraphics
+    /// (devant vers derrière) : c'est la fenêtre que l'utilisateur voit à cet endroit.
+    // O(n) - n = fenêtres du snapshot.
+    public static func frontWindow(at point: CGPoint, in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {
+        snapshot.windows.first { $0.window.isOnScreen && $0.window.frame.cgRect.contains(point) }
+    }
+
+    private static func isEligible(_ entry: ScopedWindowSnapshot, in snapshot: DaemonSnapshot) -> Bool {
+        guard let scope = entry.scope else { return false }
+        return entry.window.isTileCandidate && snapshot.state.activeScope(on: scope.displayID) == scope
     }
 }
