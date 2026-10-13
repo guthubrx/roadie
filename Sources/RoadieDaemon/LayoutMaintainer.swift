@@ -1858,19 +1858,39 @@ public final class LayoutMaintainer {
         observedRulePlacementWindowIDs.formIntersection(liveWindowIDs)
         pruneRuleEventKeys(keeping: liveWindowIDs)
         for entry in snapshot.windows where entry.window.isOnScreen {
+            // Rôle et sous-rôle AX transmis comme dans la politique du relevé (REL-007).
             let context = WindowRuleMatchContext(
+                role: entry.window.role,
+                subrole: entry.window.subrole,
                 display: entry.scope?.displayID.rawValue,
                 desktop: entry.scope.map { String($0.desktopID.rawValue) },
                 stage: entry.scope?.stageID.rawValue
             )
             let application = ruleEngine.evaluate(window: entry.window, context: context)
             appendRuleEvents(application, window: entry.window)
-            if let placement = applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+            switch applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+            case .placed(let placement):
                 placements.append(placement)
+            case .deferred:
+                // Destination indisponible : fenêtre non marquée, retentée à la passe suivante
+                // (REL-008). Le refus est journalisé une seule fois (clé d'incident).
+                continue
+            case .settled:
+                break
             }
             observedRulePlacementWindowIDs.insert(entry.window.id)
         }
         return placements
+    }
+
+    /// Issue d'une règle de placement pour une fenêtre dans la passe.
+    private enum RulePlacementOutcome {
+        /// Fenêtre placée dans la passe.
+        case placed(RulePlacement)
+        /// Destination indisponible (écran absent, bureau inconnu) : à retenter.
+        case deferred
+        /// Aucune action ou refus définitif.
+        case settled
     }
 
     private func appendRuleFailedEvents(_ validationErrors: [ConfigValidationItem]) {
@@ -2028,21 +2048,21 @@ public final class LayoutMaintainer {
         _ application: WindowRuleApplication,
         entry: ScopedWindowSnapshot,
         snapshot: DaemonSnapshot
-    ) -> RulePlacement? {
+    ) -> RulePlacementOutcome {
         guard application.matchedRuleID != nil,
               application.assignDisplay != nil || application.assignDesktop != nil || application.assignStage != nil
-        else { return nil }
+        else { return .settled }
         guard !application.excluded else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "excluded")
-            return nil
+            return .settled
         }
         guard entry.window.isTileCandidate else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "not a tile candidate")
-            return nil
+            return .settled
         }
         guard !observedRulePlacementWindowIDs.contains(entry.window.id) else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "window already managed")
-            return nil
+            return .settled
         }
 
         // Décision et écriture dans une seule transaction sur l'état relu sous verrou (SPEC-016
@@ -2084,10 +2104,10 @@ public final class LayoutMaintainer {
         switch decision {
         case .skipped(let reason, let target):
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: target, reason: reason)
-            return nil
+            return .settled
         case .deferred:
             appendPlacementEvent("rule.placement_deferred", application: application, entry: entry, reason: "destination unavailable")
-            return nil
+            return .deferred
         case .placed(let placed):
             destination = placed
         }
@@ -2103,7 +2123,7 @@ public final class LayoutMaintainer {
             destination: destination.scope,
             reason: "placed"
         )
-        return RulePlacement(window: entry.window, follow: destination.follow)
+        return .placed(RulePlacement(window: entry.window, follow: destination.follow))
     }
 
     /// Fenêtre déplacée à la main sur un autre écran : adoptée par la stage active de cet écran,
@@ -2645,9 +2665,9 @@ public final class LayoutMaintainer {
                     && !clampedIDs.contains(entry.window.id)
             }
             guard !siblingEntries.isEmpty else { continue }
-            let siblingIDs = stage.windowIDs.filter { id in
-                siblingEntries.contains { $0.window.id == id }
-            }
+            // Index des voisines hors boucle : O(n + m) au lieu de O(n · m), ordre de la stage conservé (PERF-004).
+            let siblingIDSet = Set(siblingEntries.map(\.window.id))
+            let siblingIDs = stage.windowIDs.filter(siblingIDSet.contains)
             guard !siblingIDs.isEmpty else { continue }
 
             let currentFrames = siblingEntries.reduce(into: [WindowID: CGRect]()) { result, entry in
@@ -3088,8 +3108,10 @@ public final class LayoutMaintainer {
                 guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
                 return (entry.window.id, entry.window.frame)
             })
-            for (id, frame) in resultFrames {
-                placements[id] = frame
+            // Seules les frames des membres de la stage : une fenêtre écrite sur un autre écran
+            // dans la même passe n'empêche pas de sauver cette disposition (REL-009). O(k).
+            for id in stage.windowIDs {
+                if let frame = resultFrames[id] { placements[id] = frame }
             }
             guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
             service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)
