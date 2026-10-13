@@ -6,8 +6,9 @@ import Testing
 /// mise en page, sans écran.
 @Suite
 struct CommandBoxSessionTests {
+    /// Touche décodée comme le fait le tap en mode commande (T027).
     private func key(_ code: Int64, _ text: String = "", shift: Bool = false, control: Bool = false, isRepeat: Bool = false) -> SearchKeyInput {
-        SearchKeyInput(keyCode: code, text: text, shift: shift, command: false, control: control, isRepeat: isRepeat)
+        SearchKeyInput(keyCode: code, text: text, shift: shift, command: false, control: control, isRepeat: isRepeat, mode: .command)
     }
 
     private func box(history: [String] = []) -> SlashCommandModel {
@@ -84,6 +85,18 @@ struct CommandBoxSessionTests {
         #expect(command.handle(key(36, "\r", isRepeat: true)) == .update)
         #expect(command.handle(key(36, "\r")) == .submit("stage 2"))
         #expect(command.handle(key(53)) == .close)
+    }
+
+    @Test
+    func colorValueIsTypedWholeAndSideArrowsDoNothing() {
+        var command = box()
+        for character in "set borders.active_color #FF0000" {
+            #expect(command.handle(key(0, String(character))) == .update)
+        }
+        _ = command.handle(key(123, "\u{F702}"))
+        _ = command.handle(key(124, "\u{F703}"))
+        #expect(command.input == "set borders.active_color #FF0000")
+        #expect(command.handle(key(36, "\r")) == .submit("set borders.active_color #FF0000"))
     }
 
     @Test

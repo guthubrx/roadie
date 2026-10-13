@@ -205,22 +205,60 @@ struct TargetSearchModelTests {
         #expect(kind(51) == .delete)
     }
 
+    /// FR-010 (T030) : la recherche garde le décodage de la SPEC-021 ; `. - _ , :` et un `/` après du
+    /// texte restent ignorés et laissés à l'app active. Seul le `/` d'une requête vide est du texte.
     @Test
-    func commandAndPunctuationKeysAreText() {
-        func kind(_ code: Int64, _ text: String, shift: Bool = false) -> SearchKeyInput.Kind {
-            SearchKeyInput.kind(keyCode: code, text: text, shift: shift, command: false, control: false, isRepeat: false)
+    func searchModeKeepsSpec021KeysAndOnlyALeadingSlash() {
+        func input(_ code: Int64, _ text: String, shift: Bool = false, mode: SearchKeyInput.Mode = .search) -> SearchKeyInput {
+            SearchKeyInput(keyCode: code, text: text, shift: shift, command: false, control: false, isRepeat: false, mode: mode)
+        }
+        let passedThrough = SearchKeyInput(kind: .ignored)
+        for character in [".", "-", "_", ",", ":", "/", "#", "+", "~", "@", "=", "\"", "("] {
+            #expect(input(47, character) == passedThrough)
+            #expect(input(47, character, mode: .emptySearch).swallowed == (character == "/"))
         }
         // AZERTY : `/` s'obtient avec Maj ; QWERTY : sans Maj. Seul le caractère produit compte.
-        #expect(kind(47, "/", shift: true) == .text("/"))
-        #expect(kind(44, "/") == .text("/"))
-        #expect(kind(47, ".") == .text("."))
-        #expect(kind(24, "-") == .text("-"))
-        #expect(kind(24, "_", shift: true) == .text("_"))
-        #expect(kind(46, ",") == .text(","))
-        #expect(kind(47, ":") == .text(":"))
-        #expect(kind(19, "é") == .text("é"))
-        #expect(kind(42, "ç") == .text("ç"))
-        #expect(kind(33, "^") == .ignored)
+        #expect(input(47, "/", shift: true, mode: .emptySearch).kind == .text("/"))
+        #expect(input(44, "/", mode: .emptySearch).kind == .text("/"))
+        #expect(input(19, "é").kind == .text("é"))
+        #expect(input(42, "ç").kind == .text("ç"))
+        #expect(input(33, "^") == passedThrough)
+        #expect(input(123, "\u{F702}") == passedThrough)
+    }
+
+    /// T027 : en mode commande, tout caractère produit est du texte et toute touche sans Commande est
+    /// retenue, même sans effet ; les combinaisons Commande passent toujours, sauf Cmd-Retour.
+    @Test
+    func commandModeTakesEveryPrintableCharacter() {
+        func input(_ code: Int64, _ text: String, shift: Bool = false, command: Bool = false, control: Bool = false) -> SearchKeyInput {
+            SearchKeyInput(keyCode: code, text: text, shift: shift, command: command, control: control, isRepeat: false, mode: .command)
+        }
+        for character in ["#", "+", "~", "@", "=", "\"", "(", "é", "/", ".", "-", "_", ",", ":", " ", "^", "{"] {
+            #expect(input(42, character) == SearchKeyInput(kind: .text(character)))
+        }
+        #expect(input(1, "S", shift: true).kind == .text("S"))
+        let swallowedWithoutEffect = SearchKeyInput(kind: .ignored, swallowed: true)
+        #expect(input(123, "\u{F702}") == swallowedWithoutEffect)
+        #expect(input(124, "\u{F703}") == swallowedWithoutEffect)
+        #expect(input(33, "") == swallowedWithoutEffect)
+        #expect(input(7, "\u{18}", control: true) == swallowedWithoutEffect)
+        #expect(input(1, "s", command: true) == SearchKeyInput(kind: .ignored))
+        #expect(input(36, "\r", command: true).kind == .confirm(shift: false, command: true, isRepeat: false))
+        #expect(input(48, "\t") == SearchKeyInput(kind: .next, navigationSource: .tab))
+    }
+
+    @Test
+    func dotsAreLeftToTheAppWhileSearchingLikeBefore() {
+        var model = TargetSearchModel(targets: sample)
+        var passed = ""
+        for character in "google.com" {
+            let mode: SearchKeyInput.Mode = model.query.isEmpty ? .emptySearch : .search
+            let input = SearchKeyInput(keyCode: 0, text: String(character), shift: false, command: false, control: false, isRepeat: false, mode: mode)
+            guard input.swallowed else { passed.append(character); continue }
+            if case .text(let value) = input.kind { model.type(value) }
+        }
+        #expect(model.query == "googlecom")
+        #expect(passed == ".")
     }
 
     @Test
@@ -250,6 +288,15 @@ struct TargetSearchModelTests {
         model.deleteBackward()
         #expect(!model.isCommandMode)
         model.type(" /")
+        #expect(!model.isCommandMode)
+    }
+
+    @Test
+    func slashAfterTextIsIgnored() {
+        var model = TargetSearchModel(targets: sample)
+        model.type("a")
+        model.type("/")
+        #expect(model.query == "a")
         #expect(!model.isCommandMode)
     }
 }

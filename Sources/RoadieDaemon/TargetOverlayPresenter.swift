@@ -1,4 +1,5 @@
 import AppKit
+import os
 import RoadieCore
 
 public struct TargetOverlayStyle: Sendable {
@@ -263,11 +264,11 @@ extension KeyEventTapSession {
                 return Unmanaged.passUnretained(event)
             }
             guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-            // Mode recherche : décodage propre (ponctuation, Tab, modificateurs de Retour), les modes
-            // lettres et grille gardent `KeyInput`.
+            // Mode recherche : décodage propre (ponctuation, Tab, modificateurs de Retour), selon l'état
+            // de la saisie (mode commande ou non) ; les modes lettres et grille gardent `KeyInput`.
             if let search = session as? TargetSearchSession {
-                let input = SearchKeyInput(event: event)
-                guard input.kind != .ignored else { return Unmanaged.passUnretained(event) }
+                let input = SearchKeyInput(event: event, mode: search.keyMode.withLock { $0 })
+                guard input.swallowed else { return Unmanaged.passUnretained(event) }
                 Task { @MainActor in search.handleSearch(input) }
                 return nil
             }
@@ -797,6 +798,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private var model: TargetSearchModel
     /// Mode commande : créé à la frappe du `/` dans une requête vide, nil en mode recherche.
     private var commandModel: SlashCommandModel?
+    /// État de la saisie pour le tap clavier, lu hors de l'acteur principal (T027) : mis à jour à
+    /// chaque affichage, remis en recherche à la fin de la session.
+    nonisolated let keyMode = OSAllocatedUnfairLock(initialState: SearchKeyInput.Mode.emptySearch)
     private let style: TargetOverlayStyle
     private let commands: SlashCommandRunner
     private let runDeferred: @MainActor ([String]) -> Void
@@ -984,6 +988,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func render() {
+        // Chaque changement de saisie passe ici : le tap décode la touche suivante dans le bon mode.
+        let mode: SearchKeyInput.Mode = commandModel != nil ? .command : model.query.isEmpty ? .emptySearch : .search
+        keyMode.withLock { $0 = mode }
         if let command = commandModel {
             // Mode commande : la saisie, la liste et le message, sans aucune cible.
             show(badges: [], bar: TargetSearchBar(
@@ -1043,6 +1050,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     private func cleanup() {
         timer?.invalidate()
         timer = nil
+        keyMode.withLock { $0 = .search }
         if let runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
         }
@@ -1170,9 +1178,20 @@ struct SearchBarLayout: Equatable {
 }
 
 /// Touches du mode recherche (SPEC-021) et de la boîte de commandes (SPEC-023). Le décodage lit le
-/// caractère produit par la touche : sur AZERTY, Maj + `:` arrive comme texte `/`. Les touches
-/// mortes sont ignorées. Les combinaisons Commande (sauf Cmd-Retour) passent à l'app ou au système.
+/// caractère produit par la touche : sur AZERTY, Maj + `:` arrive comme texte `/`. Les combinaisons
+/// Commande (sauf Cmd-Retour) passent à l'app ou au système. En recherche, une touche ignorée est
+/// laissée à l'app active ; en mode commande, toute touche sans Commande est retenue (T027).
 public struct SearchKeyInput: Sendable, Equatable {
+    /// État de la saisie lu par le tap clavier (SPEC-023 T027, T030).
+    public enum Mode: Sendable, Equatable {
+        /// Recherche, requête vide : le `/` ouvre le mode commande.
+        case emptySearch
+        /// Recherche en cours : décodage de la SPEC-021 inchangé (FR-010), `/` ignoré.
+        case search
+        /// Mode commande : tout caractère imprimable est du texte.
+        case command
+    }
+
     public enum Kind: Sendable, Equatable {
         case text(String)
         case labelCharacter(String)
@@ -1195,8 +1214,11 @@ public struct SearchKeyInput: Sendable, Equatable {
     public let kind: Kind
     /// Renseignée pour `.next` et `.previous` uniquement.
     public let navigationSource: NavigationSource?
+    /// Touche retenue par le tap, donc cachée à l'app active. Faux pour `.ignored`, sauf en mode
+    /// commande sans Commande (flèche gauche, touche morte : retenues sans effet).
+    public let swallowed: Bool
 
-    init(event: CGEvent) {
+    init(event: CGEvent, mode: Mode) {
         let flags = event.flags
         var length = 0
         var chars = [UniChar](repeating: 0, count: 8)
@@ -1207,25 +1229,29 @@ public struct SearchKeyInput: Sendable, Equatable {
             shift: flags.contains(.maskShift),
             command: flags.contains(.maskCommand),
             control: flags.contains(.maskControl),
-            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0,
+            mode: mode
         )
     }
 
-    public init(kind: Kind, navigationSource: NavigationSource? = nil) {
+    public init(kind: Kind, navigationSource: NavigationSource? = nil, swallowed: Bool? = nil) {
         self.kind = kind
         self.navigationSource = navigationSource
+        self.swallowed = swallowed ?? (kind != .ignored)
     }
 
-    /// Décodage pur, testable : code de touche, texte produit et modificateurs.
+    /// Décodage pur, testable, du mode recherche : code de touche, texte produit et modificateurs.
     public static func kind(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool) -> Kind {
         SearchKeyInput(keyCode: keyCode, text: text, shift: shift, command: command, control: control, isRepeat: isRepeat).kind
     }
 
-    /// Ponctuation acceptée comme texte, en plus des lettres (accentuées comprises) et des chiffres.
-    private static let textPunctuation: Set<Character> = [" ", "*", ";", "?", "/", ".", "-", "_", ",", ":"]
-
-    /// Décodage pur : comme `kind(...)`, avec la touche de navigation. O(1).
+    /// Décodage pur du mode recherche (SPEC-021), avec la touche de navigation. O(1).
     public init(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool) {
+        self.init(keyCode: keyCode, text: text, shift: shift, command: command, control: control, isRepeat: isRepeat, mode: .search)
+    }
+
+    /// Décodage pur selon l'état de la saisie. O(t), t ≤ 8 caractères produits.
+    public init(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool, mode: Mode) {
         switch keyCode {
         case 53: self.init(kind: .escape); return
         case 51: self.init(kind: .delete); return
@@ -1240,21 +1266,40 @@ public struct SearchKeyInput: Sendable, Equatable {
         case 126: self.init(kind: .previous, navigationSource: .arrow); return
         default: break
         }
+        // Sans Commande : le mode commande retient aussi les touches sans effet.
+        let commandMode = mode == .command
         if control {
             switch text.lowercased() {
             case "n", "\u{0E}": self.init(kind: .next, navigationSource: .control)
             case "p", "\u{10}": self.init(kind: .previous, navigationSource: .control)
-            default: self.init(kind: .ignored)
+            default: self.init(kind: .ignored, swallowed: commandMode)
             }
+            return
+        }
+        if commandMode {
+            // Caractère produit avec Maj ou Option (`#`, `@`, `{`…) ; touche morte en attente : texte vide.
+            let printable = !text.isEmpty && text.allSatisfy(Self.isPrintable)
+            self.init(kind: printable ? .text(text) : .ignored, swallowed: true)
             return
         }
         guard text.count == 1, let character = text.first else { self.init(kind: .ignored); return }
         if character.isLetter && shift { self.init(kind: .labelCharacter(String(character).lowercased())); return }
-        if character.isLetter || character.isNumber || Self.textPunctuation.contains(character) {
+        // Liste de la SPEC-021 (FR-010) ; le `/` d'une requête vide ouvre le mode commande.
+        if character.isLetter || character.isNumber || " *;?".contains(character) || (mode == .emptySearch && character == "/") {
             self.init(kind: .text(String(character)))
             return
         }
         self.init(kind: .ignored)
+    }
+
+    /// Ni caractère de contrôle, ni touche de fonction (zone privée U+F700…, flèches comprises).
+    private static func isPrintable(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { scalar in
+            switch scalar.properties.generalCategory {
+            case .control, .format, .privateUse, .unassigned: false
+            default: true
+            }
+        }
     }
 }
 
