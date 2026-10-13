@@ -121,6 +121,8 @@ struct CLICommandRouterTests {
     func daemonRoutingIsAnExplicitList() {
         #expect(CLICommandRouter.isDaemonRouted(["focus", "left"]))
         #expect(CLICommandRouter.isDaemonRouted(["stage", "switch", "2"]))
+        #expect(CLICommandRouter.isDaemonRouted(["bookmark", "set", "t"]))
+        #expect(CLICommandRouter.isDaemonRouted(["bookmark", "focus", "t"]))
         #expect(CLICommandRouter.isDaemonRouted(["restore", "unhide-all"]))
         #expect(CLICommandRouter.isDaemonRouted(["state", "dump"]))
         #expect(!CLICommandRouter.isDaemonRouted(["state", "heal"]))

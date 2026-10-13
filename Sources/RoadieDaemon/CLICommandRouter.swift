@@ -265,7 +265,9 @@ public final class CLICommandRouter {
     nonisolated public static func isDaemonRouted(_ args: [String]) -> Bool {
         guard let command = args.first, !args.contains("--help"), !args.contains("-h") else { return false }
         switch command {
-        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query":
+        // `bookmark` : `set` lit la fenêtre active, donc l'Accessibilité du daemon. En local, un
+        // raccourci Karabiner ne voyait aucune fenêtre (« no active tiled window »).
+        case "focus", "move", "warp", "wrap", "resize", "balance", "stage", "desktop", "display", "window", "layout", "rules", "query", "bookmark":
             return true
         case "toggle":
             return args.dropFirst().first == "maximize"
