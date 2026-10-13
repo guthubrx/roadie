@@ -92,6 +92,7 @@ struct TargetSearchModelTests {
     @Test
     func lateWindowsKeepLabelsAndTheHighlightedTarget() {
         var model = TargetSearchModel(targets: [target("A", "Alpha"), target("B", "Beta")], rank: { _ in 5 })
+        model.type("*")
         model.next()
         model.append([target("C", "Gamma")], rank: { _ in 1 })
         model.append([target("D", "Delta")], rank: { _ in 9 })
@@ -102,8 +103,22 @@ struct TargetSearchModelTests {
     }
 
     @Test
+    func anEmptyBarSelectsNothing() {
+        var model = TargetSearchModel(targets: sample)
+        let verb = model.pressReturn(shift: true, command: false, at: Date())
+        model.next()
+        #expect(model.highlighted == nil)
+        #expect(verb == nil)
+        model.type("*")
+        #expect(model.highlighted != nil)
+        model.deleteBackward()
+        #expect(model.highlighted == nil)
+    }
+
+    @Test
     func returnVariantsChooseTheClick() {
         var model = TargetSearchModel(targets: sample)
+        model.type("*")
         let start = Date()
         let verbs: [TargetActionVerb?] = [
             model.pressReturn(shift: true, command: false, at: start),
@@ -121,6 +136,7 @@ struct TargetSearchModelTests {
     @Test
     func roadieTargetsUseTheirDefaultAction() {
         var model = TargetSearchModel(targets: [target("A", "Terminal", source: .roadie, kind: .window)])
+        model.type("term")
         let start = Date()
         let shifted = model.pressReturn(shift: true, command: false, at: start)
         _ = model.pressReturn(shift: false, command: false, at: start)

@@ -63,7 +63,7 @@ public struct TargetSearchModel: Equatable, Sendable {
 
         let highlightedID = highlighted?.id
         matches = Self.matches(targets, query: query)
-        highlightedIndex = matches.firstIndex { $0.id == highlightedID } ?? (matches.isEmpty ? nil : 0)
+        highlightedIndex = matches.firstIndex { $0.id == highlightedID } ?? (query.isEmpty || matches.isEmpty ? nil : 0)
     }
 
     /// Retour seul en attente d'un éventuel second Retour : les autres touches sont ignorées.
@@ -168,7 +168,8 @@ public struct TargetSearchModel: Equatable, Sendable {
         labelBuffer = ""
         pendingReturnAt = nil
         matches = Self.matches(targets, query: query)
-        highlightedIndex = matches.isEmpty ? nil : 0
+        // Barre vide : aucune étiquette affichée, donc rien à valider.
+        highlightedIndex = query.isEmpty || matches.isEmpty ? nil : 0
     }
 
     private static func verb(_ wanted: TargetActionVerb, for target: RoadieTarget) -> TargetActionVerb? {

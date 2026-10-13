@@ -850,7 +850,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func render() {
         let highlightedID = model.highlighted?.id
-        let badges: [TargetOverlayBadge] = model.matches.compactMap { target in
+        // Barre vide : aucune étiquette (`*` les montre toutes). Moins de 3 résultats : chacun encadré.
+        let shown = model.query.isEmpty ? [] : model.matches
+        let framesAll = shown.count < 3
+        let badges: [TargetOverlayBadge] = shown.compactMap { target in
             guard let frame = target.frame?.cgRect else { return nil }
             return TargetOverlayBadge(
                 label: target.label,
@@ -858,7 +861,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 kind: target.kind,
                 isActive: target.isActive,
                 frame: RoadieScreenCoordinate.axRectToNS(frame),
-                isHighlighted: target.id == highlightedID
+                isHighlighted: target.id == highlightedID,
+                isFramed: framesAll
             )
         }
         let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading)
@@ -1081,6 +1085,8 @@ private struct TargetOverlayBadge {
     var frame: CGRect
     /// Correspondance mise en avant du mode recherche (vert).
     var isHighlighted = false
+    /// Recherche avec moins de 3 résultats : cadre fin autour de chaque résultat.
+    var isFramed = false
 
     static func badges(from state: TargetOverlayState) -> [TargetOverlayBadge] {
         state.report.targets.compactMap { target in
@@ -1276,6 +1282,13 @@ private final class TargetOverlayView: NSView {
             let path = NSBezierPath(roundedRect: placement.target.insetBy(dx: -2, dy: -2), xRadius: 6, yRadius: 6)
             NSColor.systemGreen.setStroke()
             path.lineWidth = 3
+            path.stroke()
+            return
+        }
+        if badge.isFramed {
+            let path = NSBezierPath(roundedRect: placement.target.insetBy(dx: -2, dy: -2), xRadius: 6, yRadius: 6)
+            NSColor.systemGreen.withAlphaComponent(0.6).setStroke()
+            path.lineWidth = 1.5
             path.stroke()
             return
         }
