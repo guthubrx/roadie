@@ -10,6 +10,8 @@ public struct TargetOverlayStyle: Sendable {
     public var labelColor: String
     public var labelBackgroundOpacity: Double
     public var labelPlacement: TargetGridLabelPlacement
+    /// Taille de police des étiquettes, 8 à 48 pt (SPEC-023). Les dimensions du badge suivent `scale`.
+    public var labelFontSize: CGFloat
 
     public init(
         drawTargetFrames: Bool = false,
@@ -19,7 +21,8 @@ public struct TargetOverlayStyle: Sendable {
         borderOpacity: Double = 0.9,
         labelColor: String = "#FFFFFF",
         labelBackgroundOpacity: Double = 0.84,
-        labelPlacement: TargetGridLabelPlacement = .callout
+        labelPlacement: TargetGridLabelPlacement = .callout,
+        labelFontSize: CGFloat = 13
     ) {
         self.drawTargetFrames = drawTargetFrames
         self.fillColor = fillColor
@@ -29,7 +32,11 @@ public struct TargetOverlayStyle: Sendable {
         self.labelColor = labelColor
         self.labelBackgroundOpacity = min(1, max(0, labelBackgroundOpacity))
         self.labelPlacement = labelPlacement
+        self.labelFontSize = min(48, max(8, labelFontSize))
     }
+
+    /// Facteur appliqué aux dimensions des étiquettes : 1 à 13 pt, taille d'origine.
+    public var scale: CGFloat { labelFontSize / 13 }
 
     public static let labels = TargetOverlayStyle()
 
@@ -42,8 +49,38 @@ public struct TargetOverlayStyle: Sendable {
             borderOpacity: config.overlayBorderOpacity,
             labelColor: config.overlayLabelColor,
             labelBackgroundOpacity: config.overlayLabelBackgroundOpacity,
-            labelPlacement: config.labelPlacement
+            labelPlacement: config.labelPlacement,
+            labelFontSize: CGFloat(config.labelFontSize)
         )
+    }
+}
+
+/// Dimensions des étiquettes, proportionnelles à `labelFontSize` (SPEC-023 R8). À 13 pt elles
+/// valent les constantes d'origine. Les épaisseurs de trait ne changent pas. Toutes en O(1).
+extension TargetOverlayStyle {
+    /// Badge : marge du texte 16, largeur minimale 28, hauteur 24.
+    func badgeSize(textWidth: CGFloat) -> CGSize {
+        CGSize(width: max(28 * scale, textWidth + 16 * scale), height: 24 * scale)
+    }
+
+    var badgeCornerRadius: CGFloat { 8 * scale }
+    /// Écart entre le badge et le bord de sa cible.
+    var badgeGap: CGFloat { 10 * scale }
+    /// Retrait du badge le long du bord de sa cible.
+    var badgeInset: CGFloat { 6 * scale }
+    /// Espace entre deux positions essayées autour de la cible.
+    var badgePlacementSpacing: CGFloat { 6 * scale }
+    /// Marge gardée libre autour d'un badge déjà placé.
+    var badgeAvoidanceMargin: CGFloat { 4 * scale }
+    /// Marge entre le badge et le bord de l'écran.
+    var badgeEdgeMargin: CGFloat { 4 * scale }
+
+    /// Garde le badge dans `bounds`, à `badgeEdgeMargin` du bord.
+    func clampedBadge(_ rect: CGRect, in bounds: CGRect) -> CGRect {
+        let margin = badgeEdgeMargin
+        let x = min(max(rect.minX, bounds.minX + margin), bounds.maxX - rect.width - margin)
+        let y = min(max(rect.minY, bounds.minY + margin), bounds.maxY - rect.height - margin)
+        return CGRect(origin: CGPoint(x: x, y: y), size: rect.size)
     }
 }
 
@@ -908,9 +945,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 }
 
-/// Touches du mode recherche (SPEC-021). Les touches mortes et la composition sont ignorées : la
-/// recherche ne tient pas compte des accents. Les combinaisons Commande (sauf Cmd-Retour) passent à
-/// l'app ou au système.
+/// Touches du mode recherche (SPEC-021) et de la boîte de commandes (SPEC-023). Le décodage lit le
+/// caractère produit par la touche : sur AZERTY, Maj + `:` arrive comme texte `/`. Les touches
+/// mortes sont ignorées. Les combinaisons Commande (sauf Cmd-Retour) passent à l'app ou au système.
 public struct SearchKeyInput: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         case text(String)
@@ -923,57 +960,77 @@ public struct SearchKeyInput: Sendable, Equatable {
         case ignored
     }
 
+    /// Touche à l'origine de `.next` ou `.previous` : la boîte de commandes leur donne des rôles
+    /// différents (compléter, historique, suggestion suivante).
+    public enum NavigationSource: Sendable, Equatable {
+        case tab
+        case arrow
+        case control
+    }
+
     public let kind: Kind
+    /// Renseignée pour `.next` et `.previous` uniquement.
+    public let navigationSource: NavigationSource?
 
     init(event: CGEvent) {
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
-        let shift = flags.contains(.maskShift)
-        let command = flags.contains(.maskCommand)
-        let control = flags.contains(.maskControl)
         var length = 0
         var chars = [UniChar](repeating: 0, count: 8)
         event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &length, unicodeString: &chars)
-        let text = String(utf16CodeUnits: chars, count: length)
-        self.kind = Self.kind(
-            keyCode: keyCode, text: text, shift: shift, command: command, control: control,
+        self.init(
+            keyCode: event.getIntegerValueField(.keyboardEventKeycode),
+            text: String(utf16CodeUnits: chars, count: length),
+            shift: flags.contains(.maskShift),
+            command: flags.contains(.maskCommand),
+            control: flags.contains(.maskControl),
             isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         )
     }
 
-    public init(kind: Kind) {
+    public init(kind: Kind, navigationSource: NavigationSource? = nil) {
         self.kind = kind
+        self.navigationSource = navigationSource
     }
 
     /// Décodage pur, testable : code de touche, texte produit et modificateurs.
     public static func kind(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool) -> Kind {
+        SearchKeyInput(keyCode: keyCode, text: text, shift: shift, command: command, control: control, isRepeat: isRepeat).kind
+    }
+
+    /// Ponctuation acceptée comme texte, en plus des lettres (accentuées comprises) et des chiffres.
+    private static let textPunctuation: Set<Character> = [" ", "*", ";", "?", "/", ".", "-", "_", ",", ":"]
+
+    /// Décodage pur : comme `kind(...)`, avec la touche de navigation. O(1).
+    public init(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool) {
         switch keyCode {
-        case 53: return .escape
-        case 51: return .delete
-        case 36, 76: return .confirm(shift: shift, command: command, isRepeat: isRepeat)
+        case 53: self.init(kind: .escape); return
+        case 51: self.init(kind: .delete); return
+        case 36, 76: self.init(kind: .confirm(shift: shift, command: command, isRepeat: isRepeat)); return
         default: break
         }
         // Cmd-Tab, Cmd-Espace… restent au système.
-        if command { return .ignored }
+        if command { self.init(kind: .ignored); return }
         switch keyCode {
-        case 48: return shift ? .previous : .next
-        case 125: return .next
-        case 126: return .previous
+        case 48: self.init(kind: shift ? .previous : .next, navigationSource: .tab); return
+        case 125: self.init(kind: .next, navigationSource: .arrow); return
+        case 126: self.init(kind: .previous, navigationSource: .arrow); return
         default: break
         }
         if control {
             switch text.lowercased() {
-            case "n", "\u{0E}": return .next
-            case "p", "\u{10}": return .previous
-            default: return .ignored
+            case "n", "\u{0E}": self.init(kind: .next, navigationSource: .control)
+            case "p", "\u{10}": self.init(kind: .previous, navigationSource: .control)
+            default: self.init(kind: .ignored)
             }
+            return
         }
-        guard text.count == 1, let character = text.first else { return .ignored }
-        if character.isLetter && shift { return .labelCharacter(String(character).lowercased()) }
-        if character.isLetter || character.isNumber || " *;?".contains(character) {
-            return .text(String(character))
+        guard text.count == 1, let character = text.first else { self.init(kind: .ignored); return }
+        if character.isLetter && shift { self.init(kind: .labelCharacter(String(character).lowercased())); return }
+        if character.isLetter || character.isNumber || Self.textPunctuation.contains(character) {
+            self.init(kind: .text(String(character)))
+            return
         }
-        return .ignored
+        self.init(kind: .ignored)
     }
 }
 
@@ -1151,6 +1208,7 @@ private final class TargetOverlayView: NSView {
     fileprivate var searchBar: TargetSearchBar?
     private let screenOrigin: CGPoint
     private let style: TargetOverlayStyle
+    private let textAttributes: [NSAttributedString.Key: Any]
 
     private struct BadgePlacement {
         var badge: CGRect
@@ -1161,6 +1219,10 @@ private final class TargetOverlayView: NSView {
         self.badges = badges
         self.screenOrigin = screenOrigin
         self.style = style
+        self.textAttributes = [
+            .font: NSFont.monospacedSystemFont(ofSize: style.labelFontSize, weight: .semibold),
+            .foregroundColor: NSColor.white,
+        ]
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -1180,7 +1242,7 @@ private final class TargetOverlayView: NSView {
             drawTargetFrame(for: badge, placement: placement)
             drawPointer(for: badge, placement: placement)
             drawBadge(badge, in: placement.badge)
-            occupied.append(placement.badge.insetBy(dx: -4, dy: -4))
+            occupied.append(placement.badge.insetBy(dx: -style.badgeAvoidanceMargin, dy: -style.badgeAvoidanceMargin))
         }
         if let searchBar {
             drawSearchBar(searchBar)
@@ -1219,8 +1281,8 @@ private final class TargetOverlayView: NSView {
         guard bounds.intersects(localFrame), localFrame.width > 4, localFrame.height > 4 else { return nil }
 
         let label = badge.label.isEmpty ? "?" : badge.label
-        let textSize = label.size(withAttributes: Self.textAttributes)
-        let badgeSize = CGSize(width: max(28, textSize.width + 16), height: 24)
+        let textSize = label.size(withAttributes: textAttributes)
+        let badgeSize = style.badgeSize(textWidth: textSize.width)
         if badge.kind == .gridCell, style.labelPlacement == .center {
             let rect = clamped(CGRect(
                 x: localFrame.midX - badgeSize.width / 2,
@@ -1242,8 +1304,8 @@ private final class TargetOverlayView: NSView {
     }
 
     private func candidateOrigins(for frame: CGRect, badgeSize: CGSize) -> [CGPoint] {
-        let gap: CGFloat = 10
-        let inset: CGFloat = 6
+        let gap = style.badgeGap
+        let inset = style.badgeInset
         let primary = CGPoint(x: frame.minX + inset, y: frame.maxY + gap)
         let anchors = [
             primary,
@@ -1256,8 +1318,8 @@ private final class TargetOverlayView: NSView {
             CGPoint(x: frame.minX + inset, y: frame.maxY - badgeSize.height - inset),
             CGPoint(x: frame.maxX - badgeSize.width - inset, y: frame.maxY - badgeSize.height - inset),
         ]
-        let stepX = badgeSize.width + 6
-        let stepY = badgeSize.height + 6
+        let stepX = badgeSize.width + style.badgePlacementSpacing
+        let stepY = badgeSize.height + style.badgePlacementSpacing
         var result = anchors
         for ring in 1...8 {
             let distanceX = CGFloat(ring) * stepX
@@ -1275,9 +1337,7 @@ private final class TargetOverlayView: NSView {
     }
 
     private func clamped(_ rect: CGRect) -> CGRect {
-        let x = min(max(rect.minX, bounds.minX + 4), bounds.maxX - rect.width - 4)
-        let y = min(max(rect.minY, bounds.minY + 4), bounds.maxY - rect.height - 4)
-        return CGRect(origin: CGPoint(x: x, y: y), size: rect.size)
+        style.clampedBadge(rect, in: bounds)
     }
 
     private func drawTargetFrame(for badge: TargetOverlayBadge, placement: BadgePlacement) {
@@ -1348,8 +1408,8 @@ private final class TargetOverlayView: NSView {
 
     private func drawBadge(_ badge: TargetOverlayBadge, in rect: CGRect) {
         let label = badge.label.isEmpty ? "?" : badge.label
-        let textSize = label.size(withAttributes: Self.textAttributes)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
+        let textSize = label.size(withAttributes: textAttributes)
+        let path = NSBezierPath(roundedRect: rect, xRadius: style.badgeCornerRadius, yRadius: style.badgeCornerRadius)
         // Recherche : fond vert pour chaque résultat ; seule la bordure distingue la cible choisie
         // (épaisse et blanche).
         (badge.isHighlighted || badge.isSearchResult ? NSColor.systemGreen.withAlphaComponent(0.85)
@@ -1359,7 +1419,7 @@ private final class TargetOverlayView: NSView {
         path.lineWidth = badge.isHighlighted ? 2.5 : 1.5
         path.stroke()
 
-        var attributes = Self.textAttributes
+        var attributes = textAttributes
         if badge.kind == .gridCell {
             attributes[.foregroundColor] = NSColor(hex: style.labelColor) ?? .white
         }
@@ -1373,11 +1433,6 @@ private final class TargetOverlayView: NSView {
             withAttributes: attributes
         )
     }
-
-    private static let textAttributes: [NSAttributedString.Key: Any] = [
-        .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .semibold),
-        .foregroundColor: NSColor.white,
-    ]
 
     private func tint(for kind: TargetKind) -> NSColor {
         switch kind {

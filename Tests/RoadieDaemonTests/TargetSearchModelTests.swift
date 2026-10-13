@@ -204,4 +204,52 @@ struct TargetSearchModelTests {
         #expect(kind(53) == .escape)
         #expect(kind(51) == .delete)
     }
+
+    @Test
+    func commandAndPunctuationKeysAreText() {
+        func kind(_ code: Int64, _ text: String, shift: Bool = false) -> SearchKeyInput.Kind {
+            SearchKeyInput.kind(keyCode: code, text: text, shift: shift, command: false, control: false, isRepeat: false)
+        }
+        // AZERTY : `/` s'obtient avec Maj ; QWERTY : sans Maj. Seul le caractère produit compte.
+        #expect(kind(47, "/", shift: true) == .text("/"))
+        #expect(kind(44, "/") == .text("/"))
+        #expect(kind(47, ".") == .text("."))
+        #expect(kind(24, "-") == .text("-"))
+        #expect(kind(24, "_", shift: true) == .text("_"))
+        #expect(kind(46, ",") == .text(","))
+        #expect(kind(47, ":") == .text(":"))
+        #expect(kind(19, "é") == .text("é"))
+        #expect(kind(42, "ç") == .text("ç"))
+        #expect(kind(33, "^") == .ignored)
+    }
+
+    @Test
+    func navigationKeysTellTheirSource() {
+        func input(_ code: Int64, _ text: String, shift: Bool = false, control: Bool = false) -> SearchKeyInput {
+            SearchKeyInput(keyCode: code, text: text, shift: shift, command: false, control: control, isRepeat: false)
+        }
+        #expect(input(48, "\t") == SearchKeyInput(kind: .next, navigationSource: .tab))
+        #expect(input(48, "\t", shift: true) == SearchKeyInput(kind: .previous, navigationSource: .tab))
+        #expect(input(125, "") == SearchKeyInput(kind: .next, navigationSource: .arrow))
+        #expect(input(126, "") == SearchKeyInput(kind: .previous, navigationSource: .arrow))
+        #expect(input(45, "\u{0E}", control: true) == SearchKeyInput(kind: .next, navigationSource: .control))
+        #expect(input(35, "\u{10}", control: true) == SearchKeyInput(kind: .previous, navigationSource: .control))
+        #expect(input(0, "a").navigationSource == nil)
+    }
+
+    @Test
+    func slashSwitchesToCommandModeUntilErased() {
+        var model = TargetSearchModel(targets: sample)
+        #expect(!model.isCommandMode)
+        model.type("/")
+        #expect(model.isCommandMode)
+        model.type("stage")
+        #expect(model.isCommandMode)
+        for _ in 0..<5 { model.deleteBackward() }
+        #expect(model.isCommandMode)
+        model.deleteBackward()
+        #expect(!model.isCommandMode)
+        model.type(" /")
+        #expect(!model.isCommandMode)
+    }
 }

@@ -72,6 +72,10 @@ public struct TargetSearchModel: Equatable, Sendable {
     /// Retour seul en attente d'un éventuel second Retour : les autres touches sont ignorées.
     public var isAwaitingSecondReturn: Bool { pendingReturnAt != nil }
 
+    /// Saisie commençant par `/` : les touches vont à la boîte de commandes (SPEC-023). Un texte à
+    /// chercher qui commence par `/` se tape précédé d'un espace.
+    public var isCommandMode: Bool { query.hasPrefix("/") }
+
     /// Échap ou fermeture : l'action différée est abandonnée.
     public mutating func cancelPendingReturn() { pendingReturnAt = nil }
 
