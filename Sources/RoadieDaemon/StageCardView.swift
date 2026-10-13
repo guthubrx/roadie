@@ -579,12 +579,18 @@ final class StageCardView: NSControl {
     }
 
     private func applyParallaxTransform(for rect: CGRect, in context: CGContext) {
-        let angle = min(config.parallaxRotation, 75) * .pi / 180
+        context.concatenate(Self.parallaxTransform(for: rect, rotation: config.parallaxRotation))
+    }
+
+    /// Compression horizontale et cisaillement d'un aperçu parallax autour de son centre, communs au dessin
+    /// et au test du clic (REL-040). Déterminant = xScale >= 0,45 : toujours inversible.
+    static func parallaxTransform(for rect: CGRect, rotation: CGFloat) -> CGAffineTransform {
+        let angle = min(rotation, 75) * .pi / 180
         let xScale = max(0.45, cos(angle))
         let perspective = sin(angle) * 0.12
-        context.translateBy(x: rect.midX, y: rect.midY)
-        context.concatenate(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
-        context.translateBy(x: -rect.midX, y: -rect.midY)
+        return CGAffineTransform(translationX: -rect.midX, y: -rect.midY)
+            .concatenating(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
+            .concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY))
     }
 
     private func opacity(for index: Int) -> CGFloat {
@@ -618,8 +624,8 @@ final class StageCardView: NSControl {
                 ? nativeFullscreenFocusAction(for: hit.member)
                 : nil,
             grabUnit: CGPoint(
-                x: min(1, max(0, (point.x - hit.rect.minX) / max(1, hit.rect.width))),
-                y: min(1, max(0, (point.y - hit.rect.minY) / max(1, hit.rect.height)))
+                x: min(1, max(0, (hit.localPoint.x - hit.rect.minX) / max(1, hit.rect.width))),
+                y: min(1, max(0, (hit.localPoint.y - hit.rect.minY) / max(1, hit.rect.height)))
             )
         )
     }
@@ -641,12 +647,17 @@ final class StageCardView: NSControl {
         return min(max(Int((unitFromTop * CGFloat(count)).rounded()), 0), count)
     }
 
-    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {
+    /// `localPoint` est le point dans le repère de l'aperçu avant transformation : en parallax, le clic est
+    /// ramené par l'inverse de la transformée du dessin, pour viser la forme réellement visible (REL-040).
+    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect, localPoint: CGPoint)? {
         for item in hitPreviewItems() {
-            guard item.rect.contains(point),
+            let localPoint = config.mode == .parallax
+                ? point.applying(Self.parallaxTransform(for: item.rect, rotation: config.parallaxRotation).inverted())
+                : point
+            guard item.rect.contains(localPoint),
                   let member = visualMembers[safe: item.index]
             else { continue }
-            return (member, item.rect)
+            return (member, item.rect, localPoint)
         }
         return nil
     }

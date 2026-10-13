@@ -110,6 +110,8 @@ final class RailPanel: NSPanel {
     private let stack = RailStackView()
     private let horizontalInset: CGFloat = 6
     private var visibleStageIDs: [StageID] = []
+    /// Ordre complet du scope, stages vides comprises : base du rang transmis à reorderStage (REL-039).
+    private var orderedStageIDs: [StageID] = []
     private var emptyStageIDs: [StageID] = []
     private var emptyClickHideActive = true
     private var emptyClickSafetyMargin: CGFloat = 12
@@ -285,6 +287,7 @@ final class RailPanel: NSPanel {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
         visibleStageIDs = content.stages.map(\.id)
+        orderedStageIDs = scope.stages.map(\.id)
         emptyStageIDs = content.emptyStageIDs
         stack.railBackgroundColor = config.backgroundColor
         stack.railBackgroundOpacity = config.backgroundOpacity
@@ -391,17 +394,31 @@ final class RailPanel: NSPanel {
         let targetCards = visibleStageIDs
             .filter { $0 != sourceStageID }
             .compactMap { cardsByID[$0] }
-        guard !targetCards.isEmpty else { return nil }
+        return Self.persistentReorderPosition(
+            pointY: contentPoint.y,
+            targets: targetCards.map { (stageID: $0.stageID, midY: contentView.convert($0.frame, from: stack).midY) },
+            orderedStageIDs: orderedStageIDs,
+            sourceStageID: sourceStageID
+        )
+    }
 
-        var insertionPosition = 1
-        for card in targetCards {
-            let cardFrame = contentView.convert(card.frame, from: stack)
-            if contentPoint.y >= cardFrame.midY {
-                return insertionPosition
-            }
-            insertionPosition += 1
+    /// Rang (base 1) attendu par `PersistentStageScope.reorderStage`, calculé dans l'ordre complet des stages
+    /// après retrait de la source. Les cibles sont les cartes affichées hors source, de haut en bas ; le point
+    /// se place avant la première carte dont il dépasse le milieu (y AppKit croissant vers le haut), sinon
+    /// après la dernière. Les stages vides, absentes du rail, gardent leur place (REL-039).
+    // Complexité : O(n + c) - n = stages du scope, c = cartes affichées.
+    static func persistentReorderPosition(
+        pointY: CGFloat,
+        targets: [(stageID: StageID, midY: CGFloat)],
+        orderedStageIDs: [StageID],
+        sourceStageID: StageID
+    ) -> Int? {
+        guard let last = targets.last else { return nil }
+        let remaining = orderedStageIDs.filter { $0 != sourceStageID }
+        if let before = targets.first(where: { pointY >= $0.midY }) {
+            return remaining.firstIndex(of: before.stageID).map { $0 + 1 }
         }
-        return insertionPosition
+        return remaining.firstIndex(of: last.stageID).map { $0 + 2 }
     }
 
     /// Cible d'un depot de fenetre : une carte, sinon la zone vide du rail (stage vide ou prochaine stage libre).
