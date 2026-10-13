@@ -12,6 +12,8 @@ public struct TargetSearchModel: Equatable, Sendable {
     public private(set) var targets: [RoadieTarget] = []
     private var ranks: [Int] = []
     private let labelPool: [String]
+    /// Étiquettes d'une lettre (A, S, D…) : données aux résultats quand il y en a au plus autant.
+    private let shortLabels: [String]
     private var labelsUsed = 0
     public private(set) var query = ""
     public private(set) var matches: [RoadieTarget]
@@ -23,6 +25,7 @@ public struct TargetSearchModel: Equatable, Sendable {
 
     public init(targets: [RoadieTarget], alphabet: String = "asdfghjkl", rank: (RoadieTarget) -> Int = { _ in 0 }) {
         labelPool = TargetHintService.labels(count: Self.maxTargets, alphabet: alphabet)
+        shortLabels = labelPool.filter { $0.count == 1 }
         matches = []
         append(targets, rank: rank)
     }
@@ -62,7 +65,7 @@ public struct TargetSearchModel: Equatable, Sendable {
         ranks = mergedRanks
 
         let highlightedID = highlighted?.id
-        matches = Self.matches(targets, query: query)
+        matches = shortened(Self.matches(targets, query: query))
         highlightedIndex = matches.firstIndex { $0.id == highlightedID } ?? (query.isEmpty || matches.isEmpty ? nil : 0)
     }
 
@@ -106,6 +109,8 @@ public struct TargetSearchModel: Equatable, Sendable {
     /// Maj + label : met en avant la correspondance dont le label vaut les caractères tapés.
     /// Faux si aucun label ne commence ainsi (la saisie du label repart de zéro).
     public mutating func typeLabel(_ character: String) -> Bool {
+        // Barre vide : aucune étiquette n'est affichée.
+        guard !query.isEmpty else { return false }
         let candidate = labelBuffer + character.uppercased()
         let labels = matches.map { $0.label.uppercased() }
         guard labels.contains(where: { $0.hasPrefix(candidate) }) else {
@@ -167,9 +172,20 @@ public struct TargetSearchModel: Equatable, Sendable {
     private mutating func refresh() {
         labelBuffer = ""
         pendingReturnAt = nil
-        matches = Self.matches(targets, query: query)
+        matches = shortened(Self.matches(targets, query: query))
         // Barre vide : aucune étiquette affichée, donc rien à valider.
         highlightedIndex = query.isEmpty || matches.isEmpty ? nil : 0
+    }
+
+    /// Peu de résultats (au plus un par lettre de l'alphabet) : étiquettes A, S, D… dans l'ordre
+    /// affiché, pour choisir par Maj + une seule lettre. Les cibles gardent leur étiquette d'origine.
+    private func shortened(_ found: [RoadieTarget]) -> [RoadieTarget] {
+        guard !query.isEmpty, found.count <= shortLabels.count else { return found }
+        return found.enumerated().map { index, target in
+            var short = target
+            short.label = shortLabels[index]
+            return short
+        }
     }
 
     private static func verb(_ wanted: TargetActionVerb, for target: RoadieTarget) -> TargetActionVerb? {

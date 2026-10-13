@@ -79,6 +79,8 @@ struct TargetSearchModelTests {
     func shiftLabelJumpsToThatTarget() {
         // Étiquettes données par le modèle : A, S, D… puis AA, AS… ; la 19e est « SA ».
         var model = TargetSearchModel(targets: (0..<20).map { target("T\($0)", "Item \($0)") })
+        #expect(!model.typeLabel("s"))
+        model.type("*")
         let first = model.typeLabel("s")
         let firstLabel = model.highlighted?.label
         let second = model.typeLabel("a")
@@ -100,6 +102,17 @@ struct TargetSearchModelTests {
         #expect(model.targets.map(\.id) == ["app:C", "app:A", "app:B", "app:D"])
         #expect(model.targets.map(\.label) == ["D", "A", "S", "F"])
         #expect(model.highlighted?.id == "app:B")
+    }
+
+    @Test
+    func fewResultsGetOneLetterLabels() {
+        var model = TargetSearchModel(targets: (0..<20).map { target("T\($0)", "Item \($0)") } + [target("X", "Watch Later"), target("Y", "Watch History")])
+        model.type("watch")
+        let labels = model.matches.map(\.label)
+        let picked = model.typeLabel("s")
+        #expect(labels == ["A", "S"])
+        #expect(picked && model.highlighted?.id == "app:Y")
+        #expect(model.targets.last?.label != "S")
     }
 
     @Test
