@@ -79,7 +79,8 @@ struct TargetSearchModelTests {
     func shiftLabelJumpsToThatTarget() {
         // Étiquettes données par le modèle : A, S, D… puis AA, AS… ; la 19e est « SA ».
         var model = TargetSearchModel(targets: (0..<20).map { target("T\($0)", "Item \($0)") })
-        #expect(!model.typeLabel("s"))
+        let beforeTyping = model.typeLabel("s")
+        #expect(!beforeTyping)
         model.type("*")
         let first = model.typeLabel("s")
         let firstLabel = model.highlighted?.label
