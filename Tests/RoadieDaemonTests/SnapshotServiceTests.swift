@@ -4439,3 +4439,43 @@ struct ConfigHotReloadTests {
         #expect(service.state.lastValidation == .success)
     }
 }
+
+/// REL-030 : `master_ratio` de la configuration arrive au plan master-stack du daemon.
+/// Le moteur garde une largeur déjà en place (maître actuel, ou bord de la pile collé au bord droit)
+/// et se sert du ratio configuré pour choisir entre elles : ici 30 % ou 70 %.
+@Suite
+struct MasterRatioWiringTests {
+    @Test
+    func configuredMasterRatioDrivesTheMasterStackPlan() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let master = powerWindow(10, x: 0, y: 0)
+        let other = powerWindow(20, x: 700, y: 0)
+        func masterWidth(_ ratio: Double) -> Double? {
+            let store = StageStore(path: tempPath("master-ratio-wiring-\(ratio)"))
+            store.save(PersistentStageState(
+                scopes: [
+                    PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                        PersistentStage(id: StageID(rawValue: "1"), mode: .masterStack, members: [
+                            PersistentStageMember(windowID: master.id, bundleID: master.bundleID, title: master.title, frame: master.frame),
+                            PersistentStageMember(windowID: other.id, bundleID: other.bundleID, title: other.title, frame: other.frame),
+                        ]),
+                    ]),
+                ],
+                activeDisplayID: display.id
+            ))
+            let service = SnapshotService(
+                provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [master, other]),
+                frameWriter: RecordingWriter(),
+                config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .masterStack, gapsOuter: 0, gapsInner: 0, masterRatio: ratio)),
+                // Stockage dédié : sinon une disposition mémorisée par un autre test remplace le plan.
+                intentStore: LayoutIntentStore(path: tempPath("master-ratio-intents-\(ratio)")),
+                stageStore: store
+            )
+            let plan = service.applyPlan(from: service.snapshot(followFocus: false))
+            return plan.commands.first { $0.window.id == master.id }?.frame.width
+        }
+
+        #expect(masterWidth(0.8) == 300)
+        #expect(masterWidth(0.2) == 700)
+    }
+}

@@ -1599,7 +1599,8 @@ public extension SnapshotService {
             newWindowIDs: newWindowIDs,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
-            innerGap: config.tiling.gapsInner
+            innerGap: config.tiling.gapsInner,
+            masterRatio: config.tiling.masterRatio
         ))
     }
 
@@ -1789,7 +1790,8 @@ public extension SnapshotService {
             windowIDs: intent.windowIDs,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: intent.windowIDs.count, display: display),
-            innerGap: config.tiling.gapsInner
+            innerGap: config.tiling.gapsInner,
+            masterRatio: config.tiling.masterRatio
         ))
         return plan.placements.values.reduce(CGFloat(0)) { $0 + $1.area }
     }

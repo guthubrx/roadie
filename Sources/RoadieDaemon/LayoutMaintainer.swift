@@ -2682,7 +2682,8 @@ public final class LayoutMaintainer {
                 priorityWindowIDs: [],
                 newWindowIDs: [],
                 splitPolicy: service.effectiveConfig.tiling.splitPolicy,
-                innerGap: service.innerGap()
+                innerGap: service.innerGap(),
+                masterRatio: service.effectiveConfig.tiling.masterRatio
             ))
             let windowsByID = siblingEntries.reduce(into: [WindowID: WindowSnapshot]()) { result, entry in
                 result[entry.window.id] = entry.window
