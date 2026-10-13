@@ -43,6 +43,13 @@ Pour chaque constat :
   - fin : `swift build --scratch-path ...` puis `swift test --scratch-path ...` (suite complète).
 - Avant de finir : suite complète verte, ou échecs expliqués comme venant d'un autre lot en cours.
 
+## Round 4 (audit final)
+
+- Constats à corriger : `audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json` (et `scoring.md`).
+- Lance toujours les tests avec une limite : `timeout 900 swift test --scratch-path ...` (un test bloqué a déjà
+  figé des processus).
+- Disque presque plein : supprime ton dossier `--scratch-path` à la fin de ton travail.
+
 ## Interdits
 
 - Pas de `git commit`, `git stash`, `git checkout`, `git reset`, `git add`. L'orchestrateur commite.
