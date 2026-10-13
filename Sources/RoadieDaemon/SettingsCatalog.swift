@@ -1,0 +1,468 @@
+import Foundation
+
+// Catalogue des réglages de `roadies.toml` (SPEC-023) : types purs, sans AppKit ni SwiftUI.
+// Les libellés, descriptions, défauts et plages ne se déduisent pas du code : ils sont écrits ici
+// et vérifiés par `SettingsCatalogTests` contre `RoadieConfig()` et `RailSettings.load(raw:)`.
+
+/// Catégorie de la fenêtre de réglages. La valeur brute est l'identifiant utilisé par `/settings`.
+public enum SettingCategory: String, CaseIterable, Sendable {
+    case general
+    case tuilage
+    case stages
+    case lettres
+    case grille
+    case recherche
+    case rail
+    case bordures
+    case focus
+    case regles
+    case avance
+
+    public var label: String {
+        switch self {
+        case .general: return "Général"
+        case .tuilage: return "Tuilage"
+        case .stages: return "Stages et bureaux"
+        case .lettres: return "Mode lettres"
+        case .grille: return "Grille"
+        case .recherche: return "Recherche"
+        case .rail: return "Rail"
+        case .bordures: return "Bordures"
+        case .focus: return "Focus et souris"
+        case .regles: return "Règles"
+        case .avance: return "Avancé"
+        }
+    }
+
+    /// Nom de l'icône système (SF Symbols).
+    public var symbolName: String {
+        switch self {
+        case .general: return "gearshape"
+        case .tuilage: return "rectangle.split.2x2"
+        case .stages: return "square.stack.3d.up"
+        case .lettres: return "textformat.abc"
+        case .grille: return "square.grid.3x3"
+        case .recherche: return "magnifyingglass"
+        case .rail: return "sidebar.left"
+        case .bordures: return "square.dashed"
+        case .focus: return "cursorarrow.click"
+        case .regles: return "list.bullet.rectangle"
+        case .avance: return "wrench.and.screwdriver"
+        }
+    }
+}
+
+public enum SettingValue: Equatable, Sendable {
+    case bool(Bool)
+    case int(Int)
+    case double(Double)
+    case string(String)
+    /// Clé facultative sans valeur par défaut (absente du fichier), ou liste en lecture seule.
+    case unset
+}
+
+public enum SettingKind: Equatable, Sendable {
+    case bool
+    case int(ClosedRange<Int>?)
+    case double(ClosedRange<Double>?)
+    case choice([String])
+    case text
+    /// Chaîne `#RRGGBB` ou `#RRGGBBAA`.
+    case color
+}
+
+public struct SettingDescriptor: Equatable, Sendable {
+    /// `table.clé` sans le préfixe `experimental.` ni `fx.` ; unique dans le catalogue.
+    public let id: String
+    public let category: SettingCategory
+    /// Chemin TOML complet de la table (`experimental.target_grid`) ; vide pour une table racine.
+    public let tablePath: String
+    public let key: String
+    public let label: String
+    public let help: String
+    public let kind: SettingKind
+    public let defaultValue: SettingValue
+    /// Présent pour les listes et les tableaux de tables : affichés, jamais modifiés.
+    public let readOnlyReason: String?
+
+    public init(
+        category: SettingCategory,
+        tablePath: String,
+        key: String,
+        label: String,
+        help: String,
+        kind: SettingKind,
+        defaultValue: SettingValue,
+        readOnlyReason: String? = nil
+    ) {
+        self.id = SettingsCatalog.id(tablePath: tablePath, key: key)
+        self.category = category
+        self.tablePath = tablePath
+        self.key = key
+        self.label = label
+        self.help = help
+        self.kind = kind
+        self.defaultValue = defaultValue
+        self.readOnlyReason = readOnlyReason
+    }
+}
+
+public enum SettingsCatalog {
+    /// Tous les réglages, dans l'ordre d'affichage : l'ordre de `all` fixe celui d'une catégorie.
+    public static let all: [SettingDescriptor] =
+        tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
+        + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
+        + advancedDescriptors + ruleDescriptors + railDescriptors
+
+    /// Texte de recherche normalisé de chaque réglage, calculé une fois (même ordre que `all`).
+    private static let searchTexts: [String] = all.map {
+        TargetHintService.normalized("\($0.id) \($0.label) \($0.help)")
+    }
+
+    /// Préfixes de table retirés du nom d'un réglage.
+    private static let hiddenPrefixes = ["experimental.", "fx."]
+
+    /// Nom d'un réglage : chemin de la table sans `experimental.` ni `fx.`, puis la clé.
+    public static func id(tablePath: String, key: String) -> String {
+        var table = tablePath
+        for prefix in hiddenPrefixes where table.hasPrefix(prefix) {
+            table.removeFirst(prefix.count)
+        }
+        return table.isEmpty ? key : "\(table).\(key)"
+    }
+
+    /// O(n) - n = nombre de réglages (moins de 200).
+    public static func find(id: String) -> SettingDescriptor? {
+        all.first { $0.id == id }
+    }
+
+    /// O(n)
+    public static func descriptors(in category: SettingCategory) -> [SettingDescriptor] {
+        all.filter { $0.category == category }
+    }
+
+    /// Réglages dont le nom, le libellé ou la description contient la saisie, sans tenir compte
+    /// de la casse ni des accents. Saisie vide : aucun résultat. O(n * m) - n réglages, m longueur d'un texte.
+    public static func search(_ query: String) -> [SettingDescriptor] {
+        let needle = TargetHintService.normalized(query)
+        guard !needle.isEmpty else { return [] }
+        return zip(all, searchTexts).filter { $0.1.contains(needle) }.map(\.0)
+    }
+}
+
+// MARK: - Fabrique et textes communs
+
+extension SettingsCatalog {
+    static let readOnlyMessage = "lecture seule : modifier le fichier de configuration"
+
+    /// Réglage simple modifiable.
+    static func entry(
+        _ category: SettingCategory,
+        _ tablePath: String,
+        _ key: String,
+        _ label: String,
+        _ help: String,
+        _ kind: SettingKind,
+        _ defaultValue: SettingValue
+    ) -> SettingDescriptor {
+        SettingDescriptor(
+            category: category, tablePath: tablePath, key: key, label: label, help: help,
+            kind: kind, defaultValue: defaultValue
+        )
+    }
+
+    /// Liste ou tableau de tables : affiché en lecture seule.
+    static func readOnlyEntry(
+        _ category: SettingCategory,
+        _ tablePath: String,
+        _ key: String,
+        _ label: String,
+        _ help: String
+    ) -> SettingDescriptor {
+        SettingDescriptor(
+            category: category, tablePath: tablePath, key: key, label: label, help: help,
+            kind: .text, defaultValue: .unset, readOnlyReason: readOnlyMessage
+        )
+    }
+
+    /// Marge facultative d'un côté : absente par défaut.
+    private static func gap(_ key: String, _ side: String) -> SettingDescriptor {
+        entry(.tuilage, "tiling", key, "Marge extérieure \(side)",
+              "Remplace la marge extérieure générale sur ce côté. Sans valeur, la marge générale s'applique.",
+              .double(nil), .unset)
+    }
+}
+
+// MARK: - Tuilage
+
+extension SettingsCatalog {
+    static let tilingDescriptors: [SettingDescriptor] = [
+        entry(.tuilage, "tiling", "default_strategy", "Méthode de tuilage",
+              "Façon de disposer les fenêtres : arbre (bsp), arbre persistant (spatialBsp), maître et pile (masterStack) ou libre (float).",
+              .choice(["bsp", "spatialBsp", "masterStack", "float"]), .string("bsp")),
+        entry(.tuilage, "tiling", "split_policy", "Découpage de l'espace",
+              "« largest_dim » répartit les fenêtres à parts égales ; « dwindle » donne la moitié à la première fenêtre, puis réduit en spirale.",
+              .choice(["largest_dim", "dwindle"]), .string("largest_dim")),
+        entry(.tuilage, "tiling", "gaps_outer", "Marge extérieure (points)",
+              "Espace entre les fenêtres et le bord de l'écran.", .double(nil), .double(8)),
+        gap("gaps_outer_top", "en haut"),
+        gap("gaps_outer_right", "à droite"),
+        gap("gaps_outer_bottom", "en bas"),
+        gap("gaps_outer_left", "à gauche"),
+        entry(.tuilage, "tiling", "gaps_inner", "Espace entre les fenêtres (points)",
+              "Espace laissé entre deux fenêtres voisines.", .double(nil), .double(4)),
+        entry(.tuilage, "tiling", "master_ratio", "Part de la fenêtre principale",
+              "Proportion de l'écran donnée à la fenêtre principale en mode maître et pile (0,6 = 60 %).",
+              .double(nil), .double(0.6)),
+        entry(.tuilage, "tiling", "smart_gaps_solo", "Marges réduites pour une fenêtre seule",
+              "Retire les marges quand une seule fenêtre est affichée.", .bool, .bool(false)),
+        entry(.tuilage, "tiling", "popup_filter", "Ignorer les fenêtres temporaires",
+              "Garde hors du tuilage les infobulles et les menus contextuels.", .bool, .bool(true)),
+        readOnlyEntry(.tuilage, "tiling", "smart_gaps_solo_sides", "Côtés sans marge pour une fenêtre seule",
+                      "Liste des côtés (top, right, bottom, left) où la marge disparaît."),
+        readOnlyEntry(.tuilage, "tiling", "allowed_subroles", "Types de fenêtres tuilées",
+                      "Liste des sous-rôles d'accessibilité acceptés par le tuilage."),
+        readOnlyEntry(.tuilage, "tiling", "display_overrides", "Marges par écran",
+                      "Tableau de marges extérieures propres à chaque écran."),
+        entry(.tuilage, "window_placement", "new_apps_target", "Écran des nouvelles applications",
+              "Écran où s'ouvre une nouvelle application : celui de la souris (mouse), de la fenêtre active (focused_display) ou celui choisi par macOS (macos).",
+              .choice(["mouse", "focused_display", "macos"]), .string("macos")),
+        entry(.tuilage, "window_placement", "new_window_side", "Côté d'insertion des nouvelles fenêtres",
+              "Côté où apparaît une nouvelle fenêtre par rapport à la fenêtre active, en mode spatialBsp.",
+              .choice(["right", "left"]), .string("right")),
+        entry(.tuilage, "width_adjustment", "nudge_step", "Pas d'ajustement de largeur",
+              "Variation de largeur à chaque pression d'un raccourci (0,05 = 5 %).", .double(nil), .double(0.05)),
+        entry(.tuilage, "width_adjustment", "minimum_ratio", "Largeur minimale",
+              "Plus petite largeur autorisée, en proportion de la largeur de base.", .double(nil), .double(0.25)),
+        entry(.tuilage, "width_adjustment", "maximum_ratio", "Largeur maximale",
+              "Plus grande largeur autorisée, en proportion de la largeur de base. Doit rester au moins égale à la largeur minimale.",
+              .double(nil), .double(1.5)),
+        readOnlyEntry(.tuilage, "width_adjustment", "presets", "Largeurs prédéfinies",
+                      "Liste des proportions proposées par les raccourcis de largeur."),
+    ]
+}
+
+// MARK: - Stages, focus
+
+extension SettingsCatalog {
+    static let stageDescriptors: [SettingDescriptor] = [
+        entry(.stages, "stage_manager", "default_stage", "Stage par défaut",
+              "Identifiant du stage actif sur un écran neuf.", .text, .string("1")),
+        readOnlyEntry(.avance, "stage_manager", "workspaces", "Noms des stages",
+                      "Tableau des stages nommés dans le fichier de configuration."),
+    ]
+
+    static let focusDescriptors: [SettingDescriptor] = [
+        entry(.focus, "focus", "stage_follows_focus", "Le stage suit le focus",
+              "Affiche le stage d'une fenêtre quand elle reçoit le focus.", .bool, .bool(true)),
+        entry(.focus, "focus", "assign_follows_focus", "Le focus suit l'assignation",
+              "Donne le focus à une fenêtre après son envoi vers un autre stage.", .bool, .bool(false)),
+        entry(.focus, "focus", "stage_move_follows_focus", "Le déplacement de stage suit le focus",
+              "Affiche le nouveau stage quand une fenêtre y est déplacée.", .bool, .bool(true)),
+        entry(.focus, "focus", "focus_follows_mouse", "Le focus suit la souris",
+              "Donne le focus à la fenêtre sous le pointeur.", .bool, .bool(false)),
+        entry(.focus, "focus", "mouse_follows_focus", "La souris suit le focus",
+              "Déplace le pointeur sur la fenêtre qui reçoit le focus.", .bool, .bool(false)),
+    ]
+}
+
+// MARK: - Bordures
+
+extension SettingsCatalog {
+    // Les libellés « bordure » ne servent qu'ici : la recherche « bordure » ne doit trouver que ces réglages.
+    static let borderDescriptors: [SettingDescriptor] = [
+        entry(.bordures, "fx.borders", "enabled", "Afficher les bordures",
+              "Dessine une bordure autour des fenêtres.", .bool, .bool(false)),
+        entry(.bordures, "fx.borders", "thickness", "Épaisseur de la bordure (points)",
+              "Épaisseur du trait de la bordure.", .double(nil), .double(2)),
+        entry(.bordures, "fx.borders", "corner_radius", "Arrondi de la bordure (points)",
+              "Rayon des angles de la bordure.", .double(nil), .double(10)),
+        entry(.bordures, "fx.borders", "active_color", "Couleur de la bordure active",
+              "Couleur de la bordure de la fenêtre qui a le focus.", .color, .string("#7AA2F7")),
+        entry(.bordures, "fx.borders", "inactive_color", "Couleur de la bordure inactive",
+              "Couleur de la bordure des autres fenêtres.", .color, .string("#414868")),
+        entry(.bordures, "fx.borders", "pulse_on_focus", "Pulsation de la bordure au focus",
+              "Fait pulser la bordure quand une fenêtre reçoit le focus.", .bool, .bool(false)),
+        readOnlyEntry(.avance, "fx.borders", "stage_overrides", "Couleur de contour par stage",
+                      "Tableau de couleurs propres à certains stages."),
+    ]
+}
+
+// MARK: - Mode lettres et recherche
+
+extension SettingsCatalog {
+    static let targetModeDescriptors: [SettingDescriptor] = [
+        entry(.lettres, "experimental.target_mode", "enabled", "Activer le mode lettres",
+              "Active les étiquettes à lettres pour atteindre fenêtres et stages au clavier.", .bool, .bool(true)),
+        entry(.lettres, "experimental.target_mode", "picker_enabled", "Sélecteur de cibles",
+              "Autorise la sélection d'une cible en tapant sa lettre.", .bool, .bool(true)),
+        entry(.lettres, "experimental.target_mode", "overlay_enabled", "Afficher les étiquettes en continu",
+              "Montre les étiquettes à l'écran pendant quelques secondes.", .bool, .bool(false)),
+        entry(.lettres, "experimental.target_mode", "overlay_labels_only", "Étiquettes seules",
+              "N'affiche que les étiquettes, sans cadre autour des cibles.", .bool, .bool(true)),
+        entry(.lettres, "experimental.target_mode", "overlay_duration_seconds", "Durée d'affichage (secondes)",
+              "Temps pendant lequel les étiquettes restent visibles.", .double(0.2...30), .double(3)),
+        entry(.lettres, "experimental.target_mode", "app_mouse_actions_enabled", "Actions de souris dans les applications",
+              "Autorise le clic et le double-clic sur les éléments d'une application.", .bool, .bool(false)),
+        entry(.lettres, "experimental.target_mode", "scroll_mode_enabled", "Mode défilement",
+              "Autorise le défilement au clavier dans le mode lettres.", .bool, .bool(false)),
+        entry(.lettres, "experimental.target_mode", "label_font_size", "Taille des étiquettes (points)",
+              "Taille du texte des étiquettes du mode lettres et de la recherche.", .double(8...48), .double(13)),
+        entry(.recherche, "experimental.target_mode", "search_hotkey", "Raccourci de la recherche",
+              "Raccourci global qui ouvre la recherche, par exemple command+control+alt+f. Vide : désactivé.",
+              .text, .string("command+control+alt+f")),
+    ]
+
+    static let appTargetDescriptors: [SettingDescriptor] = [
+        entry(.lettres, "experimental.app_targets", "enabled", "Cibles dans les applications",
+              "Étiquette aussi les boutons et les liens des applications.", .bool, .bool(false)),
+        entry(.lettres, "experimental.app_targets", "scope", "Étendue des cibles",
+              "« frontmost_window » : fenêtre active ; « visible_windows » : toutes les fenêtres visibles.",
+              .choice(["frontmost_window", "visible_windows"]), .string("frontmost_window")),
+        entry(.lettres, "experimental.app_targets", "max_targets", "Nombre maximal de cibles",
+              "Au-delà, les cibles en trop sont ignorées.", .int(1...500), .int(150)),
+        entry(.lettres, "experimental.app_targets", "timeout_ms", "Délai de lecture (ms)",
+              "Temps maximal accordé à la lecture des éléments d'une application.", .int(10...2000), .int(120)),
+        entry(.lettres, "experimental.app_targets", "hint_characters", "Lettres des étiquettes",
+              "Caractères utilisés pour les étiquettes. Au moins deux.", .text, .string("asdfghjkl")),
+        entry(.lettres, "experimental.app_targets", "ax_boost_enabled", "Accessibilité renforcée",
+              "Demande à certaines applications d'exposer plus d'éléments.", .bool, .bool(false)),
+        entry(.lettres, "experimental.app_targets", "max_depth", "Profondeur de lecture",
+              "Nombre de niveaux d'éléments explorés dans une fenêtre.", .int(1...40), .int(12)),
+        readOnlyEntry(.avance, "experimental.app_targets", "include_roles", "Rôles d'éléments retenus",
+                      "Liste des rôles d'accessibilité transformés en cibles."),
+        readOnlyEntry(.avance, "experimental.app_targets", "additional_boost_bundle_ids", "Applications à renforcer en plus",
+                      "Liste d'identifiants d'applications pour l'accessibilité renforcée."),
+    ]
+}
+
+// MARK: - Grille
+
+extension SettingsCatalog {
+    static let targetGridDescriptors: [SettingDescriptor] = {
+        let t = "experimental.target_grid"
+        return [
+            entry(.grille, t, "enabled", "Activer la grille",
+                  "Active la grille qui sert à cliquer n'importe où avec le clavier.", .bool, .bool(false)),
+            entry(.grille, t, "mode", "Mode de la grille",
+                  "« recursive » affine la zone à chaque touche et attend votre confirmation ; « auto_click » clique seul à la profondeur maximale.",
+                  .choice(["auto_click", "recursive"]), .string("recursive")),
+            entry(.grille, t, "overlay_enabled", "Afficher la grille",
+                  "Dessine la grille sur l'écran.", .bool, .bool(true)),
+            entry(.grille, t, "overlay_draw_grid", "Tracer les lignes",
+                  "Dessine les lignes entre les cellules.", .bool, .bool(true)),
+            entry(.grille, t, "overlay_fill_color", "Couleur de remplissage",
+                  "Couleur de fond des cellules.", .color, .string("#4DABF7")),
+            entry(.grille, t, "overlay_fill_opacity", "Opacité du remplissage",
+                  "0 : transparent, 1 : opaque.", .double(0...1), .double(0.10)),
+            entry(.grille, t, "overlay_border_color", "Couleur des lignes",
+                  "Couleur du contour des cellules.", .color, .string("#4DABF7")),
+            entry(.grille, t, "overlay_border_opacity", "Opacité des lignes",
+                  "0 : transparent, 1 : opaque.", .double(0...1), .double(0.55)),
+            entry(.grille, t, "overlay_label_color", "Couleur du texte des étiquettes",
+                  "Couleur des lettres affichées dans la grille.", .color, .string("#FFFFFF")),
+            entry(.grille, t, "overlay_label_background_opacity", "Opacité du fond des étiquettes",
+                  "0 : transparent, 1 : opaque.", .double(0...1), .double(0.84)),
+            entry(.grille, t, "rows", "Nombre de lignes",
+                  "Lignes de la grille. Les lettres doivent suffire pour toutes les cellules.", .int(2...12), .int(3)),
+            entry(.grille, t, "columns", "Nombre de colonnes",
+                  "Colonnes de la grille. Les lettres doivent suffire pour toutes les cellules.", .int(2...12), .int(3)),
+            entry(.grille, t, "max_depth", "Profondeur maximale",
+                  "Nombre de subdivisions successives d'une zone.", .int(1...20), .int(3)),
+            entry(.grille, t, "hint_characters", "Lettres des étiquettes",
+                  "Caractères des cellules. Au moins lignes × colonnes caractères.", .text, .string("azeqsdwxc")),
+            entry(.grille, t, "confirm_action_key", "Touche de confirmation",
+                  "Touche qui valide l'action dans la zone choisie.", .text, .string("space")),
+            entry(.grille, t, "reset_key", "Touche de remise à zéro",
+                  "Touche qui revient à la grille entière.", .text, .string("r")),
+            entry(.grille, t, "back_key", "Touche de retour",
+                  "Touche qui revient à la zone précédente.", .text, .string("backspace")),
+            entry(.grille, t, "exit_key", "Touche de sortie",
+                  "Touche qui quitte la grille.", .text, .string("escape")),
+            entry(.grille, t, "arrow_navigation_enabled", "Navigation aux flèches",
+                  "Déplace la zone choisie avec les flèches.", .bool, .bool(true)),
+            entry(.grille, t, "arrow_edge_behavior", "Flèches au bord",
+                  "« clamp » s'arrête au bord ; « wrap » repart du côté opposé.",
+                  .choice(["clamp", "wrap"]), .string("clamp")),
+            entry(.grille, t, "action_delay_ms", "Délai avant l'action (ms)",
+                  "Pause entre la dernière touche et l'action.", .int(0...1000), .int(30)),
+            entry(.grille, t, "wake_mouse_pixels", "Réveil de la souris (pixels)",
+                  "Petit déplacement du pointeur avant l'action, pour réveiller certaines applications.", .int(0...20), .int(1)),
+            entry(.grille, t, "mouse_follow_grid", "La souris suit la grille",
+                  "Déplace le pointeur au centre de la zone choisie.", .bool, .bool(false)),
+            entry(.grille, t, "focus_follow_grid", "Le focus suit la grille",
+                  "Donne le focus à la fenêtre située sous la zone choisie.", .bool, .bool(false)),
+            entry(.grille, t, "label_placement", "Position des étiquettes",
+                  "« callout » : étiquette en coin de cellule ; « center » : au centre.",
+                  .choice(["callout", "center"]), .string("callout")),
+            entry(.grille, t, "default_scope", "Étendue par défaut",
+                  "« display » : tout l'écran ; « focused_window » : la fenêtre active.",
+                  .choice(["display", "focused_window"]), .string("display")),
+            entry(.grille, t, "label_font_size", "Taille des étiquettes (points)",
+                  "Taille du texte des étiquettes de la grille.", .double(8...48), .double(13)),
+        ]
+    }()
+}
+
+// MARK: - Avancé et règles
+
+extension SettingsCatalog {
+    static let advancedDescriptors: [SettingDescriptor] = {
+        let record = "experimental.target_record"
+        let menu = "experimental.titlebar_context_menu"
+        return [
+            entry(.avance, record, "enabled", "Activer l'enregistrement",
+                  "Autorise l'enregistrement des actions au clavier et à la souris.", .bool, .bool(false)),
+            entry(.avance, record, "replay_enabled", "Activer la relecture",
+                  "Autorise la relecture d'un enregistrement.", .bool, .bool(false)),
+            entry(.avance, record, "directory", "Dossier des enregistrements",
+                  "Dossier où sont rangés les enregistrements.", .text, .string("~/.local/state/roadies/records")),
+            entry(.avance, record, "default_duration_seconds", "Durée par défaut (secondes)",
+                  "Durée d'un enregistrement sans durée précisée. Au plus la durée maximale.", .double(0.5...3600), .double(10)),
+            entry(.avance, record, "max_duration_seconds", "Durée maximale (secondes)",
+                  "Durée la plus longue d'un enregistrement.", .double(1...3600), .double(120)),
+            entry(.avance, record, "max_events", "Nombre maximal d'événements",
+                  "Au-delà, l'enregistrement s'arrête.", .int(1...20000), .int(2000)),
+            entry(.avance, record, "include_mouse_moves", "Enregistrer les mouvements de souris",
+                  "Ajoute chaque déplacement du pointeur.", .bool, .bool(false)),
+            entry(.avance, record, "include_key_events", "Enregistrer les touches",
+                  "Ajoute les touches pressées.", .bool, .bool(true)),
+            entry(.avance, record, "include_ax_context", "Enregistrer le contexte d'accessibilité",
+                  "Ajoute l'élément visé par chaque action.", .bool, .bool(true)),
+            entry(.avance, record, "record_text_input", "Enregistrer le texte saisi",
+                  "Ajoute le texte tapé. Peut contenir des informations personnelles.", .bool, .bool(false)),
+            entry(.avance, record, "indicator", "Indicateur d'enregistrement",
+                  "Où signaler qu'un enregistrement est en cours : notification, rail (navrail), les deux ou aucun.",
+                  .choice(["notification", "navrail", "both", "none"]), .string("notification")),
+            entry(.avance, record, "navrail_bottom_offset", "Décalage de l'indicateur du rail (points)",
+                  "Distance entre l'indicateur et le bas du rail.", .double(0...400), .double(50)),
+            entry(.avance, menu, "enabled", "Activer le menu de la barre de titre",
+                  "Ouvre un menu d'actions par clic droit sur la barre de titre d'une fenêtre.", .bool, .bool(false)),
+            entry(.avance, menu, "height", "Hauteur de la zone (points)",
+                  "Hauteur de la barre de titre qui réagit au clic droit.", .double(12...96), .double(36)),
+            entry(.avance, menu, "leading_exclusion", "Zone exclue à gauche (points)",
+                  "Largeur ignorée à gauche, pour garder les boutons de la fenêtre.", .double(0...240), .double(84)),
+            entry(.avance, menu, "trailing_exclusion", "Zone exclue à droite (points)",
+                  "Largeur ignorée à droite de la barre de titre.", .double(0...240), .double(16)),
+            entry(.avance, menu, "managed_windows_only", "Fenêtres gérées seulement",
+                  "Limite le menu aux fenêtres gérées par Roadie.", .bool, .bool(true)),
+            entry(.avance, menu, "tile_candidates_only", "Fenêtres tuilables seulement",
+                  "Limite le menu aux fenêtres que le tuilage peut placer.", .bool, .bool(true)),
+            entry(.avance, menu, "include_stage_destinations", "Proposer les stages",
+                  "Ajoute au menu les stages de destination.", .bool, .bool(true)),
+            entry(.avance, menu, "include_desktop_destinations", "Proposer les bureaux",
+                  "Ajoute au menu les bureaux de destination.", .bool, .bool(true)),
+            entry(.avance, menu, "include_display_destinations", "Proposer les écrans",
+                  "Ajoute au menu les écrans de destination.", .bool, .bool(true)),
+        ]
+    }()
+
+    static let ruleDescriptors: [SettingDescriptor] = [
+        readOnlyEntry(.regles, "exclusions", "floating_bundles", "Applications toujours flottantes",
+                      "Liste d'identifiants d'applications gardées hors du tuilage."),
+        readOnlyEntry(.regles, "", "rules", "Règles de fenêtres",
+                      "Tableau de règles qui placent ou excluent des fenêtres selon l'application ou le titre."),
+        readOnlyEntry(.regles, "signals", "hooks", "Commandes déclenchées par événement",
+                      "Tableau de commandes lancées quand un événement se produit."),
+    ]
+}
