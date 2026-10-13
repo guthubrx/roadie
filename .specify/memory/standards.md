@@ -6,30 +6,30 @@ Ce fichier indexe le patrimoine utilisateur sans le copier dans le projet.
 
 ## References
 
-- `~/.speckit/ref/adversarial-review.md`
-- `~/.speckit/ref/agent-orchestration.md`
-- `~/.speckit/ref/code-quality-details.md`
-- `~/.speckit/ref/deep-research.md`
-- `~/.speckit/ref/speckit-workflow.md`
-- `~/.speckit/ref/standards-backend.md`
-- `~/.speckit/ref/standards-frontend.md`
-- `~/.speckit/ref/standards-infra-k8s.md`
-- `~/.speckit/ref/standards-observability.md`
-- `~/.speckit/ref/standards-tests.md`
+- `/Users/moi/.speckit/ref/adversarial-review.md`
+- `/Users/moi/.speckit/ref/agent-orchestration.md`
+- `/Users/moi/.speckit/ref/code-quality-details.md`
+- `/Users/moi/.speckit/ref/deep-research.md`
+- `/Users/moi/.speckit/ref/speckit-workflow.md`
+- `/Users/moi/.speckit/ref/standards-backend.md`
+- `/Users/moi/.speckit/ref/standards-frontend.md`
+- `/Users/moi/.speckit/ref/standards-infra-k8s.md`
+- `/Users/moi/.speckit/ref/standards-observability.md`
+- `/Users/moi/.speckit/ref/standards-tests.md`
 
 ## Research Baseline
 
-- `~/.speckit/research/01-ai-agents-agentic-ai.md`
-- `~/.speckit/research/02-roi-business-value.md`
-- `~/.speckit/research/03-cognitive-load-productivity.md`
-- `~/.speckit/research/04-architectures-patterns.md`
-- `~/.speckit/research/05-knowledge-management.md`
-- `~/.speckit/research/06-security-compliance.md`
-- `~/.speckit/research/07-frontend-design-systems.md`
-- `~/.speckit/research/08-testing-quality.md`
-- `~/.speckit/research/09-devops-infrastructure.md`
-- `~/.speckit/research/10-data-privacy.md`
-- `~/.speckit/research/README.md`
+- `/Users/moi/.speckit/research/01-ai-agents-agentic-ai.md`
+- `/Users/moi/.speckit/research/02-roi-business-value.md`
+- `/Users/moi/.speckit/research/03-cognitive-load-productivity.md`
+- `/Users/moi/.speckit/research/04-architectures-patterns.md`
+- `/Users/moi/.speckit/research/05-knowledge-management.md`
+- `/Users/moi/.speckit/research/06-security-compliance.md`
+- `/Users/moi/.speckit/research/07-frontend-design-systems.md`
+- `/Users/moi/.speckit/research/08-testing-quality.md`
+- `/Users/moi/.speckit/research/09-devops-infrastructure.md`
+- `/Users/moi/.speckit/research/10-data-privacy.md`
+- `/Users/moi/.speckit/research/README.md`
 
 ## Usage
 
