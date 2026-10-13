@@ -1,0 +1,2 @@
+{"languages":["swift"],"frameworks":["swiftpm","swift-testing","appkit","accessibility"],"db":null,"ci":null,"has_ui":false,"has_llm":false,"container":false,"files_count":4,"slos_defined":false,"sampling":null,
+ "hot_paths":["Sources/RoadieDaemon/AppTargetQueryService.swift:LiveAppTargetProvider.candidates (mode lettres, double Commande)","Sources/RoadieDaemon/AppTargetQueryService.swift:scan","Sources/RoadieDaemon/TargetHintService.swift:list"]}

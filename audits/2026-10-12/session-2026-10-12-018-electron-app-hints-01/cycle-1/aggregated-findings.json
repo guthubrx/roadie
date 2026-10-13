@@ -1,0 +1,263 @@
+{
+  "$schema": "audit-code-v14/aggregated-findings",
+  "meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-12T21:19:30Z",
+    "start_timestamp": "2026-10-12T21:05:00Z",
+    "end_timestamp": "2026-10-12T21:19:30Z",
+    "duration_ms": 870000,
+    "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/018-electron-app-hints (diff main : AppTargetQueryService.swift, TargetHintService.swift, AppTargetQueryServiceTests.swift, TargetHintServiceTests.swift)",
+    "audit_mode": "fix",
+    "audit_grid": "all",
+    "scope_mode": "diff",
+    "diff_base": "main",
+    "modules_actifs": [
+      "00",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12"
+    ],
+    "score_global": "A",
+    "score_numeric": 98.6,
+    "release_blocked": true,
+    "scores": {
+      "security": "A",
+      "reliability": "A",
+      "tests": "A",
+      "performance": "A",
+      "complexity": "A",
+      "quality": "A",
+      "architecture": "A",
+      "ai_hygiene": "A",
+      "duplication": "A",
+      "minimalism": "A",
+      "observability": "A",
+      "supply_chain": "A",
+      "llm_security": "N/A",
+      "ux": "N/A"
+    },
+    "repository": {
+      "files_count": 4,
+      "languages": [
+        "swift"
+      ],
+      "frameworks": [
+        "swiftpm",
+        "swift-testing",
+        "appkit",
+        "accessibility"
+      ],
+      "type": "macos-daemon",
+      "has_ui": false,
+      "has_llm_integration": false,
+      "db_type": null,
+      "ci_system": null,
+      "container": false
+    }
+  },
+  "execution_metrics": {
+    "files_scanned": 4,
+    "files_total": 4,
+    "lines_analyzed": 317,
+    "tools_used": [
+      "manual-read",
+      "grep",
+      "git-diff",
+      "swift test"
+    ],
+    "coverage_estimate_percent": 100,
+    "sampling_method": null,
+    "phases_completed": [
+      "00",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12"
+    ],
+    "phases_skipped": [],
+    "warnings": [
+      "Objections de specs/018-electron-app-hints/adversarial-review-codex.md non re-signalees (Thread.sleep sur le fil principal, appel AX lent, atMaxDepth sur feuilles, VS Code mode lecteur d'ecran).",
+      "Choix valides par mesure non remis en cause : pas de lecture prealable de AXManualAccessibility, redemande a chaque parcours, pas de demande a l'activation.",
+      "Aucun commit (consigne appelant) : commit_sha null pour PERF-001.",
+      "PERF-001 contre-audite : CONFIRME (tableau non borne par construction, aucune borne documentee) ; impact pratique faible, couts domines par les appels AX."
+    ]
+  },
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 0,
+    "low": 4,
+    "info": 0,
+    "total": 5,
+    "by_category": {
+      "performance": 1,
+      "reliability": 1,
+      "tests": 1,
+      "quality": 1,
+      "minimalism": 1
+    }
+  },
+  "duplicated_code": {
+    "jscpd_percentage": null,
+    "duplicated_lines": 0,
+    "max_block_lines": 0,
+    "total_occurrences": 0,
+    "critical_blocks": []
+  },
+  "ai_hygiene": {
+    "suspected_ai_ratio_percent": null,
+    "dead_code_files": 0,
+    "incomplete_implementations": 0,
+    "critical_todos": 0
+  },
+  "llm_governance": {
+    "applicable": false
+  },
+  "findings": [
+    {
+      "id": "PERF-001",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "counter_audit": "CONFIRMED",
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "line": 282,
+      "title": "Recherche lineaire dans includeRoles a chaque element du parcours AX",
+      "description": "La boucle de parcours testait config.includeRoles.contains(role) sur un tableau a chaque element lu. C'est l'anti-pattern 2 de l'Article XVIII (recherche lineaire repetee dans une boucle), sans borne documentee. targets(from:) du meme fichier indexe deja ce tableau en Set. Le cout reel reste domine par les appels AX (~0,6 ms par element mesure) : impact pratique faible, mais non conforme.",
+      "evidence": "if (!actions.isEmpty || config.includeRoles.contains(role)), let frame = copyFrame(element) {",
+      "exploitability": "N/A",
+      "impact": "O(n*k) au lieu de O(n) sur le chemin interactif du mode lettres (k = taille de include_roles, 8 par defaut, non borne par construction).",
+      "path_type": "hot",
+      "remediation": "Indexer include_roles en Set une fois avant la boucle, comme targets(from:).",
+      "remediation_code": "let includedRoles = Set(config.includeRoles)\n...\nif (!actions.isEmpty || includedRoles.contains(role)), let frame = copyFrame(element) {",
+      "verification": "./scripts/test : 810 tests passes (exit 0) apres correction.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII.2"
+      ],
+      "status": "fixed",
+      "fixed_at": "2026-10-12T21:19:00Z",
+      "commit_sha": null,
+      "fingerprint": "4fbd6a81a8ac"
+    },
+    {
+      "id": "REL-001",
+      "category": "reliability",
+      "subcategory": "retry_budget",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "line": 204,
+      "title": "Une relance au budget residuel minime peut remplacer une passe complete par une passe partielle",
+      "description": "La relance demarre des que now + 150 ms < retryDeadline, donc la passe suivante peut ne disposer que de quelques millisecondes. Son resultat remplace toujours la passe precedente : si elle s'arrete en timeout, le rapport devient partial avec moins de cibles que la passe complete d'avant. Avec les mesures connues (passe d'arbre vide ~10 ms, budget 250 + 300 ms), le cas exige des appels AX anormalement lents.",
+      "evidence": "), Date().addingTimeInterval(0.15) < retryDeadline {\n    Thread.sleep(forTimeInterval: 0.15)\n    retries += 1\n    pass = scan(window: window, pid: app.processIdentifier, config: config, boost: effectiveBoost, deadline: retryDeadline)",
+      "exploitability": "THEORETICAL",
+      "impact": "Rare : moins de lettres et drapeau partial sur une premiere session Electron lente.",
+      "path_type": "hot",
+      "remediation": "Choix de conception a valider : exiger un budget residuel minimal avant de relancer, ou conserver la passe precedente si la relance s'arrete en timeout sans zone web.",
+      "verification": "Test unitaire de la regle de choix de passe, puis evenement targets.app_scan sur draw.io fraichement lance.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fingerprint": "ceca346967a3"
+    },
+    {
+      "id": "TEST-001",
+      "category": "tests",
+      "subcategory": "coverage",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "line": 255,
+      "title": "Calcul des statistiques de parcours non couvert par un test unitaire",
+      "description": "stopReason, atMaxDepth, offscreen, maxDepthReached et la boucle de relance vivent dans scan() et candidates(), prives et lies a l'API AX. Les tests couvrent les regles pures (shouldRetryScan, visibleFrame, isElectronBundle) et la journalisation, pas la production des compteurs. La validation repose sur les mesures manuelles de implementation.md.",
+      "evidence": "private func scan(window: AXUIElement, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {",
+      "exploitability": "N/A",
+      "impact": "Une regression de comptage (ex. atMaxDepth) passerait la suite verte et fausserait le reglage de max_depth.",
+      "path_type": "cold",
+      "remediation": "Si le parcours evolue encore : extraire la boucle derriere une petite abstraction d'arbre (role, frame, enfants) testable avec un faux arbre. Pas avant un 2e besoin reel (Article XIX).",
+      "verification": "Test avec faux arbre : profondeur max atteinte, element hors fenetre, limite max_targets.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "fingerprint": "f794dd939579"
+    },
+    {
+      "id": "QUAL-001",
+      "category": "quality",
+      "subcategory": "typing",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "line": 252,
+      "title": "stopReason et manualAccessibility sont des chaines libres",
+      "description": "Les valeurs valides (complete/timeout/limit, enabled/unsupported/skipped) ne sont listees qu'en commentaire. Les comparaisons pass.stopReason == \"complete\" ne sont pas verifiees par le compilateur. Un enum String a valeurs brutes garderait le meme contrat JSON.",
+      "evidence": "var stopReason = \"complete\"",
+      "exploitability": "N/A",
+      "impact": "Faute de frappe possible non detectee a la compilation ; risque faible, 3 sites de comparaison.",
+      "path_type": "cold",
+      "remediation": "enum ScanStopReason: String, Codable { case complete, timeout, limit } (idem pour l'etat de publication), eventDetails utilise rawValue.",
+      "verification": "Suite verte ; test appScanStatisticsAreLoggedOnlyWhenTheProviderReportsThem inchange.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fingerprint": "0863134b27a1"
+    },
+    {
+      "id": "MIN-001",
+      "category": "minimalism",
+      "subcategory": "single_use_helper",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/TargetHintServiceTests.swift",
+      "line": 351,
+      "title": "Extension JSONDecoder.roadieTest pour un seul usage",
+      "description": "L'extension privee n'est utilisee qu'une fois (ligne 162). Les autres fichiers de tests creent le decodeur sur place en 2 lignes (AutomationEventTests.swift:31, EventEpisodeTests.swift:28).",
+      "evidence": "private extension JSONDecoder {\n    static let roadieTest: JSONDecoder = {\n        let decoder = JSONDecoder()\n        decoder.dateDecodingStrategy = .iso8601\n        return decoder\n    }()\n}",
+      "exploitability": "N/A",
+      "impact": "~5 lignes suppressibles a comportement constant.",
+      "path_type": "cold",
+      "removable_lines_estimate": 5,
+      "remediation": "Creer le decodeur dans le test, comme les autres suites.",
+      "verification": "Test appScanStatisticsAreLoggedOnlyWhenTheProviderReportsThem vert.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fingerprint": "23f58ff58d5c"
+    }
+  ],
+  "suppressed": [],
+  "positive_findings": [
+    "Regles pures extraites et testees sans AX : shouldRetryScan, visibleFrame, isElectronBundle (AppTargetQueryService.swift:122-141, AppTargetQueryServiceTests.swift:67-107).",
+    "Budget total borne par une echeance commune timeout_ms + 300 ms, avec delai AX de 0,5 s sur la demande de publication (AppTargetQueryService.swift:190, 240).",
+    "Evenement targets.app_scan sans donnee utilisateur (identifiant de bundle et compteurs seulement), ecrit dans un EventLog deja borne par rotation.",
+    "Complexite du parcours documentee en commentaire (AppTargetQueryService.swift:184-187)."
+  ],
+  "roadmap": {
+    "immediate": [],
+    "short_term": [
+      "REL-001"
+    ],
+    "medium_term": [
+      "QUAL-001",
+      "MIN-001"
+    ],
+    "long_term": [
+      "TEST-001"
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+# Configuration Audit v14.0
+- AUDIT_SCOPE       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/018-electron-app-hints (diff main, 4 fichiers Sources/Tests)
+- SCOPE_MODE        : diff (DIFF_BASE=main)
+- AUDIT_MODE        : fix (sans commit, consigne appelant)
+- AUDIT_GRID        : all
+- MODULES_ACTIFS    : [00,01,02,03,04,05,06,07,08,09,10,11,12]
+- MAX_CYCLES        : 1 (+ cycle-scoring en lecture seule)
+- MAX_FIXES_PER_CYCLE : 10
+- MAX_RETRY_PER_FINDING : 2
+- AUTO_COMMIT       : false (consigne appelant)
+- BASELINE_PATH     : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/018-electron-app-hints/audits/baseline.json (absent = vide)
+- SESSION_DIR       : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/018-electron-app-hints/audits/2026-10-12/session-2026-10-12-018-electron-app-hints-01/
+- Tests             : ./scripts/test (swift test, HOME temporaire)
