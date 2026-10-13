@@ -93,24 +93,6 @@ struct Audit022R2LotETests {
         #expect(!AppTargetQueryService.isStillInPlace(shown, current: nil))
     }
 
-    @Test
-    func elementPathParsesWindowRootAndChildIndices() throws {
-        let visible = try #require(AppTargetQueryService.elementPath(of: shownTarget()))
-        #expect(visible.windowID == 77)
-        #expect(visible.indices == [1, 3])
-
-        var frontmost = shownTarget()
-        frontmost.id = "app:4242/0.2.0.5"
-        let focused = try #require(AppTargetQueryService.elementPath(of: frontmost))
-        #expect(focused.windowID == nil)
-        #expect(focused.indices == [2, 0, 5])
-
-        frontmost.id = "app:4242/w77.x"
-        #expect(AppTargetQueryService.elementPath(of: frontmost) == nil)
-        frontmost.id = "window:77"
-        #expect(AppTargetQueryService.elementPath(of: frontmost) == nil)
-    }
-
     // MARK: R1-06
 
     @Test
