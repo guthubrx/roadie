@@ -1,6 +1,6 @@
 # Contrat utilisateur
 
-`roadie toggle maximize` active ou désactive la maximisation de la fenêtre active à côté du navrail. La sortie textuelle nomme maximize et on/off ; le code de sortie existant distingue action/refus.
+`roadie toggle maximize` active ou désactive la maximisation de la fenêtre active. Rail masqué, elle occupe toute la zone utile comme le plein écran Roadie. Rail visible ou épinglé avec `roadie rail pin`, elle se redimensionne à côté du navrail sans quitter la maximisation. La sortie textuelle nomme maximize et on/off ; le code de sortie existant distingue action/refus.
 
 `roadie toggle fullscreen` garde son cadre plein écran Roadie. Il remplace un zoom réservé en conservant sa sauvegarde.
 

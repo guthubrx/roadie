@@ -16,7 +16,7 @@ public struct LayoutIntent: Equatable, Codable, Sendable {
     /// Posé par `toggleFullscreen`, lu par le moteur de disposition. nil = pas de zoom.
     /// L'encodage synthétisé utilise `encodeIfPresent` : la clé n'est écrite que si elle est posée.
     public var zoomedWindowID: WindowID?
-    /// Maximisation qui réserve la bande complète du navrail ; absent = plein écran existant.
+    /// Maximisation qui suit la visibilité du navrail ; absent = plein écran existant.
     public var zoomReservesRail: Bool?
     /// Disposition avant le premier zoom, conservée lors du changement de mode.
     public var restorePlacements: [WindowID: Rect]?

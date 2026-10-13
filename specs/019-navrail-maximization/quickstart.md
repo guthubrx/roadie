@@ -6,6 +6,6 @@
 4. Relancer la commande pour retrouver la disposition.
 5. Alterner `roadie toggle maximize` et `roadie toggle fullscreen`, puis répéter la dernière commande pour restaurer.
 6. Tester le menu de titre activé : clic droit sur une fenêtre, « Fenêtre », maximiser/restaurer.
-7. Avec auto-hide, le rail peut se masquer mais sa bande reste réservée. Ne pas modifier la configuration pour essayer la commande.
+7. Avec auto-hide, le rail masqué laisse toute la zone utile. Un survol ou `roadie rail pin` redimensionne la fenêtre pour dégager le rail. Ne pas modifier la configuration pour essayer la commande.
 
 Vérification automatisée : `./scripts/with-xcode swift test`.

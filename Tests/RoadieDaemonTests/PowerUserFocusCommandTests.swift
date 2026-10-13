@@ -362,3 +362,24 @@ func tempPath(_ name: String) -> String {
         .appendingPathComponent("\(name)-\(UUID().uuidString).json")
         .path
 }
+
+
+@Suite
+struct RailAwareMaximizationVisibilityTests {
+    @Test
+    func nativeFullscreenStillHidesRailWhenZoomIdIsExempted() {
+        let window = powerWindow(351, x: 0, y: 0, width: 1000, height: 800)
+        let provider = PowerUserProvider(windows: [window, powerWindow(352, x: 999)])
+        let store = StageStore(path: tempPath("spec019-visibility-native"))
+        let service = SnapshotService(provider: provider, stageStore: store)
+        let normal = service.snapshot()
+        #expect(RailController.railHiddenDisplayIDs(in: normal, hideOnMaximized: true,
+            railAwareZoomWindowIDs: [window.id]).isEmpty)
+        var native = normal
+        if let index = native.windows.firstIndex(where: { $0.window.id == window.id }) {
+            native.windows[index].window.furniture = WindowFurniture(isNativeFullscreen: true)
+        }
+        #expect(RailController.railHiddenDisplayIDs(in: native, hideOnMaximized: true,
+            railAwareZoomWindowIDs: [window.id]) == [powerDisplay().id])
+    }
+}

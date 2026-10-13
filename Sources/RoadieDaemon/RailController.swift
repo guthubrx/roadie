@@ -827,7 +827,18 @@ public final class RailController {
         let screensByDisplayID = Dictionary(NSScreen.screens.compactMap { screen in
             Self.displayID(for: screen).map { ($0, screen) }
         }, uniquingKeysWith: { first, _ in first })
-        let hiddenDisplayIDs = Self.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: config.hideOnMaximized)
+        // Une lecture d'intent par scope : le zoom adapté au rail reste réversible au survol.
+        let railAwareZoomWindowIDs = Set(snapshot.displays.compactMap { display -> WindowID? in
+            guard let scope = snapshot.state.activeScope(on: display.id),
+                  let intent = snapshotService.commandLayoutIntent(scope: scope),
+                  intent.zoomReservesRail == true else { return nil }
+            return intent.zoomedWindowID
+        })
+        let hiddenDisplayIDs = Self.railHiddenDisplayIDs(
+            in: snapshot,
+            hideOnMaximized: config.hideOnMaximized,
+            railAwareZoomWindowIDs: railAwareZoomWindowIDs
+        )
         updateManagedWindowFrames(from: snapshot)
 
         // Contenu visible de chaque ecran : sert a la signature, aux captures de vignettes et au rendu.
@@ -972,22 +983,38 @@ public final class RailController {
         managedWindowFrames = frames
     }
 
-    // Le rail ne repositionne des fenetres que s'il reserve de l'espace (mode `resize`) : en mode `overlay`
-    // il flotte au-dessus du bureau et la disposition ne depend pas de sa largeur.
-    // Complexite : O(c + w) au lieu de O(c * w) en construisant un index windowID -> displayID.
-    private func relayoutAfterRailWidthChange(on displayID: DisplayID) {
-        guard RailSettings.load().layoutMode == "resize" else { return }
+    // Resize conserve sa disposition ; overlay adapte uniquement le zoom qui suit ce rail.
+    // O(c + w) : index par fenêtre en resize, une seule cible en overlay.
+    func relayoutAfterRailWidthChange(on displayID: DisplayID) {
+        let settings = snapshotService.currentRailSettings()
         // Changement de largeur du rail : intention externe, nouvelle génération (A13, T213).
         let generation = PlacementGeneration.shared.next()
         let snapshot = snapshotService.snapshot()
-        let displayByWindow: [WindowID: DisplayID] = Dictionary(
-            snapshot.windows.compactMap { entry in
-                entry.scope.map { (entry.window.id, $0.displayID) }
-            },
-            uniquingKeysWith: { first, _ in first }
-        )
-        let commands = snapshotService.applyPlan(from: snapshot, generation: generation).commands.filter { command in
-            displayByWindow[command.window.id] == displayID
+        let commands: [ApplyCommand]
+        if settings.layoutMode == "resize" {
+            let displayByWindow: [WindowID: DisplayID] = Dictionary(
+                snapshot.windows.compactMap { entry in
+                    entry.scope.map { (entry.window.id, $0.displayID) }
+                },
+                uniquingKeysWith: { first, _ in first }
+            )
+            commands = snapshotService.applyPlan(from: snapshot, generation: generation).commands.filter { command in
+                displayByWindow[command.window.id] == displayID
+            }
+        } else {
+            guard let scope = snapshot.state.activeScope(on: displayID),
+                  let intent = snapshotService.commandLayoutIntent(scope: scope),
+                  intent.zoomReservesRail == true,
+                  let zoomedID = intent.zoomedWindowID,
+                  let entry = snapshot.windows.first(where: { $0.window.id == zoomedID && $0.scope == scope }),
+                  entry.window.furniture?.isNativeFullscreen != true,
+                  entry.window.isTileCandidate,
+                  let display = snapshot.displays.first(where: { $0.id == displayID }),
+                  let target = snapshotService.maximizedFrame(on: display) else { return }
+            let observed = entry.window.frame.cgRect
+            let matches = LayoutMaintainer.matches(observed, target)
+                && observed.minX >= target.minX && display.visibleFrame.cgRect.contains(observed)
+            commands = matches ? [] : [ApplyCommand(window: entry.window, frame: Rect(target))]
         }
         guard !commands.isEmpty else { return }
         let result = snapshotService.apply(ApplyPlan(commands: commands), generation: generation)
@@ -1042,7 +1069,11 @@ public final class RailController {
     /// l'ecran, est en plein ecran natif ; avec `hideOnMaximized`, ou simplement agrandie (voir
     /// `WindowPresentationStateResolver` : une fenetre tilee seule n'est jamais « agrandie »).
     // Complexite : O(n) - n = fenetres du snapshot.
-    nonisolated public static func railHiddenDisplayIDs(in snapshot: DaemonSnapshot, hideOnMaximized: Bool) -> Set<DisplayID> {
+    nonisolated public static func railHiddenDisplayIDs(
+        in snapshot: DaemonSnapshot,
+        hideOnMaximized: Bool,
+        railAwareZoomWindowIDs: Set<WindowID> = []
+    ) -> Set<DisplayID> {
         var displayByActiveScope: [StageScope: DisplayID] = [:]
         for display in snapshot.displays {
             if let scope = snapshot.state.activeScope(on: display.id) {
@@ -1056,7 +1087,7 @@ public final class RailController {
             switch states[entry.window.id] {
             case .nativeFullscreen:
                 hidden.insert(displayID)
-            case .maximized where hideOnMaximized:
+            case .maximized where hideOnMaximized && !railAwareZoomWindowIDs.contains(entry.window.id):
                 hidden.insert(displayID)
             default:
                 break

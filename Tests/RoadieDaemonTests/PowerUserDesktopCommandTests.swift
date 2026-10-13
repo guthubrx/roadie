@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
-import RoadieDaemon
+@testable import RoadieDaemon
 import RoadieTiler
 
 @Suite
@@ -1396,7 +1396,7 @@ struct NavrailMaximizationTests {
     }
 
     @Test(arguments: ["resize", "overlay"])
-    func hiddenRailAndSmartGapsKeepFullReservation(layoutMode: String) throws {
+    func hiddenRailUsesFullscreenAndPinRestoresReservation(layoutMode: String) throws {
         let window = powerWindow(211, x: -950, y: 0, width: 300, height: 800)
         let display = powerDisplay("left-screen", index: 1, x: -1000)
         let provider = PowerUserProvider(displays: [display], windows: [window])
@@ -1415,14 +1415,83 @@ struct NavrailMaximizationTests {
             railSettings: rail, railRuntimeStateStore: runtime, stageStore: store)
         let commands = WindowCommandService(service: service, stageStore: store)
         #expect(commands.toggleMaximize().changed)
-        #expect(writer.frames[window.id] == Rect(x: -820, y: 0, width: 820, height: 800))
+        #expect(writer.frames[window.id] == display.visibleFrame)
         _ = runtime.setPinned(true)
+        // Pin prend effet avant même que le panneau remplace sa largeur repliée (8).
+        #expect(service.maximizedFrame(on: display) == CGRect(x: -820, y: 0, width: 820, height: 800))
         runtime.setVisibleWidth(180, for: display.id)
         let snapshot = service.snapshot()
         #expect(service.maximizedFrame(on: display) == CGRect(x: -820, y: 0, width: 820, height: 800))
         #expect(RailController.railHiddenDisplayIDs(in: snapshot, hideOnMaximized: true).isEmpty)
         #expect(commands.toggleMaximize().changed)
         #expect(service.effectiveIntentStore.intent(for: try #require(snapshot.windows.first?.scope))?.zoomedWindowID == nil)
+    }
+
+    @MainActor
+    @Test(arguments: [WindowManagementMode.spatialBsp, .bsp, .masterStack, .float], ["resize", "overlay"])
+    func maximizedWindowTracksRailVisibilityAndPin(mode: WindowManagementMode, layoutMode: String) throws {
+        let main = powerDisplay()
+        let side = powerDisplay("rail-other", index: 2, x: 1000)
+        let windows = [powerWindow(341, x: 150), powerWindow(342, x: 550), powerWindow(343, x: 1100)]
+        let provider = PowerUserProvider(displays: [main, side], windows: windows)
+        let writer = PowerUserWriter(provider: provider)
+        let store = StageStore(path: tempPath("spec019-visibility-stages"))
+        let runtime = RailRuntimeStateStore(path: tempPath("spec019-visibility-rail"))
+        runtime.setVisibleWidth(8, for: main.id)
+        var rail = RailSettings.load(raw: "")
+        rail.autoHide = true; rail.layoutMode = layoutMode; rail.width = 180; rail.hideOnMaximized = true
+        let service = SnapshotService(provider: provider, frameWriter: writer,
+            config: RoadieConfig(tiling: TilingConfig(defaultStrategy: mode, gapsOuter: 8, gapsOuterLeft: 150)),
+            railSettings: rail, railRuntimeStateStore: runtime, stageStore: store)
+        let initial = service.snapshot()
+        let scope = try #require(initial.windows.first(where: { $0.window.id == windows[0].id })?.scope)
+        let commands = WindowCommandService(service: service, stageStore: store)
+        #expect(commands.toggleMaximize().changed)
+        #expect(writer.frames[windows[0].id] == main.visibleFrame)
+        let beforePin = try #require(service.effectiveIntentStore.intent(for: scope))
+        let hiddenSiblingFrame = writer.frames[windows[1].id]
+        let controller = RailController(store: store, snapshotService: service)
+        _ = runtime.setPinned(true)
+        controller.relayoutAfterRailWidthChange(on: main.id)
+        #expect(writer.frames[windows[0].id] == Rect(x: 180, y: 8, width: 812, height: 784))
+        #expect(writer.frames[windows[1].id] == hiddenSiblingFrame)
+        #expect(writer.frames[windows[2].id] == nil)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.zoomReservesRail == true)
+        #expect(service.effectiveIntentStore.intent(for: scope)?.restorePlacements == beforePin.restorePlacements)
+        // Survol : unpin garde la réservation tant que le rail est encore déplié.
+        runtime.setVisibleWidth(180, for: main.id)
+        _ = runtime.setPinned(false)
+        controller.relayoutAfterRailWidthChange(on: main.id)
+        #expect(writer.frames[windows[0].id] == Rect(x: 180, y: 8, width: 812, height: 784))
+        runtime.setVisibleWidth(8, for: main.id)
+        controller.relayoutAfterRailWidthChange(on: main.id)
+        #expect(writer.frames[windows[0].id] == main.visibleFrame)
+        let hidden = service.snapshot()
+        #expect(RailController.railHiddenDisplayIDs(in: hidden, hideOnMaximized: true,
+            railAwareZoomWindowIDs: [windows[0].id]).isEmpty)
+        // Une révélation à la souris réserve aussi la place, sans pin ni nouvelle bascule de zoom.
+        runtime.setVisibleWidth(180, for: main.id)
+        controller.relayoutAfterRailWidthChange(on: main.id)
+        #expect(writer.frames[windows[0].id] == Rect(x: 180, y: 8, width: 812, height: 784))
+        #expect(service.effectiveIntentStore.intent(for: scope)?.restorePlacements == beforePin.restorePlacements)
+        #expect(commands.toggleMaximize().message.contains("off"))
+    }
+
+    @Test
+    func unknownCollapsedWidthAndPerDisplayVisibilityUseExistingRuntime() {
+        let left = powerDisplay("rail-left", index: 1, x: -1000)
+        let right = powerDisplay("rail-right", index: 2, x: 0)
+        let runtime = RailRuntimeStateStore(path: tempPath("spec019-visibility-displays"))
+        var rail = RailSettings.load(raw: ""); rail.autoHide = true; rail.width = 180
+        let service = SnapshotService(provider: PowerUserProvider(displays: [left, right], windows: []),
+            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 8)), railSettings: rail,
+            railRuntimeStateStore: runtime, stageStore: StageStore(path: tempPath("spec019-visibility-empty")))
+        #expect(service.maximizedFrame(on: left) == left.visibleFrame.cgRect.integral)
+        runtime.setVisibleWidth(180, for: right.id)
+        #expect(service.maximizedFrame(on: left) == left.visibleFrame.cgRect.integral)
+        #expect(service.maximizedFrame(on: right) == CGRect(x: 180, y: 8, width: 812, height: 784))
+        _ = runtime.setPinned(true)
+        #expect(service.maximizedFrame(on: left) == CGRect(x: -820, y: 8, width: 812, height: 784))
     }
 
     @Test

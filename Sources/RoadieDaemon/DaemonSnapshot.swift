@@ -1291,11 +1291,20 @@ public extension SnapshotService {
         return display.visibleFrame.cgRect.inset(by: outerGaps(windowCount: placed.count, display: display))
     }
 
-    /// Zone utile avec marges de fenêtre seule et réservation complète du panneau, même masqué.
+    /// Rail replié : toute la zone visible. Rail visible ou épinglé : réservation du panneau.
     /// O(d) — d overrides d'écran ; le nombre de fenêtres ne change pas ce cadre.
     func maximizedFrame(on display: DisplaySnapshot) -> CGRect? {
+        let settings = currentRailSettings()
+        let runtime = railRuntimeStateStore.load()
+        if settings.autoHide, !runtime.isPinned,
+           (runtime.visibleWidths[display.id.rawValue] ?? settings.edgeHitWidth) <= settings.edgeHitWidth {
+            let visible = display.visibleFrame.cgRect.integral
+            guard visible.minX.isFinite, visible.minY.isFinite, visible.width.isFinite,
+                  visible.height.isFinite, !visible.isEmpty else { return nil }
+            return visible
+        }
         var gaps = outerGaps(windowCount: 1, display: display)
-        gaps.left = max(gaps.left, currentRailSettings().width)
+        gaps.left = max(gaps.left, settings.width)
         let available = display.visibleFrame.cgRect.inset(by: gaps)
         let minX = ceil(available.minX)
         let minY = ceil(available.minY)
@@ -2026,7 +2035,7 @@ private extension SnapshotService {
         return Insets(top: top, right: right, bottom: bottom, left: left)
     }
 
-    private func currentRailSettings() -> RailSettings {
+    internal func currentRailSettings() -> RailSettings {
         railSettings ?? RailSettings.load()
     }
 }

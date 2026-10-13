@@ -6,7 +6,7 @@ Décision : commande `roadie toggle maximize`. Raisons : distinction courte avec
 
 ## Géométrie
 
-Décision : utiliser le visibleFrame et les outerGaps de fenêtre seule, puis forcer left >= RailSettings.width. Réserver la largeur complète pour resize, overlay et pin. RailPanel.position/configureAutoHide applique exactement config.railWidth ; RailVisualConfig.load lit settings.width. Le contenu de StageCardView (224) n'est pas une autre surface de fenêtre. Aucun changement de dimension du panneau dans cette feature.
+Décision : utiliser le visibleFrame et les outerGaps de fenêtre seule, puis forcer left >= RailSettings.width. La largeur est réservée seulement quand le rail est visible. En repli auto-hide non pin, utiliser exactement visibleFrame ; pin force la réservation avant la prochaine mesure, puis les révélations/replis suivent visibleWidths par écran. RailPanel.position/configureAutoHide applique exactement config.railWidth ; RailVisualConfig.load lit settings.width. Le contenu de StageCardView (224) n'est pas une autre surface de fenêtre. Aucun changement de dimension du panneau dans cette feature.
 
 ## Restauration et compatibilité
 

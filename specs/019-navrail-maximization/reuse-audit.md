@@ -92,3 +92,8 @@ Les méthodes privées ajoutées ont été recherchées par nom et responsabilit
 - [x] Les règles projet applicables ont été lues
 - [x] Les specs existantes proches ont été vérifiées
 - [x] Le plan.md a été refactoré ou les divergences sont justifiées
+
+
+## Correction de visibilité — 2026-10-13
+
+Statut : PASS. Réutiliser maximizedFrame, currentRailSettings, visibleWidths, isPinned et le callback onVisibleWidthChanged existants. Aucun store/type/helper nouveau. relayoutAfterRailWidthChange et currentRailSettings deviennent internes pour partager la configuration et tester le chemin réel. railHiddenDisplayIDs ajoute une liste des zooms rail-aware pour ignorer seulement l'heuristique maximized, sans ignorer nativeFullscreen. Sources inspectées : DaemonSnapshot, RailRuntimeState, RailPanel, RailController et tests de SPEC-019. Le choix de réserve permanente est remplacé par la demande explicite de visibilité dynamique ; pas de doublon ni arbitrage à demander.

@@ -29,3 +29,12 @@
 Toutes les tâches d'implémentation doivent être cochées avant le commit. La livraison et le nettoyage sont prouvés séparément dans le dossier durable de livraison ; ils ne constituent pas des tâches de code.
 
 Dépendances : T001 -> tests T002/T004 -> T003/T005/T006 -> T007/T008/T009 -> T010 -> T011. Les chemins sont relatifs à la racine du worktree. Les tests utilisent les fixtures et la suite existantes.
+
+
+## Correction de visibilité — 2026-10-13
+
+- [x] T012 Actualiser la spec, plan, modèle et audit de réutilisation : masqué = plein cadre, visible/pin = réservation, aucune nouvelle persistance.
+- [x] T013 Adapter les tests dans Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift et PowerUserFocusCommandTests.swift : hidden/pin/hover, resize/overlay, quatre moteurs, origine négative, autres scopes, sauvegarde et priorité native.
+- [x] T014 Étendre Sources/RoadieDaemon/DaemonSnapshot.swift et RailController.swift : cible basée sur visibilité et callback overlay ciblé ; empêcher la boucle hide_on_maximized.
+- [x] T015 Mettre les six README/guides CLI anglais/français et le guide de test de la spec en cohérence.
+- [x] T016 Exécuter la suite Swift complète, relire les changements et vérifier la convergence.

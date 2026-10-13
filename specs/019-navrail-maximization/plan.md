@@ -4,7 +4,7 @@
 
 ## Résumé
 
-Étendre le zoom de commande existant avec une réservation explicite du rail. Garder le marqueur zoomedWindowID comme source de protection du scope. Calculer un seul cadre de maximisation à partir du display visible et des marges de fenêtre seule, avec une marge gauche au moins égale à RailSettings.width. Réserver la largeur complète, même en auto-hide. Persister des champs optionnels pour distinguer les modes et restaurer les placements précédents.
+Étendre le zoom de commande existant avec une réservation explicite du rail. Garder le marqueur zoomedWindowID comme source de protection du scope. Calculer un seul cadre de maximisation à partir du display visible et des marges de fenêtre seule, avec une marge gauche au moins égale à RailSettings.width. Lire visibleWidths par écran et isPinned dans le store existant : repli auto-hide sans pin donne le visibleFrame plein ; pin ou rail déplié donne la réservation. Persister des champs optionnels pour distinguer les modes et restaurer les placements précédents.
 
 ## Contexte technique
 
@@ -36,7 +36,7 @@ Code existant étendu :
 
 ## Réutilisation de l'existant
 
-WindowCommands.toggleFullscreen (484) fournit application, masquage, focus et événements. LayoutIntentStore (4) accepte déjà des propriétés optionnelles. SnapshotService.outerGaps (1913) gère les overrides et smart gaps ; maximizedFrame force seulement la bande complète du rail. RailPanel (169) définit cette bande via config.railWidth, lui-même égal à RailSettings.width : on réserve le panneau, sans ajouter la largeur de carte 224 qui reste son contenu. LayoutMaintainer.fullscreenEntries (2295) reconnaît déjà le marqueur logique. StageCommands.targetFullscreenMemberID (1231) préserve ce marqueur. Les menus et routeurs existants suffisent.
+WindowCommands.toggleFullscreen (484) fournit application, masquage, focus et événements. LayoutIntentStore (4) accepte déjà des propriétés optionnelles. SnapshotService.outerGaps (1913) gère les overrides et smart gaps ; maximizedFrame force la bande complète du rail visible, ou renvoie le plein cadre utile lorsqu’il est replié. RailPanel (169) définit cette bande via config.railWidth, lui-même égal à RailSettings.width : on réserve le panneau, sans ajouter la largeur de carte 224 qui reste son contenu. LayoutMaintainer.fullscreenEntries (2295) reconnaît déjà le marqueur logique. StageCommands.targetFullscreenMemberID (1231) préserve ce marqueur. Les menus et routeurs existants suffisent.
 
 ## Ordre et vérification
 
@@ -50,4 +50,9 @@ WindowCommands.toggleFullscreen (484) fournit application, masquage, focus et é
 
 ## Divergences volontaires
 
-Aucune duplication de service. Le calcul maximizedFrame est une règle métier nouvelle (réservation entière indépendante de l'auto-hide), utilisée par les commandes, les plans, le maintien et les transitions de stage. La disposition sauvegardée est un dictionnaire optionnel ; pas de copie récursive d'intent ni de pile de zooms.
+Aucune duplication de service. Le calcul maximizedFrame est une règle métier de maximisation suivant la visibilité du rail, utilisée par les commandes, les plans, le maintien et les transitions de stage. La disposition sauvegardée est un dictionnaire optionnel ; pas de copie récursive d'intent ni de pile de zooms.
+
+
+## Correction du 2026-10-13 — Visibilité du rail
+
+Le besoin utilisateur précise que le rail masqué libère toute sa bande. Réutiliser visibleWidths et isPinned du RailRuntimeStateStore. Une largeur absente au démarrage auto-hide non épinglé signifie repliée ; pin impose la réservation immédiatement malgré une largeur périmée. Le callback existant onVisibleWidthChanged relance déjà resize ; l'étendre à la seule fenêtre maximisée en overlay. Écarter le zoom rail-aware de l'heuristique hide_on_maximized pour éviter une boucle, tout en gardant le plein écran natif prioritaire. Le getter currentRailSettings et le callback restent internes et deviennent accessibles aux tests ; aucune nouvelle abstraction ni stockage.
