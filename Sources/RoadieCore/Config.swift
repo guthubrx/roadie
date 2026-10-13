@@ -1285,7 +1285,6 @@ private enum ConfigValidationRules {
         if let root = try? TOMLTable(string: rawToml) {
             items.append(contentsOf: keyChecks(in: root, path: ""))
         }
-        items.append(contentsOf: scalarTypeChecks(rawToml: rawToml))
         if let config = try? TOMLDecoder().decode(RoadieConfig.self, from: rawToml) {
             if config.widthAdjustment.presets.isEmpty {
                 items.append(ConfigValidationItem(level: .error, path: "width_adjustment.presets", message: "must contain at least one ratio"))
@@ -1480,57 +1479,6 @@ private enum ConfigValidationRules {
         return result
     }
 
-    private static func scalarTypeChecks(rawToml: String) -> [ConfigValidationItem] {
-        let numericKeys: Set<String> = [
-            "gaps_outer",
-            "gaps_outer_top",
-            "gaps_outer_right",
-            "gaps_outer_bottom",
-            "gaps_outer_left",
-            "gaps_inner",
-            "master_ratio",
-            "count",
-            "thickness",
-            "corner_radius",
-            "nudge_step",
-            "minimum_ratio",
-            "maximum_ratio",
-            "height",
-            "leading_exclusion",
-            "trailing_exclusion",
-            "overlay_duration_seconds"
-        ]
-        var items: [ConfigValidationItem] = []
-        var currentTable = ""
-        for line in rawToml.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#") else { continue }
-            if trimmed.hasPrefix("[") {
-                currentTable = trimmed
-                    .split(separator: "#", maxSplits: 1)
-                    .first
-                    .map(String.init)?
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "[]").union(.whitespaces)) ?? ""
-                continue
-            }
-            let parts = trimmed.split(separator: "=", maxSplits: 1).map(String.init)
-            guard parts.count == 2 else { continue }
-            let key = parts[0].trimmingCharacters(in: .whitespaces)
-            let value = parts[1]
-                .split(separator: "#", maxSplits: 1)
-                .first
-                .map(String.init)?
-                .trimmingCharacters(in: .whitespaces) ?? ""
-            guard numericKeys.contains(key), value.hasPrefix("\"") else { continue }
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: [currentTable, key].filter { !$0.isEmpty }.joined(separator: "."),
-                message: "expected numeric value, got string"
-            ))
-        }
-        return items
-    }
-
     private static func validateTitlebarContextMenu(_ config: TitlebarContextMenuConfig) -> [ConfigValidationItem] {
         var items: [ConfigValidationItem] = []
         if config.height < 12 || config.height > 96 {
@@ -1617,44 +1565,16 @@ private enum ConfigValidationRules {
                 message: "must contain at least one AX role"
             ))
         }
-        if config.maxDepth < 1 || config.maxDepth > 40 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.app_targets.max_depth",
-                message: "must be between 1 and 40"
-            ))
-        }
         return items
     }
 
     private static func validateTargetGrid(_ config: TargetGridConfig) -> [ConfigValidationItem] {
         var items: [ConfigValidationItem] = []
-        if config.rows < 2 || config.rows > 12 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_grid.rows",
-                message: "must be between 2 and 12"
-            ))
-        }
-        if config.columns < 2 || config.columns > 12 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_grid.columns",
-                message: "must be between 2 and 12"
-            ))
-        }
         if config.hintCharacters.count < config.rows * config.columns {
             items.append(ConfigValidationItem(
                 level: .error,
                 path: "experimental.target_grid.hint_characters",
                 message: "must contain at least rows*columns characters"
-            ))
-        }
-        if config.maxDepth < 1 || config.maxDepth > 20 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_grid.max_depth",
-                message: "must be between 1 and 20"
             ))
         }
         if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {
@@ -1699,13 +1619,17 @@ private extension WindowManagementMode {
 }
 
 private extension KeyedDecodingContainer {
+    /// Accepte un nombre décimal ou un entier TOML. Clé absente : `nil` (le défaut s'applique).
+    /// Autre type (booléen, texte, tableau) : l'erreur de décodage est propagée, jamais remplacée
+    /// par le défaut (REL-011).
     func decodeFlexibleDouble(forKey key: Key) throws -> Double? {
-        if let value = try? decodeIfPresent(Double.self, forKey: key) {
-            return value
+        do {
+            return try decodeIfPresent(Double.self, forKey: key)
+        } catch {
+            if let value = try? decodeIfPresent(Int.self, forKey: key) {
+                return Double(value)
+            }
+            throw error
         }
-        if let value = try? decodeIfPresent(Int.self, forKey: key) {
-            return Double(value)
-        }
-        return nil
     }
 }

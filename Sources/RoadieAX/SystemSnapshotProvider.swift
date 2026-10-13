@@ -297,6 +297,14 @@ public final class AXUnresponsiveApps: @unchecked Sendable {
         markUnresponsive(pid)
         return true
     }
+
+    /// Enregistre le résultat d'un appel AX et retourne vrai seulement s'il a réussi. Toute autre
+    /// erreur (failure, invalidUIElement, actionUnsupported, délai) est un échec pour l'appelant ;
+    /// seul le délai met l'application de côté (REL-010).
+    func noteSucceeded(_ error: AXError, pid: pid_t) -> Bool {
+        noteResult(error, pid: pid)
+        return error == .success
+    }
 }
 
 // MARK: - Attributs AX d'une fenêtre (SPEC-016 FR-022, research R4)
@@ -1051,7 +1059,7 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
         if registry.noteResult(AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element), pid: pid) {
             return false
         }
-        return !registry.noteResult(AXUIElementPerformAction(element, kAXRaiseAction as CFString), pid: pid)
+        return registry.noteSucceeded(AXUIElementPerformAction(element, kAXRaiseAction as CFString), pid: pid)
     }
 
     private func setFrontmost(pid: pid_t) -> Bool {

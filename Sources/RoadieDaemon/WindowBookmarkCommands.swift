@@ -8,17 +8,20 @@ public struct WindowBookmarkCommandService {
     private let store: StageStore
     private let mouseFollower: MouseFollower
     private let events: EventLog
+    private let isProcessAlive: (Int32) -> Bool
 
     public init(
         service: SnapshotService = SnapshotService(),
         store: StageStore = StageStore(),
         mouseFollower: MouseFollower = MouseFollower(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        isProcessAlive: @escaping (Int32) -> Bool = ProcessLiveness.isAlive
     ) {
         self.service = service
         self.store = store
         self.mouseFollower = mouseFollower
         self.events = events
+        self.isProcessAlive = isProcessAlive
     }
 
     public func set(_ rawName: String) -> WindowCommandResult {
@@ -50,6 +53,15 @@ public struct WindowBookmarkCommandService {
             return WindowCommandResult(message: "bookmark focus \(name): not found", changed: false)
         }
         guard let targetEntry = snapshot.windows.first(where: { $0.window.id == bookmark.windowID }) else {
+            // Absente du snapshot n'est pas fermée : autre Space, fenêtre réduite, application qui
+            // ne répond pas. Seul un processus mort le prouve ; sinon le signet reste et la purge
+            // différée (délai de grâce) tranche (REL-028).
+            guard processIsDead(owningWindow: bookmark.windowID, in: state) else {
+                return WindowCommandResult(
+                    message: "bookmark focus \(name): window not visible (other Space, minimized or unresponsive app), bookmark kept",
+                    changed: false
+                )
+            }
             let removed = store.mutate { $0.removeBookmark(named: name) }
             if let removed {
                 events.append(RoadieEvent(
@@ -169,6 +181,19 @@ public struct WindowBookmarkCommandService {
             lines.append("\(bookmark.name)\t\(bookmark.windowID.rawValue)\t\(bookmark.bundleID)\t\(bookmark.title)\t\(bookmark.scope)\t\(status)")
         }
         return WindowCommandResult(message: lines.joined(separator: "\n"), changed: false)
+    }
+
+    /// Vrai si le pid mémorisé du membre de stage portant cette fenêtre n'existe plus.
+    /// Sans membre ou sans pid connu (anciens fichiers) : pas de preuve, donc faux.
+    /// O(scopes * stages * membres).
+    private func processIsDead(owningWindow windowID: WindowID, in state: PersistentStageState) -> Bool {
+        for scope in state.scopes {
+            for stage in scope.stages {
+                guard let member = stage.members.first(where: { $0.windowID == windowID }) else { continue }
+                if let pid = member.pid { return !isProcessAlive(pid) }
+            }
+        }
+        return false
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {

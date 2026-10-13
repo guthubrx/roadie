@@ -172,17 +172,23 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             append("display", rule.match.display, to: &lines)
             append("desktop", rule.match.desktop, to: &lines)
             append("stage", rule.match.stage, to: &lines)
-            if let isFloating = rule.match.isFloating {
-                lines.append("is_floating = \(isFloating ? "true" : "false")")
-            }
+            appendBool("is_floating", rule.match.isFloating, to: &lines)
             lines.append("")
             lines.append("[rules.action]")
             append("assign_desktop", rule.action.assignDesktop, to: &lines)
             append("assign_display", rule.action.assignDisplay, to: &lines)
             append("assign_stage", rule.action.assignStage, to: &lines)
-            if let follow = rule.action.follow {
-                lines.append("follow = \(follow ? "true" : "false")")
+            appendBool("follow", rule.action.follow, to: &lines)
+            // Les autres actions des règles du fichier doivent survivre à la réécriture (REL-029).
+            appendBool("manage", rule.action.manage, to: &lines)
+            appendBool("exclude", rule.action.exclude, to: &lines)
+            appendBool("floating", rule.action.floating, to: &lines)
+            append("layout", rule.action.layout, to: &lines)
+            if let gapOverride = rule.action.gapOverride {
+                lines.append("gap_override = \(gapOverride)")
             }
+            append("scratchpad", rule.action.scratchpad, to: &lines)
+            appendBool("emit_event", rule.action.emitEvent, to: &lines)
             lines.append("")
         }
         return lines.joined(separator: "\n")
@@ -191,6 +197,11 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
     private func append(_ key: String, _ value: String?, to lines: inout [String]) {
         guard let value, !value.isEmpty else { return }
         lines.append("\(key) = \"\(toml(value))\"")
+    }
+
+    private func appendBool(_ key: String, _ value: Bool?, to lines: inout [String]) {
+        guard let value else { return }
+        lines.append("\(key) = \(value ? "true" : "false")")
     }
 
     private func toml(_ value: String) -> String {
