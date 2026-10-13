@@ -22,7 +22,7 @@ struct Audit022R3Tests {
 
         let result = fixture.windows.move(.right)
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.intentURL) == garbage)
     }
 
@@ -35,7 +35,7 @@ struct Audit022R3Tests {
 
         let result = fixture.windows.sendToDisplay(2)
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
     }
 
@@ -50,7 +50,7 @@ struct Audit022R3Tests {
         let result = fixture.windows.toggleFullscreen()
 
         #expect(result.message.hasPrefix("toggle fullscreen off: failed"))
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
     }
 
     // MARK: - R1-02 : DesktopCommands
@@ -64,7 +64,7 @@ struct Audit022R3Tests {
 
         let result = fixture.desktops.focus(DesktopID(rawValue: 2))
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
     }
 
@@ -76,7 +76,7 @@ struct Audit022R3Tests {
 
         let result = fixture.desktops.label(DesktopID(rawValue: 1), as: "Code")
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == garbage)
     }
 
@@ -91,7 +91,7 @@ struct Audit022R3Tests {
 
         let result = fixture.bookmarks.set("code")
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(!fixture.eventLogContains("window.bookmark_set"))
     }
@@ -112,7 +112,7 @@ struct Audit022R3Tests {
 
         let result = fixture.bookmarks.focus("code")
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
     }
 
@@ -127,7 +127,7 @@ struct Audit022R3Tests {
 
         let result = fixture.groups.create(id: "pair", windowIDs: [fixture.left.id, fixture.right.id])
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(!fixture.eventLogContains("window.grouped"))
     }
@@ -148,7 +148,7 @@ struct Audit022R3Tests {
             sourceScope: nil
         ))
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(!fixture.eventLogContains("window.pin_added"))
     }
@@ -164,7 +164,7 @@ struct Audit022R3Tests {
 
         let result = fixture.displays.focus(index: 2)
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
     }
 
@@ -178,7 +178,7 @@ struct Audit022R3Tests {
 
         let result = fixture.layout.flatten()
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.intentURL) == garbage)
     }
 
@@ -190,7 +190,7 @@ struct Audit022R3Tests {
 
         let result = fixture.layout.balance()
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
     }
 
     // MARK: - R1-02 : chemin nominal inchangé
@@ -353,10 +353,11 @@ private struct R3Fixture {
     }
 
     /// Contrat REL-021 : échec annoncé (« failed », code CLI non nul), aucun cadre ni focus AX.
-    func expectRefused(_ changed: Bool, _ message: String, sourceLocation: SourceLocation = #_sourceLocation) {
-        #expect(!changed, sourceLocation: sourceLocation)
-        #expect(message.contains("failed"), "\(message)", sourceLocation: sourceLocation)
-        #expect(CLICommandRouter.actionExitCode(changed: changed, message: message) == 1, sourceLocation: sourceLocation)
+    func expectRefused(_ result: some CommandResult, sourceLocation: SourceLocation = #_sourceLocation) {
+        #expect(!result.changed, sourceLocation: sourceLocation)
+        #expect(result.message.contains("failed"), "\(result.message)", sourceLocation: sourceLocation)
+        #expect(result.outcome == .failed, sourceLocation: sourceLocation)
+        #expect(CLICommandRouter.actionExitCode(outcome: result.outcome) == 1, sourceLocation: sourceLocation)
         #expect(writer.frames.isEmpty, "\(writer.frames)", sourceLocation: sourceLocation)
         #expect(writer.focused.isEmpty, "\(writer.focused)", sourceLocation: sourceLocation)
     }

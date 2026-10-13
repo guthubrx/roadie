@@ -19,14 +19,15 @@ public struct CLIResponse: Codable, Equatable, Sendable {
 }
 
 /// Statut d'une commande d'action (REL-042) : le code de sortie CLI en découle.
-public enum CommandOutcome: String, Equatable, Sendable {
+public enum CommandOutcome: String, Codable, Equatable, Sendable {
     case changed
     case noOp
     case failed
 }
 
-/// Résultat d'une commande d'action portant son statut (REL-042). `outcome` nil : statut non posé,
-/// le routeur garde l'ancienne lecture du message (compatibilité des résultats construits ailleurs).
+/// Résultat d'une commande d'action portant son statut (REL-042). Le code de sortie CLI se lit sur
+/// `outcome`, jamais sur `message`, qui peut contenir une valeur utilisateur. `outcome` nil (aucun
+/// résultat du code livré n'en laisse) : code 0.
 protocol CommandResult {
     var message: String { get }
     var changed: Bool { get }
@@ -308,30 +309,16 @@ public final class CLICommandRouter {
         return 1
     }
 
-    private func finish(_ message: String, changed: Bool) -> Int32 {
-        out(message)
-        return Self.actionExitCode(changed: changed, message: message)
-    }
-
     /// Fin d'une commande dont le résultat porte son statut (REL-042) : code calculé sur ce statut.
     private func finish(_ result: some CommandResult) -> Int32 {
         out(result.message)
-        return Self.actionExitCode(changed: result.changed, message: result.message, outcome: result.outcome)
+        return Self.actionExitCode(outcome: result.outcome)
     }
 
     /// Statut explicite (REL-042) : 1 pour un échec, 0 sinon, sans lire le message, qui peut
-    /// contenir une valeur utilisateur (stage nommée « failed »).
-    /// Sans statut (résultats hors commandes de stage, bureau, fenêtre et disposition), un échec
-    /// se reconnaît encore à son message (cible inconnue, argument invalide, opération en échec) ;
-    /// le reste est une action sans objet (« already », « no neighbor ») : code 0. Un tel message
-    /// d'échec doit contenir un marqueur hors valeurs utilisateur
-    /// (ex. « bookmark focus X: failed - window not visible ... ») ; « not visible » seul n'en est pas un.
-    nonisolated static func actionExitCode(changed: Bool, message: String, outcome: CommandOutcome? = nil) -> Int32 {
-        if let outcome { return outcome == .failed ? 1 : 0 }
-        guard !changed else { return 0 }
-        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "must "]
-        let lowered = message.lowercased()
-        return failureMarkers.contains { lowered.contains($0) } ? 1 : 0
+    /// contenir une valeur utilisateur (stage nommée « failed »). O(1).
+    nonisolated static func actionExitCode(outcome: CommandOutcome?) -> Int32 {
+        outcome == .failed ? 1 : 0
     }
 
     /// Identifiant de fenêtre d'un argument : entier positif. `WindowID(rawValue: 0)` arrête le
@@ -704,7 +691,7 @@ public final class CLICommandRouter {
             return finish(result)
         case "daemon":
             if args.dropFirst().first == "health" {
-                let report = DaemonHealthService(service: service).run()
+                let report = DaemonHealthService(service: service, stageStore: service.effectiveStageStore).run()
                 if args.contains("--json") {
                     try printJSON(report, label: "daemon health")
                 } else {
@@ -712,11 +699,14 @@ public final class CLICommandRouter {
                 }
                 return report.failed ? 1 : 0
             } else if args.dropFirst().first == "heal" {
-                let report = DaemonHealthService(service: service).heal()
+                let report = DaemonHealthService(service: service, stageStore: service.effectiveStageStore).heal()
                 if args.contains("--json") {
                     try printJSON(report, label: "daemon heal")
                 } else {
                     out(TextFormatter.daemonHeal(report))
+                }
+                if let persistenceError = report.state.persistenceError {
+                    err("roadie: \(persistenceError)")
                 }
                 return report.failed ? 1 : 0
             } else if args.dropFirst().first == "restart" {
@@ -889,9 +879,9 @@ public final class CLICommandRouter {
         }
     }
 
-    private func runWidthLayoutCommand(_ args: [String]) -> WindowCommandResult {
+    private func runWidthLayoutCommand(_ args: [String]) -> WidthAdjustmentResult {
         guard let verb = args.first else {
-            return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false, outcome: .failed)
+            return .failure("layout width: requires next|prev|nudge|ratio")
         }
         let scope: WidthAdjustmentScope = args.contains("--all") ? .allWindows : .activeWindow
         let widthService = WidthAdjustmentService(service: service)
@@ -909,13 +899,13 @@ public final class CLICommandRouter {
             ))
         case "ratio":
             guard let raw = args.dropFirst().first, let ratio = Double(raw) else {
-                return WindowCommandResult(message: "layout width ratio: requires numeric ratio", changed: false, outcome: .failed)
+                return .failure("layout width ratio: requires numeric ratio")
             }
             result = widthService.apply(WidthAdjustmentIntent(scope: scope, mode: .explicitRatio, targetRatio: ratio))
         default:
-            return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false, outcome: .failed)
+            return .failure("layout width: requires next|prev|nudge|ratio")
         }
-        return WindowCommandResult(message: result.message, changed: result.changed)
+        return result
     }
 
     private func runDirectionalCommand(
@@ -1352,7 +1342,7 @@ public final class CLICommandRouter {
     }
 
     private func runGroupCommand(_ args: [String]) throws -> Int32 {
-        let service = WindowGroupCommandService()
+        let service = WindowGroupCommandService(service: self.service, store: self.service.effectiveStageStore)
         switch args.first {
         case "list":
             let result = service.list()
@@ -1365,7 +1355,7 @@ public final class CLICommandRouter {
             }
             let ids = args.dropFirst(2).compactMap(Self.windowID)
             let result = service.create(id: id, windowIDs: ids)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "add":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
@@ -1375,7 +1365,7 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = service.add(windowID: windowID, to: id)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "remove":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
@@ -1385,7 +1375,7 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = service.remove(windowID: windowID, from: id)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "focus":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
@@ -1395,14 +1385,14 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = service.focus(windowID: windowID, in: id)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "dissolve":
             guard let id = args.dropFirst().first else {
                 err("roadie: group dissolve requires GROUP_ID")
                 return 64
             }
             let result = service.dissolve(id: id)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         default:
             return usageError()
         }

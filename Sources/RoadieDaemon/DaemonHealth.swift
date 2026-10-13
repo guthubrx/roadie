@@ -52,8 +52,9 @@ public struct DaemonHealReport: Equatable, Codable, Sendable {
         self.health = health
     }
 
+    /// `state.failed` : audit en échec ou réparations non écrites (REL-021).
     public var failed: Bool {
-        state.audit.failed || layout.failed > 0 || health.failed
+        state.failed || layout.failed > 0 || health.failed
     }
 }
 

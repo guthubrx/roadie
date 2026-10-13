@@ -153,16 +153,16 @@ struct PowerUserLayoutCommandTests {
         let layout = LayoutCommandService(service: fixture.service)
         let width = WidthAdjustmentService(service: fixture.service, config: fixture.service.effectiveConfig, events: EventLog(path: tempPath("tree-refusal-width")))
 
-        let results = [
-            (layout.insert(.left).message, layout.insert(.left).changed),
-            (layout.join(with: .right).message, layout.join(with: .right).changed),
-            (width.apply(WidthAdjustmentIntent(scope: .activeWindow, mode: .presetNext)).message, false),
+        let results: [(message: String, changed: Bool, outcome: CommandOutcome?)] = [
+            { let r = layout.insert(.left); return (r.message, r.changed, r.outcome) }(),
+            { let r = layout.join(with: .right); return (r.message, r.changed, r.outcome) }(),
+            { let r = width.apply(WidthAdjustmentIntent(scope: .activeWindow, mode: .presetNext)); return (r.message, r.changed, r.outcome) }(),
         ]
 
-        for (message, changed) in results {
+        for (message, changed, outcome) in results {
             #expect(!changed)
             #expect(message.contains("unavailable in tree mode"))
-            #expect(CLICommandRouter.actionExitCode(changed: changed, message: message) == 1)
+            #expect(CLICommandRouter.actionExitCode(outcome: outcome) == 1)
         }
         #expect(fixture.tree() == TreeFixture.baseTree)
         #expect(fixture.writer.frameHistory.isEmpty)

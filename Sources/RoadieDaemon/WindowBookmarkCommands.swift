@@ -30,7 +30,7 @@ public struct WindowBookmarkCommandService {
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
-            return WindowCommandResult(message: "bookmark set \(name): no active tiled window", changed: false)
+            return .noChange("bookmark set \(name): no active tiled window")
         }
 
         let bookmark: PersistentWindowBookmark
@@ -55,17 +55,14 @@ public struct WindowBookmarkCommandService {
         let snapshot = service.snapshot(followFocus: false)
         let state = store.state()
         guard let bookmark = state.bookmark(named: name) else {
-            return WindowCommandResult(message: "bookmark focus \(name): not found", changed: false)
+            return .failure("bookmark focus \(name): not found")
         }
         guard let targetEntry = snapshot.windows.first(where: { $0.window.id == bookmark.windowID }) else {
             // Absente du snapshot n'est pas fermée : autre Space, fenêtre réduite, application qui
             // ne répond pas. Seul un processus mort le prouve ; sinon le signet reste et la purge
             // différée (délai de grâce) tranche (REL-028).
             guard processIsDead(owningWindow: bookmark.windowID, in: state) else {
-                return WindowCommandResult(
-                    message: "bookmark focus \(name): failed - window not visible (other Space, minimized or unresponsive app), bookmark kept",
-                    changed: false
-                )
+                return .failure("bookmark focus \(name): failed - window not visible (other Space, minimized or unresponsive app), bookmark kept")
             }
             let removed: PersistentWindowBookmark?
             do {
@@ -85,7 +82,7 @@ public struct WindowBookmarkCommandService {
 
         let targetScope = targetEntry.scope ?? state.stageScope(for: bookmark.windowID) ?? bookmark.scope
         guard let display = snapshot.displays.first(where: { $0.id == targetScope.displayID }) else {
-            return WindowCommandResult(message: "bookmark focus \(name): display unavailable", changed: false)
+            return .failure("bookmark focus \(name): display unavailable")
         }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
@@ -165,8 +162,8 @@ public struct WindowBookmarkCommandService {
                 "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
-        return WindowCommandResult(
-            message: ok
+        return .changedOrFailed(
+            ok
                 ? "bookmark focus \(name): window=\(bookmark.windowID.rawValue) restored=\(applied) layout=\(layoutAttempted)"
                 : "bookmark focus \(name): focus failed",
             changed: ok
@@ -182,7 +179,7 @@ public struct WindowBookmarkCommandService {
             return .persistenceFailure("bookmark clear \(name)", error)
         }
         guard let removed = removal else {
-            return WindowCommandResult(message: "bookmark clear \(name): not found", changed: false)
+            return .failure("bookmark clear \(name): not found")
         }
         events.append(RoadieEvent(
             type: "window.bookmark_removed",
@@ -195,7 +192,7 @@ public struct WindowBookmarkCommandService {
     public func list() -> WindowCommandResult {
         let bookmarks = store.state().windowBookmarks
         guard !bookmarks.isEmpty else {
-            return WindowCommandResult(message: "NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS", changed: false)
+            return .noChange("NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS")
         }
         let liveWindowIDs = Set(service.snapshot(followFocus: false).windows.map(\.window.id))
         var lines = ["NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS"]
@@ -203,7 +200,7 @@ public struct WindowBookmarkCommandService {
             let status = liveWindowIDs.contains(bookmark.windowID) ? "live" : "missing"
             lines.append("\(bookmark.name)\t\(bookmark.windowID.rawValue)\t\(bookmark.bundleID)\t\(bookmark.title)\t\(bookmark.scope)\t\(status)")
         }
-        return WindowCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return .noChange(lines.joined(separator: "\n"))
     }
 
     /// Vrai si le pid mémorisé du membre de stage portant cette fenêtre n'existe plus.

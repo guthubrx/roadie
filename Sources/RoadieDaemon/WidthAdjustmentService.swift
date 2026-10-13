@@ -2,15 +2,22 @@ import Foundation
 import RoadieAX
 import RoadieCore
 
-public struct WidthAdjustmentResult: Codable, Equatable, Sendable {
+public struct WidthAdjustmentResult: CommandResult, Codable, Equatable, Sendable {
     public var changed: Bool
     public var message: String
     public var ratio: Double?
+    /// Statut explicite (REL-042) : le code de sortie CLI en découle, pas du message.
+    public var outcome: CommandOutcome?
 
-    public init(changed: Bool, message: String, ratio: Double? = nil) {
+    public init(changed: Bool, message: String, ratio: Double? = nil, outcome: CommandOutcome? = nil) {
         self.changed = changed
         self.message = message
         self.ratio = ratio
+        self.outcome = outcome ?? (changed ? .changed : nil)
+    }
+
+    init(message: String, changed: Bool, outcome: CommandOutcome?) {
+        self.init(changed: changed, message: message, outcome: outcome)
     }
 }
 
@@ -50,19 +57,19 @@ public struct WidthAdjustmentService {
               let scope = focusedEntry?.scope ?? snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope)
         else {
-            return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
+            return .noChange("width: unsupported layout")
         }
         // Mode arbre : refus explicite (SPEC-017 R12) ; « unavailable » donne un code de sortie non nul.
         if stage.mode.usesTreeEngine {
-            return WidthAdjustmentResult(changed: false, message: "width: unavailable in tree mode (spatialBsp), use resize")
+            return .failure("width: unavailable in tree mode (spatialBsp), use resize")
         }
         guard stage.mode == .bsp || stage.mode == .masterStack else {
-            return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
+            return .noChange("width: unsupported layout")
         }
 
         let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }
         guard !entries.isEmpty else {
-            return WidthAdjustmentResult(changed: false, message: "width: no active tiled window")
+            return .noChange("width: no active tiled window")
         }
 
         let activeID = focusedEntry?.window.id ?? stage.focusedWindowID ?? entries.first?.window.id
@@ -72,7 +79,7 @@ public struct WidthAdjustmentService {
         let ratio = targetRatio(from: intent, current: currentRatio)
         let targets = intent.scope == .allWindows ? entries : entries.filter { $0.window.id == activeID }
         guard !targets.isEmpty else {
-            return WidthAdjustmentResult(changed: false, message: "width: no target window")
+            return .noChange("width: no target window")
         }
 
         let commands = targets.map { entry in
@@ -92,7 +99,9 @@ public struct WidthAdjustmentService {
         return WidthAdjustmentResult(
             changed: result.failed < result.attempted,
             message: "width: ratio=\(String(format: "%.2f", ratio)) applied=\(result.applied) failed=\(result.failed)",
-            ratio: ratio
+            ratio: ratio,
+            // Toutes les écritures refusées : échec ; sinon changement.
+            outcome: result.failed < result.attempted ? .changed : .failed
         )
     }
 

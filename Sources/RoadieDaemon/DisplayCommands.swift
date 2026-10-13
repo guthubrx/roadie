@@ -16,7 +16,7 @@ public struct DisplayCommandService {
     public func focus(index: Int) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = snapshot.displays.first(where: { $0.index == index }) else {
-            return StageCommandResult(message: "display focus \(index): unknown display", changed: false)
+            return .failure("display focus \(index): unknown display")
         }
         return focus(display, in: snapshot, label: "\(index)")
     }
@@ -24,10 +24,10 @@ public struct DisplayCommandService {
     public func focus(_ direction: Direction) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let activeDisplay = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "display focus \(direction.rawValue): no active display", changed: false)
+            return .noChange("display focus \(direction.rawValue): no active display")
         }
         guard let target = DisplayTopology.neighbor(from: activeDisplay, direction: direction, in: snapshot.displays) else {
-            return StageCommandResult(message: "display focus \(direction.rawValue): no display", changed: false)
+            return .noChange("display focus \(direction.rawValue): no display")
         }
         return focus(target, in: snapshot, label: direction.rawValue)
     }
@@ -63,7 +63,8 @@ public struct DisplayCommandService {
 
         return StageCommandResult(
             message: "display focus \(label): \(display.name) focused=\(focusedResult)",
-            changed: true
+            changed: true,
+            outcome: .changed
         )
     }
 

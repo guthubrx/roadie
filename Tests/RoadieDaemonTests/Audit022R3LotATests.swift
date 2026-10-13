@@ -23,7 +23,7 @@ struct Audit022R3LotATests {
 
         let result = fixture.windows.toggleFullscreen()
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.intentURL) == garbage)
         // Cadre mémorisé écrit avant l'intent, puis rendu : la stage ne retient pas le zoom.
         #expect(fixture.rememberedFrame(of: fixture.left.id) == fixture.left.frame)
@@ -38,7 +38,7 @@ struct Audit022R3LotATests {
 
         let result = fixture.windows.toggleFullscreen()
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(fixture.service.effectiveIntentStore.intent(for: fixture.scope) == nil)
     }
@@ -88,7 +88,7 @@ struct Audit022R3LotATests {
 
         let result = fixture.stages.setMode(.float)
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         // Le snapshot peut normaliser le fichier : seul le mode compte.
         #expect(fixture.stageMode() == .bsp)
         #expect(try Data(contentsOf: fixture.intentURL) == garbage)
@@ -105,7 +105,7 @@ struct Audit022R3LotATests {
 
         let result = fixture.stages.setMode(.float)
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(fixture.service.effectiveIntentStore.intent(for: fixture.scope) == intent)
     }
@@ -127,7 +127,7 @@ struct Audit022R3LotATests {
 
         let result = fixture.layout.balance()
 
-        fixture.expectRefused(result.changed, result.message)
+        fixture.expectRefused(result)
         #expect(try Data(contentsOf: fixture.store.fileURL) == before)
         #expect(fixture.service.effectiveIntentStore.intent(for: fixture.scope) == intent)
     }
@@ -262,10 +262,11 @@ private struct R3AFixture {
     }
 
     /// Contrat REL-021 : échec annoncé, code CLI non nul, aucun cadre ni focus AX.
-    func expectRefused(_ changed: Bool, _ message: String, sourceLocation: SourceLocation = #_sourceLocation) {
-        #expect(!changed, sourceLocation: sourceLocation)
-        #expect(message.contains("failed"), "\(message)", sourceLocation: sourceLocation)
-        #expect(CLICommandRouter.actionExitCode(changed: changed, message: message) == 1, sourceLocation: sourceLocation)
+    func expectRefused(_ result: some CommandResult, sourceLocation: SourceLocation = #_sourceLocation) {
+        #expect(!result.changed, sourceLocation: sourceLocation)
+        #expect(result.message.contains("failed"), "\(result.message)", sourceLocation: sourceLocation)
+        #expect(result.outcome == .failed, sourceLocation: sourceLocation)
+        #expect(CLICommandRouter.actionExitCode(outcome: result.outcome) == 1, sourceLocation: sourceLocation)
         #expect(powerWriter?.frames.isEmpty == true, "\(String(describing: powerWriter?.frames))", sourceLocation: sourceLocation)
         #expect(powerWriter?.focused.isEmpty == true, sourceLocation: sourceLocation)
     }

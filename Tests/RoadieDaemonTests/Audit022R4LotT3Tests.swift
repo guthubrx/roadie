@@ -114,7 +114,7 @@ struct Audit022R4LotT3Tests {
         #expect(result.changed)
         #expect(result.outcome == .failed)
         #expect(result.message.contains("partial"), "\(result.message)")
-        #expect(CLICommandRouter.actionExitCode(changed: result.changed, message: result.message, outcome: result.outcome) == 1)
+        #expect(CLICommandRouter.actionExitCode(outcome: result.outcome) == 1)
     }
 
     @Test
@@ -317,14 +317,11 @@ struct Audit022R4LotT3Tests {
     }
 
     @Test
-    func exitCodeFollowsOutcomeAndKeepsTextFallbackWithoutOne() {
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "stage create failed: already exists", outcome: .noOp) == 0)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "anything", outcome: .failed) == 1)
-        #expect(CLICommandRouter.actionExitCode(changed: true, message: "x: partial", outcome: .failed) == 1)
-        // Résultat construit hors du lot, sans statut : lecture du message conservée.
-        let legacy = StageCommandResult(message: "display focus 9: unknown display", changed: false)
-        #expect(legacy.outcome == nil)
-        #expect(CLICommandRouter.actionExitCode(changed: legacy.changed, message: legacy.message, outcome: legacy.outcome) == 1)
+    func exitCodeFollowsOutcomeOnly() {
+        #expect(CLICommandRouter.actionExitCode(outcome: .noOp) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: .failed) == 1)
+        #expect(CLICommandRouter.actionExitCode(outcome: .changed) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: nil) == 0)
         #expect(StageCommandResult(message: "done", changed: true).outcome == .changed)
     }
 }

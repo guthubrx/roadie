@@ -3,9 +3,17 @@ import RoadieAX
 import RoadieCore
 import RoadieStages
 
-public struct WindowGroupCommandResult: Equatable, Sendable {
+public struct WindowGroupCommandResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil.
+    public var outcome: CommandOutcome?
+
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
+        self.message = message
+        self.changed = changed
+        self.outcome = outcome ?? (changed ? .changed : nil)
+    }
 }
 
 public struct WindowGroupCommandService {
@@ -30,7 +38,7 @@ public struct WindowGroupCommandService {
                 }
             }
         }
-        return WindowGroupCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return .noChange(lines.joined(separator: "\n"))
     }
 
     public func create(id: String, windowIDs: [WindowID]) -> WindowGroupCommandResult {
@@ -68,16 +76,17 @@ public struct WindowGroupCommandService {
                 return removed
             }
         } catch {
-            return persistenceFailure("group dissolve \(id)", error)
+            return .persistenceFailure("group dissolve \(id)", error)
         }
         if removed {
             events.append(RoadieEvent(type: "window.ungrouped", details: ["groupID": id]))
         }
-        return WindowGroupCommandResult(message: removed ? "group dissolve \(id)" : "group dissolve \(id): not found", changed: removed)
+        return removed ? WindowGroupCommandResult(message: "group dissolve \(id)", changed: true) : .failure("group dissolve \(id): not found")
     }
 
     private enum GroupMutation {
-        case failed(String)
+        /// `outcome` : `.noOp` (pas de scope ou de stage actifs) ou `.failed` (groupe introuvable).
+        case failed(String, CommandOutcome)
         case applied(StageScope, WindowGroup)
     }
 
@@ -88,7 +97,7 @@ public struct WindowGroupCommandService {
         do {
             outcome = try store.mutateChecked { state -> GroupMutation in
                 guard let scopeID = activeScope(in: snapshot, state: &state) else {
-                    return .failed("group \(id): no active scope")
+                    return .failed("group \(id): no active scope", .noOp)
                 }
                 // `scope(displayID:)` peut créer le scope : en cas d'échec, l'état d'origine est
                 // remis pour que la transaction n'écrive rien.
@@ -96,12 +105,12 @@ public struct WindowGroupCommandService {
                 var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
                 guard let stageIndex = scope.stages.firstIndex(where: { $0.id == scopeID.stageID }) else {
                     state = original
-                    return .failed("group \(id): no active stage")
+                    return .failed("group \(id): no active stage", .noOp)
                 }
                 var group = scope.stages[stageIndex].groups.first { $0.id == id } ?? WindowGroup(id: id)
                 if group.windowIDs.isEmpty && !createIfMissing && !scope.stages[stageIndex].groups.contains(where: { $0.id == id }) {
                     state = original
-                    return .failed("group \(id): not found")
+                    return .failed("group \(id): not found", .failed)
                 }
                 mutate(&group)
                 scope.stages[stageIndex].groups.removeAll { $0.id == id }
@@ -112,13 +121,13 @@ public struct WindowGroupCommandService {
                 return .applied(scopeID, group)
             }
         } catch {
-            return persistenceFailure("group \(id)", error)
+            return .persistenceFailure("group \(id)", error)
         }
         let scopeID: StageScope
         let group: WindowGroup
         switch outcome {
-        case .failed(let message):
-            return WindowGroupCommandResult(message: message, changed: false)
+        case .failed(let message, let outcome):
+            return WindowGroupCommandResult(message: message, changed: false, outcome: outcome)
         case .applied(let appliedScope, let appliedGroup):
             scopeID = appliedScope
             group = appliedGroup
@@ -129,12 +138,6 @@ public struct WindowGroupCommandService {
             details: ["groupID": id, "members": group.windowIDs.map(\.description).joined(separator: ",")]
         ))
         return WindowGroupCommandResult(message: "group \(id): members=\(group.windowIDs.map(\.description).joined(separator: ","))", changed: true)
-    }
-
-    /// État du groupe non persisté (REL-021) : aucun événement ; « failed » donne au CLI un code
-    /// de sortie non nul.
-    private func persistenceFailure(_ command: String, _ error: Error) -> WindowGroupCommandResult {
-        WindowGroupCommandResult(message: JSONPersistence.commandFailureMessage(command, error), changed: false)
     }
 
     private func activeScope(in snapshot: DaemonSnapshot, state: inout PersistentStageState) -> StageScope? {

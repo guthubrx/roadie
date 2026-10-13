@@ -24,7 +24,7 @@ struct Audit022R2LotBTests {
 
         #expect(!result.changed)
         #expect(result.message.contains("failed"))
-        #expect(CLICommandRouter.actionExitCode(changed: result.changed, message: result.message) == 1)
+        #expect(CLICommandRouter.actionExitCode(outcome: result.outcome) == 1)
         #expect(try Data(contentsOf: fixture.store.fileURL) == garbage)
     }
 
