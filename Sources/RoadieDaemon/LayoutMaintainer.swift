@@ -38,6 +38,8 @@ public final class LayoutMaintainer {
     private let intervalSeconds: TimeInterval
     private let now: () -> Date
     private let staticRuleEngine: WindowRuleEngine?
+    /// Configuration active du processus, rechargée par `roadie config reload` (REL-014).
+    private let configService: ConfigReloadService
     private let store: StageStore
     private let dragActivity: WindowDragActivity
     private let commandActivity: LayoutCommandActivity
@@ -58,7 +60,8 @@ public final class LayoutMaintainer {
     private let scanReplay: ReplayableSnapshotProvider?
     private let episodes: EpisodeContext
     private var cachedRuleEngine: WindowRuleEngine?
-    private var cachedRulesVersion: String?
+    /// Règles du moteur en cache ; nil = jamais lues.
+    private var cachedRules: [WindowRule]?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     /// Transfert échoué : attend avant de refaire la même réparation (même PID et même cadre).
@@ -131,6 +134,7 @@ public final class LayoutMaintainer {
         spaceProbe: ((String) -> Bool?)? = nil,
         readFrame: ((WindowSnapshot) -> CGRect?)? = nil,
         episodes: EpisodeContext = .shared,
+        configService: ConfigReloadService = .shared,
         now: @escaping () -> Date = Date.init
     ) {
         let replay = service == nil ? ReplayableSnapshotProvider(base: LiveSystemSnapshotProvider()) : scanReplay
@@ -140,6 +144,7 @@ public final class LayoutMaintainer {
         self.events = events
         self.intervalSeconds = intervalSeconds
         self.staticRuleEngine = ruleEngine
+        self.configService = configService
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
         self.commandActivity = commandActivity
@@ -1796,22 +1801,36 @@ public final class LayoutMaintainer {
         }
     }
 
-    public static func defaultRuleEngine() -> WindowRuleEngine? {
-        let config = ConfigReloadService.shared.currentConfig()
-        guard !config.rules.isEmpty else {
-            return nil
-        }
-        return WindowRuleEngine(rules: config.rules)
+    /// Valeur du critère `is_floating` des règles (REL-007). Flottante = non gérée par la mosaïque :
+    /// - hors du tiling (`isTileCandidate` faux : floating_bundles, action de règle `floating`,
+    ///   popup) - c'est aussi `floating` dans `TargetInspectionService` ;
+    /// - épinglée (jamais membre de la mosaïque, restaurée à son dernier cadre) ;
+    /// - membre d'une stage en mode `float`.
+    /// Une candidate sans scope (membre gardé pour un écran débranché, ou aucun écran) donne nil :
+    /// son état n'est pas observable, aucune règle `is_floating` ne lui correspond, donc aucune
+    /// règle `is_floating = true` ne la déplace hors de sa stage d'origine (`scope == nil` n'est pas
+    /// une preuve de flottement, contrairement à `AutomationSnapshotService`). O(1).
+    public static func ruleFloatingState(of entry: ScopedWindowSnapshot, in state: RoadieState) -> Bool? {
+        guard entry.window.isTileCandidate else { return true }
+        guard let scope = entry.scope else { return nil }
+        if entry.pin != nil { return true }
+        return state.stage(scope: scope).map { $0.mode == .float }
     }
 
+    /// Moteur de règles de la configuration réellement active (REL-014). `currentConfig()` lit le
+    /// chemin actif, y compris celui d'un `roadie config reload <fichier>` : le cache est invalidé
+    /// par le contenu des règles, pas par la version du fichier par défaut. Des règles identiques
+    /// venues d'un autre fichier donnent un moteur identique : rien à invalider.
+    // O(r) par passe (comparaison des règles, r = nombre de règles) ; avant : relecture et somme de
+    // contrôle complètes du fichier par défaut et de ses règles générées à chaque passe.
     private func currentRuleEngine() -> WindowRuleEngine? {
         if let staticRuleEngine {
             return staticRuleEngine
         }
-        let version = RoadieConfigLoader.rulesVersion()
-        if cachedRulesVersion != version {
-            cachedRulesVersion = version
-            cachedRuleEngine = Self.defaultRuleEngine()
+        let rules = configService.currentConfig().rules
+        if cachedRules != rules {
+            cachedRules = rules
+            cachedRuleEngine = rules.isEmpty ? nil : WindowRuleEngine(rules: rules)
             emittedRuleSkippedKeys.removeAll()
             emittedRulePlacementIssueKeys.removeAll()
         }
@@ -1858,13 +1877,15 @@ public final class LayoutMaintainer {
         observedRulePlacementWindowIDs.formIntersection(liveWindowIDs)
         pruneRuleEventKeys(keeping: liveWindowIDs)
         for entry in snapshot.windows where entry.window.isOnScreen {
-            // Rôle et sous-rôle AX transmis comme dans la politique du relevé (REL-007).
+            // Rôle et sous-rôle AX transmis comme dans la politique du relevé ; état flottant
+            // explicite (REL-007).
             let context = WindowRuleMatchContext(
                 role: entry.window.role,
                 subrole: entry.window.subrole,
                 display: entry.scope?.displayID.rawValue,
                 desktop: entry.scope.map { String($0.desktopID.rawValue) },
-                stage: entry.scope?.stageID.rawValue
+                stage: entry.scope?.stageID.rawValue,
+                isFloating: Self.ruleFloatingState(of: entry, in: snapshot.state)
             )
             let application = ruleEngine.evaluate(window: entry.window, context: context)
             appendRuleEvents(application, window: entry.window)

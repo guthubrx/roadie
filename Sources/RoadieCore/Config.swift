@@ -1093,13 +1093,6 @@ public enum RoadieConfigLoader {
         }
     }
 
-    public static func rulesVersion(path: String? = nil) -> String {
-        let resolved = path ?? defaultConfigPath()
-        return [resolved, generatedRulesPath(for: resolved)]
-            .map { "\($0)=\(fileVersion($0) ?? "-")" }
-            .joined(separator: "|")
-    }
-
     public static func loadRulesFile(from path: String) throws -> [WindowRule] {
         try generatedRules(from: path)
     }
@@ -1122,13 +1115,6 @@ public enum RoadieConfigLoader {
                 ConfigValidationItem(level: .error, path: path, message: ConfigValidationRules.describe(decodeError: error, rawToml: raw))
             ]
         }
-    }
-
-    private static func fileVersion(_ path: String) -> String? {
-        let url = URL(fileURLWithPath: NSString(string: path).expandingTildeInPath)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        let checksum = data.reduce(UInt64(0)) { (($0 &* 31) &+ UInt64($1)) }
-        return "bytes:\(data.count):\(checksum)"
     }
 }
 
