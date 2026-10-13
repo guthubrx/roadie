@@ -51,7 +51,9 @@ if [[ -f "$pidfile" ]]; then
       sleep 0.1
     done
   fi
-  rm -f "$pidfile"
+  # Un processus encore vivant (non reconnu ou pas encore arrêté) garde son fichier pid :
+  # la CLI s'en sert pour savoir qu'un daemon tient le verrou (REL-015).
+  kill -0 "$old_pid" 2>/dev/null || rm -f "$pidfile"
 fi
 
 # Rotation d'une génération : le log précédent reste lisible en .1 (utile après un crash).
