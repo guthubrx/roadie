@@ -118,8 +118,7 @@ public struct FileAdministrationService: @unchecked Sendable {
                 sizeBytes: fileSize(backup)
             )
             if !dryRun {
-                try? manager.removeItem(at: backup)
-                action.applied = true
+                action.applied = removeReporting(backup)
             }
             actions.append(action)
         }
@@ -201,8 +200,7 @@ public struct FileAdministrationService: @unchecked Sendable {
                 sizeBytes: fileSize(url)
             )
             if !dryRun {
-                try? manager.removeItem(at: url)
-                action.applied = true
+                action.applied = removeReporting(url)
             }
             return action
         }
@@ -218,10 +216,21 @@ public struct FileAdministrationService: @unchecked Sendable {
                 sizeBytes: recursiveSize(url)
             )
             if !dryRun {
-                try? manager.removeItem(at: url)
-                action.applied = true
+                action.applied = removeReporting(url)
             }
             return action
+        }
+    }
+
+    /// OBS-003 : `applied` n'est vrai que si la suppression a réussi. Un échec (permissions,
+    /// fichier verrouillé) est signalé sur stderr et l'action reste « pending ».
+    private func removeReporting(_ url: URL) -> Bool {
+        do {
+            try manager.removeItem(at: url)
+            return true
+        } catch {
+            fputs("roadie: cleanup failed for \(url.path): \(error)\n", stderr)
+            return false
         }
     }
 

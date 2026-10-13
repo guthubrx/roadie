@@ -225,8 +225,12 @@ public struct EventLog: Sendable {
             if lineCount > limit { break }
         }
 
-        guard let raw = String(data: data, encoding: .utf8) else { return [] }
-        return Array(raw.split(separator: "\n").suffix(limit).map(String.init))
+        // OBS-002 : on sélectionne les dernières lignes sur les octets AVANT de décoder. La frontière
+        // d'un bloc peut couper un caractère UTF-8 dans la première ligne (partielle, jamais retenue :
+        // il y a au moins limit + 1 retours à la ligne). Décoder tout le tampon d'un coup échouerait
+        // et viderait le résultat. Décodage tolérant : un octet invalide devient U+FFFD sans perdre la ligne.
+        // O(n) - n = octets lus.
+        return data.split(separator: 10).suffix(limit).map { String(decoding: $0, as: UTF8.self) }
     }
 
     /// Decoder partage. Meme rationale que `encoder` plus haut.

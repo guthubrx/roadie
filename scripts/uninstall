@@ -24,11 +24,12 @@ else
   echo "Binaire roadie introuvable : étape de remise à l'écran ignorée." >&2
 fi
 
-# 2. Arrêter le LaunchAgent ET toute instance autonome (Roadie.app, tmux) avec la procédure de
-# scripts/stop. Si l'arrêt n'est pas confirmé, rien n'est supprimé : une instance encore vivante
-# continuerait à gérer les fenêtres et à recréer ses fichiers d'état.
+# 2. Arrêter le LaunchAgent ET toute instance autonome (Roadie.app, tmux), y compris les composants
+# du mode modulaire (rail, border, focus-mouse, titlebar-menu, target-mode), avec la procédure de
+# scripts/stop. Si l'arrêt d'un seul n'est pas confirmé, rien n'est supprimé : une instance encore
+# vivante continuerait à gérer les fenêtres, à les recouvrir, et à recréer ses fichiers d'état.
 if ! "$script_dir/stop"; then
-  echo "ERREUR : roadied n'est pas arrêté (voir ci-dessus). Désinstallation interrompue, rien n'a été supprimé." >&2
+  echo "ERREUR : roadied ou un composant n'est pas arrêté (voir ci-dessus). Désinstallation interrompue, rien n'a été supprimé." >&2
   exit 1
 fi
 
