@@ -4,7 +4,7 @@
 - **Spec** : 023-command-box-settings
 - **Branche** : 023-command-box-settings (worktree `.worktrees/023-command-box-settings`)
 - **Démarré** : 2026-10-13
-- **Terminé** : En cours (validation à l'écran en attente)
+- **Terminé** : 2026-10-13 (code livré ; validation à l'écran T015 et T025 en attente de l'utilisateur)
 
 ## Méthode
 Lots à fichiers exclusifs, un agent par lot, build et tests dans un répertoire de build propre à chaque lot (`/tmp/roadie-build-023-<lot>`), commits par lot par l'orchestrateur avec fichiers nommés. Contre-revue du plan par Codex avant les tâches (10 objections, 10 retenues ou corrigées : `adversarial-review-codex.md`).
@@ -64,3 +64,9 @@ Restants, avec justification (constitution XVIII et XIX) :
 - TEST-004 : `/send`, `/desktop`, `/split`, `/stage send` couverts par le tableau d'argv exacts (même routeur que la CLI, dont les effets sont testés par `CLICommandRouterTests`), sans test d'effet dédié.
 - TEST-005 à TEST-009, MIN-003, MIN-004 : faibles, laissés (choix de l'auteur).
 `audits/latest` n'est pas commité : la branche `022-audit-remediation` le modifie aussi (évite un conflit de fusion).
+
+## Livraison (2026-10-13)
+- Intégration : fast-forward de `023-command-box-settings` dans `main` (base `acc10e13`, cible `282d2559`), push sans force vers `origin/main`, SHA distant lu par `git ls-remote` = `282d255936a1b09fcd8fabdf32a66ed50e3daf86` = SHA local.
+- Installation : `make install` (signature : remplacement de la signature existante, identifiant `com.roadie.roadied`) puis `make restart` ; `roadie query health` : process, daemon-status (`accessibility=true`, `config_valid=true`) et self-test `ok`, 7 fenêtres tuilées ; `roadie config show` expose `label_font_size = 13` pour `target_mode` et `target_grid`.
+- Preuve sur une copie du vrai `roadies.toml` (775 lignes, test jetable retiré ensuite) : 8 réglages écrits par `SettingsService` (`target_grid.overlay_fill_opacity`, `borders.active_color` avec `#` dans la chaîne, `rail.width`, deux `label_font_size` insérés, `focus.mouse_follows_focus` par `oui`, `tiling.gaps_outer`, `target_mode.search_hotkey`) ; seules les 5 lignes visées ont été remplacées et 3 lignes ajoutées (775 → 778) ; le fichier reste valide (0 erreur) ; une sauvegarde `roadies.toml.bak-…` ; aucun commentaire perdu.
+- Non vérifié par l'agent (nécessite l'écran et le clavier de l'utilisateur) : T015 et T025 (voir `quickstart.md`) : boîte `/`, fenêtre de réglages (activation, focus, Échap, Cmd + W, Space plein écran, non-tuilage), `/grid` et `/letters` différés dans le daemon réel, `/restart`, tailles 13/20/48 à l'écran, AZERTY réel, mesures SC-001 (< 1 s) et SC-002 (< 2 s).
