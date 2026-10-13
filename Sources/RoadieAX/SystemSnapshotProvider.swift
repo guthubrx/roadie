@@ -307,6 +307,24 @@ public final class AXUnresponsiveApps: @unchecked Sendable {
     }
 }
 
+/// Décision de réussite d'un focus (REL-010). Un focus n'est annoncé réussi que si l'application
+/// est devant, que la fenêtre est la fenêtre focalisée de l'application et que la montée au premier
+/// plan a réussi. Une écriture AX en échec reste acceptée seulement si la relecture la confirme.
+enum AXFocusDecision {
+    // O(1).
+    static func succeeded(
+        frontmost: AXError,
+        appIsActive: Bool,
+        focusedWindow: AXError,
+        focusedWindowConfirmed: Bool,
+        raise: AXError
+    ) -> Bool {
+        raise == .success
+            && (frontmost == .success || appIsActive)
+            && (focusedWindow == .success || focusedWindowConfirmed)
+    }
+}
+
 // MARK: - Attributs AX d'une fenêtre (SPEC-016 FR-022, research R4)
 
 /// Attributs fixés à la création de la fenêtre : seuls ceux-ci vont dans le cache.
@@ -1052,23 +1070,41 @@ public struct AXWindowFrameWriter: WindowFrameWriting {
     /// (sans option ignoree depuis macOS 14) puis kAXFrontmostAttribute avant AXRaise.
     /// Abandonne au premier delai depasse.
     private func focus(_ element: AXUIElement, pid: pid_t) -> Bool {
-        NSRunningApplication(processIdentifier: pid)?.activate()
-        _ = setFrontmost(pid: pid)
+        let application = NSRunningApplication(processIdentifier: pid)
+        application?.activate()
+        let frontmost = setFrontmostError(pid: pid)
         guard !registry.isQuarantined(pid) else { return false }
         let app = AXMessaging.application(pid)
-        if registry.noteResult(AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element), pid: pid) {
+        let focusedWindow = AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element)
+        if registry.noteResult(focusedWindow, pid: pid) {
             return false
         }
-        return registry.noteSucceeded(AXUIElementPerformAction(element, kAXRaiseAction as CFString), pid: pid)
+        let raise = AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        registry.noteResult(raise, pid: pid)
+        // Relectures seulement quand une écriture a échoué (REL-010) : l'état réel tranche.
+        let focusedWindowConfirmed = focusedWindow != .success
+            && elementAttribute(app, kAXFocusedWindowAttribute, pid: pid).map { CFEqual($0, element) } == true
+        let appIsActive = frontmost != .success && application?.isActive == true
+        return AXFocusDecision.succeeded(
+            frontmost: frontmost,
+            appIsActive: appIsActive,
+            focusedWindow: focusedWindow,
+            focusedWindowConfirmed: focusedWindowConfirmed,
+            raise: raise
+        )
     }
 
     private func setFrontmost(pid: pid_t) -> Bool {
-        guard !registry.isQuarantined(pid) else { return false }
+        setFrontmostError(pid: pid) == .success
+    }
+
+    private func setFrontmostError(pid: pid_t) -> AXError {
+        guard !registry.isQuarantined(pid) else { return .cannotComplete }
         let error = AXUIElementSetAttributeValue(
             AXMessaging.application(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue as CFTypeRef
         )
         registry.noteResult(error, pid: pid)
-        return error == .success
+        return error
     }
 
     private func elementAttribute(_ element: AXUIElement, _ attribute: String, pid: pid_t) -> AXUIElement? {

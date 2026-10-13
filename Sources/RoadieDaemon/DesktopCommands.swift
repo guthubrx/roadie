@@ -175,7 +175,11 @@ public struct DesktopCommandService {
         let displayID = display.id
         let sourceScope = entry.scope
         let stageManager = ConfigReloadService.shared.currentConfig().stageManager
-        let (targetStageScope, removedPin, targetIsVisible) = store.mutate { state -> (StageScope, PersistentWindowPin?, Bool) in
+        let (targetStageScope, removedPin, targetIsVisible, rememberedFrame) = store.mutate { state -> (StageScope, PersistentWindowPin?, Bool, CGRect?) in
+            // Cadre mémorisé avant le retrait : sert à replacer une fenêtre garée (REL-016).
+            let rememberedFrame = state.scopes.lazy
+                .flatMap { $0.stages.lazy.flatMap { $0.members } }
+                .first { $0.windowID == entry.window.id }?.frame.cgRect
             var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
             targetScope.applyConfiguredStages(stageManager)
             for scopeIndex in state.scopes.indices {
@@ -186,7 +190,7 @@ public struct DesktopCommandService {
             let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
             let removedPin = state.removePin(windowID: entry.window.id)
             state.suppressRulePlacement(window: entry.window)
-            return (targetStageScope, removedPin, state.currentDesktopID(for: displayID) == desktopID)
+            return (targetStageScope, removedPin, state.currentDesktopID(for: displayID) == desktopID, rememberedFrame)
         }
 
         if let sourceScope {
@@ -199,13 +203,22 @@ public struct DesktopCommandService {
         }
 
         // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
-        // Un bureau cible déjà affiché garde la fenêtre visible : seule la disposition la place (REL-016).
-        let hiding = targetIsVisible
-            ? [:]
-            : [entry.window.id: HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)]
+        // Un bureau cible déjà affiché garde la fenêtre visible (REL-016) : une fenêtre garée y reçoit
+        // un cadre visible explicite. Les modes à arbre le remplacent par leur disposition ; le mode
+        // `float` garde sinon la géométrie courante, donc la fenêtre resterait hors écran.
+        var hiding: [WindowID: CGRect] = [:]
+        var restoring: [WindowID: CGRect] = [:]
+        if targetIsVisible {
+            if let frame = Self.visibleRestoreFrame(current: entry.window.frame.cgRect, remembered: rememberedFrame, on: display, among: snapshot.displays) {
+                restoring[entry.window.id] = frame
+            }
+        } else {
+            hiding[entry.window.id] = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+        }
         let (_, result) = service.applyCommandPlacement(
             CommandPlacement(
                 hiding: hiding,
+                restoring: restoring,
                 layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
             ),
             cause: "desktop.assign_window",
@@ -228,6 +241,29 @@ public struct DesktopCommandService {
             message: "window desktop \(desktopID.rawValue): \(messageLabel)hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
         )
+    }
+
+    /// Cadre visible pour une fenêtre garée (masquée) arrivant sur un bureau affiché : le cadre
+    /// mémorisé s'il est visible et sur l'écran, sinon la taille courante centrée dans la zone
+    /// visible de l'écran. nil si la fenêtre n'est pas garée. O(d), d = nombre d'écrans.
+    static func visibleRestoreFrame(
+        current: CGRect,
+        remembered: CGRect?,
+        on display: DisplaySnapshot,
+        among displays: [DisplaySnapshot]
+    ) -> CGRect? {
+        guard HiddenWindowPlacement.isHiddenOrLegacyOffscreen(current, in: displays) else { return nil }
+        let area = display.visibleFrame.cgRect
+        if let remembered, !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(remembered, in: displays), area.intersects(remembered) {
+            return remembered
+        }
+        let size = CGSize(width: min(current.width, area.width), height: min(current.height, area.height))
+        return CGRect(
+            x: area.midX - size.width / 2,
+            y: area.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        ).integral
     }
 
     private func appendManualPinRemovalEvent(_ pin: PersistentWindowPin?, targetScope: StageScope) {

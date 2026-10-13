@@ -44,7 +44,7 @@ struct Audit022LotGTests {
 
     // MARK: REL-016 / MIN-004
 
-    private func desktopFixture(windowDesktop: Int, currentDesktop: Int = 1) -> (SnapshotService, StageStore, PowerUserWriter, WindowSnapshot, DisplayID) {
+    private func desktopFixture(windowDesktop: Int, currentDesktop: Int = 1, targetMode: WindowManagementMode = .bsp) -> (SnapshotService, StageStore, PowerUserWriter, WindowSnapshot, DisplayID) {
         let displaySnapshot = powerDisplay("display-main")
         let window = powerWindow(1, x: windowDesktop == currentDesktop ? 100 : 999)
         let provider = PowerUserProvider(displays: [displaySnapshot], windows: [window])
@@ -54,7 +54,9 @@ struct Audit022LotGTests {
             ? PersistentStageScope(displayID: displaySnapshot.id, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "1"), stages: [
                 PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: window.id, members: [member(window)]),
             ])
-            : PersistentStageScope(displayID: displaySnapshot.id, desktopID: DesktopID(rawValue: 1))
+            : PersistentStageScope(displayID: displaySnapshot.id, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), mode: targetMode),
+            ])
         let scope2 = windowDesktop == 2
             ? PersistentStageScope(displayID: displaySnapshot.id, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: "1"), stages: [
                 PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: window.id, members: [member(window)]),
@@ -109,10 +111,45 @@ struct Audit022LotGTests {
 
         #expect(result.message.contains("hidden=false"))
         #expect(store.state().stageScope(for: window.id)?.desktopID == DesktopID(rawValue: 1))
-        if let frame = writer.frames[window.id] {
-            #expect(!HiddenWindowPlacement.isHidden(frame.cgRect, in: [powerDisplay("display-main")]))
-        }
+        // Inconditionnel (R1-09) : une fenêtre garée reçoit toujours un cadre visible.
+        let frame = writer.frames[window.id]
+        #expect(frame != nil)
+        #expect(frame.map { !HiddenWindowPlacement.isHidden($0.cgRect, in: [powerDisplay("display-main")]) } == true)
         try? FileManager.default.removeItem(at: store.fileURL)
+    }
+
+    /// R1-09 : stage cible en mode `float` (aucune disposition ne donne de cadre) : la fenêtre garée
+    /// est replacée explicitement dans la zone visible de l'écran.
+    @Test
+    func assignParkedWindowToDisplayedFloatDesktopRestoresVisibleFrame() throws {
+        let (service, store, writer, window, display) = desktopFixture(windowDesktop: 2, currentDesktop: 1, targetMode: .float)
+        let displays = [powerDisplay("display-main")]
+
+        let result = DesktopCommandService(service: service, store: store)
+            .assign(windowID: window.id, to: DesktopID(rawValue: 1), displayID: display)
+
+        #expect(result.message.contains("hidden=false"))
+        #expect(result.changed)
+        let frame = try #require(writer.frames[window.id])
+        #expect(!HiddenWindowPlacement.isHiddenOrLegacyOffscreen(frame.cgRect, in: displays))
+        #expect(displays[0].visibleFrame.cgRect.contains(frame.cgRect))
+        #expect(frame.width == window.frame.width && frame.height == window.frame.height)
+        try? FileManager.default.removeItem(at: store.fileURL)
+    }
+
+    /// Décision pure : cadre mémorisé visible conservé, sinon taille courante centrée, nil si non garée.
+    @Test
+    func visibleRestoreFrameDecision() {
+        let main = powerDisplay("display-main")
+        let parked = CGRect(x: 999, y: 100, width: 300, height: 300)
+
+        #expect(DesktopCommandService.visibleRestoreFrame(current: CGRect(x: 100, y: 100, width: 300, height: 300), remembered: nil, on: main, among: [main]) == nil)
+        let remembered = CGRect(x: 200, y: 150, width: 400, height: 300)
+        #expect(DesktopCommandService.visibleRestoreFrame(current: parked, remembered: remembered, on: main, among: [main]) == remembered)
+        let centered = DesktopCommandService.visibleRestoreFrame(current: parked, remembered: parked, on: main, among: [main])
+        #expect(centered == CGRect(x: 350, y: 250, width: 300, height: 300))
+        let huge = DesktopCommandService.visibleRestoreFrame(current: CGRect(x: 999, y: 0, width: 5000, height: 5000), remembered: nil, on: main, among: [main])
+        #expect(huge == CGRect(x: 0, y: 0, width: 1000, height: 800))
     }
 
     // MARK: REL-017

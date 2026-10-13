@@ -267,7 +267,7 @@ public final class CLICommandRouter {
     /// action sans objet (« already », « no neighbor », « no structural change ») : code 0.
     nonisolated static func actionExitCode(changed: Bool, message: String) -> Int32 {
         guard !changed else { return 0 }
-        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "must "]
+        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "not visible", "must "]
         let lowered = message.lowercased()
         return failureMarkers.contains { lowered.contains($0) } ? 1 : 0
     }
@@ -895,7 +895,7 @@ public final class CLICommandRouter {
     }
 
     private func runBookmarkCommand(_ args: [String]) throws -> Int32 {
-        let command = WindowBookmarkCommandService(service: service)
+        let command = WindowBookmarkCommandService(service: service, store: service.effectiveStageStore)
         switch args.first {
         case "set":
             guard let name = args.dropFirst().first else {
