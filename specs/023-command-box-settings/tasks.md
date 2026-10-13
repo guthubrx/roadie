@@ -80,6 +80,14 @@ Passage 1 (2026-10-13, agent Converge en lecture seule + contre-revue Codex de l
 - [ ] T033 [US4] Une seule instance partagée de `SettingsService` (`SettingsService.shared`) utilisée par la boîte, le lanceur et la fenêtre : une seule sauvegarde `roadies.toml.bak-…` par session du daemon ; test.
 - [ ] T034 [P] Écarts faibles : numéros de stage proposés en complétion de `/stage` ; bouton « Rétablir » seulement si la valeur diffère du défaut (et non dès que la ligne existe) ; alias acceptés pour `tiling.default_strategy` (`spatial_bsp`, `master_stack`, `mutable_bsp`) ; `docs/en/cli.md` mis à jour.
 
+- [ ] T035 [US4] Robustesse de l'écriture (contre-revue Codex, objections 1 à 5) dans `SettingsService.swift` : refuser toute écriture si le fichier existe mais ne peut pas être lu en UTF-8 (distinguer absent et illisible : `configText()` ne renvoie plus `""` pour un fichier illisible) ; refuser si le fichier de départ OU le candidat a des erreurs de validation (plus de comparaison de nombres d'erreurs) ; résoudre le lien symbolique (écrire la cible, garder le lien) ; copier mode et attributs du fichier d'origine sur le candidat ; revérifier le contenu juste avant le `rename` sous le verrou. Tests : fichier non UTF-8 intact, fichier invalide refusé, lien symbolique conservé, mode 0600 conservé. (Remplace T028.)
+- [ ] T036 [US4] `ConfigFileEditor.edit` avec `value == nil` : si la ligne retirée porte un commentaire de fin de ligne, le garder comme ligne de commentaire (indentation conservée) au lieu de le perdre (FR-024) ; tests.
+- [ ] T037 [US6] `runDeferred` renvoie le résultat du routeur ; un échec émet l'événement `command.deferred_failed` (nom de la commande et code, jamais la saisie) ; test avec un routeur factice qui échoue.
+- [ ] T038 [P] [US5] Tests d'effet du lanceur (vrai routeur, faux fournisseur) pour `/move`, `/swap`, `/resize` en plus des argv (SC-004).
+- [ ] T039 [US1] Fenêtre de réglages : si `roadies.toml` est absent à l'ouverture, surveiller le dossier parent et armer la surveillance du fichier dès sa création ; la valeur de « Diagnostic » reste synchrone (limite documentée : exécutée sur le thread principal comme `doctor` par le socket).
+
+Passage 1 de Converge : T027 à T039 à faire, puis passage 2.
+
 ## Dependencies & Execution Order
 
 - Phase 1 : T001 et T002 d'abord. T003, T004, T005 parallèles. T006 après T002 + T004 + T005. T007 après T003 + T004.
