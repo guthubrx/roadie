@@ -35,17 +35,17 @@ Deux clés nouvelles règlent la taille des étiquettes : `experimental.target_m
 ## Décisions de conception (détail dans research.md)
 
 1. **Exécution** : `CLICommandRouter().run(argv)` en process, sur le MainActor. Les commandes de grille et de lettres (qui postent une notification au contrôleur de mode cible) et `/restart` s'exécutent après la fermeture de la boîte (R2).
-2. **Clavier de la boîte** : le décodeur de touches accepte les caractères de commande (`/ . - _ , :` et lettres accentuées). Tab complète, Flèche haut/bas parcourt l'historique, Ctrl-N / Ctrl-P parcourt les suggestions. Le mode recherche garde ses touches (R3).
+2. **Clavier de la boîte** : `TargetSearchModel.isCommandMode` aiguille toutes les touches vers le mode commande avant la logique de recherche. Le décodeur accepte les caractères de commande (`/ . - _ , :` et lettres accentuées) à partir du caractère produit (AZERTY). Tab complète, Flèche haut/bas parcourt l'historique, Ctrl-N / Ctrl-P parcourt les suggestions. Le mode recherche garde ses touches (R3).
 3. **Affichage** : la barre de recherche existante gagne une liste de suggestions et une zone de message, dessinées au-dessus de la barre (R4).
-4. **Éditeur de fichier** : édition ligne à ligne du texte, car TOMLKit ne sert qu'à lire et que le rail lit le fichier ligne à ligne. Validation du texte résultat avant écriture. Sauvegarde `roadies.toml.bak-<horodatage>` avant la première écriture de la session (le préfixe `roadies.toml.b` est déjà purgé par `FileAdministration`) (R5).
-5. **Catalogue de réglages** : une table statique de 167 descripteurs (nom `table.clé`, libellé, description, type, défaut, plage). Un test compare cette table aux clés connues du validateur et aux défauts de `RoadieConfig` : une dérive casse le test (R6).
-6. **Fenêtre** : `NSWindow` AppKit + contenu SwiftUI (`NSHostingController`). Fenêtre unique, politique d'activation `accessory` conservée, raccourcis Échap et Cmd + W gérés par la fenêtre (R7).
+4. **Éditeur de fichier** : édition ligne à ligne avec un automate (chaînes, commentaires, valeurs multi-lignes), limitée aux clés du catalogue ; refus des cas ambigus. Validation d'un fichier candidat du même dossier, contrôle du contenu avant `rename`, sauvegarde `roadies.toml.bak-<horodatage>` à la première écriture de la session (R5).
+5. **Catalogue de réglages** : une table statique de 167 descripteurs (nom unique `table.clé`, libellé, description, type, défaut, plage). Un test compare cette table aux clés connues du validateur (API publique `RoadieConfigLoader.knownScalarKeys()`) et aux défauts de `RoadieConfig` : une dérive casse le test (R6).
+6. **Fenêtre** : `NSWindow` AppKit + contenu SwiftUI (`NSHostingController`). Fenêtre unique, politique `accessory` conservée, `[.moveToActiveSpace, .fullScreenAuxiliary]`, focus mémorisé puis restauré à la fermeture, Échap et Cmd + W gérés par la fenêtre (R7).
 7. **Taille des étiquettes** : un facteur d'échelle `taille / 13` porté par `TargetOverlayStyle` et appliqué aux constantes de taille de `TargetOverlayView` (R8).
 
 ## Project Structure
 
 ```text
-Sources/RoadieCore/Config.swift                       # label_font_size x2 (+ validation, knownKeys accessible)
+Sources/RoadieCore/Config.swift                       # label_font_size x2 (+ validation, knownKeys) ; RoadieConfigLoader.knownScalarKeys()/ineffectiveKeys()
 Sources/RoadieDaemon/SlashCommandCatalog.swift        # NOUVEAU : 19 commandes, alias, analyse -> argv ou action
 Sources/RoadieDaemon/SlashCommandModel.swift          # NOUVEAU : état pur de la boîte (saisie, suggestions, historique, message)
 Sources/RoadieDaemon/SlashCommandRunner.swift         # NOUVEAU : exécution (routeur, réglages, actions différées)
