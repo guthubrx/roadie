@@ -1,0 +1,281 @@
+Building for debugging...
+[0/22] Write sources
+[0/22] Write roadied-entitlement.plist
+[3/22] Write roadie-entitlement.plist
+[4/22] Write sources
+[10/22] Write swift-version--58304C5D6DBC2206.txt
+[11/22] Compiling Node.cpp
+[11/22] Compiling Date&Time&DateTime.cpp
+[12/22] Compiling Conversion.cpp
+[14/22] Compiling Table.cpp
+[15/22] Compiling Array.cpp
+[17/44] Compiling TOMLKit InternalTOMLDecoder.swift
+[18/44] Compiling TOMLKit KeyedDecodingContainerProtocol.swift
+[19/44] Compiling TOMLKit SingleValueDecodingContainer.swift
+[20/44] Compiling TOMLKit TOMLDecoder.swift
+[21/44] Compiling TOMLKit UnkeyedDecodingContainer.swift
+[22/44] Compiling TOMLKit InternalTOMLEncoder.swift
+[23/44] Compiling TOMLKit KeyedEncodingContainer.swift
+[24/51] Emitting module TOMLKit
+[25/51] Compiling TOMLKit SingleValueEncodingContainer.swift
+[26/51] Compiling TOMLKit TOMLEncoder.swift
+[27/51] Compiling TOMLKit UnkeyedEncodingContainer.swift
+[28/51] Compiling TOMLKit FormatOptions.swift
+[29/51] Compiling TOMLKit Operators&Extensions.swift
+[30/51] Compiling TOMLKit TOMLArray+CollectionConformance.swift
+[31/51] Compiling TOMLKit TOMLArray.swift
+[32/51] Compiling TOMLKit TOMLArrayIterator.swift
+[33/51] Compiling TOMLKit TOMLDate&Time&DateTime.swift
+[34/51] Compiling TOMLKit TOMLInt.swift
+[35/51] Compiling TOMLKit TOMLTable+CollectionFunctions.swift
+[36/51] Compiling TOMLKit TOMLTable.swift
+[37/51] Compiling TOMLKit TOMLTableIterator.swift
+[38/51] Compiling TOMLKit TOMLValueConvertible+Int.swift
+[39/51] Compiling TOMLKit TOMLValueConvertible.swift
+[40/51] Compiling TOMLKit TOMLCodingKey.swift
+[41/51] Compiling TOMLKit TOMLParseError.swift
+[42/51] Compiling TOMLKit TOMLType.swift
+[43/51] Compiling TOMLKit TOMLValue+Initializers.swift
+[44/51] Compiling TOMLKit TOMLValue.swift
+[45/51] Compiling TOMLKit ValueOptions.swift
+[46/60] Compiling RoadieCore Config.swift
+[47/60] Compiling RoadieCore Geometry.swift
+[48/60] Compiling RoadieCore Identifiers.swift
+[49/60] Compiling RoadieCore AutomationEvent.swift
+[50/60] Compiling RoadieCore AutomationEventCatalog.swift
+[51/60] Compiling RoadieCore AutomationSnapshot.swift
+[52/60] Compiling RoadieCore LayoutCommandIntent.swift
+[53/60] Compiling RoadieCore LayoutTolerance.swift
+[54/60] Emitting module RoadieCore
+[55/62] Compiling RoadieCore WindowManagementMode.swift
+[56/62] Compiling RoadieCore WindowRule.swift
+[57/76] Compiling RoadieTiler LayoutStrategy.swift
+[58/76] Compiling RoadieTiler LayoutTypes.swift
+[59/78] Compiling RoadieTiler MasterStackLayoutStrategy.swift
+[60/78] Compiling RoadieTiler SpatialBSPLayoutStrategy.swift
+[61/78] Compiling RoadieStages RoadieState.swift
+[62/78] Emitting module RoadieStages
+[63/78] Compiling RoadieTiler FloatLayoutStrategy.swift
+[64/78] Compiling RoadieTiler LayoutGeometry.swift
+[65/78] Emitting module RoadieTiler
+[66/78] Compiling RoadieTiler BSPLayoutStrategy.swift
+[67/78] Compiling RoadieTiler BSPTree.swift
+[70/78] Compiling RoadieAX SpaceProbe.swift
+[71/78] Compiling RoadieAX SystemSnapshotProvider.swift
+[72/78] Emitting module RoadieAX
+[73/79] Compiling RoadieAX WrittenFrameRegistry.swift
+[74/133] Compiling RoadieDaemon FileLock.swift
+[75/133] Compiling RoadieDaemon FocusFollowsMouseController.swift
+[76/133] Compiling RoadieDaemon Formatters.swift
+[77/133] Compiling RoadieDaemon HiddenWindowPlacement.swift
+[78/133] Compiling RoadieDaemon JSONPersistence.swift
+[79/133] Compiling RoadieDaemon LayoutCommandActivity.swift
+[80/133] Compiling RoadieDaemon LayoutCommandService.swift
+[81/133] Compiling RoadieDaemon LayoutIntentStore.swift
+[82/133] Compiling RoadieDaemon LayoutMaintainer.swift
+[83/133] Compiling RoadieDaemon Metrics.swift
+[84/133] Compiling RoadieDaemon MouseFollower.swift
+[85/133] Compiling RoadieDaemon NSColorHex.swift
+[86/133] Compiling RoadieDaemon PerformanceLogService.swift
+[87/133] Compiling RoadieDaemon ProcessLiveness.swift
+[88/133] Compiling RoadieDaemon RailController.swift
+[89/133] Compiling RoadieDaemon RailFileWatchers.swift
+[90/133] Compiling RoadieDaemon RailPanel.swift
+[91/133] Compiling RoadieDaemon RailRuntimeState.swift
+[92/133] Emitting module RoadieDaemon
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[93/133] Compiling RoadieDaemon RailSettings.swift
+[94/133] Compiling RoadieDaemon RailThumbnailStore.swift
+[95/133] Compiling RoadieDaemon RailVisualConfig.swift
+[96/133] Compiling RoadieDaemon RestoreSafetyService.swift
+[97/133] Compiling RoadieDaemon RoadieScreenCoordinate.swift
+[98/133] Compiling RoadieDaemon RulesCommandService.swift
+[99/133] Compiling RoadieDaemon SelfTest.swift
+[100/133] Compiling RoadieDaemon StageCardView.swift
+[101/133] Compiling RoadieDaemon StageCommands.swift
+[102/133] Compiling RoadieDaemon StageStore.swift
+[103/133] Compiling RoadieDaemon StateAudit.swift
+[104/133] Compiling RoadieDaemon TargetGridService.swift
+[105/133] Compiling RoadieDaemon TargetHintService.swift
+[106/133] Compiling RoadieDaemon TargetInspectionService.swift
+[107/133] Compiling RoadieDaemon TargetMacroService.swift
+[108/133] Compiling RoadieDaemon TargetModeRuntimeController.swift
+[109/133] Compiling RoadieDaemon TargetOverlayPresenter.swift
+[110/133] Compiling RoadieDaemon AppTargetQueryService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[111/133] Compiling RoadieDaemon AutomationQueryService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[112/133] Compiling RoadieDaemon AutomationSnapshotService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[113/133] Compiling RoadieDaemon BorderController.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[114/133] Compiling RoadieDaemon CLICommandRouter.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[115/133] Compiling RoadieDaemon CommandSocketServer.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[116/133] Compiling RoadieDaemon ComponentLockFile.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[117/133] Compiling RoadieDaemon ConfigReloadService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[118/133] Compiling RoadieDaemon DaemonHealth.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[119/133] Compiling RoadieDaemon DaemonSnapshot.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[120/133] Compiling RoadieDaemon DesktopCommands.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[121/133] Compiling RoadieDaemon DisplayCommands.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[122/133] Compiling RoadieDaemon DisplayParkingService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[123/133] Compiling RoadieDaemon DisplayTopology.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[124/133] Compiling RoadieDaemon DropPreviewController.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[125/133] Compiling RoadieDaemon EventLog.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[126/133] Compiling RoadieDaemon EventSubscriptionService.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[127/133] Compiling RoadieDaemon FileAdministration.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Sources/RoadieDaemon/DaemonSnapshot.swift:2038:5: warning: 'internal' modifier conflicts with extension's default access of 'private'
+2036 |     }
+2037 | 
+2038 |     internal func currentRailSettings() -> RailSettings {
+     |     `- warning: 'internal' modifier conflicts with extension's default access of 'private'
+2039 |         railSettings ?? RailSettings.load()
+2040 |     }
+[128/150] Compiling RoadieDaemon TargetSearchHotkey.swift
+[129/150] Compiling RoadieDaemon TargetSearchModel.swift
+[130/150] Compiling RoadieDaemon TestEnvironment.swift
+[131/150] Compiling RoadieDaemon TickScheduler.swift
+[132/150] Compiling RoadieDaemon TitlebarContextMenuController.swift
+[133/150] Compiling RoadieDaemon TreeDump.swift
+[134/150] Compiling RoadieDaemon WidthAdjustmentService.swift
+[135/150] Compiling RoadieDaemon WindowBookmarkCommands.swift
+[136/150] Compiling RoadieDaemon WindowCommands.swift
+[137/150] Compiling RoadieDaemon WindowContextActions.swift
+[138/150] Compiling RoadieDaemon WindowDragActivity.swift
+[139/150] Compiling RoadieDaemon WindowGroupCommands.swift
+[140/150] Compiling RoadieDaemon WindowPresentationStateResolver.swift
+[141/150] Compiling RoadieDaemon WindowRuleAffinityService.swift
+[142/150] Compiling RoadieDaemon WindowRuleEngine.swift
+[143/150] Compiling RoadieDaemon WindowRuleMatcher.swift
+[144/150] Compiling RoadieDaemon WindowRuleValidator.swift
+[145/154] Emitting module roadie
+[146/154] Compiling roadie main.swift
+[146/154] Write Objects.LinkFileList
+[148/154] Compiling roadied main.swift
+[149/154] Emitting module roadied
+[149/154] Write Objects.LinkFileList
+[150/154] Linking roadie
+[151/154] Applying roadie
+[152/154] Linking roadied
+[153/154] Applying roadied
+Build complete! (29.62s)

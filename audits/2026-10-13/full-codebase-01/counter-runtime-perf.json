@@ -1,0 +1,72 @@
+{
+  "finding_id": "PERF-301",
+  "counter_audit": "CONFIRMED",
+  "verdict": "CONFIRME",
+  "severity": "HIGH",
+  "recommended_severity": "HIGH",
+  "fully_read_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+  "fully_read_lines": 3644,
+  "summary": "La recherche répétée est bien en O(n*m). Aucun garde du chemin ni StageState.insert ne borne le nombre d’identifiants. Le Set proposé préserve le résultat et son ordre. La branche est conditionnelle dans le fonctionnement interactif ; sa fréquence réelle et sa latence ne sont pas mesurées.",
+  "evidence": {
+    "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "line": 2647,
+    "code": "            guard !siblingEntries.isEmpty else { continue }\n            let siblingIDs = stage.windowIDs.filter { id in\n                siblingEntries.contains { $0.window.id == id }\n            }\n            guard !siblingIDs.isEmpty else { continue }"
+  },
+  "refutation_checks": [
+    {
+      "hypothesis": "La réparation est inatteignable dans la boucle courante.",
+      "verdict": "REFUTEE",
+      "evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift:577-595",
+      "detail": "applyPass appelle clampedSiblingRepairPlan après service.apply et stabilizeClampedPositions pour les placements sans arbre. Le chemin n’est ni un outil de débogage ni une migration."
+    },
+    {
+      "hypothesis": "Une garde borne n ou m à une petite constante.",
+      "verdict": "REFUTEE",
+      "evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift:2610-2651",
+      "detail": "Les gardes exigent un résultat clamped avec actual, un mode non float et non arbre, un écran, un conteneur résiduel et au moins une voisine. Aucune ne borne stage.windowIDs.count ou siblingEntries.count. Le seuil de 120 points à la ligne 3008 porte sur le conteneur résiduel, pas sur les collections."
+    },
+    {
+      "hypothesis": "StageState borne le nombre de fenêtres avant cet appel.",
+      "verdict": "REFUTEE",
+      "evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieStages/RoadieState.swift:151-173",
+      "detail": "windowIDs est un tableau. insert supprime seulement un éventuel doublon, puis ajoute l’ID. Aucun plafond de membres n’est imposé ici ; la recherche des noms maxWindows/window_limit/maxMembers dans RoadieCore, RoadieStages et RoadieTiler n’en a trouvé aucun."
+    },
+    {
+      "hypothesis": "Les sorties précoces de contains rendent le calcul linéaire.",
+      "verdict": "REFUTEE",
+      "evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift:2648-2650",
+      "detail": "contains sort sur correspondance, mais les rangs de recherche s’additionnent. Si m=n-1 voisines sont réparties dans la liste, le coût comprend 1+2+...+m recherches plus une recherche complète pour le membre clampé. Le pire cas reste quadratique."
+    },
+    {
+      "hypothesis": "Ce coût est payé à chaque tick sans protection.",
+      "verdict": "REFUTEE",
+      "evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift:2302-2331,2491-2526,2610-2611,3454-3464",
+      "detail": "La mémoire des refus, les commandes supprimées et la garde clampedItems vide évitent certaines répétitions. Le rapport ne doit donc pas présenter ce coût comme systématique à chaque tick. Ces protections ne changent pas la complexité lors d’un nouveau refus."
+    }
+  ],
+  "reachable_scenario": {
+    "description": "Stage bsp ou masterStack avec une fenêtre qui refuse de rétrécir, couvre au moins la moitié de la hauteur ou de la largeur de l’écran, et laisse un rectangle utilisable. D’autres fenêtres visibles et non clampées restent dans le même scope. Les lignes 2648-2650 croisent alors tous les IDs du stage avec la liste des voisines.",
+    "existing_test_read": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/LayoutMaintainerTests.swift:1756-1788",
+    "existing_test_name": "shrinkClampedWideWindowRepairsSiblingIntoRemainingSpace",
+    "validation": "Test existant lu, non exécuté. Il décrit un refus de taille réel simulé et attend layout_clamped_scope_repaired. Il prouve que le chemin est prévu et exercé par la suite, pas une mesure de sa complexité à grande échelle."
+  },
+  "path_assessment": {
+    "path_type": "hot",
+    "qualification": "Chemin interactif de production, conditionné par un refus ; fréquence observée inconnue. Éviter les formulations à chaque tick ou ralentissement mesuré. Ce n’est pas un chemin froid de migration/test."
+  },
+  "remediation_review": {
+    "code": "let siblingIDSet = Set(siblingEntries.map(\\.window.id))\nlet siblingIDs = stage.windowIDs.filter { siblingIDSet.contains($0) }\nguard !siblingIDs.isEmpty else { continue }",
+    "static_types": "siblingEntries est [ScopedWindowSnapshot], window.id est WindowID, et WindowID déclare Hashable dans Sources/RoadieCore/Identifiers.swift:44. Le Set inféré est Set<WindowID>. Le fichier emploie déjà Set(entries.map(\\.window.id)) pour une intersection équivalente dans resolveInfeasibleClampedScopes.",
+    "semantic_equivalence": "La source filtrée reste stage.windowIDs : même ordre et mêmes éventuels doublons. Les doublons du côté siblingEntries ne changeaient pas le prédicat contains et ne changent pas la présence dans Set. Les collections ne sont pas modifiées au cours du filtre.",
+    "complexity": "O(n+m) en moyenne pour cette intersection ; O(m) mémoire supplémentaire. Le reste du plan de réparation n’est pas rendu linéaire par cette modification.",
+    "compiled": false,
+    "recommended_regression_risk": "LOW"
+  },
+  "severity_reason": "HIGH est maintenu selon le module v14 04, anti-pattern 2 : recherche linéaire répétée dans une boucle, sans borne ou justification documentée. Aucun argument ne justifie CRITICAL. L’absence de benchmark ne réfute pas la preuve de complexité.",
+  "not_verified": [
+    "Aucun build/test ni benchmark exécuté.",
+    "Aucune fenêtre réelle déplacée ; aucun processus arrêté, démarré ou relancé.",
+    "Aucune fréquence de refus mesurée.",
+    "Lecture complète du fichier cible ; fichiers de support lus aux sections indiquées."
+  ]
+}

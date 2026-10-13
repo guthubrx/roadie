@@ -1,0 +1,2531 @@
+[0/1] Planning build
+Building for debugging...
+[0/12] /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build/arm64-apple-macosx/debug/roadiePackageTests.derived/runner.swift
+[0/12] Copying Spec002Snapshot.json
+[0/12] Copying Spec002Rules.toml
+[0/12] Copying Spec002Events.jsonl
+[0/12] Copying DisplayParkingFixtures.json
+[0/12] Write sources
+[10/17] Write swift-version--58304C5D6DBC2206.txt
+[12/73] Compiling RoadieStagesTests WindowGroupStateTests.swift
+[13/73] Compiling RoadieStagesTests RoadieStateTests.swift
+[14/73] Emitting module RoadieStagesTests
+[15/73] Compiling RoadieAXTests AXUnresponsiveAppsTests.swift
+[16/73] Compiling RoadieTilerTests LayoutPlannerTests.swift
+[17/74] Compiling RoadieTilerTests SpatialBSPLayoutStrategyTests.swift
+[18/74] Compiling RoadieAXTests ReactiveTilingAXTests.swift
+[19/74] Emitting module RoadieAXTests
+[20/74] Emitting module RoadieTilerTests
+[21/74] Compiling RoadieDaemonTests AppTargetQueryServiceTests.swift
+[22/74] Compiling RoadieDaemonTests AutomationEventTests.swift
+[23/74] Compiling RoadieTilerTests BSPTreeTests.swift
+[24/74] Emitting module RoadieDaemonTests
+[25/89] Compiling RoadieDaemonTests TilingPolicyTests.swift
+[26/89] Compiling RoadieDaemonTests TitlebarContextMenuTests.swift
+[27/89] Compiling RoadieDaemonTests TreeAuthorityTests.swift
+[28/89] Compiling RoadieDaemonTests WidthAdjustmentTests.swift
+[29/89] Compiling RoadieDaemonTests WindowDragReorderEligibilityTests.swift
+[30/89] Compiling RoadieDaemonTests WindowGroupCommandTests.swift
+[31/89] Compiling RoadieDaemonTests WindowGroupIndicatorTests.swift
+[32/89] Compiling RoadieDaemonTests WindowGroupStoreTests.swift
+[33/89] Compiling RoadieDaemonTests WindowPresentationStateResolverTests.swift
+[34/89] Compiling RoadieDaemonTests WindowRuleConfigTests.swift
+[35/89] Compiling RoadieDaemonTests WindowRuleMaintainerTests.swift
+[36/89] Compiling RoadieDaemonTests WindowRuleMatcherTests.swift
+[37/89] Compiling RoadieDaemonTests WindowRuleScratchpadTests.swift
+[38/89] Compiling RoadieDaemonTests WindowRuleValidationTests.swift
+[39/89] Compiling RoadieDaemonTests resource_bundle_accessor.swift
+[42/89] Compiling RoadieDaemonTests AutomationSnapshotTests.swift
+[43/89] Compiling RoadieDaemonTests CLICommandRouterTests.swift
+[44/89] Compiling RoadieDaemonTests CommandGenerationTests.swift
+[45/89] Compiling RoadieDaemonTests CommandSinglePlanTests.swift
+[46/89] Compiling RoadieDaemonTests ComponentLockFileTests.swift
+[47/89] Compiling RoadieDaemonTests ComponentSubcommandTests.swift
+[48/89] Compiling RoadieDaemonTests ConfigReloadTests.swift
+[49/89] Compiling RoadieDaemonTests ConfigTests.swift
+[50/89] Compiling RoadieDaemonTests DisplayParkingServiceTests.swift
+[51/89] Compiling RoadieDaemonTests DisplayTopologyTests.swift
+[52/89] Compiling RoadieDaemonTests DropPreviewEngineTests.swift
+[53/89] Compiling RoadieDaemonTests EventCatalogTests.swift
+[54/89] Compiling RoadieDaemonTests EventEpisodeTests.swift
+[55/89] Compiling RoadieDaemonTests EventSubscriptionTests.swift
+[56/89] Compiling RoadieDaemonTests RoadieScreenCoordinateTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[57/89] Compiling RoadieDaemonTests RulesCommandTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[58/89] Compiling RoadieDaemonTests SnapshotServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[59/89] Compiling RoadieDaemonTests SpatialBSPConfigTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[60/89] Compiling RoadieDaemonTests Spec002RegressionTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[61/89] Compiling RoadieDaemonTests StageDisplayMoveTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[62/89] Compiling RoadieDaemonTests StateMigrationTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[63/89] Compiling RoadieDaemonTests StatePersistenceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[64/89] Compiling RoadieDaemonTests TargetGridServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[65/89] Compiling RoadieDaemonTests TargetHintServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[66/89] Compiling RoadieDaemonTests TargetInspectionServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[67/89] Compiling RoadieDaemonTests TargetMacroServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[68/89] Compiling RoadieDaemonTests TargetModeRuntimeControllerTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[69/89] Compiling RoadieDaemonTests TargetSearchHotkeyTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[70/89] Compiling RoadieDaemonTests TargetSearchModelTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[71/89] Compiling RoadieDaemonTests TickSchedulerTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/TickSchedulerTests.swift:403:26: warning: 'frame' mutated after capture by sendable closure
+395 |     func unconsumedGestureOnSameWindowKeepsFirstStartFrame() {
+396 |         let input = UserInputActivity()
+397 |         var frame = CGRect(x: 0, y: 0, width: 500, height: 400)
+    |             `- note: variable defined here
+398 |         input.observeGestures(target: { _ in (7, frame) }, onRelease: { _ in })
+    |                                       |          `- note: capturing use
+    |                                       `- note: variable captured by sendable closure
+399 |         let first = Date(timeIntervalSince1970: 100)
+400 | 
+401 |         input.mouseDown(at: .zero, now: first)
+402 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.2))
+403 |         frame.size.width = 600
+    |                          `- warning: 'frame' mutated after capture by sendable closure
+404 |         input.mouseDown(at: .zero, now: first.addingTimeInterval(0.3))
+405 |         input.mouseUp(leftButton: true, now: first.addingTimeInterval(0.5))
+[72/89] Compiling RoadieDaemonTests FileAdministrationTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[73/89] Compiling RoadieDaemonTests FileLockTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[74/89] Compiling RoadieDaemonTests FormattersTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[75/89] Compiling RoadieDaemonTests LayoutMaintainerTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[76/89] Compiling RoadieDaemonTests LegacyQueryCompatibilityTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[77/89] Compiling RoadieDaemonTests PerformanceLogServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[78/89] Compiling RoadieDaemonTests PersistentStageStateTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[79/89] Compiling RoadieDaemonTests PowerUserCommandEdgeCaseTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[80/89] Compiling RoadieDaemonTests PowerUserDesktopCommandTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[81/89] Compiling RoadieDaemonTests PowerUserFocusCommandTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[82/89] Compiling RoadieDaemonTests PowerUserLayoutCommandTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[83/89] Compiling RoadieDaemonTests QueryCommandTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[84/89] Compiling RoadieDaemonTests QueryComponentsTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[85/89] Compiling RoadieDaemonTests QueryHealthEventsTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[86/89] Compiling RoadieDaemonTests ResizeHandlePickerTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[87/89] Compiling RoadieDaemonTests RestoreSafetyServiceTests.swift
+/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/Tests/RoadieDaemonTests/FileLockTests.swift:34:21: note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+32 |         // Apres withLock, on peut re-acquire immediatement.
+33 |         try FileLock.withLock(path: path) {
+34 |             #expect(true)
+   |                     `- note: '#expect(_:_:)' will always pass here; use 'Bool(true)' to silence this warning (from macro 'expect')
+35 |         }
+36 |     }
+[88/91] Emitting module roadiePackageTests
+[89/91] Compiling roadiePackageTests runner.swift
+[89/91] Write Objects.LinkFileList
+[90/91] Linking roadiePackageTests
+Build complete! (20.93s)
+Test Suite 'Selected tests' started at 2026-10-13 12:04:47.225.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-13 12:04:47.236.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-13 12:04:47.236.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-13 12:04:47.236.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.011) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite WindowGroupStateTests started.
+􀟈  Suite LayoutPlannerTests started.
+􀟈  Suite RoadieStateTests started.
+􀟈  Suite BSPTreeEngineTests started.
+􀟈  Suite AXWindowFrameWriterTests started.
+􀟈  Suite SpaceProbeTests started.
+􀟈  Suite BSPTreeTests started.
+􀟈  Suite BSPTreeMutationTests started.
+􀟈  Suite AXCacheInvalidationTests started.
+􀟈  Suite SpatialBSPLayoutStrategyTests started.
+􀟈  Suite AXWindowEventObserverDispatchTests started.
+􀟈  Suite AXAttributeCacheTests started.
+􀟈  Suite AXVolatileReadingTests started.
+􀟈  Suite WrittenFrameRegistryTests started.
+􀟈  Suite AXUnresponsiveAppsTests started.
+􀟈  Suite StateMigrationTests started.
+􀟈  Suite StageDisplayMoveTests started.
+􀟈  Suite CommandGenerationTests started.
+􀟈  Suite RestoreSafetyLifecycleTests started.
+􀟈  Suite DisplayParkingServiceTests started.
+􀟈  Suite FormattersTests started.
+􀟈  Suite LegacyQueryCompatibilityTests started.
+􀟈  Suite SpatialBSPConfigTests started.
+􀟈  Suite TilingPolicyTests started.
+􀟈  Suite TickSchedulerTests started.
+􀟈  Suite TargetSearchHotkeyTests started.
+􀟈  Suite PersistentStageStateTests started.
+􀟈  Suite WindowGroupCommandTests started.
+􀟈  Suite TargetHintServiceTests started.
+􀟈  Suite RailAwareMaximizationVisibilityTests started.
+􀟈  Suite CommandStateTransactionTests started.
+􀟈  Suite WindowRuleMaintainerTests started.
+􀟈  Suite FileLockTests started.
+􀟈  Suite PerformanceLogServiceTests started.
+􀟈  Suite TargetGridServiceTests started.
+􀟈  Suite RestoreSafetyCoverageTests started.
+􀟈  Suite EventCatalogTests started.
+􀟈  Suite TreeAuthorityTests started.
+􀟈  Suite QueryComponentsTests started.
+􀟈  Suite TargetModeRuntimeControllerTests started.
+􀟈  Suite WindowPinSnapshotTests started.
+􀟈  Suite ResizeHandlePickerTests started.
+􀟈  Suite NavrailMaximizationTests started.
+􀟈  Suite CLICommandRouterTests started.
+􀟈  Suite StatePersistenceTests started.
+􀟈  Suite RulesCommandTests started.
+􀟈  Suite WindowRuleMatcherTests started.
+􀟈  Suite WindowRuleConfigTests started.
+􀟈  Suite WindowRuleValidationTests started.
+􀟈  Suite LayoutMaintainerTests started.
+􀟈  Suite ConfigHotReloadTests started.
+􀟈  Suite NavrailMaximizationContextActionTests started.
+􀟈  Suite TreeLayoutMaintainerTests started.
+􀟈  Suite TitlebarContextMenuTests started.
+􀟈  Suite WindowGroupStoreTests started.
+􀟈  Suite WindowGroupIndicatorTests started.
+􀟈  Suite SnapshotStabilizationTests started.
+􀟈  Suite QueryCommandTests started.
+􀟈  Suite NavrailMaximizationRefusalTests started.
+􀟈  Suite ConfigReloadTests started.
+􀟈  Suite DisplayTopologyTests started.
+􀟈  Suite SnapshotServiceTests started.
+􀟈  Suite WindowDragReleaseTests started.
+􀟈  Suite EventSubscriptionTests started.
+􀟈  Suite QueryHealthEventsTests started.
+􀟈  Suite PowerUserDesktopCommandTests started.
+􀟈  Suite PowerUserLayoutCommandTests started.
+􀟈  Suite AutomationEventTests started.
+􀟈  Suite UserInputGestureTests started.
+􀟈  Suite RestoreSafetyServiceTests started.
+􀟈  Suite AppTargetQueryServiceTests started.
+􀟈  Suite EventEpisodeTests started.
+􀟈  Suite Spec002RegressionTests started.
+􀟈  Suite ConfigTests started.
+􀟈  Suite PlacementTransitionRegressionTests started.
+􀟈  Suite RoadieScreenCoordinateTests started.
+􀟈  Suite PowerUserFocusCommandTests started.
+􀟈  Suite TargetMacroServiceTests started.
+􀟈  Suite AutomationSnapshotTests started.
+􀟈  Suite WidthAdjustmentTests started.
+􀟈  Suite WindowDragReorderEligibilityTests started.
+􀟈  Suite DropPreviewEngineTests started.
+􀟈  Suite WindowPinLayoutMaintainerTests started.
+􀟈  Suite TargetInspectionServiceTests started.
+􀟈  Suite FileAdministrationTests started.
+􀟈  Suite WindowDragReleaseGraceTests started.
+􀟈  Suite WindowRuleScratchpadTests started.
+􀟈  Suite ComponentLockFileTests started.
+􀟈  Suite PowerUserCommandEdgeCaseTests started.
+􀟈  Suite WindowPresentationStateResolverTests started.
+􀟈  Suite TargetSearchModelTests started.
+􀟈  Suite CommandSinglePlanTests started.
+􀟈  Suite ComponentSubcommandTests started.
+􀟈  Test modeChangesDoNotChangeMembership() started.
+􀟈  Test stageStatePrunesGroupsWhenWindowIsRemoved() started.
+􀟈  Test creatingStageOnNewDesktopDoesNotCreatePhantomStageOne() started.
+􀟈  Test assigningWindowMovesItBetweenStages() started.
+􀟈  Test activeStageIsRememberedPerDesktop() started.
+􀟈  Test bspSplitsTwoWindowsHorizontallyWhenWide() started.
+􀟈  Test bspPreservesManualHorizontalResizeAsSplitRatio() started.
+􀟈  Test bspPriorityRightWindowWinsAgainstStaleLeftEdge() started.
+􀟈  Test windowGroupTracksMembersAndActiveWindow() started.
+􀟈  Test bspBalancedIgnoresStaleRatiosWithoutPriorityWindow() started.
+􀟈  Test bspKeepsLeftWindowManualResizeAndMovesRightWindow() started.
+􀟈  Test diffProducesCommandsForChangedFramesInStableOrder() started.
+􀟈  Test masterStackPreservesManualMasterResizeAsRatio() started.
+􀟈  Test bspNewWindowSplits5050IgnoringArbitraryMacOSFrame() started.
+􀟈  Test bspKeepsBottomPrioritySizeWhenOuterEdgeWasDraggedInward() started.
+􀟈  Test diffKeepsSmallIntentionalGapChanges() started.
+􀟈  Test bspDwindleKeepsSplittingTheRemainder() started.
+􀟈  Test parsesCurrentSpaceOfEachDisplay() started.
+􀟈  Test bspKeepsRightWindowManualResizeAndMovesLeftWindow() started.
+􀟈  Test liveProbeAnswersOrReturnsNilWithoutCrashing() started.
+􀟈  Test diffProducesNoCommandsForIdenticalPlan() started.
+􀟈  Test swapPermutesTwoLeavesKeepingStructure() started.
+􀟈  Test swapDeepLeavesPreservesOtherNodes() started.
+􀟈  Test mainIdentifierDesignatesOnlyTheMainDisplay() started.
+􀟈  Test insertOnFocusDoesNotMoveOtherWindowsFrames() started.
+􀟈  Test floatModePreservesKnownFramesAndIgnoresUnknownFrames() started.
+􀟈  Test mutableBspModeParsesUserFacingAliases() started.
+􀟈  Test minimumSizeCorrectionDistributesHeightAndKeepsTitleBarSeams() started.
+􀟈  Test bspPreservesManualVerticalResizeAsSplitRatio() started.
+􀟈  Test mutableBspAliasIsPlannedByTheTreeIgnoringObservedFrames() started.
+􀟈  Test diffUsesTheSingleFrameMatchTolerance() started.
+􀟈  Test decodesTreePersistedBeforeSpec017() started.
+􀟈  Test insertOnFocusedLeafSplitsOnlyThatLeaf() started.
+􀟈  Test insertSideLeftPlacesNewWindowFirst() started.
+􀟈  Test masterStackKeepsFirstWindowAsMaster() started.
+􀟈  Test incompleteDataGivesNil() started.
+􀟈  Test echoMoveIsAbsorbedButExternalMoveAndOtherEventsAreForwarded() started.
+􀟈  Test insertIntoEmptyBecomesRoot() started.
+􀟈  Test inactiveEnhancedUserInterfaceIsLeftAlone() started.
+􀟈  Test swapNoOpWhenWindowMissing() started.
+􀟈  Test placeHorizontalSplitStacks() started.
+􀟈  Test attributeCacheIsInvalidatedPerPid() started.
+􀟈  Test bspInsertionWithFocusAbsentFromTreeKeepsNewWindow() started.
+􀟈  Test insertSideRightPlacesNewWindowSecond() started.
+􀟈  Test placeVerticalSplitFiftyFifty() started.
+􀟈  Test windowIndexReplaceAllDropsAbsentApplications() started.
+􀟈  Test bspKeepsMinimalVerticalTitleBarSeamWhenInnerGapIsZero() started.
+􀟈  Test placesFromProjectedTreeAndKeepsStructureForUnknownWindow() started.
+􀟈  Test resizeDuringAbsenceKeepsRatioWhenNeighbourReturns() started.
+􀟈  Test removeLastWindowYieldsEmpty() started.
+􀟈  Test enhancedUserInterfaceIsDisabledOncePerAppAndRestoredEvenOnFailure() started.
+􀟈  Test readFrameDoesAFreshReadWithoutWriting() started.
+􀟈  Test invalidateDropsStablePartButKeepsLastKnownState() started.
+􀟈  Test minimumSizeCorrectionUsesIntegralPlacementAndFractionalGaps() started.
+􀟈  Test fenceRespectsKnownNeighborMinimumAndKeepsAbsentLeavesAndNestedRatios() started.
+􀟈  Test windowIDsAreInOrder() started.
+􀟈  Test legacyCallbackReceivesNamesOnly() started.
+􀟈  Test masterStackKeepsStackManualResizeAndMovesMaster() started.
+􀟈  Test alreadyInfeasibleHeightDoesNotBlockFeasibleWidthResize() started.
+􀟈  Test placesAccordingToProvidedTree() started.
+􀟈  Test writeBudgetIsEnforcedAtTheCommonWritePoint() started.
+􀟈  Test fallsBackWhenTreeDesynced() started.
+􀟈  Test codableRoundTrip() started.
+􀟈  Test retainForgetsClosedWindows() started.
+􀟈  Test insertOrientationFollowsContainerShape() started.
+􀟈  Test absorbedEchoOfTheReadBackConfirmsTheRefusal() started.
+􀟈  Test everyWindowGetsAFrameAfterFocusedInsertion() started.
+􀟈  Test unresponsiveNativeFullscreenReadStopsBeforeWriting() started.
+􀟈  Test placeSingleLeafFillsContainer() started.
+􀟈  Test directWritesCarryTheirGenerationAndDefaultToTheCurrentOne() started.
+􀟈  Test enumeratesOncePerPidAndBatchThenReusesSnapshotIndex() started.
+􀟈  Test cacheHoldsOnlyStablePartAndLastKnownFollowsLatestState() started.
+􀟈  Test minimumSizeCorrectionHandlesSecondSideAndGap() started.
+􀟈  Test inferredDetectsGrid() started.
+􀟈  Test minimumCorrectionExcludingAbsentMeasuresVisibleGeometry() started.
+􀟈  Test embeddedCannotCompleteSetsAppAside() started.
+􀟈  Test minimumSizeCorrectionAfterAsymmetricSwapBorrowsOnlyRequiredOuterSpace() started.
+􀟈  Test freshNativeFullscreenPreventsWritesWithoutConsumingTheBudget() started.
+􀟈  Test failedAttemptsAfterTheAXCallCountTowardsTheBudget() started.
+􀟈  Test staleReadDoesNotReplaceCachedStableAttributes() started.
+􀟈  Test failedReadBackRecordsItsAXCodeWithoutAnotherWrite() started.
+􀟈  Test removeLeafLeavesSiblingInPlace() started.
+􀟈  Test windowYoungerThan500msIsNotCached() started.
+􀟈  Test fenceExcludingAbsentUpdatesMatchingSplitOfFullTree() started.
+􀟈  Test insertionWithoutAnchorSplitsFirstLeafAndEmptyTreeBecomesRoot() started.
+􀟈  Test removeSiblingRecoversSpace() started.
+􀟈  Test minimumSizeCorrectionReturnsNilWhenInfeasible() started.
+􀟈  Test echoOfTheReadBackConfirmsAPendingRefusal() started.
+􀟈  Test inferredDetectsColumnsAndRows() started.
+􀟈  Test adjustingFenceRecomputesRatioFromRequestedFrame() started.
+􀟈  Test migrationKeepsExistingBackupAndValidTreeAndFallsBackToKnownFrames() started.
+􀟈  Test acceptedFrameIsTiedToTheGenerationAndDroppedByANewOne() started.
+􀟈  Test eachWriteIsRecordedWithTheGenerationPassedThroughTheProtocol() started.
+􀟈  Test fallsBackToBalancedWhenTreeMissing() started.
+􀟈  Test classifiesEchoAppResponseAndExternalChange() started.
+􀟈  Test embeddedErrorsDistinguishAbsentFromUnreadable() started.
+􀟈  Test horizontalSplitKeepsTitleBarSeam() started.
+􀟈  Test balancedResetsEveryRatio() started.
+􀟈  Test unreadableAttributeKeepsLastKnownValueButFalseIsKept() started.
+􀟈  Test otherErrorsDoNotSetAppAside() started.
+􀟈  Test minimumSizeCorrectionPreservesFoldedAbsentSplitDuringDistributedCorrection() started.
+􀟈  Test forgetDropsTheWindow() started.
+􀟈  Test migrationBacksUpOnceKeepsMembersAndOrderAndIsIdempotent() started.
+􀟈  Test projectionRemovesAbsentLeavesAndFoldsUnarySplits() started.
+􀟈  Test migrationLeavesUnreadableFileUntouched() started.
+􀟈  Test minimumSizeCorrectionDistributesAcrossThreeAncestorsAndDetectsImpossibleMinimums() started.
+􀟈  Test refusedSizeStillMovesTheWindow() started.
+􀟈  Test minimumSizeCorrectionClimbsToHigherAncestorWhenNearestIsInfeasible() started.
+􀟈  Test threeWidthNextInARowWriteThreeTimesInBsp() started.
+􀟈  Test expiredEntryIsReadAgain() started.
+􀟈  Test outsideBudgetGenerationIsNeverRefused() started.
+􀟈  Test echoComparesOnlyTheLastWrite() started.
+􀟈  Test moveActiveStageByDisplayIndexPreservesSourceAndMovesMembers() started.
+􀟈  Test minimumSizeCorrectionDistributesOnMirroredPath() started.
+􀟈  Test collisionWithNonEmptyTargetRenumbersMovedStageWithoutDroppingTarget() started.
+􀟈  Test minimumSizeCorrectionRespectsKnownMinimumOfNeighbour() started.
+􀟈  Test insertionMeasuresAnchorOnProjection() started.
+􀟈  Test refusesAutomaticRestoreWhenDisplayMatchIsAmbiguous() started.
+􀟈  Test writesSizeThenPositionThenSizeThenReadsBackOnce() started.
+􀟈  Test startRunRecoversWhenRunMarkerIsUnreadable() started.
+􀟈  Test diagnosticsBelongToTheirAttemptAndDoNotCarryIntoTheNextGeneration() started.
+􀟈  Test toggleAndSetSplitChangeOnlyParentOfWindow() started.
+􀟈  Test inferredKeepsEveryMemberOnceAndHandlesEmpty() started.
+􀟈  Test railStageMoveTargetsExcludeSourceDisplayAndSortByIndex() started.
+􀟈  Test menuDesktopStageAssignmentIsOneApplicationInAnOpenedGeneration() started.
+􀟈  Test insertionOnTallLeafStacks() started.
+􀟈  Test hiddenOrdinaryWindowStillMovesWhenNativeFullscreenIsUnavailable() started.
+􀟈  Test defersParkingWhenDisconnectedStageWindowsAreNotVisible() started.
+􀟈  Test startRunRecoversUncleanPreviousRunBeforeTakingMarker() started.
+􀟈  Test moveActiveStageByDirectionUsesDisplayTopology() started.
+􀟈  Test configuredNoFollowAppliesWhenNoCliOverrideIsProvided() started.
+􀟈  Test railStageMoveTargetsAreEmptyOnSingleDisplay() started.
+􀟈  Test cannotCompleteSetsAppAsideThenResumesAfterFiveSeconds() started.
+􀟈  Test minimumSizeCorrectionRespectsFixedNeighbourSubtreeAndAlreadyUndersizedNeighbours() started.
+􀟈  Test materializesMultipleOldParkedStagesInOneTransition() started.
+􀟈  Test adjustingFenceIsBoundedAndIgnoresContainerEdge() started.
+􀟈  Test railDisplayFiltersPersistentMembersMissingFromRuntimeSnapshot() started.
+􀟈  Test persistentStageWithoutBSPTreeDecodesNil() started.
+􀟈  Test toggleExcludingAbsentReachesSplitAboveFoldedOne() started.
+􀟈  Test newWindowSideDefaultsToRight() started.
+􀟈  Test debouncesDisplayChangeNotificationsBeforeParking() started.
+􀟈  Test keepsEmptyDisconnectedStagesAsHiddenRestorableMetadata() started.
+􀟈  Test preservesNameModeFocusGroupsAndRelativeOrderWhenParking() started.
+􀟈  Test serviceCanReturnStableNoopReport() started.
+􀟈  Test materializesOldParkedStagesWhenOriginDisplayIsNoLongerRecognized() started.
+􀟈  Test windowsReturnsHumanMessageWhenNoTileableWindows() started.
+􀟈  Test snapshotNeverContainsHiddenFrame() started.
+􀟈  Test prunesEmptyParkedResiduesWithoutDroppingUserEmptyStages() started.
+􀟈  Test restoresDisplayWhenSystemDisplayIDChangedButFingerprintMatches() started.
+􀟈  Test windowManagementModeParsesSpatialAliases() started.
+􀟈  Test displaysMarksActiveDisplay() started.
+􀟈  Test instanceLockRefusesSecondHolderEvenWithoutPidFile() started.
+􀟈  Test displaysReturnsMessageWhenEmpty() started.
+􀟈  Test persistentStageRoundTripsBSPTree() started.
+􀟈  Test windowsExcludesEntriesWithoutScope() started.
+􀟈  Test unhideAllRestoresHiddenWindowToMemberVisibleFrame() started.
+􀟈  Test invalidNewWindowSideFallsBackToRight() started.
+􀟈  Test windowPlacementParsesNewWindowSide() started.
+􀟈  Test pastRealDeadlineRunsOnceAtFloor() started.
+􀟈  Test burstWithinCoalescingWindowGivesOnePass() started.
+􀟈  Test tilingModeParsesSpatialBsp() started.
+􀟈  Test permissionsPreferDaemonStatusOverLocalProcess() started.
+􀟈  Test finishRunMarksCleanExitOnlyAfterRestore() started.
+􀟈  Test noFollowKeepsFocusDisplayAndTargetActiveStage() started.
+􀟈  Test inferredFallsBackInOrderWhenFrameMissingOrUnusable() started.
+􀟈  Test displayParkingFormatsDiagnosticFields() started.
+􀟈  Test pastInternalDeadlineIsFloored() started.
+􀟈  Test manageRuleCanForceNonResizableStandardWindow() started.
+􀟈  Test explicitStageMoveSupportsInactiveRailStageWithoutActivatingItFirst() started.
+􀟈  Test customAllowedSubrolesPermitsDialog() started.
+􀟈  Test explicitFollowOverridesNoFollowConfig() started.
+􀟈  Test preservesHostActiveStageAndNativeStageOrderWhenParking() started.
+􀟈  Test unidentifiedSmallUntitledWindowIsExcluded() started.
+􀟈  Test externalChangeExtendsOpenEpisodeAndEventOpensNewOne() started.
+􀟈  Test keepsParkedStagesVisibleWhenWindowMoveFails() started.
+􀟈  Test stageDisplayMoveUpdatesPinnedWindowHomeDisplay() started.
+􀟈  Test ruleManageDoesNotForceTilingIfBaseCriteriaFailed() started.
+􀟈  Test unidentifiedSmallDocumentWindowStillTilesWhenNotPanelShaped() started.
+􀟈  Test armedDeadlineFiresWhenNoLongerReported() started.
+􀟈  Test preservesRenameReorderMoveAndModeChangesMadeWhileParked() started.
+􀟈  Test legacySnapshotFormatsRemainEncodableAlongsideQueries() started.
+􀟈  Test persistedMutableBspStageStillDecodes() started.
+􀟈  Test tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) started.
+􀟈  Test minimumSizeCorrectionAdjustsNearestSplitOnConstrainedAxis() started.
+􀟈  Test characterKeysResolveThroughTheLayoutTable() started.
+􀟈  Test standardWindowAlwaysPassesPopupGate() started.
+􀟈  Test parkingAndRestoreCompleteWithinConfiguredFiveSecondBudget() started.
+􀟈  Test invalidOrCurrentTargetDoesNotMutateState() started.
+􀟈  Test shortStandardProgressWindowWithoutFullscreenIsExcluded() started.
+􀟈  Test gestureEndAloneRequestsOnePass() started.
+􀟈  Test reconcileWindowIDsAvoidsAmbiguousDuplicateTitles() started.
+􀟈  Test insertionSplitFollowsLeafNotScreen() started.
+􀟈  Test pinningDoesNotDuplicateStageMembership() started.
+􀟈  Test popupGateRespectsToggle() started.
+􀟈  Test noFollowUpPassWhenPassActed() started.
+􀟈  Test groupCommandsCreateAddFocusRemoveAndDissolve() started.
+􀟈  Test keepsFreshParkedStagesTemporaryForFastReconnect() started.
+􀟈  Test manageRuleCanForceModalWindow() started.
+􀟈  Test removeAndPrunePinsCleanPersistentState() started.
+􀟈  Test internalDeadlineBeforePendingRequestTicksFirst() started.
+􀟈  Test emptyOrInvalidHotkeysAreNotResolved() started.
+􀟈  Test stageScopeReturnsNilWhenWindowAbsent() started.
+􀟈  Test priorityOrdersRulesCorrectly() started.
+􀟈  Test noEventIsDroppedWithin200Milliseconds() started.
+􀟈  Test nonResizableStandardUtilityWindowIsExcluded() started.
+􀟈  Test noPassWhileButtonPressedThenOnePassOnRelease() started.
+􀟈  Test windowFurnitureIsLikelyRealWindowLogic() started.
+􀟈  Test unknownSubroleFallsBackToTileCandidateFlag() started.
+􀟈  Test disabledPickerRefusesMutation() started.
+􀟈  Test missingWindowPinsDecodeAsEmptyList() started.
+􀟈  Test ruleExcludeOverridesEvenStandardWindow() started.
+􀟈  Test earliestDueTimeWins() started.
+􀟈  Test reconcileWindowIDsPicksClearlyClosestOfTwoNearCandidates() started.
+􀟈  Test passRunsAtArmedDeadlineThenStops() started.
+􀟈  Test legacyStageStateDecodesWithoutParkingFields() started.
+􀟈  Test windowsContainsHeaderAndPayload() started.
+􀟈  Test ruleSubroleMatchTargetsDialogsOnly() started.
+􀟈  Test releaseWithoutGestureNorPendingRequestDoesNothing() started.
+􀟈  Test desktopSwitchKeepsConcurrentChangeMadeDuringAX() started.
+􀟈  Test assignDefaultsToAppendAndFocusMovedWindow() started.
+􀟈  Test emptyStageScopeIndexForEmptyState() started.
+􀟈  Test bookmarkFocusKeepsConcurrentChangeMadeDuringAX() started.
+􀟈  Test setPinKeepsSinglePinPerWindowAndCanChangeScope() started.
+􀟈  Test eventReplacesPendingSafetyNetCause() started.
+􀟈  Test normalizedSearchRemovesCaseDiacriticsAndExtraSpaces() started.
+􀟈  Test unidentifiedLittleSnitchUrlPanelIsExcluded() started.
+􀟈  Test modifiersMapToCarbonFlags() started.
+􀟈  Test modalStandardWindowIsExcluded() started.
+􀟈  Test stageScopeFindsWindowAcrossScopes() started.
+􀟈  Test restoresParkedStagesToRecognizedDisplay() started.
+􀟈  Test windowWithFullscreenButtonIsConsideredReal() started.
+􀟈  Test stageScopeIndexReturnsAllMappings() started.
+􀟈  Test unidentifiedSystemSavePanelIsExcludedEvenWhenLarge() started.
+􀟈  Test labelsUseDeterministicHomeRowAlphabet() started.
+􀟈  Test ruleFloatingBehavesLikeExclude() started.
+􀟈  Test ruleManageOverridesSubroleExclusion() started.
+􀟈  Test echoSchedulesNothing() started.
+􀟈  Test safetyNetPassesImmediatelyWithoutEpisode() started.
+􀟈  Test appMouseActionsAreDisabledIndependentlyFromAppTargetDiscovery() started.
+􀟈  Test bookmarkTargetsExposeFocusAction() started.
+􀟈  Test dialogSubroleIsExcluded() started.
+􀟈  Test overlayStateUsesSameLabelsAsTargetList() started.
+􀟈  Test disabledTargetModeReturnsStructuredError() started.
+􀟈  Test resolveAcceptsLabelIdAndUniqueSearch() started.
+􀟈  Test appMouseActionsCanBeEnabledExplicitly() started.
+􀟈  Test nativeFullscreenStillHidesRailWhenZoomIdIsExempted() started.
+􀟈  Test floatingBundlesExcludesEntireApp() started.
+􀟈  Test tickPlacesMatchedWindowOnNamedDisplay() started.
+􀟈  Test sharedLockAllowsConcurrentReads() started.
+􀟈  Test standardWindowIsTiled() started.
+􀟈  Test stageScopeIndexAndStageScopeAreEquivalent() started.
+􀟈  Test tickDoesNotReapplyPlacementAfterWindowWasMovedManually() started.
+􀟈  Test reconcileWindowIDsKeepsStageMembershipAcrossRuntimeIDChange() started.
+􀟈  Test tickDefersPlacementWhenDisplayIsMissing() started.
+􀟈  Test stableRuleMatchIsPublishedOnceUntilActionChanges() started.
+􀟈  Test smallSettingsWindowIsExcludedEvenWhenStandard() started.
+􀟈  Test doesNotMergeDisconnectedDisplayIntoActiveStage() started.
+􀟈  Test nestedGridPathResolvesInsideParentCell() started.
+􀟈  Test roadieTargetsIncludeOnlyVisibleNonEmptyStagesByDefault() started.
+􀟈  Test summarizesInteractionEventsFromEventLogOnly() started.
+􀟈  Test parksNonEmptyStagesAsDistinctStagesOnHostDisplay() started.
+􀟈  Test restoresCurrentParkedStateInsteadOfOriginalSnapshot() started.
+􀟈  Test appScanStatisticsAreLoggedOnlyWhenTheProviderReportsThem() started.
+􀟈  Test smallNonResizableStandardProgressWindowIsExcluded() started.
+􀟈  Test acquireAndReleaseExclusive() started.
+􀟈  Test tickAdoptsManualWindowDragAcrossDisplaysBeforeRelayout() started.
+􀟈  Test episodeStaysOpenAcrossArmedDeadlines() started.
+􀟈  Test pickerReturnsCandidatesWithoutMutationWhenQueryIsAmbiguous() started.
+􀟈  Test gridPathForPointUsesConfiguredDepth() started.
+􀟈  Test persistDecisionFollowsReaderModeEnvironmentValue() started.
+􀟈  Test withLockExecutesBlockAndReleases() started.
+􀟈  Test tickFollowsPlacementWhenRuleRequestsIt() started.
+􀟈  Test smallResizableStandardWindowStillTiles() started.
+􀟈  Test unidentifiedLargeUntitledOverlayIsExcluded() started.
+􀟈  Test tickPublishesRuleSkippedWhenNoRuleMatches() started.
+􀟈  Test sourceAllDoesNotErrorWhenExperimentalAppTargetsAreDisabled() started.
+􀟈  Test tickPlacesMatchedWindowOnNamedStage() started.
+􀟈  Test focusedWindowScopeUsesLiveProviderFocusAsRoot() started.
+􀟈  Test restoresMemberLeftAtEdgeOfVanishedRightDisplay() started.
+􀟈  Test tickPublishesRuleFailedWhenRulesAreInvalid() started.
+􀟈  Test spec002CatalogCanFilterByScope() started.
+􀟈  Test commandApplicationsReuseTheCallerEpisodeAndCountPasses() started.
+􀟈  Test persistedManualOverrideSuppressesRulePlacementAfterRestart() started.
+􀟈  Test gridCanUseFocusedWindowFrameAsRecursiveRoot() started.
+􀟈  Test unreachableMemberOfLiveProcessBlocksCleanExit() started.
+􀟈  Test tickSkipsPlacementForNonTileCandidate() started.
+􀟈  Test absentMemberKeepsItsLeafBeyondFortyFiveSecondsAndReturnsToItsPlace() started.
+􀟈  Test assignCanInsertAtRequestedIndexWithoutStealingTargetFocus() started.
+􀟈  Test lockPathForDataURL() started.
+􀟈  Test componentLockSurvivesConcurrentAcquireAndRelease() started.
+􀟈  Test reconcileWindowIDsRefusesTwoNearCandidatesWithSmallScoreGap() started.
+􀟈  Test bspModeUsesTheSameToleranceForSuccessAndRewrite() started.
+􀟈  Test tickPublishesRuleMatchedAndAppliedEvents() started.
+􀟈  Test spec002CatalogEventTypesAreStableAndUnique() started.
+􀟈  Test absentNativeFullscreenMemberIsLeftToMacOS() started.
+􀟈  Test liveTickSplitsLatency() started.
+􀟈  Test nativeFullscreenWindowIsNotResizedByUnhideAll(parked:) started.
+􀟈  Test nonResizableStandardWindowIsExcludedEvenWithFullscreenButton() started.
+􀟈  Test spec002CatalogContainsMinimumAutomationEvents() started.
+􀟈  Test nearestEdgeWinsInGapAndInteriorWinsOverExpandedNeighbor() started.
+􀟈  Test applyTreeScopeWritesOnceWithItsGenerationAndRepublishesReadBackFrames() started.
+􀟈  Test failedWriteInvalidatesTheSharedSnapshot() started.
+􀟈  Test snapshotPrunesMissingWindowPinsAndLogsEvent() started.
+􀟈  Test inactiveStageIsExcludedFromResizeHandles() started.
+􀟈  Test pinVisibilityIsLimitedByScope() started.
+􀟈  Test queryComponentsReturnsArrayPayload() started.
+􀟈  Test gridFocusPickerFallsBackToTopmostIntersectingWindowWhenCenterIsEmpty() started.
+􀟈  Test gridFocusPickerPrefersTopmostWindowContainingCellCenter() started.
+􀟈  Test commandRoundTripsThroughDistributedNotificationPayload() started.
+􀟈  Test activeStageSiblingStillOffDisplaysBlocksCleanExit() started.
+􀟈  Test singleToleranceDecidesSuccessAndRewrite() started.
+􀟈  Test memberOfDeadProcessIsClosedAndAllowsCleanExit() started.
+􀟈  Test gridSplitsDisplayIntoDeterministicCells() started.
+􀟈  Test equalDistanceUsesFocusedWindow() started.
+􀟈  Test resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test nativeFullscreenStartedDuringReservedZoomIsNeverResized() started.
+􀟈  Test parkedWindowThatLeftNativeFullscreenIsStillRestored() started.
+􀟈  Test restoresInactiveMemberAbsentFromVisibleSnapshot() started.
+􀟈  Test treeModePersistsNoAutomaticIntent() started.
+􀟈  Test maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test startRunRestoresOutsideRecoveryLock() started.
+􀟈  Test missingMemberWithoutPIDIsIdentifiedInFailureDiagnostic() started.
+􀟈  Test unreadableStateIsBackedUpAndNeverOverwritten() started.
+􀟈  Test olderIntentDecodesAndReservedIntentRoundTrips() started.
+􀟈  Test overBudgetWindowIsNotWrittenAndIsReported() started.
+􀟈  Test reconciliationRequiresFrameProximityEvenForSingleCandidate() started.
+􀟈  Test nativeFullscreenWindowKeepsItsLeafAndIsNotPlaced() started.
+􀟈  Test reconciliationRefusedWhileMemberProcessIsAlive() started.
+􀟈  Test memberWithoutPidAbsentFromSnapshotCountsAsNotRestored() started.
+􀟈  Test reconciliationAcceptedWhenMemberProcessIsGone() started.
+􀟈  Test clampedFrameStillHiddenCountsAsFailure() started.
+􀟈  Test commandRejectsMissingCommandName() started.
+􀟈  Test failedIntentionalShutdownKeepsRecoveryPendingWithoutCrashEvents() started.
+􀟈  Test rulesExplainReturnsMatchedRule() started.
+􀟈  Test hiddenRailUsesFullscreenAndPinRestoresReservation(layoutMode:) started.
+􀟈  Test unknownCollapsedWidthAndPerDisplayVisibilityUseExistingRuntime() started.
+􀟈  Test queryComponentsIncludesAcquiredLock() started.
+􀟈  Test reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+􀟈  Test newWindowSplitsActiveLeafAlongItsDominantDimension() started.
+􀟈  Test cachedValueDoesNotHideFileThatBecameUnreadable() started.
+􀟈  Test treeContainerIsTheLayoutContainerWithOuterGaps() started.
+􀟈  Test rulesListReturnsPriorityOrder() started.
+􀟈  Test realCrashStillReportsItsRecoveryAndRejectedWindow() started.
+􀟈  Test spec002RulesDecodeFromTomlFixture() started.
+􀟈  Test stageMismatchDoesNotMatch() started.
+􀟈  Test reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode:) started.
+􀟈  Test rulesValidateReportsConflicts() started.
+􀟈  Test windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) started.
+􀟈  Test reservedZoomReflowsAfterRestartAndWiderRail() started.
+􀟈  Test commandApplicationOpensItsEpisodeAndReportsContractFields() started.
+􀟈  Test namedKeysResolveWithoutTheKeyboardLayout() started.
+􀟈  Test floatingWindowSubroleIsExcluded() started.
+􀟈  Test desktopPinKeepsHomeScopeButLeavesActiveLayout() started.
+􀟈  Test regexAppAndTitleMatch() started.
+􀟈  Test popupWithoutFurnitureIsExcluded() started.
+􀟈  Test watcherRestoresOutsideLockAndKeepsMarkerTakenByNewInstance() started.
+􀟈  Test explicitTargetDoesNotDependOnFocusOrAffectOtherDisplay() started.
+􀟈  Test acceptedFrameOnlySuppressesTheCommandOfItsOwnGeneration() started.
+􀟈  Test unreadableRestoreSnapshotIsKeptAndNeverOverwritten() started.
+􀟈  Test rulesValidateAcceptsFixture() started.
+􀟈  Test legacyModesAreMigratedOnceByTheFirstProducerSnapshot() started.
+􀟈  Test clampedButVisibleFrameCountsAsSuccess() started.
+􀟈  Test missingMatchReturnsValidationError() started.
+􀟈  Test memberRecordsPidAndKeepsPresentationStateWhenOmitted() started.
+􀟈  Test menuActionMaximizesTheSelectedWindowInsteadOfFocusedWindow() started.
+􀟈  Test concurrentMutationsFromTwoStoresLoseNothing() started.
+􀟈  Test closingFloatZoomTargetRestoresRemainingWindowsWithoutFocus() started.
+􀟈  Test applyTreeScopePublishesItsApplication() started.
+􀟈  Test treeModeIgnoresAutoAndCommandIntentsButHonoursZoomMarker() started.
+􀟈  Test concurrentMutationsWithCachedReadsLoseNothing() started.
+􀟈  Test layoutCommandActivityTracksScopesSeparatelyFromGlobalActivity() started.
+􀟈  Test excludeWithPlacementActionReturnsValidationError() started.
+􀟈  Test duplicateIdsReturnValidationError() started.
+􀟈  Test validRulesReturnNoValidationErrors() started.
+􀟈  Test subscriptionResetsAfterRotationAndSkipsPartialLine() started.
+􀟈  Test resizeDuringNeighbourAbsenceSurvivesItsReturn() started.
+􀟈  Test restoresActiveStageSiblingLeftOffAllDisplays() started.
+􀟈  Test currentConfigReloadsChangedFileAndKeepsLastValidConfig() started.
+􀟈  Test assignRecordsPreviousFocusOnlyWhenFocusChanges() started.
+􀟈  Test confirmedDestructionRemovesTheLeafWithoutWaitingForThePurge() started.
+􀟈  Test legacyMemberWithoutPidDecodes() started.
+􀟈  Test excludeWithLayoutActionReturnsValidationError() started.
+􀟈  Test applyTreeScopeIgnoresNonTreeAndInactiveScopes() started.
+􀟈  Test firstMatchUsesHighestPriorityThenId() started.
+􀟈  Test windowDestroyedDuringGestureGivesPlaceWithoutFence() started.
+􀟈  Test displayMarginsAndChangedVisibleAreaBoundTheMaximizedFrame() started.
+􀟈  Test stateAuditHealKeepsChangesWrittenDuringSnapshot() started.
+􀟈  Test nativeFullscreenAndEmptyContainerAreRefused(native:) started.
+􀟈  Test layoutCommandActivityKeepsLongestExpiryAcrossConcurrentWriters() started.
+􀟈  Test legacyMutableStageIsLaidOutFromTheTreeNotFromGeometry() started.
+􀟈  Test cachedLoadsDecodeUnchangedFileOnce() started.
+􀟈  Test externalWriteBetweenLoadAndMutateIsNotLost() started.
+􀟈  Test failedFrameStaysSuppressedPastCooldownWhenObservedFrameIsUnchanged() started.
+􀟈  Test stabilityIsReadAfterWriteEnd() started.
+􀟈  Test pinsSurviveFortyFiveSecondsOfAbsence() started.
+􀟈  Test borderControllerExposesGroupIndicatorState() started.
+􀟈  Test affinityActionWritesGeneratedPlacementRule() started.
+􀟈  Test exactAppTitleRoleAndStageMatch() started.
+􀟈  Test resizeFromOutsideRightEdgeMovesFenceOnFirstAttempt() started.
+􀟈  Test invalidRegexReturnsValidationError() started.
+􀟈  Test saveWithIdenticalContentDoesNotRewriteFile() started.
+􀟈  Test eventLogRotationUnderConcurrencyKeepsEveryLineWhole() started.
+􀟈  Test commandClosesMembershipBurst() started.
+􀟈  Test hidingAndLayoutShareOnePass() started.
+􀟈  Test spatialBspTreeIsNotReconciledDuringMembershipChurn() started.
+􀟈  Test releaseGraceWithoutDropKeepsGesture() started.
+􀟈  Test persistentStageStoresGroups() started.
+􀟈  Test infeasibleRefusalIsAcceptedWithoutRetry() started.
+􀟈  Test destinationsMarkCurrentContextAndExposeAlternatives() started.
+􀟈  Test unmanagedAndTransientWindowsAreIgnored() started.
+􀟈  Test gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden(productionWiring:) started.
+􀟈  Test schedulerClosesSpaceGuardAtCap() started.
+􀟈  Test pinDesktopActionPersistsPinAndDoesNotMoveWindow() started.
+􀟈  Test fullscreenLikeChangeDoesNotTriggerManualResizeOrRelayout() started.
+􀟈  Test stageIgnoresFocusChangeWithoutRecentUserInput() started.
+􀟈  Test echoWithFewPointsOfDifferenceIsNotRewritten() started.
+􀟈  Test progressiveExternalResizeDuringCommandIntentSnapsBackOnceOutsideTolerance() started.
+􀟈  Test queryStateAndWindowsExposeStablePayloads() started.
+􀟈  Test nestedSwapMinimumCorrectionKeepsWriteBudgetAndReachesStability(neighbourMinimum:) started.
+􀟈  Test repeatedObservationOfUnchangedWindowsLeavesStateEqual() started.
+􀟈  Test clampedFrameIsReanchoredToRequestedOriginWithActualSize() started.
+􀟈  Test idleArrangedStageReceivesNoPlacement() started.
+􀟈  Test zoomIntentStaysValidWhileZoomedWindowRemainsInScope() started.
+􀟈  Test commandIntentCanKeepSmallPaneAfterFreshnessWindow() started.
+􀟈  Test readerSnapshotWritesNoStateFile() started.
+􀟈  Test queryDisplaysDesktopsStagesGroupsAndRulesExposePayloads() started.
+􀟈  Test inconclusiveRefusalReadIsDelayed() started.
+􀟈  Test passiveQueriesDoNotReadSystemSnapshot() started.
+􀟈  Test treeScopeIgnoresPhysicalDisplayDrift() started.
+􀟈  Test spacedMembershipChangesAreEachPlacedImmediately() started.
+􀟈  Test actionWithMissingWindowDoesNotMutateState() started.
+􀟈  Test commandActivityDoesNotSuspendTreeScope() started.
+􀟈  Test ruleChangingActiveStageHidesAndLaysOutInOnePass() started.
+􀟈  Test manualResizeIsNotSuppressedByCommandIntentOnAnotherDisplay() started.
+􀟈  Test desktopStageActionMovesWindowToExactTargetWithoutFollowingFocus() started.
+􀟈  Test titlebarClickIsEligibleForManagedWindow() started.
+􀟈  Test stageIgnoresFocusChangeWithoutInputMonitor() started.
+􀟈  Test unchangedMutateKeepsModificationTime() started.
+􀟈  Test dragReleaseGraceDefersDeadlinesToItsEnd() started.
+􀟈  Test pinnedActionCanChangeScopeAndUnpin() started.
+􀟈  Test revertedAppliedFrameDoesNotTriggerRepeatedApplyLoop() started.
+􀟈  Test hiddenRailStageLabelsExposeNonEmptyStagesAndOneNextEmptyDestination() started.
+􀟈  Test heightChangesEligibleBand() started.
+􀟈  Test minimumWidthOverlappingRailDoesNotHideSiblingsOrPersistZoom() started.
+􀟈  Test focusJitterDoesNotTriggerRelayout() started.
+􀟈  Test parkedFullscreenSizedWindowIsNotTreatedAsActiveFullscreen() started.
+􀟈  Test affinityRemoveDeletesGeneratedAppRulesOnly() started.
+􀟈  Test fullscreenCommandRestoreIntentDoesNotRetileWhileFullscreenIsActive() started.
+􀟈  Test newBSPWindowIsInsertedNextToPreviouslyFocusedMember() started.
+􀟈  Test inactiveFullscreenLikeStageWindowIsNotHidden() started.
+􀟈  Test sharedSnapshotReusesRecentSnapshotUntilExpiredOrInvalidated() started.
+􀟈  Test reloadKeepsPreviousConfigWhenValidationFails() started.
+􀟈  Test clampedCommandIntentIsStabilizedInsideDisplayBounds() started.
+􀟈  Test frameOutsideEveryDisplayDoesNotOverwriteMemberFrame() started.
+􀟈  Test schedulerRunsMaintainerBurstEndAtItsDeadline() started.
+􀟈  Test disabledFeatureNeverMarksClickEligible() started.
+􀟈  Test schedulerConfirmsRefusalAtItsDeadline() started.
+􀟈  Test generatedStageLabelsUseVisibleOrderInsteadOfTechnicalIDs() started.
+􀟈  Test unmatchedCommandIntentIsRetried() started.
+􀟈  Test readerConsumesTilerSnapshotDuringItsCycle() started.
+􀟈  Test dropProofFromAnotherProcessSuppressesGesture() started.
+􀟈  Test reloadAppliesValidConfig() started.
+􀟈  Test movingPinnedWindowToAnotherStageRemovesInstancePin() started.
+􀟈  Test helpVariantsExitZeroOnStdout() started.
+􀟈  Test scopedCommandActivityOnOneDisplayDoesNotStopOtherDisplay() started.
+􀟈  Test writerSnapshotDoesNotRewriteUnchangedState() started.
+􀟈  Test failedStableVisibleDisplayDriftRevertKeepsConcurrentChanges() started.
+􀟈  Test membershipBurstIsClosedAtBurstCap() started.
+􀟈  Test soloTiledWindowIsNotPersistedAsMaximized() started.
+􀟈  Test recentlyObservedMissingMemberKeepsRailGrace(readerBeforeWriter:) started.
+􀟈  Test oldScreenEdgeDoesNotHideAnUnobservedNormalWindow(reusedWindowID:) started.
+􀟈  Test oscillatingApplicationHeightIsNotPropagated() started.
+􀟈  Test gestureConsumedByDropDoesNotMoveFence() started.
+􀟈  Test clampedMinimumSizeSuppressesLaterSmallerRequests() started.
+􀟈  Test historicalMissingMembersAreNotDisplayedAsLiveWindows(hasOldObservation:) started.
+􀟈  Test diagonalDisplayIsRejected() started.
+􀟈  Test layoutCommandActivityReadsLegacyGlobalFile() started.
+􀟈  Test hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test focusedHiddenFullscreenSizedWindowRestoresWithoutBspRelayout() started.
+􀟈  Test closedWindowGivesItsPlaceToNeighborInOnePass() started.
+􀟈  Test changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) started.
+􀟈  Test tileClassificationSurvivesUnreadableAttributes() started.
+􀟈  Test commandClosesSpaceGuard() started.
+􀟈  Test moveGestureWithoutDropSnapsBackToTree() started.
+􀟈  Test displayTopologyChangeSuppressesRelayoutUntilSettled() started.
+􀟈  Test guardFallsBackToSpaceDidChangeAndStableReads() started.
+􀟈  Test pressedMouseButtonSuspendsLayoutApply() started.
+􀟈  Test layoutIntentPruneKeepsAbsentDisplayForTenMinutesWithoutRewrite() started.
+􀟈  Test upDirectionFindsDisplayAbove() started.
+􀟈  Test focusOnHiddenSiblingAfterZoomMakesItVisible() started.
+􀟈  Test clampedSizeRefusalIsRetriedAfterRefusalMemoryExpires() started.
+􀟈  Test disabledRuleDoesNotMatch() started.
+􀟈  Test excludesSelfFromCandidates() started.
+􀟈  Test shrinkClampedWideWindowRepairsSiblingIntoRemainingSpace() started.
+􀟈  Test fullscreenLikeWindowHidesActiveStageSiblings() started.
+􀟈  Test externalChangeIsRevertedOnceThenAccepted() started.
+􀟈  Test failedFrameIsRetriedAfterRefusalMemoryExpires() started.
+􀟈  Test guardWithFailedReadsWaitsForCap() started.
+􀟈  Test confirmedRefusalIsCorrectedOnceWithinWriteBudget() started.
+􀟈  Test policyExcludedWindowsAreNotStageManaged() started.
+􀟈  Test stageAssignFollowsTargetStageImmediately() started.
+􀟈  Test clampedMinimumSizeSuppressesLaterSmallerRequestsEvenAfterWindowGrows() started.
+􀟈  Test stageIgnoresFocusRightAfterWindowDisappearance() started.
+􀟈  Test shiftedScreenDominantFullscreenSizedWindowIsReanchoredAfterRestart() started.
+􀟈  Test returnsNilWhenNoDisplayInDirection() started.
+􀟈  Test releaseBeforeDropLeavesSessionToDrop() started.
+􀟈  Test edgeExclusionsProtectWindowControls() started.
+􀟈  Test clampedMinimumSizeSuppressesLaterSmallerRequestsEvenWhenMacOSShiftsPosition() started.
+􀟈  Test resizeGestureMovesTreeFenceAndNeighborOnce() started.
+􀟈  Test geometryChangeAfterZoomExitIsLaidOut() started.
+􀟈  Test resizeGesturePreservesNestedSplit() started.
+􀟈  Test stableVisibleDisplayDriftIsIgnoredImmediatelyAfterTopologyChange() started.
+􀟈  Test commandActivityDoesNotDelayReclaimAfterStageMemberDisappears() started.
+􀟈  Test mouseUpWithoutCandidateReleasesWithoutGraceOrDrop() started.
+􀟈  Test resizeCommandReflowsLayoutAroundResizedWindowAndPersistsIntent() started.
+􀟈  Test snapshotLeavesVisibleDisplayDriftForMaintainerRepair() started.
+􀟈  Test stabilityAfterRefusalCorrectionTargetsCorrectedPlan() started.
+􀟈  Test releaseWithoutDropEndsDragImmediatelyWithoutGrace() started.
+􀟈  Test stageSummonRepairsWindowVisibleOnDifferentDisplay() started.
+􀟈  Test growthClampedFramesAreExcludedWithoutPersistingBrokenLayoutIntent() started.
+􀟈  Test hotplugDoesNotSaveHiddenFrameAsSoloMaximizedFrame() started.
+􀟈  Test contentClickIsNotTitlebar() started.
+􀟈  Test tiledScopeMembershipChurnSettlesBeforeRelayout(spacing:) started.
+􀟈  Test recognizesDisplayByPreviousIDWhenAvailable() started.
+􀟈  Test failedStableVisibleDisplayDriftDoesNotCommitMembership() started.
+􀟈  Test applyPlanUsesCollapsedRailWidthWhenDynamicLeftGapIsEnabled() started.
+􀟈  Test externalResizeSnapsBackToSavedLayoutIntent() started.
+􀟈  Test selfTestFailsWhenAccessibilityIsDenied() started.
+􀟈  Test failedReadDoesNotConfirmRefusal() started.
+􀟈  Test focusedStageRestoreAndInactiveHidingShareOnePass() started.
+􀟈  Test neighborToTheRightIsFoundWhenAlignedHorizontally() started.
+􀟈  Test spec002SubscribeReadsAppendedEventsUnderOneSecond() started.
+􀟈  Test applyPlanSkipsWindowsAlreadyAtTargetFrames() started.
+􀟈  Test fingerprintNormalizesStableDisplayShape() started.
+􀟈  Test nativeFullscreenOnOneDisplayDoesNotStopOtherDisplay() started.
+􀟈  Test refusesAmbiguousFingerprintMatch() started.
+􀟈  Test focusedStageRestoreWaitsForRecentMissingMemberToSettle() started.
+􀟈  Test maximizedLikeWindowWithoutNativeSignalDoesNotHideActiveStageSiblings() started.
+􀟈  Test accessibilityDeniedArmsNoDeadline() started.
+􀟈  Test recognizedDropKeepsGraceAndLeavesProofAcrossProcesses() started.
+􀟈  Test stagePositionCommandsFollowVisibleRailOrder() started.
+􀟈  Test spec002SubscribeFromNowSkipsExistingEvents() started.
+􀟈  Test queryHealthAndEventsExposePayloads() started.
+􀟈  Test externalResizeAfterRecentCommandIntentSnapsBackToCommandLayout() started.
+􀟈  Test membershipSettlingOnOneDisplayDoesNotStopOtherDisplay() started.
+􀟈  Test daemonHealthWarnsWhenPidfileIsMissing() started.
+􀟈  Test railDropAtIndexInsertsIntoHiddenTreeStage() started.
+􀟈  Test newWindowIsPlacedInOnePassWithoutWaiting() started.
+􀟈  Test spec002SubscriptionServiceCanReadAllWithFilters() started.
+􀟈  Test activeLayoutCommandSuppressesNonTreeRelayout() started.
+􀟈  Test staleCommandIntentStillSuppressesReflowWhenLayoutMatchesWithoutRefreshingExpiry() started.
+􀟈  Test commandArmsStabilityAndKeepsItsGeneration() started.
+􀟈  Test shiftedFullscreenSizedClampedWindowIsReanchoredBeforeSiblingHide() started.
+􀟈  Test treeBalanceResetsEveryRatioInOneApplication() started.
+􀟈  Test recognizedBspGestureOverridesSavedGridAndSurvivesFocusChange(commandInProgress:) started.
+􀟈  Test staleDisplayMembershipIsPreservedUntilParkingHeal() started.
+􀟈  Test failedFrameDoesNotTriggerRepeatedApplyLoop() started.
+􀟈  Test snapshotKeepsDisconnectedDisplayScopesWithoutContainingDisplayReassign() started.
+􀟈  Test newTileCandidatesCanFollowFocusedDisplay() started.
+􀟈  Test stageSwitchIgnoresStaleFocusFromHiddenPreviousStage() started.
+􀟈  Test spec002SubscribeInitialStateEmitsSnapshotEvent() started.
+􀟈  Test dragReleaseSnapsBackWhenAuthoritativeLayoutIntentExists() started.
+􀟈  Test focusFollowsMousePickerTargetsActiveStageWindowAtPoint() started.
+􀟈  Test snapshotMarksClosedWindowsMissingBeforePruningPersistentStages() started.
+􀟈  Test stageSwitchPreservesMaximizedWindowAndKeepsSiblingsHidden() started.
+􀟈  Test snapshotPrunesDisconnectedActiveDisplay() started.
+􀟈  Test layoutFlattenAndSplitReturnCommandResults() started.
+􀟈  Test stageSwitchToAlreadyActiveStageDoesNotReapplyLayout() started.
+􀟈  Test repeatedStageSwitchToAlreadyActiveMissingNativeFullscreenRetriesActivation() started.
+􀟈  Test inactiveStageWindowsAreHiddenInAerospaceCorner() started.
+􀟈  Test nonTileCandidatesRemainUnscoped() started.
+􀟈  Test displaySendRemovesInstancePin() started.
+􀟈  Test snapshotKeepsDisconnectedDisplayScopesWithoutFallbackReassign() started.
+􀟈  Test stageAssignPositionCanTargetHiddenEmptyStageSlots() started.
+􀟈  Test stageSwitchIsNotTreatedAsMembershipChange() started.
+􀟈  Test toggleSplitRequiresTreeMode() started.
+􀟈  Test policyExcludedWindowDoesNotRemainStageManaged() started.
+􀟈  Test treeStageSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() started.
+􀟈  Test stageMoveToDisplayMovesActiveStageMembership() started.
+􀟈  Test treeToggleSplitFlipsParentSplitOfActiveWindow() started.
+􀟈  Test spec002EventLogReadsEnvelopeAndLegacyEvents() started.
+􀟈  Test stableVisibleDisplayDriftIsReconciledAfterRulesAndManualMovesHadPriority() started.
+􀟈  Test catalogContainsWindowPinEvents() started.
+􀟈  Test daemonHealthReportsModularComponentsWhenMonolithicPidfileIsMissing() started.
+􀟈  Test clampedHeightExcludesWindowAndRelayoutsRemainingTiles() started.
+􀟈  Test crossDisplayDropKeepsPreviewPlacementAfterRelease(destinationHasWindow:) started.
+􀟈  Test stageSummonMovesExplicitWindowToActiveStage() started.
+􀟈  Test ownAppliedFramesAreNotTreatedAsManualResizeOnNextTick() started.
+􀟈  Test stageAssignEmptySkipsNamedEmptyStagesAndCreatesNextStage() started.
+􀟈  Test stageCreateRenameReorderListAndDeleteEmptyInactiveStage() started.
+􀟈  Test fullscreenExitGuardTimesOutWithinOneEpisode() started.
+􀟈  Test commandIntentBlocksImmediateReflow() started.
+􀟈  Test eventLogRotatesBeforeAppendingPastLimit() started.
+􀟈  Test treeSplitVerticalStacksParentSplit() started.
+􀟈  Test singleTiledWindowStageTilesNewWindowInsteadOfHidingIt() started.
+􀟈  Test spec002EventEnvelopeRoundTripsJSONPayloads() started.
+􀟈  Test cleanExitMarkerPreventsCrashRestore() started.
+􀟈  Test stageAssignWindowNoFollowBlocksDelayedHiddenFocusFollow() started.
+􀟈  Test otherButtonReleaseKeepsLeftSessionOpen() started.
+􀟈  Test layoutSplitVerticalStacksWindowsTopToBottom() started.
+􀟈  Test knownMinimumLimitsGestureBeforeWritingRefusedNeighborSize() started.
+􀟈  Test snapshotIgnoresStaleHiddenFocusAfterExplicitStageSwitch() started.
+􀟈  Test commandIntentWithLargeInternalGapIsInvalidated() started.
+􀟈  Test fullscreenSiblingHideIsNotAdoptedAsMutableBspResize() started.
+􀟈  Test clickWithoutTargetProducesNoGesture() started.
+􀟈  Test treeMoveSwapsLeavesInOneApplicationWithoutCommandHold() started.
+􀟈  Test gestureOnManagedWindowIsConsumedOnce() started.
+􀟈  Test toggleSplitUsesFocusedDisplayTreeAndMutableBspAlias() started.
+􀟈  Test stageSwitchVisibleFollowsNonEmptyRailOrder() started.
+􀟈  Test desktopAssignRemovesInstancePin() started.
+􀟈  Test treeResizePushesDesignatedEdgeThenPullsOppositeFence() started.
+􀟈  Test windowDesktopAssignMovesActiveWindowToTargetDesktopWithoutFollowing() started.
+􀟈  Test stageSwitchToMissingNativeFullscreenTargetActivatesApplication() started.
+􀟈  Test neighborToTheLeftIsFoundForCenterDisplay() started.
+􀟈  Test legacyLineWithoutNewFieldsDecodes() started.
+􀟈  Test stageSwitchDoesNotTreatScreenSizedWindowAsFullscreenWithoutZoomIntent() started.
+􀟈  Test desktopSummonSwitchesRequestedDesktopToActiveDisplay() started.
+􀟈  Test sessionWithoutObserverHasNoTarget() started.
+􀟈  Test treeWarpReinsertsByCuttingNeighborLeafShape() started.
+􀟈  Test nativeFullscreenFocusPrefersExactApplicationWindowOverBundleActivation() started.
+􀟈  Test toggleFullscreenRecordsZoomedIntentWithAppliedFrames() started.
+􀟈  Test episodeIdIsSetByContextAndStableAcrossContinue() started.
+􀟈  Test treeModeRefusesInsertJoinAndWidthWithFailureExitCode() started.
+􀟈  Test catalogDeclaresLayoutEventsAndKeepsObsoleteMutableBspTypes() started.
+􀟈  Test bspNewWindowDoesNotInheritStaleManualRatio() started.
+􀟈  Test stageSwitchPersistsTargetStageBeforeRestoringWindows() started.
+􀟈  Test nativeFullscreenFocusActivatesApplicationWithoutSwitchingStage() started.
+􀟈  Test stageSwitchIgnoresMissingMaximizedMemberWhenRestoringLiveStageMembers() started.
+􀟈  Test unconsumedGestureOnSameWindowKeepsFirstStartFrame() started.
+􀟈  Test placingWindowOnAnotherDisplayRelayoutsVisibleSourceStageImmediately() started.
+􀟈  Test snapshotPersistsFocusedWindowInStage() started.
+􀟈  Test snapshotSuppressesHiddenCrossDisplayFocusWhenAWindowJustWentMissing() started.
+􀟈  Test temporarilyMissingWindowIsNotPrunedAfterShortAXGap() started.
+􀟈  Test aFocusableLeafWithoutActionReachesTheFinalTargets() started.
+􀟈  Test repeatedStageSwitchToAlreadyActiveHiddenStageRestoresMembers() started.
+􀟈  Test activeWindowDragSuppressesMaintainerRelayoutAcrossActivityInstances() started.
+􀟈  Test aFocusableElementIsALeafUnlessTheNextFocusableInPreorderIsItsDescendant() started.
+􀟈  Test mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing(productionWiring:) started.
+􀟈  Test episodeClosesAfterOneSecondWithoutActivityAndNewCauseGetsNewId() started.
+􀟈  Test inactiveFloatingStageWindowsAreRemovedFromStageManagement() started.
+􀟈  Test overlappingEpisodeCountsStabilityFromItsOwnPass() started.
+􀟈  Test snapshotCanIgnoreMacFocusWhenStageFollowsFocusIsDisabled() started.
+􀟈  Test repeatedStageSwitchToAlreadyActiveMissingStageFocusesApplicationWindow() started.
+􀟈  Test persistentActiveStageModeControlsApplyPlan() started.
+􀟈  Test selfTestPassesForHealthySnapshot() started.
+􀟈  Test stageAssignPositionUsesVisibleRailOrder() started.
+􀟈  Test writesStatusAndAppliesManualSnapshot() started.
+􀟈  Test applyPlanTracksVisibleRailWidthWhenResizeLayoutModeIsEnabled() started.
+􀟈  Test activeWindowDragSuppressesMaintainerRelayout() started.
+􀟈  Test staleIntentWithHoleIsInvalidatedAndRebalanced() started.
+􀟈  Test warpMovesSmallWindowAcrossRootSplitInsteadOfSwappingFrames() started.
+􀟈  Test searchTextKeepsChildTextWithoutRepeatingTheTitle() started.
+􀟈  Test stageSwitchToTargetWithOnlyStaleMissingMembersSwitchesAndRecallsApplication() started.
+􀟈  Test stageSwitchMarksLayoutCommandActivity() started.
+􀟈  Test layoutInsertAndZoomParentApplyFrames() started.
+􀟈  Test treePlaceOnAnotherDisplayMovesLeafAtRequestedRank() started.
+􀟈  Test commandIntentPersistsWithRecentDriftAndDoesNotGetInvalidated() started.
+􀟈  Test displayTilingOverridesDecodeFromToml() started.
+􀟈  Test desktopFocusHidesOutgoingDesktopAndRestoresIncomingDesktop() started.
+􀟈  Test commandIntentIsNotPersistedOnPartialCommandFailure() started.
+􀟈  Test mouseFollowerMovesToWindowCenterOnlyWhenEnabled() started.
+􀟈  Test directionalWindowFocusAcrossOffsetDisplaysFollowsVisualOverlap() started.
+􀟈  Test convertsPrimaryScreenPointBetweenNSAndAXCoordinates() started.
+􀟈  Test eventLogAppendsJsonLines() started.
+􀟈  Test windowCommandEventCapturesWarpDirectionAndClampOutcome() started.
+􀟈  Test rememberedVisibleSiblingWithoutSystemFocusDoesNotExitZoom() started.
+􀟈  Test memberReturnGuardClosesOnUserSpace() started.
+􀟈  Test snapshotCreatesEmptyScopeForNewlyConnectedDisplay() started.
+􀟈  Test validationTranslatesDecodeErrors() started.
+􀟈  Test swapIntentPreventsMaintainerFromRevertingToSpatialBSPOrder() started.
+􀟈  Test moveIntentIsNotPersistedWhenFrameIsClamped() started.
+􀟈  Test parkedStagesAreWarnNotFail() started.
+􀟈  Test completeNonCanonicalIntentIsPreserved() started.
+􀟈  Test electronBundlesAreDetectedByTheirFramework() started.
+􀟈  Test convertsAXRectBackToNSRectOnContainingScreen() started.
+􀟈  Test directionalWindowFocusChoosesGeometricEntryWindowOnAdjacentDisplay() started.
+􀟈  Test legacyTreeWarpInsertsIntoImmediateNeighborSlot() started.
+􀟈  Test spec002CoreSurfacesRemainAvailableTogether() started.
+􀟈  Test fullscreenTogglesCallUnderlyingWindowActions() started.
+􀟈  Test railSettingsHideOnMaximizedDefaultsToNativeFullscreenOnly() started.
+􀟈  Test appTargetsFilterRolesAndPreserveActionableElements() started.
+􀟈  Test theProcessOfAnAppTargetIsReadFromItsID() started.
+􀟈  Test treeFlattenEqualsBalance() started.
+􀟈  Test railExposesMaximizedPresentationInsteadOfDroppingStageState() started.
+􀟈  Test titlebarContextMenuDefaultsAreSafe() started.
+􀟈  Test macroRecordingRoundTripsAsJSON() started.
+􀟈  Test temporarilyMissingWindowKeepsStageAcrossFullscreenTransition() started.
+􀟈  Test sendToDisplayWritesTheMovedWindowOnceWithoutIntermediateMove() started.
+􀟈  Test externallyRestoredHiddenWindowIsNotAnInferredResize() started.
+􀟈  Test stageSwitchToRecentlyMissingTargetSwitchesAndRecallsApplication() started.
+􀟈  Test acceptedResponseReportsOnlyMatchingRequestDiagnostics(matchingRequest:) started.
+􀟈  Test directionalWindowMoveFallsThroughToAdjacentDisplayAtStageEdge() started.
+􀟈  Test focusedBorderIsShownWhenNoWindowOccludesFocusedWindow() started.
+􀟈  Test tileCandidatesAreAssignedToDefaultStageOnContainingDisplay() started.
+􀟈  Test bookmarkFocusReactivatesWindowStage() started.
+􀟈  Test applyPlanUsesVisibleFrameOfEachDisplay() started.
+􀟈  Test staleBookmarkIsRemovedOnFocus() started.
+􀟈  Test railRuntimeStateKeepsBackwardCompatiblePinnedDefault() started.
+􀟈  Test clickVariantsAreRoutedToProvider() started.
+􀟈  Test focusChangesDuringPassDoNotProduceHideThenRestore() started.
+􀟈  Test tsMsMatchesTimestampAndSurvivesTheLog() started.
+􀟈  Test snapshotSwitchesStageWhenMacFocusPointsToHiddenInactiveStage() started.
+􀟈  Test treeDesktopSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() started.
+􀟈  Test floatStageModeDoesNotReplaySavedTilingIntent() started.
+􀟈  Test stateAuditFailsOnDuplicateMembership() started.
+􀟈  Test explicitResizeOfActiveVisibleWindowStillWorks(mode:) started.
+􀟈  Test railStaysVisibleBeforeSoleTiledWindowCoveringDisplay() started.
+􀟈  Test bspUsesSpatialOrderAfterManualReposition() started.
+􀟈  Test focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test shippedExampleConfigIsValidWithoutWarning() started.
+􀟈  Test borderConfigDecodesFromToml() started.
+􀟈  Test spec002StateSnapshotRoundTrips() started.
+􀟈  Test directionalFocusPrefersSameVisualBandBeforeDiagonalCandidate() started.
+􀟈  Test railHidesOnDisplayWithNativeFullscreenWindowEvenWhenFocusIsElsewhere() started.
+􀟈  Test childTextMakesAWebTargetSearchable() started.
+􀟈  Test displayFocusPersistsActiveDisplayAndRestoresFocusedStageWindow() started.
+􀟈  Test focusBackAndForthUsesPreviousFocusedWindow() started.
+􀟈  Test focusedBorderIsHiddenWhenAnotherWindowOccludesFocusedWindow() started.
+􀟈  Test hidingInactiveStagePreservesIntentAndDoesNotBecomeResize(mode:) started.
+􀟈  Test spec002SnapshotFixtureDecodes() started.
+􀟈  Test failedPlacementReportsOnlyMatchingGenerationDiagnostics(matchingGeneration:) started.
+􀟈  Test aWebLeafIsClickedOnItsFirstContentNotItsCenter() started.
+􀟈  Test appTargetsAreDisabledUnlessConfiguredOrOverridden() started.
+􀟈  Test identitySetUsesRealEqualityNotOnlyTheHash() started.
+􀟈  Test railHidesBeforeMaximizedWindowOnlyWhenSettingIsEnabled() started.
+􀟈  Test lostWindowRiskFailsOnlyWhenUnrecoverable() started.
+􀟈  Test rejectedRolesAreSummarizedByFrequencyThenName() started.
+􀟈  Test acceptsRegularResizableStandardWindow() started.
+􀟈  Test rejectsNonStandardSubrolesEvenWhenRawTileCandidate() started.
+􀟈  Test stageRenameWithDisplayIDRenamesClickedDisplayStageOnly() started.
+􀟈  Test aTargetHiddenByAWindowInFrontGetsNoLabel() started.
+􀟈  Test validationDoesNotSuggestWhenNothingIsClose() started.
+􀟈  Test elementsAreClippedToTheWindowSoTheirClickPointStaysInside() started.
+􀟈  Test directionalDisplayFocusUsesAdjacentDisplay() started.
+􀟈  Test desktopBackAndForthReturnsToPreviousDesktop() started.
+􀟈  Test scanIsRetriedOnlyWhileAFullyExploredElectronTreeHasNoWebArea() started.
+􀟈  Test searchHotkeyDefaultsToHyperFAndAcceptsAliases() started.
+􀟈  Test nearestTargetPrefersSmallestContainingFrame() started.
+􀟈  Test focusConfigDecodesFromToml() started.
+􀟈  Test titlebarContextMenuValidationReportsUnsafeValues() started.
+􀟈  Test rejectsModalAndNonResizableDialogs() started.
+􀟈  Test aRowWithItsOwnButtonsKeepsItsTextButAPageContainerDoesNot() started.
+􀟈  Test validationFlagsKeysThatHaveNoEffect() started.
+􀟈  Test desktopLabelPersistsAndAppearsInList() started.
+􀟈  Test aFocusableElementWithUnreadableChildrenIsNotProvenALeaf() started.
+􀟈  Test configWorkspacesSeedPersistentStageNames() started.
+􀟈  Test windowPlacementDefaultsToMacOS() started.
+􀟈  Test aLeafIsADuplicateOnlyWhenItCoversItsRetainedTarget() started.
+􀟈  Test snapshotKeepsDisconnectedDisplayMembersWhenWindowsAreTemporarilyHidden() started.
+􀟈  Test onlyScrolledOutOrOffWindowElementsHideContent() started.
+􀟈  Test selfTestWarnsOnTinyLiveTiles() started.
+􀟈  Test windowPlacementConfigDecodesFromToml() started.
+􀟈  Test treeDropAppliesCandidateMutationToPersistedTree() started.
+􀟈  Test onlyFullyExploredFocusableLeavesAreKept() started.
+􀟈  Test configValidationReportsUnsupportedTablesAsWarnings() started.
+􀟈  Test crossDisplayEmptyTreePreviewsItsFirstPlacement() started.
+􀟈  Test configValidationReportsDecodeErrors() started.
+􀟈  Test inactiveDesktopPinIsNotHiddenWhenDesktopIsActive() started.
+􀟈  Test inactiveWindowParkedOnOldBottomLeftIsReparkedToBottomRight() started.
+􀟈  Test appliesExplicitRatioToActiveWindow() started.
+􀟈  Test snapshotStillFollowsHiddenCrossDisplayFocusWhenNoWindowWentMissing() started.
+􀟈  Test targetModeValidationReportsUnsafeValues() started.
+􀟈  Test crossDisplayCenterInsertsWithFutureSmartGaps() started.
+􀟈  Test applyPlanLetsDisplayOverrideBaseGapOverrideGlobalSideGaps() started.
+􀟈  Test stageCommandsUseCurrentDesktopScope() started.
+􀟈  Test validationAcceptsEveryRailTableWithoutWarning() started.
+􀟈  Test automationSnapshotExposesWindowPresentationState() started.
+􀟈  Test displayTopologyRejectsMostlyDiagonalNeighbors() started.
+􀟈  Test rejectsWhenNoTiledWindowExists() started.
+􀟈  Test treeDropIgnoresTransientDraggedFrameAndRefillsFreedSpace() started.
+􀟈  Test focusStageMoveFollowDefaultsToTrue() started.
+􀟈  Test cleanupKeepsOnlyRecentGeneratedBackupsAndArchives() started.
+􀟈  Test inspectStaleWindowReturnsStaleReason() started.
+􀟈  Test validationSuggestsClosestKnownKeyForTypos() started.
+􀟈  Test crossDisplayEdgesApplyThePreviewedTree(operation:) started.
+􀟈  Test stateHealRepairsDuplicateStaleAndBrokenFocusState() started.
+􀟈  Test treeDropOnBottomEdgeInsertsBelowTarget() started.
+􀟈  Test titlebarContextMenuConfigDecodesFromToml() started.
+􀟈  Test railSettingsDefaultsCenterStagesAndReserveHeaderTopPadding() started.
+􀟈  Test treeDumpExposesDisplayDesktopStageAndWindowHierarchy() started.
+􀟈  Test convertsExternalScreenAbovePrimaryBetweenNSAndAXCoordinates() started.
+􀟈  Test inspectWindowReportsPinnedFloatingAndScopeReasons() started.
+􀟈  Test inspectionJSONKeepsTargetIdentityStateAndReasons() started.
+􀟈  Test targetModeConfigDecodesFromToml() started.
+􀟈  Test visiblePinHiddenInCornerIsRestoredToLastFrame() started.
+􀟈  Test configExclusionsKeepMatchingBundlesOutOfStageManagement() started.
+􀟈  Test autoIntentWithTinyTileIsInvalidated() started.
+􀟈  Test metricsExposeRuntimeAndStateCounters() started.
+􀟈  Test generatedRulesValidationReportsGeneratedFileErrors() started.
+􀟈  Test treeDropAtCenterSwapsLeaves() started.
+􀟈  Test generatedRulesAreMergedWithUserConfig() started.
+􀟈  Test crossDisplayPreviewRequiresAnEligibleSourceOnItsActiveDesktop() started.
+􀟈  Test sameScopeDropOutsideProjectedWindowsCancels() started.
+􀟈  Test railSettingsFileIsReparsedOnlyWhenItChanges() started.
+􀟈  Test sameScopeEmptyProjectionCancels() started.
+􀟈  Test legacyTreeStageRestoresHiddenWindowsFromTheTree() started.
+􀟈  Test displayTopologyFindsDirectionalNeighborByGeometry() started.
+􀟈  Test snapshotPreservesDisconnectedDisplayMembershipUntilParkingHeal() started.
+􀟈  Test automationSnapshotUsesFocusedWindowDisplayAndConfiguredRules() started.
+􀟈  Test crossDisplayEmptyProjectionKeepsHistoricalLeafOnDrop() started.
+􀟈  Test searchHotkeyValidationRejectsAKeyWithoutModifier() started.
+􀟈  Test snapshotPrunesLayoutIntentsForDisconnectedDisplays() started.
+􀟈  Test railStaysVisibleWhenFocusedWindowIsNotFullscreen() started.
+􀟈  Test railSettingsDecodeRendererGeometryAndStageAccents() started.
+􀟈  Test moveFallsBackToActiveStageFocusedWindowWhenAXFocusIsUnavailable() started.
+􀟈  Test treePreviewPersistsNothing() started.
+􀟈  Test targetModeDefaultsKeepRiskyFeaturesDisabled() started.
+􀟈  Test stateAuditPassesForHealthyState() started.
+􀟈  Test commandsHandleUnknownDisplayAndStaleWindow() started.
+􀟈  Test commandsHandleEmptyWindowSets() started.
+􀟈  Test crossDisplayPreviewRejectsFloatDestinationAndPointsOutsideDisplays() started.
+􀟈  Test snapshotDoesNotFollowFocusBackToHiddenDesktopWindow() started.
+􀟈  Test crossDisplayPreviewUsesFrozenContextAndPersistsNothing() started.
+􀟈  Test unmatchedRuleDoesNotCreateScratchpadMarker() started.
+􀟈  Test daemonHealRepairsStateAndAppliesPendingLayout() started.
+􀟈  Test newTileCandidatesCanFollowMouseDisplay() started.
+􀟈  Test doubleAcquireOnSameLiveProcessThrowsAlreadyRunning() started.
+􀟈  Test sendToDisplayMovesMembershipAndRelayoutsBothDisplays() started.
+􀟈  Test daemonHealthReportsRunningPidAndHealthyState() started.
+􀟈  Test registryReturnsActiveLocksWithStartedAt() started.
+􀟈  Test matchedScratchpadActionIsStoredAndExposed() started.
+􀟈  Test acquireOverwritesStalePidFile() started.
+􀟈  Test soleTiledWindowCoveringDisplayIsNotMaximized() started.
+􀟈  Test railDoesNotRepresentMissingNormalMember() started.
+􀟈  Test acquireWritesPidFileAndReleaseRemovesIt() started.
+􀟈  Test applyReportsAppliedClampedAndFailedFrames() started.
+􀟈  Test emptyStarAndSemicolonShowEverything() started.
+􀟈  Test railDropsMissingNativeFullscreenMemberAfterFifteenSeconds() started.
+􀟈  Test slivedOrTinyElementsAreNotHintable() started.
+􀟈  Test releaseGraceIsIgnoredForTreeModesAcrossInstances() started.
+􀟈  Test railUsesPersistedMemberFrameForParkedMaximizedWindow() started.
+􀟈  Test railDoesNotKeepStaleMissingNormalMemberDuringFullscreen() started.
+􀟈  Test snapshotPersistsNativeFullscreenPresentationState() started.
+􀟈  Test railShowsSoleTiledWindowAsNormalEvenWhenItCoversDisplay() started.
+􀟈  Test treeBookmarkFocusHidesAndLaysOutInOneApplication() started.
+􀟈  Test railKeepsRecentlyMissingNormalMemberDuringStageSwitch() started.
+􀟈  Test treeDesktopSwitchHidesAndLaysOutInOneApplication() started.
+􀟈  Test lateWindowsKeepLabelsAndTheHighlightedTarget() started.
+􀟈  Test railRepresentsMissingNativeFullscreenMember() started.
+􀟈  Test nearVisibleFrameWindowIsMaximized() started.
+􀟈  Test railContentSignatureIsStableUntilVisibleContentChanges() started.
+􀟈  Test anEmptyBarSelectsNothing() started.
+􀟈  Test windowDisplaySendWritesSourceAndTargetInOneApplication() started.
+􀟈  Test physicalDirectionalFocusKeepsPhysicalFramesOutsideTreeModes() started.
+􀟈  Test nativeFullscreenTakesPrecedenceOverMaximizedFrame() started.
+􀟈  Test treeStageSwitchPublishesItsApplicationToTheServiceCenter() started.
+􀟈  Test matchingIgnoresCaseAccentsAndSpaces() started.
+􀟈  Test railDropsMissingMaximizedMemberAfterGrace() started.
+􀟈  Test questionMarkShowsPropertiesUntilTheNextKey() started.
+􀟈  Test regularWindowIsNormal() started.
+􀟈  Test treeDropAcrossScopesWritesSourceAndTargetInOneApplication() started.
+􀟈  Test treeDirectionalFocusUsesProjectedTreeFrames() started.
+􀟈  Test coveringWindowIsMaximizedWhenStageHasAnotherTiledWindow() started.
+􀟈  Test treeStageSwitchHidesAndLaysOutInOneApplicationThenFocuses() started.
+􀟈  Test roadieTargetsUseTheirDefaultAction() started.
+􀟈  Test shiftLabelJumpsToThatTarget() started.
+􀟈  Test returnVariantsChooseTheClick() started.
+􀟈  Test webTargetsRankByTheirChildText() started.
+􀟈  Test noMatchLeavesNothingHighlighted() started.
+􀟈  Test navigationWrapsAndTypingResetsTheHighlight() started.
+􀟈  Test searchKeysAreDecodedLikeHomerow() started.
+􀟈  Test lockFilePathFollowsPattern() started.
+􀟈  Test lockAcquireReleaseRoundTripsForEachComponent() started.
+􀟈  Test restoringStageSwitchWritesNoIntermediateMemorizedFrame() started.
+􀟈  Test fewResultsGetOneLetterLabels() started.
+􀟈  Test titlesStartingWithTheQueryComeFirst() started.
+roadie: stages not persisted, state file is unreadable
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-migration-4B7DBC31-3DF8-4283-B159-9FD13E6405C3.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-migration-4B7DBC31-3DF8-4283-B159-9FD13E6405C3.json.corrupt-20261013-120447; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected end of file" UserInfo={NSDebugDescription=Unexpected end of file})))
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/restore-lifecycle-run-BB786CBC-8235-4DD9-92C5-E2BD177A8AA5.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/restore-lifecycle-run-BB786CBC-8235-4DD9-92C5-E2BD177A8AA5.json.corrupt-20261013-120447; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'n' around line 1, column 3." UserInfo={NSJSONSerializationErrorIndex=2, NSDebugDescription=Unexpected character 'n' around line 1, column 3.})))
+􀟈  Test case passing 1 argument value → "yabai" to tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) started.
+􀟈  Test case passing 1 argument value → "mutableBsp" to tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) started.
+􀟈  Test case passing 1 argument value → "mutable_bsp" to tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) started.
+􀟈  Test case passing 1 argument value → "mutable-bsp" to tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) started.
+􀟈  Test case passing 1 argument parked → false to nativeFullscreenWindowIsNotResizedByUnhideAll(parked:) started.
+􀟈  Test case passing 1 argument parked → true to nativeFullscreenWindowIsNotResizedByUnhideAll(parked:) started.
+􀟈  Test case passing 1 argument point → (3678.0, -300.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 1 argument point → (3680.0, -300.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 1 argument point → (1660.0, -300.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 1 argument point → (2000.0, -928.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 1 argument point → (2000.0, 1190.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 1 argument point → (3680.0, 1190.0) to resizeHandleOutsideFrameKeepsWindow(point:) started.
+􀟈  Test case passing 2 arguments mode → .spatialBsp, layoutMode → "resize" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .spatialBsp, layoutMode → "overlay" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .bsp, layoutMode → "resize" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .bsp, layoutMode → "overlay" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .masterStack, layoutMode → "resize" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .masterStack, layoutMode → "overlay" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-corrupt-4E7E0D31-6F46-4341-A56B-09B7206E9750.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-corrupt-4E7E0D31-6F46-4341-A56B-09B7206E9750.json.corrupt-20261013-120447; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'n' in expected boolean value around line 1, column 17." UserInfo={NSDebugDescription=Unexpected character 'n' in expected boolean value around line 1, column 17., NSJSONSerializationErrorIndex=16})))
+roadie: stages not persisted, state file is unreadable
+roadie: stages not persisted, state file is unreadable
+􀟈  Test case passing 2 arguments mode → .float, layoutMode → "resize" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 2 arguments mode → .float, layoutMode → "overlay" to maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) started.
+􀟈  Test case passing 1 argument mode → .spatialBsp to reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+􀟈  Test case passing 1 argument mode → .mutableBsp to reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+􀟈  Test case passing 1 argument mode → .bsp to reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+􀟈  Test case passing 1 argument layoutMode → "resize" to hiddenRailUsesFullscreenAndPinRestoresReservation(layoutMode:) started.
+􀟈  Test case passing 1 argument mode → .masterStack to reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+􀟈  Test case passing 1 argument layoutMode → "overlay" to hiddenRailUsesFullscreenAndPinRestoresReservation(layoutMode:) started.
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-cache-corrupt-641BCA68-C6BD-4D4C-AC97-08B2044E2F97.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/state-cache-corrupt-641BCA68-C6BD-4D4C-AC97-08B2044E2F97.json.corrupt-20261013-120447; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'n' in expected boolean value around line 1, column 17." UserInfo={NSDebugDescription=Unexpected character 'n' in expected boolean value around line 1, column 17., NSJSONSerializationErrorIndex=16})))
+􀟈  Test case passing 1 argument mode → .float to reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) started.
+roadie: stages not persisted, state file is unreadable
+􀟈  Test case passing 1 argument mode → .spatialBsp to reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode:) started.
+􀟈  Test case passing 1 argument mode → .bsp to reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode:) started.
+􀟈  Test case passing 1 argument mode → .float to reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode:) started.
+􀟈  Test case passing 1 argument mode → .float to windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) started.
+􀟈  Test case passing 1 argument mode → .bsp to windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) started.
+􀟈  Test case passing 1 argument mode → .masterStack to windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) started.
+􀟈  Test case passing 1 argument mode → .spatialBsp to windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) started.
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/restore-coverage-CC154AB3-D6F6-4A8F-B95B-CBC8D630612D.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/restore-coverage-CC154AB3-D6F6-4A8F-B95B-CBC8D630612D.json.corrupt-20261013-120447; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'n' around line 1, column 4." UserInfo={NSDebugDescription=Unexpected character 'n' around line 1, column 4., NSJSONSerializationErrorIndex=3})))
+􀟈  Test case passing 1 argument native → true to nativeFullscreenAndEmptyContainerAreRefused(native:) started.
+􀟈  Test case passing 1 argument native → false to nativeFullscreenAndEmptyContainerAreRefused(native:) started.
+􀟈  Test case passing 1 argument productionWiring → false to gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden(productionWiring:) started.
+􀟈  Test case passing 1 argument productionWiring → true to gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden(productionWiring:) started.
+􀟈  Test case passing 1 argument neighbourMinimum → 0.0 to nestedSwapMinimumCorrectionKeepsWriteBudgetAndReachesStability(neighbourMinimum:) started.
+􀟈  Test case passing 1 argument neighbourMinimum → 120.0 to nestedSwapMinimumCorrectionKeepsWriteBudgetAndReachesStability(neighbourMinimum:) started.
+􀟈  Test case passing 1 argument readerBeforeWriter → false to recentlyObservedMissingMemberKeepsRailGrace(readerBeforeWriter:) started.
+􀟈  Test case passing 1 argument reusedWindowID → false to oldScreenEdgeDoesNotHideAnUnobservedNormalWindow(reusedWindowID:) started.
+􀟈  Test case passing 1 argument readerBeforeWriter → true to recentlyObservedMissingMemberKeepsRailGrace(readerBeforeWriter:) started.
+􀟈  Test case passing 1 argument reusedWindowID → true to oldScreenEdgeDoesNotHideAnUnobservedNormalWindow(reusedWindowID:) started.
+􀟈  Test case passing 1 argument hasOldObservation → false to historicalMissingMembersAreNotDisplayedAsLiveWindows(hasOldObservation:) started.
+􀟈  Test case passing 1 argument hasOldObservation → true to historicalMissingMembersAreNotDisplayedAsLiveWindows(hasOldObservation:) started.
+􀟈  Test case passing 1 argument observation → "observed" to hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test case passing 1 argument observation → "absent" to hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test case passing 1 argument observation → "written" to hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test case passing 1 argument observation → "written-direct" to hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test case passing 1 argument observation → "written-partial" to hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) started.
+􀟈  Test case passing 2 arguments targetMode → .bsp, geometryChanged → false to changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) started.
+􀟈  Test case passing 2 arguments targetMode → .bsp, geometryChanged → true to changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) started.
+􀟈  Test case passing 2 arguments targetMode → .spatialBsp, geometryChanged → false to changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) started.
+􀟈  Test case passing 2 arguments targetMode → .spatialBsp, geometryChanged → true to changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) started.
+􀟈  Test case passing 1 argument spacing → 0.08 to tiledScopeMembershipChurnSettlesBeforeRelayout(spacing:) started.
+􀟈  Test case passing 1 argument spacing → 0.25 to tiledScopeMembershipChurnSettlesBeforeRelayout(spacing:) started.
+􀟈  Test case passing 1 argument commandInProgress → false to recognizedBspGestureOverridesSavedGridAndSurvivesFocusChange(commandInProgress:) started.
+􀟈  Test case passing 1 argument commandInProgress → true to recognizedBspGestureOverridesSavedGridAndSurvivesFocusChange(commandInProgress:) started.
+􀟈  Test case passing 1 argument destinationHasWindow → false to crossDisplayDropKeepsPreviewPlacementAfterRelease(destinationHasWindow:) started.
+􀟈  Test case passing 1 argument destinationHasWindow → true to crossDisplayDropKeepsPreviewPlacementAfterRelease(destinationHasWindow:) started.
+􀟈  Test case passing 1 argument productionWiring → false to mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing(productionWiring:) started.
+􀟈  Test case passing 1 argument productionWiring → true to mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing(productionWiring:) started.
+nil-focus-fixture pass=1 systemFocus=nil zoom=Optional(451) siblingFrame=Optional(RoadieCore.Rect(x: 999.0, y: 100.0, width: 300.0, height: 300.0))
+nil-focus-fixture pass=2 systemFocus=nil zoom=Optional(451) siblingFrame=Optional(RoadieCore.Rect(x: 999.0, y: 100.0, width: 300.0, height: 300.0))
+nil-focus-fixture pass=3 systemFocus=nil zoom=Optional(451) siblingFrame=Optional(RoadieCore.Rect(x: 999.0, y: 100.0, width: 300.0, height: 300.0))
+􀟈  Test case passing 1 argument matchingRequest → true to acceptedResponseReportsOnlyMatchingRequestDiagnostics(matchingRequest:) started.
+􀟈  Test case passing 1 argument matchingRequest → false to acceptedResponseReportsOnlyMatchingRequestDiagnostics(matchingRequest:) started.
+􀟈  Test case passing 1 argument mode → .bsp to explicitResizeOfActiveVisibleWindowStillWorks(mode:) started.
+􀟈  Test case passing 1 argument mode → .masterStack to explicitResizeOfActiveVisibleWindowStillWorks(mode:) started.
+􀢄  Test shippedExampleConfigIsValidWithoutWarning() recorded an issue at ConfigTests.swift:896:9: Expectation failed: report.items.allSatisfy { $0.level == .ok }
+􀄵  [RoadieCore.ConfigValidationItem(level: RoadieCore.ConfigValidationLevel.warning, path: "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package/examples/roadies.toml", message: "config file not found; defaults will be used")]
+􀟈  Test case passing 2 arguments mode → .float, newcomer → false to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 2 arguments mode → .float, newcomer → true to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 2 arguments mode → .bsp, newcomer → false to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 2 arguments mode → .bsp, newcomer → true to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 2 arguments mode → .spatialBsp, newcomer → false to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 2 arguments mode → .spatialBsp, newcomer → true to focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) started.
+􀟈  Test case passing 1 argument mode → .bsp to hidingInactiveStagePreservesIntentAndDoesNotBecomeResize(mode:) started.
+􀟈  Test case passing 1 argument mode → .masterStack to hidingInactiveStagePreservesIntentAndDoesNotBecomeResize(mode:) started.
+􀟈  Test case passing 1 argument matchingGeneration → true to failedPlacementReportsOnlyMatchingGenerationDiagnostics(matchingGeneration:) started.
+􀟈  Test case passing 1 argument matchingGeneration → false to failedPlacementReportsOnlyMatchingGenerationDiagnostics(matchingGeneration:) started.
+􀟈  Test case passing 1 argument operation → .insertLeft to crossDisplayEdgesApplyThePreviewedTree(operation:) started.
+􀟈  Test case passing 1 argument operation → .insertRight to crossDisplayEdgesApplyThePreviewedTree(operation:) started.
+􀟈  Test case passing 1 argument operation → .insertUp to crossDisplayEdgesApplyThePreviewedTree(operation:) started.
+􀟈  Test case passing 1 argument operation → .insertDown to crossDisplayEdgesApplyThePreviewedTree(operation:) started.
+􁁛  Test activeStageIsRememberedPerDesktop() passed after 1.318 seconds.
+􁁛  Test creatingStageOnNewDesktopDoesNotCreatePhantomStageOne() passed after 1.319 seconds.
+􁁛  Test stageStatePrunesGroupsWhenWindowIsRemoved() passed after 1.328 seconds.
+􁁛  Test modeChangesDoNotChangeMembership() passed after 1.328 seconds.
+􁁛  Test bspPreservesManualHorizontalResizeAsSplitRatio() passed after 1.333 seconds.
+􁁛  Test bspBalancedIgnoresStaleRatiosWithoutPriorityWindow() passed after 1.333 seconds.
+􁁛  Test bspPriorityRightWindowWinsAgainstStaleLeftEdge() passed after 1.333 seconds.
+􁁛  Test bspKeepsLeftWindowManualResizeAndMovesRightWindow() passed after 1.333 seconds.
+􁁛  Test bspSplitsTwoWindowsHorizontallyWhenWide() passed after 1.333 seconds.
+􁁛  Test windowGroupTracksMembersAndActiveWindow() passed after 1.333 seconds.
+􁁛  Test diffKeepsSmallIntentionalGapChanges() passed after 1.334 seconds.
+􁁛  Test diffProducesCommandsForChangedFramesInStableOrder() passed after 1.334 seconds.
+􁁛  Test assigningWindowMovesItBetweenStages() passed after 1.334 seconds.
+􁁛  Test bspNewWindowSplits5050IgnoringArbitraryMacOSFrame() passed after 1.334 seconds.
+􁁛  Test bspKeepsRightWindowManualResizeAndMovesLeftWindow() passed after 1.334 seconds.
+􁁛  Test insertOnFocusDoesNotMoveOtherWindowsFrames() passed after 1.334 seconds.
+􁁛  Test parsesCurrentSpaceOfEachDisplay() passed after 1.334 seconds.
+􁁛  Test floatModePreservesKnownFramesAndIgnoresUnknownFrames() passed after 1.336 seconds.
+􁁛  Test bspDwindleKeepsSplittingTheRemainder() passed after 1.336 seconds.
+􁁛  Test masterStackPreservesManualMasterResizeAsRatio() passed after 1.336 seconds.
+􁁛  Test insertOnFocusedLeafSplitsOnlyThatLeaf() passed after 1.336 seconds.
+􁁛  Test diffProducesNoCommandsForIdenticalPlan() passed after 1.338 seconds.
+􁁛  Test mutableBspAliasIsPlannedByTheTreeIgnoringObservedFrames() passed after 1.338 seconds.
+􁁛  Test mutableBspModeParsesUserFacingAliases() passed after 1.338 seconds.
+􁁛  Test bspPreservesManualVerticalResizeAsSplitRatio() passed after 1.338 seconds.
+􁁛  Test swapDeepLeavesPreservesOtherNodes() passed after 1.338 seconds.
+􁁛  Test masterStackKeepsFirstWindowAsMaster() passed after 1.338 seconds.
+􁁛  Test mainIdentifierDesignatesOnlyTheMainDisplay() passed after 1.338 seconds.
+􁁛  Test incompleteDataGivesNil() passed after 1.338 seconds.
+􁁛  Test minimumSizeCorrectionDistributesHeightAndKeepsTitleBarSeams() passed after 1.338 seconds.
+􁁛  Test insertSideLeftPlacesNewWindowFirst() passed after 1.344 seconds.
+􁁛  Test placeHorizontalSplitStacks() passed after 1.344 seconds.
+􁁛  Test diffUsesTheSingleFrameMatchTolerance() passed after 1.344 seconds.
+􁁛  Test insertIntoEmptyBecomesRoot() passed after 1.347 seconds.
+􁁛  Test decodesTreePersistedBeforeSpec017() passed after 1.347 seconds.
+􁁛  Test insertSideRightPlacesNewWindowSecond() passed after 1.347 seconds.
+􁁛  Test bspInsertionWithFocusAbsentFromTreeKeepsNewWindow() passed after 1.347 seconds.
+􁁛  Test placeVerticalSplitFiftyFifty() passed after 1.347 seconds.
+􁁛  Test swapNoOpWhenWindowMissing() passed after 1.347 seconds.
+􁁛  Test inactiveEnhancedUserInterfaceIsLeftAlone() passed after 1.347 seconds.
+􁁛  Test bspKeepsMinimalVerticalTitleBarSeamWhenInnerGapIsZero() passed after 1.347 seconds.
+􁁛  Test attributeCacheIsInvalidatedPerPid() passed after 1.347 seconds.
+􁁛  Test swapPermutesTwoLeavesKeepingStructure() passed after 1.348 seconds.
+􁁛  Test bspKeepsBottomPrioritySizeWhenOuterEdgeWasDraggedInward() passed after 1.351 seconds.
+􁁛  Test placesFromProjectedTreeAndKeepsStructureForUnknownWindow() passed after 1.351 seconds.
+􁁛  Test windowIDsAreInOrder() passed after 1.351 seconds.
+􁁛  Test removeLastWindowYieldsEmpty() passed after 1.351 seconds.
+􁁛  Test enhancedUserInterfaceIsDisabledOncePerAppAndRestoredEvenOnFailure() passed after 1.351 seconds.
+􁁛  Test minimumSizeCorrectionUsesIntegralPlacementAndFractionalGaps() passed after 1.351 seconds.
+􁁛  Test fenceRespectsKnownNeighborMinimumAndKeepsAbsentLeavesAndNestedRatios() passed after 1.351 seconds.
+􁁛  Test readFrameDoesAFreshReadWithoutWriting() passed after 1.351 seconds.
+􁁛  Test placesAccordingToProvidedTree() passed after 1.351 seconds.
+􁁛  Test resizeDuringAbsenceKeepsRatioWhenNeighbourReturns() passed after 1.359 seconds.
+􁁛  Test invalidateDropsStablePartButKeepsLastKnownState() passed after 1.360 seconds.
+􁁛  Test insertOrientationFollowsContainerShape() passed after 1.360 seconds.
+􁁛  Test retainForgetsClosedWindows() passed after 1.360 seconds.
+􁁛  Test fallsBackWhenTreeDesynced() passed after 1.360 seconds.
+􁁛  Test placeSingleLeafFillsContainer() passed after 1.360 seconds.
+􁁛  Test everyWindowGetsAFrameAfterFocusedInsertion() passed after 1.361 seconds.
+􁁛  Test alreadyInfeasibleHeightDoesNotBlockFeasibleWidthResize() passed after 1.361 seconds.
+􁁛  Test cacheHoldsOnlyStablePartAndLastKnownFollowsLatestState() passed after 1.361 seconds.
+􁁛  Test unresponsiveNativeFullscreenReadStopsBeforeWriting() passed after 1.361 seconds.
+􁁛  Test windowIndexReplaceAllDropsAbsentApplications() passed after 1.361 seconds.
+􁁛  Test minimumSizeCorrectionHandlesSecondSideAndGap() passed after 1.366 seconds.
+􁁛  Test codableRoundTrip() passed after 1.366 seconds.
+􁁛  Test directWritesCarryTheirGenerationAndDefaultToTheCurrentOne() passed after 1.371 seconds.
+􁁛  Test enumeratesOncePerPidAndBatchThenReusesSnapshotIndex() passed after 1.370 seconds.
+􁁛  Test writeBudgetIsEnforcedAtTheCommonWritePoint() passed after 1.371 seconds.
+􁁛  Test failedAttemptsAfterTheAXCallCountTowardsTheBudget() passed after 1.371 seconds.
+􁁛  Test failedReadBackRecordsItsAXCodeWithoutAnotherWrite() passed after 1.371 seconds.
+􁁛  Test embeddedCannotCompleteSetsAppAside() passed after 1.371 seconds.
+􁁛  Test removeSiblingRecoversSpace() passed after 1.371 seconds.
+􁁛  Test fenceExcludingAbsentUpdatesMatchingSplitOfFullTree() passed after 1.371 seconds.
+􁁛  Test inferredDetectsGrid() passed after 1.371 seconds.
+􁁛  Test staleReadDoesNotReplaceCachedStableAttributes() passed after 1.371 seconds.
+􁁛  Test removeLeafLeavesSiblingInPlace() passed after 1.371 seconds.
+􁁛  Test fallsBackToBalancedWhenTreeMissing() passed after 1.371 seconds.
+􁁛  Test horizontalSplitKeepsTitleBarSeam() passed after 1.371 seconds.
+􁁛  Test windowYoungerThan500msIsNotCached() passed after 1.371 seconds.
+􁁛  Test classifiesEchoAppResponseAndExternalChange() passed after 1.371 seconds.
+􁁛  Test adjustingFenceRecomputesRatioFromRequestedFrame() passed after 1.371 seconds.
+􁁛  Test masterStackKeepsStackManualResizeAndMovesMaster() passed after 1.372 seconds.
+􁁛  Test embeddedErrorsDistinguishAbsentFromUnreadable() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionAfterAsymmetricSwapBorrowsOnlyRequiredOuterSpace() passed after 1.371 seconds.
+􁁛  Test inferredDetectsColumnsAndRows() passed after 1.371 seconds.
+􁁛  Test insertionWithoutAnchorSplitsFirstLeafAndEmptyTreeBecomesRoot() passed after 1.371 seconds.
+􁁛  Test otherErrorsDoNotSetAppAside() passed after 1.371 seconds.
+􁁛  Test projectionRemovesAbsentLeavesAndFoldsUnarySplits() passed after 1.371 seconds.
+􁁛  Test eachWriteIsRecordedWithTheGenerationPassedThroughTheProtocol() passed after 1.371 seconds.
+􁁛  Test acceptedFrameIsTiedToTheGenerationAndDroppedByANewOne() passed after 1.371 seconds.
+􁁛  Test balancedResetsEveryRatio() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionPreservesFoldedAbsentSplitDuringDistributedCorrection() passed after 1.371 seconds.
+􁁛  Test unreadableAttributeKeepsLastKnownValueButFalseIsKept() passed after 1.371 seconds.
+􁁛  Test forgetDropsTheWindow() passed after 1.371 seconds.
+􁁛  Test minimumCorrectionExcludingAbsentMeasuresVisibleGeometry() passed after 1.371 seconds.
+􁁛  Test echoComparesOnlyTheLastWrite() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionDistributesAcrossThreeAncestorsAndDetectsImpossibleMinimums() passed after 1.371 seconds.
+􁁛  Test refusedSizeStillMovesTheWindow() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionClimbsToHigherAncestorWhenNearestIsInfeasible() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionDistributesOnMirroredPath() passed after 1.371 seconds.
+􁁛  Test insertionMeasuresAnchorOnProjection() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionReturnsNilWhenInfeasible() passed after 1.371 seconds.
+􁁛  Test writesSizeThenPositionThenSizeThenReadsBackOnce() passed after 1.372 seconds.
+􁁛  Test expiredEntryIsReadAgain() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionRespectsKnownMinimumOfNeighbour() passed after 1.371 seconds.
+􁁛  Test echoOfTheReadBackConfirmsAPendingRefusal() passed after 1.372 seconds.
+􁁛  Test freshNativeFullscreenPreventsWritesWithoutConsumingTheBudget() passed after 1.372 seconds.
+􁁛  Test toggleAndSetSplitChangeOnlyParentOfWindow() passed after 1.371 seconds.
+􁁛  Test diagnosticsBelongToTheirAttemptAndDoNotCarryIntoTheNextGeneration() passed after 1.371 seconds.
+􁁛  Test inferredKeepsEveryMemberOnceAndHandlesEmpty() passed after 1.371 seconds.
+􁁛  Test insertionOnTallLeafStacks() passed after 1.371 seconds.
+􁁛  Test outsideBudgetGenerationIsNeverRefused() passed after 1.371 seconds.
+􁁛  Test hiddenOrdinaryWindowStillMovesWhenNativeFullscreenIsUnavailable() passed after 1.371 seconds.
+􁁛  Test defersParkingWhenDisconnectedStageWindowsAreNotVisible() passed after 1.371 seconds.
+􁁛  Test refusesAutomaticRestoreWhenDisplayMatchIsAmbiguous() passed after 1.371 seconds.
+􁁛  Test cannotCompleteSetsAppAsideThenResumesAfterFiveSeconds() passed after 1.371 seconds.
+􁁛  Test minimumSizeCorrectionRespectsFixedNeighbourSubtreeAndAlreadyUndersizedNeighbours() passed after 1.371 seconds.
+􁁛  Test materializesMultipleOldParkedStagesInOneTransition() passed after 1.371 seconds.
+􁁛  Test adjustingFenceIsBoundedAndIgnoresContainerEdge() passed after 1.371 seconds.
+􁁛  Test railDisplayFiltersPersistentMembersMissingFromRuntimeSnapshot() passed after 1.371 seconds.
+􁁛  Test toggleExcludingAbsentReachesSplitAboveFoldedOne() passed after 1.372 seconds.
+􁁛  Test persistentStageWithoutBSPTreeDecodesNil() passed after 1.371 seconds.
+􁁛  Test debouncesDisplayChangeNotificationsBeforeParking() passed after 1.371 seconds.
+􁁛  Test keepsEmptyDisconnectedStagesAsHiddenRestorableMetadata() passed after 1.371 seconds.
+􁁛  Test preservesNameModeFocusGroupsAndRelativeOrderWhenParking() passed after 1.371 seconds.
+􁁛  Test serviceCanReturnStableNoopReport() passed after 1.371 seconds.
+􁁛  Test materializesOldParkedStagesWhenOriginDisplayIsNoLongerRecognized() passed after 1.371 seconds.
+􁁛  Test windowsReturnsHumanMessageWhenNoTileableWindows() passed after 1.371 seconds.
+􁁛  Test newWindowSideDefaultsToRight() passed after 1.371 seconds.
+􁁛  Test prunesEmptyParkedResiduesWithoutDroppingUserEmptyStages() passed after 1.371 seconds.
+􁁛  Test restoresDisplayWhenSystemDisplayIDChangedButFingerprintMatches() passed after 1.371 seconds.
+􁁛  Test windowManagementModeParsesSpatialAliases() passed after 1.371 seconds.
+􁁛  Test displaysMarksActiveDisplay() passed after 1.371 seconds.
+􁁛  Test railStageMoveTargetsExcludeSourceDisplayAndSortByIndex() passed after 1.372 seconds.
+􁁛  Test displaysReturnsMessageWhenEmpty() passed after 1.371 seconds.
+􁁛  Test persistentStageRoundTripsBSPTree() passed after 1.371 seconds.
+􁁛  Test windowsExcludesEntriesWithoutScope() passed after 1.371 seconds.
+􁁛  Test migrationBacksUpOnceKeepsMembersAndOrderAndIsIdempotent() passed after 1.372 seconds.
+􁁛  Test migrationLeavesUnreadableFileUntouched() passed after 1.372 seconds.
+􁁛  Test railStageMoveTargetsAreEmptyOnSingleDisplay() passed after 1.372 seconds.
+􁁛  Test migrationKeepsExistingBackupAndValidTreeAndFallsBackToKnownFrames() passed after 1.372 seconds.
+􁁛  Test permissionsPreferDaemonStatusOverLocalProcess() passed after 1.371 seconds.
+􁁛  Test invalidNewWindowSideFallsBackToRight() passed after 1.371 seconds.
+􁁛  Test windowPlacementParsesNewWindowSide() passed after 1.371 seconds.
+􁁛  Test inferredFallsBackInOrderWhenFrameMissingOrUnusable() passed after 1.372 seconds.
+􁁛  Test tilingModeParsesSpatialBsp() passed after 1.371 seconds.
+􁁛  Test displayParkingFormatsDiagnosticFields() passed after 1.371 seconds.
+􁁛  Test manageRuleCanForceNonResizableStandardWindow() passed after 1.371 seconds.
+􁁛  Test customAllowedSubrolesPermitsDialog() passed after 1.371 seconds.
+􁁛  Test threeWidthNextInARowWriteThreeTimesInBsp() passed after 1.372 seconds.
+􁁛  Test preservesHostActiveStageAndNativeStageOrderWhenParking() passed after 1.372 seconds.
+􁁛  Test unidentifiedSmallUntitledWindowIsExcluded() passed after 1.371 seconds.
+􁁛  Test keepsParkedStagesVisibleWhenWindowMoveFails() passed after 1.371 seconds.
+􁁛  Test snapshotNeverContainsHiddenFrame() passed after 1.372 seconds.
+􁁛  Test ruleManageDoesNotForceTilingIfBaseCriteriaFailed() passed after 1.371 seconds.
+􁁛  Test unidentifiedSmallDocumentWindowStillTilesWhenNotPanelShaped() passed after 1.371 seconds.
+􁁛  Test preservesRenameReorderMoveAndModeChangesMadeWhileParked() passed after 1.372 seconds.
+􁁛  Test startRunRecoversUncleanPreviousRunBeforeTakingMarker() passed after 1.372 seconds.
+􁁛  Test persistedMutableBspStageStillDecodes() passed after 1.372 seconds.
+􁁛  Test minimumSizeCorrectionAdjustsNearestSplitOnConstrainedAxis() passed after 1.371 seconds.
+􁁛  Test characterKeysResolveThroughTheLayoutTable() passed after 1.372 seconds.
+􁁛  Test instanceLockRefusesSecondHolderEvenWithoutPidFile() passed after 1.372 seconds.
+􁁛  Test collisionWithNonEmptyTargetRenumbersMovedStageWithoutDroppingTarget() passed after 1.372 seconds.
+􁁛  Test standardWindowAlwaysPassesPopupGate() passed after 1.372 seconds.
+􁁛  Test startRunRecoversWhenRunMarkerIsUnreadable() passed after 1.372 seconds.
+􁁛  Test configuredNoFollowAppliesWhenNoCliOverrideIsProvided() passed after 1.372 seconds.
+􁁛  Test moveActiveStageByDirectionUsesDisplayTopology() passed after 1.372 seconds.
+􁁛  Test moveActiveStageByDisplayIndexPreservesSourceAndMovesMembers() passed after 1.372 seconds.
+􁁛  Test shortStandardProgressWindowWithoutFullscreenIsExcluded() passed after 1.372 seconds.
+􁁛  Test reconcileWindowIDsAvoidsAmbiguousDuplicateTitles() passed after 1.372 seconds.
+􁁛  Test insertionSplitFollowsLeafNotScreen() passed after 1.372 seconds.
+􁁛  Test pinningDoesNotDuplicateStageMembership() passed after 1.372 seconds.
+􁁛  Test popupGateRespectsToggle() passed after 1.372 seconds.
+􁁛  Test tilingModeParsesMutableBspAliasesAsSpatialBsp(_:) with 4 test cases passed after 1.372 seconds.
+􁁛  Test keepsFreshParkedStagesTemporaryForFastReconnect() passed after 1.372 seconds.
+􁁛  Test manageRuleCanForceModalWindow() passed after 1.372 seconds.
+􁁛  Test removeAndPrunePinsCleanPersistentState() passed after 1.372 seconds.
+􁁛  Test emptyOrInvalidHotkeysAreNotResolved() passed after 1.372 seconds.
+􁁛  Test stageScopeReturnsNilWhenWindowAbsent() passed after 1.372 seconds.
+􁁛  Test priorityOrdersRulesCorrectly() passed after 1.372 seconds.
+􁁛  Test nonResizableStandardUtilityWindowIsExcluded() passed after 1.372 seconds.
+􁁛  Test windowFurnitureIsLikelyRealWindowLogic() passed after 1.372 seconds.
+􁁛  Test unknownSubroleFallsBackToTileCandidateFlag() passed after 1.372 seconds.
+􁁛  Test parkingAndRestoreCompleteWithinConfiguredFiveSecondBudget() passed after 1.372 seconds.
+􁁛  Test missingWindowPinsDecodeAsEmptyList() passed after 1.372 seconds.
+􁁛  Test ruleExcludeOverridesEvenStandardWindow() passed after 1.372 seconds.
+􁁛  Test unhideAllRestoresHiddenWindowToMemberVisibleFrame() passed after 1.373 seconds.
+􁁛  Test reconcileWindowIDsPicksClearlyClosestOfTwoNearCandidates() passed after 1.372 seconds.
+􁁛  Test windowsContainsHeaderAndPayload() passed after 1.372 seconds.
+􁁛  Test legacyStageStateDecodesWithoutParkingFields() passed after 1.372 seconds.
+􁁛  Test ruleSubroleMatchTargetsDialogsOnly() passed after 1.372 seconds.
+􁁛  Test emptyStageScopeIndexForEmptyState() passed after 1.372 seconds.
+􁁛  Test assignDefaultsToAppendAndFocusMovedWindow() passed after 1.372 seconds.
+􁁛  Test setPinKeepsSinglePinPerWindowAndCanChangeScope() passed after 1.372 seconds.
+􁁛  Test normalizedSearchRemovesCaseDiacriticsAndExtraSpaces() passed after 1.372 seconds.
+􁁛  Test modifiersMapToCarbonFlags() passed after 1.372 seconds.
+􁁛  Test unidentifiedLittleSnitchUrlPanelIsExcluded() passed after 1.372 seconds.
+􁁛  Test modalStandardWindowIsExcluded() passed after 1.372 seconds.
+􁁛  Test stageScopeFindsWindowAcrossScopes() passed after 1.372 seconds.
+􁁛  Test restoresParkedStagesToRecognizedDisplay() passed after 1.372 seconds.
+􁁛  Test windowWithFullscreenButtonIsConsideredReal() passed after 1.372 seconds.
+􁁛  Test stageScopeIndexReturnsAllMappings() passed after 1.372 seconds.
+􁁛  Test unidentifiedSystemSavePanelIsExcludedEvenWhenLarge() passed after 1.372 seconds.
+􁁛  Test labelsUseDeterministicHomeRowAlphabet() passed after 1.372 seconds.
+􁁛  Test ruleFloatingBehavesLikeExclude() passed after 1.372 seconds.
+􁁛  Test ruleManageOverridesSubroleExclusion() passed after 1.372 seconds.
+􁁛  Test dialogSubroleIsExcluded() passed after 1.371 seconds.
+􁁛  Test bookmarkTargetsExposeFocusAction() passed after 1.372 seconds.
+􁁛  Test noFollowKeepsFocusDisplayAndTargetActiveStage() passed after 1.373 seconds.
+􁁛  Test resolveAcceptsLabelIdAndUniqueSearch() passed after 1.371 seconds.
+􁁛  Test explicitStageMoveSupportsInactiveRailStageWithoutActivatingItFirst() passed after 1.372 seconds.
+􁁛  Test explicitFollowOverridesNoFollowConfig() passed after 1.372 seconds.
+􁁛  Test floatingBundlesExcludesEntireApp() passed after 1.371 seconds.
+􁁛  Test finishRunMarksCleanExitOnlyAfterRestore() passed after 1.373 seconds.
+􁁛  Test sharedLockAllowsConcurrentReads() passed after 1.371 seconds.
+􁁛  Test standardWindowIsTiled() passed after 1.372 seconds.
+􁁛  Test stageScopeIndexAndStageScopeAreEquivalent() passed after 1.371 seconds.
+􁁛  Test invalidOrCurrentTargetDoesNotMutateState() passed after 1.373 seconds.
+􁁛  Test reconcileWindowIDsKeepsStageMembershipAcrossRuntimeIDChange() passed after 1.371 seconds.
+􁁛  Test stageDisplayMoveUpdatesPinnedWindowHomeDisplay() passed after 1.373 seconds.
+􁁛  Test nativeFullscreenStillHidesRailWhenZoomIdIsExempted() passed after 1.372 seconds.
+􁁛  Test smallSettingsWindowIsExcludedEvenWhenStandard() passed after 1.372 seconds.
+􁁛  Test doesNotMergeDisconnectedDisplayIntoActiveStage() passed after 1.372 seconds.
+􁁛  Test roadieTargetsIncludeOnlyVisibleNonEmptyStagesByDefault() passed after 1.372 seconds.
+􁁛  Test nestedGridPathResolvesInsideParentCell() passed after 1.371 seconds.
+􁁛  Test menuDesktopStageAssignmentIsOneApplicationInAnOpenedGeneration() passed after 1.373 seconds.
+􁁛  Test parksNonEmptyStagesAsDistinctStagesOnHostDisplay() passed after 1.371 seconds.
+􁁛  Test restoresCurrentParkedStateInsteadOfOriginalSnapshot() passed after 1.371 seconds.
+􁁛  Test summarizesInteractionEventsFromEventLogOnly() passed after 1.371 seconds.
+􁁛  Test smallNonResizableStandardProgressWindowIsExcluded() passed after 1.372 seconds.
+􁁛  Test acquireAndReleaseExclusive() passed after 1.371 seconds.
+􁁛  Test tickDefersPlacementWhenDisplayIsMissing() passed after 1.372 seconds.
+􁁛  Test gridPathForPointUsesConfiguredDepth() passed after 1.371 seconds.
+􁁛  Test disabledPickerRefusesMutation() passed after 1.372 seconds.
+􁁛  Test persistDecisionFollowsReaderModeEnvironmentValue() passed after 1.371 seconds.
+􁁛  Test legacySnapshotFormatsRemainEncodableAlongsideQueries() passed after 1.372 seconds.
+􁁛  Test tickPlacesMatchedWindowOnNamedDisplay() passed after 1.372 seconds.
+􁁛  Test smallResizableStandardWindowStillTiles() passed after 1.371 seconds.
+􁁛  Test unidentifiedLargeUntitledOverlayIsExcluded() passed after 1.371 seconds.
+􁁛  Test withLockExecutesBlockAndReleases() passed after 1.372 seconds.
+􁁛  Test stableRuleMatchIsPublishedOnceUntilActionChanges() passed after 1.372 seconds.
+􁁛  Test disabledTargetModeReturnsStructuredError() passed after 1.372 seconds.
+􁁛  Test tickDoesNotReapplyPlacementAfterWindowWasMovedManually() passed after 1.372 seconds.
+􁁛  Test overlayStateUsesSameLabelsAsTargetList() passed after 1.372 seconds.
+􁁛  Test bookmarkFocusKeepsConcurrentChangeMadeDuringAX() passed after 1.372 seconds.
+􁁛  Test spec002CatalogCanFilterByScope() passed after 1.371 seconds.
+􁁛  Test focusedWindowScopeUsesLiveProviderFocusAsRoot() passed after 1.371 seconds.
+􁁛  Test tickPublishesRuleSkippedWhenNoRuleMatches() passed after 1.371 seconds.
+􁁛  Test gridCanUseFocusedWindowFrameAsRecursiveRoot() passed after 1.371 seconds.
+􁁛  Test groupCommandsCreateAddFocusRemoveAndDissolve() passed after 1.372 seconds.
+􁁛  Test sourceAllDoesNotErrorWhenExperimentalAppTargetsAreDisabled() passed after 1.371 seconds.
+􁁛  Test desktopSwitchKeepsConcurrentChangeMadeDuringAX() passed after 1.372 seconds.
+􁁛  Test assignCanInsertAtRequestedIndexWithoutStealingTargetFocus() passed after 1.372 seconds.
+􁁛  Test lockPathForDataURL() passed after 1.372 seconds.
+􁁛  Test tickAdoptsManualWindowDragAcrossDisplaysBeforeRelayout() passed after 1.372 seconds.
+􁁛  Test reconcileWindowIDsRefusesTwoNearCandidatesWithSmallScoreGap() passed after 1.371 seconds.
+􁁛  Test tickPublishesRuleFailedWhenRulesAreInvalid() passed after 1.372 seconds.
+􁁛  Test restoresMemberLeftAtEdgeOfVanishedRightDisplay() passed after 1.371 seconds.
+􁁛  Test spec002CatalogEventTypesAreStableAndUnique() passed after 1.372 seconds.
+􁁛  Test commandApplicationsReuseTheCallerEpisodeAndCountPasses() passed after 1.371 seconds.
+􁁛  Test tickPlacesMatchedWindowOnNamedStage() passed after 1.372 seconds.
+􁁛  Test nonResizableStandardWindowIsExcludedEvenWithFullscreenButton() passed after 1.371 seconds.
+􁁛  Test tickFollowsPlacementWhenRuleRequestsIt() passed after 1.372 seconds.
+􁁛  Test spec002CatalogContainsMinimumAutomationEvents() passed after 1.371 seconds.
+􁁛  Test nearestEdgeWinsInGapAndInteriorWinsOverExpandedNeighbor() passed after 1.371 seconds.
+􁁛  Test persistedManualOverrideSuppressesRulePlacementAfterRestart() passed after 1.371 seconds.
+􁁛  Test tickSkipsPlacementForNonTileCandidate() passed after 1.372 seconds.
+􁁛  Test absentMemberKeepsItsLeafBeyondFortyFiveSecondsAndReturnsToItsPlace() passed after 1.371 seconds.
+􁁛  Test inactiveStageIsExcludedFromResizeHandles() passed after 1.371 seconds.
+􁁛  Test pinVisibilityIsLimitedByScope() passed after 1.371 seconds.
+􁁛  Test unreachableMemberOfLiveProcessBlocksCleanExit() passed after 1.372 seconds.
+􁁛  Test gridFocusPickerFallsBackToTopmostIntersectingWindowWhenCenterIsEmpty() passed after 1.371 seconds.
+􁁛  Test gridFocusPickerPrefersTopmostWindowContainingCellCenter() passed after 1.371 seconds.
+􁁛  Test applyTreeScopeWritesOnceWithItsGenerationAndRepublishesReadBackFrames() passed after 1.371 seconds.
+􁁛  Test commandRoundTripsThroughDistributedNotificationPayload() passed after 1.371 seconds.
+􁁛  Test bspModeUsesTheSameToleranceForSuccessAndRewrite() passed after 1.371 seconds.
+􁁛  Test absentNativeFullscreenMemberIsLeftToMacOS() passed after 1.372 seconds.
+􁁛  Test gridSplitsDisplayIntoDeterministicCells() passed after 1.372 seconds.
+􁁛  Test equalDistanceUsesFocusedWindow() passed after 1.371 seconds.
+􁁛  Test nativeFullscreenWindowIsNotResizedByUnhideAll(parked:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test snapshotPrunesMissingWindowPinsAndLogsEvent() passed after 1.371 seconds.
+􁁛  Test failedWriteInvalidatesTheSharedSnapshot() passed after 1.371 seconds.
+􁁛  Test resizeHandleOutsideFrameKeepsWindow(point:) with 6 test cases passed after 1.371 seconds.
+􁁛  Test queryComponentsReturnsArrayPayload() passed after 1.371 seconds.
+􁁛  Test tickPublishesRuleMatchedAndAppliedEvents() passed after 1.372 seconds.
+􁁛  Test singleToleranceDecidesSuccessAndRewrite() passed after 1.372 seconds.
+􁁛  Test olderIntentDecodesAndReservedIntentRoundTrips() passed after 1.371 seconds.
+􁁛  Test treeModePersistsNoAutomaticIntent() passed after 1.371 seconds.
+􁁛  Test reconciliationRequiresFrameProximityEvenForSingleCandidate() passed after 1.371 seconds.
+􁁛  Test activeStageSiblingStillOffDisplaysBlocksCleanExit() passed after 1.371 seconds.
+􁁛  Test reconciliationRefusedWhileMemberProcessIsAlive() passed after 1.371 seconds.
+􁁛  Test unreadableStateIsBackedUpAndNeverOverwritten() passed after 1.371 seconds.
+􁁛  Test parkedWindowThatLeftNativeFullscreenIsStillRestored() passed after 1.372 seconds.
+􁁛  Test reconciliationAcceptedWhenMemberProcessIsGone() passed after 1.371 seconds.
+􁁛  Test commandRejectsMissingCommandName() passed after 1.371 seconds.
+􁁛  Test restoresInactiveMemberAbsentFromVisibleSnapshot() passed after 1.371 seconds.
+􁁛  Test nativeFullscreenStartedDuringReservedZoomIsNeverResized() passed after 1.371 seconds.
+􁁛  Test rulesExplainReturnsMatchedRule() passed after 1.371 seconds.
+􁁛  Test missingMemberWithoutPIDIsIdentifiedInFailureDiagnostic() passed after 1.371 seconds.
+􁁛  Test overBudgetWindowIsNotWrittenAndIsReported() passed after 1.371 seconds.
+􁁛  Test memberOfDeadProcessIsClosedAndAllowsCleanExit() passed after 1.372 seconds.
+􁁛  Test startRunRestoresOutsideRecoveryLock() passed after 1.371 seconds.
+􁁛  Test nativeFullscreenWindowKeepsItsLeafAndIsNotPlaced() passed after 1.371 seconds.
+􁁛  Test newWindowSplitsActiveLeafAlongItsDominantDimension() passed after 1.371 seconds.
+􁁛  Test componentLockSurvivesConcurrentAcquireAndRelease() passed after 1.372 seconds.
+􁁛  Test unknownCollapsedWidthAndPerDisplayVisibilityUseExistingRuntime() passed after 1.371 seconds.
+􁁛  Test clampedFrameStillHiddenCountsAsFailure() passed after 1.371 seconds.
+􁁛  Test memberWithoutPidAbsentFromSnapshotCountsAsNotRestored() passed after 1.371 seconds.
+􁁛  Test queryComponentsIncludesAcquiredLock() passed after 1.372 seconds.
+􁁛  Test cachedValueDoesNotHideFileThatBecameUnreadable() passed after 1.371 seconds.
+􁁛  Test rulesListReturnsPriorityOrder() passed after 1.371 seconds.
+􁁛  Test spec002RulesDecodeFromTomlFixture() passed after 1.371 seconds.
+􁁛  Test stageMismatchDoesNotMatch() passed after 1.371 seconds.
+􁁛  Test rulesValidateReportsConflicts() passed after 1.371 seconds.
+􁁛  Test failedIntentionalShutdownKeepsRecoveryPendingWithoutCrashEvents() passed after 1.372 seconds.
+􁁛  Test treeContainerIsTheLayoutContainerWithOuterGaps() passed after 1.371 seconds.
+􁁛  Test realCrashStillReportsItsRecoveryAndRejectedWindow() passed after 1.371 seconds.
+􁁛  Test hiddenRailUsesFullscreenAndPinRestoresReservation(layoutMode:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test reservedZoomRestoresLayoutAndSurvivesModeChanges(mode:) with 5 test cases passed after 1.371 seconds.
+􁁛  Test namedKeysResolveWithoutTheKeyboardLayout() passed after 1.372 seconds.
+􁁛  Test floatingWindowSubroleIsExcluded() passed after 1.372 seconds.
+􁁛  Test regexAppAndTitleMatch() passed after 1.371 seconds.
+􁁛  Test popupWithoutFurnitureIsExcluded() passed after 1.372 seconds.
+􁁛  Test commandApplicationOpensItsEpisodeAndReportsContractFields() passed after 1.371 seconds.
+􁁛  Test desktopPinKeepsHomeScopeButLeavesActiveLayout() passed after 1.372 seconds.
+􁁛  Test reservedZoomSurvivesStageSwitchAndHiddenSiblingFocusRestores(mode:) with 3 test cases passed after 1.371 seconds.
+􁁛  Test reservedZoomReflowsAfterRestartAndWiderRail() passed after 1.371 seconds.
+􁁛  Test rulesValidateAcceptsFixture() passed after 1.371 seconds.
+􁁛  Test acceptedFrameOnlySuppressesTheCommandOfItsOwnGeneration() passed after 1.371 seconds.
+􁁛  Test missingMatchReturnsValidationError() passed after 1.371 seconds.
+􁁛  Test watcherRestoresOutsideLockAndKeepsMarkerTakenByNewInstance() passed after 1.371 seconds.
+􁁛  Test memberRecordsPidAndKeepsPresentationStateWhenOmitted() passed after 1.371 seconds.
+􁁛  Test explicitTargetDoesNotDependOnFocusOrAffectOtherDisplay() passed after 1.371 seconds.
+􁁛  Test windowOpenedDuringZoomIsVisibleAfterRestoration(mode:) with 4 test cases passed after 1.371 seconds.
+􁁛  Test excludeWithPlacementActionReturnsValidationError() passed after 1.371 seconds.
+􁁛  Test duplicateIdsReturnValidationError() passed after 1.371 seconds.
+􁁛  Test validRulesReturnNoValidationErrors() passed after 1.371 seconds.
+􁁛  Test clampedButVisibleFrameCountsAsSuccess() passed after 1.371 seconds.
+􁁛  Test unreadableRestoreSnapshotIsKeptAndNeverOverwritten() passed after 1.372 seconds.
+􁁛  Test applyTreeScopePublishesItsApplication() passed after 1.371 seconds.
+􁁛  Test legacyModesAreMigratedOnceByTheFirstProducerSnapshot() passed after 1.371 seconds.
+􁁛  Test assignRecordsPreviousFocusOnlyWhenFocusChanges() passed after 1.371 seconds.
+􁁛  Test subscriptionResetsAfterRotationAndSkipsPartialLine() passed after 1.371 seconds.
+􁁛  Test legacyMemberWithoutPidDecodes() passed after 1.371 seconds.
+􁁛  Test excludeWithLayoutActionReturnsValidationError() passed after 1.371 seconds.
+􁁛  Test layoutCommandActivityTracksScopesSeparatelyFromGlobalActivity() passed after 1.372 seconds.
+􁁛  Test treeModeIgnoresAutoAndCommandIntentsButHonoursZoomMarker() passed after 1.372 seconds.
+􁁛  Test firstMatchUsesHighestPriorityThenId() passed after 1.371 seconds.
+􁁛  Test resizeDuringNeighbourAbsenceSurvivesItsReturn() passed after 1.371 seconds.
+􁁛  Test menuActionMaximizesTheSelectedWindowInsteadOfFocusedWindow() passed after 1.371 seconds.
+􁁛  Test displayMarginsAndChangedVisibleAreaBoundTheMaximizedFrame() passed after 1.371 seconds.
+􁁛  Test applyTreeScopeIgnoresNonTreeAndInactiveScopes() passed after 1.371 seconds.
+􁁛  Test closingFloatZoomTargetRestoresRemainingWindowsWithoutFocus() passed after 1.371 seconds.
+􁁛  Test currentConfigReloadsChangedFileAndKeepsLastValidConfig() passed after 1.371 seconds.
+􁁛  Test confirmedDestructionRemovesTheLeafWithoutWaitingForThePurge() passed after 1.371 seconds.
+􁁛  Test restoresActiveStageSiblingLeftOffAllDisplays() passed after 1.371 seconds.
+􁁛  Test cachedLoadsDecodeUnchangedFileOnce() passed after 1.371 seconds.
+􁁛  Test legacyMutableStageIsLaidOutFromTheTreeNotFromGeometry() passed after 1.372 seconds.
+􁁛  Test pinsSurviveFortyFiveSecondsOfAbsence() passed after 1.371 seconds.
+􁁛  Test stateAuditHealKeepsChangesWrittenDuringSnapshot() passed after 1.371 seconds.
+􁁛  Test exactAppTitleRoleAndStageMatch() passed after 1.371 seconds.
+􁁛  Test invalidRegexReturnsValidationError() passed after 1.371 seconds.
+􁁛  Test windowDestroyedDuringGestureGivesPlaceWithoutFence() passed after 1.371 seconds.
+􁁛  Test nativeFullscreenAndEmptyContainerAreRefused(native:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test externalWriteBetweenLoadAndMutateIsNotLost() passed after 1.371 seconds.
+􁁛  Test saveWithIdenticalContentDoesNotRewriteFile() passed after 1.371 seconds.
+􁁛  Test failedFrameStaysSuppressedPastCooldownWhenObservedFrameIsUnchanged() passed after 1.371 seconds.
+􁁛  Test stabilityIsReadAfterWriteEnd() passed after 1.371 seconds.
+􁁛  Test hidingAndLayoutShareOnePass() passed after 1.371 seconds.
+􁁛  Test persistentStageStoresGroups() passed after 1.371 seconds.
+􁁛  Test unmanagedAndTransientWindowsAreIgnored() passed after 1.371 seconds.
+􁁛  Test affinityActionWritesGeneratedPlacementRule() passed after 1.371 seconds.
+􁁛  Test spatialBspTreeIsNotReconciledDuringMembershipChurn() passed after 1.371 seconds.
+􁁛  Test commandClosesMembershipBurst() passed after 1.371 seconds.
+􁁛  Test destinationsMarkCurrentContextAndExposeAlternatives() passed after 1.371 seconds.
+􁁛  Test releaseGraceWithoutDropKeepsGesture() passed after 1.371 seconds.
+􁁛  Test infeasibleRefusalIsAcceptedWithoutRetry() passed after 1.371 seconds.
+􁁛  Test pinDesktopActionPersistsPinAndDoesNotMoveWindow() passed after 1.371 seconds.
+􁁛  Test gridWithTwoClampedWindowsIsRearrangedInsteadOfHidden(productionWiring:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test repeatedObservationOfUnchangedWindowsLeavesStateEqual() passed after 1.371 seconds.
+􁁛  Test stageIgnoresFocusChangeWithoutRecentUserInput() passed after 1.371 seconds.
+􁁛  Test fullscreenLikeChangeDoesNotTriggerManualResizeOrRelayout() passed after 1.371 seconds.
+􁁛  Test queryStateAndWindowsExposeStablePayloads() passed after 1.371 seconds.
+􁁛  Test echoWithFewPointsOfDifferenceIsNotRewritten() passed after 1.371 seconds.
+􁁛  Test clampedFrameIsReanchoredToRequestedOriginWithActualSize() passed after 1.371 seconds.
+􁁛  Test progressiveExternalResizeDuringCommandIntentSnapsBackOnceOutsideTolerance() passed after 1.371 seconds.
+􁁛  Test eventLogRotationUnderConcurrencyKeepsEveryLineWhole() passed after 1.371 seconds.
+􁁛  Test readerSnapshotWritesNoStateFile() passed after 1.371 seconds.
+􁁛  Test nestedSwapMinimumCorrectionKeepsWriteBudgetAndReachesStability(neighbourMinimum:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test zoomIntentStaysValidWhileZoomedWindowRemainsInScope() passed after 1.371 seconds.
+􁁛  Test inconclusiveRefusalReadIsDelayed() passed after 1.371 seconds.
+􁁛  Test commandIntentCanKeepSmallPaneAfterFreshnessWindow() passed after 1.371 seconds.
+􁁛  Test passiveQueriesDoNotReadSystemSnapshot() passed after 1.371 seconds.
+􁁛  Test queryDisplaysDesktopsStagesGroupsAndRulesExposePayloads() passed after 1.371 seconds.
+􁁛  Test treeScopeIgnoresPhysicalDisplayDrift() passed after 1.371 seconds.
+􁁛  Test actionWithMissingWindowDoesNotMutateState() passed after 1.371 seconds.
+􁁛  Test commandActivityDoesNotSuspendTreeScope() passed after 1.371 seconds.
+􁁛  Test idleArrangedStageReceivesNoPlacement() passed after 1.371 seconds.
+􁁛  Test spacedMembershipChangesAreEachPlacedImmediately() passed after 1.371 seconds.
+􁁛  Test titlebarClickIsEligibleForManagedWindow() passed after 1.371 seconds.
+􁁛  Test stageIgnoresFocusChangeWithoutInputMonitor() passed after 1.371 seconds.
+􁁛  Test unchangedMutateKeepsModificationTime() passed after 1.371 seconds.
+􁁛  Test ruleChangingActiveStageHidesAndLaysOutInOnePass() passed after 1.371 seconds.
+􁁛  Test layoutCommandActivityKeepsLongestExpiryAcrossConcurrentWriters() passed after 1.371 seconds.
+􁁛  Test manualResizeIsNotSuppressedByCommandIntentOnAnotherDisplay() passed after 1.371 seconds.
+􁁛  Test heightChangesEligibleBand() passed after 1.371 seconds.
+􁁛  Test desktopStageActionMovesWindowToExactTargetWithoutFollowingFocus() passed after 1.371 seconds.
+􁁛  Test hiddenRailStageLabelsExposeNonEmptyStagesAndOneNextEmptyDestination() passed after 1.371 seconds.
+􁁛  Test revertedAppliedFrameDoesNotTriggerRepeatedApplyLoop() passed after 1.371 seconds.
+􁁛  Test minimumWidthOverlappingRailDoesNotHideSiblingsOrPersistZoom() passed after 1.371 seconds.
+􁁛  Test pinnedActionCanChangeScopeAndUnpin() passed after 1.371 seconds.
+􁁛  Test sharedSnapshotReusesRecentSnapshotUntilExpiredOrInvalidated() passed after 1.371 seconds.
+􁁛  Test parkedFullscreenSizedWindowIsNotTreatedAsActiveFullscreen() passed after 1.371 seconds.
+􁁛  Test newBSPWindowIsInsertedNextToPreviouslyFocusedMember() passed after 1.371 seconds.
+􁁛  Test inactiveFullscreenLikeStageWindowIsNotHidden() passed after 1.371 seconds.
+􁁛  Test reloadKeepsPreviousConfigWhenValidationFails() passed after 1.371 seconds.
+􁁛  Test focusJitterDoesNotTriggerRelayout() passed after 1.371 seconds.
+􁁛  Test fullscreenCommandRestoreIntentDoesNotRetileWhileFullscreenIsActive() passed after 1.371 seconds.
+􁁛  Test affinityRemoveDeletesGeneratedAppRulesOnly() passed after 1.371 seconds.
+􁁛  Test frameOutsideEveryDisplayDoesNotOverwriteMemberFrame() passed after 1.371 seconds.
+􁁛  Test clampedCommandIntentIsStabilizedInsideDisplayBounds() passed after 1.371 seconds.
+􁁛  Test disabledFeatureNeverMarksClickEligible() passed after 1.371 seconds.
+􁁛  Test generatedStageLabelsUseVisibleOrderInsteadOfTechnicalIDs() passed after 1.371 seconds.
+􁁛  Test reloadAppliesValidConfig() passed after 1.371 seconds.
+􁁛  Test readerConsumesTilerSnapshotDuringItsCycle() passed after 1.371 seconds.
+􁁛  Test unmatchedCommandIntentIsRetried() passed after 1.371 seconds.
+􁁛  Test writerSnapshotDoesNotRewriteUnchangedState() passed after 1.371 seconds.
+􁁛  Test dropProofFromAnotherProcessSuppressesGesture() passed after 1.371 seconds.
+􁁛  Test soloTiledWindowIsNotPersistedAsMaximized() passed after 1.371 seconds.
+􁁛  Test movingPinnedWindowToAnotherStageRemovesInstancePin() passed after 1.371 seconds.
+􁁛  Test failedStableVisibleDisplayDriftRevertKeepsConcurrentChanges() passed after 1.371 seconds.
+􁁛  Test scopedCommandActivityOnOneDisplayDoesNotStopOtherDisplay() passed after 1.371 seconds.
+􁁛  Test diagonalDisplayIsRejected() passed after 1.371 seconds.
+􁁛  Test recentlyObservedMissingMemberKeepsRailGrace(readerBeforeWriter:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test oldScreenEdgeDoesNotHideAnUnobservedNormalWindow(reusedWindowID:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test layoutCommandActivityReadsLegacyGlobalFile() passed after 1.372 seconds.
+􁁛  Test gestureConsumedByDropDoesNotMoveFence() passed after 1.371 seconds.
+􁁛  Test clampedMinimumSizeSuppressesLaterSmallerRequests() passed after 1.371 seconds.
+􁁛  Test historicalMissingMembersAreNotDisplayedAsLiveWindows(hasOldObservation:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test hotplugPreservesFrameOfPreviouslyHiddenWindow(observation:) with 5 test cases passed after 1.371 seconds.
+􁁛  Test oscillatingApplicationHeightIsNotPropagated() passed after 1.371 seconds.
+􁁛  Test focusedHiddenFullscreenSizedWindowRestoresWithoutBspRelayout() passed after 1.371 seconds.
+􁁛  Test closedWindowGivesItsPlaceToNeighborInOnePass() passed after 1.371 seconds.
+􁁛  Test tileClassificationSurvivesUnreadableAttributes() passed after 1.371 seconds.
+􁁛  Test concurrentMutationsFromTwoStoresLoseNothing() passed after 1.372 seconds.
+􁁛  Test membershipBurstIsClosedAtBurstCap() passed after 1.371 seconds.
+􁁛  Test concurrentMutationsWithCachedReadsLoseNothing() passed after 1.372 seconds.
+􁁛  Test layoutIntentPruneKeepsAbsentDisplayForTenMinutesWithoutRewrite() passed after 1.371 seconds.
+􁁛  Test upDirectionFindsDisplayAbove() passed after 1.370 seconds.
+􁁛  Test pressedMouseButtonSuspendsLayoutApply() passed after 1.370 seconds.
+􁁛  Test disabledRuleDoesNotMatch() passed after 1.370 seconds.
+􁁛  Test excludesSelfFromCandidates() passed after 1.371 seconds.
+􁁛  Test displayTopologyChangeSuppressesRelayoutUntilSettled() passed after 1.371 seconds.
+􁁛  Test moveGestureWithoutDropSnapsBackToTree() passed after 1.371 seconds.
+􁁛  Test commandClosesSpaceGuard() passed after 1.371 seconds.
+􁁛  Test guardFallsBackToSpaceDidChangeAndStableReads() passed after 1.371 seconds.
+􁁛  Test shrinkClampedWideWindowRepairsSiblingIntoRemainingSpace() passed after 1.371 seconds.
+􁁛  Test clampedSizeRefusalIsRetriedAfterRefusalMemoryExpires() passed after 1.371 seconds.
+􁁛  Test fullscreenLikeWindowHidesActiveStageSiblings() passed after 1.371 seconds.
+􁁛  Test failedFrameIsRetriedAfterRefusalMemoryExpires() passed after 1.371 seconds.
+􁁛  Test focusOnHiddenSiblingAfterZoomMakesItVisible() passed after 1.371 seconds.
+􁁛  Test policyExcludedWindowsAreNotStageManaged() passed after 1.370 seconds.
+􁁛  Test changedFrameRetriesFailedDisplayRepairAndRecoveryCommitsMembership(targetMode:geometryChanged:) with 4 test cases passed after 1.371 seconds.
+􁁛  Test returnsNilWhenNoDisplayInDirection() passed after 1.371 seconds.
+􁁛  Test edgeExclusionsProtectWindowControls() passed after 1.371 seconds.
+􁁛  Test externalChangeIsRevertedOnceThenAccepted() passed after 1.371 seconds.
+􁁛  Test confirmedRefusalIsCorrectedOnceWithinWriteBudget() passed after 1.371 seconds.
+􁁛  Test clampedMinimumSizeSuppressesLaterSmallerRequestsEvenAfterWindowGrows() passed after 1.370 seconds.
+􁁛  Test shiftedScreenDominantFullscreenSizedWindowIsReanchoredAfterRestart() passed after 1.370 seconds.
+􁁛  Test releaseBeforeDropLeavesSessionToDrop() passed after 1.371 seconds.
+􁁛  Test clampedMinimumSizeSuppressesLaterSmallerRequestsEvenWhenMacOSShiftsPosition() passed after 1.370 seconds.
+􁁛  Test stageIgnoresFocusRightAfterWindowDisappearance() passed after 1.371 seconds.
+􁁛  Test guardWithFailedReadsWaitsForCap() passed after 1.371 seconds.
+􁁛  Test snapshotLeavesVisibleDisplayDriftForMaintainerRepair() passed after 1.370 seconds.
+􁁛  Test resizeCommandReflowsLayoutAroundResizedWindowAndPersistsIntent() passed after 1.370 seconds.
+􁁛  Test resizeGesturePreservesNestedSplit() passed after 1.370 seconds.
+􁁛  Test releaseWithoutDropEndsDragImmediatelyWithoutGrace() passed after 1.371 seconds.
+􁁛  Test commandActivityDoesNotDelayReclaimAfterStageMemberDisappears() passed after 1.370 seconds.
+􁁛  Test recognizesDisplayByPreviousIDWhenAvailable() passed after 1.371 seconds.
+􁁛  Test resizeGestureMovesTreeFenceAndNeighborOnce() passed after 1.371 seconds.
+􁁛  Test stableVisibleDisplayDriftIsIgnoredImmediatelyAfterTopologyChange() passed after 1.371 seconds.
+􁁛  Test contentClickIsNotTitlebar() passed after 1.371 seconds.
+􁁛  Test geometryChangeAfterZoomExitIsLaidOut() passed after 1.371 seconds.
+􁁛  Test hotplugDoesNotSaveHiddenFrameAsSoloMaximizedFrame() passed after 1.371 seconds.
+􁁛  Test stageSummonRepairsWindowVisibleOnDifferentDisplay() passed after 1.370 seconds.
+􁁛  Test selfTestFailsWhenAccessibilityIsDenied() passed after 1.370 seconds.
+􁁛  Test spec002SubscribeReadsAppendedEventsUnderOneSecond() passed after 1.370 seconds.
+􁁛  Test neighborToTheRightIsFoundWhenAlignedHorizontally() passed after 1.370 seconds.
+􁁛  Test applyPlanUsesCollapsedRailWidthWhenDynamicLeftGapIsEnabled() passed after 1.370 seconds.
+􁁛  Test fingerprintNormalizesStableDisplayShape() passed after 1.371 seconds.
+􁁛  Test growthClampedFramesAreExcludedWithoutPersistingBrokenLayoutIntent() passed after 1.371 seconds.
+􁁛  Test refusesAmbiguousFingerprintMatch() passed after 1.370 seconds.
+􁁛  Test stabilityAfterRefusalCorrectionTargetsCorrectedPlan() passed after 1.371 seconds.
+􁁛  Test focusedStageRestoreAndInactiveHidingShareOnePass() passed after 1.371 seconds.
+􁁛  Test applyPlanSkipsWindowsAlreadyAtTargetFrames() passed after 1.370 seconds.
+􁁛  Test recognizedDropKeepsGraceAndLeavesProofAcrossProcesses() passed after 1.370 seconds.
+􁁛  Test spec002SubscribeFromNowSkipsExistingEvents() passed after 1.370 seconds.
+􁁛  Test externalResizeSnapsBackToSavedLayoutIntent() passed after 1.371 seconds.
+􁁛  Test failedReadDoesNotConfirmRefusal() passed after 1.370 seconds.
+􁁛  Test tiledScopeMembershipChurnSettlesBeforeRelayout(spacing:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test nativeFullscreenOnOneDisplayDoesNotStopOtherDisplay() passed after 1.370 seconds.
+􁁛  Test maximizedLikeWindowWithoutNativeSignalDoesNotHideActiveStageSiblings() passed after 1.370 seconds.
+􁁛  Test focusedStageRestoreWaitsForRecentMissingMemberToSettle() passed after 1.370 seconds.
+􁁛  Test spec002SubscriptionServiceCanReadAllWithFilters() passed after 1.370 seconds.
+􁁛  Test queryHealthAndEventsExposePayloads() passed after 1.371 seconds.
+􁁛  Test daemonHealthWarnsWhenPidfileIsMissing() passed after 1.370 seconds.
+􁁛  Test stagePositionCommandsFollowVisibleRailOrder() passed after 1.370 seconds.
+􁁛  Test externalResizeAfterRecentCommandIntentSnapsBackToCommandLayout() passed after 1.370 seconds.
+􁁛  Test newWindowIsPlacedInOnePassWithoutWaiting() passed after 1.370 seconds.
+􁁛  Test railDropAtIndexInsertsIntoHiddenTreeStage() passed after 1.370 seconds.
+􁁛  Test staleCommandIntentStillSuppressesReflowWhenLayoutMatchesWithoutRefreshingExpiry() passed after 1.370 seconds.
+􁁛  Test stageAssignFollowsTargetStageImmediately() passed after 1.371 seconds.
+􁁛  Test activeLayoutCommandSuppressesNonTreeRelayout() passed after 1.371 seconds.
+􁁛  Test failedStableVisibleDisplayDriftDoesNotCommitMembership() passed after 1.371 seconds.
+􁁛  Test staleDisplayMembershipIsPreservedUntilParkingHeal() passed after 1.370 seconds.
+􁁛  Test membershipSettlingOnOneDisplayDoesNotStopOtherDisplay() passed after 1.370 seconds.
+􁁛  Test commandArmsStabilityAndKeepsItsGeneration() passed after 1.370 seconds.
+􁁛  Test focusFollowsMousePickerTargetsActiveStageWindowAtPoint() passed after 1.370 seconds.
+􁁛  Test spec002SubscribeInitialStateEmitsSnapshotEvent() passed after 1.370 seconds.
+􁁛  Test shiftedFullscreenSizedClampedWindowIsReanchoredBeforeSiblingHide() passed after 1.370 seconds.
+􁁛  Test snapshotKeepsDisconnectedDisplayScopesWithoutContainingDisplayReassign() passed after 1.370 seconds.
+􁁛  Test newTileCandidatesCanFollowFocusedDisplay() passed after 1.370 seconds.
+􁁛  Test failedFrameDoesNotTriggerRepeatedApplyLoop() passed after 1.370 seconds.
+􁁛  Test treeBalanceResetsEveryRatioInOneApplication() passed after 1.370 seconds.
+􁁛  Test snapshotMarksClosedWindowsMissingBeforePruningPersistentStages() passed after 1.370 seconds.
+􁁛  Test stageSwitchIgnoresStaleFocusFromHiddenPreviousStage() passed after 1.370 seconds.
+􁁛  Test snapshotPrunesDisconnectedActiveDisplay() passed after 1.370 seconds.
+􁁛  Test stageSwitchToAlreadyActiveStageDoesNotReapplyLayout() passed after 1.370 seconds.
+􁁛  Test layoutFlattenAndSplitReturnCommandResults() passed after 1.370 seconds.
+􁁛  Test nonTileCandidatesRemainUnscoped() passed after 1.370 seconds.
+􁁛  Test repeatedStageSwitchToAlreadyActiveMissingNativeFullscreenRetriesActivation() passed after 1.370 seconds.
+􁁛  Test snapshotKeepsDisconnectedDisplayScopesWithoutFallbackReassign() passed after 1.371 seconds.
+􁁛  Test dragReleaseSnapsBackWhenAuthoritativeLayoutIntentExists() passed after 1.371 seconds.
+􁁛  Test inactiveStageWindowsAreHiddenInAerospaceCorner() passed after 1.370 seconds.
+􁁛  Test recognizedBspGestureOverridesSavedGridAndSurvivesFocusChange(commandInProgress:) with 2 test cases passed after 1.370 seconds.
+􁁛  Test catalogContainsWindowPinEvents() passed after 1.370 seconds.
+􁁛  Test spec002EventLogReadsEnvelopeAndLegacyEvents() passed after 1.370 seconds.
+􁁛  Test stageSwitchPreservesMaximizedWindowAndKeepsSiblingsHidden() passed after 1.370 seconds.
+􁁛  Test toggleSplitRequiresTreeMode() passed after 1.370 seconds.
+􁁛  Test stageAssignPositionCanTargetHiddenEmptyStageSlots() passed after 1.370 seconds.
+􁁛  Test policyExcludedWindowDoesNotRemainStageManaged() passed after 1.370 seconds.
+􁁛  Test treeStageSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() passed after 1.370 seconds.
+􁁛  Test displaySendRemovesInstancePin() passed after 1.370 seconds.
+􁁛  Test stageMoveToDisplayMovesActiveStageMembership() passed after 1.370 seconds.
+􁁛  Test treeToggleSplitFlipsParentSplitOfActiveWindow() passed after 1.370 seconds.
+􁁛  Test stageSwitchIsNotTreatedAsMembershipChange() passed after 1.370 seconds.
+􁁛  Test daemonHealthReportsModularComponentsWhenMonolithicPidfileIsMissing() passed after 1.370 seconds.
+􁁛  Test clampedHeightExcludesWindowAndRelayoutsRemainingTiles() passed after 1.370 seconds.
+􁁛  Test stableVisibleDisplayDriftIsReconciledAfterRulesAndManualMovesHadPriority() passed after 1.370 seconds.
+􁁛  Test eventLogRotatesBeforeAppendingPastLimit() passed after 1.370 seconds.
+􁁛  Test spec002EventEnvelopeRoundTripsJSONPayloads() passed after 1.370 seconds.
+􁁛  Test stageSummonMovesExplicitWindowToActiveStage() passed after 1.370 seconds.
+􁁛  Test ownAppliedFramesAreNotTreatedAsManualResizeOnNextTick() passed after 1.370 seconds.
+􁁛  Test stageCreateRenameReorderListAndDeleteEmptyInactiveStage() passed after 1.370 seconds.
+􁁛  Test commandIntentBlocksImmediateReflow() passed after 1.370 seconds.
+􁁛  Test stageAssignEmptySkipsNamedEmptyStagesAndCreatesNextStage() passed after 1.370 seconds.
+􁁛  Test crossDisplayDropKeepsPreviewPlacementAfterRelease(destinationHasWindow:) with 2 test cases passed after 1.371 seconds.
+􁁛  Test cleanExitMarkerPreventsCrashRestore() passed after 1.370 seconds.
+􁁛  Test treeSplitVerticalStacksParentSplit() passed after 1.370 seconds.
+􁁛  Test snapshotIgnoresStaleHiddenFocusAfterExplicitStageSwitch() passed after 1.370 seconds.
+􁁛  Test layoutSplitVerticalStacksWindowsTopToBottom() passed after 1.370 seconds.
+􁁛  Test singleTiledWindowStageTilesNewWindowInsteadOfHidingIt() passed after 1.370 seconds.
+􁁛  Test commandIntentWithLargeInternalGapIsInvalidated() passed after 1.370 seconds.
+􁁛  Test stageAssignWindowNoFollowBlocksDelayedHiddenFocusFollow() passed after 1.370 seconds.
+􁁛  Test legacyLineWithoutNewFieldsDecodes() passed after 1.370 seconds.
+􁁛  Test toggleSplitUsesFocusedDisplayTreeAndMutableBspAlias() passed after 1.370 seconds.
+􁁛  Test neighborToTheLeftIsFoundForCenterDisplay() passed after 1.370 seconds.
+􁁛  Test stageSwitchToMissingNativeFullscreenTargetActivatesApplication() passed after 1.370 seconds.
+􁁛  Test treeMoveSwapsLeavesInOneApplicationWithoutCommandHold() passed after 1.370 seconds.
+􁁛  Test fullscreenExitGuardTimesOutWithinOneEpisode() passed after 1.370 seconds.
+􁁛  Test stageSwitchDoesNotTreatScreenSizedWindowAsFullscreenWithoutZoomIntent() passed after 1.370 seconds.
+􁁛  Test windowDesktopAssignMovesActiveWindowToTargetDesktopWithoutFollowing() passed after 1.370 seconds.
+􁁛  Test fullscreenSiblingHideIsNotAdoptedAsMutableBspResize() passed after 1.370 seconds.
+􁁛  Test desktopAssignRemovesInstancePin() passed after 1.370 seconds.
+􁁛  Test catalogDeclaresLayoutEventsAndKeepsObsoleteMutableBspTypes() passed after 1.370 seconds.
+􁁛  Test episodeIdIsSetByContextAndStableAcrossContinue() passed after 1.370 seconds.
+􁁛  Test treeResizePushesDesignatedEdgeThenPullsOppositeFence() passed after 1.370 seconds.
+􁁛  Test stageSwitchVisibleFollowsNonEmptyRailOrder() passed after 1.370 seconds.
+􁁛  Test bspNewWindowDoesNotInheritStaleManualRatio() passed after 1.370 seconds.
+􁁛  Test nativeFullscreenFocusPrefersExactApplicationWindowOverBundleActivation() passed after 1.370 seconds.
+􁁛  Test knownMinimumLimitsGestureBeforeWritingRefusedNeighborSize() passed after 1.370 seconds.
+􁁛  Test desktopSummonSwitchesRequestedDesktopToActiveDisplay() passed after 1.370 seconds.
+􁁛  Test treeWarpReinsertsByCuttingNeighborLeafShape() passed after 1.370 seconds.
+􁁛  Test aFocusableLeafWithoutActionReachesTheFinalTargets() passed after 1.370 seconds.
+􁁛  Test nativeFullscreenFocusActivatesApplicationWithoutSwitchingStage() passed after 1.370 seconds.
+􁁛  Test aFocusableElementIsALeafUnlessTheNextFocusableInPreorderIsItsDescendant() passed after 1.370 seconds.
+􁁛  Test stageSwitchPersistsTargetStageBeforeRestoringWindows() passed after 1.370 seconds.
+􁁛  Test episodeClosesAfterOneSecondWithoutActivityAndNewCauseGetsNewId() passed after 1.370 seconds.
+􁁛  Test toggleFullscreenRecordsZoomedIntentWithAppliedFrames() passed after 1.370 seconds.
+􁁛  Test snapshotPersistsFocusedWindowInStage() passed after 1.370 seconds.
+􁁛  Test treeModeRefusesInsertJoinAndWidthWithFailureExitCode() passed after 1.370 seconds.
+􁁛  Test stageSwitchIgnoresMissingMaximizedMemberWhenRestoringLiveStageMembers() passed after 1.370 seconds.
+􁁛  Test snapshotSuppressesHiddenCrossDisplayFocusWhenAWindowJustWentMissing() passed after 1.370 seconds.
+􁁛  Test temporarilyMissingWindowIsNotPrunedAfterShortAXGap() passed after 1.370 seconds.
+􁁛  Test repeatedStageSwitchToAlreadyActiveHiddenStageRestoresMembers() passed after 1.370 seconds.
+􁁛  Test mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing(productionWiring:) with 2 test cases passed after 1.370 seconds.
+􁁛  Test snapshotCanIgnoreMacFocusWhenStageFollowsFocusIsDisabled() passed after 1.370 seconds.
+􁁛  Test inactiveFloatingStageWindowsAreRemovedFromStageManagement() passed after 1.370 seconds.
+􁁛  Test persistentActiveStageModeControlsApplyPlan() passed after 1.370 seconds.
+􁁛  Test activeWindowDragSuppressesMaintainerRelayoutAcrossActivityInstances() passed after 1.370 seconds.
+􁁛  Test searchTextKeepsChildTextWithoutRepeatingTheTitle() passed after 1.370 seconds.
+􁁛  Test selfTestPassesForHealthySnapshot() passed after 1.370 seconds.
+􁁛  Test repeatedStageSwitchToAlreadyActiveMissingStageFocusesApplicationWindow() passed after 1.370 seconds.
+􁁛  Test overlappingEpisodeCountsStabilityFromItsOwnPass() passed after 1.370 seconds.
+􁁛  Test placingWindowOnAnotherDisplayRelayoutsVisibleSourceStageImmediately() passed after 1.370 seconds.
+􁁛  Test applyPlanTracksVisibleRailWidthWhenResizeLayoutModeIsEnabled() passed after 1.370 seconds.
+􁁛  Test staleIntentWithHoleIsInvalidatedAndRebalanced() passed after 1.370 seconds.
+􁁛  Test activeWindowDragSuppressesMaintainerRelayout() passed after 1.370 seconds.
+􁁛  Test displayTilingOverridesDecodeFromToml() passed after 1.370 seconds.
+􁁛  Test writesStatusAndAppliesManualSnapshot() passed after 1.370 seconds.
+􁁛  Test mouseFollowerMovesToWindowCenterOnlyWhenEnabled() passed after 1.370 seconds.
+􁁛  Test stageAssignPositionUsesVisibleRailOrder() passed after 1.370 seconds.
+􁁛  Test convertsPrimaryScreenPointBetweenNSAndAXCoordinates() passed after 1.370 seconds.
+􁁛  Test commandIntentPersistsWithRecentDriftAndDoesNotGetInvalidated() passed after 1.370 seconds.
+􁁛  Test stageSwitchToTargetWithOnlyStaleMissingMembersSwitchesAndRecallsApplication() passed after 1.370 seconds.
+􁁛  Test eventLogAppendsJsonLines() passed after 1.370 seconds.
+􁁛  Test layoutInsertAndZoomParentApplyFrames() passed after 1.370 seconds.
+􁁛  Test stageSwitchMarksLayoutCommandActivity() passed after 1.370 seconds.
+􁁛  Test treePlaceOnAnotherDisplayMovesLeafAtRequestedRank() passed after 1.370 seconds.
+􁁛  Test commandIntentIsNotPersistedOnPartialCommandFailure() passed after 1.370 seconds.
+􁁛  Test warpMovesSmallWindowAcrossRootSplitInsteadOfSwappingFrames() passed after 1.370 seconds.
+􁁛  Test validationTranslatesDecodeErrors() passed after 1.370 seconds.
+􁁛  Test snapshotCreatesEmptyScopeForNewlyConnectedDisplay() passed after 1.370 seconds.
+􁁛  Test windowCommandEventCapturesWarpDirectionAndClampOutcome() passed after 1.370 seconds.
+􁁛  Test desktopFocusHidesOutgoingDesktopAndRestoresIncomingDesktop() passed after 1.370 seconds.
+􁁛  Test directionalWindowFocusAcrossOffsetDisplaysFollowsVisualOverlap() passed after 1.370 seconds.
+􁁛  Test convertsAXRectBackToNSRectOnContainingScreen() passed after 1.370 seconds.
+􁁛  Test electronBundlesAreDetectedByTheirFramework() passed after 1.370 seconds.
+􁁛  Test railSettingsHideOnMaximizedDefaultsToNativeFullscreenOnly() passed after 1.369 seconds.
+􁁛  Test appTargetsFilterRolesAndPreserveActionableElements() passed after 1.370 seconds.
+􁁛  Test theProcessOfAnAppTargetIsReadFromItsID() passed after 1.370 seconds.
+􁁛  Test completeNonCanonicalIntentIsPreserved() passed after 1.370 seconds.
+􁁛  Test parkedStagesAreWarnNotFail() passed after 1.370 seconds.
+􁁛  Test titlebarContextMenuDefaultsAreSafe() passed after 1.369 seconds.
+􁁛  Test moveIntentIsNotPersistedWhenFrameIsClamped() passed after 1.370 seconds.
+􁁛  Test rememberedVisibleSiblingWithoutSystemFocusDoesNotExitZoom() passed after 1.370 seconds.
+􁁛  Test memberReturnGuardClosesOnUserSpace() passed after 1.371 seconds.
+􁁛  Test railExposesMaximizedPresentationInsteadOfDroppingStageState() passed after 1.370 seconds.
+􁁛  Test directionalWindowFocusChoosesGeometricEntryWindowOnAdjacentDisplay() passed after 1.370 seconds.
+􁁛  Test swapIntentPreventsMaintainerFromRevertingToSpatialBSPOrder() passed after 1.370 seconds.
+􁁛  Test spec002CoreSurfacesRemainAvailableTogether() passed after 1.370 seconds.
+􁁛  Test legacyTreeWarpInsertsIntoImmediateNeighborSlot() passed after 1.370 seconds.
+􁁛  Test treeFlattenEqualsBalance() passed after 1.370 seconds.
+􁁛  Test temporarilyMissingWindowKeepsStageAcrossFullscreenTransition() passed after 1.370 seconds.
+􁁛  Test fullscreenTogglesCallUnderlyingWindowActions() passed after 1.370 seconds.
+􁁛  Test macroRecordingRoundTripsAsJSON() passed after 1.370 seconds.
+􁁛  Test focusedBorderIsShownWhenNoWindowOccludesFocusedWindow() passed after 1.369 seconds.
+􁁛  Test tileCandidatesAreAssignedToDefaultStageOnContainingDisplay() passed after 1.369 seconds.
+􁁛  Test clickVariantsAreRoutedToProvider() passed after 1.369 seconds.
+􁁛  Test railRuntimeStateKeepsBackwardCompatiblePinnedDefault() passed after 1.369 seconds.
+􁁛  Test sendToDisplayWritesTheMovedWindowOnceWithoutIntermediateMove() passed after 1.370 seconds.
+􁁛  Test tsMsMatchesTimestampAndSurvivesTheLog() passed after 1.369 seconds.
+􁁛  Test externallyRestoredHiddenWindowIsNotAnInferredResize() passed after 1.370 seconds.
+􁁛  Test stageSwitchToRecentlyMissingTargetSwitchesAndRecallsApplication() passed after 1.369 seconds.
+􁁛  Test acceptedResponseReportsOnlyMatchingRequestDiagnostics(matchingRequest:) with 2 test cases passed after 1.369 seconds.
+􁁛  Test applyPlanUsesVisibleFrameOfEachDisplay() passed after 1.369 seconds.
+􁁛  Test snapshotSwitchesStageWhenMacFocusPointsToHiddenInactiveStage() passed after 1.370 seconds.
+􁁛  Test staleBookmarkIsRemovedOnFocus() passed after 1.369 seconds.
+􁁛  Test stateAuditFailsOnDuplicateMembership() passed after 1.369 seconds.
+􁁛  Test floatStageModeDoesNotReplaySavedTilingIntent() passed after 1.369 seconds.
+􁁛  Test railStaysVisibleBeforeSoleTiledWindowCoveringDisplay() passed after 1.369 seconds.
+􀢄  Test shippedExampleConfigIsValidWithoutWarning() failed after 1.369 seconds with 1 issue.
+􁁛  Test bookmarkFocusReactivatesWindowStage() passed after 1.369 seconds.
+􁁛  Test spec002StateSnapshotRoundTrips() passed after 1.369 seconds.
+􁁛  Test borderConfigDecodesFromToml() passed after 1.369 seconds.
+􁁛  Test bspUsesSpatialOrderAfterManualReposition() passed after 1.370 seconds.
+􁁛  Test treeDesktopSwitchPlacesFinalTreeFramesWithoutRestoringMemorizedFrames() passed after 1.369 seconds.
+􁁛  Test explicitResizeOfActiveVisibleWindowStillWorks(mode:) with 2 test cases passed after 1.369 seconds.
+􁁛  Test directionalWindowMoveFallsThroughToAdjacentDisplayAtStageEdge() passed after 1.370 seconds.
+􁁛  Test focusChangesDuringPassDoNotProduceHideThenRestore() passed after 1.370 seconds.
+􁁛  Test directionalFocusPrefersSameVisualBandBeforeDiagonalCandidate() passed after 1.369 seconds.
+􁁛  Test childTextMakesAWebTargetSearchable() passed after 1.369 seconds.
+􁁛  Test railHidesOnDisplayWithNativeFullscreenWindowEvenWhenFocusIsElsewhere() passed after 1.369 seconds.
+􁁛  Test focusedVisibleSiblingExitsZoomBeforeAnyHiding(mode:newcomer:) with 6 test cases passed after 1.369 seconds.
+􁁛  Test spec002SnapshotFixtureDecodes() passed after 1.369 seconds.
+􁁛  Test aWebLeafIsClickedOnItsFirstContentNotItsCenter() passed after 1.369 seconds.
+􁁛  Test focusedBorderIsHiddenWhenAnotherWindowOccludesFocusedWindow() passed after 1.369 seconds.
+􁁛  Test appTargetsAreDisabledUnlessConfiguredOrOverridden() passed after 1.369 seconds.
+􁁛  Test identitySetUsesRealEqualityNotOnlyTheHash() passed after 1.369 seconds.
+􁁛  Test rejectedRolesAreSummarizedByFrequencyThenName() passed after 1.370 seconds.
+􁁛  Test acceptsRegularResizableStandardWindow() passed after 1.369 seconds.
+􁁛  Test displayFocusPersistsActiveDisplayAndRestoresFocusedStageWindow() passed after 1.369 seconds.
+􁁛  Test aTargetHiddenByAWindowInFrontGetsNoLabel() passed after 1.369 seconds.
+􁁛  Test rejectsNonStandardSubrolesEvenWhenRawTileCandidate() passed after 1.369 seconds.
+􁁛  Test validationDoesNotSuggestWhenNothingIsClose() passed after 1.369 seconds.
+􁁛  Test elementsAreClippedToTheWindowSoTheirClickPointStaysInside() passed after 1.369 seconds.
+􁁛  Test scanIsRetriedOnlyWhileAFullyExploredElectronTreeHasNoWebArea() passed after 1.369 seconds.
+􁁛  Test nearestTargetPrefersSmallestContainingFrame() passed after 1.370 seconds.
+􁁛  Test railHidesBeforeMaximizedWindowOnlyWhenSettingIsEnabled() passed after 1.369 seconds.
+􁁛  Test searchHotkeyDefaultsToHyperFAndAcceptsAliases() passed after 1.369 seconds.
+􁁛  Test focusConfigDecodesFromToml() passed after 1.369 seconds.
+􁁛  Test aRowWithItsOwnButtonsKeepsItsTextButAPageContainerDoesNot() passed after 1.369 seconds.
+􁁛  Test rejectsModalAndNonResizableDialogs() passed after 1.369 seconds.
+􁁛  Test focusBackAndForthUsesPreviousFocusedWindow() passed after 1.370 seconds.
+􁁛  Test failedPlacementReportsOnlyMatchingGenerationDiagnostics(matchingGeneration:) with 2 test cases passed after 1.369 seconds.
+􁁛  Test aFocusableElementWithUnreadableChildrenIsNotProvenALeaf() passed after 1.369 seconds.
+􁁛  Test windowPlacementDefaultsToMacOS() passed after 1.369 seconds.
+􁁛  Test titlebarContextMenuValidationReportsUnsafeValues() passed after 1.369 seconds.
+􁁛  Test aLeafIsADuplicateOnlyWhenItCoversItsRetainedTarget() passed after 1.369 seconds.
+􁁛  Test stageRenameWithDisplayIDRenamesClickedDisplayStageOnly() passed after 1.369 seconds.
+􁁛  Test onlyScrolledOutOrOffWindowElementsHideContent() passed after 1.369 seconds.
+􁁛  Test lostWindowRiskFailsOnlyWhenUnrecoverable() passed after 1.369 seconds.
+􁁛  Test validationFlagsKeysThatHaveNoEffect() passed after 1.369 seconds.
+􁁛  Test onlyFullyExploredFocusableLeavesAreKept() passed after 1.369 seconds.
+􁁛  Test windowPlacementConfigDecodesFromToml() passed after 1.369 seconds.
+􁁛  Test directionalDisplayFocusUsesAdjacentDisplay() passed after 1.369 seconds.
+􁁛  Test hidingInactiveStagePreservesIntentAndDoesNotBecomeResize(mode:) with 2 test cases passed after 1.369 seconds.
+􁁛  Test configWorkspacesSeedPersistentStageNames() passed after 1.369 seconds.
+􁁛  Test configValidationReportsUnsupportedTablesAsWarnings() passed after 1.369 seconds.
+􁁛  Test configValidationReportsDecodeErrors() passed after 1.369 seconds.
+􁁛  Test snapshotKeepsDisconnectedDisplayMembersWhenWindowsAreTemporarilyHidden() passed after 1.369 seconds.
+􁁛  Test selfTestWarnsOnTinyLiveTiles() passed after 1.370 seconds.
+􁁛  Test desktopBackAndForthReturnsToPreviousDesktop() passed after 1.370 seconds.
+􁁛  Test targetModeValidationReportsUnsafeValues() passed after 1.369 seconds.
+􁁛  Test appliesExplicitRatioToActiveWindow() passed after 1.369 seconds.
+􁁛  Test desktopLabelPersistsAndAppearsInList() passed after 1.369 seconds.
+􁁛  Test automationSnapshotExposesWindowPresentationState() passed after 1.369 seconds.
+􁁛  Test displayTopologyRejectsMostlyDiagonalNeighbors() passed after 1.369 seconds.
+􁁛  Test snapshotStillFollowsHiddenCrossDisplayFocusWhenNoWindowWentMissing() passed after 1.369 seconds.
+􁁛  Test applyPlanLetsDisplayOverrideBaseGapOverrideGlobalSideGaps() passed after 1.369 seconds.
+􁁛  Test inactiveDesktopPinIsNotHiddenWhenDesktopIsActive() passed after 1.369 seconds.
+􁁛  Test inactiveWindowParkedOnOldBottomLeftIsReparkedToBottomRight() passed after 1.369 seconds.
+􁁛  Test validationAcceptsEveryRailTableWithoutWarning() passed after 1.369 seconds.
+􁁛  Test crossDisplayCenterInsertsWithFutureSmartGaps() passed after 1.369 seconds.
+􁁛  Test focusStageMoveFollowDefaultsToTrue() passed after 1.369 seconds.
+􁁛  Test treeDropAppliesCandidateMutationToPersistedTree() passed after 1.369 seconds.
+􁁛  Test rejectsWhenNoTiledWindowExists() passed after 1.369 seconds.
+􁁛  Test crossDisplayEmptyTreePreviewsItsFirstPlacement() passed after 1.369 seconds.
+􁁛  Test validationSuggestsClosestKnownKeyForTypos() passed after 1.369 seconds.
+􁁛  Test inspectStaleWindowReturnsStaleReason() passed after 1.369 seconds.
+􁁛  Test railSettingsDefaultsCenterStagesAndReserveHeaderTopPadding() passed after 1.369 seconds.
+􁁛  Test treeDropIgnoresTransientDraggedFrameAndRefillsFreedSpace() passed after 1.369 seconds.
+􁁛  Test inspectionJSONKeepsTargetIdentityStateAndReasons() passed after 1.369 seconds.
+􁁛  Test titlebarContextMenuConfigDecodesFromToml() passed after 1.369 seconds.
+􁁛  Test convertsExternalScreenAbovePrimaryBetweenNSAndAXCoordinates() passed after 1.369 seconds.
+􁁛  Test treeDropOnBottomEdgeInsertsBelowTarget() passed after 1.369 seconds.
+􁁛  Test stateHealRepairsDuplicateStaleAndBrokenFocusState() passed after 1.369 seconds.
+􁁛  Test targetModeConfigDecodesFromToml() passed after 1.369 seconds.
+􁁛  Test stageCommandsUseCurrentDesktopScope() passed after 1.369 seconds.
+􁁛  Test cleanupKeepsOnlyRecentGeneratedBackupsAndArchives() passed after 1.369 seconds.
+􁁛  Test inspectWindowReportsPinnedFloatingAndScopeReasons() passed after 1.369 seconds.
+􁁛  Test treeDumpExposesDisplayDesktopStageAndWindowHierarchy() passed after 1.369 seconds.
+􁁛  Test generatedRulesValidationReportsGeneratedFileErrors() passed after 1.369 seconds.
+􁁛  Test displayTopologyFindsDirectionalNeighborByGeometry() passed after 1.369 seconds.
+􁁛  Test generatedRulesAreMergedWithUserConfig() passed after 1.369 seconds.
+􁁛  Test configExclusionsKeepMatchingBundlesOutOfStageManagement() passed after 1.369 seconds.
+􁁛  Test autoIntentWithTinyTileIsInvalidated() passed after 1.369 seconds.
+􁁛  Test railSettingsFileIsReparsedOnlyWhenItChanges() passed after 1.369 seconds.
+􁁛  Test crossDisplayEdgesApplyThePreviewedTree(operation:) with 4 test cases passed after 1.369 seconds.
+􁁛  Test metricsExposeRuntimeAndStateCounters() passed after 1.369 seconds.
+􁁛  Test automationSnapshotUsesFocusedWindowDisplayAndConfiguredRules() passed after 1.370 seconds.
+􁁛  Test visiblePinHiddenInCornerIsRestoredToLastFrame() passed after 1.369 seconds.
+􁁛  Test crossDisplayPreviewRequiresAnEligibleSourceOnItsActiveDesktop() passed after 1.369 seconds.
+􁁛  Test treeDropAtCenterSwapsLeaves() passed after 1.369 seconds.
+􁁛  Test railSettingsDecodeRendererGeometryAndStageAccents() passed after 1.369 seconds.
+􁁛  Test targetModeDefaultsKeepRiskyFeaturesDisabled() passed after 1.369 seconds.
+􁁛  Test sameScopeEmptyProjectionCancels() passed after 1.369 seconds.
+􁁛  Test searchHotkeyValidationRejectsAKeyWithoutModifier() passed after 1.369 seconds.
+􁁛  Test legacyTreeStageRestoresHiddenWindowsFromTheTree() passed after 1.369 seconds.
+􁁛  Test snapshotPreservesDisconnectedDisplayMembershipUntilParkingHeal() passed after 1.369 seconds.
+􁁛  Test sameScopeDropOutsideProjectedWindowsCancels() passed after 1.369 seconds.
+􁁛  Test railStaysVisibleWhenFocusedWindowIsNotFullscreen() passed after 1.369 seconds.
+􁁛  Test treePreviewPersistsNothing() passed after 1.369 seconds.
+􁁛  Test snapshotPrunesLayoutIntentsForDisconnectedDisplays() passed after 1.369 seconds.
+􁁛  Test stateAuditPassesForHealthyState() passed after 1.369 seconds.
+􁁛  Test unmatchedRuleDoesNotCreateScratchpadMarker() passed after 1.368 seconds.
+􁁛  Test commandsHandleEmptyWindowSets() passed after 1.369 seconds.
+􁁛  Test commandsHandleUnknownDisplayAndStaleWindow() passed after 1.369 seconds.
+􁁛  Test snapshotDoesNotFollowFocusBackToHiddenDesktopWindow() passed after 1.369 seconds.
+􁁛  Test crossDisplayPreviewUsesFrozenContextAndPersistsNothing() passed after 1.369 seconds.
+􁁛  Test moveFallsBackToActiveStageFocusedWindowWhenAXFocusIsUnavailable() passed after 1.369 seconds.
+􁁛  Test matchedScratchpadActionIsStoredAndExposed() passed after 1.368 seconds.
+􁁛  Test soleTiledWindowCoveringDisplayIsNotMaximized() passed after 1.368 seconds.
+􁁛  Test crossDisplayEmptyProjectionKeepsHistoricalLeafOnDrop() passed after 1.369 seconds.
+􁁛  Test railDoesNotRepresentMissingNormalMember() passed after 1.368 seconds.
+􁁛  Test newTileCandidatesCanFollowMouseDisplay() passed after 1.369 seconds.
+􁁛  Test emptyStarAndSemicolonShowEverything() passed after 1.368 seconds.
+􁁛  Test railDropsMissingNativeFullscreenMemberAfterFifteenSeconds() passed after 1.368 seconds.
+􁁛  Test slivedOrTinyElementsAreNotHintable() passed after 1.368 seconds.
+􁁛  Test railUsesPersistedMemberFrameForParkedMaximizedWindow() passed after 1.368 seconds.
+􁁛  Test railDoesNotKeepStaleMissingNormalMemberDuringFullscreen() passed after 1.368 seconds.
+􁁛  Test doubleAcquireOnSameLiveProcessThrowsAlreadyRunning() passed after 1.369 seconds.
+􁁛  Test applyReportsAppliedClampedAndFailedFrames() passed after 1.369 seconds.
+􁁛  Test railKeepsRecentlyMissingNormalMemberDuringStageSwitch() passed after 1.368 seconds.
+􁁛  Test registryReturnsActiveLocksWithStartedAt() passed after 1.368 seconds.
+􁁛  Test lateWindowsKeepLabelsAndTheHighlightedTarget() passed after 1.368 seconds.
+􁁛  Test railRepresentsMissingNativeFullscreenMember() passed after 1.368 seconds.
+􁁛  Test railShowsSoleTiledWindowAsNormalEvenWhenItCoversDisplay() passed after 1.368 seconds.
+􁁛  Test nearVisibleFrameWindowIsMaximized() passed after 1.368 seconds.
+􁁛  Test anEmptyBarSelectsNothing() passed after 1.368 seconds.
+􁁛  Test railContentSignatureIsStableUntilVisibleContentChanges() passed after 1.368 seconds.
+􁁛  Test acquireWritesPidFileAndReleaseRemovesIt() passed after 1.368 seconds.
+􁁛  Test releaseGraceIsIgnoredForTreeModesAcrossInstances() passed after 1.369 seconds.
+􁁛  Test nativeFullscreenTakesPrecedenceOverMaximizedFrame() passed after 1.368 seconds.
+􁁛  Test daemonHealRepairsStateAndAppliesPendingLayout() passed after 1.369 seconds.
+􁁛  Test matchingIgnoresCaseAccentsAndSpaces() passed after 1.368 seconds.
+􁁛  Test acquireOverwritesStalePidFile() passed after 1.368 seconds.
+􁁛  Test regularWindowIsNormal() passed after 1.368 seconds.
+􁁛  Test railDropsMissingMaximizedMemberAfterGrace() passed after 1.368 seconds.
+􁁛  Test questionMarkShowsPropertiesUntilTheNextKey() passed after 1.368 seconds.
+􁁛  Test snapshotPersistsNativeFullscreenPresentationState() passed after 1.368 seconds.
+􁁛  Test coveringWindowIsMaximizedWhenStageHasAnotherTiledWindow() passed after 1.368 seconds.
+􁁛  Test daemonHealthReportsRunningPidAndHealthyState() passed after 1.369 seconds.
+􁁛  Test roadieTargetsUseTheirDefaultAction() passed after 1.368 seconds.
+􁁛  Test shiftLabelJumpsToThatTarget() passed after 1.368 seconds.
+􁁛  Test returnVariantsChooseTheClick() passed after 1.368 seconds.
+􁁛  Test webTargetsRankByTheirChildText() passed after 1.368 seconds.
+􁁛  Test navigationWrapsAndTypingResetsTheHighlight() passed after 1.367 seconds.
+􁁛  Test noMatchLeavesNothingHighlighted() passed after 1.367 seconds.
+􁁛  Test searchKeysAreDecodedLikeHomerow() passed after 1.367 seconds.
+􁁛  Test sendToDisplayMovesMembershipAndRelayoutsBothDisplays() passed after 1.369 seconds.
+􁁛  Test fewResultsGetOneLetterLabels() passed after 1.368 seconds.
+􁁛  Test titlesStartingWithTheQueryComeFirst() passed after 1.367 seconds.
+􁁛  Test crossDisplayPreviewRejectsFloatDestinationAndPointsOutsideDisplays() passed after 1.369 seconds.
+􁁛  Test treeBookmarkFocusHidesAndLaysOutInOneApplication() passed after 1.368 seconds.
+􁁛  Test treeStageSwitchPublishesItsApplicationToTheServiceCenter() passed after 1.368 seconds.
+􁁛  Test physicalDirectionalFocusKeepsPhysicalFramesOutsideTreeModes() passed after 1.368 seconds.
+􁁛  Test treeDesktopSwitchHidesAndLaysOutInOneApplication() passed after 1.368 seconds.
+􁁛  Test treeStageSwitchHidesAndLaysOutInOneApplicationThenFocuses() passed after 1.368 seconds.
+􁁛  Suite WindowGroupStateTests passed after 1.382 seconds.
+􁁛  Suite RoadieStateTests passed after 1.382 seconds.
+􁁛  Test treeDirectionalFocusUsesProjectedTreeFrames() passed after 1.368 seconds.
+􁁛  Suite BSPTreeMutationTests passed after 1.382 seconds.
+􁁛  Suite LayoutPlannerTests passed after 1.382 seconds.
+􁁛  Suite BSPTreeTests passed after 1.382 seconds.
+􁁛  Suite AXCacheInvalidationTests passed after 1.382 seconds.
+􁁛  Suite SpatialBSPLayoutStrategyTests passed after 1.382 seconds.
+􁁛  Suite AXWindowFrameWriterTests passed after 1.382 seconds.
+􁁛  Suite AXAttributeCacheTests passed after 1.382 seconds.
+􁁛  Suite AXVolatileReadingTests passed after 1.382 seconds.
+􁁛  Suite BSPTreeEngineTests passed after 1.382 seconds.
+􁁛  Suite AXUnresponsiveAppsTests passed after 1.382 seconds.
+􁁛  Suite WrittenFrameRegistryTests passed after 1.382 seconds.
+􁁛  Suite StateMigrationTests passed after 1.382 seconds.
+􁁛  Suite FormattersTests passed after 1.382 seconds.
+􁁛  Suite SpatialBSPConfigTests passed after 1.382 seconds.
+􁁛  Suite StageDisplayMoveTests passed after 1.382 seconds.
+􁁛  Suite DisplayParkingServiceTests passed after 1.382 seconds.
+􁁛  Suite CommandGenerationTests passed after 1.382 seconds.
+􁁛  Suite RestoreSafetyLifecycleTests passed after 1.382 seconds.
+􁁛  Suite TargetSearchHotkeyTests passed after 1.382 seconds.
+􁁛  Suite PerformanceLogServiceTests passed after 1.382 seconds.
+􁁛  Suite RailAwareMaximizationVisibilityTests passed after 1.382 seconds.
+􁁛  Suite PersistentStageStateTests passed after 1.382 seconds.
+􁁛  Suite FileLockTests passed after 1.382 seconds.
+􁁛  Suite LegacyQueryCompatibilityTests passed after 1.382 seconds.
+􁁛  Suite CommandStateTransactionTests passed after 1.382 seconds.
+􁁛  Suite TargetGridServiceTests passed after 1.382 seconds.
+􁁛  Suite WindowGroupCommandTests passed after 1.382 seconds.
+􁁛  Suite EventCatalogTests passed after 1.382 seconds.
+􁁛  Suite WindowRuleMaintainerTests passed after 1.382 seconds.
+􁁛  Suite TilingPolicyTests passed after 1.382 seconds.
+􁁛  Suite WindowPinSnapshotTests passed after 1.382 seconds.
+􁁛  Suite ResizeHandlePickerTests passed after 1.382 seconds.
+􁁛  Suite TargetModeRuntimeControllerTests passed after 1.382 seconds.
+􁁛  Suite QueryComponentsTests passed after 1.382 seconds.
+􁁛  Suite TreeAuthorityTests passed after 1.382 seconds.
+􁁛  Suite RestoreSafetyCoverageTests passed after 1.382 seconds.
+􁁛  Suite WindowRuleConfigTests passed after 1.382 seconds.
+􁁛  Suite RulesCommandTests passed after 1.382 seconds.
+􁁛  Suite ConfigHotReloadTests passed after 1.382 seconds.
+􁁛  Suite WindowRuleMatcherTests passed after 1.382 seconds.
+􁁛  Suite NavrailMaximizationContextActionTests passed after 1.382 seconds.
+􁁛  Suite WindowRuleValidationTests passed after 1.382 seconds.
+􁁛  Suite StatePersistenceTests passed after 1.382 seconds.
+􁁛  Suite WindowGroupStoreTests passed after 1.382 seconds.
+􁁛  Suite QueryCommandTests passed after 1.382 seconds.
+􁁛  Suite NavrailMaximizationRefusalTests passed after 1.382 seconds.
+􁁛  Suite ConfigReloadTests passed after 1.382 seconds.
+􁁛  Suite TitlebarContextMenuTests passed after 1.382 seconds.
+􁁛  Suite QueryHealthEventsTests passed after 1.382 seconds.
+􁁛  Suite SnapshotStabilizationTests passed after 1.382 seconds.
+􁁛  Suite DisplayTopologyTests passed after 1.382 seconds.
+􁁛  Suite EventSubscriptionTests passed after 1.382 seconds.
+􁁛  Suite RestoreSafetyServiceTests passed after 1.382 seconds.
+􁁛  Suite PowerUserLayoutCommandTests passed after 1.382 seconds.
+􁁛  Suite EventEpisodeTests passed after 1.382 seconds.
+􁁛  Suite PowerUserDesktopCommandTests passed after 1.382 seconds.
+􁁛  Suite LayoutMaintainerTests passed after 1.382 seconds.
+􁁛  Suite RoadieScreenCoordinateTests passed after 1.382 seconds.
+􁁛  Suite PlacementTransitionRegressionTests passed after 1.382 seconds.
+􀢄  Suite ConfigTests failed after 1.382 seconds with 1 issue.
+􁁛  Suite Spec002RegressionTests passed after 1.382 seconds.
+􁁛  Suite PowerUserFocusCommandTests passed after 1.382 seconds.
+􁁛  Suite AutomationSnapshotTests passed after 1.382 seconds.
+􁁛  Suite WindowDragReorderEligibilityTests passed after 1.382 seconds.
+􁁛  Suite WidthAdjustmentTests passed after 1.382 seconds.
+􁁛  Suite WindowPinLayoutMaintainerTests passed after 1.382 seconds.
+􁁛  Suite TargetInspectionServiceTests passed after 1.382 seconds.
+􁁛  Suite FileAdministrationTests passed after 1.382 seconds.
+􁁛  Suite WindowRuleScratchpadTests passed after 1.382 seconds.
+􁁛  Suite PowerUserCommandEdgeCaseTests passed after 1.382 seconds.
+􁁛  Suite WindowPresentationStateResolverTests passed after 1.382 seconds.
+􁁛  Suite TargetSearchModelTests passed after 1.382 seconds.
+􁁛  Suite AutomationEventTests passed after 1.383 seconds.
+􁁛  Suite TargetMacroServiceTests passed after 1.383 seconds.
+􁁛  Suite ComponentLockFileTests passed after 1.383 seconds.
+􁁛  Suite WindowDragReleaseGraceTests passed after 1.383 seconds.
+􁁛  Suite AppTargetQueryServiceTests passed after 1.383 seconds.
+􁁛  Suite DropPreviewEngineTests passed after 1.383 seconds.
+􁁛  Test lockFilePathFollowsPattern() passed after 1.370 seconds.
+􁁛  Suite SnapshotServiceTests passed after 1.383 seconds.
+􁁛  Test liveProbeAnswersOrReturnsNilWithoutCrashing() passed after 1.381 seconds.
+􁁛  Suite SpaceProbeTests passed after 1.384 seconds.
+􁁛  Test treeDropAcrossScopesWritesSourceAndTargetInOneApplication() passed after 1.371 seconds.
+􁁛  Test pickerReturnsCandidatesWithoutMutationWhenQueryIsAmbiguous() passed after 1.380 seconds.
+􁁛  Test windowDisplaySendWritesSourceAndTargetInOneApplication() passed after 1.373 seconds.
+􁁛  Test appMouseActionsCanBeEnabledExplicitly() passed after 1.383 seconds.
+􁁛  Test restoringStageSwitchWritesNoIntermediateMemorizedFrame() passed after 1.375 seconds.
+􁁛  Suite CommandSinglePlanTests passed after 1.388 seconds.
+􁁛  Test appMouseActionsAreDisabledIndependentlyFromAppTargetDiscovery() passed after 1.384 seconds.
+􁁛  Test appScanStatisticsAreLoggedOnlyWhenTheProviderReportsThem() passed after 1.384 seconds.
+􁁛  Suite TargetHintServiceTests passed after 1.389 seconds.
+􁁛  Test lockAcquireReleaseRoundTripsForEachComponent() passed after 1.380 seconds.
+􁁛  Suite ComponentSubcommandTests passed after 1.393 seconds.
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+rail relayout display=display-main commands=1 applied=1 clamped=0 failed=0
+􁁛  Test maximizedWindowTracksRailVisibilityAndPin(mode:layoutMode:) with 8 test cases passed after 1.571 seconds.
+􁁛  Suite NavrailMaximizationTests passed after 1.577 seconds.
+􁁛  Test borderControllerExposesGroupIndicatorState() passed after 1.572 seconds.
+􁁛  Suite WindowGroupIndicatorTests passed after 1.579 seconds.
+􁁛  Test resizeFromOutsideRightEdgeMovesFenceOnFirstAttempt() passed after 1.583 seconds.
+􁁛  Test schedulerClosesSpaceGuardAtCap() passed after 1.622 seconds.
+􁁛  Test dragReleaseGraceDefersDeadlinesToItsEnd() passed after 1.635 seconds.
+􁁛  Test schedulerRunsMaintainerBurstEndAtItsDeadline() passed after 1.651 seconds.
+􁁛  Test schedulerConfirmsRefusalAtItsDeadline() passed after 1.664 seconds.
+􁁛  Test mouseUpWithoutCandidateReleasesWithoutGraceOrDrop() passed after 1.670 seconds.
+􁁛  Suite WindowDragReleaseTests passed after 1.678 seconds.
+􁁛  Test accessibilityDeniedArmsNoDeadline() passed after 1.678 seconds.
+􁁛  Suite TreeLayoutMaintainerTests passed after 1.686 seconds.
+􁁛  Test echoMoveIsAbsorbedButExternalMoveAndOtherEventsAreForwarded() passed after 1.685 seconds.
+􁁛  Test absorbedEchoOfTheReadBackConfirmsTheRefusal() passed after 1.685 seconds.
+􁁛  Test pastRealDeadlineRunsOnceAtFloor() passed after 1.684 seconds.
+􁁛  Test burstWithinCoalescingWindowGivesOnePass() passed after 1.684 seconds.
+􁁛  Test internalDeadlineBeforePendingRequestTicksFirst() passed after 1.684 seconds.
+􁁛  Test pastInternalDeadlineIsFloored() passed after 1.684 seconds.
+􁁛  Test armedDeadlineFiresWhenNoLongerReported() passed after 1.684 seconds.
+􁁛  Test passRunsAtArmedDeadlineThenStops() passed after 1.683 seconds.
+􁁛  Test legacyCallbackReceivesNamesOnly() passed after 1.685 seconds.
+􁁛  Test noPassWhileButtonPressedThenOnePassOnRelease() passed after 1.684 seconds.
+􁁛  Test noFollowUpPassWhenPassActed() passed after 1.684 seconds.
+􁁛  Test releaseWithoutGestureNorPendingRequestDoesNothing() passed after 1.684 seconds.
+􁁛  Test eventReplacesPendingSafetyNetCause() passed after 1.683 seconds.
+􁁛  Test earliestDueTimeWins() passed after 1.683 seconds.
+􁁛  Test echoSchedulesNothing() passed after 1.683 seconds.
+􁁛  Test otherButtonReleaseKeepsLeftSessionOpen() passed after 1.679 seconds.
+􁁛  Test helpVariantsExitZeroOnStdout() passed after 1.680 seconds.
+􁁛  Test gestureEndAloneRequestsOnePass() passed after 1.684 seconds.
+􁁛  Test liveTickSplitsLatency() passed after 1.682 seconds.
+􁁛  Test safetyNetPassesImmediatelyWithoutEpisode() passed after 1.683 seconds.
+􁁛  Test gestureOnManagedWindowIsConsumedOnce() passed after 1.679 seconds.
+􁁛  Test unconsumedGestureOnSameWindowKeepsFirstStartFrame() passed after 1.678 seconds.
+􁁛  Test externalChangeExtendsOpenEpisodeAndEventOpensNewOne() passed after 1.684 seconds.
+􁁛  Test episodeStaysOpenAcrossArmedDeadlines() passed after 1.683 seconds.
+􁁛  Test clickWithoutTargetProducesNoGesture() passed after 1.679 seconds.
+􁁛  Suite AXWindowEventObserverDispatchTests passed after 1.688 seconds.
+􁁛  Test noEventIsDroppedWithin200Milliseconds() passed after 1.684 seconds.
+􁁛  Test sessionWithoutObserverHasNoTarget() passed after 1.678 seconds.
+􀟈  Test maximizeIsAdvertisedAndRouted() started.
+􁁛  Suite TickSchedulerTests passed after 1.688 seconds.
+􁁛  Suite UserInputGestureTests passed after 1.688 seconds.
+􁁛  Test maximizeIsAdvertisedAndRouted() passed after 0.003 seconds.
+􀟈  Test helpIsGeneratedFromCommandTable() started.
+􁁛  Test helpIsGeneratedFromCommandTable() passed after 0.001 seconds.
+􀟈  Test unimplementedCommandsExitOne() started.
+􁁛  Test unimplementedCommandsExitOne() passed after 0.001 seconds.
+􀟈  Test versionPrintsSingleVersionConstant() started.
+􁁛  Test versionPrintsSingleVersionConstant() passed after 0.001 seconds.
+􀟈  Test usageErrorsExit64OnStderr() started.
+􁁛  Test usageErrorsExit64OnStderr() passed after 0.001 seconds.
+􀟈  Test actionWithoutChangeExitsZeroAndFailureExitsOne() started.
+􁁛  Test actionWithoutChangeExitsZeroAndFailureExitsOne() passed after 0.001 seconds.
+􀟈  Test windowsListJSONIsTheWindowList() started.
+􁁛  Test windowsListJSONIsTheWindowList() passed after 0.001 seconds.
+􀟈  Test daemonRoutingIsAnExplicitList() started.
+􁁛  Test daemonRoutingIsAnExplicitList() passed after 0.001 seconds.
+􀟈  Test balanceIsDaemonRoutedAndMutableBspModeSelectsTree() started.
+􁁛  Test balanceIsDaemonRoutedAndMutableBspModeSelectsTree() passed after 0.003 seconds.
+􀟈  Test readCommandsGetReadOnlyService() started.
+􁁛  Test readCommandsGetReadOnlyService() passed after 0.004 seconds.
+􀟈  Test relativeConfigPathIsResolvedFromClientDirectory() started.
+􁁛  Test relativeConfigPathIsResolvedFromClientDirectory() passed after 0.001 seconds.
+􀟈  Test fallsBackLocallyOnlyWhenDaemonLockIsFree() started.
+􁁛  Test fallsBackLocallyOnlyWhenDaemonLockIsFree() passed after 0.002 seconds.
+􀟈  Test daemonStatusReadingDetectsStoppedAndStaleDaemon() started.
+􁁛  Test daemonStatusReadingDetectsStoppedAndStaleDaemon() passed after 0.001 seconds.
+􀟈  Test layoutVerbDoesNotScanBeforeItsCommand() started.
+􁁛  Test layoutVerbDoesNotScanBeforeItsCommand() passed after 0.006 seconds.
+􁁛  Suite CLICommandRouterTests passed after 1.715 seconds.
+􀢄  Test run with 880 tests in 93 suites failed after 1.716 seconds with 1 issue.

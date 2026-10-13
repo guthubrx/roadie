@@ -1,0 +1,51 @@
+{
+  "deferred": [
+    {
+      "reason": "Plausible, non reproduit. Piste conservée dans le sous-rapport, écartée des constats prouvés.",
+      "id": "REL-305",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 77,
+      "title": "Une annulation différée peut supprimer le socket suivant",
+      "description": "stop annule la source de manière asynchrone, puis retourne. Le handler d’annulation supprime ensuite le chemin sans vérifier qu’il désigne encore son socket. start peut déjà avoir lié une nouvelle instance au même chemin. Le redémarrage normal entre deux processus possède aussi une fenêtre possible entre libération du verrou et annulation effective.",
+      "evidence": "        source.setEventHandler { [weak self] in self?.acceptPending() }\n        source.setCancelHandler {\n            close(fd)\n            unlink(path)\n        }",
+      "exploitability": "LIKELY",
+      "verification_status": "plausible",
+      "exploitation_scenario": "Appeler start deux fois avec le même chemin, tandis que l’ancienne file socket traite encore un client. Le second start crée son socket avant l’exécution différée du premier cancel handler. Ce handler peut alors supprimer le nouveau chemin.",
+      "impact": "Le nouveau serveur peut rester vivant avec un socket inaccessible par son nom. Le scénario a été établi par l’ordre du code, mais n’a pas été reproduit à l’exécution.",
+      "path_type": "cold",
+      "remediation": "Supprimer le chemin de manière synchrone pendant que le propriétaire détient encore le verrou d’instance ; ne laisser au handler différé que la fermeture du descripteur. À défaut, vérifier l’identité du fichier avant sa suppression.",
+      "verification": "Test isolé de redémarrage sur le même chemin avec un client lent sur l’ancienne instance. Après le handler d’annulation, vérifier que le nouveau chemin existe et que la nouvelle instance répond.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 62
+        },
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 87
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 210
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-security.json",
+      "source_id": "REL-305"
+    }
+  ],
+  "merged": [
+    {
+      "source": "raw-commands.json:PERF-102",
+      "into": "PERF-003",
+      "reason": "Même planGroup et même correction que le site DropPreviewController."
+    }
+  ]
+}

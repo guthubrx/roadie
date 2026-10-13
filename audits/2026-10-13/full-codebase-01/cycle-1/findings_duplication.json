@@ -1,0 +1,46 @@
+{
+  "module": "07",
+  "findings": [
+    {
+      "id": "DUP-001",
+      "category": "duplication",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "line": 421,
+      "title": "Le menu recopie trois fois l’exécution et le journal d’une action",
+      "description": "Les trois constructeurs de menus recréent la même closure : construire WindowContextAction, appeler execute, puis publier les mêmes champs de résultat. Seul le type de destination change. Leur raison de changer est commune et une extraction locale suffit.",
+      "evidence": "        let target = TitlebarMenuActionTarget { [weak self] targetID in\n            guard let self else { return }\n            let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)\n            let result = self.actions.execute(action)\n            self.events.append(RoadieEvent(\n                type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                scope: sourceScope,\n                details: [\n                    \"windowID\": String(windowID.rawValue),\n                    \"kind\": kind.rawValue,",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Lors d’une évolution de l’événement titlebar_context_menu.action ou du traitement d’un échec, modifier seulement l’un des trois constructeurs produit trois comportements différents selon le sous-menu.",
+      "impact": "Charge de maintenance évitable et risque de divergence entre actions ordinaires, destinations et desktop/stage.",
+      "path_type": "cold",
+      "remediation": "Extraire une méthode privée executeAndLog(_ action: WindowContextAction). Garder la construction des menus et leurs filtres distincts.",
+      "verification": "Vérifier un événement identique pour les trois familles de menu avec succès et échec.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "subcategory": "duplication",
+      "duplication_type": "RENAMED",
+      "occurrences_count": 3,
+      "removable_lines_estimate": 30,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 457,
+          "evidence": "            let target = TitlebarMenuActionTarget { [weak self] targetID in\n                guard let self else { return }\n                let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)\n                let result = self.actions.execute(action)\n                self.events.append(RoadieEvent(\n                    type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                    scope: sourceScope,\n                    details: [\n                        \"windowID\": String(windowID.rawValue),\n                        \"kind\": kind.rawValue,"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 506,
+          "evidence": "                let target = TitlebarMenuActionTarget { [weak self] targetID in\n                    guard let self else { return }\n                    let action = WindowContextAction(windowID: windowID, kind: .desktopStage, targetID: targetID, sourceScope: sourceScope)\n                    let result = self.actions.execute(action)\n                    self.events.append(RoadieEvent(\n                        type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                        scope: sourceScope,\n                        details: [\n                            \"windowID\": String(windowID.rawValue),\n                            \"kind\": WindowContextActionKind.desktopStage.rawValue,"
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-docs-quality.json",
+      "source_id": "DUP-DQ-001",
+      "remediation_applied": false,
+      "fingerprint": "e7e3b0b9315e"
+    }
+  ]
+}

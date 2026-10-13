@@ -1,0 +1,47 @@
+{
+  "module": "05",
+  "findings": [
+    {
+      "id": "QUAL-001",
+      "category": "quality",
+      "severity": "LOW",
+      "file": "README.fr.md",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/README.fr.md",
+      "line": 528,
+      "title": "Les guides décrivent des interactions qui ne correspondent plus au code",
+      "description": "Les README français et anglais décrivent des chevrons de réorganisation absents du rendu actuel. RailController réalise cette action au glisser du bouton droit. Les guides de fonctions attribuent aussi le drag/drop au composant titlebar-menu, alors que son contrôleur appartient à RailController.",
+      "evidence": "- Un clic dans une zone vide du rail ne fait rien par défaut, pour qu’un clic raté ne masque pas la stage active. Mets `empty_click_hide_active = true` seulement si tu veux qu’une zone vide bascule vers une stage vide.\n- Drag une thumbnail vers une autre stage pour y déplacer la fenêtre.\n- Drag une thumbnail vers la scène active pour la ramener.\n- Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.\n- Utiliser les chevrons au-dessus et au-dessous d’une stage pour réordonner les stages.",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Suivre README.fr.md pour réordonner une stage : chercher les chevrons annoncés. En exécution modulaire, suivre docs/fr/features.md pour lancer titlebar-menu seul en espérant obtenir le glisser-déposer : WindowDragReorderController n’est créé que par RailController.",
+      "impact": "La documentation oriente vers des commandes ou gestes inutilisables dans le composant décrit.",
+      "path_type": "cold",
+      "remediation": "Mettre à jour les versions FR/EN : décrire le glisser au bouton droit et attribuer le drag/drop au rail. Relire aussi la phrase aucun moteur de raccourcis dans les pages CLI pour mentionner l’exception search_hotkey.",
+      "verification": "Comparer la liste des interactions aux branches handleRightMouse et aux points de création des contrôleurs. Garder les pages FR/EN cohérentes.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "README.md",
+          "line": 540,
+          "evidence": "- Drag an application window by its title bar onto a stage to move it there.\n- Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.\n- Use the chevrons above and below a stage to reorder stages.\n- Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.\n"
+        },
+        {
+          "file": "docs/fr/features.md",
+          "line": 40,
+          "evidence": "- `rail` : affiche le navrail et les thumbnails;\n- `border` : dessine la bordure de focus;\n- `focus-mouse` : gere le focus-follows-mouse;\n- `titlebar-menu` : gere drag/drop et actions de barre de titre;\n- `target-mode` : expose les cibles clavier, grilles et activations de cible.\n"
+        },
+        {
+          "file": "docs/en/features.md",
+          "line": 40,
+          "evidence": "- `rail`: renders the stage rail and thumbnails;\n- `border`: draws the focus border overlay;\n- `focus-mouse`: handles focus-follows-mouse;\n- `titlebar-menu`: handles title-bar drag/drop and context actions;\n- `target-mode`: exposes keyboard targets, grids, and target activation.\n"
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-docs-quality.json",
+      "source_id": "QUAL-DQ-001",
+      "remediation_applied": false,
+      "fingerprint": "bfc011708120"
+    }
+  ]
+}

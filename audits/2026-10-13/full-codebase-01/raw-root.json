@@ -1,0 +1,47 @@
+{
+  "findings": [
+    {
+      "id": "REL-ROOT-001",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 502,
+      "title": "config reload annonce une application sans changer la configuration du daemon",
+      "description": "La commande recharge une nouvelle instance de ConfigReloadService puis la détruit. Elle est aussi absente des commandes routées au daemon. Le service partagé utilisé par les composants garde son chemin actif. Le rechargement automatique du fichier habituel ne rend pas opérant un fichier alternatif passé à cette commande.",
+      "evidence": "            } else if verb == \"reload\" {\n                let result = ConfigReloadService().reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())\n                if args.contains(\"--json\") {\n                    try printCodableJSON(result)\n                } else {\n                    out(\"status=\\(result.status.rawValue)\")\n                    if let error = result.error {\n                        out(\"error=\\(error)\")\n                    }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et sonde isolée",
+      "exploitation_scenario": "Créer un fichier TOML alternatif avec gaps_inner=31 puis appeler config reload --config avec ce chemin. La réponse est status=applied et exitCode=0, mais ConfigReloadService.shared.state.activePath reste inchangé. Sonde exécutée sans joindre le daemon.",
+      "impact": "Le résultat positif ne correspond pas à une modification de la configuration utilisée. Les scripts et le diagnostic de configuration peuvent être trompés.",
+      "path_type": "cold",
+      "remediation": "Router config reload vers le daemon et y appeler une instance partagée injectée. Conserver cette instance pour les composants. Tester le fichier alternatif et le maintien de la version précédente en cas de validation refusée.",
+      "verification": "Faire exécuter config reload via un routeur injecté. Vérifier son activePath et la valeur effective au prochain tick; vérifier qu’un fichier invalide garde la version réellement précédente.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "runtime_proof": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/probe-results.log",
+      "status": "open"
+    },
+    {
+      "id": "REL-ROOT-002",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+      "line": 38,
+      "title": "Un espacement trop grand produit une fenêtre hors du conteneur",
+      "description": "Le moteur ramène la hauteur disponible à zéro, mais continue à ajouter la totalité des espacements. La dernière hauteur devient négative, puis CGRect.integral produit un rectangle hors du conteneur. Aucune borne supérieure de gap adaptée à ce conteneur n’est appliquée.",
+      "evidence": "        let usableHeight = max(0, rect.height - gap * CGFloat(stack.count - 1))\n        let baseHeight = floor(usableHeight / CGFloat(stack.count))\n        var y = rect.minY\n        for (index, windowID) in stack.enumerated() {\n            let isLast = index == stack.count - 1\n            let height = isLast ? rect.maxY - y : baseHeight\n            placements[windowID] = CGRect(\n                x: rect.minX + masterWidth + gap,\n                y: y,\n                width: stackWidth,",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par sonde isolée sur le moteur compilé",
+      "exploitation_scenario": "LayoutRequest masterStack, conteneur 1000×500, trois fenêtres, innerGap=600. La sonde obtient pour la fenêtre 3 le cadre x=840,y=500,width=160,height=100. Le cadre dépasse la hauteur du conteneur.",
+      "impact": "Une configuration numérique valide peut proposer une fenêtre invisible en partie et une autre de hauteur nulle. Le résultat réel AX peut ensuite être refusé ou ajusté.",
+      "path_type": "hot",
+      "remediation": "Borner les espacements par les dimensions réellement disponibles et le nombre de séparations. Vérifier les dimensions finies et positives, puis refuser tout plan qui déborde. Ajouter des cas de conteneur petit et de marge excessive aux tests des stratégies.",
+      "verification": "Rejouer exactement la sonde avec gap=600 : aucune frame ne doit être vide ni dépasser 1000×500. Vérifier aussi zéro, marges normales, n=1 et config non finie.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "runtime_proof": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/probe-results.log",
+      "status": "open"
+    }
+  ],
+  "positive_findings": []
+}

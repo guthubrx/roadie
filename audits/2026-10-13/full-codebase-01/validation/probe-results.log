@@ -1,0 +1,10 @@
+roadie: rail runtime state not persisted, state file is unreadable
+roadie: unreadable state file /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/corrupt-rail.json kept as /Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/corrupt-rail.json.corrupt-20261013-120936; writes refused until it loads: dataCorrupted(Swift.DecodingError.Context(codingPath: [], debugDescription: "The given data was not valid JSON.", underlyingError: Optional(Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'I' around line 1, column 1." UserInfo={NSJSONSerializationErrorIndex=0, NSDebugDescription=Unexpected character 'I' around line 1, column 1.})))
+bad_numeric_type=bool validation_has_errors=false decoded_gap=4.0
+bad_numeric_type=literal validation_has_errors=false decoded_gap=4.0
+large_gap wid=1 frame=(0.0, 0.0, 240.0, 500.0) inside=true
+large_gap wid=2 frame=(840.0, 0.0, 160.0, 0.0) inside=true
+large_gap wid=3 frame=(840.0, 500.0, 160.0, 100.0) inside=false
+visible_left_window=true classified_hidden=true
+corrupt_persistence claimed_pin=true readback_pin=false
+config_reload exit=0 stdout=status=applied shared_path_unchanged=true

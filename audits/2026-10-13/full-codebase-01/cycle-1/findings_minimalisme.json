@@ -1,0 +1,166 @@
+{
+  "module": "12",
+  "findings": [
+    {
+      "id": "MIN-001",
+      "category": "minimalism",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/RailPanel.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailPanel.swift",
+      "line": 374,
+      "title": "Le rail recopie des helpers disponibles et conserve un double adaptateur de menu",
+      "description": "action, stageID et stageDragPayload refont le parcours déjà fourni par stageCard(at:). StageCardView recalcule la mosaïque dans hitPreviewItems malgré mosaicPreviewFrames utilisé au rendu. RailStageRenameMenuTarget est identique à RailMenuActionTarget. Aucune contrainte de compatibilité ou justification de séparation n’est indiquée aux sites ou dans les ADR lus.",
+      "evidence": "        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }\n        let windowPoint = convertPoint(fromScreen: screenPoint)\n        let contentPoint = contentView.convert(windowPoint, from: nil)\n        var view = contentView.hitTest(contentPoint)\n        while let current = view {\n            if let card = current as? StageCardView {\n                let local = card.convert(contentPoint, from: contentView)\n                return card.action(at: local)\n            }\n            view = current.superview",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Une modification de la zone cliquable ou de la géométrie de mosaïque doit être répétée dans le rendu et le hit-test. Les helpers privés actuels permettent déjà de partager ces calculs.",
+      "impact": "Environ 80 lignes supprimables sans nouvelle couche : ~30 pour les hit-tests du panneau, ~25 pour la mosaïque/icônes, ~15 pour le double adaptateur, ~10 pour les délégations et variables redondantes adjacentes. Estimation de refactor, pas diff exécuté.",
+      "path_type": "hot",
+      "remediation": "Réutiliser stageCard(at:), mosaicPreviewFrames(in:) et iconPreviewFrames(in:). Employer RailMenuActionTarget pour Renommer. Supprimer le relais hitPreviewItemsFrontToBack en déplaçant son commentaire utile sur hitPreviewItems.",
+      "verification": "Conserver les résultats de hit-test et la géométrie pour chaque mode, y compris les cartes vides et les bords. Compiler pour vérifier les sélecteurs Objective-C.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "removable_lines_estimate": 80,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCardView.swift",
+          "line": 669,
+          "evidence": "        case .mosaic:\n            let count = min(visualMembers.count, 6)\n            let cols = count <= 2 ? count : 2\n            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))\n            let gap: CGFloat = 6\n            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))\n            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))\n            return (0..<count).map { index in\n                let col = index % cols\n                let row = index / cols"
+        },
+        {
+          "file": "Sources/RoadieDaemon/RailController.swift",
+          "line": 1293,
+          "evidence": "final class RailStageRenameMenuTarget: NSObject {\n    private let handler: () -> Void\n\n    init(handler: @escaping () -> Void) {\n        self.handler = handler\n    }\n\n    @objc func choose(_ sender: NSMenuItem) {\n        handler()\n    }"
+        }
+      ],
+      "references": [
+        "Constitution Article XIX.1",
+        "Constitution Article XX.1"
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-docs-quality.json",
+      "source_id": "MIN-DQ-001",
+      "remediation_applied": false,
+      "fingerprint": "8f2e0ed99159"
+    },
+    {
+      "id": "MIN-002",
+      "category": "minimalism",
+      "subcategory": "repeated_serialization",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 2075,
+      "title": "Neuf surcharges répètent le même encodeur JSON",
+      "description": "SnapshotEncoding répète neuf fois le même corps pour neuf types Encodable. Seul le type du paramètre change. Une fonction générique conserve les appels existants et centralise les options d'encodage.",
+      "evidence": "    public static func json(_ snapshot: DaemonSnapshot, pretty: Bool = true) throws -> String {\n        let encoder = JSONEncoder()\n        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n        let data = try encoder.encode(snapshot)\n        return String(decoding: data, as: UTF8.self)\n    }\n\n    public static func json(_ plan: ApplyPlan, pretty: Bool = true) throws -> String {\n        let encoder = JSONEncoder()\n        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n        let data = try encoder.encode(plan)\n        return String(decoding: data, as: UTF8.self)",
+      "fingerprint": "4a3bef8c5af9",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Modifier une option d'encodage : il faut synchroniser neuf corps identiques, de 2075 à 2136.",
+      "impact": "Charge de maintenance évitable, sans différence métier entre les surcharges.",
+      "path_type": "cold",
+      "remediation": "Remplacer les neuf surcharges par json<T: Encodable>(_ value: T, pretty: Bool = true).",
+      "remediation_code": "public static func json<T: Encodable>(_ value: T, pretty: Bool = true) throws -> String {\n    let encoder = JSONEncoder()\n    encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n    let data = try encoder.encode(value)\n    return String(decoding: data, as: UTF8.self)\n}",
+      "verification": "Comparer les sorties JSON actuelles et génériques pour les neuf types, en modes compact et pretty.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée",
+      "suppressible_lines_estimate": 56,
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-snapshot.json",
+      "source_id": "MIN-SNAPSHOT-001",
+      "remediation_applied": false
+    },
+    {
+      "id": "MIN-003",
+      "category": "minimalism",
+      "subcategory": "unreachable_validation",
+      "severity": "LOW",
+      "file": "Sources/RoadieCore/Config.swift",
+      "line": 1620,
+      "title": "Quatre contrôles de plage portent sur des valeurs déjà bornées",
+      "description": "La validation privée reçoit uniquement les objets décodés par les initialisateurs, qui bornent déjà les paramètres. Les contrôles de AppTargets.maxDepth et de TargetGrid.rows, columns, maxDepth ne peuvent jamais produire leur erreur. Ils donnent une impression de validation stricte alors que les valeurs sont corrigées silencieusement avant ce point.",
+      "evidence": "        if config.maxDepth < 1 || config.maxDepth > 40 {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.app_targets.max_depth\",\n                message: \"must be between 1 and 40\"\n            ))\n        }",
+      "exploitability": "N/A",
+      "verification_status": "confirmé par suivi du décodage et de tous les appels privés",
+      "impact": "28 lignes sans effet à maintenir. Les règles semblent exister deux fois alors qu'une seule est réellement appliquée.",
+      "path_type": "cold",
+      "removable_lines_estimate": 28,
+      "remediation": "Conserver les bornes dans les initialisateurs et supprimer ces quatre branches mortes à comportement constant. Si le produit doit rejeter les valeurs hors plage, valider les données brutes avant leur normalisation, dans un changement fonctionnel distinct.",
+      "verification": "La suppression ne doit changer aucun rapport de validation sur les fichiers TOML. Vérifier notamment max_depth=99 et rows=1 avant et après.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XIX.2",
+        "Constitution Article XX.1"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 661
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 779
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1632
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1639
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1653
+        }
+      ],
+      "discovery_command": "rg -n 'maxDepth|min\\(12|max\\(2|validateAppTargets|validateTargetGrid' Sources/RoadieCore/Config.swift",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-models.json",
+      "source_id": "MIN-201",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Config.swift",
+      "remediation_applied": false,
+      "fingerprint": "a7c9d83b3ef6"
+    },
+    {
+      "id": "MIN-004",
+      "category": "minimalism",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+      "line": 154,
+      "title": "Deux pipelines presque identiques gèrent les déplacements de bureau",
+      "description": "assignActiveWindow et assign(windowID:to:displayID:) répètent la mutation des scopes, la suppression des intentions, le placement, l’événement et le résultat. Une divergence existe déjà : seul le second refuse le bureau courant.",
+      "evidence": "        if let sourceScope {\n            service.removeLayoutIntent(scope: sourceScope)\n        }\n        service.removeLayoutIntent(scope: targetStageScope)\n\n        if follow {\n            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)\n        }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Pour modifier la politique de visibilité ou de retrait des pins, le mainteneur doit modifier deux blocs équivalents dans le même fichier.",
+      "impact": "Charge cognitive et risque de correction appliquée à une seule entrée. Estimation locale : environ 60 lignes suppressibles après extraction du corps partagé.",
+      "path_type": "cold",
+      "remediation": "Conserver les deux points d’entrée publics et extraire un helper privé recevant la fenêtre, le snapshot et le bureau cible. Conserver les différences de validation explicites aux entrées.",
+      "verification": "Les tests existants de transfert, de retrait de pin et de transaction doivent conserver leur résultat; ajouter les scénarios du bureau courant et de l’écran cible actif.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "duplicated_command_pipeline",
+      "estimated_removable_lines": 60,
+      "references": [
+        "Constitution Article XIX",
+        "Constitution Article XX"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 230,
+          "evidence": "\n        if follow {\n            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)\n        }\n\n        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.\n        let (_, result) = service.applyCommandPlacement(\n            CommandPlacement("
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-commands.json",
+      "source_id": "MIN-101",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DesktopCommands.swift",
+      "remediation_applied": false,
+      "fingerprint": "2bc893e8aacd"
+    }
+  ]
+}

@@ -1,0 +1,266 @@
+{
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "audit_mode": "readonly",
+  "agent_scope": "RoadieCore, RoadieStages, RoadieTiler",
+  "findings": [
+    {
+      "id": "PERF-201",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "line": 28,
+      "title": "Le plan BSP normal reparcourt tout l'arbre pour chaque fenêtre",
+      "description": "Même lorsque toutes les fenêtres ont déjà une feuille, chaque élément de windows déclenche tree.contains, qui parcourt l'arbre. Le plan ordinaire est donc quadratique. De plus, BSPTree.windowIDs concatène les tableaux de chaque sous-arbre ; cet accès annoncé O(n) peut être O(n²) pour un arbre en chaîne. Le coût des insertions de secours n'est pas la seule cause.",
+      "evidence": "        var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))\n        var previous: WindowID?\n        for id in windows where !tree.contains(id) {\n            tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)\n            previous = id\n        }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et analyse des parcours",
+      "exploitation_scenario": "Prendre un arbre contenant n fenêtres et appeler plan avec exactement ces n identifiants. Aucune insertion n'est faite, mais n recherches linéaires sont effectuées. Un arbre construit par insertions successives sur la dernière fenêtre ajoute aussi les copies récursives de windowIDs.",
+      "impact": "Travail évitable dans chaque calcul de disposition. Aucune latence absolue n'a été mesurée ; la sévérité HIGH découle de l'Article XVIII, pas d'un gel observé.",
+      "path_type": "hot",
+      "remediation": "Collecter les feuilles dans un seul accumulateur. Préparer un Set des identifiants présents avant la boucle. Garder l'ordre et l'ancre actuels pour les insertions réellement nécessaires.",
+      "remediation_code": "// Remplacement de BSPTree.windowIDs\npublic var windowIDs: [WindowID] {\n    var result: [WindowID] = []\n    func collect(_ node: BSPTree) {\n        switch node {\n        case .empty: break\n        case .leaf(let id): result.append(id)\n        case .split(_, _, let first, let second):\n            collect(first)\n            collect(second)\n        }\n    }\n    collect(self)\n    return result\n}\n\n// Remplacement de SpatialBSPLayoutStrategy.plan\npublic func plan(_ request: LayoutRequest) -> LayoutPlan {\n    let windows = request.windowIDs\n    guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }\n    let rect = request.container.inset(by: request.outerGaps)\n    let gap = CGFloat(request.innerGap)\n    let requested = Set(windows)\n    let full = request.bspTree ?? .empty\n    var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))\n    var present = Set(tree.windowIDs)\n    var previous: WindowID?\n    for id in windows where present.insert(id).inserted {\n        tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)\n        previous = id\n    }\n    return LayoutPlan(placements: tree.place(in: rect, innerGap: gap))\n}",
+      "verification": "Conserver les tests de SpatialBSPLayoutStrategyTests ; comparer les placements avant/après pour un arbre complet, une projection et des fenêtres manquantes. Mesurer séparément le chemin sans insertion à plusieurs tailles. Le code de correction fourni n'a pas été compilé dans cette tâche.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII",
+        "docs/decisions/009-authoritative-tree-single-pass.md"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieTiler/BSPTree.swift",
+          "line": 54,
+          "evidence": "    public var windowIDs: [WindowID] {\n        switch self {\n        case .empty:\n            return []\n        case .leaf(let id):\n            return [id]\n        case .split(_, _, let first, let second):\n            return first.windowIDs + second.windowIDs\n        }\n    }"
+        },
+        {
+          "file": "Sources/RoadieTiler/BSPTree.swift",
+          "line": 65,
+          "evidence": "    public func contains(_ windowID: WindowID) -> Bool {\n        switch self {\n        case .empty:\n            return false\n        case .leaf(let id):\n            return id == windowID\n        case .split(_, _, let first, let second):\n            return first.contains(windowID) || second.contains(windowID)\n        }\n    }"
+        }
+      ],
+      "discovery_command": "rg -n 'contains\\(|windowIDs|for id' Sources/RoadieTiler",
+      "self_counter_review": "Relu SpatialBSPLayoutStrategy.swift et BSPTree.swift intégralement. Le compromis écrit BSPTree.swift:38-45 couvre les mutations récursives et annonce n typique <20/plafond observé ~50. Aucune limite imposée n'a été trouvée par recherche dans Sources. Le chemin normal ne modifie pas l'arbre ; un Set supprime le parcours répété sans modifier ce compromis. Contre-revue indépendante à effectuer par l'orchestrateur."
+    },
+    {
+      "id": "REL-201",
+      "category": "reliability",
+      "subcategory": "configuration",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieTiler/LayoutTypes.swift",
+      "line": 74,
+      "title": "La configuration master_ratio n'arrive jamais au moteur de disposition",
+      "description": "TilingConfig décode master_ratio et le validateur l'accepte. LayoutRequest ne porte pas cette valeur. Le seul appel de production à MasterStackLayoutStrategy utilise toujours son initialiseur sans argument. Changer master_ratio n'a donc aucun effet sur le calcul.",
+      "evidence": "        case .bsp:\n            return BSPLayoutStrategy().plan(request)\n        case .masterStack:\n            return MasterStackLayoutStrategy().plan(request)\n        case .float:\n            return FloatLayoutStrategy().plan(request)",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par recherche de tous les usages",
+      "exploitation_scenario": "À fenêtres et frames identiques, remplacer master_ratio=0.6 par master_ratio=0.8 dans [tiling], puis recalculer une stage masterStack. Les deux configurations produisent la même requête de layout et donc le même plan. Sans frame observée utilisable, le ratio de repli reste 0.6.",
+      "impact": "Une option présentée dans les deux guides de configuration est silencieusement ignorée. L'utilisateur ne peut pas choisir la proportion initiale du panneau principal.",
+      "path_type": "hot",
+      "remediation": "Ajouter le ratio à LayoutRequest, le transmettre depuis la configuration dans les producteurs de requêtes, puis appeler MasterStackLayoutStrategy(masterRatio: ...). Ajouter un test depuis une config TOML non standard jusqu'aux placements.",
+      "verification": "Avec container 1000×500, sans marges ni frames observées, vérifier qu'un ratio configuré à 0.8 donne 800 points au panneau principal, puis qu'un autre ratio modifie le résultat.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "docs/fr/configuration-rules.md:60",
+        "docs/en/configuration-rules.md:59"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 176
+        },
+        {
+          "file": "Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+          "line": 7
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1564
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2656
+        }
+      ],
+      "test_gap": "Les tests masterStack de LayoutPlannerTests.swift:277-332 utilisent le ratio implicite et des frames observées. Aucun usage de masterRatio configuré dans les tests n'a été trouvé.",
+      "discovery_command": "rg -n 'masterRatio|MasterStackLayoutStrategy|master_ratio' Sources Tests docs"
+    },
+    {
+      "id": "REL-202",
+      "category": "reliability",
+      "subcategory": "configuration_validation",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieCore/Config.swift",
+      "line": 1702,
+      "title": "Les mauvais types numériques peuvent passer la validation puis devenir des défauts",
+      "description": "decodeFlexibleDouble ignore les erreurs de décodage et renvoie nil, que les appelants remplacent par une valeur par défaut. Le rattrapage scalarTypeChecks ne reconnaît que les valeurs commençant par un guillemet double. Un booléen ou une chaîne TOML entre apostrophes n'est donc pas rejeté pour ces paramètres.",
+      "evidence": "    func decodeFlexibleDouble(forKey key: Key) throws -> Double? {\n        if let value = try? decodeIfPresent(Double.self, forKey: key) {\n            return value\n        }\n        if let value = try? decodeIfPresent(Int.self, forKey: key) {\n            return Double(value)\n        }\n        return nil\n    }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé statiquement, reproduction CLI non exécutée",
+      "exploitation_scenario": "Créer une configuration contenant [tiling] puis gaps_inner = true, ou gaps_inner = '30'. RoadieConfigLoader.validate ne produit aucune erreur pour cette clé ; RoadieConfigLoader.load remplace cette valeur par 4. Le test existant ne vérifie que gaps_inner = \"not-a-number\".",
+      "impact": "Une configuration incorrecte est annoncée valide. Une faute peut modifier la disposition au lieu de conserver la dernière configuration valide promise dans la documentation.",
+      "path_type": "cold",
+      "remediation": "Distinguer une clé absente d'une erreur de type. Accepter Int/Double uniquement, puis propager DecodingError pour les autres types. Retirer ensuite le rattrapage textuel devenu inutile et utiliser le parseur TOML pour produire le diagnostic.",
+      "verification": "Tester true, false, chaîne entre apostrophes, chaîne entre guillemets, tableau, clé absente, entier et nombre décimal. Les mauvais types doivent échouer pour load et validate ; l'absence doit garder le défaut.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "references": [
+        "docs/fr/configuration-rules.md:43"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1524,
+          "evidence": "            guard numericKeys.contains(key), value.hasPrefix(\"\\\"\") else { continue }\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: [currentTable, key].filter { !$0.isEmpty }.joined(separator: \".\"),\n                message: \"expected numeric value, got string\"\n            ))"
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/ConfigTests.swift",
+          "line": 425
+        }
+      ],
+      "discovery_command": "rg -n 'decodeFlexibleDouble|scalarTypeChecks|hasPrefix' Sources/RoadieCore/Config.swift"
+    },
+    {
+      "id": "MIN-201",
+      "category": "minimalism",
+      "subcategory": "unreachable_validation",
+      "severity": "LOW",
+      "file": "Sources/RoadieCore/Config.swift",
+      "line": 1620,
+      "title": "Quatre contrôles de plage portent sur des valeurs déjà bornées",
+      "description": "La validation privée reçoit uniquement les objets décodés par les initialisateurs, qui bornent déjà les paramètres. Les contrôles de AppTargets.maxDepth et de TargetGrid.rows, columns, maxDepth ne peuvent jamais produire leur erreur. Ils donnent une impression de validation stricte alors que les valeurs sont corrigées silencieusement avant ce point.",
+      "evidence": "        if config.maxDepth < 1 || config.maxDepth > 40 {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.app_targets.max_depth\",\n                message: \"must be between 1 and 40\"\n            ))\n        }",
+      "exploitability": "N/A",
+      "verification_status": "confirmé par suivi du décodage et de tous les appels privés",
+      "impact": "28 lignes sans effet à maintenir. Les règles semblent exister deux fois alors qu'une seule est réellement appliquée.",
+      "path_type": "cold",
+      "removable_lines_estimate": 28,
+      "remediation": "Conserver les bornes dans les initialisateurs et supprimer ces quatre branches mortes à comportement constant. Si le produit doit rejeter les valeurs hors plage, valider les données brutes avant leur normalisation, dans un changement fonctionnel distinct.",
+      "verification": "La suppression ne doit changer aucun rapport de validation sur les fichiers TOML. Vérifier notamment max_depth=99 et rows=1 avant et après.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XIX.2",
+        "Constitution Article XX.1"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 661
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 779
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1632
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1639
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1653
+        }
+      ],
+      "discovery_command": "rg -n 'maxDepth|min\\(12|max\\(2|validateAppTargets|validateTargetGrid' Sources/RoadieCore/Config.swift"
+    }
+  ],
+  "read_files": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/AutomationEvent.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/AutomationEventCatalog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/AutomationSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Config.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Geometry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/LayoutCommandIntent.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/LayoutTolerance.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/WindowManagementMode.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/WindowRule.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieStages/RoadieState.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/BSPTree.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/FloatLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/LayoutGeometry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/LayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/LayoutTypes.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieStagesTests/RoadieStateTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieStagesTests/WindowGroupStateTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/BSPTreeTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/BSPTreeMutationTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/SpatialBSPLayoutStrategyTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/LayoutPlannerTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/BSPTreeEngineTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/008-state-transactions.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/009-authoritative-tree-single-pass.md"
+  ],
+  "sampled_files": [
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/ConfigTests.swift",
+      "ranges": [
+        "1-190",
+        "390-500",
+        "660-865"
+      ]
+    },
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        "1530-1600",
+        "1700-1750"
+      ]
+    },
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "ranges": [
+        "2630-2685"
+      ]
+    },
+    {
+      "path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/configuration-rules.md",
+      "ranges": [
+        "1-95"
+      ]
+    }
+  ],
+  "positive_findings": [
+    "Le moteur BSP est une valeur Sendable immuable. Projection et adoption des splits préservent les feuilles absentes et leurs proportions ; Tests/RoadieTilerTests/BSPTreeEngineTests.swift vérifie ces invariants sur des arbres imbriqués.",
+    "Les tailles minimales sont confrontées au placement réel arrondi. Les tests couvrent les marges fractionnaires, les voisines déjà trop petites et les corrections distribuées sur plusieurs ancêtres.",
+    "LayoutDiff emploie le seuil central LayoutTolerance.frameMatch, avec vérification des deux côtés de la limite et ordre stable des commandes.",
+    "Les quatre stratégies concrètes de layout donnent un usage réel au protocole LayoutStrategy. Les aliases mutableBsp sont justifiés par la compatibilité et l'ADR-009."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 28,
+    "checklists_1_to_6_completed": true,
+    "notes": [
+      "Suppression conservatrice des quatre branches inatteignables seulement. Les propriétés publiques, aliases persistés et chemins de migration ne sont pas comptés.",
+      "Pas de nouvelle dépendance trouvée dans ces modules au-delà de TOMLKit et frameworks Apple existants.",
+      "La duplication des calculs du BSP géométrique et de l'inférence de migration porte des règles différentes ; pas de fusion générale proposée."
+    ]
+  },
+  "llm_virtues": {
+    "cognitive_load": "Les types séparés et les invariants expliqués réduisent la charge. Config.swift concentre 1711 lignes et combine schéma, normalisation, validation et diagnostics ; les erreurs de type masquées et validations mortes augmentent la charge de maintenance.",
+    "code_volume": "Le moteur des tailles minimales est complexe mais justifié par des tests concrets et des cas documentés. Pas de preuve d'une feature hors demande dans les modules lus.",
+    "abstractions": "Les stratégies, identifiants typés et types de snapshot servent des besoins réels. Le wrapper RoadieConfig à deux initialisateurs est public ; aucune suppression sans vérifier la compatibilité n'est recommandée.",
+    "human_ownership": "Les contrats BSP sont explicites et vérifiables. Les déclarations O(n) de windowIDs et removing doivent être corrigées : removing appelle contains à chaque niveau, et windowIDs concatène des tableaux.",
+    "unverifiable_generation": "Aucune origine LLM ni absence de relecture humaine n'est inférée depuis le style de code. Pas de régénération opaque vérifiée sans étude de l'historique."
+  },
+  "warnings": [
+    "PERF-201 : contre-revue adversariale locale effectuée, contre-revue indépendante encore attendue de l'orchestrateur.",
+    "Pas de build ni de test exécuté par cet agent, conformément au sous-périmètre confié. Le parent centralise ces vérifications.",
+    "Pas de benchmark ni de mesure mémoire. Complexités établies par lecture.",
+    "JSCPD non exécuté dans ce sous-audit ; analyse manuelle de duplication seulement. Le parent peut disposer du rapport global.",
+    "Scénario plausible non retenu comme fait d'exécution : MasterStackLayoutStrategy.swift:38-50 avec container 1000x500, trois fenêtres et innerGap=600 calcule une hauteur finale -100. Les configurations de gaps excessifs/non finis et le comportement CoreGraphics final n'ont pas été testés.",
+    "Les identifiants synthétisés Codable, configurations non finies et consommateurs en aval n'ont pas reçu de fuzzing.",
+    "Fichiers des autres cibles seulement lus par extraits quand nécessaires au suivi des appels ; leur couverture complète relève des autres agents."
+  ]
+}

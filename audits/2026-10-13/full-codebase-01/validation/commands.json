@@ -1,0 +1,105 @@
+{
+  "environment": {
+    "TMPDIR": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp/",
+    "CLANG_MODULE_CACHE_PATH": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/modules",
+    "SWIFTPM_MODULECACHE_OVERRIDE": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/modules"
+  },
+  "working_directory": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "build": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/with-xcode",
+    "swift",
+    "build",
+    "--disable-sandbox",
+    "--package-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package",
+    "--scratch-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build",
+    "--cache-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/cache",
+    "--config-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/config",
+    "--security-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/security",
+    "--manifest-cache",
+    "local",
+    "--disable-automatic-resolution",
+    "--jobs",
+    "4"
+  ],
+  "test": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/with-xcode",
+    "swift",
+    "test",
+    "--disable-sandbox",
+    "--package-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package",
+    "--scratch-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build",
+    "--cache-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/cache",
+    "--config-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/config",
+    "--security-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/security",
+    "--manifest-cache",
+    "local",
+    "--disable-automatic-resolution",
+    "--jobs",
+    "4",
+    "--skip",
+    "CLICommandRouterTests.socketRoundTripRunsRouterAndRefusesOthers"
+  ],
+  "example_recheck": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/with-xcode",
+    "swift",
+    "test",
+    "--disable-sandbox",
+    "--package-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package",
+    "--scratch-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build",
+    "--cache-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/cache",
+    "--config-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/config",
+    "--security-path",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/security",
+    "--manifest-cache",
+    "local",
+    "--disable-automatic-resolution",
+    "--jobs",
+    "4",
+    "--skip-build",
+    "--filter",
+    "ConfigTests.shippedExampleConfigIsValidWithoutWarning"
+  ],
+  "python_tests": [
+    "python3",
+    "-I",
+    "-B",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/tests/test_measure_layout_reactivity.py"
+  ],
+  "probe": [
+    "python3",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/run-probes.py"
+  ],
+  "preparation": {
+    "copy_source_directories": [
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources",
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests",
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/examples"
+    ],
+    "copy_manifest_files": [
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/Package.swift",
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/Package.resolved"
+    ],
+    "copy_existing_dependency_state": [
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/.build/checkouts",
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/.build/repositories",
+      "/Users/moi/Nextcloud/10.Scripts/39.roadie/.build/workspace-state.json"
+    ],
+    "destination_package": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package",
+    "destination_dependency_state": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build",
+    "note": "Tous les chemins source à résoudre sous working_directory. Aucun fichier original modifié."
+  }
+}

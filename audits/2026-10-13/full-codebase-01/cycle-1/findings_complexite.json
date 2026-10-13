@@ -1,0 +1,267 @@
+{
+  "module": "04",
+  "findings": [
+    {
+      "id": "PERF-001",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1692,
+      "title": "La validation des trous de disposition parcourt les fenêtres dans chaque cellule",
+      "description": "Les bords X et Y ont chacun O(n) valeurs. Le produit de ces axes crée O(n²) cellules. Pour chaque cellule, frames.contains parcourt jusqu'à n cadres. Les intentions de commande contournent le minimum de taille des tuiles (1620–1622), et aucune limite du nombre de fenêtres n'est imposée.",
+      "evidence": "            for yIndex in 0..<max(0, yEdges.count - 1) {\n                let minY = yEdges[yIndex]\n                let maxY = yEdges[yIndex + 1]\n                let height = maxY - minY\n                guard height > tolerance else { continue }\n                let cell = CGRect(x: minX, y: minY, width: width, height: height)\n                guard container.contains(cell, tolerance: 1),\n                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })\n                else { continue }\n                return true",
+      "fingerprint": "1e88a8f2a195",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Créer un intent .command sans gap avec n=2m fenêtres : m colonnes de largeur 100, hauteur totale 50*(m+1). Dans la colonne i (0..<m), une fenêtre couvre y=0..50*(i+1), l'autre couvre y=50*(i+1)..hauteur. Toutes les cellules sont couvertes et mesurent 100x50 : le retour anticipé ne s'active jamais. Sauver cet intent puis appeler hasValidLayoutIntent ou applyPlan.",
+      "impact": "Coût cubique confirmé par les boucles. Cette validation appartient au maintien de disposition via LayoutMaintainer.swift:633 et 3104. La latence pratique n'a pas été mesurée.",
+      "path_type": "hot",
+      "remediation": "Calculer une seule fois la couverture des centres de cellules. Le tableau de différences ci-dessous supprime le parcours des n cadres pour chaque cellule, en conservant les mêmes seuils. Mesurer avant de choisir entre cette grille O(n²) mémoire et un balayage d'intervalles.",
+      "remediation_code": "private func framesLeaveLargeUntiledCells(\n    _ frames: [CGRect], in container: CGRect, allowedGap: CGFloat\n) -> Bool {\n    guard frames.count > 1 else { return false }\n    let tolerance = max(LayoutTolerance.untiledCell, allowedGap)\n    let xs = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })\n    let ys = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })\n    let nx = max(0, xs.count - 1), ny = max(0, ys.count - 1)\n    guard nx > 0, ny > 0 else { return false }\n    let xc = (0..<nx).map { (xs[$0] + xs[$0 + 1]) / 2 }\n    let yc = (0..<ny).map { (ys[$0] + ys[$0 + 1]) / 2 }\n    func bound(_ values: [CGFloat], _ target: CGFloat, upper: Bool) -> Int {\n        var lo = 0, hi = values.count\n        while lo < hi {\n            let mid = lo + (hi - lo) / 2\n            if values[mid] < target || (upper && values[mid] == target) { lo = mid + 1 }\n            else { hi = mid }\n        }\n        return lo\n    }\n    // Différences de couverture, puis sommes cumulées : O(n² + n log n).\n    let stride = ny + 1\n    var coverage = Array(repeating: 0, count: (nx + 1) * stride)\n    for frame in frames {\n        let x0 = bound(xc, frame.minX - 1, upper: false)\n        let x1 = bound(xc, frame.maxX + 1, upper: true)\n        let y0 = bound(yc, frame.minY - 1, upper: false)\n        let y1 = bound(yc, frame.maxY + 1, upper: true)\n        guard x0 < x1, y0 < y1 else { continue }\n        coverage[x0 * stride + y0] += 1\n        coverage[x1 * stride + y0] -= 1\n        coverage[x0 * stride + y1] -= 1\n        coverage[x1 * stride + y1] += 1\n    }\n    for x in 0..<nx {\n        for y in 0..<ny {\n            let index = x * stride + y\n            if x > 0 { coverage[index] += coverage[(x - 1) * stride + y] }\n            if y > 0 { coverage[index] += coverage[index - 1] }\n            if x > 0 && y > 0 { coverage[index] -= coverage[(x - 1) * stride + y - 1] }\n            let cell = CGRect(x: xs[x], y: ys[y], width: xs[x + 1] - xs[x], height: ys[y + 1] - ys[y])\n            if coverage[index] == 0, cell.width > tolerance, cell.height > tolerance,\n               container.contains(cell, tolerance: 1) { return true }\n        }\n    }\n    return false\n}",
+      "verification": "Comparer l'ancienne et la nouvelle fonction sur des dispositions complètes, trouées et à marges. Ajouter la famille de colonnes décrite avec m croissant et compter les comparaisons. Compiler la proposition avant intégration.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée",
+      "complexity_current": "O(n³)",
+      "complexity_target": "O(n² + n log n)",
+      "counter_audit_required": true,
+      "references": [
+        "Constitution Article XVIII"
+      ],
+      "grep_command": "rg -n 'framesLeaveLargeUntiledCells|frames.contains|hasValidLayoutIntent' Sources/RoadieDaemon/DaemonSnapshot.swift Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-snapshot.json",
+      "source_id": "PERF-SNAPSHOT-001",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_detail": "framesLeaveLargeUntiledCells combine les bords X et Y puis appelle frames.contains pour chaque cellule assez grande. La famille de colonnes scindées à des hauteurs différentes décrite par l’auditeur couvre toutes les cellules, donc ne déclenche aucune sortie anticipée et atteint O(n³)."
+    },
+    {
+      "id": "PERF-002",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "line": 28,
+      "title": "Le plan BSP normal reparcourt tout l'arbre pour chaque fenêtre",
+      "description": "Même lorsque toutes les fenêtres ont déjà une feuille, chaque élément de windows déclenche tree.contains, qui parcourt l'arbre. Le plan ordinaire est donc quadratique. De plus, BSPTree.windowIDs concatène les tableaux de chaque sous-arbre ; cet accès annoncé O(n) peut être O(n²) pour un arbre en chaîne. Le coût des insertions de secours n'est pas la seule cause.",
+      "evidence": "        var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))\n        var previous: WindowID?\n        for id in windows where !tree.contains(id) {\n            tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)\n            previous = id\n        }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et analyse des parcours",
+      "exploitation_scenario": "Prendre un arbre contenant n fenêtres et appeler plan avec exactement ces n identifiants. Aucune insertion n'est faite, mais n recherches linéaires sont effectuées. Un arbre construit par insertions successives sur la dernière fenêtre ajoute aussi les copies récursives de windowIDs.",
+      "impact": "Travail évitable dans chaque calcul de disposition. Aucune latence absolue n'a été mesurée ; la sévérité HIGH découle de l'Article XVIII, pas d'un gel observé.",
+      "path_type": "hot",
+      "remediation": "Collecter les feuilles dans un seul accumulateur. Préparer un Set des identifiants présents avant la boucle. Garder l'ordre et l'ancre actuels pour les insertions réellement nécessaires.",
+      "remediation_code": "// Remplacement de BSPTree.windowIDs\npublic var windowIDs: [WindowID] {\n    var result: [WindowID] = []\n    func collect(_ node: BSPTree) {\n        switch node {\n        case .empty: break\n        case .leaf(let id): result.append(id)\n        case .split(_, _, let first, let second):\n            collect(first)\n            collect(second)\n        }\n    }\n    collect(self)\n    return result\n}\n\n// Remplacement de SpatialBSPLayoutStrategy.plan\npublic func plan(_ request: LayoutRequest) -> LayoutPlan {\n    let windows = request.windowIDs\n    guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }\n    let rect = request.container.inset(by: request.outerGaps)\n    let gap = CGFloat(request.innerGap)\n    let requested = Set(windows)\n    let full = request.bspTree ?? .empty\n    var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))\n    var present = Set(tree.windowIDs)\n    var previous: WindowID?\n    for id in windows where present.insert(id).inserted {\n        tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)\n        previous = id\n    }\n    return LayoutPlan(placements: tree.place(in: rect, innerGap: gap))\n}",
+      "verification": "Conserver les tests de SpatialBSPLayoutStrategyTests ; comparer les placements avant/après pour un arbre complet, une projection et des fenêtres manquantes. Mesurer séparément le chemin sans insertion à plusieurs tailles. Le code de correction fourni n'a pas été compilé dans cette tâche.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII",
+        "docs/decisions/009-authoritative-tree-single-pass.md"
+      ],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieTiler/BSPTree.swift",
+          "line": 54,
+          "evidence": "    public var windowIDs: [WindowID] {\n        switch self {\n        case .empty:\n            return []\n        case .leaf(let id):\n            return [id]\n        case .split(_, _, let first, let second):\n            return first.windowIDs + second.windowIDs\n        }\n    }"
+        },
+        {
+          "file": "Sources/RoadieTiler/BSPTree.swift",
+          "line": 65,
+          "evidence": "    public func contains(_ windowID: WindowID) -> Bool {\n        switch self {\n        case .empty:\n            return false\n        case .leaf(let id):\n            return id == windowID\n        case .split(_, _, let first, let second):\n            return first.contains(windowID) || second.contains(windowID)\n        }\n    }"
+        }
+      ],
+      "discovery_command": "rg -n 'contains\\(|windowIDs|for id' Sources/RoadieTiler",
+      "self_counter_review": "Relu SpatialBSPLayoutStrategy.swift et BSPTree.swift intégralement. Le compromis écrit BSPTree.swift:38-45 couvre les mutations récursives et annonce n typique <20/plafond observé ~50. Aucune limite imposée n'a été trouvée par recherche dans Sources. Le chemin normal ne modifie pas l'arbre ; un Set supprime le parcours répété sans modifier ce compromis. Contre-revue indépendante à effectuer par l'orchestrateur.",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-models.json",
+      "source_id": "PERF-201",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_detail": "tree.contains parcourt récursivement l’arbre. Avec les n feuilles déjà présentes, la boucle appelle cette recherche n fois sans aucune insertion : complexité quadratique. windowIDs concatène aussi les sous-tableaux ; sur un arbre en chaîne, ses copies peuvent être quadratiques.",
+      "fingerprint": "0e6d1d177331"
+    },
+    {
+      "id": "PERF-003",
+      "category": "performance",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift",
+      "line": 480,
+      "title": "La géométrie de groupe copie et fusionne des suffixes en O(n²) pendant le glisser",
+      "description": "Chaque appel récursif construit un nouveau tableau de n−1 fenêtres puis fusionne un dictionnaire de n−1 placements. La somme des tailles traitées est quadratique. La chaîne candidate → structuralPlacements → planGroup reste active pour bsp/masterStack. activeEntries vient de toutes les fenêtres de la stage, sans plafond explicite. La même implémentation apparaît dans WindowCommands.swift:1159. Les deux sites sont regroupés dans ce constat.",
+      "evidence": "    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n        guard let first = windowIDs.first else { return [:] }\n        guard windowIDs.count > 1 else { return [first: rect.integral] }\n\n        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)\n        var placements = [first: parts.first.integral]\n        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }\n        return placements",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Utiliser bsp ou masterStack avec plusieurs fenêtres redimensionnables dans la même stage. Glisser une fenêtre vers le bord d’une autre, avec au moins une fenêtre dans chaque groupe géométrique. Chaque mise à jour d’aperçu calcule planGroup. Augmenter la taille du groupe augmente le nombre de copies et de fusions selon n(n−1)/2.",
+      "impact": "Travail quadratique et profondeur de pile linéaire dans les mises à jour du glisser. La dégradation effective de latence reste à mesurer. Le mode spatialBsp emprunte un autre chemin.",
+      "path_type": "hot",
+      "remediation": "Conserver un rectangle restant, une orientation et un index. Ajouter chaque placement directement dans un seul dictionnaire. Cette passe réalise les mêmes découpes en O(n).",
+      "verification": "Comparer les rectangles de la version récursive et de la version itérative pour n=0,1,2,3,10,100, orientations et gaps variés. Vérifier que les changements d’orientation et les arrondis restent identiques. Mesurer séparément le temps d’aperçu.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "subcategory": "algorithmic_complexity",
+      "counter_audit": "CONFIRMED",
+      "grep_command": "rg -n 'planGroup|structuralPlacements|Array\\(windowIDs.dropFirst' Sources/RoadieDaemon/DropPreviewController.swift",
+      "remediation_code": "private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n    var placements: [WindowID: CGRect] = [:]\n    placements.reserveCapacity(windowIDs.count)\n    var remainingRect = rect\n    var isHorizontal = horizontal\n    for (index, windowID) in windowIDs.enumerated() {\n        let remainingCount = windowIDs.count - index\n        let frame: CGRect\n        if remainingCount == 1 {\n            frame = remainingRect.integral\n        } else {\n            let parts = split(remainingRect, horizontally: isHorizontal, gap: gap,\n                              firstCount: 1, secondCount: remainingCount - 1)\n            frame = parts.first.integral\n            remainingRect = parts.second\n            isHorizontal.toggle()\n        }\n        if placements[windowID] == nil { placements[windowID] = frame }\n    }\n    return placements\n}",
+      "references": [
+        "Constitution Article XVIII.2"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 181,
+          "evidence": "        let activeEntries = snapshot.windows.filter { entry in\n            entry.scope == scope && entry.window.isTileCandidate\n        }\n        var ordered = service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)\n        if !ordered.contains(sourceWindowID) {\n            ordered.append(sourceWindowID)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 389,
+          "evidence": "\n        var result: [WindowID: CGRect] = [:]\n        result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }\n        result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }\n        return result"
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 1159
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-docs-quality.json",
+      "source_id": "PERF-DQ-002",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "merged_source_findings": [
+        "raw-commands.json:PERF-102"
+      ],
+      "counter_audit_detail": "Chaque niveau construit Array(dropFirst()) puis fusionne les n−1 résultats suivants. La somme des tailles copiées et fusionnées est quadratique. Le contrôleur recalcule candidate sur les événements de déplacement avant de comparer à lastCandidate.",
+      "fingerprint": "015cfd241481"
+    },
+    {
+      "id": "PERF-004",
+      "category": "performance",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 2647,
+      "title": "La réparation de voisinage refait une recherche linéaire pour chaque fenêtre",
+      "description": "clampedSiblingRepairPlan filtre les n IDs du stage avec contains sur les m fenêtres voisines. Cette intersection coûte O(n*m), alors qu’un Set conserve exactement l’ordre et le résultat en O(n+m). Le code est atteint lors d’un refus de taille des modes sans arbre ; aucune borne de nombre de fenêtres n’est imposée ici.",
+      "evidence": "            guard !siblingEntries.isEmpty else { continue }\n            let siblingIDs = stage.windowIDs.filter { id in\n                siblingEntries.contains { $0.window.id == id }\n            }\n            guard !siblingIDs.isEmpty else { continue }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Utiliser un stage bsp ou masterStack avec n fenêtres, dont une refuse la taille demandée. Chaque appel de réparation recherche chaque ID dans siblingEntries ; avec n voisins, le nombre de comparaisons croît au carré.",
+      "impact": "Travail CPU évitable dans une passe synchrone du tiler. Aucun retard en millisecondes n’a été mesuré ; le constat porte sur la classe de complexité.",
+      "path_type": "hot",
+      "remediation": "Construire un Set des IDs voisins une fois avant le filtre.",
+      "verification": "Comparer le résultat et son ordre sur 10, 100 et 1000 fenêtres synthétiques. Mesurer le nombre de recherches ou le temps de la seule intersection. Revenir à l’ancien filtre si le résultat diffère.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "subcategory": "algorithmic_complexity",
+      "complexity_current": "O(n*m)",
+      "complexity_target": "O(n+m)",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_scope": "Fichier LayoutMaintainer.swift lu entièrement ; contre-audit indépendant à finaliser par le parent.",
+      "counter_audit_notes": "La garde ne borne que le mode et la présence d’un refus. Pas de maximum de fenêtres. Le commentaire O(s*n) ne couvre pas cette recherche imbriquée. Sévérité HIGH pour la branche exceptionnelle de réparation, pas CRITICAL : aucun seuil de latence réel vérifié.",
+      "remediation_code": "let siblingIDSet = Set(siblingEntries.map(\\.window.id))\nlet siblingIDs = stage.windowIDs.filter { siblingIDSet.contains($0) }\nguard !siblingIDs.isEmpty else { continue }",
+      "grep_command": "rg -n -A 3 'let siblingIDs = stage.windowIDs.filter' Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "references": [
+        "Constitution Article XVIII"
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-runtime.json",
+      "source_id": "PERF-301",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "counter_audit_detail": "La recherche répétée est bien en O(n*m). Aucun garde du chemin ni StageState.insert ne borne le nombre d’identifiants. Le Set proposé préserve le résultat et son ordre. La branche est conditionnelle dans le fonctionnement interactif ; sa fréquence réelle et sa latence ne sont pas mesurées.",
+      "fingerprint": "0f06aa450605"
+    },
+    {
+      "id": "PERF-005",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "line": 1503,
+      "title": "Les commandes répètent des recherches linéaires évitables",
+      "description": "Le filtrage des stages restantes fait contains sur la liste visible pour chaque candidate. Deux autres helpers de dépôt font le même type de recherche répétée dans scopedIDs ou ordered. Les listes n’ont pas de borne appliquée dans le code.",
+      "evidence": "    private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {\n        let candidates = scope.stages.filter(isSelectableStage)\n        let visible = candidates.filter { !$0.members.isEmpty }.map(\\.id)\n        let remaining = candidates.map(\\.id).filter { !visible.contains($0) }\n        let ordered = visible + remaining\n        let index = position - 1\n        guard ordered.indices.contains(index) else { return nil }\n        return ordered[index]",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Appeler stage assign-position sur un scope comportant s stages visibles : chaque candidate parcourt visible. Les helpers de dépôt répètent le motif pour les identifiants de fenêtres.",
+      "impact": "Coût O(s²) au lieu de O(s) pour une opération simple; pas de latence mesurée et charge limitée en usage ordinaire.",
+      "path_type": "cold",
+      "remediation": "Filtrer directement les stages vides; convertir scopedIDs et ordered en Set avant leurs boucles. Conserver l’ordre original dans les tableaux.",
+      "verification": "Vérifier le même ordre pour stages vides, non vides et parkées. Contrôler par lecture qu’aucun contains linéaire ne reste dans les boucles de ces trois helpers.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "algorithmic_complexity",
+      "complexity_current": "O(s²) / O(n²)",
+      "complexity_target": "O(s) / O(n)",
+      "severity_rationale": "Chemin froid de commande utilisateur : déclassement HIGH vers MEDIUM selon module 01; aucune mesure de ralentissement.",
+      "remediation_code": "private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {\n    guard position > 0 else { return nil }\n    let candidates = scope.stages.filter(isSelectableStage)\n    let visible = candidates.filter { !$0.members.isEmpty }.map(\\.id)\n    let remaining = candidates.filter { $0.members.isEmpty }.map(\\.id)\n    let ordered = visible + remaining\n    let index = position - 1\n    guard ordered.indices.contains(index) else { return nil }\n    return ordered[index]\n}",
+      "references": [
+        "Constitution Article XVIII"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1398,
+          "evidence": "        var seen: Set<WindowID> = []\n        var result: [WindowID] = []\n        for id in orderedWindowIDs where scopedIDs.contains(id) || id == windowID {\n            guard !seen.contains(id) else { continue }\n            result.append(id)\n            seen.insert(id)\n        }\n        for id in scopedIDs where !seen.contains(id) {"
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1448,
+          "evidence": "        })\n        let current = LayoutPlan(placements: currentFrames)\n        let commands = LayoutDiff.commands(previous: current, next: layout).compactMap { command -> ApplyCommand? in\n            guard ordered.contains(command.windowID),\n                  let window = windowsByID[command.windowID]\n            else { return nil }\n            return ApplyCommand(window: window, frame: Rect(command.frame))\n        }\n        return ApplyPlan(commands: commands)"
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-commands.json",
+      "source_id": "PERF-101",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageCommands.swift",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "fingerprint": "fa872d097db6"
+    },
+    {
+      "id": "PERF-007",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 329,
+      "title": "Le lecteur de ligne réanalyse tout le préfixe à chaque paquet",
+      "description": "Le commentaire annonce O(n), mais firstIndex repart du début de data après chaque réception. Avec des fragments de taille fixe et le saut de ligne en fin de réponse, le travail cumulé est quadratique. Les requêtes sont bornées à 64 Kio, mais les réponses sont lues avec limit égal à Int.max.",
+      "evidence": "    /// Lit jusqu'au premier `\\n` (exclu) ou la fin du flux. O(n), n = taille de la ligne.\n    static func readLine(_ fd: Int32, limit: Int, deadline: Date) -> ReadResult {\n        var data = Data()\n        var chunk = [UInt8](repeating: 0, count: 4096)\n        while true {\n            if let newline = data.firstIndex(of: 0x0A) {\n                return newline - data.startIndex > limit ? .tooLarge : .line(data[data.startIndex..<newline])\n            }\n            guard data.count <= limit else { return .tooLarge }\n            let count = recv(fd, &chunk, chunk.count, 0)",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Une réponse JSON de grande taille arrive en nombreux fragments avant son unique saut de ligne final. Chaque fragment déclenche une nouvelle recherche sur tous les octets déjà reçus.",
+      "impact": "Le coût CPU de lecture augmente plus vite que la taille de la réponse. Aucun temps d’exécution n’a été mesuré pendant cet audit.",
+      "path_type": "hot",
+      "remediation": "Rechercher le saut de ligne seulement dans le nouveau fragment ou mémoriser le dernier index parcouru. Fixer également une limite de réponse conforme au contrat attendu.",
+      "verification": "Injecter la même ligne en fragments fixes pour plusieurs tailles et vérifier que chaque octet est parcouru au plus une fois, sans changer les règles de fin de flux et de taille maximale.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 261
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-security.json",
+      "source_id": "PERF-301",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "fingerprint": "7c585cdbd60d"
+    }
+  ]
+}

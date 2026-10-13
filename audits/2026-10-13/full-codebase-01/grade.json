@@ -1,0 +1,114 @@
+{
+  "grade": "B+",
+  "date": "2026-10-13",
+  "spec": "all",
+  "scope": "Tout le dépôt Roadie au commit acc10e1 : sources, scripts, tests et documentation; audit readonly v14",
+  "coverage_percent": 100,
+  "coverage_definition": "96/96 fichiers Swift de production lus intégralement. Tests et docs revus par risque, avec limites explicites dans scoring.md. Pas une mesure de couverture des tests.",
+  "justification": "Moyenne pondérée canonique 83.16/100. Fiabilité F; 7 HIGH non corrigés : release_blocked=true.",
+  "release_blocked": true,
+  "metrics": {
+    "security": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "supply_chain": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "observability": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 1,
+      "by_severity": {
+        "MEDIUM": 1
+      }
+    },
+    "reliability": {
+      "grade": "F",
+      "numeric": 0,
+      "findings_count": 32,
+      "by_severity": {
+        "HIGH": 3,
+        "MEDIUM": 29
+      }
+    },
+    "tests": {
+      "grade": "A-",
+      "numeric": 88,
+      "findings_count": 4,
+      "by_severity": {
+        "MEDIUM": 4
+      }
+    },
+    "performance": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 1,
+      "by_severity": {
+        "MEDIUM": 1
+      }
+    },
+    "complexity": {
+      "grade": "D",
+      "numeric": 56,
+      "findings_count": 6,
+      "by_severity": {
+        "HIGH": 4,
+        "MEDIUM": 1,
+        "LOW": 1
+      }
+    },
+    "quality": {
+      "grade": "A",
+      "numeric": 99,
+      "findings_count": 1,
+      "by_severity": {
+        "LOW": 1
+      }
+    },
+    "architecture": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "duplication": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 1,
+      "by_severity": {
+        "MEDIUM": 1
+      }
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 94,
+      "findings_count": 4,
+      "by_severity": {
+        "MEDIUM": 1,
+        "LOW": 3
+      }
+    },
+    "ux": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "llm_security": {
+      "grade": "N/A",
+      "findings_count": 0
+    }
+  }
+}
