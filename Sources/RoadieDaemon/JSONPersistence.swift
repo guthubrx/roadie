@@ -72,7 +72,7 @@ enum JSONPersistence {
     }
 
     /// Message d'une commande dont l'état n'a pas été écrit (REL-021), journalisé sur stderr.
-    /// « failed » donne au CLI un code de sortie non nul (`CLICommandRouter.actionExitCode`).
+    /// Le code de sortie vient du statut `failed` du résultat (`CommandResult`), pas de ce texte.
     static func commandFailureMessage(_ command: String, _ error: Error) -> String {
         fputs("roadie: \(command): \(error)\n", stderr)
         return "\(command): failed, \(error)"

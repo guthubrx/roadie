@@ -389,7 +389,7 @@ public final class CLICommandRouter {
             }
             let snapshot = service.snapshot()
             if args.contains("--json"), verb == "current" {
-                guard let display = TextFormatter.currentDisplaySnapshot(snapshot, state: StageStore().state()) else {
+                guard let display = TextFormatter.currentDisplaySnapshot(snapshot, state: service.effectiveStageStore.state()) else {
                     err("roadie: no displays found")
                     return 1
                 }
@@ -397,9 +397,9 @@ public final class CLICommandRouter {
             } else if args.contains("--json") {
                 try printJSON(snapshot.displays, label: "displays")
             } else if verb == "current" {
-                out(TextFormatter.currentDisplay(snapshot, state: StageStore().state()))
+                out(TextFormatter.currentDisplay(snapshot, state: service.effectiveStageStore.state()))
             } else {
-                out(TextFormatter.displays(snapshot.displays, state: StageStore().state()))
+                out(TextFormatter.displays(snapshot.displays, state: service.effectiveStageStore.state()))
             }
         case "state":
             let verb = args.dropFirst().first
@@ -520,7 +520,7 @@ public final class CLICommandRouter {
                 config: RoadieConfigLoader.validate(path: nil),
                 snapshot: snapshot,
                 plan: service.applyPlan(from: snapshot),
-                persistentState: StageStore().state()
+                persistentState: service.effectiveStageStore.state()
             ))
         case "self-test":
             let report = SelfTestService(service: service).run()
@@ -1127,7 +1127,7 @@ public final class CLICommandRouter {
                 return 64
             }
             let snapshot = service.snapshot()
-            let state = StageStore().state()
+            let state = service.effectiveStageStore.state()
             guard let activeDisplayID = state.activeDisplayID ?? snapshot.focusedWindowID.flatMap({ focusedID in
                 snapshot.windows.first { $0.window.id == focusedID }?.scope?.displayID
             }) ?? snapshot.displays.first?.id else {
