@@ -209,4 +209,39 @@ struct AppTargetQueryServiceTests {
         #expect(AppTargetQueryService.hidesContent(Rect(x: 0, y: 0, width: 191, height: 1)))
         #expect(!AppTargetQueryService.hidesContent(Rect(x: 0, y: 0, width: 283, height: 4)))
     }
+
+    @Test
+    func searchTextKeepsChildTextWithoutRepeatingTheTitle() {
+        let text = AppTargetQueryService.searchText(
+            ["  Subscriptions ", "Subscriptions", "", "Home"],
+            excluding: ["home", ""]
+        )
+        #expect(text == "Subscriptions")
+        #expect(AppTargetQueryService.searchText([String(repeating: "a", count: 600)], excluding: []).count == 500)
+    }
+
+    @Test
+    func childTextMakesAWebTargetSearchable() {
+        let candidate = AppElementCandidate(id: "1/0.4", role: "AXGroup", title: "", frame: Rect(x: 0, y: 0, width: 300, height: 270),
+                                            actions: [], isFocusableLeaf: true, searchText: "Meta just dropped something")
+        let target = AppTargetQueryService.targets(from: [candidate], config: AppTargetsConfig(enabled: true)).first
+
+        #expect(target?.title == "AXGroup")
+        #expect(target?.matchText.contains("meta just dropped") == true)
+        #expect(target?.searchText == "Meta just dropped something")
+    }
+
+    @Test
+    func aWebLeafIsClickedOnItsFirstContentNotItsCenter() {
+        let row = Rect(x: 0, y: 0, width: 900, height: 90)
+        let thumbnail = Rect(x: 10, y: 4, width: 150, height: 82)
+        let leaf = AppElementCandidate(id: "1/0.6", role: "AXGroup", title: "", frame: row, actions: [],
+                                       isFocusableLeaf: true, clickFrame: thumbnail)
+        let button = AppElementCandidate(id: "1/0.7", role: "AXButton", title: "OK", frame: row, actions: ["AXPress"])
+        let targets = AppTargetQueryService.targets(from: [leaf, button], config: AppTargetsConfig(enabled: true))
+
+        #expect(targets.first?.frame == row)
+        #expect(targets.first?.clickFrame == thumbnail)
+        #expect(targets.last?.clickFrame == nil)
+    }
 }

@@ -159,7 +159,7 @@ public final class CLICommandRouter {
         CLICommandSpec(usage: "rules validate|list|explain [--json] [--config PATH]"),
         CLICommandSpec(usage: "group create|add|remove|focus|dissolve|list ..."),
         CLICommandSpec(usage: "query state|windows|displays|desktops|stages|groups|rules|health|events|event_catalog|performance|restore|targets|components"),
-        CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|hide ..."),
+        CLICommandSpec(usage: "targets list|pick|inspect|activate|show|interactive|search|hide ..."),
         CLICommandSpec(usage: "grid show|interactive|click|double-click|right-click|move|scroll-up|scroll-down|drag [--scope display|focused_window] ..."),
         CLICommandSpec(usage: "record start NAME [--duration S] [--stop-file PATH]"),
         CLICommandSpec(usage: "record replay|list|inspect|delete ..."),
@@ -1430,6 +1430,9 @@ public final class CLICommandRouter {
                 payload["action"] = action
             }
             return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.interactive", arguments: payload), json: json)
+        case "search":
+            // SPEC-021 : même session que le raccourci global `search_hotkey`.
+            return try queueTargetModeRuntimeCommand(TargetModeRuntimeCommand(name: "targets.search"), json: json)
         case "hide":
             let result = targets.overlayState(options: options, labelsOnly: true, visible: false)
             if json {

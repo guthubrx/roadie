@@ -129,6 +129,21 @@ public enum TargetOverlayPresenter {
         return session
     }
 
+    /// Mode recherche (SPEC-021) : barre de saisie, filtrage, mise en avant, validation au clavier.
+    @discardableResult
+    public static func startSearch(
+        targets: [RoadieTarget],
+        activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        onFinish: @escaping @MainActor (TargetActionResult) -> Void
+    ) -> TargetOverlaySessionHandle? {
+        let session = TargetSearchSession(targets: targets, activate: activate, onFinish: onFinish)
+        if let immediate = session.start() {
+            onFinish(immediate)
+            return nil
+        }
+        return session
+    }
+
     fileprivate static func screenUnionFrame() -> CGRect {
         NSScreen.screens
             .map(\.frame)
@@ -178,6 +193,14 @@ extension KeyEventTapSession {
                 return Unmanaged.passUnretained(event)
             }
             guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+            // Mode recherche : décodage propre (ponctuation, Tab, modificateurs de Retour), les modes
+            // lettres et grille gardent `KeyInput`.
+            if let search = session as? TargetSearchSession {
+                let input = SearchKeyInput(event: event)
+                guard input.kind != .ignored else { return Unmanaged.passUnretained(event) }
+                Task { @MainActor in search.handleSearch(input) }
+                return nil
+            }
             let input = KeyInput(event: event)
             guard input.isRoadieHandled else {
                 return Unmanaged.passUnretained(event)
@@ -689,6 +712,227 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
     }
 }
 
+/// Session du mode recherche (SPEC-021). La logique est dans `TargetSearchModel` ; la session lit les
+/// touches, met à jour l'affichage et active la cible figée au moment de la validation.
+@MainActor
+private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession {
+    /// Fermeture sans frappe pendant ce délai.
+    static let idleTimeout: TimeInterval = 60
+
+    private var model: TargetSearchModel
+    private let activate: @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult
+    private let onFinish: (@MainActor (TargetActionResult) -> Void)?
+    private var lastInputAt = Date()
+    private(set) var finished = false
+    var eventTap: CFMachPort?
+    var runLoopSource: CFRunLoopSource?
+    private var timer: Timer?
+    private var windows: [TargetOverlayWindow] = []
+
+    init(
+        targets: [RoadieTarget],
+        activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
+        onFinish: (@MainActor (TargetActionResult) -> Void)?
+    ) {
+        self.model = TargetSearchModel(targets: targets)
+        self.activate = activate
+        self.onFinish = onFinish
+    }
+
+    func start() -> TargetActionResult? {
+        guard installEventTap() else {
+            return TargetActionResult(changed: false, message: "target_search: event tap unavailable", error: "event_tap_unavailable")
+        }
+        NSApplication.shared.setActivationPolicy(.accessory)
+        // Une fenêtre par écran : la barre suit l'écran du pointeur, même sans correspondance.
+        windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: .labels) }
+        windows.forEach { $0.orderFrontRegardless() }
+        render()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        if let timer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
+        return nil
+    }
+
+    func cancel() {
+        finish(TargetActionResult(changed: false, message: "target_search_cancelled", error: "cancelled"))
+    }
+
+    /// Exigé par `KeyEventTapSession` ; la recherche reçoit `SearchKeyInput` via `handleSearch`.
+    func handle(_ input: KeyInput) {}
+
+    fileprivate func handleSearch(_ input: SearchKeyInput) {
+        guard !finished else { return }
+        lastInputAt = Date()
+        if case .escape = input.kind {
+            model.cancelPendingReturn()
+            cancel()
+            return
+        }
+        if case .confirm(let shift, let command, let isRepeat) = input.kind {
+            guard !isRepeat, let target = model.highlighted else { return }
+            if let verb = model.pressReturn(shift: shift, command: command, at: Date()) {
+                finishActivating(target, verb)
+            }
+            return
+        }
+        // Retour seul en attente : les autres touches sont ignorées jusqu'à l'échéance.
+        guard !model.isAwaitingSecondReturn else { return }
+        switch input.kind {
+        case .text(let value):
+            model.type(value)
+        case .labelCharacter(let value):
+            _ = model.typeLabel(value)
+        case .delete:
+            model.deleteBackward()
+        case .next:
+            model.next()
+        case .previous:
+            model.previous()
+        case .escape, .confirm, .ignored:
+            break
+        }
+        render()
+    }
+
+    private func tick() {
+        guard !finished else { return }
+        if let target = model.highlighted, let verb = model.pendingReturn(at: Date()) {
+            finishActivating(target, verb)
+            return
+        }
+        if Date().timeIntervalSince(lastInputAt) >= Self.idleTimeout {
+            finish(TargetActionResult(changed: false, message: "target_search_timeout", error: "timeout"))
+        }
+    }
+
+    private func render() {
+        let highlightedID = model.highlighted?.id
+        let badges: [TargetOverlayBadge] = model.matches.compactMap { target in
+            guard let frame = target.frame?.cgRect else { return nil }
+            return TargetOverlayBadge(
+                label: target.label,
+                title: target.title,
+                kind: target.kind,
+                isActive: target.isActive,
+                frame: RoadieScreenCoordinate.axRectToNS(frame),
+                isHighlighted: target.id == highlightedID
+            )
+        }
+        let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties)
+        let mouse = NSEvent.mouseLocation
+        let barWindow = windows.first { $0.frame.contains(mouse) } ?? windows.first
+        for window in windows {
+            window.update(badges: badges, searchBar: window === barWindow ? bar : nil)
+        }
+    }
+
+    private func finish(_ result: TargetActionResult) {
+        guard !finished else { return }
+        finished = true
+        cleanup()
+        onFinish?(result)
+    }
+
+    private func finishActivating(_ target: RoadieTarget, _ verb: TargetActionVerb) {
+        guard !finished else { return }
+        finished = true
+        cleanup()
+        onFinish?(activate(target, verb))
+    }
+
+    private func cleanup() {
+        timer?.invalidate()
+        timer = nil
+        if let runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        }
+        runLoopSource = nil
+        if let eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+        }
+        eventTap = nil
+        for window in windows {
+            window.orderOut(nil)
+            window.close()
+        }
+        windows = []
+        NSApplication.shared.updateWindows()
+    }
+}
+
+/// Touches du mode recherche (SPEC-021). Les touches mortes et la composition sont ignorées : la
+/// recherche ne tient pas compte des accents. Les combinaisons Commande (sauf Cmd-Retour) passent à
+/// l'app ou au système.
+public struct SearchKeyInput: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable {
+        case text(String)
+        case labelCharacter(String)
+        case delete
+        case escape
+        case next
+        case previous
+        case confirm(shift: Bool, command: Bool, isRepeat: Bool)
+        case ignored
+    }
+
+    public let kind: Kind
+
+    init(event: CGEvent) {
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        let flags = event.flags
+        let shift = flags.contains(.maskShift)
+        let command = flags.contains(.maskCommand)
+        let control = flags.contains(.maskControl)
+        var length = 0
+        var chars = [UniChar](repeating: 0, count: 8)
+        event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &length, unicodeString: &chars)
+        let text = String(utf16CodeUnits: chars, count: length)
+        self.kind = Self.kind(
+            keyCode: keyCode, text: text, shift: shift, command: command, control: control,
+            isRepeat: event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        )
+    }
+
+    public init(kind: Kind) {
+        self.kind = kind
+    }
+
+    /// Décodage pur, testable : code de touche, texte produit et modificateurs.
+    public static func kind(keyCode: Int64, text: String, shift: Bool, command: Bool, control: Bool, isRepeat: Bool) -> Kind {
+        switch keyCode {
+        case 53: return .escape
+        case 51: return .delete
+        case 36, 76: return .confirm(shift: shift, command: command, isRepeat: isRepeat)
+        default: break
+        }
+        // Cmd-Tab, Cmd-Espace… restent au système.
+        if command { return .ignored }
+        switch keyCode {
+        case 48: return shift ? .previous : .next
+        case 125: return .next
+        case 126: return .previous
+        default: break
+        }
+        if control {
+            switch text.lowercased() {
+            case "n", "\u{0E}": return .next
+            case "p", "\u{10}": return .previous
+            default: return .ignored
+            }
+        }
+        guard text.count == 1, let character = text.first else { return .ignored }
+        if character.isLetter && shift { return .labelCharacter(String(character).lowercased()) }
+        if character.isLetter || character.isNumber || " *;?".contains(character) {
+            return .text(String(character))
+        }
+        return .ignored
+    }
+}
+
 private struct KeyInput: Sendable {
     enum Kind: Sendable {
         case characters(String)
@@ -796,6 +1040,8 @@ private struct TargetOverlayBadge {
     var kind: TargetKind
     var isActive: Bool
     var frame: CGRect
+    /// Correspondance mise en avant du mode recherche (vert).
+    var isHighlighted = false
 
     static func badges(from state: TargetOverlayState) -> [TargetOverlayBadge] {
         state.report.targets.compactMap { target in
@@ -834,10 +1080,26 @@ private final class TargetOverlayWindow: NSPanel {
         hasShadow = false
         contentView = content
     }
+
+    /// Mode recherche : nouvelles étiquettes et barre de saisie (nil = pas de barre sur cet écran).
+    func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?) {
+        guard let view = contentView as? TargetOverlayView else { return }
+        view.badges = badges
+        view.searchBar = searchBar
+        view.needsDisplay = true
+    }
+}
+
+/// Contenu de la barre de saisie du mode recherche.
+private struct TargetSearchBar {
+    var query: String
+    var matchCount: Int
+    var properties: String?
 }
 
 private final class TargetOverlayView: NSView {
-    private let badges: [TargetOverlayBadge]
+    fileprivate var badges: [TargetOverlayBadge]
+    fileprivate var searchBar: TargetSearchBar?
     private let screenOrigin: CGPoint
     private let style: TargetOverlayStyle
 
@@ -871,6 +1133,36 @@ private final class TargetOverlayView: NSView {
             drawBadge(badge, in: placement.badge)
             occupied.append(placement.badge.insetBy(dx: -4, dy: -4))
         }
+        if let searchBar {
+            drawSearchBar(searchBar)
+        }
+    }
+
+    private func drawSearchBar(_ bar: TargetSearchBar) {
+        let text: String
+        if let properties = bar.properties {
+            text = properties
+        } else {
+            let count = bar.matchCount == 0 ? "aucune correspondance" : "\(bar.matchCount) correspondance\(bar.matchCount > 1 ? "s" : "")"
+            text = "🔍 \(bar.query)▏   \(count)"
+        }
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 15, weight: .medium),
+            .foregroundColor: NSColor.white,
+        ]
+        let size = text.size(withAttributes: attributes)
+        let width = min(bounds.width - 40, max(420, size.width + 40))
+        let rect = CGRect(x: bounds.midX - width / 2, y: bounds.minY + 48, width: width, height: 40).integral
+        let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
+        NSColor(calibratedWhite: 0.06, alpha: 0.92).setFill()
+        path.fill()
+        NSColor.systemGreen.withAlphaComponent(0.9).setStroke()
+        path.lineWidth = 1.5
+        path.stroke()
+        text.draw(
+            in: CGRect(x: rect.minX + 20, y: rect.midY - size.height / 2, width: rect.width - 40, height: size.height),
+            withAttributes: attributes
+        )
     }
 
     private func placement(for badge: TargetOverlayBadge, avoiding occupied: [CGRect]) -> BadgePlacement? {
@@ -940,6 +1232,13 @@ private final class TargetOverlayView: NSView {
     }
 
     private func drawTargetFrame(for badge: TargetOverlayBadge, placement: BadgePlacement) {
+        if badge.isHighlighted {
+            let path = NSBezierPath(roundedRect: placement.target.insetBy(dx: -2, dy: -2), xRadius: 6, yRadius: 6)
+            NSColor.systemGreen.setStroke()
+            path.lineWidth = 3
+            path.stroke()
+            return
+        }
         guard style.drawTargetFrames, badge.kind == .gridCell else { return }
         let rect = placement.target.integral.insetBy(dx: 0.5, dy: 0.5)
         guard rect.width > 2, rect.height > 2 else { return }
@@ -995,10 +1294,11 @@ private final class TargetOverlayView: NSView {
         let label = badge.label.isEmpty ? "?" : badge.label
         let textSize = label.size(withAttributes: Self.textAttributes)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        NSColor(calibratedWhite: 0.04, alpha: CGFloat(style.labelBackgroundOpacity)).setFill()
+        (badge.isHighlighted ? NSColor.systemGreen.withAlphaComponent(0.85)
+            : NSColor(calibratedWhite: 0.04, alpha: CGFloat(style.labelBackgroundOpacity))).setFill()
         path.fill()
-        (badge.isActive ? NSColor.systemBlue : tint(for: badge.kind)).setStroke()
-        path.lineWidth = 1.5
+        (badge.isHighlighted ? NSColor.white : badge.isActive ? NSColor.systemBlue : tint(for: badge.kind)).setStroke()
+        path.lineWidth = badge.isHighlighted ? 2.5 : 1.5
         path.stroke()
 
         var attributes = Self.textAttributes

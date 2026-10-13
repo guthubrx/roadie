@@ -91,11 +91,16 @@ public struct AppElementCandidate: Equatable, Sendable {
     public var actions: [String]
     /// Retenu par la règle « feuille focalisable » d'une zone web (SPEC-020), sans action exposée.
     public var isFocusableLeaf: Bool
+    /// Texte des `AXStaticText` descendants, pour la recherche seulement (SPEC-021) ; `title` reste inchangé.
+    public var searchText: String
+    /// Feuille focalisable : cadre de sa première image ou de son premier texte visible (SPEC-021).
+    public var clickFrame: Rect?
 
     public init(
         id: String, role: String, title: String, value: String? = nil, frame: Rect? = nil, actions: [String],
-        isFocusableLeaf: Bool = false
+        isFocusableLeaf: Bool = false, searchText: String = "", clickFrame: Rect? = nil
     ) {
+        self.clickFrame = clickFrame
         self.id = id
         self.role = role
         self.title = title
@@ -103,6 +108,7 @@ public struct AppElementCandidate: Equatable, Sendable {
         self.frame = frame
         self.actions = actions
         self.isFocusableLeaf = isFocusableLeaf
+        self.searchText = searchText
     }
 }
 
@@ -202,6 +208,19 @@ public struct AppTargetQueryService {
 
     /// Même seuil que l'affichage (`TargetOverlayPresenter`, plus de 4 points) : en dessous, aucune
     /// lettre n'est dessinée. Chromium réduit à 1 point les éléments défilés hors d'une liste.
+    /// Texte de recherche d'une cible web : fragments des `AXStaticText` descendants, sans répéter
+    /// le titre ou la valeur, borné à `limit` caractères (SPEC-021).
+    public static func searchText(_ fragments: [String], excluding own: [String], limit: Int = 500) -> String {
+        let ownTexts = Set(own.map(TargetHintService.normalized).filter { !$0.isEmpty })
+        var kept: [String] = []
+        for fragment in fragments {
+            let trimmed = fragment.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty, !ownTexts.contains(TargetHintService.normalized(trimmed)), kept.last != trimmed else { continue }
+            kept.append(trimmed)
+        }
+        return String(kept.joined(separator: " ").prefix(limit))
+    }
+
     public static func isHintable(_ visible: Rect) -> Bool {
         visible.width > 4 && visible.height > 4
     }
@@ -236,10 +255,12 @@ public struct AppTargetQueryService {
                     title: title,
                     subtitle: [candidate.role, candidate.value].compactMap(\.self).joined(separator: " - "),
                     source: .app,
-                    matchText: RoadieTarget.normalizedMatchText([candidate.id, candidate.role, title, candidate.value ?? ""]),
+                    matchText: RoadieTarget.normalizedMatchText([candidate.id, candidate.role, title, candidate.value ?? "", candidate.searchText]),
                     frame: candidate.frame,
-                    actions: [.click, .doubleClick, .rightClick, .inspect],
-                    diagnostics: candidate.actions.map { "action=\($0)" } + ["role=\(candidate.role)"]
+                    actions: [.click, .doubleClick, .rightClick, .commandClick, .inspect],
+                    diagnostics: candidate.actions.map { "action=\($0)" } + ["role=\(candidate.role)"],
+                    searchText: candidate.searchText.isEmpty ? nil : candidate.searchText,
+                    clickFrame: candidate.clickFrame
                 )
             }
     }
@@ -360,8 +381,9 @@ public struct LiveAppTargetProvider: AppTargetProviding {
     private func scan(window: AXUIElement, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
         let windowFrame = copyFrame(window)
         // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.
-        var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?)] =
-            [(window, "0", 0, false, nil)]
+        // `textOwner` : chemin du plus proche candidat web, qui reçoit le texte des `AXStaticText` (SPEC-021).
+        var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?)] =
+            [(window, "0", 0, false, nil, nil)]
         var pass = ScanPass()
         var seen = CFIdentitySet()
         let ignoredActions: Set<String> = ["AXShowMenu", "AXScrollToVisible", "AXShowDefaultUI", "AXShowAlternateUI"]
@@ -369,9 +391,13 @@ public struct LiveAppTargetProvider: AppTargetProviding {
         // SPEC-020 : feuilles focalisables en attente et marqueurs de zone web, en préordre.
         var pending: [(candidate: AppElementCandidate, path: String)] = []
         var markers: [String] = []
+        var texts: [String: [String]] = [:]
+        var historicPaths: [String] = []
+        // Premier contenu visible (préordre) de chaque candidat web : point de clic des feuilles.
+        var contentFrames: [String: Rect] = [:]
 
         while let entry = stack.popLast() {
-            let (element, path, depth, parentInWeb, retainedFrame) = entry
+            let (element, path, depth, parentInWeb, retainedFrame, textOwner) = entry
             guard seen.insert(element) else { continue }
             if pass.candidates.count >= config.maxTargets {
                 pass.stopReason = "limit"
@@ -401,11 +427,18 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             if inWeb && (isCandidate || isPending) {
                 markers.append(path)
             }
+            if inWeb, role == "AXStaticText", let owner = textOwner, let text = value ?? (title.isEmpty ? nil : title) {
+                texts[owner, default: []].append(text)
+            }
             var retained = false
             var retainedVisible: Rect?
             // Zone web : le cadre est lu pour tous, afin de ne pas descendre dans un élément invisible.
             let frame = isCandidate || isPending || (inWeb && !isWebArea) ? copyFrame(element) : nil
             let visibleFrame = frame.flatMap { AppTargetQueryService.visibleFrame($0, in: windowFrame) }
+            if inWeb, role == "AXImage" || role == "AXStaticText", let owner = textOwner, contentFrames[owner] == nil,
+               let visible = visibleFrame, AppTargetQueryService.isHintable(visible) {
+                contentFrames[owner] = visible
+            }
             if isCandidate || isPending, frame != nil {
                 if let visible = visibleFrame,
                    !isPending || (AppTargetQueryService.isHintable(visible)
@@ -423,6 +456,7 @@ public struct LiveAppTargetProvider: AppTargetProviding {
                         pending.append((candidate, path))
                     } else {
                         pass.candidates.append(candidate)
+                        historicPaths.append(path)
                         retained = true
                         retainedVisible = visible
                     }
@@ -450,7 +484,8 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             let (children, unreadable) = copyChildren(element, boost: boost && !inWeb)
             if inWeb && unreadable { markers.append(path + ".?") }
             for (index, child) in children.enumerated().reversed() {
-                stack.append((child, "\(path).\(index)", depth + 1, inWeb, inWeb && retained ? retainedVisible : retainedFrame))
+                stack.append((child, "\(path).\(index)", depth + 1, inWeb, inWeb && retained ? retainedVisible : retainedFrame,
+                              inWeb && (isCandidate || isPending) ? path : textOwner))
             }
         }
 
@@ -460,8 +495,26 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             markers: markers,
             unexplored: stack.map(\.path)
         )
+        // Texte des enfants : seulement pour un candidat qui ne contient aucun autre candidat (le
+        // conteneur de page de Bluejay recevrait sinon tout le texte de la page).
+        var containers = Set<String>()
+        for index in markers.indices.dropLast()
+            where !AppTargetQueryService.keepsFocusableLeaf(path: markers[index], nextFocusablePath: markers[index + 1]) {
+            containers.insert(markers[index])
+        }
+        func withText(_ candidate: AppElementCandidate, at path: String) -> AppElementCandidate {
+            guard let fragments = texts[path], !containers.contains(path) else { return candidate }
+            var updated = candidate
+            updated.searchText = AppTargetQueryService.searchText(fragments, excluding: [candidate.title, candidate.value ?? ""])
+            return updated
+        }
+        for (index, path) in historicPaths.enumerated() where texts[path] != nil {
+            pass.candidates[index] = withText(pass.candidates[index], at: path)
+        }
         for item in pending where leaves.contains(item.path) && pass.candidates.count < config.maxTargets {
-            pass.candidates.append(item.candidate)
+            var leaf = withText(item.candidate, at: item.path)
+            leaf.clickFrame = contentFrames[item.path]
+            pass.candidates.append(leaf)
             pass.focusableAdded += 1
             pass.rejectedRoles[item.candidate.role, default: 0] -= 1
         }
@@ -476,7 +529,9 @@ public struct LiveAppTargetProvider: AppTargetProviding {
     }
 
     public func click(_ target: RoadieTarget, action: TargetActionVerb) -> TargetActionResult {
-        guard let frame = target.frame?.cgRect else {
+        // Feuille web sans action : son centre peut tomber hors des zones qui réagissent (ligne de
+        // l'Historique Bluejay, où seuls vignette, titre et auteur ont un gestionnaire de clic).
+        guard let frame = (target.clickFrame ?? target.frame)?.cgRect else {
             return TargetActionResult(changed: false, message: "app click: no frame", target: target, error: "no_frame")
         }
         let point = CGPoint(x: frame.midX, y: frame.midY)
@@ -488,6 +543,8 @@ public struct LiveAppTargetProvider: AppTargetProviding {
             postClick(at: point, button: .left, down: .leftMouseDown, up: .leftMouseUp, clickCount: 2)
         case .rightClick:
             postClick(at: point, button: .right, down: .rightMouseDown, up: .rightMouseUp, clickCount: 1)
+        case .commandClick:
+            postClick(at: point, button: .left, down: .leftMouseDown, up: .leftMouseUp, clickCount: 1, flags: .maskCommand)
         default:
             return TargetActionResult(changed: false, message: "app click: unsupported \(action.rawValue)", target: target, error: "unsupported_action")
         }
@@ -499,12 +556,17 @@ public struct LiveAppTargetProvider: AppTargetProviding {
         button: CGMouseButton,
         down: CGEventType,
         up: CGEventType,
-        clickCount: Int64
+        clickCount: Int64,
+        flags: CGEventFlags = []
     ) {
         let downEvent = CGEvent(mouseEventSource: nil, mouseType: down, mouseCursorPosition: point, mouseButton: button)
         let upEvent = CGEvent(mouseEventSource: nil, mouseType: up, mouseCursorPosition: point, mouseButton: button)
         downEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
         upEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
+        if !flags.isEmpty {
+            downEvent?.flags = flags
+            upEvent?.flags = flags
+        }
         downEvent?.post(tap: .cghidEventTap)
         upEvent?.post(tap: .cghidEventTap)
     }

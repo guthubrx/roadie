@@ -27,10 +27,12 @@ public enum TargetActionVerb: String, Codable, Equatable, Sendable {
     case click
     case doubleClick = "double-click"
     case rightClick = "right-click"
+    /// Cmd-clic (ouvrir dans un nouvel onglet), mode recherche SPEC-021.
+    case commandClick = "command-click"
 
     var isAppMouseAction: Bool {
         switch self {
-        case .click, .doubleClick, .rightClick:
+        case .click, .doubleClick, .rightClick, .commandClick:
             return true
         case .focus, .switch, .sendActive, .inspect:
             return false
@@ -72,6 +74,10 @@ public struct RoadieTarget: Codable, Equatable, Sendable {
     public var isActive: Bool
     public var actions: [TargetActionVerb]
     public var diagnostics: [String]
+    /// Texte des enfants d'une cible web, pour le mode recherche (SPEC-021) ; absent sinon.
+    public var searchText: String?
+    /// Zone visée par le clic d'une feuille web (SPEC-021) : son premier contenu visible. Absent : `frame`.
+    public var clickFrame: Rect?
 
     public init(
         id: String,
@@ -85,8 +91,12 @@ public struct RoadieTarget: Codable, Equatable, Sendable {
         frame: Rect? = nil,
         isActive: Bool = false,
         actions: [TargetActionVerb],
-        diagnostics: [String] = []
+        diagnostics: [String] = [],
+        searchText: String? = nil,
+        clickFrame: Rect? = nil
     ) {
+        self.searchText = searchText
+        self.clickFrame = clickFrame
         self.id = id
         self.label = label
         self.kind = kind
@@ -380,6 +390,17 @@ public struct TargetHintService {
             return TargetActionResult(changed: false, message: String(describing: error), error: String(describing: error))
         }
 
+        return activate(target: target, action: requestedAction)
+    }
+
+    /// Active une cible déjà résolue, sans nouvelle liste : le mode recherche (SPEC-021) clique ainsi
+    /// exactement l'élément choisi, même si l'ordre des cibles a changé depuis.
+    public func activate(target: RoadieTarget, action requestedAction: TargetActionVerb? = nil) -> TargetActionResult {
+        guard targetModeConfig.enabled else {
+            let message = "target_mode_disabled"
+            eventLog.append(RoadieEvent(type: "targets.activate_failed", details: ["target": target.id, "error": message]))
+            return TargetActionResult(changed: false, message: message, error: message)
+        }
         let result = perform(target, requestedAction: requestedAction)
         eventLog.append(RoadieEvent(type: "targets.activate", details: [
             "target": target.id,
@@ -412,7 +433,7 @@ public struct TargetHintService {
             result = activateSwitch(target)
         case .sendActive:
             result = activateSendActive(target)
-        case .click, .doubleClick, .rightClick:
+        case .click, .doubleClick, .rightClick, .commandClick:
             result = appTargetService.click(target, action: action)
         case .inspect:
             result = TargetActionResult(changed: false, message: "inspect \(target.id)", target: target)

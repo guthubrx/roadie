@@ -23,6 +23,7 @@ var borderController: BorderController?
 var focusFollowsMouseController: FocusFollowsMouseController?
 var titlebarContextMenuController: TitlebarContextMenuController?
 var targetModeRuntimeController: TargetModeRuntimeController?
+var targetSearchHotkey: TargetSearchHotkey?
 var displayChangeObserver: NSObjectProtocol?
 var pendingDisplayHeal: Task<Void, Never>?
 var displaySettlingUntil: Date = .distantPast
@@ -198,6 +199,9 @@ func startTitlebarMenuComponent() {
 func startTargetModeComponent() {
     targetModeRuntimeController = TargetModeRuntimeController(service: service)
     targetModeRuntimeController?.start()
+    // SPEC-021 : raccourci global du mode recherche, même cycle de vie que le mode lettres.
+    targetSearchHotkey = TargetSearchHotkey { targetModeRuntimeController?.requestSearch() }
+    targetSearchHotkey?.start()
 }
 
 /// Canal socket des commandes CLI, servi par le process qui détient le verrou d'instance.

@@ -706,6 +706,35 @@ struct ConfigTests {
         )))
     }
 
+    // MARK: - SPEC-021 : raccourci du mode recherche
+
+    @Test
+    func searchHotkeyDefaultsToHyperFAndAcceptsAliases() throws {
+        #expect(TargetModeConfig().searchHotkey == "command+control+alt+f")
+        #expect(TargetModeConfig(searchHotkey: "Hyper + F").searchHotkey == "command+control+alt+f")
+        #expect(TargetModeConfig(searchHotkey: "ctrl+option+space").searchHotkey == "control+alt+space")
+        #expect(TargetModeConfig(searchHotkey: "").searchHotkey == "")
+        let parts = TargetModeConfig.hotkeyParts("command+control+alt+f")
+        #expect(parts?.modifiers == ["command", "control", "alt"])
+        #expect(parts?.key == "f")
+        #expect(TargetModeConfig.hotkeyParts("f") == nil)
+        #expect(TargetModeConfig.hotkeyParts("command+f+g") == nil)
+    }
+
+    @Test
+    func searchHotkeyValidationRejectsAKeyWithoutModifier() throws {
+        let invalid = try validate("""
+        [experimental.target_mode]
+        search_hotkey = "f"
+        """)
+        let valid = try validate("""
+        [experimental.target_mode]
+        search_hotkey = "cmd+alt+ctrl+f"
+        """)
+        #expect(invalid.items.contains { $0.path == "experimental.target_mode.search_hotkey" && $0.level == .error })
+        #expect(!valid.items.contains { $0.path.hasPrefix("experimental.target_mode.search_hotkey") })
+    }
+
     // MARK: - Validation SPEC-016 (clés inconnues, messages lisibles, tables fx.rail.*)
 
     private func validate(_ toml: String) throws -> ConfigValidationReport {

@@ -62,6 +62,7 @@ public final class TargetModeRuntimeController: NSObject {
     private let events: EventLog
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
+    private var currentCommand: String?
 
     public init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
         self.service = service
@@ -83,6 +84,11 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "target_mode.runtime_started"))
     }
 
+    /// Raccourci global du mode recherche (SPEC-021).
+    public func requestSearch() {
+        handle(TargetModeRuntimeCommand(name: "targets.search"))
+    }
+
     public func stop() {
         if let observer {
             DistributedNotificationCenter.default().removeObserver(observer)
@@ -98,11 +104,18 @@ public final class TargetModeRuntimeController: NSObject {
             events.append(RoadieEvent(type: "target_mode.command_rejected", details: ["reason": "invalid_payload"]))
             return
         }
+        // Raccourci de recherche maintenu ou répété : la recherche ouverte reste ouverte.
+        if command.name == "targets.search", currentCommand == "targets.search", currentSession != nil {
+            return
+        }
         currentSession?.cancel()
         currentSession = nil
+        currentCommand = command.name
         switch command.name {
         case "targets.interactive":
             startTargetsInteractive(command)
+        case "targets.search":
+            startTargetsSearch(command)
         case "grid.interactive":
             startGridInteractive(command)
         default:
@@ -141,6 +154,30 @@ public final class TargetModeRuntimeController: NSObject {
             duration: duration,
             activate: { label in
                 targets.activate(label, action: action)
+            },
+            onFinish: { [weak self] result in
+                self?.finish(result, command: command.name)
+            }
+        )
+    }
+
+    /// Mode recherche (SPEC-021) : toutes sources, cibles d'app incluses ; activation de la cible figée.
+    private func startTargetsSearch(_ command: TargetModeRuntimeCommand) {
+        let config = service.effectiveConfig.experimental.targetMode
+        guard config.overlayEnabled else {
+            finish(TargetActionResult(changed: false, message: "target_overlay_disabled", error: "target_overlay_disabled"), command: command.name)
+            return
+        }
+        let targets = TargetHintService(service: service)
+        let options = TargetQueryOptions(source: .all, maxResults: 500, includeAppTargets: true)
+        let overlay = targets.overlayState(options: options, labelsOnly: true, visible: true)
+        events.append(RoadieEvent(type: "target_mode.search_started", details: [
+            "targetCount": String(overlay.report.targets.count)
+        ]))
+        currentSession = TargetOverlayPresenter.startSearch(
+            targets: overlay.report.targets,
+            activate: { target, verb in
+                targets.activate(target: target, action: verb)
             },
             onFinish: { [weak self] result in
                 self?.finish(result, command: command.name)
@@ -274,6 +311,7 @@ public final class TargetModeRuntimeController: NSObject {
 
     private func finish(_ result: TargetActionResult, command: String) {
         currentSession = nil
+        currentCommand = nil
         events.append(RoadieEvent(type: "target_mode.finished", details: [
             "command": command,
             "changed": String(result.changed),

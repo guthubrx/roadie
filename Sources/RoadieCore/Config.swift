@@ -563,6 +563,11 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var overlayDurationSeconds: Double
     public var appMouseActionsEnabled: Bool
     public var scrollModeEnabled: Bool
+    /// Raccourci global du mode recherche (SPEC-021), forme normalisée `command+control+alt+f` ;
+    /// vide = désactivé. Défaut : la hyper key (Cmd+Option+Ctrl) + F, comme le conseille Homerow.
+    public var searchHotkey: String
+
+    public static let defaultSearchHotkey = "command+control+alt+f"
 
     public init(
         enabled: Bool = true,
@@ -571,7 +576,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         overlayLabelsOnly: Bool = true,
         overlayDurationSeconds: Double = 3,
         appMouseActionsEnabled: Bool = false,
-        scrollModeEnabled: Bool = false
+        scrollModeEnabled: Bool = false,
+        searchHotkey: String = TargetModeConfig.defaultSearchHotkey
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -580,6 +586,18 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.overlayDurationSeconds = overlayDurationSeconds
         self.appMouseActionsEnabled = appMouseActionsEnabled
         self.scrollModeEnabled = scrollModeEnabled
+        self.searchHotkey = TargetGridConfig.normalizedKey(searchHotkey, fallback: "")
+    }
+
+    /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
+    /// nil si la chaîne n'a pas exactement une touche et au moins un modificateur.
+    public static func hotkeyParts(_ normalized: String) -> (modifiers: Set<String>, key: String)? {
+        let modifierNames: Set<String> = ["command", "control", "alt", "shift"]
+        let parts = normalized.split(separator: "+").map(String.init)
+        let modifiers = Set(parts.filter { modifierNames.contains($0) })
+        let keys = parts.filter { !modifierNames.contains($0) }
+        guard !modifiers.isEmpty, keys.count == 1, let key = keys.first, !key.isEmpty else { return nil }
+        return (modifiers, key)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -590,6 +608,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case overlayDurationSeconds = "overlay_duration_seconds"
         case appMouseActionsEnabled = "app_mouse_actions_enabled"
         case scrollModeEnabled = "scroll_mode_enabled"
+        case searchHotkey = "search_hotkey"
     }
 
     public init(from decoder: Decoder) throws {
@@ -601,7 +620,8 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             overlayLabelsOnly: try c.decodeIfPresent(Bool.self, forKey: .overlayLabelsOnly) ?? true,
             overlayDurationSeconds: try c.decodeFlexibleDouble(forKey: .overlayDurationSeconds) ?? 3,
             appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
-            scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false
+            scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false,
+            searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey
         )
     }
 }
@@ -832,7 +852,8 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
         )
     }
 
-    private static func normalizedKey(_ value: String, fallback: String) -> String {
+    /// Partagé avec `TargetModeConfig.searchHotkey` (SPEC-021).
+    static func normalizedKey(_ value: String, fallback: String) -> String {
         let cleaned = value
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
@@ -844,6 +865,10 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
                 return "alt"
             case "cmd":
                 return "command"
+            case "ctrl":
+                return "control"
+            case "hyper":
+                return "command+control+alt"
             case "esc":
                 return "escape"
             case "delete":
@@ -1215,7 +1240,7 @@ private enum ConfigValidationRules {
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],
@@ -1554,6 +1579,13 @@ private enum ConfigValidationRules {
                 level: .warning,
                 path: "experimental.target_mode",
                 message: "target mode is disabled; sub-features will be ignored"
+            ))
+        }
+        if !config.searchHotkey.isEmpty, TargetModeConfig.hotkeyParts(config.searchHotkey) == nil {
+            items.append(ConfigValidationItem(
+                level: .error,
+                path: "experimental.target_mode.search_hotkey",
+                message: "expected modifiers and one key, e.g. \"cmd+alt+ctrl+f\" or \"hyper+f\"; empty disables"
             ))
         }
         return items

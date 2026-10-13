@@ -1,12 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `020-cef-web-hints`.
+Current SpecKit feature: `021-target-search-mode`.
 
 Contexte :
-- `specs/020-cef-web-hints/spec.md`
-- `specs/020-cef-web-hints/plan.md`
-- `specs/020-cef-web-hints/research.md`
-- `specs/020-cef-web-hints/data-model.md`
-- `specs/020-cef-web-hints/contracts/`
+- `specs/021-target-search-mode/spec.md`
+- `specs/021-target-search-mode/plan.md`
+- `specs/021-target-search-mode/research.md`
+- `specs/021-target-search-mode/data-model.md`
+- `specs/021-target-search-mode/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
