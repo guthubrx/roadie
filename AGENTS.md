@@ -1,12 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `021-target-search-mode`.
+Current SpecKit feature: `022-audit-remediation`.
 
 Contexte :
-- `specs/021-target-search-mode/spec.md`
-- `specs/021-target-search-mode/plan.md`
-- `specs/021-target-search-mode/research.md`
-- `specs/021-target-search-mode/data-model.md`
-- `specs/021-target-search-mode/contracts/`
+- `specs/022-audit-remediation/spec.md`
+- `specs/022-audit-remediation/plan.md`
+- `specs/022-audit-remediation/research.md`
+- `specs/022-audit-remediation/data-model.md`
+- `specs/022-audit-remediation/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
