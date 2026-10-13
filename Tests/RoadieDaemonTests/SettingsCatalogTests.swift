@@ -24,6 +24,22 @@ struct SettingsCatalogTests {
     }
 
     @Test
+    func strategyAliasesMatchTheLoader() throws {
+        let strategy = try #require(SettingsCatalog.find(id: "tiling.default_strategy"))
+        guard case .choice(let choices) = strategy.kind else { Issue.record("choix attendu"); return }
+        for alias in ["spatial_bsp", "master_stack", "mutable_bsp", "bsp", "float", "SPATIAL_BSP", " tree "] {
+            let canonical = SettingsCatalog.canonicalChoice(alias, for: strategy.id)
+            #expect(choices.contains(canonical), "\(alias) → \(canonical)")
+            // Même résultat que le chargeur : `mutableBsp` y devient `spatialBsp`.
+            let loaded = try #require(WindowManagementMode(roadieValue: canonical))
+            let expected = try #require(WindowManagementMode(roadieValue: alias.trimmingCharacters(in: .whitespaces).lowercased() == "spatial_bsp" ? "spatial_bsp" : alias.trimmingCharacters(in: .whitespaces)))
+            #expect(loaded == (expected == .mutableBsp ? .spatialBsp : expected), "\(alias)")
+        }
+        #expect(SettingsCatalog.canonicalChoice("spirale", for: strategy.id) == "spirale")
+        #expect(SettingsCatalog.canonicalChoice("spatial_bsp", for: "tiling.split_policy") == "spatial_bsp")
+    }
+
+    @Test
     func readOnlyEntriesAreTheListsAndTableArrays() {
         let readOnly = Set(SettingsCatalog.all.filter { $0.readOnlyReason != nil }.map(\.id))
         #expect(readOnly == [

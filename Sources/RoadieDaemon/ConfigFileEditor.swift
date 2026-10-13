@@ -14,14 +14,12 @@ public enum ConfigEditError: Error, Equatable {
 /// Un automate suit, ligne à ligne, les chaînes (`"…"`, `'…'`, `"""`, `'''`) et les tableaux ouverts.
 public enum ConfigFileEditor {
     /// `table` : chemin TOML complet de la table (`experimental.target_grid`), `key` : clé simple.
-    /// `value` : LITTÉRAL TOML déjà formaté (`4`, `0.55`, `true`, `"#7AA2F7"`) ; `nil` retire la ligne de la clé.
+    /// `value` : LITTÉRAL TOML déjà formaté (`4`, `0.55`, `true`, `"#7AA2F7"`) ; `nil` retire la ligne de la clé
+    /// (son commentaire de fin de ligne, s'il existe, reste en ligne de commentaire : FR-024).
     /// Retourne le nouveau texte. Complexité : O(L) sur L = nombre de caractères du fichier.
     public static func edit(_ text: String, table: String, key: String, value: String?) -> Result<String, ConfigEditError> {
-        let found: Located
-        switch locate(text, table: table, key: key) {
-        case .failure(let error): return .failure(error)
-        case .success(let located): found = located
-        }
+        let (found, failure) = locate(text, table: table, key: key)
+        if let failure { return .failure(failure) }
         var lines = found.lines
         let eol = lines.first(where: { !$0.end.isEmpty })?.end ?? "\n"
 
@@ -33,6 +31,11 @@ public enum ConfigFileEditor {
                 view.append(contentsOf: value.unicodeScalars)
                 view.append(contentsOf: scalars[found.valueRange.upperBound...])
                 lines[keyIndex].text = String(view)
+            } else if let comment = found.commentStart {
+                // Le commentaire de fin de ligne reste, seul, avec l'indentation de la ligne.
+                let scalars = Array(lines[keyIndex].text.unicodeScalars)
+                let indent = scalars.prefix(while: isSpace)
+                lines[keyIndex].text = String(String.UnicodeScalarView(indent + scalars[comment...]))
             } else {
                 // Retrait de la dernière ligne sans saut final : le fichier reste sans saut final.
                 if lines[keyIndex].end.isEmpty, keyIndex > 0 { lines[keyIndex - 1].end = "" }
@@ -68,11 +71,80 @@ public enum ConfigFileEditor {
     /// `nil` si la clé est absente, vide, ou si l'édition serait refusée (valeur multi-lignes, clé en double…).
     /// Complexité : O(L) sur L = nombre de caractères du fichier.
     public static func readLiteral(_ text: String, table: String, key: String) -> String? {
-        guard case .success(let found) = locate(text, table: table, key: key),
-              let keyIndex = found.keyIndex, !found.valueRange.isEmpty else { return nil }
+        let (found, failure) = locate(text, table: table, key: key)
+        guard failure == nil, let keyIndex = found.keyIndex, !found.valueRange.isEmpty else { return nil }
         var view = String.UnicodeScalarView()
         view.append(contentsOf: Array(found.lines[keyIndex].text.unicodeScalars)[found.valueRange])
         return String(view)
+    }
+
+    /// Texte de la valeur, même sur plusieurs lignes (tableau, table en ligne), pour un affichage en lecture seule :
+    /// commentaires et lignes vides retirés, lignes ramenées sur une seule (`["a", "b"]`).
+    /// `nil` si la clé est absente, vide ou illisible. Complexité : O(L) sur L = nombre de caractères du fichier.
+    public static func readRawValue(_ text: String, table: String, key: String) -> String? {
+        let (found, failure) = locate(text, table: table, key: key)
+        guard let keyIndex = found.keyIndex, let keyEnd = found.keyEnd, !found.valueRange.isEmpty else { return nil }
+        // Seuls les refus propres à la forme de cette valeur sont tolérés.
+        if let failure, failure != .multilineValue(line: keyIndex + 1), failure != .inlineTable(line: keyIndex + 1) {
+            return nil
+        }
+        var state = ScanState()
+        var joined = ""
+        for index in keyIndex...keyEnd {
+            let scalars = Array(found.lines[index].text.unicodeScalars)
+            let start = index == keyIndex ? found.valueRange.lowerBound : 0
+            let result = scan(scalars, from: start, state)
+            state = result.state
+            var end = result.comment ?? scalars.count
+            var first = start
+            while first < end, isSpace(scalars[first]) { first += 1 }
+            while end > first, isSpace(scalars[end - 1]) { end -= 1 }
+            guard first < end else { continue }
+            let piece = String(String.UnicodeScalarView(scalars[first..<end]))
+            // `[` puis `"a",` puis `]` donnent `["a"]` : pas d'espace après `[`, pas de virgule avant `]`.
+            if piece.hasPrefix("]"), joined.hasSuffix(",") { joined.removeLast() }
+            if !joined.isEmpty, !joined.hasSuffix("["), !piece.hasPrefix("]") { joined += " " }
+            joined += piece
+        }
+        return joined
+    }
+
+    /// Nombre d'en-têtes `[[table]]` (`table` : chemin complet, `rules`, `tiling.display_overrides`). O(L).
+    public static func countArrayTables(_ text: String, table: String) -> Int {
+        arrayTables(text, table: table).count
+    }
+
+    /// Entrées `[[table]]` dans l'ordre du fichier : pour chacune, ses clés simples d'une ligne → littéral brut
+    /// (sans commentaire). Les sous-tables (`[rules.match]`) et les valeurs multi-lignes sont ignorées. O(L).
+    static func arrayTables(_ text: String, table: String) -> [[String: String]] {
+        let tablePath = segments(Array(table.unicodeScalars)[...])
+        var entries: [[String: String]] = []
+        var inEntry = false
+        var state = ScanState()
+        for line in splitLines(text) {
+            let scalars = Array(line.text.unicodeScalars)
+            guard state.isTopLevel else {
+                state = scan(scalars, from: 0, state).state
+                continue
+            }
+            guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
+            if let header = header(scalars, at: first) {
+                inEntry = header.isArray && header.path == tablePath
+                if inEntry { entries.append([:]) }
+                continue
+            }
+            guard let equals = equalsIndex(scalars, from: first) else { continue }
+            let result = scan(scalars, from: equals + 1, ScanState())
+            state = result.state
+            let names = segments(scalars[first..<equals])
+            guard inEntry, state.isTopLevel, !result.unterminated, names.count == 1 else { continue }
+            var start = equals + 1
+            while start < scalars.count, isSpace(scalars[start]) { start += 1 }
+            var end = result.comment ?? scalars.count
+            while end > start, isSpace(scalars[end - 1]) { end -= 1 }
+            entries[entries.count - 1][names[0]] = String(String.UnicodeScalarView(scalars[start..<end]))
+        }
+        return entries
     }
 
     /// Résultat du parcours d'un fichier pour une clé : lignes, position de la clé et de sa table.
@@ -82,13 +154,26 @@ public enum ConfigFileEditor {
         var headerIndex: Int?
         var lastUseful: Int?
         var keyIndex: Int?
+        /// Index de la ligne qui termine la valeur de la clé (égal à `keyIndex` pour une valeur d'une ligne).
+        var keyEnd: Int?
         /// Position de la valeur dans la ligne de la clé (en scalaires Unicode).
         var valueRange: Range<Int>
+        /// Position du `#` du commentaire de fin de ligne de la clé.
+        var commentStart: Int?
         var endsAtTopLevel: Bool
     }
 
-    /// Parcourt tout le fichier avec l'automate et applique les règles de refus. O(L).
-    private static func locate(_ text: String, table: String, key: String) -> Result<Located, ConfigEditError> {
+    /// En-tête `[table]` ou `[[table]]` d'une ligne dont le premier caractère utile est en `first`. O(n).
+    private static func header(_ scalars: [Unicode.Scalar], at first: Int) -> (path: [String], isArray: Bool)? {
+        guard scalars[first] == "[" else { return nil }
+        let isArray = first + 1 < scalars.count && scalars[first + 1] == "["
+        let start = first + (isArray ? 2 : 1)
+        let end = scalars[start...].firstIndex(of: "]") ?? scalars.count
+        return (segments(scalars[start..<end]), isArray)
+    }
+
+    /// Parcourt tout le fichier avec l'automate et applique les règles de refus (premier refus rencontré). O(L).
+    private static func locate(_ text: String, table: String, key: String) -> (found: Located, failure: ConfigEditError?) {
         let lines = splitLines(text)
         let tablePath = table.isEmpty ? [] : segments(Array(table.unicodeScalars)[...])
         let target = tablePath + [key]
@@ -99,7 +184,9 @@ public enum ConfigFileEditor {
         var headerIndex: Int? = tablePath.isEmpty ? -1 : nil
         var lastUseful: Int?
         var keyIndex: Int?
+        var keyEnd: Int?
         var valueRange = 0..<0
+        var commentStart: Int?
         var failure: ConfigEditError?
         func fail(_ error: ConfigEditError) { if failure == nil { failure = error } }
 
@@ -110,16 +197,14 @@ public enum ConfigFileEditor {
             guard state.isTopLevel else {
                 state = scan(scalars, from: 0, state).state
                 if inTarget, state.isTopLevel { lastUseful = index }
+                if keyIndex != nil, keyEnd == nil, state.isTopLevel { keyEnd = index }
                 continue
             }
             guard let first = scalars.firstIndex(where: { !isSpace($0) }), scalars[first] != "#" else { continue }
-            if scalars[first] == "[" {
-                let isArray = first + 1 < scalars.count && scalars[first + 1] == "["
-                let start = first + (isArray ? 2 : 1)
-                let end = scalars[start...].firstIndex(of: "]") ?? scalars.count
-                context = segments(scalars[start..<end])
-                contextIsArray = isArray
-                if !isArray, context == tablePath {
+            if let header = header(scalars, at: first) {
+                context = header.path
+                contextIsArray = header.isArray
+                if !header.isArray, context == tablePath {
                     if headerIndex != nil { fail(.duplicateTable) } else { headerIndex = index }
                 }
                 continue
@@ -140,12 +225,14 @@ public enum ConfigFileEditor {
             if inTarget, names == [key] {
                 if keyIndex != nil { fail(.duplicateKey(line: index + 1)); continue }
                 keyIndex = index
+                if state.isTopLevel { keyEnd = index }
                 if opening == "{" { fail(.inlineTable(line: index + 1)) }
                 else if opening == "[" || !state.isTopLevel { fail(.multilineValue(line: index + 1)) }
                 else if result.unterminated { fail(.unterminatedString(line: index + 1)) }
                 var end = result.comment ?? scalars.count
                 while end > start, isSpace(scalars[end - 1]) { end -= 1 }
                 valueRange = start..<max(start, end)
+                commentStart = result.comment
             } else if names.count > 1, path.starts(with: target)
                         || (context.count < tablePath.count && path.count > tablePath.count && path.starts(with: tablePath)) {
                 // La clé visée, ou la table visée, est définie par une clé pointée.
@@ -154,11 +241,11 @@ public enum ConfigFileEditor {
                 fail(.inlineTable(line: index + 1))
             }
         }
-        if let failure { return .failure(failure) }
-        return .success(Located(
-            lines: lines, headerIndex: headerIndex, lastUseful: lastUseful, keyIndex: keyIndex,
-            valueRange: valueRange, endsAtTopLevel: state.isTopLevel
-        ))
+        let found = Located(
+            lines: lines, headerIndex: headerIndex, lastUseful: lastUseful, keyIndex: keyIndex, keyEnd: keyEnd,
+            valueRange: valueRange, commentStart: commentStart, endsAtTopLevel: state.isTopLevel
+        )
+        return (found, failure)
     }
 
     private struct Line {

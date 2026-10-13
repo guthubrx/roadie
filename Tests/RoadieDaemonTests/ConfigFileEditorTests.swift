@@ -177,7 +177,9 @@ struct ConfigFileEditorTests {
         #expect(try edit(text, "t", "a", "2") == "[t]\r\na = 2 # c\r\n")
         #expect(try edit(text, "t", "b", "2") == "[t]\r\na = 1 # c\r\nb = 2\r\n")
         #expect(try edit(text, "u", "b", "2") == "[t]\r\na = 1 # c\r\n\r\n[u]\r\nb = 2\r\n")
-        #expect(try edit(text, "t", "a", nil) == "[t]\r\n")
+        // Retrait : le commentaire de fin de ligne reste, avec la fin de ligne CRLF (T036).
+        #expect(try edit(text, "t", "a", nil) == "[t]\r\n# c\r\n")
+        #expect(try edit("[t]\r\na = 1\r\n", "t", "a", nil) == "[t]\r\n")
     }
 
     // MARK: - Retrait
@@ -187,6 +189,17 @@ struct ConfigFileEditorTests {
         let result = diff(sample, try edit(sample, "tiling", "gaps_inner", nil))
         #expect(result.removed == ["gaps_inner = 4"])
         #expect(result.added.isEmpty)
+    }
+
+    @Test
+    func removalKeepsTrailingCommentAsCommentLine() throws {
+        let result = diff(sample, try edit(sample, "tiling", "gaps_outer", nil))
+        #expect(result.removed == ["gaps_outer = 8 # marge extérieure"])
+        #expect(result.added == ["# marge extérieure"])
+        // Indentation gardée ; `#` dans une chaîne n'est pas un commentaire ; fichier sans saut final.
+        #expect(try edit("[t]\n    a = \"#1\"   # note\nb = 2\n", "t", "a", nil) == "[t]\n    # note\nb = 2\n")
+        #expect(try edit("[t]\na = \"#1\"\n", "t", "a", nil) == "[t]\n")
+        #expect(try edit("[t]\na = 1 # fin", "t", "a", nil) == "[t]\n# fin")
     }
 
     @Test
@@ -216,6 +229,43 @@ struct ConfigFileEditorTests {
         #expect(ConfigFileEditor.readLiteral("[t]\na = 1\na = 2\n", table: "t", key: "a") == nil)
         #expect(ConfigFileEditor.readLiteral("[t]\na =\n", table: "t", key: "a") == nil)
         #expect(ConfigFileEditor.readLiteral("", table: "t", key: "a") == nil)
+    }
+
+    // MARK: - Lecture brute et tableaux de tables (T029)
+
+    @Test
+    func readRawValueCompactsMultilineArrayWithoutComments() {
+        #expect(ConfigFileEditor.readRawValue(sample, table: "exclusions", key: "floating_bundles")
+                == #"["com.apple.systempreferences", "weird]name"]"#)
+        #expect(ConfigFileEditor.readRawValue(sample, table: "tiling", key: "gaps_outer") == "8")
+        #expect(ConfigFileEditor.readRawValue("[t]\nlist = [1, 2] # c\n", table: "t", key: "list") == "[1, 2]")
+        #expect(ConfigFileEditor.readRawValue("[t]\nm = { a = 1 }\n", table: "t", key: "m") == "{ a = 1 }")
+        #expect(ConfigFileEditor.readRawValue("[t]\nlist = [\n  [1, 2],\n  [3],\n]\nb = 1\n", table: "t", key: "list")
+                == "[[1, 2], [3]]")
+        #expect(ConfigFileEditor.readRawValue(sample, table: "tiling", key: "gaps_outer_top") == nil)
+        #expect(ConfigFileEditor.readRawValue(sample, table: "absent", key: "x") == nil)
+        #expect(ConfigFileEditor.readRawValue("[t]\na = 1\n[u]\nb = 2\n[t]\nc = 3\n", table: "t", key: "a") == nil)
+    }
+
+    @Test
+    func countArrayTablesIgnoresSubTablesCommentsAndStrings() {
+        #expect(ConfigFileEditor.countArrayTables(sample, table: "rules") == 1)
+        let text = """
+        [[rules]]
+        id = "a"
+        [rules.match]
+        app = "A"
+        # [[rules]]
+        [[rules]]
+        note = \"\"\"
+        [[rules]]
+        \"\"\"
+        [[rules.other]]
+        [[ rules ]]
+        """
+        #expect(ConfigFileEditor.countArrayTables(text, table: "rules") == 3)
+        #expect(ConfigFileEditor.countArrayTables(text, table: "rules.other") == 1)
+        #expect(ConfigFileEditor.countArrayTables(text, table: "signals.hooks") == 0)
     }
 
     // MARK: - Refus

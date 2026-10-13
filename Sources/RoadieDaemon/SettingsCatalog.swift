@@ -136,6 +136,27 @@ public enum SettingsCatalog {
         all.first { $0.id == id }
     }
 
+    /// Alias d'un choix, acceptés à la lecture du fichier et par `/set`, ramenés à la valeur du catalogue.
+    /// `tiling.default_strategy` : les formes que le chargeur accepte (`WindowManagementMode(roadieValue:)`) ;
+    /// `mutableBsp` et ses formes deviennent `spatialBsp`, comme au chargement (`Config.swift`, SPEC-017 A8).
+    /// `SettingsCatalogTests` vérifie cette table contre `WindowManagementMode`.
+    static let choiceAliases: [String: [String: String]] = [
+        "tiling.default_strategy": [
+            "spatial_bsp": "spatialBsp", "spatial-bsp": "spatialBsp", "spatial": "spatialBsp", "tree": "spatialBsp",
+            "mutableBsp": "spatialBsp", "mutable_bsp": "spatialBsp", "mutable-bsp": "spatialBsp", "yabai": "spatialBsp",
+            "master_stack": "masterStack", "master-stack": "masterStack",
+            "floating": "float",
+        ],
+    ]
+
+    /// Valeur du catalogue pour un alias connu du réglage `id` (casse ignorée, espaces autour retirés) ;
+    /// sinon le texte tel quel. O(a) - a = nombre d'alias du réglage.
+    public static func canonicalChoice(_ text: String, for id: String) -> String {
+        guard let aliases = choiceAliases[id] else { return text }
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        return aliases.first { $0.key.caseInsensitiveCompare(trimmed) == .orderedSame }?.value ?? text
+    }
+
     /// O(n)
     public static func descriptors(in category: SettingCategory) -> [SettingDescriptor] {
         all.filter { $0.category == category }

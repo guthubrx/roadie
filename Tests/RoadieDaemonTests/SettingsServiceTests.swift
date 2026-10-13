@@ -82,6 +82,10 @@ struct SettingsServiceTests {
         return (SettingsService(configPath: config.path, eventLog: log, afterWrite: {}), config, log)
     }
 
+    private func mode(_ url: URL) throws -> Int {
+        try #require(FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int)
+    }
+
     private func read(_ url: URL) throws -> String {
         try String(contentsOf: url, encoding: .utf8)
     }
@@ -103,7 +107,8 @@ struct SettingsServiceTests {
     func validValueIsAppliedAndReadBack() throws {
         let (service, config, _) = try makeService(fixture)
         let rows = try descriptor("target_grid.rows")
-        #expect(service.value(of: rows) == (.int(3), false))
+        // `rows = 3` est écrit mais égale le défaut : `isDefault` est vrai (T034).
+        #expect(service.value(of: rows) == (.int(3), true))
 
         #expect(service.set("target_grid.rows", to: "4") == .applied(old: .int(3), new: .int(4)))
         #expect(service.value(of: rows) == (.int(4), false))
@@ -118,6 +123,8 @@ struct SettingsServiceTests {
         #expect(service.reset("tiling.gaps_outer") == .applied(old: .double(8), new: .double(8)))
         #expect(!(try read(config)).contains("gaps_outer = "))
         #expect(try read(config).contains("# gaps_outer_top = 4"))
+        // Le commentaire de fin de ligne reste, seul sur sa ligne (T036).
+        #expect(try read(config).contains("\n# marge extérieure\n"))
         #expect(service.value(of: gaps) == (.double(8), true))
     }
 
@@ -226,6 +233,7 @@ struct SettingsServiceTests {
         #expect(service.set("target_mode.label_font_size", to: "20") == .applied(old: .double(13), new: .double(20)))
         #expect(try read(config) == "[experimental.target_mode]\nlabel_font_size = 20.0\n")
         #expect(try extraFiles(config).isEmpty)
+        #expect(try mode(config) == 0o644)
     }
 
     @Test
@@ -342,9 +350,169 @@ struct SettingsServiceTests {
         let apps = try descriptor("app_targets.enabled")
         #expect(service.set("target_mode.enabled", to: "false") == .applied(old: .bool(true), new: .bool(false)))
         #expect(service.value(of: lettres) == (.bool(false), false))
-        #expect(service.value(of: apps) == (.bool(false), false))
+        // `app_targets.enabled = false` égale le défaut (T034).
+        #expect(service.value(of: apps) == (.bool(false), true))
         #expect(service.set("app_targets.enabled", to: "true") == .applied(old: .bool(false), new: .bool(true)))
         #expect(service.value(of: lettres) == (.bool(false), false))
         #expect(service.value(of: apps) == (.bool(true), false))
+    }
+
+    // MARK: - Robustesse de l'écriture (T035)
+
+    @Test
+    func unreadableFileIsRejectedAndLeftByteForByte() throws {
+        let (service, config, _) = try makeService(nil)
+        // « é » en Latin-1 (0xE9) suivi d'une lettre : séquence invalide en UTF-8.
+        try (Data("[tiling]\ngaps_outer = 8 # marge ext".utf8) + [0xE9] + Data("rieure\n".utf8)).write(to: config)
+        let before = try Data(contentsOf: config)
+        #expect(service.readConfig() == .failure(SettingsFileError(message: "le fichier de configuration n'est pas lisible en UTF-8")))
+        #expect(service.configText() == "")
+        #expect(service.set("tiling.gaps_outer", to: "12")
+                == .rejected(reason: "le fichier de configuration n'est pas lisible en UTF-8 : aucune modification"))
+        #expect(service.reset("tiling.gaps_outer")
+                == .rejected(reason: "le fichier de configuration n'est pas lisible en UTF-8 : aucune modification"))
+        #expect(try Data(contentsOf: config) == before)
+        #expect(try extraFiles(config).isEmpty)
+    }
+
+    @Test
+    func missingFileReadsAsEmpty() throws {
+        let (service, _, _) = try makeService(nil)
+        #expect(service.readConfig() == .success(""))
+    }
+
+    @Test
+    func invalidStartFileIsRejectedEvenForAValidChange() throws {
+        // 3 × 3 = 9 cellules pour 2 lettres : le fichier de départ est déjà invalide.
+        let text = fixture.replacingOccurrences(of: "azeqsdwxcrtyfghvbnuiopjklm", with: "az")
+        let (service, config, _) = try makeService(text)
+        let errors = service.validity().errorCount
+        #expect(errors >= 1)
+        let before = try Data(contentsOf: config)
+        let expected = SettingChangeResult.rejected(
+            reason: "le fichier de configuration est invalide : corrige-le d'abord (\(errors) erreur(s))")
+        #expect(service.set("tiling.gaps_outer", to: "12") == expected)
+        #expect(service.reset("tiling.gaps_outer") == expected)
+        #expect(try Data(contentsOf: config) == before)
+        #expect(try extraFiles(config).isEmpty)
+    }
+
+    @Test
+    func invalidCandidateReasonListsItsErrors() throws {
+        // Départ valide (9 lettres pour 3 × 3) ; 4 × 3 = 12 cellules rendrait le fichier invalide.
+        let text = fixture.replacingOccurrences(of: "azeqsdwxcrtyfghvbnuiopjklm", with: "azeqsdwxc")
+        let (service, config, _) = try makeService(text)
+        #expect(service.validity().isValid)
+        guard case .rejected(let reason) = service.set("target_grid.columns", to: "4") else {
+            Issue.record("refus attendu"); return
+        }
+        #expect(reason.hasPrefix("le fichier deviendrait invalide : "))
+        #expect(reason.contains("hint_characters"))
+        #expect(!reason.contains(".candidate-"))
+        #expect(try read(config) == text)
+    }
+
+    @Test
+    func symbolicLinkIsKeptAndItsTargetIsWritten() throws {
+        let directory = try makeDirectory()
+        let real = directory.appendingPathComponent("depot/roadies.toml")
+        let link = directory.appendingPathComponent("config/roadies.toml")
+        try FileManager.default.createDirectory(at: real.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fixture.write(to: real, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let service = SettingsService(configPath: link.path, eventLog: EventLog(path: directory.appendingPathComponent("events.jsonl").path), afterWrite: {})
+
+        #expect(service.set("tiling.gaps_outer", to: "12") == .applied(old: .double(8), new: .double(12)))
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: link.path) == real.path)
+        #expect(try read(real).contains("gaps_outer = 12.0 # marge extérieure"))
+        #expect(try read(link) == read(real))
+        // Aucun candidat oublié près de la cible ; la sauvegarde est à côté du lien.
+        #expect(try FileManager.default.contentsOfDirectory(atPath: real.deletingLastPathComponent().path) == ["roadies.toml"])
+        #expect(try extraFiles(link).allSatisfy { $0.hasPrefix("roadies.toml.bak-") })
+        #expect(try extraFiles(link).count == 1)
+    }
+
+    @Test
+    func posixModeIsKept() throws {
+        let (service, config, _) = try makeService(fixture)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
+        #expect(service.set("tiling.gaps_outer", to: "12") == .applied(old: .double(8), new: .double(12)))
+        #expect(try mode(config) == 0o600)
+    }
+
+    // MARK: - Instance partagée (T033)
+
+    @Test
+    func sharedInstanceIsUniqueAndUsesTheDefaultPath() {
+        #expect(SettingsService.shared === SettingsService.shared)
+        #expect(SettingsService.shared.configPath == RoadieConfigLoader.defaultConfigPath())
+    }
+
+    // MARK: - Défaut et alias (T034)
+
+    @Test
+    func isDefaultFollowsTheValueNotTheLine() throws {
+        let (service, _, _) = try makeService("[experimental.target_grid]\nrows = 3\ncolumns = 4\nhint_characters = \"azeqsdwxcrtyfghv\"\n")
+        #expect(service.value(of: try descriptor("target_grid.rows")) == (.int(3), true))
+        #expect(service.value(of: try descriptor("target_grid.columns")) == (.int(4), false))
+        #expect(service.value(of: try descriptor("target_grid.max_depth")) == (.int(3), true))
+    }
+
+    @Test
+    func strategyAliasesAreReadAndWrittenInCanonicalForm() throws {
+        let strategy = try descriptor("tiling.default_strategy")
+        for (alias, canonical) in [("spatial_bsp", "spatialBsp"), ("master_stack", "masterStack"),
+                                   ("mutable_bsp", "spatialBsp"), ("bsp", "bsp"), ("float", "float")] {
+            let (service, config, _) = try makeService("[tiling]\ndefault_strategy = \"\(alias)\" # c\n")
+            #expect(service.value(of: strategy) == (.string(canonical), canonical == "bsp"))
+            #expect(service.describe("tiling.default_strategy")?.hasPrefix("tiling.default_strategy = \(canonical) (") == true)
+            let target = canonical == "float" ? "bsp" : "float"
+            #expect(service.set("tiling.default_strategy", to: target) == .applied(old: .string(canonical), new: .string(target)))
+            #expect(service.set("tiling.default_strategy", to: alias) == .applied(old: .string(target), new: .string(canonical)))
+            #expect(try read(config) == "[tiling]\ndefault_strategy = \"\(canonical)\" # c\n")
+        }
+    }
+
+    // MARK: - Lecture seule (T029)
+
+    @Test
+    func readOnlySummaryShowsListsAndCountsTableArrays() throws {
+        let rules = (1...11).map { "[[rules]]\nid = \"regle-\($0)\" # règle \($0)\n[rules.match]\napp = \"App\($0)\"\n" }.joined(separator: "\n")
+        let text = """
+        [tiling]
+        allowed_subroles = ["AXStandardWindow", "AXDialog"] # sous-rôles
+
+        [exclusions]
+        # Applications flottantes.
+        floating_bundles = [
+            # Réglages macOS.
+            "com.apple.systempreferences", # commentaire interne
+            "com.example.#diese",
+
+            "com.apple.finder",
+        ]
+
+        [[stage_manager.workspaces]]
+        id = "1"
+        display_name = "Code"
+
+        [[stage_manager.workspaces]]
+        id = "2"
+
+        [[signals.hooks]]
+        event = "focus"
+
+        """ + rules
+        let (service, _, _) = try makeService(nil)
+        func summary(_ id: String) throws -> String { service.readOnlySummary(of: try descriptor(id), in: text) }
+        #expect(try summary("exclusions.floating_bundles")
+                == #"["com.apple.systempreferences", "com.example.#diese", "com.apple.finder"]"#)
+        #expect(try summary("tiling.allowed_subroles") == #"["AXStandardWindow", "AXDialog"]"#)
+        #expect(try summary("rules") == "11 entrée(s) : regle-1, regle-2, regle-3, regle-4, regle-5, …")
+        #expect(try summary("stage_manager.workspaces") == "2 entrée(s) : Code, 2")
+        #expect(try summary("signals.hooks") == "1 entrée(s)")
+        #expect(try summary("tiling.display_overrides") == "(aucune valeur dans le fichier)")
+        #expect(try summary("width_adjustment.presets") == "(aucune valeur dans le fichier)")
     }
 }
