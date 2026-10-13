@@ -31,10 +31,12 @@ final class SettingsViewModel: ObservableObject {
     /// Valeurs lues, limitées aux réglages affichés : lire une valeur reparcourt tout le fichier
     /// (`ConfigFileEditor.readLiteral`, environ 2 ms sur le fichier réel), les 179 coûtent 0,36 s.
     @Published private var values: [String: (value: SettingValue, isDefault: Bool)] = [:]
+    /// Texte de la valeur actuelle des entrées en lecture seule, par nom (valeurs d'une liste, « N entrée(s) »).
+    @Published private var summaries: [String: String] = [:]
     /// Couleurs choisies au sélecteur, écrites après une courte pause (le sélecteur envoie une valeur par mouvement).
     private var pendingColors: [String: Task<Void, Never>] = [:]
 
-    init(service: SettingsService) {
+    init(service: SettingsService = .shared) {
         self.service = service
         validity = SettingsValidity(path: service.configPath, isValid: true, errorCount: 0, warningCount: 0, messages: [])
         refresh()
@@ -85,6 +87,7 @@ final class SettingsViewModel: ObservableObject {
     func refresh() {
         validity = service.validity()
         values = [:]
+        summaries = [:]
         loadVisibleValues()
     }
 
@@ -95,19 +98,15 @@ final class SettingsViewModel: ObservableObject {
         guard !missing.isEmpty else { return }
         let text = service.configText()
         var read = values
+        var readSummaries = summaries
         for descriptor in missing {
-            read[descriptor.id] = Self.value(of: descriptor, in: text)
+            read[descriptor.id] = service.value(of: descriptor, in: text)
+            if descriptor.readOnlyReason != nil {
+                readSummaries[descriptor.id] = service.readOnlySummary(of: descriptor, in: text)
+            }
         }
         values = read
-    }
-
-    /// Même règle que `SettingsService.value(of:)`, sur un texte déjà lu (une lecture du fichier par relecture).
-    private static func value(of descriptor: SettingDescriptor, in text: String) -> (value: SettingValue, isDefault: Bool) {
-        guard descriptor.readOnlyReason == nil,
-              let literal = ConfigFileEditor.readLiteral(text, table: descriptor.tablePath, key: descriptor.key),
-              let value = SettingsService.parse(literal, kind: descriptor.kind)
-        else { return (descriptor.defaultValue, true) }
-        return (value, false)
+        summaries = readSummaries
     }
 
     func value(_ descriptor: SettingDescriptor) -> SettingValue {
@@ -116,6 +115,11 @@ final class SettingsViewModel: ObservableObject {
 
     func isDefault(_ descriptor: SettingDescriptor) -> Bool {
         values[descriptor.id]?.isDefault ?? true
+    }
+
+    /// Valeur actuelle d'une entrée en lecture seule, en texte non modifiable ; nil pour un réglage modifiable.
+    func readOnlySummary(_ descriptor: SettingDescriptor) -> String? {
+        summaries[descriptor.id]
     }
 
     /// Texte du champ : la saisie en cours, sinon la valeur actuelle (vide si non définie).
@@ -225,8 +229,8 @@ final class SettingsViewModel: ObservableObject {
         switch result {
         case .applied(_, let new):
             errors[descriptor.id] = nil
-            // Rétablir retire la ligne ; une écriture la pose.
-            values[descriptor.id] = (new, isDefault: isReset)
+            // Rétablir retire la ligne ; une écriture qui répète le défaut n'a rien à rétablir.
+            values[descriptor.id] = (new, isDefault: isReset || new == descriptor.defaultValue)
         case .rejected(let reason):
             errors[descriptor.id] = reason
         }
@@ -234,7 +238,8 @@ final class SettingsViewModel: ObservableObject {
 
     // MARK: - Actions de la catégorie Général
 
-    /// Résultat de `roadie doctor`, exécuté dans le processus.
+    /// Résultat de `roadie doctor`, exécuté dans le processus. Synchrone, sur le thread principal comme `doctor`
+    /// par le socket : la fenêtre se fige le temps du diagnostic (limite connue et acceptée, SPEC-023 T039).
     func runDiagnostic() {
         let response = CLICommandRouter().run(["doctor"])
         diagnostic = [response.stdout, response.stderr]

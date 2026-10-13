@@ -7,9 +7,11 @@ import SwiftUI
 public final class SettingsWindowController: NSObject, NSWindowDelegate {
     public static let shared = SettingsWindowController()
 
-    private let model = SettingsViewModel(service: SettingsService())
+    private let model = SettingsViewModel(service: .shared)
     private var window: NSWindow?
     private var watcher: RailFileWatcher?
+    /// Surveille le dossier du fichier tant que celui-ci est absent ; arrêtée dès sa création.
+    private var directoryWatcher: RailFileWatcher?
     /// Application au premier plan avant l'ouverture, réactivée à la fermeture.
     private var previousApplication: NSRunningApplication?
 
@@ -21,16 +23,38 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         if let front = NSWorkspace.shared.frontmostApplication, front != .current {
             previousApplication = front
         }
-        // Le watcher ne démarre pas si le fichier est absent : on le relance à chaque ouverture.
-        if watcher == nil {
-            let path = model.service.configPath
-            watcher = RailFileWatcher(path: { path }, onChange: { [weak self] in self?.model.refresh() })
-        }
-        watcher?.start()
+        armWatchers()
         // Fenêtre déjà au premier plan : `windowDidBecomeKey` ne viendra pas, on relit ici.
         if window.isKeyWindow { model.refresh() }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+    }
+
+    /// Le watcher du fichier ne démarre pas si le fichier est absent : dans ce cas, le dossier parent est surveillé
+    /// jusqu'à la création du fichier. Limite : si le dossier n'existe pas non plus, rien n'est surveillé
+    /// (la prise de focus relit tout de même). Appelé à chaque ouverture et quand le fichier disparaît.
+    private func armWatchers() {
+        let path = model.service.configPath
+        if watcher == nil {
+            watcher = RailFileWatcher(path: { path }, onChange: { [weak self] in
+                self?.model.refresh()
+                // Fichier supprimé : le réarmement du watcher échoue, le dossier prend le relais.
+                if let self, !FileManager.default.fileExists(atPath: path) { self.armWatchers() }
+            })
+        }
+        if FileManager.default.fileExists(atPath: path) {
+            directoryWatcher?.stop()
+            directoryWatcher = nil
+            watcher?.start()
+        } else if directoryWatcher == nil {
+            let directory = (path as NSString).deletingLastPathComponent
+            directoryWatcher = RailFileWatcher(path: { directory }, onChange: { [weak self] in
+                guard let self else { return }
+                self.model.refresh()
+                if FileManager.default.fileExists(atPath: path) { self.armWatchers() }
+            })
+            directoryWatcher?.start()
+        }
     }
 
     private func makeWindow() -> NSWindow {
@@ -62,6 +86,8 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     public func windowWillClose(_ notification: Notification) {
         watcher?.stop()
+        directoryWatcher?.stop()
+        directoryWatcher = nil
         if let previous = previousApplication, !previous.isTerminated {
             _ = previous.activate(from: .current, options: [])
         }

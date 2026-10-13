@@ -174,6 +174,19 @@ private struct SettingRow: View {
                     control.disabled(model.isLocked)
                 }
             }
+            // Valeur actuelle d'une entrée en lecture seule : texte sélectionnable, 6 lignes visibles au plus.
+            if let summary = model.readOnlySummary(descriptor), !summary.isEmpty {
+                ScrollView {
+                    Text(summary)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(6)
+                }
+                // Hauteur au contenu (un ScrollView prendrait toute la hauteur permise), 6 lignes au plus.
+                .frame(height: CGFloat(min(summary.split(separator: "\n", omittingEmptySubsequences: false).count, 6)) * 15 + 12)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
+            }
             if let error = model.errors[descriptor.id] {
                 Text(error).font(.caption).foregroundStyle(.red)
             }

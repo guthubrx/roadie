@@ -87,7 +87,6 @@ struct SettingsViewModelTests {
         model.select(.grille)
         let rows = try descriptor("target_grid.rows")
         #expect(model.value(rows) == .int(3))
-        #expect(!model.isDefault(rows))
 
         model.drafts[rows.id] = "4"
         #expect(model.text(for: rows) == "4")
@@ -101,6 +100,56 @@ struct SettingsViewModelTests {
         model.refresh()
         #expect(model.value(rows) == .int(4))
         #expect(!model.isDefault(rows))
+    }
+
+    @Test
+    func resetButtonOnlyAppearsWhenTheValueDiffersFromTheDefault() throws {
+        // Le fichier répète les défauts (rows = 3, thickness = 2) : rien à rétablir malgré la présence des lignes.
+        let (model, _) = try makeModel()
+        model.select(.grille)
+        let rows = try descriptor("target_grid.rows")
+        #expect(model.isDefault(rows))
+        model.select(.bordures)
+        let thickness = try descriptor("borders.thickness")
+        #expect(model.isDefault(thickness))
+
+        // Une valeur différente propose « Rétablir » ; revenir à la valeur par défaut le retire.
+        model.apply(thickness, raw: "5")
+        #expect(!model.isDefault(thickness))
+        model.apply(thickness, raw: "2")
+        #expect(model.isDefault(thickness))
+    }
+
+    @Test
+    func readOnlyEntriesShowTheirCurrentValueAsText() throws {
+        let (model, _) = try makeModel(fixture + """
+
+
+        [exclusions]
+        floating_bundles = ["com.example.alpha", "com.example.beta"]
+
+        [[rules]]
+        id = "a"
+        match = { app = "Alpha" }
+        action = { floating = true }
+
+        [[rules]]
+        id = "b"
+        match = { app = "Beta" }
+        action = { floating = true }
+        """)
+        model.select(.regles)
+        let entries = model.sections.flatMap(\.descriptors)
+        let rules = try #require(entries.first { $0.key == "rules" })
+        let bundles = try #require(entries.first { $0.key == "floating_bundles" })
+        #expect(try #require(model.readOnlySummary(rules)).contains("2 entrée"))
+        let bundlesSummary = try #require(model.readOnlySummary(bundles))
+        #expect(bundlesSummary.contains("com.example.alpha"))
+        #expect(bundlesSummary.contains("com.example.beta"))
+
+        // Un réglage modifiable n'a pas de résumé.
+        model.select(.grille)
+        #expect(model.readOnlySummary(try descriptor("target_grid.rows")) == nil)
     }
 
     @Test
