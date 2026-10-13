@@ -33,7 +33,7 @@ L'utilisateur appuie sur Caps Lock + F et tape `/settings`, puis Retour. Une fen
 2. **Given** la fenêtre ouverte, **When** l'utilisateur clique une catégorie à gauche, **Then** les réglages de cette catégorie s'affichent à droite.
 3. **Given** un réglage affiché, **When** l'utilisateur le change, **Then** la nouvelle valeur s'applique tout de suite et reste après un redémarrage de Roadie.
 4. **Given** la fenêtre déjà ouverte, **When** l'utilisateur lance `/settings` encore une fois, **Then** la même fenêtre passe au premier plan, sans seconde fenêtre.
-5. **Given** la fenêtre ouverte, **When** l'utilisateur appuie sur Échap ou Cmd + W, **Then** la fenêtre se ferme.
+5. **Given** la fenêtre ouverte, **When** l'utilisateur appuie sur Échap ou Cmd + W, **Then** la fenêtre se ferme et l'application qui était au premier plan avant l'ouverture reprend le focus.
 6. **Given** la fenêtre ouverte, **When** le fichier de configuration change par une autre voie (édition à la main, commande `/set`), **Then** la fenêtre affiche la nouvelle valeur sans être rouverte.
 
 ---
@@ -67,7 +67,7 @@ L'utilisateur tape `/` dans la boîte. La boîte passe en mode commande et liste
 
 1. **Given** la boîte ouverte, **When** l'utilisateur tape `/`, **Then** la boîte affiche la liste des commandes, avec une courte description de chacune.
 2. **Given** un début de commande, **When** l'utilisateur tape des lettres, **Then** la liste ne garde que les commandes qui correspondent, sans tenir compte de la casse ni des accents.
-3. **Given** une commande complète, **When** l'utilisateur appuie sur Retour, **Then** Roadie l'exécute sur la fenêtre qui était active à l'ouverture de la boîte, puis ferme la boîte.
+3. **Given** une commande complète, **When** l'utilisateur appuie sur Retour, **Then** Roadie l'exécute sur le contexte actif à cet instant (la fenêtre qui avait le focus à l'ouverture, sauf changement pendant la saisie), puis ferme la boîte.
 4. **Given** une commande inconnue ou des arguments faux, **When** l'utilisateur appuie sur Retour, **Then** la boîte reste ouverte et affiche un message d'erreur court, avec la forme attendue de la commande.
 5. **Given** la boîte en mode commande, **When** l'utilisateur efface le `/`, **Then** la boîte revient au mode recherche de texte.
 6. **Given** la boîte ouverte, **When** l'utilisateur appuie sur Échap, **Then** la boîte se ferme sans action.
@@ -76,11 +76,11 @@ L'utilisateur tape `/` dans la boîte. La boîte passe en mode commande et liste
 
 ### User Story 4 - Modifier un réglage avec `/set` (Priority: P2)
 
-L'utilisateur tape `/set grille.rows 4`. Roadie change ce réglage et l'applique. `/set grille.rows` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
+L'utilisateur tape `/set target_grid.rows 4`. Roadie change ce réglage et l'applique. `/set target_grid.rows` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
 
 **Why this priority**: c'est le second usage demandé de `/settings` : régler sans ouvrir la fenêtre. Elle dépend de la fenêtre (P1) pour partager la même liste de réglages.
 
-**Independent Test**: `/set grille.rows 4`, Retour, puis ouvrir la grille : 4 lignes. `/set grille.rows`, Retour : la boîte affiche « 4 (défaut 3, de 2 à 12) ».
+**Independent Test**: `/set target_grid.rows 4`, Retour, puis ouvrir la grille : 4 lignes. `/set target_grid.rows`, Retour : la boîte affiche « 4 (défaut 3, de 2 à 12) ».
 
 **Acceptance Scenarios**:
 
@@ -169,7 +169,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - Le fichier de configuration est invalide : la fenêtre l'indique, ne modifie rien, et propose d'ouvrir le fichier. `/set` est refusé avec le même message.
 - Le fichier de configuration contient des commentaires et des réglages inconnus : une modification les conserve tous. Seule la ligne modifiée change.
 - La fenêtre de réglages et `/set` modifient le même réglage à la suite : la dernière valeur écrite gagne et la fenêtre l'affiche.
-- La commande agit sur « la fenêtre active à l'ouverture de la boîte » : si cette fenêtre a disparu avant Retour, la boîte le dit et ne fait rien.
+- La fenêtre active peut changer ou disparaître pendant la saisie : la commande agit sur le contexte actif à Retour. S'il n'y a plus de fenêtre active, la commande est refusée avec un message clair.
 - Aucune fenêtre active : les commandes qui en demandent une sont refusées avec un message clair.
 - Un seul écran ou un seul bureau : `/screen` et `/desktop` disent qu'il n'y a pas d'autre cible, sans erreur technique.
 - Une commande non implémentée par Roadie (par exemple fermer une fenêtre) n'est pas proposée.
@@ -185,7 +185,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-001**: La boîte de recherche (Caps Lock + F) MUST passer en mode commande quand le premier caractère saisi est `/`, et rester en mode recherche de texte sinon.
 - **FR-002**: En mode commande, la boîte MUST lister les commandes avec une description courte et MUST filtrer cette liste pendant la frappe, sans tenir compte de la casse ni des accents.
 - **FR-003**: Retour MUST exécuter la commande saisie. En cas de succès, la boîte MUST se fermer. En cas d'échec, la boîte MUST rester ouverte avec un message d'erreur court qui donne la forme attendue.
-- **FR-004**: Une commande MUST agir sur la fenêtre, le stage, l'écran et le bureau qui étaient actifs à l'ouverture de la boîte.
+- **FR-004**: Une commande MUST agir sur la fenêtre, le stage, l'écran et le bureau actifs au moment où elle s'exécute. La boîte n'enlève pas le focus à la fenêtre active : ce contexte est celui de l'ouverture, sauf si l'utilisateur change de fenêtre pendant la saisie.
 - **FR-005**: Les commandes de ce périmètre MUST avoir le même effet que la commande `roadie` correspondante : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/stage` (numéro, nom, `new`, `rename`, `send`), `/screen`, `/send` (numéro d'écran), `/desktop`, `/layout`, `/balance`, `/split`, `/bm`, `/grid`, `/letters`, `/doctor`, `/heal`, `/reload`, `/restart`.
 - **FR-006**: Les directions MUST être acceptées en français (gauche, droite, haut, bas) et en anglais (left, right, up, down).
 - **FR-007**: Tab MUST compléter une commande ou un argument. Flèche haut et Flèche bas MUST parcourir l'historique des commandes en mode commande. L'historique MUST garder les 50 dernières commandes, y compris après un redémarrage.
@@ -210,7 +210,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-020**: `/settings` sans argument MUST ouvrir la fenêtre ; `/settings catégorie` MUST l'ouvrir sur cette catégorie.
 - **FR-021**: `/set nom valeur` MUST écrire la valeur dans le fichier de configuration après validation ; `/set nom` MUST afficher la valeur actuelle, la valeur par défaut et la plage permise ; `/set nom défaut` MUST rétablir la valeur par défaut.
 - **FR-022**: Une valeur invalide MUST laisser le fichier intact, et la boîte MUST donner la raison du refus.
-- **FR-023**: Un nom de réglage MUST avoir la forme `catégorie.clé`, où `clé` est le nom de la clé dans le fichier de configuration. Les noms MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
+- **FR-023**: Un nom de réglage MUST identifier une seule clé du fichier de configuration. Il a la forme `table.clé`, où `table` est le chemin de la table sans le préfixe `experimental.` ni `fx.` (par exemple `target_grid.rows`, `app_targets.max_targets`, `rail.header.display.font_size`). Les noms MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
 - **FR-024**: Une modification MUST conserver les commentaires, l'ordre et les réglages inconnus du fichier de configuration. Seule la ligne concernée change.
 
 **Taille des étiquettes**
@@ -222,12 +222,12 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 **Général**
 
 - **FR-028**: Toute commande ou réglage nouveau MUST être documenté dans la documentation utilisateur du projet (français et anglais).
-- **FR-029**: Roadie MUST journaliser (journal d'événements existant) chaque réglage modifié et chaque commande refusée, sans écrire de donnée personnelle.
+- **FR-029**: Roadie MUST journaliser (journal d'événements existant) chaque réglage modifié (nom du réglage et résultat) et chaque commande refusée (nom de la commande si elle est connue, et raison). Le journal MUST NOT contenir la valeur d'un réglage ni la saisie brute de l'utilisateur.
 
 ### Key Entities
 
 - **Commande de la boîte** : nom, alias, description courte, forme des arguments, effet. Exemple : `stage`, alias `s`, argument numéro ou nom.
-- **Réglage** : nom stable (par exemple `grille.rows`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
+- **Réglage** : nom stable (par exemple `target_grid.rows`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
 - **Catégorie** : nom affiché, ordre, liste de réglages.
 - **Historique de commandes** : les 50 dernières commandes tapées, de la plus récente à la plus ancienne.
 
@@ -241,7 +241,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **SC-004**: Chaque commande de FR-005 a un test qui montre le même effet que la commande `roadie` correspondante.
 - **SC-005**: Après 20 modifications par `/set` et par la fenêtre, le fichier de configuration garde tous ses commentaires et ses réglages inconnus (comparaison avant/après de ces lignes).
 - **SC-006**: Le mode recherche de texte de la SPEC-021 passe tous ses tests actuels, sans changement.
-- **SC-007**: Chaque réglage simple du fichier de configuration apparaît dans une seule catégorie de la fenêtre ; aucun réglage simple ne manque.
+- **SC-007**: Chaque clé simple reconnue par le validateur de configuration (hors clés sans effet et hors table héritée `fx.rail.header`) apparaît dans une seule catégorie de la fenêtre ; aucune ne manque. Les clés inconnues du validateur (par exemple `persistence_ms`) ne sont pas montrées.
 - **SC-008**: Une commande invalide ne modifie aucun état de Roadie et la boîte affiche la forme attendue.
 
 ## Assumptions

@@ -2,9 +2,15 @@
 
 ## Nom d'un réglage
 
-`catégorie.clé`, où `catégorie` vient de la liste ci-dessous et `clé` est la clé du fichier. La table TOML se déduit du catalogue, pas du nom.
+`table.clé`, où `table` est le chemin de la table TOML sans le préfixe `experimental.` ni `fx.`, et `clé` la clé du fichier. Le nom est unique : deux clés de même nom dans des tables différentes ont des noms différents (`target_mode.enabled`, `app_targets.enabled`, `rail.header.display.font_size`, `rail.stage_labels.font_size`). La catégorie de la fenêtre est une donnée séparée : elle sert à regrouper, pas à nommer.
 
-| Catégorie (id) | Libellé | Contenu |
+Exemples : `target_grid.rows`, `target_mode.label_font_size`, `target_grid.label_font_size`, `rail.width`, `target_mode.search_hotkey`, `borders.active_color`, `tiling.gaps_outer`.
+
+Complétion : après `/set `, Tab propose les noms qui commencent par la saisie, ou qui contiennent un de ses mots.
+
+## Catégories (pour `/settings` et la fenêtre)
+
+| Identifiant de catégorie | Libellé | Contenu |
 |---|---|---|
 | `general` | Général | pas de réglage : chemin du fichier, état de validité ; actions Ouvrir, Recharger, Diagnostic |
 | `tuilage` | Tuilage | `tiling`, `window_placement`, `width_adjustment` |
@@ -18,7 +24,6 @@
 | `regles` | Règles | lecture seule : règles, exclusions |
 | `avance` | Avancé | `experimental.target_record`, `experimental.titlebar_context_menu`, listes et tableaux de tables en lecture seule |
 
-Exemples : `grille.rows`, `lettres.label_font_size`, `grille.label_font_size`, `rail.width`, `recherche.search_hotkey`, `bordures.active_color`.
 
 ## `/set`
 

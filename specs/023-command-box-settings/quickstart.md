@@ -32,18 +32,18 @@ Prérequis : Roadie installé et lancé (`make install`, signature `roadied-cert
 
 ## 4. `/set`
 
-1. `/set grille.rows 4` puis Retour : la grille a 4 lignes.
-2. `/set grille.rows` : « grille.rows = 4 (défaut 3, de 2 à 12) ».
-3. `/set grille.rows 99` : refus, fichier intact.
-4. `/set grille.rows défaut` : retour à 3.
+1. `/set target_grid.rows 4` puis Retour : la grille a 4 lignes.
+2. `/set target_grid.rows` : « target_grid.rows = 4 (défaut 3, de 2 à 12) ».
+3. `/set target_grid.rows 99` : refus, fichier intact.
+4. `/set target_grid.rows défaut` : retour à 3.
 5. Comparer les commentaires du fichier avant/après : `diff` ne montre que la ligne `rows`.
 
 ## 5. Taille des étiquettes
 
 1. Mesure : lancer le mode lettres (double Cmd gauche), noter la taille des étiquettes.
-2. `/set lettres.label_font_size 20`, relancer : les étiquettes sont plus grosses et ne se superposent pas plus qu'avant.
-3. `/set grille.label_font_size 20`, `/grid` : les étiquettes de la grille grandissent.
-4. `/set lettres.label_font_size défaut` : retour à l'aspect d'origine.
+2. `/set target_mode.label_font_size 20`, relancer : les étiquettes sont plus grosses et ne se superposent pas plus qu'avant.
+3. `/set target_grid.label_font_size 20`, `/grid` : les étiquettes de la grille grandissent.
+4. `/set target_mode.label_font_size défaut` : retour à l'aspect d'origine.
 
 ## 6. Tests automatiques
 

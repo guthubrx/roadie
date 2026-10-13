@@ -6,7 +6,7 @@
 
 La boîte de recherche de la SPEC-021 (Caps Lock + F) passe en mode commande quand le premier caractère est `/`. Une commande est analysée par un catalogue pur, puis exécutée dans le processus `roadied` par le routeur de commandes `roadie` existant (`CLICommandRouter.run`). Aucune action nouvelle n'est créée.
 
-`/settings` ouvre une fenêtre de réglages (colonne de catégories + recherche à gauche, réglages à droite). `/set catégorie.clé valeur` modifie un réglage sans fenêtre. Les deux passent par le même service de réglages. Un éditeur de texte du fichier `roadies.toml` change une seule ligne, valide le résultat, puis écrit le fichier d'un coup (écriture atomique). Les commentaires et les clés inconnues restent intacts. Le rechargement à chaud existant applique la valeur.
+`/settings` ouvre une fenêtre de réglages (colonne de catégories + recherche à gauche, réglages à droite). `/set table.clé valeur` modifie un réglage sans fenêtre. Les deux passent par le même service de réglages. Un éditeur de texte du fichier `roadies.toml` change une seule ligne, valide le résultat, puis écrit le fichier d'un coup (écriture atomique). Les commentaires et les clés inconnues restent intacts. Le rechargement à chaud existant applique la valeur.
 
 Deux clés nouvelles règlent la taille des étiquettes : `experimental.target_mode.label_font_size` (lettres et recherche) et `experimental.target_grid.label_font_size` (grille). Défaut : 13 points, l'aspect actuel.
 
@@ -38,7 +38,7 @@ Deux clés nouvelles règlent la taille des étiquettes : `experimental.target_m
 2. **Clavier de la boîte** : le décodeur de touches accepte les caractères de commande (`/ . - _ , :` et lettres accentuées). Tab complète, Flèche haut/bas parcourt l'historique, Ctrl-N / Ctrl-P parcourt les suggestions. Le mode recherche garde ses touches (R3).
 3. **Affichage** : la barre de recherche existante gagne une liste de suggestions et une zone de message, dessinées au-dessus de la barre (R4).
 4. **Éditeur de fichier** : édition ligne à ligne du texte, car TOMLKit ne sert qu'à lire et que le rail lit le fichier ligne à ligne. Validation du texte résultat avant écriture. Sauvegarde `roadies.toml.bak-<horodatage>` avant la première écriture de la session (le préfixe `roadies.toml.b` est déjà purgé par `FileAdministration`) (R5).
-5. **Catalogue de réglages** : une table statique de 167 descripteurs (nom `catégorie.clé`, libellé, description, type, défaut, plage). Un test compare cette table aux clés connues du validateur et aux défauts de `RoadieConfig` : une dérive casse le test (R6).
+5. **Catalogue de réglages** : une table statique de 167 descripteurs (nom `table.clé`, libellé, description, type, défaut, plage). Un test compare cette table aux clés connues du validateur et aux défauts de `RoadieConfig` : une dérive casse le test (R6).
 6. **Fenêtre** : `NSWindow` AppKit + contenu SwiftUI (`NSHostingController`). Fenêtre unique, politique d'activation `accessory` conservée, raccourcis Échap et Cmd + W gérés par la fenêtre (R7).
 7. **Taille des étiquettes** : un facteur d'échelle `taille / 13` porté par `TargetOverlayStyle` et appliqué aux constantes de taille de `TargetOverlayView` (R8).
 

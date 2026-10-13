@@ -71,8 +71,8 @@ enum SlashOutcome {
 
 | Champ | Type | Rôle |
 |---|---|---|
-| `id` | `String` | `catégorie.clé` (`grille.rows`) |
-| `category` | `SettingCategory` | catégorie de la fenêtre |
+| `id` | `String` | `table.clé`, unique : chemin de la table sans `experimental.` ni `fx.`, puis la clé (`target_grid.rows`, `app_targets.enabled`, `rail.header.display.font_size`) |
+| `category` | `SettingCategory` | catégorie de la fenêtre (donnée séparée de l'identifiant) |
 | `tablePath` | `String` | table TOML (`experimental.target_grid`) |
 | `key` | `String` | clé TOML (`rows`) |
 | `label` | `String` | libellé français |

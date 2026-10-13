@@ -39,13 +39,13 @@ Notation : `DIR` = `gauche|droite|haut|bas` (ou `left|right|up|down`), traduit e
 - Succès (`exitCode == 0`) : la boîte se ferme, sauf `/doctor`, `/set nom` et `/settings` sans fenêtre disponible, qui affichent leur résultat.
 - Échec (`exitCode != 0`, argument invalide, commande inconnue) : la boîte reste ouverte. Le message contient la cause courte et la forme attendue (`usage`). Aucun état de Roadie ne change quand l'analyse échoue.
 - Une commande inconnue propose la commande la plus proche (distance d'édition ≤ 2).
-- Journal : une commande refusée émet `command.rejected` {commande, raison}.
+- Journal : une commande refusée émet `command.rejected` {nom de la commande si elle est connue (sinon `unknown`), code de la raison}. Ni la saisie brute ni les arguments ne sont journalisés.
 
 ## Cas particuliers
 
 - Aucune fenêtre active : le routeur répond « no active window » ; la boîte l'affiche en français : « Aucune fenêtre active ».
 - Un seul écran ou un seul bureau : `/screen` et `/desktop` affichent « Il n'y a pas d'autre écran » / « Il n'y a pas d'autre bureau ».
-- Action différée : le lanceur appelle `finish` de la session, puis exécute l'action au tour suivant de la boucle principale.
+- Action différée : (1) la session se termine, (2) le contrôleur remet son état à zéro, (3) au tour suivant de la boucle principale, le lanceur exécute l'action (research R2). `/restart` n'affiche aucun résultat : le processus s'arrête.
 
 ## Complétion
 

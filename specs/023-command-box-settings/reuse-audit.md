@@ -41,7 +41,7 @@ Conclusion courte: les commandes réutilisent intégralement le routeur `roadie`
 | Commande la plus proche d'une commande inconnue | `ConfigValidationRules.editDistance` / `suggestionSuffix` (privé) | `Sources/RoadieCore/Config.swift:1353-1385` | REUTILISER : rendre `editDistance` accessible (`static`, interne au module Core, exposé en `public`) ; ne pas écrire une seconde distance d'édition |
 | Recherche insensible à la casse et aux accents | `TargetHintService.normalized` | `Sources/RoadieDaemon/TargetHintService.swift:487-515` | REUTILISER pour le filtre de commandes, de réglages et la complétion |
 | Clés connues du validateur pour le test de dérive | `ConfigValidationRules.knownKeys` (privé) | `Sources/RoadieCore/Config.swift:1216` | REUTILISER : accesseur en lecture (`knownKeys`, `ineffectiveKeys`) ; pas de seconde liste de clés |
-| Détection des fenêtres de réglages transitoires | `isLikelyTransientSettingsWindow` | `Sources/RoadieDaemon/DaemonSnapshot.swift:842` | information : filet de sécurité pour la fenêtre de réglages, aucune modification |
+| Détection des fenêtres de réglages transitoires | `isLikelyTransientSettingsWindow` | `Sources/RoadieDaemon/DaemonSnapshot.swift:842` | information : ne protège pas une fenêtre redimensionnable (exige l'absence de bouton plein écran) ; la fenêtre est exclue par le filtre de pid ; aucune modification |
 
 ## Duplications evidentes
 
@@ -56,7 +56,7 @@ Conclusion courte: les commandes réutilisent intégralement le routeur `roadie`
 | `roadie-install-signing` | `make install` produit une Roadie.app signée ; sinon l'Accessibilité saute | livraison (build + installation signée) |
 | `t3-delegate-review-runtime` | contre-revue en `runtimeMode: auto` | contre-revue adverse |
 | `roadie-shortcuts-location` | hyper key et raccourcis côté droit dans Karabiner | aucun raccourci ajouté ; Caps Lock + F existe |
-| constitution XIX | abstraction ≥ 3 usages | `ConfigFileEditor` : `/set`, fenêtre, rétablissement (3 usages) ; `SettingsCatalog` : fenêtre, `/set`, complétion, test de dérive |
+| constitution XIX | abstraction ≥ 3 usages ou contrainte documentée | `ConfigFileEditor` : un seul consommateur (`SettingsService`, qui sert `/set`, la fenêtre et « Rétablir ») ; il reste séparé parce que FR-024 (commentaires conservés) et les cas limites du fichier demandent un moteur de texte testable sans E/S. `SettingsCatalog` : fenêtre, `/set`, complétion, test de dérive (4 consommateurs) |
 
 ## Specs livrees applicables
 
@@ -86,7 +86,7 @@ Conclusion courte: les commandes réutilisent intégralement le routeur `roadie`
 |---|---|---|---|
 | `SlashCommandCatalog`, `SlashCommandModel` | creer nouveau | pas de commande `/` dans Roadie ; logique pure testable sans écran | 2026-10-13 |
 | `SlashCommandRunner` | creer nouveau | traduit `CLIResponse` en résultat de boîte et gère les actions différées ; 3 voies d'exécution (routeur, réglages, fenêtre) | 2026-10-13 |
-| `ConfigFileEditor` | creer nouveau | aucune écriture de `roadies.toml` ; TOMLKit ne conserve pas les commentaires (non vérifié) et le rail lit le fichier ligne à ligne | 2026-10-13 |
+| `ConfigFileEditor` | creer nouveau | aucune écriture de `roadies.toml` ; moteur de texte pur à automate (R5) pour FR-024 ; un seul consommateur (`SettingsService`), conservé séparé pour le tester sans E/S | 2026-10-13 |
 | `SettingsCatalog`, `SettingsService` | creer nouveau | aucun réglage décrit à l'écran ; libellés et plages ne sont pas dans le code | 2026-10-13 |
 | `SettingsWindowController`, `SettingsView` | creer nouveau | aucune fenêtre ordinaire ; SwiftUI justifié par 167 contrôles (plan, « Écarts justifiés ») | 2026-10-13 |
 | Distance d'édition | reutiliser (rendre accessible) | évite une seconde implémentation | 2026-10-13 |
