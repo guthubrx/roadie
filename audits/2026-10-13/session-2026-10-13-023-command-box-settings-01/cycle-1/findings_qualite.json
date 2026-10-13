@@ -1,0 +1,29 @@
+{
+  "module": "05",
+  "findings": [
+    {
+      "id": "QUAL-001",
+      "category": "quality",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/SettingsService.swift",
+      "line": 324,
+      "title": "Couleur acceptée avec des chiffres hexadécimaux pleine chasse",
+      "description": "`Character.isHexDigit` accepte les formes pleine chasse (ＡＢＣ…). `/set borders.active_color #ＡＢＣＤＥＦ` était écrit dans le fichier alors que `NSColor(hex:)` (UInt64 radix 16) ne sait pas le lire : la couleur retombait en silence sur sa valeur de secours. FR : une valeur invalide doit être refusée avec sa raison.",
+      "evidence": "guard text.hasPrefix(\"#\"), digits.count == 6 || digits.count == 8, digits.allSatisfy(\\.isHexDigit) else {",
+      "exploitability": "N/A",
+      "impact": "Valeur illisible écrite dans roadies.toml sans refus ; couleur ignorée au rendu.",
+      "path_type": "cold",
+      "remediation": "Limiter aux chiffres ASCII : `digits.allSatisfy({ $0.isASCII && $0.isHexDigit })`.",
+      "verification": "SettingsServiceTests.conversions : `#ＡＢＣＤＥＦ` doit être refusé (preuve préalable : `\"ＦＦＦＦＦＦ\".allSatisfy(\\.isHexDigit)` = true, `UInt64(_, radix: 16)` = nil).",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "fixed",
+      "fixed_at": "2026-10-13T12:20:48Z",
+      "commit_sha": null,
+      "references": [
+        "CWE-20"
+      ],
+      "fingerprint": "76f4ad14ee2c"
+    }
+  ]
+}

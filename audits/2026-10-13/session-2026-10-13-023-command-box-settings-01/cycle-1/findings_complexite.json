@@ -1,0 +1,30 @@
+{
+  "module": "04",
+  "findings": [
+    {
+      "id": "PERF-001",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/SettingsViewModel.swift",
+      "line": 103,
+      "title": "Relecture complète du fichier pour chaque réglage affiché (O(v·L))",
+      "description": "loadVisibleValues appelle `service.value(of:in:)` (donc `ConfigFileEditor.readLiteral`, qui reparcourt tout le fichier) pour chaque réglage visible, plus `readOnlySummary` pour les entrées en lecture seule. Le commentaire mesure ~2 ms par réglage ; la catégorie Rail (75+ réglages) coûte ~150 ms à chaque prise de focus et à chaque changement du fichier (refresh vide le cache). Compromis documenté, n borné (179), mais sur un chemin interactif.",
+      "evidence": "for descriptor in missing { read[descriptor.id] = service.value(of: descriptor, in: text) if descriptor.readOnlyReason != nil { readSummaries[descriptor.id] = service.readOnlySummary(of: descriptor, in: text) }",
+      "exploitability": "N/A",
+      "impact": "Gel perceptible (~0,15 s Rail, 0,36 s si tout est visible) à chaque focus de la fenêtre.",
+      "path_type": "hot",
+      "remediation": "Ajouter à ConfigFileEditor un parcours unique qui indexe les littéraux d'une ligne par (table, clé) avec les mêmes règles de refus, puis lire les valeurs dans ce dictionnaire : O(L + v).",
+      "verification": "Mesurer refresh() sur la catégorie Rail avec le fichier réel avant/après (cible < 20 ms) ; ConfigFileEditorTests et SettingsServiceTests verts.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "subcategory": "algorithmic_complexity",
+      "references": [
+        "Constitution XVIII §2 recherche linéaire répétée"
+      ],
+      "fingerprint": "afa2e0e87643"
+    }
+  ]
+}

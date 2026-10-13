@@ -1,0 +1,359 @@
+{
+  "$schema": "audit-code-v14/aggregated-findings",
+  "meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-13T12:20:48Z",
+    "start_timestamp": "2026-10-13T12:14:22Z",
+    "end_timestamp": "2026-10-13T12:20:48Z",
+    "duration_ms": 386000,
+    "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/023-command-box-settings (feature 023, git diff acc10e13..HEAD, périmètre restreint)",
+    "audit_mode": "readonly",
+    "audit_grid": "all (périmètre restreint)",
+    "modules_actifs": [
+      "00",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "10",
+      "11",
+      "12"
+    ],
+    "score_global": "A",
+    "release_blocked": false,
+    "scores": {
+      "security": "A",
+      "quality": "A",
+      "tests": "A",
+      "performance": "A",
+      "complexity": "A",
+      "duplication": "A",
+      "minimalism": "A",
+      "reliability": "A",
+      "ai_hygiene": "A",
+      "architecture": "A",
+      "observability": "N/A",
+      "supply_chain": "N/A",
+      "llm_security": "N/A",
+      "ux": "N/A"
+    },
+    "repository": {
+      "files_count": 25,
+      "languages": [
+        "swift"
+      ],
+      "frameworks": [
+        "appkit",
+        "swiftui",
+        "swift-testing",
+        "tomlkit"
+      ],
+      "type": "macos-daemon",
+      "has_ui": true,
+      "has_llm_integration": false,
+      "db_type": null,
+      "ci_system": null,
+      "container": false
+    }
+  },
+  "execution_metrics": {
+    "files_scanned": 25,
+    "files_total": 25,
+    "lines_analyzed": 8000,
+    "tools_used": [
+      "manual-read",
+      "grep",
+      "swift test",
+      "fingerprint.py"
+    ],
+    "coverage_estimate_percent": 100,
+    "sampling_method": null,
+    "phases_completed": [
+      "00",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "10",
+      "11",
+      "12"
+    ],
+    "phases_skipped": [
+      "09"
+    ],
+    "warnings": [
+      "Phase 2bis : aucun constat CRITICAL/HIGH ; contre-audit appliqué aux candidats écartés (voir scoring.md).",
+      "Réfuté : « mode 0644 dépendant du umask » (SettingsServiceTests.swift:236) - SettingsService.swift:238 pose 0o644 explicitement quand le fichier est créé.",
+      "Réfuté : « .labelCharacter mort en mode commande » - atteignable si une frappe Maj+lettre est décodée avant que render() n'ait basculé keyMode (TargetOverlayPresenter.swift:153, 423).",
+      "Module 07 sans jscpd : duplication relevée par lecture et grep.",
+      "Module 08 : pas de Core Web Vitals (application native)."
+    ]
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 3,
+    "low": 6,
+    "info": 0,
+    "total": 9,
+    "by_category": {
+      "performance": 1,
+      "tests": 6,
+      "minimalism": 2
+    }
+  },
+  "supply_chain": {
+    "slsa_level": null,
+    "slsa_target": null,
+    "sbom_ready": false,
+    "vulnerable_deps_count": 0,
+    "license_issues_count": 0
+  },
+  "duplicated_code": {
+    "jscpd_percentage": null,
+    "duplicated_lines": null,
+    "max_block_lines": 7,
+    "total_occurrences": 3,
+    "critical_blocks": []
+  },
+  "ai_hygiene": {
+    "suspected_ai_ratio_percent": null,
+    "dead_code_files": 0,
+    "incomplete_implementations": 0,
+    "critical_todos": 0
+  },
+  "llm_governance": {
+    "applicable": false
+  },
+  "slos": {
+    "defined": false
+  },
+  "findings": [
+    {
+      "id": "PERF-001",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/SettingsViewModel.swift",
+      "line": 103,
+      "title": "Relecture complète du fichier pour chaque réglage affiché (O(v·L))",
+      "description": "loadVisibleValues appelle `service.value(of:in:)` (donc `ConfigFileEditor.readLiteral`, qui reparcourt tout le fichier) pour chaque réglage visible, plus `readOnlySummary` pour les entrées en lecture seule. Le commentaire mesure ~2 ms par réglage ; la catégorie Rail (75+ réglages) coûte ~150 ms à chaque prise de focus et à chaque changement du fichier (refresh vide le cache). Compromis documenté, n borné (179), mais sur un chemin interactif.",
+      "evidence": "for descriptor in missing { read[descriptor.id] = service.value(of: descriptor, in: text) if descriptor.readOnlyReason != nil { readSummaries[descriptor.id] = service.readOnlySummary(of: descriptor, in: text) }",
+      "exploitability": "N/A",
+      "impact": "Gel perceptible (~0,15 s Rail, 0,36 s si tout est visible) à chaque focus de la fenêtre.",
+      "path_type": "hot",
+      "remediation": "Ajouter à ConfigFileEditor un parcours unique qui indexe les littéraux d'une ligne par (table, clé) avec les mêmes règles de refus, puis lire les valeurs dans ce dictionnaire : O(L + v).",
+      "verification": "Mesurer refresh() sur la catégorie Rail avec le fichier réel avant/après (cible < 20 ms) ; ConfigFileEditorTests et SettingsServiceTests verts.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "subcategory": "algorithmic_complexity",
+      "references": [
+        "Constitution XVIII §2 recherche linéaire répétée"
+      ],
+      "fingerprint": "afa2e0e87643"
+    },
+    {
+      "id": "TEST-004",
+      "category": "tests",
+      "severity": "MEDIUM",
+      "file": "Tests/RoadieDaemonTests/SlashCommandRunnerTests.swift",
+      "line": 96,
+      "title": "SC-004 : effet de /send, /desktop, /split, /stage send non testé par le lanceur",
+      "description": "Le lanceur n'a de test d'effet que pour une partie des commandes ; /max et /balance ne vérifient que le succès, et /send N, /desktop N, /split h|v, /stage send N ne sont vérifiés qu'en argv dans SlashCommandCatalogTests.",
+      "evidence": "let max = runner.execute(\"max\") #expect(Self.isDone(max), \"\\(max)\")",
+      "exploitability": "N/A",
+      "impact": "Écart possible entre la boîte et la CLI non détecté.",
+      "path_type": "cold",
+      "remediation": "Ajouter des tests d'effet avec le faux fournisseur, comme moveAndSwapExchangeNeighborFrames.",
+      "verification": "Nouveaux tests verts ; chaque commande du contrat a un test d'effet.",
+      "effort": "M",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "1a5fb8f8defa"
+    },
+    {
+      "id": "TEST-005",
+      "category": "tests",
+      "severity": "MEDIUM",
+      "file": "Tests/RoadieDaemonTests/CommandBoxSessionTests.swift",
+      "line": 24,
+      "title": "Collage session/boîte (handleCommand, execute) non testé",
+      "description": "Le test fait agir TargetSearchModel et SlashCommandModel côte à côte sans les relier. Le retour à la recherche sur .leave, la fermeture sur .done et le maintien ouvert sur .info/.failed dans TargetSearchSession ne sont pas couverts.",
+      "evidence": "var search = TargetSearchModel(targets: []) search.type(\"/\") #expect(search.isCommandMode)",
+      "exploitability": "N/A",
+      "impact": "Régression d'enchaînement possible sans échec de test.",
+      "path_type": "cold",
+      "remediation": "Extraire la décision effet → (fermer, rester, revenir) en fonction pure et la tester.",
+      "verification": "Test de la table de décision vert.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "97dcdb9e7375"
+    },
+    {
+      "id": "TEST-006",
+      "category": "tests",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/SettingsServiceTests.swift",
+      "line": 476,
+      "title": "Test tautologique de l'instance partagée",
+      "description": "`shared` est construit avec le paramètre par défaut defaultConfigPath() : l'égalité ne peut pas échouer et ne prouve pas le partage entre boîte et fenêtre.",
+      "evidence": "#expect(SettingsService.shared.configPath == RoadieConfigLoader.defaultConfigPath())",
+      "exploitability": "N/A",
+      "impact": "Fausse impression de couverture de T033.",
+      "path_type": "cold",
+      "remediation": "Supprimer, ou vérifier qu'un lanceur et un modèle de vue construits par défaut référencent la même instance (===).",
+      "verification": "Test retiré ou remplacé par une assertion d'identité.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "9d3a3e90f9c5"
+    },
+    {
+      "id": "TEST-007",
+      "category": "tests",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/SettingsServiceTests.swift",
+      "line": 220,
+      "title": "Texte attendu construit avec readLiteral (code de production)",
+      "description": "Le test SC-005 calcule l'attendu avec ConfigFileEditor.readLiteral et sa dernière assertion compare before et expected, deux valeurs du test.",
+      "evidence": "let old = try #require(ConfigFileEditor.readLiteral(fixture, table: d.tablePath, key: d.key))",
+      "exploitability": "N/A",
+      "impact": "Une erreur de readLiteral se propagerait à l'attendu.",
+      "path_type": "cold",
+      "remediation": "Écrire les lignes attendues en dur.",
+      "verification": "Test vert avec attendu littéral.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "480b0f7c951c"
+    },
+    {
+      "id": "TEST-008",
+      "category": "tests",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/SettingsCatalogTests.swift",
+      "line": 35,
+      "title": "Assertion qui recopie la correspondance d'alias du chargeur",
+      "description": "L'attendu reproduit la logique de correspondance (spatial_bsp, mutableBsp → spatialBsp) au lieu d'une table littérale.",
+      "evidence": "let expected = try #require(WindowManagementMode(roadieValue: alias.trimmingCharacters(in: .whitespaces).lowercased() == \"spatial_bsp\" ? \"spatial_bsp\" : alias.trimmingCharacters(in: .whitespaces)))",
+      "exploitability": "N/A",
+      "impact": "Erreur de correspondance reproduite à l'identique dans le test.",
+      "path_type": "cold",
+      "remediation": "Table littérale alias → valeur attendue.",
+      "verification": "Test vert.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "8b3164573dac"
+    },
+    {
+      "id": "TEST-009",
+      "category": "tests",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/SettingsWindowController.swift",
+      "line": 36,
+      "title": "Surveillance fichier/dossier (FR-018, T039) sans test",
+      "description": "armWatchers (fichier, puis dossier parent si le fichier est absent, réarmement à la suppression) n'a pas de test automatisé ; seul refresh() manuel est testé.",
+      "evidence": "private func armWatchers() { let path = model.service.configPath if watcher == nil {",
+      "exploitability": "N/A",
+      "impact": "Régression du rafraîchissement automatique non détectée.",
+      "path_type": "cold",
+      "remediation": "Tester RailFileWatcher + refresh sur un dossier temporaire (création, écriture, suppression).",
+      "verification": "Test vert.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "f6252b5d9af9"
+    },
+    {
+      "id": "MIN-003",
+      "category": "minimalism",
+      "severity": "LOW",
+      "file": "Tests/RoadieDaemonTests/SettingsCatalogTests.swift",
+      "line": 23,
+      "title": "Assertion arithmétiquement redondante",
+      "description": "`simple.count - railSimple.count == 92` découle des deux assertions précédentes (167 et 75).",
+      "evidence": "#expect(simple.count - railSimple.count == 92)",
+      "exploitability": "N/A",
+      "impact": "Ligne sans valeur de vérification.",
+      "path_type": "cold",
+      "remediation": "Supprimer la ligne.",
+      "verification": "Test vert.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "d6b976fd47b6"
+    },
+    {
+      "id": "MIN-004",
+      "category": "minimalism",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/ConfigFileEditor.swift",
+      "line": 113,
+      "title": "API publique countArrayTables utilisée seulement par les tests",
+      "description": "countArrayTables est un passe-plat public vers arrayTables(...).count, appelé uniquement par ConfigFileEditorTests (qui importe RoadieDaemon sans @testable).",
+      "evidence": "public static func countArrayTables(_ text: String, table: String) -> Int { arrayTables(text, table: table).count }",
+      "exploitability": "N/A",
+      "impact": "Surface publique sans usage de production (3 lignes).",
+      "path_type": "cold",
+      "remediation": "Passer les tests en @testable import et appeler arrayTables(...).count, puis supprimer le passe-plat.",
+      "verification": "Build et ConfigFileEditorTests verts.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "fixed_at": null,
+      "commit_sha": null,
+      "fingerprint": "be3b5438526d"
+    }
+  ],
+  "suppressed": [],
+  "positive_findings": [
+    "SettingsService.write : candidat dans le dossier de la cible réelle, double validation, relecture avant rename atomique, lien symbolique et mode conservés (SettingsService.swift:157-231), testés (SettingsServiceTests.swift:363-442).",
+    "Journal sans donnée personnelle : seuls le nom du réglage/de la commande et un code de résultat sont écrits (SettingsService.swift:268-270, SlashCommandRunner.swift:236-238, runDeferred : argv.first seulement).",
+    "Tap clavier : état lu hors acteur principal via OSAllocatedUnfairLock, remis en recherche au nettoyage (TargetOverlayPresenter.swift, keyMode).",
+    "Complexités annotées sur toutes les fonctions publiques du périmètre ; textes de recherche normalisés calculés une fois (SettingsCatalog.searchTexts)."
+  ],
+  "roadmap": {
+    "immediate": [],
+    "short_term": [
+      "PERF-001",
+      "TEST-004",
+      "TEST-005"
+    ],
+    "medium_term": [
+      "TEST-006",
+      "TEST-007",
+      "TEST-008",
+      "TEST-009"
+    ],
+    "long_term": [
+      "MIN-003",
+      "MIN-004"
+    ]
+  }
+}

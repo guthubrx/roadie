@@ -56,3 +56,11 @@ Le disque est monté à 100 % pendant le lot N1 (ENOSPC) : le code du lot n'a pu
 
 ### Passage 3
 T040 corrigé (`/heal`, `/reload` en échec = erreur visible, sans historique, journalisé sans saisie). En relisant le correctif, défaut trouvé et corrigé avant commit : la traduction `status=` → « Rechargement refusé. » s'appliquait aussi à `/doctor` et `/heal` (qui écrivent `status=ok`) ; elle est désormais limitée à `config reload`, avec deux tests sur les vraies formes de sortie. Verdict : CONVERGED (les 40 tâches de code cochées ; T015 et T025, validation à l'écran, restent à faire).
+
+## Audit v14 (mode fix, 1 cycle + cycle final)
+Session : `audits/2026-10-13/session-2026-10-13-023-command-box-settings-01/`. **Note A (98,9)**, 0 critique, 0 élevé, 5 moyens, 13 faibles au cycle 1 ; 9 corrigés (couleur à chiffres pleine chasse refusée, doublons de décodage de couleur, de recherche de commande et de plage supprimés, test de rechargement ajouté, boucle de test sans assertion corrigée). Suite : **1058 tests, 0 échec**.
+Restants, avec justification (constitution XVIII et XIX) :
+- PERF-001 (moyen) : `SettingsViewModel` relit le fichier par réglage affiché (≈ 0,15 s pour les 75 réglages du Rail, à chaque prise de focus de la fenêtre, build debug sous charge). Mesuré, documenté dans le code ; une lecture groupée en un passage reste possible si la lenteur se voit à l'écran (quickstart §3 mesure l'ouverture < 1 s). Pas d'optimisation sans gain mesuré (article XXII).
+- TEST-004 : `/send`, `/desktop`, `/split`, `/stage send` couverts par le tableau d'argv exacts (même routeur que la CLI, dont les effets sont testés par `CLICommandRouterTests`), sans test d'effet dédié.
+- TEST-005 à TEST-009, MIN-003, MIN-004 : faibles, laissés (choix de l'auteur).
+`audits/latest` n'est pas commité : la branche `022-audit-remediation` le modifie aussi (évite un conflit de fusion).

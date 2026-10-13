@@ -1,0 +1,60 @@
+{
+  "grade": "A",
+  "date": "2026-10-13",
+  "spec": "023",
+  "scope": "Feature 023 (boîte de commandes et fenêtre de réglages) : 10 fichiers neufs, diffs de 5 fichiers, tests et docs, git diff acc10e13..HEAD",
+  "coverage_percent": 100,
+  "justification": "Aucun constat critique ou élevé. 9 constats corrigés au cycle 1 ; restent 2 moyens de tests, 1 moyen de complexité et 7 faibles. Score pondéré 98.9.",
+  "metrics": {
+    "security": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "quality": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "tests": {
+      "grade": "A",
+      "numeric": 90,
+      "findings_count": 6
+    },
+    "performance": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "complexity": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 1
+    },
+    "duplication": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 98,
+      "findings_count": 2
+    },
+    "reliability": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    },
+    "architecture": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0
+    }
+  }
+}

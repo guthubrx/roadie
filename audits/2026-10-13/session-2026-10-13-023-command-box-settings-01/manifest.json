@@ -1,0 +1,21 @@
+{
+  "languages": ["swift"],
+  "frameworks": ["appkit", "swiftui", "swift-testing", "tomlkit"],
+  "db": null,
+  "ci": null,
+  "has_ui": true,
+  "has_llm": false,
+  "container": false,
+  "files_count": 25,
+  "mode": "S",
+  "sampling": null,
+  "slos_defined": false,
+  "hot_paths": [
+    "Sources/RoadieDaemon/TargetOverlayPresenter.swift (tap clavier, handleSearch, handleCommand)",
+    "Sources/RoadieDaemon/SettingsService.swift (write)",
+    "Sources/RoadieDaemon/ConfigFileEditor.swift (locate, scan)",
+    "Sources/RoadieDaemon/SettingsViewModel.swift (refresh, loadVisibleValues)",
+    "Sources/RoadieDaemon/SlashCommandCatalog.swift (suggestions à chaque frappe)",
+    "Sources/RoadieDaemon/SlashCommandRunner.swift (execute, runDeferred)"
+  ]
+}
