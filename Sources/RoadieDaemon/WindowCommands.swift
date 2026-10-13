@@ -1037,11 +1037,12 @@ public struct WindowCommandService {
         }
         let firstGroup = targetFirst ? targetGroup : sourceGroup
         let secondGroup = targetFirst ? sourceGroup : targetGroup
-        let rects = split(container, horizontally: horizontal, gap: gap, firstCount: firstGroup.count, secondCount: secondGroup.count)
+        // Même découpe que l'aperçu de dépôt (PERF-003, O(n)).
+        let rects = DropGroupGeometry.split(container, horizontally: horizontal, gap: gap, firstCount: firstGroup.count, secondCount: secondGroup.count)
 
         var placements: [WindowID: CGRect] = [:]
-        placements.merge(planGroup(firstGroup, in: rects.first, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
-        placements.merge(planGroup(secondGroup, in: rects.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
+        placements.merge(DropGroupGeometry.planGroup(firstGroup, in: rects.first, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
+        placements.merge(DropGroupGeometry.planGroup(secondGroup, in: rects.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: scopedWindows.map { ($0.id, $0) })
         let commands = placements.keys.sorted().compactMap { id -> ApplyCommand? in
@@ -1128,42 +1129,6 @@ public struct WindowCommandService {
         group.append(id)
         let frames = Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0.frame.cgRect) })
         group.sort { lhs, rhs in (frames[lhs]?.midX ?? 0) < (frames[rhs]?.midX ?? 0) }
-    }
-
-    private func split(
-        _ rect: CGRect,
-        horizontally: Bool,
-        gap: CGFloat,
-        firstCount: Int,
-        secondCount: Int
-    ) -> (first: CGRect, second: CGRect) {
-        let total = CGFloat(firstCount + secondCount)
-        let ratio = total > 0 ? CGFloat(firstCount) / total : 0.5
-        if horizontally {
-            let usable = max(0, rect.width - gap)
-            let firstWidth = floor(usable * ratio)
-            return (
-                CGRect(x: rect.minX, y: rect.minY, width: firstWidth, height: rect.height),
-                CGRect(x: rect.minX + firstWidth + gap, y: rect.minY, width: usable - firstWidth, height: rect.height)
-            )
-        }
-
-        let usable = max(0, rect.height - gap)
-        let firstHeight = floor(usable * ratio)
-        return (
-            CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: firstHeight),
-            CGRect(x: rect.minX, y: rect.minY + firstHeight + gap, width: rect.width, height: usable - firstHeight)
-        )
-    }
-
-    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {
-        guard let first = windowIDs.first else { return [:] }
-        guard windowIDs.count > 1 else { return [first: rect.integral] }
-
-        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)
-        var placements = [first: parts.first.integral]
-        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
-        return placements
     }
 
     private func framesAreClose(_ lhs: CGRect, _ rhs: CGRect) -> Bool {

@@ -642,7 +642,7 @@ final class StageCardView: NSControl {
     }
 
     private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {
-        for item in hitPreviewItemsFrontToBack() {
+        for item in hitPreviewItems() {
             guard item.rect.contains(point),
                   let member = visualMembers[safe: item.index]
             else { continue }
@@ -655,11 +655,8 @@ final class StageCardView: NSControl {
         .focusNativeFullscreen(member.windowID, member.bundleID, stageID)
     }
 
-    private func hitPreviewItemsFrontToBack() -> [(index: Int, rect: CGRect)] {
-        // Stacked/parallax previews are drawn back-to-front, so index 0 is visually on top.
-        hitPreviewItems()
-    }
-
+    /// Aperçus dans l'ordre de test du clic, du dessus vers le dessous : en stacked/parallax, dessinés
+    /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
         let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
         let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
@@ -667,29 +664,9 @@ final class StageCardView: NSControl {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
         case .mosaic:
-            let count = min(visualMembers.count, 6)
-            let cols = count <= 2 ? count : 2
-            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))
-            let gap: CGFloat = 6
-            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))
-            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))
-            return (0..<count).map { index in
-                let col = index % cols
-                let row = index / cols
-                return (
-                    index,
-                    CGRect(
-                        x: rect.minX + CGFloat(col) * (cellW + gap),
-                        y: rect.minY + CGFloat(row) * (cellH + gap),
-                        width: cellW,
-                        height: cellH
-                    )
-                )
-            }
+            return Array(mosaicPreviewFrames(in: rect).enumerated()).map { ($0.offset, $0.element) }
         case .icons:
-            return Array(visualMembers.prefix(6)).enumerated().map { index, _ in
-                (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
-            }
+            return Array(iconPreviewFrames(in: rect).enumerated()).map { ($0.offset, $0.element) }
         }
     }
 
