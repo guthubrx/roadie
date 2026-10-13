@@ -37,3 +37,19 @@ Suite complète (`./scripts/test`, scratch `/tmp/roadie-build-023-base`) : **102
 
 ## Restant
 - T015 et T025 : vérification à l'écran après `make install` (section « Livraison »).
+
+## Convergence
+
+### Passage 1 (agent Converge, lecture seule + contre-revue Codex de l'implémentation)
+Verdict : non convergé, 13 tâches ajoutées (T027 à T039). Défauts les plus graves corrigés :
+- touches (`#`, `+`, `~`…) laissées à l'application active en mode commande, et ponctuation entrée dans la recherche (FR-010) : indicateur de mode lu par le tap, décodeur du mode recherche rétabli à l'identique (`d` 16141d94) ;
+- `/set` sur fichier invalide, illisible (UTF-8), lien symbolique, permissions, relecture avant `rename`, commentaire de fin de ligne perdu au rétablissement (`d05348f9`) ;
+- réglages en lecture seule sans valeur, bouton Rétablir faux, surveillance d'un fichier absent (`d05348f9`, `a4615c2d`) ;
+- `/heal`, `/reload`, messages et usage des échecs, échec des actions différées journalisé, tests d'effet (`0554db16`).
+Suite complète après corrections : **1053 tests, 102 suites, 0 échec**.
+
+### Passage 2
+Les 13 tâches sont prouvées dans le code et les tests. Un manque de classe (d) : T040 (`/heal` et `/reload` en échec affichés comme résultat). Aucun test de la SPEC-021 retiré ou relâché (SC-006 tient). Tests relâchés listés par l'agent : tous justifiés par T030, T031 (heal/reload en info), T034, T036 ; seul `reload` en échec ne l'était pas, ce que T040 rétablit.
+
+### Incident disque
+Le disque est monté à 100 % pendant le lot N1 (ENOSPC) : le code du lot n'a pu être compilé qu'après avoir supprimé les dossiers `/tmp/roadie-build-023-{a,b,c,d,e,f,g,i,j,k}` (environ 5 Go). Le lot a ensuite été vérifié par la suite complète.
