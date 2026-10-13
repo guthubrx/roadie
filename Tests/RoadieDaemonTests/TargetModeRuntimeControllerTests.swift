@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
@@ -95,4 +96,54 @@ struct TargetModeRuntimeControllerTests {
 
         #expect(target?.window.id == top.window.id)
     }
+
+    @Test
+    func labelStylesFollowTheConfiguredFontSize() {
+        let letters = TargetOverlayStyle.labels(TargetModeConfig(labelFontSize: 20))
+        let grid = TargetOverlayStyle.grid(TargetGridConfig(labelFontSize: 20))
+
+        #expect(abs(letters.scale - 20.0 / 13.0) < 0.001)
+        #expect(abs(grid.scale - 20.0 / 13.0) < 0.001)
+        #expect(TargetOverlayStyle.labels(TargetModeConfig()).scale == 1)
+    }
+
+    /// SPEC-023 R2 : l'action différée de la boîte part après le nettoyage de la session et la remise à
+    /// zéro du contrôleur, un tour de boucle plus tard ; la commande `grid` arrive alors au contrôleur.
+    /// La session de recherche exige un tap clavier et des écrans : la séquence est testée par la
+    /// fonction qu'elle appelle, avec le vrai contrôleur.
+    @Test @MainActor
+    func deferredBoxActionRunsAfterTheSessionEndsAndReachesTheController() async throws {
+        let eventPath = tempPath("command-box-events")
+        defer { try? FileManager.default.removeItem(atPath: eventPath) }
+        let provider = PowerUserProvider(windows: [])
+        let controller = TargetModeRuntimeController(
+            service: SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: RoadieConfig()),
+            events: EventLog(path: eventPath)
+        )
+        let steps = StepLog()
+
+        CommandBoxFollowUp.finish(
+            cleanup: { steps.entries.append("cleanup") },
+            notify: { steps.entries.append("finish") },
+            then: {
+                steps.entries.append("action")
+                controller.handle(TargetModeRuntimeCommand(name: "grid.interactive", arguments: ["scope": "display"]))
+            }
+        )
+        #expect(steps.entries == ["cleanup", "finish"])
+
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        #expect(steps.entries == ["cleanup", "finish", "action"])
+        // Grille désactivée par défaut : la commande est traitée (et refusée), pas ignorée.
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("grid.interactive"))
+        #expect(events.contains("target_grid_disabled"))
+    }
+}
+
+@MainActor
+private final class StepLog {
+    var entries: [String] = []
 }

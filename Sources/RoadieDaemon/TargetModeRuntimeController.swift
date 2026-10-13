@@ -99,7 +99,8 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "target_mode.runtime_stopped"))
     }
 
-    private func handle(_ command: TargetModeRuntimeCommand?) {
+    /// Interne pour les tests (action différée de la boîte de commandes, SPEC-023 R2).
+    func handle(_ command: TargetModeRuntimeCommand?) {
         guard let command else {
             events.append(RoadieEvent(type: "target_mode.command_rejected", details: ["reason": "invalid_payload"]))
             return
@@ -152,6 +153,7 @@ public final class TargetModeRuntimeController: NSObject {
         currentSession = TargetOverlayPresenter.startInteractive(
             overlay,
             duration: duration,
+            style: .labels(config),
             activate: { label in
                 targets.activate(label, action: action)
             },
@@ -181,9 +183,16 @@ public final class TargetModeRuntimeController: NSObject {
         events.append(RoadieEvent(type: "target_mode.search_started", details: [
             "targetCount": String(roadieTargets.count)
         ]))
+        // Mode commande (SPEC-023) : l'action différée et la fenêtre de réglages partent après la fin
+        // de la session et la remise à zéro de `currentSession` (research R2).
+        let commands = SlashCommandRunner()
         currentSession = TargetOverlayPresenter.startSearch(
             targets: roadieTargets,
             alphabet: appTargets.hintCharacters,
+            style: .labels(config),
+            commands: commands,
+            runDeferred: { argv in commands.runDeferred(argv) },
+            openSettings: { category in SettingsWindowController.shared.show(category: category) },
             load: { deliver, done in
                 DispatchQueue.global(qos: .userInitiated).async {
                     let scan = LiveAppTargetProvider().scanVisibleWindows(config: scanConfig) { window in

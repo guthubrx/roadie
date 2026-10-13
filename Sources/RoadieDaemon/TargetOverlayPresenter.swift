@@ -40,6 +40,11 @@ public struct TargetOverlayStyle: Sendable {
 
     public static let labels = TargetOverlayStyle()
 
+    /// Style des lettres et de la recherche, à la taille de `experimental.target_mode.label_font_size`.
+    public static func labels(_ config: TargetModeConfig) -> TargetOverlayStyle {
+        TargetOverlayStyle(labelFontSize: CGFloat(config.labelFontSize))
+    }
+
     public static func grid(_ config: TargetGridConfig) -> TargetOverlayStyle {
         TargetOverlayStyle(
             drawTargetFrames: config.overlayDrawGrid,
@@ -120,12 +125,14 @@ public enum TargetOverlayPresenter {
     public static func startInteractive(
         _ state: TargetOverlayState,
         duration: TimeInterval,
+        style: TargetOverlayStyle = .labels,
         activate: @escaping @MainActor (String) -> TargetActionResult,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         let session = TargetInteractiveSession(
             state: state,
             duration: duration,
+            style: style,
             activate: activate,
             onFinish: onFinish
         )
@@ -170,9 +177,15 @@ public enum TargetOverlayPresenter {
     @discardableResult
     /// Barre immédiate (SPEC-021) : la session s'ouvre avec `targets`, puis `load` lit les fenêtres en
     /// arrière-plan. Il appelle `deliver(cibles, rang de fenêtre)` pour chaque fenêtre lue, puis `done`.
+    /// Mode commande (SPEC-023) : `commands` exécute la saisie qui suit `/` ; `runDeferred` et
+    /// `openSettings` partent après la fin de la session (research R2).
     public static func startSearch(
         targets: [RoadieTarget],
         alphabet: String,
+        style: TargetOverlayStyle = .labels,
+        commands: SlashCommandRunner,
+        runDeferred: @escaping @MainActor ([String]) -> Void,
+        openSettings: @escaping @MainActor (SettingCategory?) -> Void,
         load: (
             _ deliver: @escaping @MainActor @Sendable ([RoadieTarget], Int) -> Void,
             _ done: @escaping @MainActor @Sendable () -> Void
@@ -180,7 +193,16 @@ public enum TargetOverlayPresenter {
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
-        let session = TargetSearchSession(targets: targets, alphabet: alphabet, activate: activate, onFinish: onFinish)
+        let session = TargetSearchSession(
+            targets: targets,
+            alphabet: alphabet,
+            style: style,
+            commands: commands,
+            runDeferred: runDeferred,
+            openSettings: openSettings,
+            activate: activate,
+            onFinish: onFinish
+        )
         if let immediate = session.start() {
             onFinish(immediate)
             return nil
@@ -281,6 +303,7 @@ extension KeyEventTapSession {
 private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEventTapSession {
     private let state: TargetOverlayState
     private let duration: TimeInterval
+    private let style: TargetOverlayStyle
     private let activate: @MainActor (String) -> TargetActionResult
     private let onFinish: (@MainActor (TargetActionResult) -> Void)?
     private let labels: Set<String>
@@ -297,11 +320,13 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
     init(
         state: TargetOverlayState,
         duration: TimeInterval,
+        style: TargetOverlayStyle,
         activate: @escaping @MainActor (String) -> TargetActionResult,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
         self.state = state
         self.duration = max(1, duration)
+        self.style = style
         self.activate = activate
         self.onFinish = onFinish
         self.labels = Set(state.report.targets.map { $0.label.uppercased() }.filter { !$0.isEmpty })
@@ -317,7 +342,7 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
         }
 
         NSApplication.shared.setActivationPolicy(.accessory)
-        windows = TargetOverlayPresenter.overlayWindows(for: badges)
+        windows = TargetOverlayPresenter.overlayWindows(for: badges, style: style)
         windows.forEach { $0.orderFrontRegardless() }
 
         let startedAt = Date()
@@ -762,12 +787,20 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
 
 /// Session du mode recherche (SPEC-021). La logique est dans `TargetSearchModel` ; la session lit les
 /// touches, met à jour l'affichage et active la cible figée au moment de la validation.
+/// Une requête qui commence par `/` passe en mode commande (SPEC-023) : les touches vont alors à
+/// `SlashCommandModel` et Retour exécute la commande par `SlashCommandRunner`.
 @MainActor
 private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTapSession {
     /// Fermeture sans frappe pendant ce délai.
     static let idleTimeout: TimeInterval = 60
 
     private var model: TargetSearchModel
+    /// Mode commande : créé à la frappe du `/` dans une requête vide, nil en mode recherche.
+    private var commandModel: SlashCommandModel?
+    private let style: TargetOverlayStyle
+    private let commands: SlashCommandRunner
+    private let runDeferred: @MainActor ([String]) -> Void
+    private let openSettings: @MainActor (SettingCategory?) -> Void
     private let activate: @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult
     private let onFinish: (@MainActor (TargetActionResult) -> Void)?
     private var lastInputAt = Date()
@@ -784,6 +817,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     init(
         targets: [RoadieTarget],
         alphabet: String,
+        style: TargetOverlayStyle,
+        commands: SlashCommandRunner,
+        runDeferred: @escaping @MainActor ([String]) -> Void,
+        openSettings: @escaping @MainActor (SettingCategory?) -> Void,
         activate: @escaping @MainActor (RoadieTarget, TargetActionVerb) -> TargetActionResult,
         onFinish: (@MainActor (TargetActionResult) -> Void)?
     ) {
@@ -791,6 +828,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         let pointerScreen = NSScreen.screens.first { $0.frame.contains(mouse) }?.frame
         self.pointerScreen = pointerScreen
         self.model = TargetSearchModel(targets: targets, alphabet: alphabet) { Self.rank($0, windowOrder: -1, pointerScreen: pointerScreen) }
+        self.style = style
+        self.commands = commands
+        self.runDeferred = runDeferred
+        self.openSettings = openSettings
         self.activate = activate
         self.onFinish = onFinish
     }
@@ -821,7 +862,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         NSApplication.shared.setActivationPolicy(.accessory)
         // Une fenêtre par écran : la barre suit l'écran du pointeur, même sans correspondance.
-        windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: .labels) }
+        windows = NSScreen.screens.map { TargetOverlayWindow(frame: $0.frame, badges: [], style: style) }
         windows.forEach { $0.orderFrontRegardless() }
         render()
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
@@ -843,6 +884,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     fileprivate func handleSearch(_ input: SearchKeyInput) {
         guard !finished else { return }
         lastInputAt = Date()
+        // Mode commande (SPEC-023 R3) : aiguillage avant le modèle de recherche.
+        if model.isCommandMode {
+            handleCommand(input)
+            return
+        }
         if case .escape = input.kind {
             model.cancelPendingReturn()
             cancel()
@@ -860,6 +906,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         switch input.kind {
         case .text(let value):
             model.type(value)
+            if model.isCommandMode { enterCommandMode() }
         case .labelCharacter(let value):
             _ = model.typeLabel(value)
         case .delete:
@@ -874,6 +921,57 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         render()
     }
 
+    /// Premier `/` d'une requête vide : la boîte de commandes prend la main. Le contexte (stages,
+    /// bookmarks) est lu une fois, à la bascule.
+    private func enterCommandMode() {
+        model.cancelPendingReturn()
+        let context = commands.context()
+        commandModel = SlashCommandModel(history: commands.loadHistory()) {
+            SlashCommandCatalog.suggestions(for: $0, context: context)
+        }
+    }
+
+    private func handleCommand(_ input: SearchKeyInput) {
+        guard var command = commandModel else { return }
+        let effect = command.handle(input)
+        commandModel = command
+        switch effect {
+        case .update:
+            render()
+        case .close:
+            cancel()
+        case .leave:
+            // Le `/` est effacé : la requête de recherche revient à vide.
+            commandModel = nil
+            model.deleteBackward()
+            render()
+        case .submit(let line):
+            execute(line)
+        }
+    }
+
+    /// Retour en mode commande. Succès, action différée et réglages ferment la boîte ; un résultat
+    /// d'information ou une erreur s'affichent dans la boîte, qui reste ouverte.
+    private func execute(_ line: String) {
+        switch commands.execute(line) {
+        case .done:
+            finish(TargetActionResult(changed: true, message: "command_box_done"))
+        case .deferred(let argv):
+            let runDeferred = runDeferred
+            finish(TargetActionResult(changed: false, message: "command_box_deferred")) { runDeferred(argv) }
+        case .openSettings(let category):
+            let openSettings = openSettings
+            finish(TargetActionResult(changed: false, message: "command_box_settings")) { openSettings(category) }
+        case .info(let lines):
+            commandModel?.setMessage(.info(lines))
+            render()
+        case .failed(let error):
+            let hint = error.suggestion.map { " Vouliez-vous dire « \($0) » ?" } ?? ""
+            commandModel?.setMessage(.error(error.message + hint, usage: error.usage))
+            render()
+        }
+    }
+
     private func tick() {
         guard !finished else { return }
         if let target = model.highlighted, let verb = model.pendingReturn(at: Date()) {
@@ -886,6 +984,20 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func render() {
+        if let command = commandModel {
+            // Mode commande : la saisie, la liste et le message, sans aucune cible.
+            show(badges: [], bar: TargetSearchBar(
+                query: model.query,
+                matchCount: 0,
+                properties: nil,
+                isLoading: false,
+                commandInput: command.input,
+                suggestions: command.suggestions,
+                selectedSuggestion: command.selected,
+                message: command.message
+            ))
+            return
+        }
         let highlightedID = model.highlighted?.id
         // Barre vide : aucune étiquette (`*` les montre toutes). Étiquettes d'une lettre : chacun encadré.
         let shown = model.query.isEmpty ? [] : model.matches
@@ -903,7 +1015,10 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 isSearchResult: true
             )
         }
-        let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading)
+        show(badges: badges, bar: TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading))
+    }
+
+    private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
         let mouse = NSEvent.mouseLocation
         let barWindow = windows.first { $0.frame.contains(mouse) } ?? windows.first
         for window in windows {
@@ -911,11 +1026,11 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
     }
 
-    private func finish(_ result: TargetActionResult) {
+    /// `then` : action de la boîte de commandes, lancée après la fin de la session (research R2).
+    private func finish(_ result: TargetActionResult, then action: (@MainActor @Sendable () -> Void)? = nil) {
         guard !finished else { return }
         finished = true
-        cleanup()
-        onFinish?(result)
+        CommandBoxFollowUp.finish(cleanup: cleanup, notify: { onFinish?(result) }, then: action)
     }
 
     private func finishActivating(_ target: RoadieTarget, _ verb: TargetActionVerb) {
@@ -942,6 +1057,115 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         }
         windows = []
         NSApplication.shared.updateWindows()
+    }
+}
+
+/// Fin d'une session suivie d'une action de la boîte de commandes (SPEC-023 R2) : nettoyer la session,
+/// prévenir le contrôleur (qui remet son état à zéro), puis lancer l'action un tour de boucle plus tard.
+/// Lancée plus tôt, une commande `grid` ou `targets` ouvrirait sa session avant cette remise à zéro,
+/// qui effacerait alors la nouvelle session du contrôleur.
+@MainActor
+enum CommandBoxFollowUp {
+    static func finish(cleanup: () -> Void, notify: () -> Void, then action: (@MainActor @Sendable () -> Void)?) {
+        cleanup()
+        notify()
+        guard let action else { return }
+        DispatchQueue.main.async { MainActor.assumeIsolated { action() } }
+    }
+}
+
+/// Effet d'une touche de la boîte de commandes pour la session (SPEC-023 R3).
+enum CommandBoxKeyEffect: Equatable {
+    /// Saisie, liste ou message à redessiner.
+    case update
+    /// Retour : commande à exécuter, sans `/`.
+    case submit(String)
+    /// Échap : fermer sans action.
+    case close
+    /// `/` effacé : la main revient à la recherche.
+    case leave
+}
+
+extension SlashCommandModel {
+    /// Aiguillage pur d'une touche en mode commande : la recherche n'en voit aucune. Maj + lettre écrit
+    /// une majuscule, Tab complète, Maj-Tab et Ctrl-P remontent la liste, Ctrl-N la descend, les
+    /// flèches parcourent l'historique, Retour exécute sans attendre de second Retour.
+    /// Complexité : celle de l'opération appelée, O(c + l) au plus.
+    mutating func handle(_ input: SearchKeyInput) -> CommandBoxKeyEffect {
+        switch input.kind {
+        case .text(let value):
+            type(value)
+        case .labelCharacter(let value):
+            type(value.uppercased())
+        case .delete:
+            deleteBackward()
+            if !isActive { return .leave }
+        case .next:
+            switch input.navigationSource {
+            case .arrow: historyDown()
+            case .control: nextSuggestion()
+            case .tab, nil: complete()
+            }
+        case .previous:
+            switch input.navigationSource {
+            case .arrow: historyUp()
+            case .tab, .control, nil: previousSuggestion()
+            }
+        case .confirm(_, _, let isRepeat):
+            if !isRepeat { return .submit(submit()) }
+        case .escape:
+            return .close
+        case .ignored:
+            break
+        }
+        return .update
+    }
+}
+
+/// Mise en page de la barre de saisie et de la boîte de commandes (SPEC-023 R4), pure. La barre reste
+/// collée en bas de l'écran (y = minY + 48) ; la liste et le message s'empilent au-dessus d'elle, dans
+/// un même fond, sans sortir de l'écran. Le message, réponse à Retour, est le plus près de la barre.
+struct SearchBarLayout: Equatable {
+    static let maxSuggestions = 8
+    static let maxMessageLines = 12
+    static let lineHeight: CGFloat = 22
+    static let padding: CGFloat = 8
+    static let gap: CGFloat = 6
+
+    var bar: CGRect
+    /// Fond des lignes ; nil sans ligne.
+    var panel: CGRect?
+    /// De haut en bas.
+    var suggestionRows: [CGRect]
+    var messageRows: [CGRect]
+
+    /// `contentWidth` : largeur du texte le plus long. Faute de place, les suggestions cèdent la
+    /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
+    static func make(bounds: CGRect, contentWidth: CGFloat, suggestions: Int, messageLines: Int) -> SearchBarLayout {
+        let width = min(bounds.width - 40, max(420, contentWidth + 40))
+        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + 48, width: width, height: 40).integral
+        let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
+        let messageCount = min(messageLines, maxMessageLines, room)
+        let suggestionCount = min(suggestions, maxSuggestions, room - messageCount)
+        let total = messageCount + suggestionCount
+        guard total > 0 else { return SearchBarLayout(bar: bar, panel: nil, suggestionRows: [], messageRows: []) }
+        let panel = CGRect(x: bar.minX, y: bar.maxY + gap, width: bar.width, height: CGFloat(total) * lineHeight + 2 * padding)
+        let rows = (0..<total).map { index in
+            CGRect(x: panel.minX + 12, y: panel.maxY - padding - CGFloat(index + 1) * lineHeight, width: panel.width - 24, height: lineHeight)
+        }
+        return SearchBarLayout(
+            bar: bar,
+            panel: panel,
+            suggestionRows: Array(rows.prefix(suggestionCount)),
+            messageRows: Array(rows.suffix(messageCount))
+        )
+    }
+
+    /// Suggestions montrées dans `rows` lignes, sélection comprise. O(1).
+    static func visibleSuggestions(count: Int, selected: Int?, rows: Int) -> Range<Int> {
+        let shown = max(0, min(count, rows))
+        let start = min(max(0, (selected ?? 0) - shown + 1), count - shown)
+        return start..<(start + shown)
     }
 }
 
@@ -1201,6 +1425,11 @@ private struct TargetSearchBar {
     var matchCount: Int
     var properties: String?
     var isLoading: Bool
+    /// Mode commande (SPEC-023) : saisie après le `/` ; nil en mode recherche.
+    var commandInput: String? = nil
+    var suggestions: [SlashSuggestion] = []
+    var selectedSuggestion: Int? = nil
+    var message: SlashMessage? = nil
 }
 
 private final class TargetOverlayView: NSView {
@@ -1251,7 +1480,9 @@ private final class TargetOverlayView: NSView {
 
     private func drawSearchBar(_ bar: TargetSearchBar) {
         let text: String
-        if let properties = bar.properties {
+        if let input = bar.commandInput {
+            text = "/\(input)▏"
+        } else if let properties = bar.properties {
             text = properties
         } else {
             let count = bar.matchCount == 0 ? "aucune correspondance" : "\(bar.matchCount) correspondance\(bar.matchCount > 1 ? "s" : "")"
@@ -1262,8 +1493,17 @@ private final class TargetOverlayView: NSView {
             .foregroundColor: NSColor.white,
         ]
         let size = text.size(withAttributes: attributes)
-        let width = min(bounds.width - 40, max(420, size.width + 40))
-        let rect = CGRect(x: bounds.midX - width / 2, y: bounds.minY + 48, width: width, height: 40).integral
+        // Mode commande (SPEC-023 R4) : liste et message au-dessus de la barre.
+        let messageLines = Self.messageLines(bar.message)
+        let candidates = SearchBarLayout.visibleSuggestions(
+            count: bar.suggestions.count, selected: bar.selectedSuggestion, rows: SearchBarLayout.maxSuggestions
+        )
+        let widest = (candidates.map { Self.suggestionLine(bar.suggestions[$0]) } + messageLines)
+            .reduce(size.width) { max($0, $1.size().width) }
+        let layout = SearchBarLayout.make(
+            bounds: bounds, contentWidth: widest, suggestions: bar.suggestions.count, messageLines: messageLines.count
+        )
+        let rect = layout.bar
         let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
         NSColor(calibratedWhite: 0.06, alpha: 0.92).setFill()
         path.fill()
@@ -1274,6 +1514,64 @@ private final class TargetOverlayView: NSView {
             in: CGRect(x: rect.minX + 20, y: rect.midY - size.height / 2, width: rect.width - 40, height: size.height),
             withAttributes: attributes
         )
+        guard let panel = layout.panel else { return }
+        let panelPath = NSBezierPath(roundedRect: panel, xRadius: 10, yRadius: 10)
+        NSColor(calibratedWhite: 0.06, alpha: 0.92).setFill()
+        panelPath.fill()
+        NSColor.systemGreen.withAlphaComponent(0.9).setStroke()
+        panelPath.lineWidth = 1.5
+        panelPath.stroke()
+        let shown = SearchBarLayout.visibleSuggestions(
+            count: bar.suggestions.count, selected: bar.selectedSuggestion, rows: layout.suggestionRows.count
+        )
+        for (row, index) in zip(layout.suggestionRows, shown) {
+            if index == bar.selectedSuggestion {
+                NSColor.systemGreen.withAlphaComponent(0.35).setFill()
+                NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
+            }
+            Self.draw(Self.suggestionLine(bar.suggestions[index]), in: row)
+        }
+        for (row, line) in zip(layout.messageRows, messageLines) {
+            Self.draw(line, in: row)
+        }
+    }
+
+    /// Ligne de la boîte : police monospace 13 pt, coupée en fin de ligne si elle est trop longue.
+    private static func lineText(_ string: String, color: NSColor) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        return NSAttributedString(string: string, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+            .foregroundColor: color,
+            .paragraphStyle: paragraph,
+        ])
+    }
+
+    /// `/stage   Changer de stage` : nom en blanc, description en gris.
+    private static func suggestionLine(_ suggestion: SlashSuggestion) -> NSAttributedString {
+        let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
+        let line = NSMutableAttributedString(attributedString: lineText(name, color: .white))
+        if !suggestion.detail.isEmpty {
+            line.append(lineText("   " + suggestion.detail, color: NSColor(calibratedWhite: 0.65, alpha: 1)))
+        }
+        return line
+    }
+
+    /// Information en blanc ; erreur en rouge, suivie de la forme attendue.
+    private static func messageLines(_ message: SlashMessage?) -> [NSAttributedString] {
+        switch message {
+        case .info(let lines):
+            return lines.prefix(SearchBarLayout.maxMessageLines).map { lineText($0, color: .white) }
+        case .error(let text, let usage):
+            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { lineText($0, color: .systemRed) }
+        case nil:
+            return []
+        }
+    }
+
+    private static func draw(_ line: NSAttributedString, in row: CGRect) {
+        let height = line.size().height
+        line.draw(in: CGRect(x: row.minX, y: row.midY - height / 2, width: row.width, height: height))
     }
 
     private func placement(for badge: TargetOverlayBadge, avoiding occupied: [CGRect]) -> BadgePlacement? {

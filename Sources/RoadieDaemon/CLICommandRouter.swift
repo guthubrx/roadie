@@ -1406,7 +1406,7 @@ public final class CLICommandRouter {
                     return 1
                 }
                 let duration = value(after: "--duration", in: args).flatMap(Double.init) ?? config.overlayDurationSeconds
-                TargetOverlayPresenter.present(overlay, duration: duration)
+                TargetOverlayPresenter.present(overlay, duration: duration, style: .labels(config))
                 return 0
             }
             if json {
