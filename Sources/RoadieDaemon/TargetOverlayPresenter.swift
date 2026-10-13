@@ -850,9 +850,9 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func render() {
         let highlightedID = model.highlighted?.id
-        // Barre vide : aucune étiquette (`*` les montre toutes). Moins de 3 résultats : chacun encadré.
+        // Barre vide : aucune étiquette (`*` les montre toutes). Étiquettes d'une lettre : chacun encadré.
         let shown = model.query.isEmpty ? [] : model.matches
-        let framesAll = shown.count < 3
+        let framesAll = model.hasShortLabels
         let badges: [TargetOverlayBadge] = shown.compactMap { target in
             guard let frame = target.frame?.cgRect else { return nil }
             return TargetOverlayBadge(
@@ -862,7 +862,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
                 isActive: target.isActive,
                 frame: RoadieScreenCoordinate.axRectToNS(frame),
                 isHighlighted: target.id == highlightedID,
-                isFramed: framesAll
+                isFramed: framesAll,
+                isSearchResult: true
             )
         }
         let bar = TargetSearchBar(query: model.query, matchCount: model.matches.count, properties: model.properties, isLoading: isLoading)
@@ -1085,8 +1086,10 @@ private struct TargetOverlayBadge {
     var frame: CGRect
     /// Correspondance mise en avant du mode recherche (vert).
     var isHighlighted = false
-    /// Recherche avec moins de 3 résultats : cadre fin autour de chaque résultat.
+    /// Recherche avec des étiquettes d'une lettre : cadre fin autour de chaque résultat.
     var isFramed = false
+    /// Résultat du mode recherche : étiquette sur fond vert.
+    var isSearchResult = false
 
     static func badges(from state: TargetOverlayState) -> [TargetOverlayBadge] {
         state.report.targets.compactMap { target in
@@ -1287,7 +1290,7 @@ private final class TargetOverlayView: NSView {
         }
         if badge.isFramed {
             let path = NSBezierPath(roundedRect: placement.target.insetBy(dx: -2, dy: -2), xRadius: 6, yRadius: 6)
-            NSColor.systemGreen.withAlphaComponent(0.6).setStroke()
+            NSColor.systemGreen.withAlphaComponent(0.9).setStroke()
             path.lineWidth = 1.5
             path.stroke()
             return
@@ -1347,9 +1350,9 @@ private final class TargetOverlayView: NSView {
         let label = badge.label.isEmpty ? "?" : badge.label
         let textSize = label.size(withAttributes: Self.textAttributes)
         let path = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
-        // Recherche : fond vert pour la cible choisie et, sous 3 résultats, pour chaque résultat ; seule
-        // la bordure distingue la cible choisie (épaisse et blanche).
-        (badge.isHighlighted || badge.isFramed ? NSColor.systemGreen.withAlphaComponent(0.85)
+        // Recherche : fond vert pour chaque résultat ; seule la bordure distingue la cible choisie
+        // (épaisse et blanche).
+        (badge.isHighlighted || badge.isSearchResult ? NSColor.systemGreen.withAlphaComponent(0.85)
             : NSColor(calibratedWhite: 0.04, alpha: CGFloat(style.labelBackgroundOpacity))).setFill()
         path.fill()
         (badge.isHighlighted ? NSColor.white : badge.isActive ? NSColor.systemBlue : tint(for: badge.kind)).setStroke()

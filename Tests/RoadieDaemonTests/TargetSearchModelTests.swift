@@ -112,6 +112,7 @@ struct TargetSearchModelTests {
         let labels = model.matches.map(\.label)
         let picked = model.typeLabel("s")
         #expect(labels == ["A", "S"])
+        #expect(model.hasShortLabels)
         #expect(picked && model.highlighted?.id == "app:Y")
         #expect(model.targets.last?.label != "S")
     }

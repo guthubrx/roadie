@@ -177,6 +177,9 @@ public struct TargetSearchModel: Equatable, Sendable {
         highlightedIndex = query.isEmpty || matches.isEmpty ? nil : 0
     }
 
+    /// Les résultats portent les étiquettes d'une lettre : assez peu nombreux pour être tous encadrés.
+    public var hasShortLabels: Bool { !query.isEmpty && matches.count <= shortLabels.count }
+
     /// Peu de résultats (au plus un par lettre de l'alphabet) : étiquettes A, S, D… dans l'ordre
     /// affiché, pour choisir par Maj + une seule lettre. Les cibles gardent leur étiquette d'origine.
     private func shortened(_ found: [RoadieTarget]) -> [RoadieTarget] {
