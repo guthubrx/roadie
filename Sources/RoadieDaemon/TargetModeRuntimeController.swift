@@ -148,9 +148,9 @@ public final class TargetModeRuntimeController: NSObject {
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
-    /// Clic d'une case de grille sur une racine résolue. Point d'injection des tests (TEST-002) :
-    /// destination observée sans événement souris réel.
-    private let gridClick: @MainActor (TargetGridService, String, TargetGridRoot) -> TargetActionResult
+    /// Émission des événements souris de la grille. Point d'injection des tests (TEST-002) : clic
+    /// réellement émis par `TargetGridService`, observé sans événement réel.
+    private let gridPostEvent: (CGEvent) -> Void
 
     public convenience init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
         self.init(service: service, events: events, presenter: LiveTargetModeOverlayPresenter())
@@ -160,14 +160,12 @@ public final class TargetModeRuntimeController: NSObject {
         service: SnapshotService,
         events: EventLog,
         presenter: any TargetModeOverlayPresenting,
-        gridClick: @escaping @MainActor (TargetGridService, String, TargetGridRoot) -> TargetActionResult = { grid, path, root in
-            grid.perform(.click, path: path, root: root)
-        }
+        gridPostEvent: @escaping (CGEvent) -> Void = { $0.post(tap: .cghidEventTap) }
     ) {
         self.service = service
         self.events = events
         self.presenter = presenter
-        self.gridClick = gridClick
+        self.gridPostEvent = gridPostEvent
     }
 
     public func start() {
@@ -330,7 +328,7 @@ public final class TargetModeRuntimeController: NSObject {
         }
 
         let targetModeConfig = service.effectiveConfig.experimental.targetMode
-        let grid = TargetGridService(service: service)
+        let grid = TargetGridService(service: service, postEvent: gridPostEvent)
         let displayIndex = command.int("display")
         let initialPath = command.string("path") ?? ""
         let scope = command.string("scope").flatMap(TargetGridScope.init(rawValue:)) ?? config.defaultScope
@@ -371,9 +369,9 @@ public final class TargetModeRuntimeController: NSObject {
                     report: grid.targets(displayIndex: selectedDisplayIndex, parentPath: parentPath, scope: scope)
                 )
             },
-            activate: { [gridClick] selectedDisplayIndex, selectedPath in
+            activate: { selectedDisplayIndex, selectedPath in
                 if let root = rootFor(selectedDisplayIndex) {
-                    return gridClick(grid, selectedPath, root)
+                    return grid.perform(.click, path: selectedPath, root: root)
                 }
                 return grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
             },

@@ -151,19 +151,14 @@ struct TargetModeRuntimeControllerTests {
         ])
         let eventPath = tempPath("rel004-grid-click-events")
         let presenter = SpyTargetModeOverlayPresenter()
-        var clicks: [CGPoint] = []
-        // Émission souris simulée : même géométrie que `TargetGridService.perform`, sans événement réel.
+        var posted: [CGEvent] = []
+        // Événements souris réellement construits par `TargetGridService.perform`, interceptés avant
+        // l'envoi au système.
         let controller = TargetModeRuntimeController(
             service: service,
             events: EventLog(path: eventPath),
             presenter: presenter,
-            gridClick: { grid, path, root in
-                guard let cell = grid.report(root: root).cells.first(where: { $0.path == path }) else {
-                    return TargetActionResult(changed: false, message: "unknown path", error: "unknown_grid_path")
-                }
-                clicks.append(cell.center.cgPoint)
-                return TargetActionResult(changed: true, message: "grid click \(path)")
-            }
+            gridPostEvent: { posted.append($0) }
         )
 
         controller.handle(TargetModeRuntimeCommand(name: "grid.interactive", arguments: [
@@ -181,8 +176,12 @@ struct TargetModeRuntimeControllerTests {
         onFinish(result)
 
         #expect(result.changed)
-        #expect(clicks == [CGPoint(x: shownFrame.midX, y: shownFrame.midY)])
-        #expect(clicks.allSatisfy { $0.x >= 1000 })
+        #expect(posted.map(\.type) == [.leftMouseDown, .leftMouseUp])
+        // La case affichée est arrondie au point entier (`integral`), le clic vise le centre exact :
+        // écart inférieur à un point, toujours dans la case affichée.
+        #expect(posted.allSatisfy { shownFrame.contains($0.location) })
+        #expect(posted.allSatisfy { abs($0.location.x - shownFrame.midX) < 1 && abs($0.location.y - shownFrame.midY) < 1 })
+        #expect(posted.allSatisfy { $0.location.x >= 1000 })
         let finished = EventLog(path: eventPath).tail(limit: 5).filter { $0.contains("target_mode.finished") }
         #expect(finished.count == 1)
         #expect(finished.first?.contains("grid.interactive") == true)
