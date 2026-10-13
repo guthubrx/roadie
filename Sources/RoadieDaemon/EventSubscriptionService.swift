@@ -29,6 +29,9 @@ public struct EventSubscriptionCursor: Equatable, Sendable {
 
 public struct EventSubscriptionService: Sendable {
     private let url: URL
+    /// Point d'injection pour les tests : appelé après chaque ouverture de génération `.N`
+    /// (argument : N), pour simuler une rotation pendant la collecte.
+    var generationOpenHook: (@Sendable (Int) -> Void)?
 
     public var path: String { url.path }
 
@@ -78,7 +81,8 @@ public struct EventSubscriptionService: Sendable {
     /// en tête, quels que soient les filtres, puis la lecture reprend au début du fichier courant.
     /// Les générations sont ouvertes une fois et identifiées par l'inode de leur descripteur
     /// (`fstat`) : une rotation entre l'identification et la lecture ne fait pas lire un autre
-    /// fichier. Une génération qui désigne déjà le fichier ouvert comme courant arrête la remontée :
+    /// fichier. L'ouverture de l'ensemble se fait sous le verrou de rotation de `EventLog`
+    /// (partagé) : l'écrivain ne peut pas faire tourner le journal entre deux ouvertures. Une génération qui désigne déjà le fichier ouvert comme courant arrête la remontée :
     /// son contenu est lu une seule fois, comme fichier courant.
     // O(octets nouveaux) ; la recherche de l'ancienne génération coûte au plus `maxBackupsScanned` ouvertures.
     public func readAvailable(from cursor: EventSubscriptionCursor, options: EventSubscriptionOptions = EventSubscriptionOptions()) -> (events: [RoadieEventEnvelope], cursor: EventSubscriptionCursor) {
@@ -94,7 +98,7 @@ public struct EventSubscriptionService: Sendable {
         var offset = cursor.offset
         if let known = cursor.inode, known != currentInode {
             // Rotation : finir l'ancienne génération, puis les intermédiaires, puis le fichier courant depuis 0.
-            let generations = Self.openGenerations(of: url.path, upTo: known)
+            let generations = openGenerations(upTo: known)
             defer { generations.forEach { try? $0.handle.close() } }
             if let first = generations.lastIndex(where: { $0.inode == known }) {
                 for index in stride(from: first, through: 0, by: -1) {
@@ -142,20 +146,50 @@ public struct EventSubscriptionService: Sendable {
     /// Type de l'événement émis quand des événements ont pu être perdus entre deux lectures.
     public static let gapEventType = "events.gap"
 
+    /// Nombre maximal de collectes successives si une rotation est détectée pendant l'ouverture.
+    private static let maxScanAttempts = 3
+
     /// Générations `.1`, `.2`... ouvertes (indice 0 = `.1`) jusqu'à celle d'inode `known`.
     /// Une génération absente est sautée : pendant une rotation, `.1` manque un court instant.
-    private static func openGenerations(of path: String, upTo known: UInt64) -> [(handle: FileHandle, inode: UInt64)] {
+    /// Ouverture sous le verrou de rotation partagé (un écrivain exclusif attend la fin de la
+    /// collecte, qui ne fait qu'ouvrir et `fstat`). Sans verrou obtenu, ou si un inode apparaît deux
+    /// fois (rotation pendant la collecte : `[B, B, A]`), la collecte est refaite jusqu'à
+    /// `maxScanAttempts` fois ; à la dernière, les doublons sont écartés.
+    // O(maxBackupsScanned) ouvertures par collecte, au plus maxScanAttempts collectes.
+    private func openGenerations(upTo known: UInt64) -> [(handle: FileHandle, inode: UInt64)] {
+        let lock = FileLock(path: FileLock.lockPath(for: url))
+        let locked = (try? lock.acquire(mode: .shared)) != nil
+        defer { if locked { lock.release() } }
+        for attempt in 1...Self.maxScanAttempts {
+            let scan = scanGenerations(upTo: known)
+            if !scan.duplicated || attempt == Self.maxScanAttempts { return scan.generations }
+            scan.generations.forEach { try? $0.handle.close() }
+        }
+        return []
+    }
+
+    /// Une collecte. Un inode déjà vu est écarté (descripteur fermé) et signalé par `duplicated`.
+    private func scanGenerations(upTo known: UInt64) -> (generations: [(handle: FileHandle, inode: UInt64)], duplicated: Bool) {
         var generations: [(handle: FileHandle, inode: UInt64)] = []
-        for index in 1...maxBackupsScanned {
-            guard let handle = FileHandle(forReadingAtPath: "\(path).\(index)") else { continue }
-            guard let inode = inode(of: handle) else {
+        var seen = Set<UInt64>()
+        var duplicated = false
+        for index in 1...Self.maxBackupsScanned {
+            guard let handle = FileHandle(forReadingAtPath: "\(url.path).\(index)") else { continue }
+            guard let inode = Self.inode(of: handle) else {
                 try? handle.close()
                 continue
             }
-            generations.append((handle, inode))
+            generationOpenHook?(index)
+            if seen.insert(inode).inserted {
+                generations.append((handle, inode))
+            } else {
+                duplicated = true
+                try? handle.close()
+                continue
+            }
             if inode == known { break }
         }
-        return generations
+        return (generations, duplicated)
     }
 
     private static func gapEvent(reason: String, lostAfterOffset: UInt64) -> RoadieEventEnvelope {
