@@ -581,14 +581,8 @@ public struct WindowCommandService {
         }
 
         let target = reservingRail ? service.maximizedFrame(on: display) : display.visibleFrame.cgRect.integral
-        guard let target, !target.isEmpty,
-              let appliedFrame = service.setFrame(target, of: active.window, generation: generation) else {
+        guard let target, !target.isEmpty else {
             return WindowCommandResult(message: "toggle \(name) on: failed, refused frame", changed: false)
-        }
-        if reservingRail && (!display.visibleFrame.cgRect.contains(appliedFrame)
-            || appliedFrame.minX < target.minX || appliedFrame.isEmpty) {
-            _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation)
-            return WindowCommandResult(message: "toggle maximize: failed, refused incompatible application minimum size", changed: false)
         }
         let original = previous?.restorePlacements ?? (previous?.zoomedWindowID == nil ? previous?.placements : nil)
             ?? Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
@@ -596,35 +590,67 @@ public struct WindowCommandService {
                       !HiddenWindowPlacement.isHidden(entry.window.frame.cgRect, in: snapshot.displays) else { return nil }
                 return (entry.window.id, entry.window.frame)
             })
-        let zoomedFrame = Rect(appliedFrame)
-        do {
-            try persistFrame(zoomedFrame, for: active.window, in: scope)
-        } catch {
-            // Cadre non mémorisé : la fenêtre reprend sa géométrie, comme pour un refus de taille.
-            _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation)
-            return .persistenceFailure("toggle \(name) on", error)
-        }
-        let hiddenFrames = hideSiblings(of: active.window.id, in: scope, display: display, snapshot: snapshot, generation: generation)
+        let hiding = siblingsToHide(of: active.window.id, in: scope, display: display, snapshot: snapshot)
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
             return (entry.window.id, entry.window.frame)
         })
-        placements.merge(hiddenFrames) { _, hidden in hidden }
-        placements[active.window.id] = zoomedFrame
+        for (window, frame) in hiding { placements[window.id] = Rect(frame) }
+        placements[active.window.id] = Rect(target)
         let ordered = previous.flatMap { $0.zoomedWindowID == nil ? nil : $0.windowIDs }
             ?? service.orderedWindowIDs(in: scope, from: snapshot)
+        let zoomIntent = { (placements: [WindowID: Rect]) in
+            LayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command,
+                         zoomedWindowID: active.window.id, zoomReservesRail: reservingRail, restorePlacements: original)
+        }
+        // Décisions écrites avant tout effet AX (REL-021, R2-01) : cadre mémorisé d'abord, intent
+        // ensuite. L'intent est la seule écriture que la maintenance applique : sans lui, rien ne
+        // bouge ; s'il échoue, le cadre mémorisé reprend sa valeur.
+        let storedIntent = service.effectiveIntentStore.intent(for: scope)
         do {
-            try service.effectiveIntentStore.saveChecked(LayoutIntent(
-                scope: scope,
-                windowIDs: ordered,
-                placements: placements,
-                source: .command,
-                zoomedWindowID: active.window.id,
-                zoomReservesRail: reservingRail,
-                restorePlacements: original
-            ))
+            try persistFrame(Rect(target), for: active.window, in: scope)
+            do {
+                try service.effectiveIntentStore.saveChecked(zoomIntent(placements))
+            } catch {
+                try? persistFrame(active.window.frame, for: active.window, in: scope)
+                throw error
+            }
         } catch {
             return .persistenceFailure("toggle \(name) on", error)
+        }
+        let appliedFrame = service.setFrame(target, of: active.window, generation: generation)
+        let incompatible = appliedFrame.map { frame in
+            reservingRail && (!display.visibleFrame.cgRect.contains(frame) || frame.minX < target.minX || frame.isEmpty)
+        } ?? false
+        guard let appliedFrame, !incompatible else {
+            // Refus de l'application : fenêtre, intent et cadre mémorisé reviennent à l'état
+            // d'avant, sinon la maintenance réappliquerait le zoom refusé.
+            if appliedFrame != nil { _ = service.setFrame(active.window.frame.cgRect, of: active.window, generation: generation) }
+            if let storedIntent {
+                try? service.effectiveIntentStore.saveChecked(storedIntent)
+            } else {
+                try? service.effectiveIntentStore.removeChecked(scope: scope)
+            }
+            try? persistFrame(active.window.frame, for: active.window, in: scope)
+            return WindowCommandResult(
+                message: appliedFrame == nil ? "toggle \(name) on: failed, refused frame"
+                    : "toggle maximize: failed, refused incompatible application minimum size",
+                changed: false
+            )
+        }
+        var applied = placements
+        applied[active.window.id] = Rect(appliedFrame)
+        for (window, frame) in hiding {
+            // Masquage refusé : la voisine garde son cadre observé, comme avant l'écriture anticipée.
+            applied[window.id] = service.setFrame(frame, of: window, generation: generation).map { Rect($0) } ?? window.frame
+        }
+        // Cadres ajustés par les applications : l'intent retient les cadres appliqués (T040).
+        // Un échec ici reste sans conséquence : l'intent écrit est cohérent, l'observation le recale.
+        if applied != placements {
+            try? service.effectiveIntentStore.saveChecked(zoomIntent(applied))
+        }
+        if Rect(appliedFrame) != Rect(target) {
+            try? persistFrame(Rect(appliedFrame), for: active.window, in: scope)
         }
         _ = focusWindow(active.window)
         return WindowCommandResult(message: "toggle \(name) on: changed=true", changed: true)
@@ -640,30 +666,25 @@ public struct WindowCommandService {
         }
     }
 
-    private func hideSiblings(
+    /// Voisines visibles à cacher et leur cadre de masquage, sans effet AX. O(w·d).
+    private func siblingsToHide(
         of fullscreenWindowID: WindowID,
         in scope: StageScope,
         display: DisplaySnapshot,
-        snapshot: DaemonSnapshot,
-        generation: UInt64
-    ) -> [WindowID: Rect] {
-        var hidden: [WindowID: Rect] = [:]
-        for entry in snapshot.windows {
+        snapshot: DaemonSnapshot
+    ) -> [(WindowSnapshot, CGRect)] {
+        snapshot.windows.compactMap { entry in
             guard entry.scope == scope,
                   entry.window.id != fullscreenWindowID,
                   entry.window.isTileCandidate,
                   entry.window.isOnScreen
-            else { continue }
-            let frame = HiddenWindowPlacement.frame(
+            else { return nil }
+            return (entry.window, HiddenWindowPlacement.frame(
                 for: entry.window.frame.cgRect,
                 on: display,
                 among: snapshot.displays
-            )
-            if let applied = service.setFrame(frame, of: entry.window, generation: generation) {
-                hidden[entry.window.id] = Rect(applied)
-            }
+            ))
         }
-        return hidden
     }
 
     public func toggleNativeFullscreen() -> WindowCommandResult {

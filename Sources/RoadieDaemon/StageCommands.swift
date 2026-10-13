@@ -153,7 +153,7 @@ public struct StageCommandService {
                     state.update(scope)
                 }
             } catch {
-                return persistenceFailure("stage assign \(stageID.rawValue)", error)
+                return .persistenceFailure("stage assign \(stageID.rawValue)", error)
             }
             return StageCommandResult(message: "stage assign \(stageID.rawValue): stale window pruned", changed: true)
         }
@@ -217,7 +217,7 @@ public struct StageCommandService {
                 return (scope, pin)
             }
         } catch {
-            return persistenceFailure("stage assign \(stageID.rawValue)", error)
+            return .persistenceFailure("stage assign \(stageID.rawValue)", error)
         }
         let (scope, removedPin) = assigned
         let targetScope = StageScope(displayID: displayID, desktopID: scope.desktopID, stageID: stageID)
@@ -323,10 +323,6 @@ public struct StageCommandService {
         StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false)
     }
 
-    private func persistenceFailure(_ command: String, _ error: Error) -> StageCommandResult {
-        .persistenceFailure(command, error)
-    }
-
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
@@ -344,7 +340,7 @@ public struct StageCommandService {
                 return true
             }
         } catch {
-            return persistenceFailure("stage create \(stageID.rawValue)", error)
+            return .persistenceFailure("stage create \(stageID.rawValue)", error)
         }
         guard created else {
             return StageCommandResult(message: "stage create \(stageID.rawValue): already exists", changed: false)
@@ -373,7 +369,7 @@ public struct StageCommandService {
                 return true
             }
         } catch {
-            return persistenceFailure("stage rename \(stageID.rawValue)", error)
+            return .persistenceFailure("stage rename \(stageID.rawValue)", error)
         }
         guard renamed else {
             return StageCommandResult(message: "stage rename \(stageID.rawValue): not found", changed: false)
@@ -402,7 +398,7 @@ public struct StageCommandService {
                 return true
             }
         } catch {
-            return persistenceFailure("stage reorder \(stageID.rawValue)", error)
+            return .persistenceFailure("stage reorder \(stageID.rawValue)", error)
         }
         guard reordered else {
             return StageCommandResult(message: "stage reorder \(stageID.rawValue): not found", changed: false)
@@ -427,7 +423,7 @@ public struct StageCommandService {
                 return true
             }
         } catch {
-            return persistenceFailure("stage delete \(stageID.rawValue)", error)
+            return .persistenceFailure("stage delete \(stageID.rawValue)", error)
         }
         guard deleted else {
             return StageCommandResult(message: "stage delete \(stageID.rawValue): must exist, be inactive, and be empty", changed: false)
@@ -641,7 +637,7 @@ public struct StageCommandService {
                 return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID, targetScope.activeStageID == movingStage.id)
             }
         } catch {
-            return persistenceFailure("stage move-to-display \(stageID.rawValue)", error)
+            return .persistenceFailure("stage move-to-display \(stageID.rawValue)", error)
         }
         guard let move else {
             return stageMoveResult(
@@ -678,7 +674,7 @@ public struct StageCommandService {
             try intentStore.removeChecked(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
             try intentStore.removeChecked(scope: targetScopeID)
         } catch {
-            return persistenceFailure("stage move-to-display \(requestedStageID.rawValue)", error)
+            return .persistenceFailure("stage move-to-display \(requestedStageID.rawValue)", error)
         }
         let result = service.applyCommandPlacement(placement, cause: "stage.move_display", generation: generation, events: events).result
         failed += result.failed
@@ -704,7 +700,7 @@ public struct StageCommandService {
                 }
             } catch {
                 // Stage déplacée et masquée, mais frames de retour perdues : échec signalé.
-                return persistenceFailure("stage move-to-display \(movingStage.id.rawValue)", error)
+                return .persistenceFailure("stage move-to-display \(movingStage.id.rawValue)", error)
             }
         }
         events.append(RoadieEvent(
@@ -777,7 +773,7 @@ public struct StageCommandService {
                 try intentStore.removeChecked(scope: sourceScope)
             }
         } catch {
-            return persistenceFailure("stage place \(windowID.rawValue)", error)
+            return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
         let updated = service.snapshot(followFocus: false)
         let sourceRelayout = relayoutActiveSourceScopes(
@@ -800,7 +796,7 @@ public struct StageCommandService {
         do {
             try persistCommandIntent(scope: scope, orderedWindowIDs: ordered, layout: layout, result: result)
         } catch {
-            return persistenceFailure("stage place \(windowID.rawValue)", error)
+            return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
         _ = service.focus(window)
         events.append(RoadieEvent(
@@ -877,7 +873,7 @@ public struct StageCommandService {
                 try intentStore.removeChecked(scope: sourceScope)
             }
         } catch {
-            return persistenceFailure("stage place \(windowID.rawValue)", error)
+            return .persistenceFailure("stage place \(windowID.rawValue)", error)
         }
         // Plan unique (A15, T212) : scope d'origine et scope cible disposés dans une seule écriture
         // groupée, puis le focus.
@@ -964,7 +960,7 @@ public struct StageCommandService {
                 return ordered[nextIndex]
             }
         } catch {
-            return persistenceFailure("stage \(direction.rawValue)", error)
+            return .persistenceFailure("stage \(direction.rawValue)", error)
         }
         return switchDisplay(display, to: nextStageID, snapshot: snapshot)
     }
@@ -1001,18 +997,26 @@ public struct StageCommandService {
         let commandScopes = Set([snapshot.state.activeScope(on: display.id)].compactMap { $0 })
         beginLayoutCommand("stage.mode", scopes: commandScopes)
         defer { finishLayoutCommand("stage.mode", scopes: commandScopes) }
-        let modeScope: StageScope
+        var current = store.state()
+        let currentScope = activeScope(displayID: display.id, in: &current)
+        let modeScope = StageScope(displayID: display.id, desktopID: currentScope.desktopID, stageID: currentScope.activeStageID)
+        // Intent retiré avant le mode (R2-01) : un mode écrit sans ce retrait serait appliqué par
+        // la maintenance avec l'ancien intent. Si le mode n'est pas écrit, l'intent revient.
+        let removedIntent = intentStore.intent(for: modeScope)
         do {
-            modeScope = try store.mutateChecked { state -> StageScope in
-                var scope = activeScope(displayID: display.id, in: &state)
-                let stageID = scope.activeStageID
-                scope.setMode(mode, for: stageID)
-                state.update(scope)
-                return StageScope(displayID: display.id, desktopID: scope.desktopID, stageID: stageID)
-            }
             try intentStore.removeChecked(scope: modeScope)
+            do {
+                try store.mutateChecked { state in
+                    var scope = state.scope(displayID: display.id, desktopID: modeScope.desktopID, defaultMode: config.tiling.defaultStrategy)
+                    scope.setMode(mode, for: modeScope.stageID)
+                    state.update(scope)
+                }
+            } catch {
+                if let removedIntent { try? intentStore.saveChecked(removedIntent) }
+                throw error
+            }
         } catch {
-            return persistenceFailure("mode \(mode.rawValue)", error)
+            return .persistenceFailure("mode \(mode.rawValue)", error)
         }
         let stageID = modeScope.stageID
         let result = service.apply(service.applyPlan(from: service.snapshot(followFocus: false), generation: generation), generation: generation)
@@ -1100,7 +1104,7 @@ public struct StageCommandService {
                             )
                         }
                     } catch {
-                        return persistenceFailure("stage switch \(stageID.rawValue)", error)
+                        return .persistenceFailure("stage switch \(stageID.rawValue)", error)
                     }
                     let persistMs = elapsedMs(since: persistStartedAt)
 
@@ -1169,7 +1173,7 @@ public struct StageCommandService {
                 do {
                     try store.mutateChecked { $0.focusDisplay(display.id) }
                 } catch {
-                    return persistenceFailure("stage switch \(stageID.rawValue)", error)
+                    return .persistenceFailure("stage switch \(stageID.rawValue)", error)
                 }
             }
             events.append(RoadieEvent(
@@ -1259,7 +1263,7 @@ public struct StageCommandService {
                 )
             }
         } catch {
-            return persistenceFailure("stage switch \(stageID.rawValue)", error)
+            return .persistenceFailure("stage switch \(stageID.rawValue)", error)
         }
         let persistMs = elapsedMs(since: persistStartedAt)
         let targetScope = StageScope(displayID: display.id, desktopID: transition.desktopID, stageID: stageID)

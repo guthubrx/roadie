@@ -30,23 +30,42 @@ public struct LayoutCommandService {
     public func balance() -> LayoutCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
-        do {
-            try service.removeLayoutIntents(in: snapshot)
-        } catch {
-            return persistenceFailure("balance", error)
-        }
         let treeScopes = snapshot.displays.compactMap { display -> StageScope? in
             guard let scope = snapshot.state.activeScope(on: display.id),
                   snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
             else { return nil }
             return scope
         }
-        let treeResults = treeScopes.map { scope in
-            treeCommand("balance", label: "balance", scope: scope, snapshot: snapshot, generation: generation) { tree, _ in tree.balanced() }
+        // Toutes les écritures avant le premier effet AX (REL-021, R2-01) : un refus n'a rien
+        // déplacé. Intents retirés d'abord ; en cas d'échec, ceux déjà retirés reviennent, sinon
+        // la maintenance redisposerait les écrans sans intent après l'échec annoncé.
+        let removedIntents = snapshot.displays.compactMap { display in
+            snapshot.state.activeScope(on: display.id).flatMap(service.effectiveIntentStore.intent(for:))
         }
-        // Arbre non persisté : pas de disposition globale après la transaction refusée (REL-021).
-        if let refused = treeResults.first(where: { !$0.changed && $0.message.hasPrefix("balance: failed") }) {
-            return refused
+        let changedTrees: Set<StageScope>
+        do {
+            try service.removeLayoutIntents(in: snapshot)
+            // Une seule transaction pour tous les arbres : écrits ensemble ou pas du tout.
+            changedTrees = treeScopes.isEmpty ? [] : try service.effectiveStageStore.mutateChecked { state -> Set<StageScope> in
+                var changed = Set<StageScope>()
+                for scope in treeScopes {
+                    let existing = state.bspTree(for: scope) ?? .empty
+                    let balanced = existing.balanced()
+                    guard balanced != existing else { continue }
+                    state.setBSPTree(balanced, for: scope)
+                    changed.insert(scope)
+                }
+                return changed
+            }
+        } catch {
+            for intent in removedIntents { try? service.effectiveIntentStore.saveChecked(intent) }
+            return persistenceFailure("balance", error)
+        }
+        let treeChanged = treeScopes.map { scope in
+            let tick = service.applyTreeScope(scope, cause: "balance", generation: generation)
+            let changed = changedTrees.contains(scope) || tick.applied + tick.clamped > 0
+            emit(command: "balance", changed: changed || tick.failed == 0)
+            return changed
         }
         let scopesByWindowID = Dictionary(
             snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } },
@@ -58,7 +77,7 @@ public struct LayoutCommandService {
         let result = service.apply(plan, generation: generation)
         return LayoutCommandResult(
             message: "balance: trees=\(treeScopes.count) commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: treeResults.contains { $0.changed } || result.failed < result.attempted || plan.commands.isEmpty
+            changed: treeChanged.contains(true) || result.failed < result.attempted || plan.commands.isEmpty
         )
     }
 
