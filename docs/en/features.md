@@ -290,6 +290,20 @@ and `timeout_ms`:
 grep '"targets.app_scan"' ~/.roadies/events.jsonl | tail -3
 ```
 
+Some web interfaces (SolidJS, React) make elements clickable through JavaScript:
+Chromium gives them no Accessibility action. Inside a web area, Roadie therefore
+also labels each focusable element that contains no other focusable element
+(menu entries, cards). These labels come after the classic targets.
+`focusableAdded` and `rejectedRoles` in `targets.app_scan` measure this rule.
+
+Inside a web area, Roadie only reads `AXChildren`: the AX boost attributes are
+expensive there and add nothing. A heavy web page (Bluejay: about 3,300
+elements) needs `timeout_ms = 700`.
+
+CEF apps (Grayjay, Bluejay) answer no external request: their tree only exists
+when the app starts CEF with `--force-renderer-accessibility` (built into
+Bluejay on macOS).
+
 Keyboard Target building blocks are independently configurable. The CLI foundation
 and picker stay enabled by default, while the future visual overlay, app mouse
 actions, and app scroll mode stay off until the user opts in.

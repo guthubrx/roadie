@@ -294,6 +294,21 @@ atteinte, duree, raison d'arret) dans `~/.roadies/events.jsonl`. Il sert a regle
 grep '"targets.app_scan"' ~/.roadies/events.jsonl | tail -3
 ```
 
+Certaines interfaces web (SolidJS, React) rendent leurs elements cliquables par du
+JavaScript : Chromium ne leur donne aucune action Accessibility. Dans une zone web,
+Roadie pose donc aussi un label sur chaque element focalisable qui ne contient aucun
+autre element focalisable (entrees de menu, cartes). Ces labels passent apres les
+cibles classiques. `focusableAdded` et `rejectedRoles` dans `targets.app_scan`
+mesurent cette regle.
+
+Dans une zone web, Roadie lit seulement `AXChildren` : les attributs du boost AX
+y coutent cher sans rien apporter. Une page web lourde (Bluejay : environ 3 300
+elements) demande `timeout_ms = 700`.
+
+Les applications CEF (Grayjay, Bluejay) ne repondent a aucune demande externe :
+leur arbre n'existe que si l'application lance CEF avec
+`--force-renderer-accessibility` (option integree a Bluejay sur macOS).
+
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
 restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
 les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne

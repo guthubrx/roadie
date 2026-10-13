@@ -142,7 +142,7 @@ struct TargetHintServiceTests {
         let stats = AppTargetScanStats(
             bundleID: "com.example.electron", isElectron: true, manualAccessibility: "enabled",
             visited: 412, candidates: 57, offscreen: 18, maxDepthReached: 8, atMaxDepth: 31,
-            sawWebArea: true, elapsedMs: 240, stopReason: "complete", retries: 1
+            sawWebArea: true, focusableAdded: 35, rejectedRoles: "AXStaticText=106,AXImage=96", elapsedMs: 240, stopReason: "complete", retries: 1
         )
         let measured = TargetHintService(
             eventLog: log,
@@ -165,6 +165,8 @@ struct TargetHintServiceTests {
         #expect(scans.first?.details == stats.eventDetails)
         #expect(scans.first?.details["stopReason"] == "complete")
         #expect(scans.first?.details["retries"] == "1")
+        #expect(scans.first?.details["focusableAdded"] == "35")
+        #expect(scans.first?.details["rejectedRoles"] == "AXStaticText=106,AXImage=96")
     }
 
     @Test

@@ -105,4 +105,108 @@ struct AppTargetQueryServiceTests {
         #expect(AppTargetQueryService.visibleFrame(Rect(x: 150, y: 900, width: 20, height: 20), in: nil)
             == Rect(x: 150, y: 900, width: 20, height: 20))
     }
+
+    @Test
+    func aFocusableElementIsALeafUnlessTheNextFocusableInPreorderIsItsDescendant() {
+        #expect(AppTargetQueryService.keepsFocusableLeaf(path: "0.1", nextFocusablePath: nil))
+        #expect(!AppTargetQueryService.keepsFocusableLeaf(path: "0.1", nextFocusablePath: "0.1.4.2"))
+        #expect(AppTargetQueryService.keepsFocusableLeaf(path: "0.1", nextFocusablePath: "0.10"))
+        #expect(AppTargetQueryService.keepsFocusableLeaf(path: "0.1", nextFocusablePath: "0.2.0"))
+    }
+
+    @Test
+    func rejectedRolesAreSummarizedByFrequencyThenName() {
+        let counts = ["AXGroup": 197, "AXStaticText": 106, "AXImage": 96, "AXButton": 4, "AXCell": 4, "AXRow": 1]
+
+        #expect(AppTargetQueryService.rejectedRoleSummary(counts)
+            == "AXGroup=197,AXStaticText=106,AXImage=96,AXButton=4,AXCell=4")
+        #expect(AppTargetQueryService.rejectedRoleSummary(counts, limit: 2) == "AXGroup=197,AXStaticText=106")
+        #expect(AppTargetQueryService.rejectedRoleSummary([:]) == "")
+    }
+
+    @Test
+    func aFocusableLeafWithoutActionReachesTheFinalTargets() {
+        let candidates = [
+            AppElementCandidate(id: "1/0.4", role: "AXGroup", title: "Home", frame: Rect(x: 0, y: 0, width: 260, height: 44),
+                                actions: [], isFocusableLeaf: true),
+            AppElementCandidate(id: "1/0.5", role: "AXGroup", title: "Decor", frame: Rect(x: 0, y: 50, width: 260, height: 44),
+                                actions: []),
+        ]
+
+        let targets = AppTargetQueryService.targets(from: candidates, config: AppTargetsConfig(enabled: true, includeRoles: ["AXButton"]))
+
+        #expect(targets.map(\.title) == ["Home"])
+    }
+
+    @Test
+    func onlyFullyExploredFocusableLeavesAreKept() {
+        // 0.1 : carte feuille. 0.2 : conteneur d'une feuille (0.2.0). 0.3 : un descendant coupé à max_depth.
+        // 0.4 : sous-arbre encore dans la pile d'un parcours coupé. 0.5 : son seul descendant focalisable
+        // est hors fenêtre, mais reste un marqueur.
+        let markers = ["0.1", "0.2", "0.2.0", "0.3", "0.3.0.?", "0.4", "0.5", "0.5.1"]
+        let pending = ["0.1", "0.2", "0.2.0", "0.3", "0.4", "0.5"]
+
+        let leaves = AppTargetQueryService.focusableLeaves(pending: pending, markers: markers, unexplored: ["0.4.2"])
+
+        #expect(leaves == ["0.1", "0.2.0"])
+    }
+
+    @Test
+    func aFocusableElementWithUnreadableChildrenIsNotProvenALeaf() {
+        #expect(AppTargetQueryService.focusableLeaves(pending: ["0.1"], markers: ["0.1", "0.1.?"], unexplored: []).isEmpty)
+        // Enfants illisibles par AXChildren mais lus par un attribut boost : le marqueur inconnu suffit.
+        #expect(AppTargetQueryService.focusableLeaves(pending: ["0.1"], markers: ["0.1", "0.1.?", "0.1.0"], unexplored: []).isEmpty)
+        // Parcours interrompu juste avant le premier enfant : l'enfant reste dans la pile.
+        #expect(AppTargetQueryService.focusableLeaves(pending: ["0.1"], markers: ["0.1"], unexplored: ["0.1.0"]).isEmpty)
+        // Descendant plus profond resté dans la pile ; `0.10.0` n'est pas sous `0.1`.
+        #expect(AppTargetQueryService.focusableLeaves(pending: ["0.1", "0.2"], markers: ["0.1", "0.2"],
+                                                      unexplored: ["0.2.3.0", "0.10.0"]) == ["0.1"])
+    }
+
+    @Test
+    func aLeafIsADuplicateOnlyWhenItCoversItsRetainedTarget() {
+        let button = Rect(x: 0, y: 0, width: 100, height: 40)
+        let page = Rect(x: 0, y: 0, width: 1800, height: 2000)
+
+        #expect(AppTargetQueryService.duplicatesTarget(Rect(x: 2, y: 2, width: 96, height: 36), of: button))
+        #expect(!AppTargetQueryService.duplicatesTarget(Rect(x: 0, y: 0, width: 327, height: 287), of: page))
+        #expect(!AppTargetQueryService.duplicatesTarget(Rect(x: 0, y: 0, width: 30, height: 30), of: button))
+        #expect(!AppTargetQueryService.duplicatesTarget(button, of: nil))
+        // Petite cible dans le coin d'une feuille plus grande : pas la même boîte.
+        #expect(!AppTargetQueryService.duplicatesTarget(Rect(x: 20, y: 20, width: 80, height: 80),
+                                                        of: Rect(x: 90, y: 90, width: 10, height: 10)))
+    }
+
+    @Test
+    func slivedOrTinyElementsAreNotHintable() {
+        #expect(AppTargetQueryService.isHintable(Rect(x: 0, y: 0, width: 260, height: 44)))
+        #expect(!AppTargetQueryService.isHintable(Rect(x: 0, y: 0, width: 145, height: 1)))
+        #expect(!AppTargetQueryService.isHintable(Rect(x: 0, y: 0, width: 4, height: 40)))
+    }
+
+    @Test
+    func identitySetUsesRealEqualityNotOnlyTheHash() {
+        // CFString ne hache que le début, le milieu et la fin d'une longue chaîne : même hash, contenus différents.
+        let first = (String(repeating: "a", count: 48) + "X" + String(repeating: "b", count: 100)) as CFString
+        let second = (String(repeating: "a", count: 48) + "Y" + String(repeating: "b", count: 100)) as CFString
+        #expect(CFHash(first) == CFHash(second))
+        var set = CFIdentitySet()
+        let inserted = [
+            set.insert("abc" as CFString),
+            set.insert("abc" as CFString),
+            set.insert("abd" as CFString),
+            set.insert(NSNumber(value: 1)),
+            set.insert(first),
+            set.insert(second),
+        ]
+
+        #expect(inserted == [true, false, true, true, true, true])
+    }
+
+    @Test
+    func onlyScrolledOutOrOffWindowElementsHideContent() {
+        #expect(AppTargetQueryService.hidesContent(nil))
+        #expect(AppTargetQueryService.hidesContent(Rect(x: 0, y: 0, width: 191, height: 1)))
+        #expect(!AppTargetQueryService.hidesContent(Rect(x: 0, y: 0, width: 283, height: 4)))
+    }
 }
