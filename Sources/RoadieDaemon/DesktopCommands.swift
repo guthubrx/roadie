@@ -132,60 +132,11 @@ public struct DesktopCommandService {
         else {
             return StageCommandResult(message: "window desktop \(desktopID.rawValue): no active window", changed: false)
         }
-
-        let sourceScope = active.scope
-        let stageManager = ConfigReloadService.shared.currentConfig().stageManager
-        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
-            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageManager)
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: active.window.id)
-            }
-            targetScope.assign(window: active.window, to: targetScope.activeStageID)
-            state.update(targetScope)
-            let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-            let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
-            if sourceScope != targetStageScope {
-                state.suppressRulePlacement(window: active.window)
-            }
-            return (targetStageScope, removedPin)
+        // Bureau cible = bureau actuel de la fenêtre : rien à écrire (REL-016), comme `assign(windowID:...)`.
+        guard active.scope?.desktopID != desktopID || active.scope?.displayID != displayID else {
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false)
         }
-
-        if let sourceScope {
-            service.removeLayoutIntent(scope: sourceScope)
-        }
-        service.removeLayoutIntent(scope: targetStageScope)
-
-        if follow {
-            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)
-        }
-
-        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
-        let (_, result) = service.applyCommandPlacement(
-            CommandPlacement(
-                hiding: [active.window.id: HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays)],
-                layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
-            ),
-            cause: "desktop.assign_window",
-            generation: generation,
-            events: events
-        )
-        let hidden = !result.items.contains { $0.windowID == active.window.id && $0.status == .failed }
-        events.append(RoadieEvent(
-            type: "window_desktop",
-            scope: targetStageScope,
-            details: [
-                "windowID": String(active.window.id.rawValue),
-                "follow": String(follow),
-                "layout": String(result.attempted),
-                "unpinned": String(removedPin != nil),
-            ]
-        ))
-        appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
-        return StageCommandResult(
-            message: "window desktop \(desktopID.rawValue): hidden=\(hidden) layout=\(result.attempted)",
-            changed: hidden || result.attempted > 0
-        )
+        return moveWindow(active, to: desktopID, on: display, snapshot: snapshot, follow: follow, generation: generation, messageLabel: "")
     }
 
     public func assign(
@@ -206,10 +157,25 @@ public struct DesktopCommandService {
         guard entry.scope?.desktopID != desktopID || entry.scope?.displayID != displayID else {
             return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false)
         }
+        return moveWindow(entry, to: desktopID, on: display, snapshot: snapshot, follow: follow, generation: generation, messageLabel: "window=\(windowID.rawValue) ")
+    }
 
+    /// Corps commun des deux entrées publiques (MIN-004) : mutation des scopes, retrait du pin,
+    /// intentions de layout, puis masquage (bureau cible non affiché) et disposition en un seul plan.
+    /// Les validations propres à chaque entrée restent chez l'appelant.
+    private func moveWindow(
+        _ entry: ScopedWindowSnapshot,
+        to desktopID: DesktopID,
+        on display: DisplaySnapshot,
+        snapshot: DaemonSnapshot,
+        follow: Bool,
+        generation: UInt64,
+        messageLabel: String
+    ) -> StageCommandResult {
+        let displayID = display.id
         let sourceScope = entry.scope
         let stageManager = ConfigReloadService.shared.currentConfig().stageManager
-        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
+        let (targetStageScope, removedPin, targetIsVisible) = store.mutate { state -> (StageScope, PersistentWindowPin?, Bool) in
             var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
             targetScope.applyConfiguredStages(stageManager)
             for scopeIndex in state.scopes.indices {
@@ -220,7 +186,7 @@ public struct DesktopCommandService {
             let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
             let removedPin = state.removePin(windowID: entry.window.id)
             state.suppressRulePlacement(window: entry.window)
-            return (targetStageScope, removedPin)
+            return (targetStageScope, removedPin, state.currentDesktopID(for: displayID) == desktopID)
         }
 
         if let sourceScope {
@@ -233,16 +199,20 @@ public struct DesktopCommandService {
         }
 
         // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
+        // Un bureau cible déjà affiché garde la fenêtre visible : seule la disposition la place (REL-016).
+        let hiding = targetIsVisible
+            ? [:]
+            : [entry.window.id: HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)]
         let (_, result) = service.applyCommandPlacement(
             CommandPlacement(
-                hiding: [entry.window.id: HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)],
+                hiding: hiding,
                 layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
             ),
             cause: "desktop.assign_window",
             generation: generation,
             events: events
         )
-        let hidden = !result.items.contains { $0.windowID == entry.window.id && $0.status == .failed }
+        let hidden = !targetIsVisible && !result.items.contains { $0.windowID == entry.window.id && $0.status == .failed }
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
@@ -255,7 +225,7 @@ public struct DesktopCommandService {
         ))
         appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
         return StageCommandResult(
-            message: "window desktop \(desktopID.rawValue): window=\(windowID.rawValue) hidden=\(hidden) layout=\(result.attempted)",
+            message: "window desktop \(desktopID.rawValue): \(messageLabel)hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
         )
     }

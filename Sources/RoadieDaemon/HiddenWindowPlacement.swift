@@ -32,9 +32,13 @@ enum HiddenWindowPlacement {
     }
 
     /// `isHidden` plus l'ancienne position de masquage très loin à gauche (versions précédentes).
-    /// Test unique pour tous les appelants qui filtrent les fenêtres réellement visibles.
+    /// Les coordonnées historiques ne comptent que pour un cadre hors de tout écran présent :
+    /// un écran placé à gauche du principal (x négatif) contient des fenêtres visibles (REL-020).
+    /// Test unique pour tous les appelants qui filtrent les fenêtres réellement visibles. O(d).
     static func isHiddenOrLegacyOffscreen(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {
-        frame.maxX < -1000 || frame.minX < -10000 || isHidden(frame, in: displays)
+        if isHidden(frame, in: displays) { return true }
+        guard frame.maxX < -1000 || frame.minX < -10000 else { return false }
+        return !displays.contains { $0.frame.cgRect.intersects(frame) }
     }
 
     static func isPreferred(_ frame: CGRect, among displays: [DisplaySnapshot]) -> Bool {

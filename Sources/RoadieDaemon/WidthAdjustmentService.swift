@@ -35,8 +35,19 @@ public struct WidthAdjustmentService {
             "mode": intent.mode.rawValue,
             "scope": intent.scope.rawValue
         ]))
-        guard let display = snapshot.displays.first,
-              let scope = snapshot.state.activeScope(on: display.id),
+        // Fenêtre focalisée d'abord : son scope et son écran pilotent la commande (REL-026).
+        // Repli sur le premier écran quand aucune fenêtre tilée active n'est focalisée.
+        let focusedEntry = snapshot.focusedWindowID.flatMap { focusedID in
+            snapshot.windows.first { entry in
+                guard let entryScope = entry.scope else { return false }
+                return entry.window.id == focusedID
+                    && entry.window.isTileCandidate
+                    && snapshot.state.activeScope(on: entryScope.displayID) == entryScope
+            }
+        }
+        guard let display = focusedEntry?.scope.flatMap({ scope in snapshot.displays.first { $0.id == scope.displayID } })
+                ?? snapshot.displays.first,
+              let scope = focusedEntry?.scope ?? snapshot.state.activeScope(on: display.id),
               let stage = snapshot.state.stage(scope: scope)
         else {
             return WidthAdjustmentResult(changed: false, message: "width: unsupported layout")
@@ -54,9 +65,11 @@ public struct WidthAdjustmentService {
             return WidthAdjustmentResult(changed: false, message: "width: no active tiled window")
         }
 
-        let currentRatio = entries.first.map { $0.window.frame.width / display.visibleFrame.width } ?? 0.5
+        let activeID = focusedEntry?.window.id ?? stage.focusedWindowID ?? entries.first?.window.id
+        // Largeur de départ des réglages relatifs : fenêtre active, y compris pour --all (REL-027).
+        let referenceEntry = entries.first { $0.window.id == activeID } ?? entries.first
+        let currentRatio = referenceEntry.map { $0.window.frame.width / display.visibleFrame.width } ?? 0.5
         let ratio = targetRatio(from: intent, current: currentRatio)
-        let activeID = snapshot.focusedWindowID ?? stage.focusedWindowID ?? entries.first?.window.id
         let targets = intent.scope == .allWindows ? entries : entries.filter { $0.window.id == activeID }
         guard !targets.isEmpty else {
             return WidthAdjustmentResult(changed: false, message: "width: no target window")

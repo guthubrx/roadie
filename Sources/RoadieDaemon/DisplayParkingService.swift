@@ -255,33 +255,40 @@ public struct DisplayParkingService: Sendable {
             }
             guard let restoredDisplayID = decision.displayID else { continue }
 
-            let sortedStages = stages.sorted {
-                ($0.origin?.position ?? Int.max, $0.id.rawValue) < ($1.origin?.position ?? Int.max, $1.id.rawValue)
-            }
-            let parkedIDs = Set(sortedStages.map(\.id))
-            removeParkedStages(parkedIDs, from: &state)
-
-            var targetScope = state.scope(displayID: restoredDisplayID, desktopID: origin.desktopID)
-            targetScope.logicalDisplayID = logicalDisplayID
-            if let display = liveDisplays.first(where: { $0.id == restoredDisplayID }) {
-                targetScope.lastKnownDisplayFingerprint = DisplayFingerprint(display: display)
-            }
-
-            for parkedStage in sortedStages {
-                var restoredStage = parkedStage
-                let originalStageID = parkedStage.origin?.stageID ?? parkedStage.id
-                targetScope.stages.removeAll { stage in
-                    stage.id == originalStageID
-                        && stage.members.isEmpty
-                        && stage.parkingState == .parked
+            // Un écran, plusieurs bureaux : chaque bureau d'origine est restauré dans son propre
+            // scope (REL-017). Les stages d'un autre bureau ne migrent pas vers celui du premier.
+            let stagesByDesktop = Dictionary(grouping: stages) { $0.origin!.desktopID }
+            var restoredCount = 0
+            for desktopID in stagesByDesktop.keys.sorted() {
+                let sortedStages = stagesByDesktop[desktopID, default: []].sorted {
+                    ($0.origin?.position ?? Int.max, $0.id.rawValue) < ($1.origin?.position ?? Int.max, $1.id.rawValue)
                 }
-                restoredStage.id = uniqueRestoredStageID(originalStageID, in: targetScope)
-                restoredStage.parkingState = .restored
-                restoredStage.hostDisplayID = nil
-                restoredStage.restoredAt = now
-                targetScope.stages.append(restoredStage)
+                let parkedIDs = Set(sortedStages.map(\.id))
+                removeParkedStages(parkedIDs, from: &state)
+
+                var targetScope = state.scope(displayID: restoredDisplayID, desktopID: desktopID)
+                targetScope.logicalDisplayID = logicalDisplayID
+                if let display = liveDisplays.first(where: { $0.id == restoredDisplayID }) {
+                    targetScope.lastKnownDisplayFingerprint = DisplayFingerprint(display: display)
+                }
+
+                for parkedStage in sortedStages {
+                    var restoredStage = parkedStage
+                    let originalStageID = parkedStage.origin?.stageID ?? parkedStage.id
+                    targetScope.stages.removeAll { stage in
+                        stage.id == originalStageID
+                            && stage.members.isEmpty
+                            && stage.parkingState == .parked
+                    }
+                    restoredStage.id = uniqueRestoredStageID(originalStageID, in: targetScope)
+                    restoredStage.parkingState = .restored
+                    restoredStage.hostDisplayID = nil
+                    restoredStage.restoredAt = now
+                    targetScope.stages.append(restoredStage)
+                }
+                state.update(targetScope)
+                restoredCount += sortedStages.count
             }
-            state.update(targetScope)
 
             if state.activeDisplayID.map({ !Set(liveDisplays.map(\.id)).contains($0) }) == true {
                 state.activeDisplayID = liveDisplays.first(where: \.isMain)?.id ?? liveDisplays.first?.id
@@ -293,7 +300,7 @@ public struct DisplayParkingService: Sendable {
                 originDisplayID: origin.displayID,
                 originLogicalDisplayID: logicalDisplayID,
                 restoredDisplayID: restoredDisplayID,
-                restoredStageCount: sortedStages.count,
+                restoredStageCount: restoredCount,
                 candidateDisplayIDs: decision.candidateDisplayIDs,
                 confidence: decision.confidence
             )
