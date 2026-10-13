@@ -434,8 +434,11 @@ public struct TargetHintService {
         case .sendActive:
             result = activateSendActive(target)
         case .click, .doubleClick, .rightClick, .commandClick:
-            // Cible d'une fenêtre visible quelconque (SPEC-021) : focaliser puis cliquer.
-            if let windowID = target.scope.windowId, target.source == .app {
+            // Cible d'une fenêtre visible quelconque (SPEC-021) : focaliser puis cliquer. Fenêtre déjà
+            // active (portée `frontmost_window`, REL-012) : aucune demande, donc ni relecture complète
+            // des fenêtres ni déplacement du pointeur avant le clic.
+            if let windowID = target.scope.windowId, target.source == .app,
+               service.focusedWindowID()?.rawValue != windowID {
                 _ = WindowCommandService(service: service, stageStore: stageStore).focus(windowID: WindowID(rawValue: windowID))
             }
             result = appTargetService.click(target, action: action)
@@ -477,6 +480,7 @@ public struct TargetHintService {
         else {
             return TargetActionResult(changed: false, message: "unsupported_action: switch for \(target.kind.rawValue)", target: target, error: "unsupported_action")
         }
+        if let refused = refusedOutsideCurrentDesktop(target, displayID: displayID) { return refused }
         let result = StageCommandService(service: service, store: stageStore, events: eventLog).switchTo(stageID, displayID: DisplayID(rawValue: displayID))
         return TargetActionResult(changed: result.changed, message: result.message, target: target, error: result.changed ? nil : "switch_failed")
     }
@@ -488,6 +492,7 @@ public struct TargetHintService {
         else {
             return TargetActionResult(changed: false, message: "unsupported_action: send-active for \(target.kind.rawValue)", target: target, error: "unsupported_action")
         }
+        if let refused = refusedOutsideCurrentDesktop(target, displayID: displayID) { return refused }
         let snapshot = service.snapshot(followFocus: false)
         guard let activeID = snapshot.focusedWindowID ?? snapshot.windows.first(where: { $0.window.isTileCandidate && $0.scope != nil })?.window.id else {
             return TargetActionResult(changed: false, message: "send-active: no active window", target: target, error: "no_active_window")
@@ -495,6 +500,17 @@ public struct TargetHintService {
         let result = StageCommandService(service: service, store: stageStore, events: eventLog)
             .assign(windowID: activeID, to: stageID, displayID: DisplayID(rawValue: displayID), focusAssignedWindow: service.effectiveConfig.focus.assignFollowsFocus)
         return TargetActionResult(changed: result.changed, message: result.message, target: target, error: result.changed ? nil : "assign_failed")
+    }
+
+    /// REL-037 : les commandes de stage agissent sur le bureau courant de l'écran. Une stage d'un autre
+    /// bureau est refusée, sinon sa stage homonyme du bureau courant serait modifiée. O(d), d écrans.
+    private func refusedOutsideCurrentDesktop(_ target: RoadieTarget, displayID: String) -> TargetActionResult? {
+        guard target.scope.desktopId != stageStore.state().currentDesktopID(for: DisplayID(rawValue: displayID)).rawValue else {
+            return nil
+        }
+        return TargetActionResult(
+            changed: false, message: "target_desktop_not_active: \(target.id)", target: target, error: "target_desktop_not_active"
+        )
     }
 
     public static func labels(count: Int, alphabet: String = "asdfghjkl") -> [String] {
@@ -597,9 +613,10 @@ public struct TargetHintService {
                 diagnostics: ["scope_known"]
             ))
 
+            let onCurrentDesktop = state.currentDesktopID(for: scope.displayID) == scope.desktopID
             for stage in scope.stages {
                 let hasLiveMembers = stage.members.contains { liveWindowIDs.contains($0.windowID) }
-                let isActive = stage.id == scope.activeStageID && state.currentDesktopID(for: scope.displayID) == scope.desktopID
+                let isActive = stage.id == scope.activeStageID && onCurrentDesktop
                 guard includeHidden || hasLiveMembers || isActive else { continue }
                 targets.append(RoadieTarget(
                     id: "stage:\(scope.displayID.rawValue)/\(scope.desktopID.rawValue)/\(stage.id.rawValue)",
@@ -611,7 +628,8 @@ public struct TargetHintService {
                     frame: railFramesByStageKey[stageKey(displayID: scope.displayID, desktopID: scope.desktopID, stageID: stage.id)]
                         ?? unionFrame(for: stage, framesByID: liveWindowFramesByID),
                     isActive: isActive,
-                    actions: [.switch, .sendActive, .inspect],
+                    // REL-037 : switch et send-active ne visent que le bureau courant.
+                    actions: onCurrentDesktop ? [.switch, .sendActive, .inspect] : [.inspect],
                     diagnostics: [
                         isActive ? "active" : "inactive",
                         hasLiveMembers ? "non_empty" : "empty",

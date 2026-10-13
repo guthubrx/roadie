@@ -281,7 +281,10 @@ public struct AppTargetQueryService {
             .joined(separator: ",")
     }
 
-    public static func targets(from candidates: [AppElementCandidate], config: AppTargetsConfig) -> [RoadieTarget] {
+    /// `windowID` : fenêtre parcourue, portée par chaque cible ; le clic exige cette identité (REL-012).
+    public static func targets(
+        from candidates: [AppElementCandidate], config: AppTargetsConfig, windowID: UInt32? = nil
+    ) -> [RoadieTarget] {
         let allowedRoles = Set(config.includeRoles)
         return candidates
             .filter { allowedRoles.contains($0.role) || !$0.actions.isEmpty || $0.isFocusableLeaf }
@@ -295,6 +298,7 @@ public struct AppTargetQueryService {
                     subtitle: [candidate.role, candidate.value].compactMap(\.self).joined(separator: " - "),
                     source: .app,
                     matchText: RoadieTarget.normalizedMatchText([candidate.id, candidate.role, title, candidate.value ?? "", candidate.searchText]),
+                    scope: TargetScopeSnapshot(windowId: windowID),
                     frame: candidate.frame,
                     actions: [.click, .doubleClick, .rightClick, .commandClick, .inspect],
                     diagnostics: candidate.actions.map { "action=\($0)" } + ["role=\(candidate.role)"],
@@ -428,15 +432,19 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             return AppTargetQueryReport(error: "no_frontmost_application")
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        guard let window = Self.copyElementAttribute(appElement, kAXFocusedWindowAttribute) else {
+        // REL-012 : identité de la fenêtre, pour que le clic vérifie son focus. O(m), m fenêtres de l'application.
+        guard let window = Self.copyElementAttribute(appElement, kAXFocusedWindowAttribute),
+              let windowID = axWindowElements(pid: app.processIdentifier).first(where: { CFEqual($0.value, window) })?.key
+        else {
             return AppTargetQueryReport(error: "no_focused_window")
         }
         let generation = AppTargetElementRegistry.shared.begin()
         let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
         AppTargetElementRegistry.shared.add(result.pass.elements, generation: generation)
         let partial = result.pass.stopReason != "complete"
+        let targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config, windowID: windowID)
         return AppTargetQueryReport(
-            targets: Self.labeled(AppTargetQueryService.targets(from: result.pass.candidates, config: config), config: config),
+            targets: Self.labeled(targets, config: config),
             partial: partial,
             error: partial ? "partial_timeout_or_limit" : nil,
             scan: result.stats
@@ -500,12 +508,8 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             let job = batch.jobs[index]
             let scan = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
             let inFront = Array(frames.prefix(job.order))
-            var targets: [RoadieTarget] = []
-            for var target in AppTargetQueryService.targets(from: scan.pass.candidates, config: config)
-            where !AppTargetQueryService.isCovered(target, by: inFront) {
-                target.scope.windowId = job.id
-                targets.append(target)
-            }
+            let targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
+                .filter { !AppTargetQueryService.isCovered($0, by: inFront) }
             let result = VisibleWindowScan(order: job.order, targets: targets, stats: scan.stats,
                                            partial: scan.pass.stopReason != "complete")
             batch.results[index] = result
@@ -803,16 +807,19 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             return TargetActionResult(changed: false, message: "app click: no frame", target: target, error: "no_frame")
         }
         let frame = shown.cgRect
-        // REL-012 : sans fenêtre active, le clic tomberait sur une autre fenêtre ou application.
-        if let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) {
-            switch waitForFocus(windowID, pid, 0.5) {
-            case .focused:
-                break
-            case .windowGone:
-                return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
-            case .timedOut:
-                return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
-            }
+        // REL-012 : sans fenêtre active, le clic tomberait sur une autre fenêtre ou application. Toute
+        // cible porte sa fenêtre ; sans elle, le focus ne se vérifie pas et rien n'est cliqué. Fenêtre
+        // déjà active (cas courant) : l'attente répond dès la première lecture, sans délai.
+        guard let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) else {
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        }
+        switch waitForFocus(windowID, pid, 0.5) {
+        case .focused:
+            break
+        case .windowGone:
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        case .timedOut:
+            return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
         }
         // REL-012 : l'overlay a pu rester ouvert, la fenêtre bouger ou la page défiler pendant l'attente.
         // Le point de clic n'est sûr que si la zone cliquée occupe encore le cadre affiché (R2-02).

@@ -309,10 +309,20 @@ public struct TargetMacroService {
     }
 
     /// Rejoue les événements à leur instant enregistré. Renvoie le nombre de clics sémantiques rejoués
-    /// aux coordonnées faute de cible résolue. O(n), n = nombre d'événements.
+    /// aux coordonnées faute de cible résolue. O(n * h), n = nombre d'événements, h = appuis bruts
+    /// encore tenus (quelques-uns au plus).
     func replay(events: [TargetMacroEvent]) -> Int {
         let startedAt = Date()
         var fallbacks = 0
+        // REL-038 : appuis bruts émis sans leur relâchement. Une capture tronquée (max_events, durée
+        // écoulée) peut finir sur un appui ; il est relâché en fin de replay, du dernier au premier.
+        var held: [TargetMacroEvent] = []
+        defer {
+            for var press in held.reversed() {
+                press.kind = press.kind == .mouseDown ? .mouseUp : .keyUp
+                replay(press)
+            }
+        }
         var index = 0
         while index < events.count {
             let event = events[index]
@@ -334,9 +344,30 @@ public struct TargetMacroService {
                 fallbacks += 1
             }
             replay(event)
+            Self.track(event, held: &held)
             index += 1
         }
         return fallbacks
+    }
+
+    /// Même bouton ou même touche : un relâchement libère l'appui correspondant (REL-038). O(h).
+    private static func track(_ event: TargetMacroEvent, held: inout [TargetMacroEvent]) {
+        let pairs: (TargetMacroEvent) -> Bool = { press in
+            switch (press.kind, event.kind) {
+            case (.mouseDown, .mouseDown), (.mouseDown, .mouseUp): press.mouseButton == event.mouseButton
+            case (.keyDown, .keyDown), (.keyDown, .keyUp): press.keyCode == event.keyCode
+            default: false
+            }
+        }
+        switch event.kind {
+        case .mouseDown where event.point != nil, .keyDown where event.keyCode != nil:
+            held.removeAll(where: pairs)
+            held.append(event)
+        case .mouseUp where event.point != nil, .keyUp where event.keyCode != nil:
+            held.removeAll(where: pairs)
+        default:
+            break
+        }
     }
 
     /// Cible d'un clic complet : down puis up immédiat, même bouton, même cible applicative.
