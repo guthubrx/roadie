@@ -51,14 +51,23 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     // MARK: - Lecture
 
     /// Feuilles dans l'ordre de parcours (first avant second) = gauche→droite, haut→bas.
+    // O(n) - un seul accumulateur ; avant, `first.windowIDs + second.windowIDs` recopiait les
+    // tableaux à chaque niveau (O(n²) sur un arbre en chaîne).
     public var windowIDs: [WindowID] {
+        var result: [WindowID] = []
+        appendWindowIDs(to: &result)
+        return result
+    }
+
+    private func appendWindowIDs(to result: inout [WindowID]) {
         switch self {
         case .empty:
-            return []
+            break
         case .leaf(let id):
-            return [id]
+            result.append(id)
         case .split(_, _, let first, let second):
-            return first.windowIDs + second.windowIDs
+            first.appendWindowIDs(to: &result)
+            second.appendWindowIDs(to: &result)
         }
     }
 
@@ -108,14 +117,26 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
     /// fenêtre du haut (même valeur que `BSPLayoutStrategy.titleBarSeamGap`).
     static let titleBarSeamGap: CGFloat = 1
 
+    /// Étendue minimale (points) gardée par chaque enfant quand l'espacement est trop grand pour
+    /// le conteneur. Même valeur que `MasterStackLayoutStrategy.minimumTileExtent` (REL-031).
+    static let minimumChildExtent: CGFloat = 10
+
     static func gap(for orientation: BSPOrientation, innerGap: CGFloat) -> CGFloat {
         orientation == .horizontal ? max(innerGap, titleBarSeamGap) : innerGap
+    }
+
+    /// Écart réellement appliqué dans `rect` : sans borne, un espacement plus grand que le
+    /// conteneur poussait le second enfant hors de `rect`. Il est borné pour laisser
+    /// `minimumChildExtent` à chaque enfant ; un écart qui tient déjà reste inchangé.
+    static func gap(for orientation: BSPOrientation, in rect: CGRect, innerGap: CGFloat) -> CGFloat {
+        let extent = orientation == .vertical ? rect.width : rect.height
+        return min(gap(for: orientation, innerGap: innerGap), max(0, extent - 2 * minimumChildExtent))
     }
 
     /// Longueur partageable d'un split (son étendue sur l'axe coupé, moins l'écart).
     static func usableExtent(of rect: CGRect, orientation: BSPOrientation, innerGap: CGFloat) -> CGFloat {
         let extent = orientation == .vertical ? rect.width : rect.height
-        return max(0, extent - gap(for: orientation, innerGap: innerGap))
+        return max(0, extent - gap(for: orientation, in: rect, innerGap: innerGap))
     }
 
     /// Rectangles des deux enfants d'un split, au ratio borné.
@@ -126,7 +147,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
         innerGap: CGFloat
     ) -> (first: CGRect, second: CGRect) {
         let clamped = min(max(ratio, ratioBounds.lowerBound), ratioBounds.upperBound)
-        let gap = gap(for: orientation, innerGap: innerGap)
+        let gap = gap(for: orientation, in: rect, innerGap: innerGap)
         let usable = usableExtent(of: rect, orientation: orientation, innerGap: innerGap)
         let firstExtent = floor(usable * clamped)
         let secondExtent = usable - firstExtent
@@ -396,7 +417,7 @@ public indirect enum BSPTree: Equatable, Codable, Sendable {
             else { return tree }
             let usable = Self.usableExtent(of: split.rect, orientation: orientation, innerGap: innerGap)
             guard usable > 0 else { return tree }
-            let gap = Self.gap(for: orientation, innerGap: innerGap)
+            let gap = Self.gap(for: orientation, in: split.rect, innerGap: innerGap)
             let origin = orientation == .vertical ? split.rect.minX : split.rect.minY
             // Étendue du côté `first` = position de la frontière depuis l'origine du split.
             let firstExtent: CGFloat = switch edge {
@@ -725,7 +746,7 @@ private struct InferredCuts {
               let rightFrame = unionFrame(for: right, in: frames)
         else { return 0.5 }
         let horizontal = orientation == .vertical
-        let gap = BSPTree.gap(for: orientation, innerGap: innerGap)
+        let gap = BSPTree.gap(for: orientation, in: rect, innerGap: innerGap)
         let usableExtent = BSPTree.usableExtent(of: rect, orientation: orientation, innerGap: innerGap)
         guard usableExtent > 0 else { return 0.5 }
 

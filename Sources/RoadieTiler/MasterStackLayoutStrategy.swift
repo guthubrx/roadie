@@ -39,7 +39,8 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
             gap: horizontalGap,
             usableWidth: usableWidth,
             currentFrames: request.currentFrames,
-            priorityWindowIDs: request.priorityWindowIDs
+            priorityWindowIDs: request.priorityWindowIDs,
+            newWindowIDs: request.newWindowIDs
         )
         let masterWidth = floor(usableWidth * ratio)
         let stackWidth = usableWidth - masterWidth
@@ -72,7 +73,8 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
         gap: CGFloat,
         usableWidth: CGFloat,
         currentFrames: [WindowID: CGRect],
-        priorityWindowIDs: Set<WindowID>
+        priorityWindowIDs: Set<WindowID>,
+        newWindowIDs: Set<WindowID>
     ) -> CGFloat {
         guard usableWidth > 0 else { return masterRatio }
 
@@ -85,11 +87,15 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
             return ((stackFrame.minX - gap - rect.minX) / usableWidth).clamped(to: 0.1...0.9)
         }
 
+        // REL-030 : la largeur d'une fenêtre tout juste découverte est arbitraire (position donnée
+        // par macOS à la création). Seules les fenêtres déjà disposées fixent une géométrie à
+        // préserver ; sans elles, le ratio configuré s'applique.
         var candidates: [CGFloat] = []
-        if let masterFrame = currentFrames[master] {
+        if !newWindowIDs.contains(master), let masterFrame = currentFrames[master] {
             candidates.append(masterFrame.width / usableWidth)
         }
-        if let stackFrame = unionFrame(for: stack, in: currentFrames), stackFrame.maxX.isClose(to: rect.maxX) {
+        let knownStack = stack.filter { !newWindowIDs.contains($0) }
+        if let stackFrame = unionFrame(for: knownStack[...], in: currentFrames), stackFrame.maxX.isClose(to: rect.maxX) {
             candidates.append((stackFrame.minX - gap - rect.minX) / usableWidth)
         }
 

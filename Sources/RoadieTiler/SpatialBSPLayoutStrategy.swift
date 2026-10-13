@@ -25,7 +25,7 @@ public struct SpatialBSPLayoutStrategy: LayoutStrategy {
         let gap = CGFloat(request.innerGap)
         let requested = Set(windows)
         let full = request.bspTree ?? .empty
-        let leaves = Self.leafIDs(of: full)
+        let leaves = Set(full.windowIDs)
         var tree = full.projected(excluding: leaves.subtracting(requested))
         // Feuilles de l'arbre projeté = feuilles demandées : un test d'appartenance O(1)
         // remplace le parcours de l'arbre pour chaque fenêtre.
@@ -36,24 +36,5 @@ public struct SpatialBSPLayoutStrategy: LayoutStrategy {
             previous = id
         }
         return LayoutPlan(placements: tree.place(in: rect, innerGap: gap))
-    }
-
-    /// Identifiants des feuilles, collectés dans un seul accumulateur. O(n) - n = nœuds.
-    /// `BSPTree.windowIDs` concatène les tableaux des sous-arbres (O(n²) sur un arbre en chaîne).
-    private static func leafIDs(of tree: BSPTree) -> Set<WindowID> {
-        var result: Set<WindowID> = []
-        func collect(_ node: BSPTree) {
-            switch node {
-            case .empty:
-                break
-            case .leaf(let id):
-                result.insert(id)
-            case .split(_, _, let first, let second):
-                collect(first)
-                collect(second)
-            }
-        }
-        collect(tree)
-        return result
     }
 }
