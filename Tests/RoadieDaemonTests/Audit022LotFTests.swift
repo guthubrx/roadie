@@ -13,7 +13,7 @@ struct Audit022LotFTests {
     @Test
     func appClickPostsNothingWhenTargetWindowIsGone() {
         let spy = CGEventSpy()
-        let provider = LiveAppTargetProvider(waitForFocus: { _, _, _ in .windowGone }, postEvent: { spy.record($0) })
+        let provider = LiveAppTargetProvider(waitForFocus: { _, _, _ in .windowGone }, postEvent: { spy.record($0) }, currentFrame: { $0.frame })
 
         let result = provider.click(windowTarget(), action: .click)
 
@@ -25,7 +25,7 @@ struct Audit022LotFTests {
     @Test
     func appClickPostsNothingWhenWindowDoesNotBecomeActive() {
         let spy = CGEventSpy()
-        let provider = LiveAppTargetProvider(waitForFocus: { _, _, _ in .timedOut }, postEvent: { spy.record($0) })
+        let provider = LiveAppTargetProvider(waitForFocus: { _, _, _ in .timedOut }, postEvent: { spy.record($0) }, currentFrame: { $0.frame })
 
         let result = provider.click(windowTarget(), action: .click)
 
@@ -43,7 +43,8 @@ struct Audit022LotFTests {
                 asked.append("\(windowID)/\(pid)")
                 return .focused
             },
-            postEvent: { spy.record($0) }
+            postEvent: { spy.record($0) },
+            currentFrame: { $0.frame }
         )
 
         let result = provider.click(windowTarget(), action: .click)

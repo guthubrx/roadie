@@ -148,15 +148,26 @@ public final class TargetModeRuntimeController: NSObject {
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
+    /// Clic d'une case de grille sur une racine résolue. Point d'injection des tests (TEST-002) :
+    /// destination observée sans événement souris réel.
+    private let gridClick: @MainActor (TargetGridService, String, TargetGridRoot) -> TargetActionResult
 
     public convenience init(service: SnapshotService = SnapshotService(), events: EventLog = EventLog()) {
         self.init(service: service, events: events, presenter: LiveTargetModeOverlayPresenter())
     }
 
-    init(service: SnapshotService, events: EventLog, presenter: any TargetModeOverlayPresenting) {
+    init(
+        service: SnapshotService,
+        events: EventLog,
+        presenter: any TargetModeOverlayPresenting,
+        gridClick: @escaping @MainActor (TargetGridService, String, TargetGridRoot) -> TargetActionResult = { grid, path, root in
+            grid.perform(.click, path: path, root: root)
+        }
+    ) {
         self.service = service
         self.events = events
         self.presenter = presenter
+        self.gridClick = gridClick
     }
 
     public func start() {
@@ -360,9 +371,9 @@ public final class TargetModeRuntimeController: NSObject {
                     report: grid.targets(displayIndex: selectedDisplayIndex, parentPath: parentPath, scope: scope)
                 )
             },
-            activate: { selectedDisplayIndex, selectedPath in
+            activate: { [gridClick] selectedDisplayIndex, selectedPath in
                 if let root = rootFor(selectedDisplayIndex) {
-                    return grid.perform(.click, path: selectedPath, root: root)
+                    return gridClick(grid, selectedPath, root)
                 }
                 return grid.perform(.click, path: selectedPath, displayIndex: selectedDisplayIndex, scope: scope)
             },

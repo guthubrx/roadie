@@ -140,6 +140,53 @@ struct TargetModeRuntimeControllerTests {
         #expect(stateProvider(2, "").report.targets.first?.scope.displayId == "display-2")
         #expect(stateProvider(2, "").report.targets.first?.frame?.x ?? 0 >= 1000)
     }
+
+    // TEST-002 / REL-004 (contre-revue R1-16) : la lettre validée après une flèche vers l'écran 2 clique
+    // au centre de la case affichée sur l'écran 2, puis la session se termine.
+    @Test @MainActor
+    func gridActivationClicksShownCellOfSelectedDisplayThenFinishes() throws {
+        let service = targetModeService(name: "rel004-grid-click", displays: [
+            powerDisplay("display-1", index: 1, x: 0),
+            powerDisplay("display-2", index: 2, x: 1000),
+        ])
+        let eventPath = tempPath("rel004-grid-click-events")
+        let presenter = SpyTargetModeOverlayPresenter()
+        var clicks: [CGPoint] = []
+        // Émission souris simulée : même géométrie que `TargetGridService.perform`, sans événement réel.
+        let controller = TargetModeRuntimeController(
+            service: service,
+            events: EventLog(path: eventPath),
+            presenter: presenter,
+            gridClick: { grid, path, root in
+                guard let cell = grid.report(root: root).cells.first(where: { $0.path == path }) else {
+                    return TargetActionResult(changed: false, message: "unknown path", error: "unknown_grid_path")
+                }
+                clicks.append(cell.center.cgPoint)
+                return TargetActionResult(changed: true, message: "grid click \(path)")
+            }
+        )
+
+        controller.handle(TargetModeRuntimeCommand(name: "grid.interactive", arguments: [
+            "display": "1",
+            "scope": "display",
+        ]))
+        let stateProvider = try #require(presenter.gridStateProvider)
+        let activate = try #require(presenter.gridActivate)
+        let onFinish = try #require(presenter.gridFinish)
+        let shown = try #require(stateProvider(2, "").report.targets.first)
+        let shownFrame = try #require(shown.frame).cgRect
+        let path = try #require(shown.id.split(separator: "/").last.map(String.init))
+
+        let result = activate(2, path)
+        onFinish(result)
+
+        #expect(result.changed)
+        #expect(clicks == [CGPoint(x: shownFrame.midX, y: shownFrame.midY)])
+        #expect(clicks.allSatisfy { $0.x >= 1000 })
+        let finished = EventLog(path: eventPath).tail(limit: 5).filter { $0.contains("target_mode.finished") }
+        #expect(finished.count == 1)
+        #expect(finished.first?.contains("grid.interactive") == true)
+    }
 }
 
 @MainActor
@@ -171,6 +218,8 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
     var interactiveState: TargetOverlayState?
     var interactiveActivate: (@MainActor (String) -> TargetActionResult)?
     var gridStateProvider: (@MainActor (Int?, String) -> TargetOverlayState)?
+    var gridActivate: (@MainActor (Int?, String) -> TargetActionResult)?
+    var gridFinish: (@MainActor (TargetActionResult) -> Void)?
 
     func startInteractive(
         _ state: TargetOverlayState,
@@ -195,6 +244,8 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         onFinish: @escaping @MainActor (TargetActionResult) -> Void
     ) -> TargetOverlaySessionHandle? {
         gridStateProvider = stateProvider
+        gridActivate = activate
+        gridFinish = onFinish
         return nil
     }
 

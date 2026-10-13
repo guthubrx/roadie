@@ -322,9 +322,11 @@ public struct TargetMacroService {
             }
             // REL-024 : un clic complet sur une cible applicative est une unité, résolue avant toute
             // émission. Clic sémantique réussi : ni down ni up bruts. Échec : paire down/up aux
-            // coordonnées enregistrées, le relâchement n'est jamais perdu.
-            if index + 1 < events.count, let target = Self.semanticClickTarget(down: event, up: events[index + 1]) {
-                let result = activateTarget(target, Self.semanticAction(for: event))
+            // coordonnées enregistrées, le relâchement n'est jamais perdu. REL-025 : un geste sans
+            // action sémantique fidèle (Maj-clic, Cmd-clic droit…) est rejoué en brut, drapeaux complets.
+            if index + 1 < events.count, let target = Self.semanticClickTarget(down: event, up: events[index + 1]),
+               let action = Self.semanticAction(for: event) {
+                let result = activateTarget(target, action)
                 if result.changed, result.error == nil {
                     index += 2
                     continue
@@ -347,10 +349,19 @@ public struct TargetMacroService {
         return target
     }
 
-    /// Action sémantique fidèle au clic enregistré (REL-025) : bouton droit, Commande-clic ou clic.
-    static func semanticAction(for event: TargetMacroEvent) -> TargetActionVerb {
-        if event.mouseButton == .right { return .rightClick }
-        return CGEventFlags(rawValue: event.modifiers).contains(.maskCommand) ? .commandClick : .click
+    /// Action sémantique fidèle au clic enregistré (REL-025) : clic, clic droit ou Commande-clic, sans
+    /// autre modificateur. Nil pour toute autre combinaison (Maj, Option, Contrôle, Cmd-clic droit) :
+    /// aucune action ne la représente, le replay la rejoue en brut. Les bits sans effet sur un clic
+    /// (verrouillage majuscule, événement non fusionné) sont ignorés.
+    static func semanticAction(for event: TargetMacroEvent) -> TargetActionVerb? {
+        let modifiers = CGEventFlags(rawValue: event.modifiers)
+            .intersection([.maskShift, .maskControl, .maskAlternate, .maskCommand])
+        switch (event.mouseButton, modifiers) {
+        case (.left, []): return .click
+        case (.right, []): return .rightClick
+        case (.left, .maskCommand): return .commandClick
+        default: return nil
+        }
     }
 
     private func replay(_ event: TargetMacroEvent) {

@@ -249,6 +249,40 @@ public struct AppTargetQueryService {
         return pid_t(target.id[target.id.index(target.id.startIndex, offsetBy: 4)..<slash])
     }
 
+    /// Chemin AX d'une cible d'application (`app:<pid>/<racine>.<i>.<j>…`, voir `scan`) : fenêtre racine
+    /// (`w<id>` en portée `visible_windows`, nil pour `0`, fenêtre active en portée `frontmost_window`)
+    /// et rang de chaque enfant. Nil si l'id n'a pas cette forme. O(d), d = profondeur.
+    public static func elementPath(of target: RoadieTarget) -> (windowID: CGWindowID?, indices: [Int])? {
+        guard pid(of: target) != nil, let slash = target.id.firstIndex(of: "/") else { return nil }
+        let parts = target.id[target.id.index(after: slash)...].split(separator: ".", omittingEmptySubsequences: false)
+        guard let root = parts.first else { return nil }
+        let windowID: CGWindowID?
+        if root == "0" {
+            windowID = nil
+        } else if root.hasPrefix("w"), let id = CGWindowID(root.dropFirst()) {
+            windowID = id
+        } else {
+            return nil
+        }
+        var indices: [Int] = []
+        for part in parts.dropFirst() {
+            guard let index = Int(part), index >= 0 else { return nil }
+            indices.append(index)
+        }
+        return (windowID, indices)
+    }
+
+    /// L'élément occupe-t-il encore le cadre affiché par l'overlay (REL-012) ? Chaque bord doit rester
+    /// à `tolerance` points près : un décalage d'arrondi passe, un défilement ou un déplacement de
+    /// fenêtre non. `current` nil : élément introuvable. O(1).
+    public static func isStillInPlace(_ shown: Rect, current: Rect?, tolerance: Double = 4) -> Bool {
+        guard let current else { return false }
+        let a = shown.cgRect
+        let b = current.cgRect
+        return abs(a.minX - b.minX) <= tolerance && abs(a.minY - b.minY) <= tolerance
+            && abs(a.maxX - b.maxX) <= tolerance && abs(a.maxY - b.maxY) <= tolerance
+    }
+
     public static func isHintable(_ visible: Rect) -> Bool {
         visible.width > 4 && visible.height > 4
     }
@@ -334,20 +368,25 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     /// souris, sans AX ni CGEvent réels.
     private let waitForFocus: @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait
     private let postEvent: @Sendable (CGEvent) -> Void
+    /// Cadre visible actuel de l'élément d'une cible, relu après le focus (REL-012) ; nil : introuvable.
+    private let currentFrame: @Sendable (RoadieTarget) -> Rect?
 
     public init() {
         self.init(
             waitForFocus: { Self.waitUntilFocused(windowID: $0, pid: $1, timeout: $2) },
-            postEvent: { $0.post(tap: .cghidEventTap) }
+            postEvent: { $0.post(tap: .cghidEventTap) },
+            currentFrame: { Self.currentVisibleFrame(of: $0) }
         )
     }
 
     init(
         waitForFocus: @escaping @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait,
-        postEvent: @escaping @Sendable (CGEvent) -> Void
+        postEvent: @escaping @Sendable (CGEvent) -> Void,
+        currentFrame: @escaping @Sendable (RoadieTarget) -> Rect?
     ) {
         self.waitForFocus = waitForFocus
         self.postEvent = postEvent
+        self.currentFrame = currentFrame
     }
 
     public func candidates(config: AppTargetsConfig) -> AppTargetQueryReport {
@@ -575,7 +614,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
 
     /// Complexité : O(n + m + p + u * d), n = éléments lus ; voir `focusableLeaves` pour m, p, u, d.
     private func scan(window: AXUIElement, rootPath: String, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
-        let windowFrame = copyFrame(window)
+        let windowFrame = Self.copyFrame(window)
         // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.
         // `textOwner` : chemin du plus proche candidat web, qui reçoit le texte des `AXStaticText` (SPEC-021).
         var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?)] =
@@ -629,7 +668,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             var retained = false
             var retainedVisible: Rect?
             // Zone web : le cadre est lu pour tous, afin de ne pas descendre dans un élément invisible.
-            let frame = isCandidate || isPending || (inWeb && !isWebArea) ? copyFrame(element) : nil
+            let frame = isCandidate || isPending || (inWeb && !isWebArea) ? Self.copyFrame(element) : nil
             let visibleFrame = frame.flatMap { AppTargetQueryService.visibleFrame($0, in: windowFrame) }
             if inWeb, role == "AXImage" || role == "AXStaticText", let owner = textOwner, contentFrames[owner] == nil,
                let visible = visibleFrame, AppTargetQueryService.isHintable(visible) {
@@ -677,7 +716,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                 if AppTargetQueryService.hidesContent(visibleFrame) { markers.append(path + ".?") }
                 continue
             }
-            let (children, unreadable) = copyChildren(element, boost: boost && !inWeb)
+            let (children, unreadable) = Self.copyChildren(element, boost: boost && !inWeb)
             if inWeb && unreadable { markers.append(path + ".?") }
             for (index, child) in children.enumerated().reversed() {
                 stack.append((child, "\(path).\(index)", depth + 1, inWeb, inWeb && retained ? retainedVisible : retainedFrame,
@@ -744,6 +783,11 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                 return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
             }
         }
+        // REL-012 : l'overlay a pu rester ouvert, la fenêtre bouger ou la page défiler pendant l'attente.
+        // Le point de clic n'est sûr que si l'élément occupe encore le cadre affiché.
+        guard let shown = target.frame, AppTargetQueryService.isStillInPlace(shown, current: currentFrame(target)) else {
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {
         case .click:
@@ -780,6 +824,41 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             Thread.sleep(forTimeInterval: 0.02)
         } while Date() < deadline
         return .timedOut
+    }
+
+    /// Relecture ciblée de l'élément d'une cible (REL-012) : fenêtre racine, puis un enfant par niveau
+    /// en suivant le chemin du parcours, puis son cadre, rapporté à la fenêtre comme dans `scan`.
+    /// Complexité : O(d) appels AX, d = profondeur du chemin ; pas de nouveau parcours de l'arbre.
+    private static func currentVisibleFrame(of target: RoadieTarget) -> Rect? {
+        guard let pid = AppTargetQueryService.pid(of: target),
+              let path = AppTargetQueryService.elementPath(of: target)
+        else { return nil }
+        let window: AXUIElement?
+        if let windowID = path.windowID {
+            window = axWindowElements(pid: pid)[windowID]
+        } else {
+            window = copyElementAttribute(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute)
+        }
+        guard let window else { return nil }
+        var element = window
+        for index in path.indices {
+            guard let child = child(of: element, at: index) else { return nil }
+            element = child
+        }
+        guard let frame = copyFrame(element) else { return nil }
+        return AppTargetQueryService.visibleFrame(frame, in: copyFrame(window))
+    }
+
+    /// Enfant de rang `index` tel que `copyChildren` le numérote : `AXChildren` d'abord (lecture d'un
+    /// seul élément), puis les attributs du mode renforcé pour les rangs au-delà.
+    private static func child(of element: AXUIElement, at index: Int) -> AXUIElement? {
+        var values: CFArray?
+        if AXUIElementCopyAttributeValues(element, kAXChildrenAttribute as CFString, index, 1, &values) == .success,
+           let first = (values as? [AXUIElement])?.first {
+            return first
+        }
+        let children = copyChildren(element, boost: true).children
+        return children.indices.contains(index) ? children[index] : nil
     }
 
     private func postClick(
@@ -823,7 +902,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     }
 
     /// `unreadable` : `AXChildren` a échoué pour une autre raison qu'une absence d'enfants.
-    private func copyChildren(_ element: AXUIElement, boost: Bool) -> (children: [AXUIElement], unreadable: Bool) {
+    private static func copyChildren(_ element: AXUIElement, boost: Bool) -> (children: [AXUIElement], unreadable: Bool) {
         let attributes = boost ? [
             kAXChildrenAttribute,
             "AXVisibleChildren",
@@ -865,7 +944,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         return names
     }
 
-    private func copyFrame(_ element: AXUIElement) -> Rect? {
+    private static func copyFrame(_ element: AXUIElement) -> Rect? {
         var positionRef: CFTypeRef?
         var sizeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
