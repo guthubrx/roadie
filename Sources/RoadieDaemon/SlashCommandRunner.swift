@@ -112,9 +112,10 @@ public final class SlashCommandRunner {
     /// Noms de stages de l'espace courant (tous si l'espace courant est inconnu) et de bookmarks.
     public func context() -> SlashContext {
         let state = stageStore().state()
+        let stages = Self.currentStages(in: state).stages
         var seen = Set<String>()
-        let names = Self.currentStages(in: state).stages.map(\.name).filter { seen.insert($0).inserted }
-        let numbers = Set(Self.currentStages(in: state).stages.compactMap { Int($0.id.rawValue) }).sorted().map(String.init)
+        let names = stages.map(\.name).filter { seen.insert($0).inserted }
+        let numbers = Set(stages.compactMap { Int($0.id.rawValue) }).sorted().map(String.init)
         return SlashContext(stageNames: names, bookmarkNames: state.windowBookmarks.map(\.name), stageNumbers: numbers)
     }
 
@@ -287,8 +288,7 @@ public final class SlashCommandRunner {
 
     /// Premier mot reconnu comme nom ou alias d'une commande ; nil sinon. O(c).
     private static func commandName(_ input: String) -> String? {
-        let head = TargetHintService.normalized(String(input.prefix { !$0.isWhitespace }))
-        return SlashCommandCatalog.commands.first { $0.name == head || $0.aliases.contains(head) }?.name
+        SlashCommandCatalog.command(named: String(input.prefix { !$0.isWhitespace }))?.name
     }
 
     private static func usage(_ name: String) -> String? {

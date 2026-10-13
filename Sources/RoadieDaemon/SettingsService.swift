@@ -320,8 +320,9 @@ extension SettingsService {
             }
             return .success((quoted(choice), .string(choice)))
         case .color:
+            // ASCII seulement : `isHexDigit` accepte aussi les chiffres pleine chasse, illisibles par `NSColor(hex:)`.
             let digits = text.dropFirst()
-            guard text.hasPrefix("#"), digits.count == 6 || digits.count == 8, digits.allSatisfy(\.isHexDigit) else {
+            guard text.hasPrefix("#"), digits.count == 6 || digits.count == 8, digits.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
                 return .failure(ConversionError(message: "couleur attendue : #RRGGBB ou #RRGGBBAA"))
             }
             return .success((quoted(text), .string(text)))
@@ -395,11 +396,11 @@ extension SettingsService {
         number == number.rounded() && abs(number) < 1e15 ? String(Int(number)) : String(number)
     }
 
-    private static func display(_ range: ClosedRange<Int>) -> String {
+    static func display(_ range: ClosedRange<Int>) -> String {
         "de \(range.lowerBound) à \(range.upperBound)"
     }
 
-    private static func display(_ range: ClosedRange<Double>) -> String {
+    static func display(_ range: ClosedRange<Double>) -> String {
         "de \(display(range.lowerBound)) à \(display(range.upperBound))"
     }
 

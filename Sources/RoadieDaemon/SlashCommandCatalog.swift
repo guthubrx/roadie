@@ -119,8 +119,8 @@ public enum SlashCommandCatalog {
         }
     }
 
-    /// Commande désignée par son nom ou un alias. O(c).
-    private static func command(named word: String) -> SlashCommand? {
+    /// Commande désignée par son nom ou un alias (casse et accents ignorés). O(c).
+    static func command(named word: String) -> SlashCommand? {
         let key = TargetHintService.normalized(word)
         return commands.first { $0.name == key || $0.aliases.contains(key) }
     }

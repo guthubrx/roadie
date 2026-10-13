@@ -236,6 +236,28 @@ struct SettingsServiceTests {
         #expect(try mode(config) == 0o644)
     }
 
+    /// FR-013 : le rechargement suit chaque écriture réussie, jamais un refus ni un rétablissement sans effet.
+    @Test
+    func reloadRunsOnlyAfterAnActualWrite() throws {
+        let directory = try makeDirectory()
+        let config = directory.appendingPathComponent("roadies.toml")
+        try fixture.write(to: config, atomically: true, encoding: .utf8)
+        let reloads = ReloadCounter()
+        let service = SettingsService(
+            configPath: config.path,
+            eventLog: EventLog(path: directory.appendingPathComponent("events.jsonl").path),
+            afterWrite: { reloads.increment() }
+        )
+        _ = service.set("target_grid.rows", to: "4")
+        #expect(reloads.count == 1)
+        _ = service.set("target_grid.rows", to: "99")
+        #expect(reloads.count == 1)
+        _ = service.reset("target_grid.rows")
+        #expect(reloads.count == 2)
+        _ = service.reset("target_grid.rows")
+        #expect(reloads.count == 2)
+    }
+
     @Test
     func onlyOneBackupPerInstance() throws {
         let (service, config, _) = try makeService(fixture)
@@ -321,7 +343,12 @@ struct SettingsServiceTests {
             ("tiling.default_strategy", "spirale"),
             ("borders.active_color", "#12345"),
             ("borders.active_color", "rouge"),
+            // Chiffres pleine chasse : `isHexDigit` les accepte, `NSColor(hex:)` ne les lit pas.
+            ("borders.active_color", "#ＡＢＣＤＥＦ"),
             ("target_record.directory", "a\nb"),
+            ("target_record.directory", "a\rb"),
+            // Caractère de contrôle : interdit dans une chaîne TOML, refusé par la validation du candidat.
+            ("target_record.directory", "a\u{1B}b"),
         ] {
             guard case .rejected = service.set(id, to: raw) else {
                 Issue.record("\(id) = \(raw) aurait dû être refusé"); continue
@@ -515,4 +542,14 @@ struct SettingsServiceTests {
         #expect(try summary("tiling.display_overrides") == "(aucune valeur dans le fichier)")
         #expect(try summary("width_adjustment.presets") == "(aucune valeur dans le fichier)")
     }
+}
+
+/// Compteur d'appels de `afterWrite` (fermeture `@Sendable`), protégé par un verrou.
+private final class ReloadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    var count: Int { lock.withLock { value } }
+
+    func increment() { lock.withLock { value += 1 } }
 }

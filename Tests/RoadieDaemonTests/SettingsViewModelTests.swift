@@ -72,6 +72,8 @@ struct SettingsViewModelTests {
     func searchListsReadOnlyEntriesAfterEditableOnes() throws {
         let (model, _) = try makeModel()
         model.query = "stage"
+        // Sans section ni entrée en lecture seule, la boucle ci-dessous ne vérifierait rien.
+        #expect(model.sections.contains { $0.descriptors.contains { $0.readOnlyReason != nil } })
         for section in model.sections {
             let flags = section.descriptors.map { $0.readOnlyReason != nil }
             #expect(flags == flags.sorted { !$0 && $1 })

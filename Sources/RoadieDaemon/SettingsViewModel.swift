@@ -134,9 +134,8 @@ final class SettingsViewModel: ObservableObject {
     /// « de 2 à 12 » pour un nombre borné ; nil sinon.
     func rangeText(_ descriptor: SettingDescriptor) -> String? {
         switch descriptor.kind {
-        case .int(let range?): return "de \(range.lowerBound) à \(range.upperBound)"
-        case .double(let range?):
-            return "de \(SettingsService.display(.double(range.lowerBound))) à \(SettingsService.display(.double(range.upperBound)))"
+        case .int(let range?): return SettingsService.display(range)
+        case .double(let range?): return SettingsService.display(range)
         default: return nil
         }
     }

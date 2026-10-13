@@ -227,7 +227,7 @@ private struct SettingRow: View {
         case .color:
             HStack(spacing: 6) {
                 ColorPicker("", selection: Binding(
-                    get: { Color(hex: model.text(for: descriptor)) ?? .clear },
+                    get: { NSColor(hex: model.text(for: descriptor)).map { Color(nsColor: $0) } ?? .clear },
                     set: { model.setColor(descriptor, hex: $0.hexString) }
                 ), supportsOpacity: true)
                 .labelsHidden()
@@ -251,17 +251,9 @@ private struct SettingRow: View {
     }
 }
 
-// MARK: - Couleurs `#RRGGBB` / `#RRGGBBAA`
+// MARK: - Couleurs `#RRGGBB` / `#RRGGBBAA` (lecture : `NSColor(hex:)`, partagée avec le rail et les bordures)
 
 private extension Color {
-    init?(hex: String) {
-        let digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        guard digits.count == 6 || digits.count == 8, let raw = UInt64(digits, radix: 16) else { return nil }
-        let value = digits.count == 6 ? raw << 8 | 0xFF : raw
-        func component(_ shift: UInt64) -> Double { Double((value >> shift) & 0xFF) / 255 }
-        self.init(.sRGB, red: component(24), green: component(16), blue: component(8), opacity: component(0))
-    }
-
     /// `#RRGGBB`, ou `#RRGGBBAA` si la couleur est transparente.
     var hexString: String {
         let color = NSColor(self).usingColorSpace(.sRGB) ?? .black

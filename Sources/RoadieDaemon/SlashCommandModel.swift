@@ -28,7 +28,7 @@ public enum SlashMessage: Equatable, Sendable {
 /// ne connaît ni le catalogue des commandes ni l'état des stages.
 public struct SlashCommandModel: Equatable, Sendable {
     /// Taille maximale de l'historique : la plus ancienne commande est perdue au-delà.
-    public static let maxHistory = 50
+    public static let maxHistory = CommandHistoryStore.maxEntries
 
     /// Texte saisi, sans le `/` initial.
     public private(set) var input: String
