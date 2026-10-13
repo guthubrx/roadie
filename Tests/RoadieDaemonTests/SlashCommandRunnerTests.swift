@@ -102,7 +102,8 @@ struct SlashCommandRunnerTests {
     func noActiveWindowIsTranslated() {
         let fixture = Fixture(windows: [])
         let outcome = fixture.runner().execute("full")
-        #expect(outcome == .failed(SlashError(message: "Aucune fenêtre active.")))
+        // L'échec porte la forme attendue de la commande (T031 c).
+        #expect(outcome == .failed(SlashError(message: "Aucune fenêtre active.", usage: "/full")))
         #expect(fixture.events.contains("no_active_window"))
     }
 
@@ -151,11 +152,58 @@ struct SlashCommandRunnerTests {
         #expect(fixture.scope?.stages.map(\.name) == ["Main", "Perso"])
     }
 
+    /// T038 : effet réel des commandes de direction (vrai routeur, faux fournisseur), pas seulement l'argv.
+    @Test
+    func moveAndSwapExchangeNeighborFrames() {
+        let move = Fixture(windows: [powerWindow(1, x: 0), powerWindow(2, x: 500)])
+        let first = move.runner().execute("move droite")
+        #expect(Self.isDone(first), "\(first)")
+        let one = WindowID(rawValue: 1)
+        let two = WindowID(rawValue: 2)
+        // Les deux fenêtres ont changé d'emplacement : la fenêtre 1 n'est plus à gauche de la fenêtre 2.
+        let movedOne = move.writer.frames[one]
+        let movedTwo = move.writer.frames[two]
+        #expect(movedOne != nil && movedTwo != nil)
+        #expect((movedOne?.x ?? 0) > (movedTwo?.x ?? 0))
+
+        let swap = Fixture(windows: [powerWindow(1, x: 0), powerWindow(2, x: 500)])
+        let second = swap.runner().execute("swap right")
+        #expect(Self.isDone(second), "\(second)")
+        #expect((swap.writer.frames[one]?.x ?? 0) > (swap.writer.frames[two]?.x ?? 0))
+    }
+
+    @Test
+    func moveWithoutNeighborKeepsTranslatedMessage() {
+        let fixture = Fixture()
+        #expect(fixture.runner().execute("move gauche") == .done(message: ["Aucune fenêtre voisine à gauche."]))
+        #expect(fixture.writer.frames.isEmpty)
+    }
+
+    @Test
+    func resizeWritesANewFrame() {
+        let fixture = Fixture(windows: [powerWindow(1, x: 0), powerWindow(2, x: 500)])
+        let before = fixture.provider.snapshots.first { $0.id == WindowID(rawValue: 1) }?.frame
+        let outcome = fixture.runner().execute("resize droite")
+        #expect(Self.isDone(outcome), "\(outcome)")
+        let after = fixture.writer.frames[WindowID(rawValue: 1)]
+        #expect(after != nil)
+        #expect(after != before)
+    }
+
+    @Test
+    func translatedKnownRouterMessagesOnly() {
+        #expect(SlashCommandRunner.translated("unknown display 4") == "Écran inconnu : 4.")
+        #expect(SlashCommandRunner.translated("no neighbor up") == "Aucune fenêtre voisine au-dessus.")
+        #expect(SlashCommandRunner.translated("toggle maximize: failed, window unavailable for tiling") == "Cette fenêtre ne peut pas être tuilée.")
+        #expect(SlashCommandRunner.translated("stage switch: unknown display") == "Écran inconnu.")
+        #expect(SlashCommandRunner.translated("bookmark set a: window=1") == "bookmark set a: window=1")
+    }
+
     @Test
     func screenWithoutOtherDisplayIsTranslated() {
         let fixture = Fixture()
         let outcome = fixture.runner().execute("screen droite")
-        #expect(outcome == .failed(SlashError(message: "Il n'y a pas d'autre écran.")))
+        #expect(outcome == .failed(SlashError(message: "Il n'y a pas d'autre écran.", usage: "/screen gauche|droite|haut|bas|N")))
     }
 
     @Test
@@ -177,9 +225,10 @@ struct SlashCommandRunnerTests {
             return
         }
         #expect(message.first?.hasPrefix("bookmark set a") == true)
-        // Bookmark absent : message du routeur tel quel.
+        // Bookmark absent : message du routeur traduit, avec la forme attendue.
         let jump = try #require(Self.failure(runner.execute("b zz")))
-        #expect(jump.message == "bookmark focus zz: not found")
+        #expect(jump.message == "Bookmark introuvable : zz.")
+        #expect(jump.usage == "/bm nom|set nom")
     }
 
     @Test
@@ -196,9 +245,10 @@ struct SlashCommandRunnerTests {
         #expect(fixture.routersMade == 2)
     }
 
-    /// `heal` et `config reload` lisent l'état réel : routeur remplacé, argv et traduction vérifiés.
+    /// `heal` et `config reload` lisent l'état réel : routeur remplacé, argv vérifiés. Comme `doctor`,
+    /// leur résultat s'affiche dans la boîte (T031 a), succès comme échec.
     @Test
-    func healAndReloadTranslateRouterResponses() {
+    func healAndReloadAreShownInTheBox() {
         let fixture = Fixture()
         var seen: [[String]] = []
         let runner = fixture.runner { argv in
@@ -207,8 +257,8 @@ struct SlashCommandRunnerTests {
                 ? CLIResponse(exitCode: 0, stdout: "heal ok\n")
                 : CLIResponse(exitCode: 1, stderr: "roadie: config invalide\n")
         }
-        #expect(runner.execute("heal") == .done(message: ["heal ok"]))
-        #expect(runner.execute("reload") == .failed(SlashError(message: "roadie: config invalide")))
+        #expect(runner.execute("heal") == .info(["heal ok"]))
+        #expect(runner.execute("reload") == .info(["roadie: config invalide"]))
         #expect(seen == [["daemon", "heal"], ["config", "reload"]])
     }
 
@@ -248,14 +298,32 @@ struct SlashCommandRunnerTests {
         #expect(fixture.routersMade == 0)
 
         // L'appelant exécute ensuite l'action, sur une nouvelle instance du routeur.
-        runner.runDeferred(["balance"])
+        #expect(runner.runDeferred(["balance"]).exitCode == 0)
         #expect(fixture.routersMade == 1)
+        #expect(!fixture.events.contains("command.deferred_failed"))
+    }
+
+    /// T037 : l'échec d'une action différée est journalisé avec le nom de la commande et le code,
+    /// jamais les arguments.
+    @Test
+    func failedDeferredActionIsLoggedWithoutArguments() {
+        let fixture = Fixture()
+        let runner = fixture.runner { _ in CLIResponse(exitCode: 3, stderr: "roadie: échec secret-detail\n") }
+
+        let response = runner.runDeferred(["grid", "interactive", "--scope", "secret-scope"])
+
+        #expect(response.exitCode == 3)
+        #expect(fixture.events.contains("command.deferred_failed"))
+        #expect(fixture.events.contains("\"command\":\"grid\""))
+        #expect(fixture.events.contains("\"code\":\"3\""))
+        #expect(!fixture.events.contains("secret"))
+        #expect(!fixture.events.contains("interactive"))
     }
 
     @Test
     func doctorIsShownInTheBoxAndTruncated() {
         let fixture = Fixture()
-        var lines = (1...20).map { "ligne \($0)" }
+        let lines = (1...20).map { "ligne \($0)" }
         let runner = fixture.runner { _ in CLIResponse(exitCode: 0, stdout: lines.joined(separator: "\n") + "\n") }
 
         guard case .info(let long) = runner.execute("doctor") else {
@@ -266,8 +334,8 @@ struct SlashCommandRunnerTests {
         #expect(long[10] == "ligne 11")
         #expect(long[11] == "… 9 lignes cachées")
 
-        lines = ["ligne 1", "ligne 2"]
-        #expect(runner.execute("doctor") == .info(["ligne 1", "ligne 2"]))
+        let short = fixture.runner { _ in CLIResponse(exitCode: 0, stdout: "ligne 1\nligne 2\n") }
+        #expect(short.execute("doctor") == .info(["ligne 1", "ligne 2"]))
     }
 
     @Test
@@ -375,6 +443,6 @@ struct SlashCommandRunnerTests {
                 scope: StageScope(displayID: Self.display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1")),
                 bundleID: "app.1", title: "Window 1", frame: Rect(x: 0, y: 0, width: 10, height: 10))]
         }
-        #expect(fixture.runner().context() == SlashContext(stageNames: ["Main", "Dev"], bookmarkNames: ["mail"]))
+        #expect(fixture.runner().context() == SlashContext(stageNames: ["Main", "Dev"], bookmarkNames: ["mail"], stageNumbers: ["1", "2"]))
     }
 }

@@ -567,6 +567,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// vide = désactivé. Défaut : la hyper key (Cmd+Option+Ctrl) + F, comme le conseille Homerow.
     public var searchHotkey: String
     /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
+    /// Taille des étiquettes. Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
 
     public static let defaultSearchHotkey = "command+control+alt+f"
@@ -744,6 +745,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
     public var labelPlacement: TargetGridLabelPlacement
     public var defaultScope: TargetGridScope
     /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
+    /// Taille des étiquettes. Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
 
     public init(
@@ -1626,13 +1628,6 @@ private enum ConfigValidationRules {
                 message: "must be between 0.2 and 30"
             ))
         }
-        if config.labelFontSize < 8 || config.labelFontSize > 48 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_mode.label_font_size",
-                message: "must be between 8 and 48"
-            ))
-        }
         if !config.enabled &&
             (config.pickerEnabled || config.overlayEnabled || config.appMouseActionsEnabled || config.scrollModeEnabled) {
             items.append(ConfigValidationItem(
@@ -1712,13 +1707,6 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: "experimental.target_grid.max_depth",
                 message: "must be between 1 and 20"
-            ))
-        }
-        if config.labelFontSize < 8 || config.labelFontSize > 48 {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_grid.label_font_size",
-                message: "must be between 8 and 48"
             ))
         }
         if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {

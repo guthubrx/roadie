@@ -265,6 +265,12 @@ actions return structured errors instead of silently falling back.
 `search_hotkey` shortcut (Hyper+F by default). See `docs/en/features.md`,
 Search mode section.
 
+In this bar, a `/` as the first character opens command mode. Its commands
+(`/move`, `/stage`, `/screen`, `/bm`, `/grid`, `/doctor`, `/set`,
+`/settings`...) call the same services as the `roadie` commands above, without
+going through the socket. They require the daemon to be running. See
+`docs/en/features.md`, Command mode (`/`) and settings window section.
+
 The `[experimental.target_mode]` section can also disable all Keyboard Target
 commands (`enabled = false`) or only the picker (`picker_enabled = false`).
 

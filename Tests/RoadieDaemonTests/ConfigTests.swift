@@ -925,6 +925,16 @@ struct ConfigTests {
         let defaults = try RoadieConfigLoader.load(from: "/nonexistent/roadie-\(UUID().uuidString).toml")
         #expect(defaults.experimental.targetMode.labelFontSize == 13)
         #expect(defaults.experimental.targetGrid.labelFontSize == 13)
+
+        // Le clamp suffit : une valeur hors plage ne produit ni erreur ni avertissement de validation (T032).
+        let report = try validate("""
+        [experimental.target_mode]
+        label_font_size = 5
+
+        [experimental.target_grid]
+        label_font_size = 99
+        """)
+        #expect(report.items.allSatisfy { $0.level == .ok }, "\(report.items)")
     }
 
     @Test

@@ -5,10 +5,13 @@ import RoadieCore
 public struct SlashContext: Equatable, Sendable {
     public var stageNames: [String]
     public var bookmarkNames: [String]
+    /// Identifiants numériques des stages de l'espace courant, proposés après `/stage`.
+    public var stageNumbers: [String]
 
-    public init(stageNames: [String] = [], bookmarkNames: [String] = []) {
+    public init(stageNames: [String] = [], bookmarkNames: [String] = [], stageNumbers: [String] = []) {
         self.stageNames = stageNames
         self.bookmarkNames = bookmarkNames
+        self.stageNumbers = stageNumbers
     }
 }
 
@@ -24,7 +27,7 @@ public enum SettingRequest: Equatable, Sendable {
 public enum SlashInvocation: Equatable, Sendable {
     /// `CLICommandRouter.run`, résultat court puis fermeture de la boîte.
     case router(argv: [String])
-    /// Idem, mais le résultat s'affiche dans la boîte (`/doctor`).
+    /// Idem, mais le résultat s'affiche dans la boîte (`/doctor`, `/heal`, `/reload`).
     case routerInfo(argv: [String])
     /// Exécutée après la fermeture de la boîte (`/grid`, `/letters`, `/restart`).
     case routerDeferred(argv: [String])
@@ -194,8 +197,8 @@ public enum SlashCommandCatalog {
         case "letters":
             return fixed(command, args, .routerDeferred(argv: ["targets", "interactive", "--source", "all", "--include-app-targets"]))
         case "doctor": return fixed(command, args, .routerInfo(argv: ["doctor"]))
-        case "heal": return fixed(command, args, .router(argv: ["daemon", "heal"]))
-        case "reload": return fixed(command, args, .router(argv: ["config", "reload"]))
+        case "heal": return fixed(command, args, .routerInfo(argv: ["daemon", "heal"]))
+        case "reload": return fixed(command, args, .routerInfo(argv: ["config", "reload"]))
         case "restart": return fixed(command, args, .routerDeferred(argv: ["daemon", "restart"]))
         case "settings": return parseSettings(command, rest: rest)
         default: return parseSet(rest: rest) // "set"
@@ -378,9 +381,10 @@ public enum SlashCommandCatalog {
             return rank(arguments([("h", "horizontal"), ("v", "vertical")]), word: word)
         case "stage":
             let names = context.stageNames.map { Candidate(SlashSuggestion(text: $0, detail: "stage", kind: .argument), keys: [$0]) }
+            let numbers = context.stageNumbers.map { Candidate(SlashSuggestion(text: $0, detail: "stage", kind: .argument), keys: [$0]) }
             let actions = arguments([("new", "Nouveau stage"), ("rename", "Renommer le stage courant"),
                                      ("send", "Envoyer la fenêtre vers un stage")])
-            return rank(names + actions, word: word)
+            return rank(numbers + names + actions, word: word)
         case "bm":
             let names = context.bookmarkNames.map { Candidate(SlashSuggestion(text: $0, detail: "bookmark", kind: .argument), keys: [$0]) }
             return rank(names + arguments([("set", "Poser un bookmark")]), word: word)

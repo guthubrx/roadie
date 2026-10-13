@@ -42,8 +42,8 @@ struct SlashCommandCatalogTests {
         ("grid window", .routerDeferred(argv: ["grid", "interactive", "--scope", "focused_window"])),
         ("letters", .routerDeferred(argv: ["targets", "interactive", "--source", "all", "--include-app-targets"])),
         ("doctor", .routerInfo(argv: ["doctor"])),
-        ("heal", .router(argv: ["daemon", "heal"])),
-        ("reload", .router(argv: ["config", "reload"])),
+        ("heal", .routerInfo(argv: ["daemon", "heal"])),
+        ("reload", .routerInfo(argv: ["config", "reload"])),
         ("restart", .routerDeferred(argv: ["daemon", "restart"])),
         ("settings", .openSettings(category: nil)),
         ("settings grille", .openSettings(category: .grille)),
@@ -163,7 +163,7 @@ struct SlashCommandCatalogTests {
 
     // MARK: - Suggestions
 
-    private let context = SlashContext(stageNames: ["Travail", "Courrier"], bookmarkNames: ["a", "docs"])
+    private let context = SlashContext(stageNames: ["Travail", "Courrier"], bookmarkNames: ["a", "docs"], stageNumbers: ["1", "2"])
 
     private func texts(_ input: String) -> [String] {
         SlashCommandCatalog.suggestions(for: input, context: context).map(\.text)
@@ -193,9 +193,10 @@ struct SlashCommandCatalogTests {
         #expect(names.filter { $0 == "bm " }.count == 1)
     }
 
-    @Test func stageArgumentsAreNamesThenActions() {
+    @Test func stageArgumentsAreNumbersNamesThenActions() {
         let names = texts("stage ")
-        #expect(Set(names) == ["Travail", "Courrier", "new", "rename", "send"])
+        #expect(Set(names) == ["1", "2", "Travail", "Courrier", "new", "rename", "send"])
+        #expect(texts("stage 2") == ["2"])
         #expect(texts("stage tra") == ["Travail"])
         #expect(texts("s n").first == "new")
     }

@@ -54,7 +54,7 @@ public final class SlashCommandRunner {
 
     public convenience init(
         makeRouter: @escaping @MainActor () -> CLICommandRouter = { CLICommandRouter() },
-        settings: SettingsService = SettingsService(),
+        settings: SettingsService = .shared,
         history: CommandHistoryStore = CommandHistoryStore(),
         stageStore: @escaping () -> StageStore = { StageStore() },
         eventLog: EventLog? = nil
@@ -95,9 +95,18 @@ public final class SlashCommandRunner {
         return outcome
     }
 
-    /// Action différée, appelée par l'intégration après la fermeture de la boîte.
-    public func runDeferred(_ argv: [String]) {
-        _ = route(argv)
+    /// Action différée, appelée par l'intégration après la fermeture de la boîte (la boîte est déjà
+    /// fermée : aucun message ne peut y être affiché). Un échec est journalisé (R10) : nom de la
+    /// commande (premier mot de l'argv) et code de sortie, jamais les arguments.
+    @discardableResult
+    public func runDeferred(_ argv: [String]) -> CLIResponse {
+        let response = route(argv)
+        if response.exitCode != 0 {
+            eventLog.append(RoadieEvent(
+                type: "command.deferred_failed",
+                details: ["command": argv.first ?? "unknown", "code": String(response.exitCode)]))
+        }
+        return response
     }
 
     /// Noms de stages de l'espace courant (tous si l'espace courant est inconnu) et de bookmarks.
@@ -105,7 +114,8 @@ public final class SlashCommandRunner {
         let state = stageStore().state()
         var seen = Set<String>()
         let names = Self.currentStages(in: state).stages.map(\.name).filter { seen.insert($0).inserted }
-        return SlashContext(stageNames: names, bookmarkNames: state.windowBookmarks.map(\.name))
+        let numbers = Set(Self.currentStages(in: state).stages.compactMap { Int($0.id.rawValue) }).sorted().map(String.init)
+        return SlashContext(stageNames: names, bookmarkNames: state.windowBookmarks.map(\.name), stageNumbers: numbers)
     }
 
     public func loadHistory() -> [String] {
@@ -145,22 +155,24 @@ public final class SlashCommandRunner {
     }
 
     /// Exécution par le routeur. Certains échecs sortent avec le code 0 (« no active window »,
-    /// « display focus right: no display ») : ils sont reconnus à leur texte. O(l), l = taille de la réponse.
+    /// « display focus right: no display ») : ils sont reconnus à leur texte. Tout échec porte la
+    /// forme attendue de la commande (`usage`). O(l), l = taille de la réponse.
     private func routed(_ argv: [String], command: String) -> SlashOutcome {
         let response = route(argv)
         let stdout = response.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         let stderr = response.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         let text = "\(stdout)\n\(stderr)"
+        let usage = Self.usage(command)
         if text.contains("no active window") || text.contains("no active tiled window") {
-            return reject(command, "no_active_window", SlashError(message: "Aucune fenêtre active."))
+            return reject(command, "no_active_window", SlashError(message: "Aucune fenêtre active.", usage: usage))
         }
         if argv.starts(with: ["display", "focus"]), text.contains(": no display") || text.contains(": unknown display") {
-            return reject(command, "no_other_display", SlashError(message: "Il n'y a pas d'autre écran."))
+            return reject(command, "no_other_display", SlashError(message: "Il n'y a pas d'autre écran.", usage: usage))
         }
         guard response.exitCode == 0 else {
-            return reject(command, "router_failed", SlashError(message: stderr.isEmpty ? stdout : stderr))
+            return reject(command, "router_failed", SlashError(message: Self.translated(stderr.isEmpty ? stdout : stderr), usage: usage))
         }
-        return .done(message: stdout.isEmpty ? [] : [stdout])
+        return .done(message: stdout.isEmpty ? [] : [Self.translated(stdout)])
     }
 
     private func setting(_ request: SettingRequest, command: String) -> SlashOutcome {
@@ -259,6 +271,45 @@ public final class SlashCommandRunner {
 
     private static func usage(_ name: String) -> String? {
         SlashCommandCatalog.commands.first { $0.name == name }?.usage
+    }
+
+    /// Messages bruts connus du routeur (`WindowCommands`, `WindowBookmarkCommands`, `StageCommands`,
+    /// `DesktopCommands`) en français. Message inconnu : renvoyé tel quel. Les messages techniques
+    /// qui contiennent des compteurs (`applied=2 failed=0`) ne sont pas traduits. O(r), r = nombre de règles (borné, une vingtaine).
+    static func translated(_ raw: String) -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let name = between(text, "bookmark focus ", ": not found") { return "Bookmark introuvable : \(name)." }
+        if let name = between(text, "bookmark focus ", ": display unavailable") { return "Bookmark \(name) : écran indisponible." }
+        if let name = between(text, "bookmark focus ", ": focus failed") { return "Bookmark \(name) : le focus a échoué." }
+        if text.hasPrefix("no neighbor ") {
+            let directions = ["left": "à gauche", "right": "à droite", "up": "au-dessus", "down": "en dessous"]
+            return "Aucune fenêtre voisine \(directions[String(text.dropFirst("no neighbor ".count))] ?? "dans cette direction")."
+        }
+        if text.hasPrefix("unknown display ") { return "Écran inconnu : \(text.dropFirst("unknown display ".count))." }
+        if text.hasSuffix(": unknown display") { return "Écran inconnu." }
+        if text.hasSuffix(": no display") { return "Aucun écran disponible." }
+        if text.hasSuffix(": no active display") { return "Aucun écran actif." }
+        if text.hasSuffix("window unavailable") || text.hasSuffix("display unavailable") {
+            return "Fenêtre ou écran indisponible."
+        }
+        if text.hasSuffix("failed, window unavailable for tiling") { return "Cette fenêtre ne peut pas être tuilée." }
+        if text.hasSuffix("failed, refused native-fullscreen or non-resizable window") {
+            return "Fenêtre en plein écran natif ou non redimensionnable."
+        }
+        if text.hasSuffix("failed, refused incompatible application minimum size") {
+            return "La taille minimale de l'application est incompatible."
+        }
+        if text.hasSuffix("failed, refused frame") { return "La fenêtre a refusé le nouveau cadre." }
+        if text.hasSuffix(": window not in tree") { return "Cette fenêtre n'est pas dans le tuilage." }
+        if text.hasSuffix("already on target display") { return "La fenêtre est déjà sur cet écran." }
+        if text.hasSuffix("already on target desktop") { return "La fenêtre est déjà sur ce bureau." }
+        return text
+    }
+
+    /// Texte entre `prefix` (début) et `suffix` (fin) ; nil si le texte n'a pas cette forme.
+    private static func between(_ text: String, _ prefix: String, _ suffix: String) -> String? {
+        guard text.hasPrefix(prefix), text.hasSuffix(suffix), text.count > prefix.count + suffix.count else { return nil }
+        return String(text.dropFirst(prefix.count).dropLast(suffix.count))
     }
 
     private static func lines(_ text: String) -> [String] {
