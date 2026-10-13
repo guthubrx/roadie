@@ -135,7 +135,9 @@ public struct StageCommandService {
             return StageCommandResult(message: "stage assign: unknown display", changed: false)
         }
 
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage assign")
+        }
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }) else {
             store.mutate { state in
                 var scope = activeScope(displayID: displayID, in: &state)
@@ -289,12 +291,23 @@ public struct StageCommandService {
         return StageCommandResult(message: lines.joined(separator: "\n"), changed: false)
     }
 
+    /// Identifiant de stage saisi par l'appelant : nil si vide, car `StageID` s'arrête sur une précondition (REL-001).
+    private func parsedStageID(_ raw: String) -> StageID? {
+        raw.isEmpty ? nil : StageID(rawValue: raw)
+    }
+
+    private static func emptyStageIDResult(_ command: String) -> StageCommandResult {
+        StageCommandResult(message: "\(command): requires a nonempty stage id", changed: false)
+    }
+
     public func create(_ rawStageID: String, name: String? = nil) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage create: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage create")
+        }
         let created = store.mutate { state -> Bool in
             var scope = activeScope(displayID: display.id, in: &state)
             guard scope.createStage(stageID, name: name, mode: config.tiling.defaultStrategy) else { return false }
@@ -316,7 +329,9 @@ public struct StageCommandService {
     }
 
     public func rename(_ rawStageID: String, to name: String, displayID: DisplayID) -> StageCommandResult {
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage rename")
+        }
         let renamed = store.mutate { state -> Bool in
             var scope = activeScope(displayID: displayID, in: &state)
             guard scope.renameStage(stageID, to: name) else { return false }
@@ -338,7 +353,9 @@ public struct StageCommandService {
     }
 
     public func reorder(_ rawStageID: String, to position: Int, displayID: DisplayID) -> StageCommandResult {
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage reorder")
+        }
         let reordered = store.mutate { state -> Bool in
             var scope = activeScope(displayID: displayID, in: &state)
             guard scope.reorderStage(stageID, to: position) else { return false }
@@ -356,7 +373,9 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage delete: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage delete")
+        }
         let deleted = store.mutate { state -> Bool in
             var scope = activeScope(displayID: display.id, in: &state)
             guard scope.deleteEmptyInactiveStage(stageID) else { return false }
@@ -374,7 +393,9 @@ public struct StageCommandService {
         guard let display = activeDisplay(in: snapshot) else {
             return StageCommandResult(message: "stage switch: no display", changed: false)
         }
-        let stageID = StageID(rawValue: rawStageID)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage switch")
+        }
         return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
@@ -383,7 +404,10 @@ public struct StageCommandService {
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
             return StageCommandResult(message: "stage switch: unknown display", changed: false)
         }
-        return switchDisplay(display, to: StageID(rawValue: rawStageID), snapshot: snapshot)
+        guard let stageID = parsedStageID(rawStageID) else {
+            return Self.emptyStageIDResult("stage switch")
+        }
+        return switchDisplay(display, to: stageID, snapshot: snapshot)
     }
 
     public func switchToPosition(_ position: Int) -> StageCommandResult {
@@ -530,7 +554,7 @@ public struct StageCommandService {
         }
 
         let effectiveFollow = followFocus ?? config.focus.stageMoveFollowsFocus
-        let move = store.mutate { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope)? in
+        let move = store.mutate { state -> (movingStage: PersistentStage, requestedStageID: StageID, sourceDesktopID: DesktopID, targetScopeID: StageScope, activated: Bool)? in
             var sourceScope = activeScope(displayID: sourceDisplayID, in: &state)
             var targetScope = activeScope(displayID: targetDisplay.id, in: &state)
             guard let movingStageIndex = sourceScope.stages.firstIndex(where: { $0.id == stageID }) else { return nil }
@@ -565,7 +589,7 @@ public struct StageCommandService {
                 state.updatePinHomeScope(windowID: member.windowID, to: targetScopeID)
             }
             state.focusDisplay(effectiveFollow ? targetDisplay.id : sourceDisplay.id)
-            return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID)
+            return (movingStage, requestedStageID, sourceScope.desktopID, targetScopeID, targetScope.activeStageID == movingStage.id)
         }
         guard let move else {
             return stageMoveResult(
@@ -586,14 +610,35 @@ public struct StageCommandService {
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
         // Plan unique (A15, T212) : membres transférés et disposition des deux écrans en une écriture.
         var placement = CommandPlacement(layoutScopes: nil)
-        for member in movingStage.members where windowsByID[member.windowID] != nil {
-            placement.restoring[member.windowID] = centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect)
+        var placed = 0
+        for member in movingStage.members {
+            guard let window = windowsByID[member.windowID] else { continue }
+            if move.activated {
+                placement.restoring[member.windowID] = centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect)
+            } else {
+                // Stage déplacée mais inactive sur l'écran cible : ses fenêtres restent masquées (REL-023).
+                placement.hiding[member.windowID] = HiddenWindowPlacement.frame(for: window.frame.cgRect, on: targetDisplay, among: snapshot.displays)
+            }
+            placed += 1
         }
-        var failed = movingStage.members.count - placement.restoring.count
+        var failed = movingStage.members.count - placed
         service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))
         service.removeLayoutIntent(scope: targetScopeID)
         let result = service.applyCommandPlacement(placement, cause: "stage.move_display", generation: generation, events: events).result
         failed += result.failed
+        if !move.activated {
+            // Frames de retour de la stage masquée (REL-023) : centrées sur l'écran cible, écrites après
+            // l'application car le relevé du plan réécrit les frames des membres avec les frames vivantes.
+            store.mutate { state in
+                var scope = activeScope(displayID: targetDisplay.id, in: &state)
+                guard let index = scope.stages.firstIndex(where: { $0.id == movingStage.id }) else { return }
+                for memberIndex in scope.stages[index].members.indices {
+                    let frame = scope.stages[index].members[memberIndex].frame.cgRect
+                    scope.stages[index].members[memberIndex].frame = Rect(centeredFrame(frame, in: targetDisplay.visibleFrame.cgRect))
+                }
+                state.update(scope)
+            }
+        }
         events.append(RoadieEvent(
             type: "stage_move_display",
             scope: targetScopeID,
@@ -1386,6 +1431,7 @@ public struct StageCommandService {
         }
     }
 
+    // O(n) - n = fenêtres du snapshot et de l'ordre demandé (avant : O(n²), PERF-005).
     private func normalizedOrder(
         _ orderedWindowIDs: [WindowID],
         windowID: WindowID,
@@ -1395,9 +1441,10 @@ public struct StageCommandService {
         let scopedIDs = snapshot.windows.compactMap { entry in
             entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
         }
+        let scopedIDSet = Set(scopedIDs)
         var seen: Set<WindowID> = []
         var result: [WindowID] = []
-        for id in orderedWindowIDs where scopedIDs.contains(id) || id == windowID {
+        for id in orderedWindowIDs where scopedIDSet.contains(id) || id == windowID {
             guard !seen.contains(id) else { continue }
             result.append(id)
             seen.insert(id)
@@ -1447,8 +1494,10 @@ public struct StageCommandService {
             return (entry.window.id, entry.window.frame.cgRect)
         })
         let current = LayoutPlan(placements: currentFrames)
+        // O(n) - ensemble construit hors boucle (avant : `ordered.contains` par commande, PERF-005).
+        let orderedSet = Set(ordered)
         let commands = LayoutDiff.commands(previous: current, next: layout).compactMap { command -> ApplyCommand? in
-            guard ordered.contains(command.windowID),
+            guard orderedSet.contains(command.windowID),
                   let window = windowsByID[command.windowID]
             else { return nil }
             return ApplyCommand(window: window, frame: Rect(command.frame))
@@ -1500,10 +1549,11 @@ public struct StageCommandService {
         return ordered[index]
     }
 
+    // O(s) - s = stages du scope (avant : O(s²), `visible.contains` par candidate, PERF-005).
     private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {
         let candidates = scope.stages.filter(isSelectableStage)
         let visible = candidates.filter { !$0.members.isEmpty }.map(\.id)
-        let remaining = candidates.map(\.id).filter { !visible.contains($0) }
+        let remaining = candidates.filter { $0.members.isEmpty }.map(\.id)
         let ordered = visible + remaining
         let index = position - 1
         guard ordered.indices.contains(index) else { return nil }
