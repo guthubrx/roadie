@@ -265,9 +265,11 @@ public final class CLICommandRouter {
     /// Les résultats d'action n'ont qu'un booléen `changed` : un échec se reconnaît à son
     /// message (cible inconnue, argument invalide, opération en échec). Le reste est une
     /// action sans objet (« already », « no neighbor », « no structural change ») : code 0.
+    /// Un message d'échec doit donc contenir un de ces marqueurs hors valeurs utilisateur
+    /// (ex. « bookmark focus X: failed - window not visible ... ») ; « not visible » seul n'en est pas un.
     nonisolated static func actionExitCode(changed: Bool, message: String) -> Int32 {
         guard !changed else { return 0 }
-        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "not visible", "must "]
+        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "must "]
         let lowered = message.lowercased()
         return failureMarkers.contains { lowered.contains($0) } ? 1 : 0
     }

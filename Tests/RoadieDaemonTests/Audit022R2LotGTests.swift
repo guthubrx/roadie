@@ -54,9 +54,17 @@ struct Audit022R2LotGTests {
     }
 
     @Test
-    func notVisibleMessageIsAFailureOnlyWhenNothingChanged() {
-        let message = "bookmark focus work: window not visible (other Space, minimized or unresponsive app), bookmark kept"
+    func absentBookmarkWindowMessageIsAFailureOnlyWhenNothingChanged() {
+        let message = "bookmark focus work: failed - window not visible (other Space, minimized or unresponsive app), bookmark kept"
         #expect(CLICommandRouter.actionExitCode(changed: false, message: message) == 1)
         #expect(CLICommandRouter.actionExitCode(changed: true, message: message) == 0)
+    }
+
+    /// R2-06 : « not visible » dans une valeur utilisateur ne fait plus échouer une action sans objet.
+    @Test
+    func userValueContainingNotVisibleIsNotAFailure() {
+        let message = "stage create not visible: already exists"
+        #expect(CLICommandRouter.actionExitCode(changed: false, message: message) == 0)
+        #expect(CLICommandRouter.actionExitCode(changed: false, message: "window not visible") == 0)
     }
 }

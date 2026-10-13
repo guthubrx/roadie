@@ -221,22 +221,61 @@ private final class BorderView: NSView {
     }
 
     /// Pastille dans le coin haut droit, à l'intérieur de la bordure, couleur de la bordure.
+    /// Largeur bornée à la place disponible ; libellé tronqué sur une ligne ; rien si la place manque.
     private func drawGroupLabel() {
         guard let groupLabel else { return }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: NSColor.white
+            .foregroundColor: NSColor.white,
+            .paragraphStyle: paragraph
         ]
         let text = NSAttributedString(string: groupLabel, attributes: attributes)
-        let size = text.size()
-        let pill = NSRect(
-            x: bounds.maxX - thickness - 8 - size.width - 12,
-            y: bounds.maxY - thickness - 6 - size.height - 4,
-            width: size.width + 12,
-            height: size.height + 4
-        )
+        guard let geometry = BorderGroupPill.geometry(bounds: bounds, thickness: thickness, textSize: text.size()) else { return }
         color.setFill()
-        NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
-        text.draw(at: NSPoint(x: pill.minX + 6, y: pill.minY + 2))
+        NSBezierPath(roundedRect: geometry.pill, xRadius: geometry.pill.height / 2, yRadius: geometry.pill.height / 2).fill()
+        text.draw(in: geometry.text)
+    }
+}
+
+/// Géométrie de la pastille de groupe (fonction pure, testable sans AppKit à l'écran).
+enum BorderGroupPill {
+    static let rightMargin: CGFloat = 8
+    static let topMargin: CGFloat = 6
+    static let horizontalPadding: CGFloat = 6
+    static let verticalPadding: CGFloat = 2
+    /// Largeur de texte minimale pour que la pastille reste lisible (au moins « … » et un caractère).
+    static let minimumTextWidth: CGFloat = 16
+
+    struct Geometry: Equatable {
+        var pill: CGRect
+        var text: CGRect
+    }
+
+    /// Pastille ancrée en haut à droite. Sa largeur ne dépasse jamais l'espace entre les deux marges
+    /// intérieures de la bordure : l'origine ne devient donc jamais négative. `nil` si la place
+    /// (largeur ou hauteur) est insuffisante. O(1).
+    static func geometry(bounds: CGRect, thickness: CGFloat, textSize: CGSize) -> Geometry? {
+        let inset = thickness + rightMargin
+        let availableWidth = bounds.width - 2 * inset
+        let pillHeight = textSize.height + 2 * verticalPadding
+        guard availableWidth >= minimumTextWidth + 2 * horizontalPadding,
+              bounds.height >= pillHeight + 2 * (thickness + topMargin)
+        else { return nil }
+        let pillWidth = min(textSize.width + 2 * horizontalPadding, availableWidth)
+        let pill = CGRect(
+            x: bounds.maxX - inset - pillWidth,
+            y: bounds.maxY - thickness - topMargin - pillHeight,
+            width: pillWidth,
+            height: pillHeight
+        )
+        let text = CGRect(
+            x: pill.minX + horizontalPadding,
+            y: pill.minY + verticalPadding,
+            width: pillWidth - 2 * horizontalPadding,
+            height: textSize.height
+        )
+        return Geometry(pill: pill, text: text)
     }
 }

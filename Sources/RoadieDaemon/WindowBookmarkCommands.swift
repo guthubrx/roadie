@@ -63,7 +63,7 @@ public struct WindowBookmarkCommandService {
             // différée (délai de grâce) tranche (REL-028).
             guard processIsDead(owningWindow: bookmark.windowID, in: state) else {
                 return WindowCommandResult(
-                    message: "bookmark focus \(name): window not visible (other Space, minimized or unresponsive app), bookmark kept",
+                    message: "bookmark focus \(name): failed - window not visible (other Space, minimized or unresponsive app), bookmark kept",
                     changed: false
                 )
             }
