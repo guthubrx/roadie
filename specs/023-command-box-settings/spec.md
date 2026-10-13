@@ -184,14 +184,14 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 
 - **FR-001**: La boîte de recherche (Caps Lock + F) MUST passer en mode commande quand le premier caractère saisi est `/`, et rester en mode recherche de texte sinon.
 - **FR-002**: En mode commande, la boîte MUST lister les commandes avec une description courte et MUST filtrer cette liste pendant la frappe, sans tenir compte de la casse ni des accents.
-- **FR-003**: Retour MUST exécuter la commande saisie. En cas de succès, la boîte MUST se fermer. En cas d'échec, la boîte MUST rester ouverte avec un message d'erreur court qui donne la forme attendue.
+- **FR-003**: Retour MUST exécuter la commande saisie. En cas de succès, la boîte MUST se fermer, sauf pour les commandes qui rendent un résultat à lire (`/doctor`, `/heal`, `/reload`, `/set`), dont la boîte MUST afficher le résultat et rester ouverte jusqu'à la frappe suivante ou Échap. En cas d'échec, la boîte MUST rester ouverte avec un message d'erreur court qui donne la forme attendue.
 - **FR-004**: Une commande MUST agir sur la fenêtre, le stage, l'écran et le bureau actifs au moment où elle s'exécute. La boîte n'enlève pas le focus à la fenêtre active : ce contexte est celui de l'ouverture, sauf si l'utilisateur change de fenêtre pendant la saisie.
 - **FR-005**: Les commandes de ce périmètre MUST avoir le même effet que la commande `roadie` correspondante : `/move`, `/swap`, `/resize`, `/full`, `/max`, `/stage` (numéro, nom, `new`, `rename`, `send`), `/screen`, `/send` (numéro d'écran), `/desktop`, `/layout`, `/balance`, `/split`, `/bm`, `/grid`, `/letters`, `/doctor`, `/heal`, `/reload`, `/restart`.
 - **FR-006**: Les directions MUST être acceptées en français (gauche, droite, haut, bas) et en anglais (left, right, up, down).
 - **FR-007**: Tab MUST compléter une commande ou un argument. Flèche haut et Flèche bas MUST parcourir l'historique des commandes en mode commande. L'historique MUST garder les 50 dernières commandes, y compris après un redémarrage.
 - **FR-008**: Des alias courts MUST exister pour les commandes les plus fréquentes : `/s` (stage), `/d` (desktop), `/b` (bm).
 - **FR-009**: La boîte MUST afficher le résultat d'une commande d'information (`/doctor`, `/set nom`) dans la boîte même.
-- **FR-010**: Le comportement du mode recherche de texte de la SPEC-021 MUST rester identique quand la saisie ne commence pas par `/`.
+- **FR-010**: Le comportement du mode recherche de texte de la SPEC-021 MUST rester identique quand la saisie ne commence pas par `/` : même décodage des touches (les caractères ignorés restent ignorés et laissés à l'application active), mêmes correspondances.
 
 **Fenêtre de réglages**
 
@@ -203,7 +203,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-016**: Les catégories MUST être : Général, Tuilage, Stages et bureaux, Mode lettres, Grille, Recherche, Rail, Bordures, Focus et souris, Règles, Avancé.
 - **FR-017**: Les réglages qui ne sont pas simples (listes de règles, stages nommés, hooks, surcharges par écran) MUST s'afficher en lecture seule avec un bouton qui ouvre le fichier de configuration.
 - **FR-018**: La fenêtre MUST suivre le fichier : un changement fait ailleurs MUST apparaître sans rouvrir la fenêtre.
-- **FR-019**: La fenêtre MUST se fermer avec Échap et Cmd + W, suivre l'apparence claire ou sombre du système, et le texte de la fenêtre MUST être en français.
+- **FR-019**: La fenêtre MUST se fermer avec Échap et Cmd + W, suivre l'apparence claire ou sombre du système, et le texte de l'interface MUST être en français. Les messages techniques du validateur de configuration (identiques à ceux de `roadie config validate`) restent tels quels.
 
 **Réglages en ligne de commande dans la boîte**
 

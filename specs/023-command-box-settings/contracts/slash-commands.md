@@ -28,15 +28,15 @@ Notation : `DIR` = `gauche|droite|haut|bas` (ou `left|right|up|down`), traduit e
 | | | `/grid fenêtre` | `["grid","interactive","--scope","focused_window"]` | différée |
 | `/letters` | | `/letters` | `["targets","interactive","--source","all","--include-app-targets"]` | différée |
 | `/doctor` | | `/doctor` | `["doctor"]` | résultat affiché dans la boîte |
-| `/heal` | | `/heal` | `["daemon","heal"]` | |
-| `/reload` | | `/reload` | `["config","reload"]` | |
+| `/heal` | | `/heal` | `["daemon","heal"]` | résultat affiché dans la boîte |
+| `/reload` | | `/reload` | `["config","reload"]` | résultat affiché dans la boîte |
 | `/restart` | | `/restart` | `["daemon","restart"]` | différée, sans message |
 | `/settings` | | `/settings [catégorie]` | (aucun) | ouvre la fenêtre |
 | `/set` | | `/set nom [valeur\|défaut]` | (aucun) | voir contracts/settings.md |
 
 ## Résultat
 
-- Succès (`exitCode == 0`) : la boîte se ferme, sauf `/doctor`, `/set nom` et `/settings` sans fenêtre disponible, qui affichent leur résultat.
+- Succès (`exitCode == 0`) : la boîte se ferme, sauf `/doctor`, `/heal`, `/reload`, `/set` (lecture, écriture, rétablissement) qui affichent leur résultat et restent ouvertes jusqu'à la frappe suivante ou Échap.
 - Échec (`exitCode != 0`, argument invalide, commande inconnue) : la boîte reste ouverte. Le message contient la cause courte et la forme attendue (`usage`). Aucun état de Roadie ne change quand l'analyse échoue.
 - Une commande inconnue propose la commande la plus proche (distance d'édition ≤ 2).
 - Journal : une commande refusée émet `command.rejected` {nom de la commande si elle est connue (sinon `unknown`), code de la raison}. Ni la saisie brute ni les arguments ne sont journalisés.

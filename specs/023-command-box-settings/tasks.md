@@ -67,6 +67,19 @@
 
 - [x] T026 [P] Écrire `docs/decisions/011-command-box-settings-window.md` (constitution VII) : mode commande dans la boîte de la SPEC-021 ; première fenêtre SwiftUI du daemon ; éditeur de texte du fichier TOML plutôt que ré-encodage ; nom de réglage `table.clé`. Format : Contexte, Décision, Conséquences, Statut. Résultat observable : fichier présent, statut « Accepté », cité dans `plan.md`.
 
+## Convergence
+
+Passage 1 (2026-10-13, agent Converge en lecture seule + contre-revue Codex de l'implémentation) : manques de classe (d). Tâches ajoutées, section close à la fin du passage.
+
+- [ ] T027 [US3] Mode commande : avaler toute touche sans Commande et accepter tout caractère imprimable (`#`, `+`, `~`, `@`, `=`, guillemets, parenthèses ; flèches gauche/droite et touches mortes avalées), SANS changer le mode recherche (FR-010 : même décodage, mêmes touches ignorées et laissées à l'application active). Indicateur thread-safe `commandModeActive` lu par le tap clavier (`TargetOverlayPresenter.swift`, callback d'`installEventTap`). Tests de décodage : `#`, `+`, `~` acceptés en mode commande, ignorés (laissés passer) en mode recherche. Résultat observable : `/set borders.active_color #FF0000` est accepté en test manuel.
+- [ ] T028 [US4] Refuser `/set` et `reset` quand le fichier de configuration a déjà des erreurs (`validity().isValid == false`), avec le même message que la fenêtre ; test (`SettingsServiceTests`). Résultat observable : fichier invalide + `/set` = refus, fichier intact.
+- [ ] T029 [US8] Montrer la valeur actuelle des entrées en lecture seule dans la fenêtre (texte brut d'une liste, nombre d'entrées d'un tableau de tables) en texte non modifiable ; `ConfigFileEditor` expose la lecture brute d'un bloc multi-lignes ; tests. Résultat observable : la page Règles liste le nombre de règles ; `floating_bundles` montre ses valeurs.
+- [ ] T030 [US3] FR-010 : le mode recherche ignore comme avant `. - _ , :` et un `/` hors du premier caractère ; seul le `/` d'une saisie vide ouvre le mode commande (spec corrigée : cas limite et FR-010). Test : « google.com » donne `googlecom` en mode recherche comme avant.
+- [ ] T031 [US6] `/heal` et `/reload` rendent un résultat court dans la boîte (comme `/doctor`) ; `/set` réussi reste ouvert avec le résultat (FR-003 corrigé) ; refus du routeur et « Aucune fenêtre active » portent la forme attendue (`usage`) ; messages bruts du routeur traduits quand ils sont connus. Mise à jour de `SlashCommandCatalog` (`/heal`, `/reload` en `routerInfo`), de ses tests et de ceux du lanceur.
+- [ ] T032 [US2] `label_font_size` : retirer la validation hors plage inatteignable (le clamp au décodage suffit, comme `rows` et `max_depth`) ; la refus hors plage reste dans `SettingsService`/`/set`/fenêtre (US2 AS4). Corriger le texte de T001 et le test (clamp déjà testé). 
+- [ ] T033 [US4] Une seule instance partagée de `SettingsService` (`SettingsService.shared`) utilisée par la boîte, le lanceur et la fenêtre : une seule sauvegarde `roadies.toml.bak-…` par session du daemon ; test.
+- [ ] T034 [P] Écarts faibles : numéros de stage proposés en complétion de `/stage` ; bouton « Rétablir » seulement si la valeur diffère du défaut (et non dès que la ligne existe) ; alias acceptés pour `tiling.default_strategy` (`spatial_bsp`, `master_stack`, `mutable_bsp`) ; `docs/en/cli.md` mis à jour.
+
 ## Dependencies & Execution Order
 
 - Phase 1 : T001 et T002 d'abord. T003, T004, T005 parallèles. T006 après T002 + T004 + T005. T007 après T003 + T004.
