@@ -2724,7 +2724,8 @@ public final class LayoutMaintainer {
     /// Scopes actifs sans arbre (A3) où au moins deux fenêtres clampées se chevauchent ou débordent encore.
     /// Replanifie avec les tailles minimales connues ; garde la fenêtre focalisée et cache les
     /// autres seulement si aucune disposition n'existe (dernier recours journalisé, FR-003).
-    // O(s · n³) au pire — s scopes concernés, n fenêtres par scope (n petit).
+    // O(r + s · n³) au pire - r résultats indexés une fois, s scopes concernés, n fenêtres par scope.
+    // Avant PERF-009, la préparation des minimums ajoutait O(n·r) par scope.
     private func resolveInfeasibleClampedScopes(
         from result: ApplyResult,
         in snapshot: DaemonSnapshot
@@ -2746,6 +2747,9 @@ public final class LayoutMaintainer {
             frames[item.windowID] = item.requested.cgRect
         }
         let innerGap = CGFloat(service.innerGap())
+        // Index des refus partagé par tous les scopes : un seul parcours des résultats (PERF-009).
+        let refusedMinimums = Self.refusedMinimumSizes(in: result)
+        let minimumFloor = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)
 
         for (optionalScope, scopedClampedItems) in clampedScopes {
             guard let scope = optionalScope,
@@ -2778,8 +2782,14 @@ public final class LayoutMaintainer {
                 .compactMap { requestedFrames[$0] ?? liveFrames[$0] }
                 .reduce(CGRect.null) { $0.union($1) }
                 .intersection(visibleFrame)
+            // Taille minimale connue : plancher, refus mémorisés, refus de ce résultat.
+            // O(n) par scope avec l'index ; avant : O(n·r), un parcours des r résultats par fenêtre.
             var minimumSizes = orderedIDs.reduce(into: [WindowID: CGSize]()) { sizes, id in
-                sizes[id] = knownMinimumSize(of: id, in: result)
+                var size = Self.largest(minimumFloor, refusedMinimums[id] ?? .zero)
+                if let known = clampedFrames[id.rawValue] {
+                    size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))
+                }
+                sizes[id] = size
             }
             // Deux essais au plus : le premier peut révéler de nouveaux minimums.
             var arranged = false
@@ -2848,18 +2858,15 @@ public final class LayoutMaintainer {
         return (resolution, commands, hidden)
     }
 
-    /// Taille minimale connue d'une fenêtre : refus de ce résultat et refus mémorisés. O(r).
-    private func knownMinimumSize(of windowID: WindowID, in result: ApplyResult) -> CGSize {
-        var size = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)
-        if let known = clampedFrames[windowID.rawValue] {
-            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))
+    /// Minimums révélés par les refus (`clamped` avec cadre réel) d'un résultat, par fenêtre.
+    /// Plusieurs refus d'une même fenêtre gardent le plus grand minimum de chaque axe.
+    // O(r) - un seul parcours des r éléments du résultat.
+    static func refusedMinimumSizes(in result: ApplyResult) -> [WindowID: CGSize] {
+        result.items.reduce(into: [WindowID: CGSize]()) { sizes, item in
+            guard item.status == .clamped, let actual = item.actual else { return }
+            let size = minimumSize(requested: item.requested, actual: actual)
+            sizes[item.windowID] = sizes[item.windowID].map { largest($0, size) } ?? size
         }
-        for item in result.items where item.windowID == windowID && item.status == .clamped {
-            if let actual = item.actual {
-                size = Self.largest(size, Self.minimumSize(requested: item.requested, actual: actual))
-            }
-        }
-        return size
     }
 
     /// Vrai si des cadres se chevauchent ou débordent de la zone visible au-delà de la tolérance
