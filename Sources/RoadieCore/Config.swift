@@ -164,7 +164,15 @@ public struct TilingConfig: Equatable, Codable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let rawStrategy = try c.decodeIfPresent(String.self, forKey: .defaultStrategy) ?? "bsp"
-        self.defaultStrategy = WindowManagementMode(tomlValue: rawStrategy) ?? .bsp
+        // Clé absente : bsp. Valeur présente mais inconnue : erreur lisible, jamais un repli silencieux (REL-034).
+        guard let strategy = WindowManagementMode(tomlValue: rawStrategy) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .defaultStrategy,
+                in: c,
+                debugDescription: "default_strategy inconnu : \"\(rawStrategy)\" (attendu : bsp, mutableBsp, masterStack, float, spatialBsp ou un alias)"
+            )
+        }
+        self.defaultStrategy = strategy
         self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? "largest_dim"
         self.gapsOuter = try c.decodeFlexibleDouble(forKey: .gapsOuter) ?? 8
         self.gapsOuterTop = try c.decodeFlexibleDouble(forKey: .gapsOuterTop)
@@ -1561,13 +1569,6 @@ private enum ConfigValidationRules {
                 level: .error,
                 path: "experimental.target_grid.hint_characters",
                 message: "must contain at least rows*columns characters"
-            ))
-        }
-        if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {
-            items.append(ConfigValidationItem(
-                level: .error,
-                path: "experimental.target_grid.*_key",
-                message: "recursive grid keys must not be empty"
             ))
         }
         return items

@@ -146,7 +146,17 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try render(rules).write(to: url, atomically: true, encoding: .utf8)
+        let text = render(rules)
+        // Relire le texte produit avant de remplacer le fichier : une règle altérée ne doit jamais être écrite (REL-035).
+        let check = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rules-check-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: check) }
+        try text.write(to: check, atomically: true, encoding: .utf8)
+        let reloaded = try RoadieConfigLoader.loadRulesFile(from: check.path)
+        guard reloaded == rules.sorted(by: { $0.id < $1.id }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "les regles relues different des regles a ecrire"])
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func render(_ rules: [WindowRule]) -> String {
@@ -195,7 +205,8 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
     }
 
     private func append(_ key: String, _ value: String?, to lines: inout [String]) {
-        guard let value, !value.isEmpty else { return }
+        // Une chaîne vide reste écrite : "title = \"\"" ne correspond qu'à un titre vide, l'absence du champ à tous (REL-035).
+        guard let value else { return }
         lines.append("\(key) = \"\(toml(value))\"")
     }
 
@@ -204,10 +215,18 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
         lines.append("\(key) = \(value ? "true" : "false")")
     }
 
+    /// Échappe une chaîne TOML entre guillemets : `"`, `\\` et tout caractère de contrôle (REL-035).
     private func toml(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        var escaped = ""
+        for scalar in value.unicodeScalars {
+            switch scalar.value {
+            case 0x22: escaped += "\\\""
+            case 0x5C: escaped += "\\\\"
+            case 0x00...0x1F, 0x7F: escaped += String(format: "\\u%04X", scalar.value)
+            default: escaped.unicodeScalars.append(scalar)
+            }
+        }
+        return escaped
     }
 
     private func slug(_ value: String) -> String {
