@@ -566,8 +566,7 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     /// Raccourci global du mode recherche (SPEC-021), forme normalisée `command+control+alt+f` ;
     /// vide = désactivé. Défaut : la hyper key (Cmd+Option+Ctrl) + F, comme le conseille Homerow.
     public var searchHotkey: String
-    /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
-    /// Taille des étiquettes. Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
+    /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
 
     public static let defaultSearchHotkey = "command+control+alt+f"
@@ -744,8 +743,7 @@ public struct TargetGridConfig: Equatable, Codable, Sendable {
     public var focusFollowGrid: Bool
     public var labelPlacement: TargetGridLabelPlacement
     public var defaultScope: TargetGridScope
-    /// Taille de police des étiquettes en points (SPEC-023), bornée à 8…48.
-    /// Taille des étiquettes. Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
+    /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
 
     public init(

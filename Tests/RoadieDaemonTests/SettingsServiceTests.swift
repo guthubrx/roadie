@@ -444,8 +444,8 @@ struct SettingsServiceTests {
     // MARK: - Instance partagée (T033)
 
     @Test
-    func sharedInstanceIsUniqueAndUsesTheDefaultPath() {
-        #expect(SettingsService.shared === SettingsService.shared)
+    func sharedInstanceUsesTheDefaultPath() {
+        // L'unicité de l'instance (une seule sauvegarde par instance) est couverte par `onlyOneBackupPerInstance`.
         #expect(SettingsService.shared.configPath == RoadieConfigLoader.defaultConfigPath())
     }
 

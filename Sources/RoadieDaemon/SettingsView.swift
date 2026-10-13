@@ -176,15 +176,17 @@ private struct SettingRow: View {
             }
             // Valeur actuelle d'une entrée en lecture seule : texte sélectionnable, 6 lignes visibles au plus.
             if let summary = model.readOnlySummary(descriptor), !summary.isEmpty {
-                ScrollView {
-                    Text(summary)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(6)
+                // Hauteur qui suit le contenu, plafonnée à 6 lignes : le texte seul s'il tient, sinon un ScrollView de 6 lignes.
+                let text = Text(summary)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(6)
+                ViewThatFits(in: .vertical) {
+                    text.fixedSize(horizontal: false, vertical: true)
+                    ScrollView { text }
                 }
-                // Hauteur au contenu (un ScrollView prendrait toute la hauteur permise), 6 lignes au plus.
-                .frame(height: CGFloat(min(summary.split(separator: "\n", omittingEmptySubsequences: false).count, 6)) * 15 + 12)
+                .frame(maxHeight: 6 * 15 + 12)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
             }
             if let error = model.errors[descriptor.id] {

@@ -129,9 +129,7 @@ public final class SlashCommandRunner {
         case .router(let argv):
             return routed(argv, command: command)
         case .routerInfo(let argv):
-            let response = route(argv)
-            let text = response.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? response.stderr : response.stdout
-            return .info(Self.truncated(Self.lines(text)))
+            return routedInfo(argv, command: command)
         case .routerDeferred(let argv):
             return .deferred(argv: argv)
         case .stageSwitchByName(let name):
@@ -172,7 +170,28 @@ public final class SlashCommandRunner {
         guard response.exitCode == 0 else {
             return reject(command, "router_failed", SlashError(message: Self.translated(stderr.isEmpty ? stdout : stderr), usage: usage))
         }
-        return .done(message: stdout.isEmpty ? [] : [Self.translated(stdout)])
+        // Exit 0 avec un message connu (« aucune fenêtre voisine », « déjà sur cet écran »…) : rien n'a été fait,
+        // l'échec doit rester visible dans la boîte.
+        let message = Self.translated(stdout)
+        if message != stdout {
+            return reject(command, "no_effect", SlashError(message: message, usage: usage))
+        }
+        return .done(message: stdout.isEmpty ? [] : [message])
+    }
+
+    /// `/doctor` (sortie = diagnostic), `/heal` et `/reload` : le résultat s'affiche dans la boîte, lignes
+    /// connues traduites. Pour `/heal` et `/reload`, une sortie non nulle ou un `status=` autre que `applied`
+    /// est un échec (message du routeur, ou `error=` de `config reload`). O(l), l = taille de la réponse.
+    private func routedInfo(_ argv: [String], command: String) -> SlashOutcome {
+        let response = route(argv)
+        let text = response.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? response.stderr : response.stdout
+        let lines = Self.lines(text).map(Self.translated)
+        let reloadRefused = text.contains("status=") && !text.contains("status=applied")
+        if argv.first != "doctor", response.exitCode != 0 || reloadRefused {
+            let message = lines.first { $0.hasPrefix("Rechargement refusé :") } ?? lines.first ?? "La commande a échoué."
+            return reject(command, "router_failed", SlashError(message: message, usage: Self.usage(command)))
+        }
+        return .info(Self.truncated(lines))
     }
 
     private func setting(_ request: SettingRequest, command: String) -> SlashOutcome {
@@ -281,6 +300,9 @@ public final class SlashCommandRunner {
         if let name = between(text, "bookmark focus ", ": not found") { return "Bookmark introuvable : \(name)." }
         if let name = between(text, "bookmark focus ", ": display unavailable") { return "Bookmark \(name) : écran indisponible." }
         if let name = between(text, "bookmark focus ", ": focus failed") { return "Bookmark \(name) : le focus a échoué." }
+        if text == "status=applied" { return "Configuration rechargée." }
+        if text.hasPrefix("status=") { return "Rechargement refusé." }
+        if text.hasPrefix("error=") { return "Rechargement refusé : \(text.dropFirst("error=".count))" }
         if text.hasPrefix("no neighbor ") {
             let directions = ["left": "à gauche", "right": "à droite", "up": "au-dessus", "down": "en dessous"]
             return "Aucune fenêtre voisine \(directions[String(text.dropFirst("no neighbor ".count))] ?? "dans cette direction")."

@@ -175,8 +175,11 @@ struct SlashCommandRunnerTests {
     @Test
     func moveWithoutNeighborKeepsTranslatedMessage() {
         let fixture = Fixture()
-        #expect(fixture.runner().execute("move gauche") == .done(message: ["Aucune fenêtre voisine à gauche."]))
+        // Le routeur sort avec 0 : sans cela, la boîte se fermerait sans rien dire (échec silencieux).
+        #expect(fixture.runner().execute("move gauche") == .failed(SlashError(
+            message: "Aucune fenêtre voisine à gauche.", usage: "/move gauche|droite|haut|bas")))
         #expect(fixture.writer.frames.isEmpty)
+        #expect(fixture.runner().loadHistory().isEmpty)
     }
 
     @Test
@@ -246,7 +249,7 @@ struct SlashCommandRunnerTests {
     }
 
     /// `heal` et `config reload` lisent l'état réel : routeur remplacé, argv vérifiés. Comme `doctor`,
-    /// leur résultat s'affiche dans la boîte (T031 a), succès comme échec.
+    /// leur résultat s'affiche dans la boîte ; un échec du routeur reste un échec (T040).
     @Test
     func healAndReloadAreShownInTheBox() {
         let fixture = Fixture()
@@ -255,11 +258,43 @@ struct SlashCommandRunnerTests {
             seen.append(argv)
             return argv == ["daemon", "heal"]
                 ? CLIResponse(exitCode: 0, stdout: "heal ok\n")
-                : CLIResponse(exitCode: 1, stderr: "roadie: config invalide\n")
+                : CLIResponse(exitCode: 0, stdout: "status=applied\n")
         }
         #expect(runner.execute("heal") == .info(["heal ok"]))
-        #expect(runner.execute("reload") == .info(["roadie: config invalide"]))
+        #expect(runner.execute("reload") == .info(["Configuration rechargée."]))
         #expect(seen == [["daemon", "heal"], ["config", "reload"]])
+        #expect(runner.loadHistory() == ["heal", "reload"])
+    }
+
+    @Test
+    func failedHealIsAFailureWithUsageAndNoHistory() {
+        let fixture = Fixture()
+        let runner = fixture.runner { _ in CLIResponse(exitCode: 1, stderr: "roadie: daemon injoignable\n") }
+        #expect(runner.execute("heal") == .failed(SlashError(message: "roadie: daemon injoignable", usage: "/heal")))
+        #expect(runner.loadHistory().isEmpty)
+        #expect(fixture.events.contains("command.rejected"))
+        #expect(fixture.events.contains("router_failed"))
+        #expect(!fixture.events.contains("injoignable"))
+    }
+
+    @Test
+    func refusedReloadIsAFailureWithTheConfigError() {
+        let fixture = Fixture()
+        let runner = fixture.runner { _ in
+            CLIResponse(exitCode: 1, stdout: "status=failed_keeping_previous\nerror=ligne 3 invalide\n")
+        }
+        #expect(runner.execute("reload") == .failed(SlashError(message: "Rechargement refusé : ligne 3 invalide", usage: "/reload")))
+        #expect(runner.loadHistory().isEmpty)
+        // Même avec le code 0, un `status=` autre que `applied` n'est pas un succès.
+        let zero = fixture.runner { _ in CLIResponse(exitCode: 0, stdout: "status=failed\nerror=refus\n") }
+        #expect(zero.execute("reload") == .failed(SlashError(message: "Rechargement refusé : refus", usage: "/reload")))
+    }
+
+    @Test
+    func failedDoctorStaysInfo() {
+        let fixture = Fixture()
+        let runner = fixture.runner { _ in CLIResponse(exitCode: 1, stdout: "daemon: KO\n") }
+        #expect(runner.execute("doctor") == .info(["daemon: KO"]))
     }
 
     @Test
