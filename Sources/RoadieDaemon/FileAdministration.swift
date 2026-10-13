@@ -126,7 +126,11 @@ public struct FileAdministrationService: @unchecked Sendable {
         return actions
     }
 
-    /// Logs du service launchd : renommés en `.1` (l'ancien `.1` est écrasé), jamais supprimés.
+    /// Logs du service launchd : copiés en `.1` (l'ancien `.1` est écrasé), puis tronqués sur place.
+    /// Un simple renommage couperait la consultation courante : le daemon garde son descripteur
+    /// ouvert et continuerait d'écrire dans le fichier renommé (OBS-001). Le fichier garde donc son
+    /// inode ; launchd ouvre les logs en ajout (`O_APPEND`), les écritures suivantes repartent du début.
+    /// Limite : les octets écrits entre la copie et la troncature sont perdus.
     private func daemonLogActions(dryRun: Bool) -> [FileAdminAction] {
         ["roadied.stdout.log", "roadied.stderr.log"].compactMap { name in
             let url = roadiesURL.appendingPathComponent(name)
@@ -138,12 +142,21 @@ public struct FileAdministrationService: @unchecked Sendable {
                 sizeBytes: fileSize(url)
             )
             if !dryRun {
-                let backup = URL(fileURLWithPath: "\(url.path).1")
-                try? manager.removeItem(at: backup)
-                action.applied = (try? manager.moveItem(at: url, to: backup)) != nil
+                action.applied = Self.copyThenTruncate(url, manager: manager)
             }
             return action
         }
+    }
+
+    /// Copie `url` vers `<url>.1` puis tronque `url` à 0 octet. Pas de troncature si la copie échoue.
+    private static func copyThenTruncate(_ url: URL, manager: FileManager) -> Bool {
+        let backup = URL(fileURLWithPath: "\(url.path).1")
+        try? manager.removeItem(at: backup)
+        guard (try? manager.copyItem(at: url, to: backup)) != nil,
+              let handle = try? FileHandle(forWritingTo: url)
+        else { return false }
+        defer { try? handle.close() }
+        return (try? handle.truncate(atOffset: 0)) != nil
     }
 
     private func configBackupActions(dryRun: Bool) -> [FileAdminAction] {

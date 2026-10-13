@@ -7,7 +7,6 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$script_dir/.." && pwd)"
 label="com.roadie.roadied"
-service="gui/$(id -u)/$label"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 local_bin_dir="$HOME/.local/bin"
 state_dirs=("$HOME/.roadies" "$HOME/.local/state/roadies")
@@ -25,12 +24,12 @@ else
   echo "Binaire roadie introuvable : étape de remise à l'écran ignorée." >&2
 fi
 
-# 2. Arrêter et décharger le service (sans kill : launchd envoie le signal d'arrêt).
-if launchctl print "$service" >/dev/null 2>&1; then
-  launchctl bootout "$service"
-  echo "$label arrêté"
-else
-  echo "$label n'était pas chargé"
+# 2. Arrêter le LaunchAgent ET toute instance autonome (Roadie.app, tmux) avec la procédure de
+# scripts/stop. Si l'arrêt n'est pas confirmé, rien n'est supprimé : une instance encore vivante
+# continuerait à gérer les fenêtres et à recréer ses fichiers d'état.
+if ! "$script_dir/stop"; then
+  echo "ERREUR : roadied n'est pas arrêté (voir ci-dessus). Désinstallation interrompue, rien n'a été supprimé." >&2
+  exit 1
 fi
 
 # 3. Supprimer le LaunchAgent et les binaires installés.

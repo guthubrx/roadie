@@ -40,6 +40,10 @@ struct CLICommandSpec {
 public final class CLICommandRouter {
     private let makeService: (_ readOnly: Bool) -> SnapshotService
     private let streamSink: ((String) -> Void)?
+    /// Service de configuration du processus : `config reload` doit agir sur celui que lisent
+    /// les composants (REL-014), donc l'instance partagée par défaut.
+    private let configReload: ConfigReloadService
+    private let railRuntimeStore: RailRuntimeStateStore
     private var cachedService: SnapshotService?
     private var stdoutBuffer = ""
     private var stderrBuffer = ""
@@ -54,10 +58,14 @@ public final class CLICommandRouter {
     /// fourni seulement en exécution locale.
     public init(
         makeService: @escaping (_ readOnly: Bool) -> SnapshotService = CLICommandRouter.defaultService,
-        streamSink: ((String) -> Void)? = nil
+        streamSink: ((String) -> Void)? = nil,
+        configReload: ConfigReloadService = .shared,
+        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore()
     ) {
         self.makeService = makeService
         self.streamSink = streamSink
+        self.configReload = configReload
+        self.railRuntimeStore = railRuntimeStore
     }
 
     /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
@@ -243,6 +251,19 @@ public final class CLICommandRouter {
 
     /// Fin d'une commande d'action : message sur stdout, code 0 si changement ou action
     /// sans objet, 1 si la commande a échoué (FR-039).
+    /// `RailRuntimeStateStore` rend la valeur calculée même si l'écriture a échoué (REL-021) :
+    /// on relit le fichier pour ne pas annoncer un succès perdu. Rend `false` après avoir écrit l'erreur.
+    private func railMutationPersisted(_ expected: RailRuntimeState, _ store: RailRuntimeStateStore) -> Bool {
+        let stored = store.load()
+        guard stored.isPinned == expected.isPinned,
+              stored.stageLabelsVisibleUntil == expected.stageLabelsVisibleUntil
+        else {
+            err("roadie: rail state not persisted (rail.json unreadable or not writable); see roadied stderr")
+            return false
+        }
+        return true
+    }
+
     private func finish(_ message: String, changed: Bool) -> Int32 {
         out(message)
         return Self.actionExitCode(changed: changed, message: message)
@@ -275,6 +296,9 @@ public final class CLICommandRouter {
             return args.dropFirst().first == "unhide-all"
         case "state":
             return ["dump", "audit"].contains(args.dropFirst().first ?? "")
+        // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).
+        case "config":
+            return args.dropFirst().first == "reload"
         default:
             return false
         }
@@ -499,7 +523,7 @@ public final class CLICommandRouter {
                 }
                 return report.hasErrors ? 1 : 0
             } else if verb == "reload" {
-                let result = ConfigReloadService().reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())
+                let result = configReload.reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())
                 if args.contains("--json") {
                     try printCodableJSON(result)
                 } else {
@@ -537,19 +561,22 @@ public final class CLICommandRouter {
             else {
                 return usageError()
             }
-            let runtimeStore = RailRuntimeStateStore()
+            let runtimeStore = railRuntimeStore
             switch verb {
             case "status":
                 let pinned = runtimeStore.load().isPinned
                 out((RailSettings.load().statusLines + ["runtime.pinned=\(pinned)"]).joined(separator: "\n"))
             case "pin":
                 let state = runtimeStore.setPinned(true)
+                guard railMutationPersisted(state, runtimeStore) else { return 1 }
                 out("rail pinned=\(state.isPinned)")
             case "unpin":
                 let state = runtimeStore.setPinned(false)
+                guard railMutationPersisted(state, runtimeStore) else { return 1 }
                 out("rail pinned=\(state.isPinned)")
             case "toggle":
                 let state = runtimeStore.togglePinned()
+                guard railMutationPersisted(state, runtimeStore) else { return 1 }
                 out("rail pinned=\(state.isPinned)")
             case "labels":
                 let subcommand = args.dropFirst(2).first ?? "show"
@@ -557,6 +584,7 @@ public final class CLICommandRouter {
                 switch subcommand {
                 case "show":
                     let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds)
+                    guard railMutationPersisted(state, runtimeStore) else { return 1 }
                     if settings.visibilitySeconds <= 0 {
                         out("rail labels visible=always")
                     } else {
@@ -564,6 +592,7 @@ public final class CLICommandRouter {
                     }
                 case "hide":
                     let state = runtimeStore.hideStageLabels()
+                    guard railMutationPersisted(state, runtimeStore) else { return 1 }
                     out("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
                 case "status":
                     let state = runtimeStore.load()
@@ -968,7 +997,7 @@ public final class CLICommandRouter {
             out(result.message)
             return 0
         case "create":
-            guard let stageID = args.dropFirst().first else {
+            guard let stageID = args.dropFirst().first, !stageID.isEmpty else {
                 err("roadie: stage create requires a stage id")
                 return 64
             }
@@ -985,9 +1014,9 @@ public final class CLICommandRouter {
         case "reorder":
             guard let stageID = args.dropFirst().first,
                   let rawPosition = args.dropFirst(2).first,
-                  let position = Int(rawPosition)
+                  let position = Int(rawPosition), position > 0
             else {
-                err("roadie: stage reorder requires a stage id and numeric position")
+                err("roadie: stage reorder requires a stage id and a positive numeric position")
                 return 64
             }
             let result = StageCommandService(service: service).reorder(stageID, to: position)

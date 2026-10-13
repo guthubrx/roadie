@@ -54,10 +54,10 @@ struct FileAdministrationTests {
         #expect(FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stdout.log").path))
 
         let applied = service.run(dryRun: false)
-        // Rotation : le log courant passe en .1 (ancien .1 écrasé), rien n'est supprimé.
+        // Rotation : le log courant est copié en .1 (ancien .1 écrasé) puis tronqué sur place (OBS-001).
         let stdoutBackup = try Data(contentsOf: roadies.appendingPathComponent("roadied.stdout.log.1"))
         #expect(stdoutBackup == Data(repeating: 2, count: 32))
-        #expect(!FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stdout.log").path))
+        #expect(try Data(contentsOf: roadies.appendingPathComponent("roadied.stdout.log")).isEmpty)
         #expect(FileManager.default.fileExists(atPath: roadies.appendingPathComponent("roadied.stderr.log").path))
         #expect(applied.actions.contains { $0.applied })
         #expect(!FileManager.default.fileExists(atPath: roadies.appendingPathComponent("events.jsonl.1").path))
