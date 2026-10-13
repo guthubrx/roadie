@@ -44,7 +44,7 @@ Notation : `DIR` = `gauche|droite|haut|bas` (ou `left|right|up|down`), traduit e
 ## Cas particuliers
 
 - Aucune fenêtre active : le routeur répond « no active window » ; la boîte l'affiche en français : « Aucune fenêtre active ».
-- Un seul écran ou un seul bureau : `/screen` et `/desktop` affichent « Il n'y a pas d'autre écran » / « Il n'y a pas d'autre bureau ».
+- Un seul écran : `/screen` affiche « Il n'y a pas d'autre écran ». Le routeur ne signale jamais « pas d'autre bureau » (les bureaux se créent à la demande).
 - Action différée : (1) la session se termine, (2) le contrôleur remet son état à zéro, (3) au tour suivant de la boucle principale, le lanceur exécute l'action (research R2). `/restart` n'affiche aucun résultat : le processus s'arrête.
 
 ## Complétion

@@ -460,14 +460,14 @@ Une seconde demande ramène la même fenêtre au premier plan.
 #### Réglage en ligne (`/set`)
 
 Un réglage se nomme `table.clé` : le chemin de la table du fichier, sans le
-préfixe `experimental.` ni `fx.`, puis la clé. Exemples : `target_grid.rows`,
+préfixe `experimental.` ni `fx.`, puis la clé. Exemples : `target_grid.overlay_fill_opacity`,
 `app_targets.max_targets`, `rail.header.display.font_size`. La fenêtre, `/set` et
 la complétion de la barre utilisent les mêmes noms.
 
 | Saisie | Effet |
 |--------|-------|
 | `/set` | liste les catégories |
-| `/set nom` | affiche la valeur actuelle, le défaut et la plage ou les choix permis (`target_grid.rows = 4 (défaut 3, de 2 à 12)`) |
+| `/set nom` | affiche la valeur actuelle, le défaut et la plage ou les choix permis (`target_grid.overlay_fill_opacity = 0.4 (défaut 0.1, de 0 à 1)`) |
 | `/set nom valeur` | valide, écrit dans le fichier et applique |
 | `/set nom défaut` | rétablit la valeur par défaut |
 

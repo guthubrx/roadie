@@ -25,7 +25,7 @@ L'utilisateur appuie sur Caps Lock + F et tape `/settings`, puis Retour. Une fen
 
 **Why this priority**: c'est la demande de départ de l'utilisateur. Sans cette fenêtre, les autres parties n'ont pas d'intérêt visible.
 
-**Independent Test**: Caps Lock + F, `/settings`, Retour. La fenêtre s'ouvre sur la première catégorie. Changer le nombre de lignes de la grille de 3 à 4. Lancer la grille : elle a 4 lignes, sans redémarrage de Roadie.
+**Independent Test**: Caps Lock + F, `/settings`, Retour. La fenêtre s'ouvre sur la première catégorie. Changer l'opacité du remplissage de la grille de 0,10 à 0,40. Lancer la grille : son fond est plus visible, sans redémarrage de Roadie.
 
 **Acceptance Scenarios**:
 
@@ -76,17 +76,17 @@ L'utilisateur tape `/` dans la boîte. La boîte passe en mode commande et liste
 
 ### User Story 4 - Modifier un réglage avec `/set` (Priority: P2)
 
-L'utilisateur tape `/set target_grid.rows 4`. Roadie change ce réglage et l'applique. `/set target_grid.rows` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
+L'utilisateur tape `/set target_grid.overlay_fill_opacity 0.4`. Roadie change ce réglage et l'applique. `/set target_grid.overlay_fill_opacity` seul affiche la valeur actuelle, le réglage par défaut et la plage permise. `/settings grille` ouvre la fenêtre sur la catégorie Grille.
 
 **Why this priority**: c'est le second usage demandé de `/settings` : régler sans ouvrir la fenêtre. Elle dépend de la fenêtre (P1) pour partager la même liste de réglages.
 
-**Independent Test**: `/set target_grid.rows 4`, Retour, puis ouvrir la grille : 4 lignes. `/set target_grid.rows`, Retour : la boîte affiche « 4 (défaut 3, de 2 à 12) ».
+**Independent Test**: `/set target_grid.overlay_fill_opacity 0.4`, Retour, puis ouvrir la grille : son fond est plus visible. `/set target_grid.overlay_fill_opacity`, Retour : la boîte affiche « 0.4 (défaut 0.1, de 0 à 1) ».
 
 **Acceptance Scenarios**:
 
 1. **Given** un nom de réglage et une valeur valides, **When** l'utilisateur lance `/set nom valeur`, **Then** la valeur est écrite dans le fichier de configuration et appliquée sans redémarrage.
 2. **Given** un nom de réglage seul, **When** l'utilisateur lance `/set nom`, **Then** la boîte affiche la valeur actuelle, la valeur par défaut et la plage permise.
-3. **Given** une valeur invalide, **When** l'utilisateur lance `/set nom valeur`, **Then** le fichier ne change pas, et la boîte dit pourquoi la valeur est refusée.
+3. **Given** une valeur invalide, **When** l'utilisateur lance `/set nom valeur`, **Then** le fichier ne change pas, et la boîte dit pourquoi la valeur est refusée. Cela vaut aussi pour une valeur correcte en soi qui rend le fichier invalide : par exemple 4 lignes de grille avec seulement 9 lettres d'étiquettes.
 4. **Given** un début de nom après `/set `, **When** l'utilisateur appuie sur Tab, **Then** la boîte complète le nom, ou propose la liste des noms qui correspondent.
 5. **Given** un nom de catégorie, **When** l'utilisateur lance `/settings catégorie`, **Then** la fenêtre s'ouvre sur cette catégorie.
 6. **Given** un réglage modifié, **When** l'utilisateur lance `/set nom défaut`, **Then** le réglage reprend sa valeur par défaut.
@@ -171,7 +171,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - La fenêtre de réglages et `/set` modifient le même réglage à la suite : la dernière valeur écrite gagne et la fenêtre l'affiche.
 - La fenêtre active peut changer ou disparaître pendant la saisie : la commande agit sur le contexte actif à Retour. S'il n'y a plus de fenêtre active, la commande est refusée avec un message clair.
 - Aucune fenêtre active : les commandes qui en demandent une sont refusées avec un message clair.
-- Un seul écran ou un seul bureau : `/screen` et `/desktop` disent qu'il n'y a pas d'autre cible, sans erreur technique.
+- Un seul écran : `/screen` dit qu'il n'y a pas d'autre écran, sans erreur technique. Les bureaux se créent à la demande : `/desktop N` n'échoue pas pour un bureau absent.
 - Une commande non implémentée par Roadie (par exemple fermer une fenêtre) n'est pas proposée.
 - Le mode recherche de texte reste inchangé quand le texte ne commence pas par `/`. Un texte qui doit commencer par `/` se tape précédé d'un espace.
 - La fenêtre de réglages est ouverte quand l'utilisateur change d'écran ou de bureau : elle reste ouverte.
@@ -210,7 +210,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 - **FR-020**: `/settings` sans argument MUST ouvrir la fenêtre ; `/settings catégorie` MUST l'ouvrir sur cette catégorie.
 - **FR-021**: `/set nom valeur` MUST écrire la valeur dans le fichier de configuration après validation ; `/set nom` MUST afficher la valeur actuelle, la valeur par défaut et la plage permise ; `/set nom défaut` MUST rétablir la valeur par défaut.
 - **FR-022**: Une valeur invalide MUST laisser le fichier intact, et la boîte MUST donner la raison du refus.
-- **FR-023**: Un nom de réglage MUST identifier une seule clé du fichier de configuration. Il a la forme `table.clé`, où `table` est le chemin de la table sans le préfixe `experimental.` ni `fx.` (par exemple `target_grid.rows`, `app_targets.max_targets`, `rail.header.display.font_size`). Les noms MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
+- **FR-023**: Un nom de réglage MUST identifier une seule clé du fichier de configuration. Il a la forme `table.clé`, où `table` est le chemin de la table sans le préfixe `experimental.` ni `fx.` (par exemple `target_grid.overlay_fill_opacity`, `app_targets.max_targets`, `rail.header.display.font_size`). Les noms MUST être les mêmes dans la fenêtre, dans `/set` et dans la complétion de la boîte.
 - **FR-024**: Une modification MUST conserver les commentaires, l'ordre et les réglages inconnus du fichier de configuration. Seule la ligne concernée change.
 
 **Taille des étiquettes**
@@ -227,7 +227,7 @@ La fenêtre couvre tous les réglages simples de Roadie (nombres, interrupteurs,
 ### Key Entities
 
 - **Commande de la boîte** : nom, alias, description courte, forme des arguments, effet. Exemple : `stage`, alias `s`, argument numéro ou nom.
-- **Réglage** : nom stable (par exemple `target_grid.rows`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
+- **Réglage** : nom stable (par exemple `target_grid.overlay_fill_opacity`), catégorie, description, type (interrupteur, nombre, choix, texte, couleur), valeur par défaut, limites, valeur actuelle, caractère simple ou lecture seule.
 - **Catégorie** : nom affiché, ordre, liste de réglages.
 - **Historique de commandes** : les 50 dernières commandes tapées, de la plus récente à la plus ancienne.
 

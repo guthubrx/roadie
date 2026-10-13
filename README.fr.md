@@ -551,7 +551,7 @@ Un `/` en premier caractère fait passer la même barre en **mode commande** :
 `/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` ouvre une
 fenêtre de réglages (catégories à gauche, recherche, changements appliqués tout
 de suite) et `/set table.clé valeur` modifie un réglage sans l'ouvrir (par exemple
-`/set target_grid.rows 4`). Le fichier de configuration garde ses commentaires.
+`/set target_grid.overlay_fill_opacity 0.4`). Le fichier de configuration garde ses commentaires.
 Voir [Mode commande et fenêtre de réglages](docs/fr/features.md).
 
 Roadie fournit aussi deux grilles recursives :

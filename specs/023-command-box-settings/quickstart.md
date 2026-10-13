@@ -23,20 +23,21 @@ Prérequis : Roadie installé et lancé (`make install`, signature `roadied-cert
 ## 3. Fenêtre de réglages
 
 1. `/settings` puis Retour : la fenêtre s'ouvre en moins de 1 s, sur Général.
-2. Cliquer « Grille ». Passer `rows` de 3 à 4. Fermer, lancer `/grid` : 4 lignes, sans redémarrage.
+2. Cliquer « Grille ». Passer l'opacité du remplissage (`overlay_fill_opacity`) de 0,10 à 0,40. Fermer, lancer `/grid` : le fond de la grille est nettement plus visible, sans redémarrage.
 3. Dans la recherche, taper « bordure » : les réglages des bordures de toutes les catégories apparaissent.
 4. Vérifier que la fenêtre n'est pas tuilée : `roadie windows list` ne la liste pas, ou la liste en flottant ; les autres fenêtres ne bougent pas à son ouverture.
 5. `/settings` une seconde fois : la même fenêtre passe devant.
-6. Éditer `roadies.toml` à la main (`rows = 5`) : la fenêtre affiche 5 sans être rouverte.
+6. Éditer `roadies.toml` à la main (`overlay_fill_opacity = 0.5`) : la fenêtre affiche 0.5 sans être rouverte.
 7. Échap puis Cmd + W : la fenêtre se ferme.
 
 ## 4. `/set`
 
-1. `/set target_grid.rows 4` puis Retour : la grille a 4 lignes.
-2. `/set target_grid.rows` : « target_grid.rows = 4 (défaut 3, de 2 à 12) ».
-3. `/set target_grid.rows 99` : refus, fichier intact.
-4. `/set target_grid.rows défaut` : retour à 3.
-5. Comparer les commentaires du fichier avant/après : `diff` ne montre que la ligne `rows`.
+1. `/set target_grid.overlay_fill_opacity 0.4` puis Retour : le fond de la grille est plus visible.
+2. `/set target_grid.overlay_fill_opacity` : « target_grid.overlay_fill_opacity = 0.4 (défaut 0.1, de 0 à 1) ».
+3. `/set target_grid.overlay_fill_opacity 5` : refus, fichier intact.
+4. `/set target_grid.overlay_fill_opacity défaut` : retour à 0.1.
+5. Comparer les commentaires du fichier avant/après : `diff` ne montre que la ligne `overlay_fill_opacity`.
+6. Cas du nombre de lignes : `/set target_grid.rows 4` est refusé avec les 9 `hint_characters` par défaut (12 cases demandent 12 lettres) ; Roadie dit pourquoi et le fichier reste intact. Après `/set target_grid.hint_characters azeqsdwxcrtyuiop`, `/set target_grid.rows 4` est accepté.
 
 ## 5. Taille des étiquettes
 

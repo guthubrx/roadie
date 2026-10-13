@@ -559,7 +559,7 @@ A `/` as the first character switches the same bar to **command mode**:
 `/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` opens a
 settings window (categories on the left, search, changes applied at once) and
 `/set table.key value` changes a setting without opening it (for example
-`/set target_grid.rows 4`). The configuration file keeps its comments. See
+`/set target_grid.overlay_fill_opacity 0.4`). The configuration file keeps its comments. See
 [Command mode and settings window](docs/en/features.md).
 
 Roadie also provides two spatial grid modes:

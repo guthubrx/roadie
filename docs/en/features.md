@@ -460,7 +460,7 @@ the bar completion use the same names.
 | Input | Effect |
 |-------|--------|
 | `/set` | lists the categories |
-| `/set name` | shows the current value, the default, and the allowed range or choices (`target_grid.rows = 4 (défaut 3, de 2 à 12)`) |
+| `/set name` | shows the current value, the default, and the allowed range or choices (`target_grid.overlay_fill_opacity = 0.4 (défaut 0.1, de 0 à 1)`) |
 | `/set name value` | validates, writes to the file and applies |
 | `/set name défaut` | restores the default value |
 

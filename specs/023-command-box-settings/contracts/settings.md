@@ -4,7 +4,7 @@
 
 `table.clé`, où `table` est le chemin de la table TOML sans le préfixe `experimental.` ni `fx.`, et `clé` la clé du fichier. Le nom est unique : deux clés de même nom dans des tables différentes ont des noms différents (`target_mode.enabled`, `app_targets.enabled`, `rail.header.display.font_size`, `rail.stage_labels.font_size`). La catégorie de la fenêtre est une donnée séparée : elle sert à regrouper, pas à nommer.
 
-Exemples : `target_grid.rows`, `target_mode.label_font_size`, `target_grid.label_font_size`, `rail.width`, `target_mode.search_hotkey`, `borders.active_color`, `tiling.gaps_outer`.
+Exemples : `target_grid.overlay_fill_opacity`, `target_mode.label_font_size`, `target_grid.label_font_size`, `rail.width`, `target_mode.search_hotkey`, `borders.active_color`, `tiling.gaps_outer`.
 
 Complétion : après `/set `, Tab propose les noms qui commencent par la saisie, ou qui contiennent un de ses mots.
 
