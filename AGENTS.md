@@ -1,11 +1,11 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `025-settings-readability`.
+Current SpecKit feature: `026-command-bar`.
 
 Contexte :
-- `specs/025-settings-readability/spec.md`
-- `specs/025-settings-readability/plan.md`
-- `specs/025-settings-readability/research.md`
-- `specs/025-settings-readability/tasks.md`
+- `specs/026-command-bar/spec.md`
+- `specs/026-command-bar/plan.md`
+- `specs/026-command-bar/research.md`
+- `specs/026-command-bar/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
