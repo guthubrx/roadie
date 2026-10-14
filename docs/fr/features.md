@@ -354,7 +354,10 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 | `?` | fiche de la cible en vert (role, titre, texte, id) |
 | Echap | fermer sans action |
 
-La recherche se ferme seule apres 60 s sans frappe. Les clics exigent
+Un clic hors de la barre et de son panneau la ferme. Le clic atteint normalement
+l'application, même sur un autre écran. Les clics dans la barre ou le panneau
+la gardent ouverte. La recherche se ferme aussi seule après 60 s sans frappe.
+Les actions de clic sur une cible exigent
 `app_mouse_actions_enabled = true` et la barre `overlay_enabled = true`.
 
 La barre reste centree en bas sur l'ecran d'ouverture, avec une largeur de 640 points reduite si l'ecran

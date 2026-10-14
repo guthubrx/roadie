@@ -3,6 +3,15 @@
 Changements livrés dans chaque version. Les notes de release précisent la mise à
 jour et les limites connues ; les README décrivent la version courante.
 
+## Non publié
+
+### Corrections
+
+- Recherche des libellés de contrôles natifs portés par leurs enfants, notamment
+  les dossiers Outlook, avec moins de lectures inutiles des éléments hors fenêtre.
+- Fermeture de la barre de recherche et de commandes au clic extérieur, sans
+  bloquer le clic dans l’application ni déclencher un Retour encore en attente.
+
 ## 0.5.0 — 2026-10-14
 
 ### Nouveautés

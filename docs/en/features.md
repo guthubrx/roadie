@@ -345,7 +345,10 @@ letter filters the targets; Return clicks the green target.
 | `?` | details of the green target (role, title, text, id) |
 | Esc | close without action |
 
-Search closes by itself after 60 s without a key press. Clicks require
+Clicking outside the bar and its panel closes it. The click reaches the application
+normally, including on another display. Clicking inside the bar or its panel
+keeps it open. Search also closes after 60 s without a key press.
+Click actions on a target require
 `app_mouse_actions_enabled = true` and the bar requires `overlay_enabled = true`.
 
 The bar stays centered at the bottom of the opening display, with a width of 640 points reduced on

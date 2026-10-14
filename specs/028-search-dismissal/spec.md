@@ -1,7 +1,7 @@
 # Session 028 — Recherche des contrôles et fermeture au clic extérieur
 
-Statut : en cours. Validée le 14 octobre 2026, avec agents.
-Tests : 0/0 (en préparation).
+Statut : clôturée, installée et validée le 14 octobre 2026.
+Tests : 18/18 tests dédiés passent ; suite complète : 1 458 tests.
 
 ## Besoin
 
