@@ -13,7 +13,7 @@ Roadie est écrit en Swift. Il regroupe les fenêtres dans des stages et organis
 
 **État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit les sources actuelles : tuilage réactif, recherche dans les fenêtres visibles, boîte de commandes, fenêtre de réglages et correctifs de fiabilité. Compile les sources de `main` pour utiliser ce code.
 
-La dernière release publiée est [v0.3.0](https://github.com/guthubrx/roadie/releases/tag/v0.3.0). Elle ne contient pas toutes les fonctions décrites ici. Consulte le [changelog](CHANGELOG.md) et le [brouillon de la v0.4.0](docs/releases/v0.4.0.md) pour les ajouts depuis cette release.
+La release [v0.4.0](https://github.com/guthubrx/roadie/releases/tag/v0.4.0) ajoute la recherche, la boîte de commandes et les réglages. Consulte le [changelog](CHANGELOG.md) et les [notes de release](docs/releases/v0.4.0.md) pour les nouveautés, les migrations et les limites connues.
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Bureau Roadie avec tiling, nav rail et commandes CLI" width="100%">

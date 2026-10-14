@@ -1,12 +1,12 @@
 # Changelog
 
 Ce journal décrit les changements visibles depuis la dernière release publiée.
-Les entrées non publiées décrivent les sources de `main`, pas le DMG v0.3.0.
+Chaque entrée décrit la version correspondante. Les README présentent les sources courantes.
 
-## Non publié — version proposée : 0.4.0
+## 0.4.0 — 2026-10-14
 
 Comparaison : [v0.3.0 → sources intégrées](https://github.com/guthubrx/roadie/compare/v0.3.0...96c3d462).
-180 commits intégrés depuis la release du 25 mai 2026. Préparation du 14 octobre 2026.
+180 commits pour les nouveautés intégrées jusqu’à `96c3d462`, puis les corrections de la session 024. La dernière release précédente date du 25 mai 2026.
 
 ### Ajouts
 
@@ -84,18 +84,26 @@ Comparaison : [v0.3.0 → sources intégrées](https://github.com/guthubrx/roadi
   `[experimental.target_mode].overlay_enabled = true`. Les clics dans les applications
   demandent aussi leurs activations explicites. La fenêtre de réglages est en français.
 
-### Vérification et état de publication
+### Corrections finales de performance
 
-- Fusion 022/023 `96c3d462` : 1 343 tests Swift dans 141 suites et 26 tests des scripts réussis.
-- La publication stable reste bloquée par le dernier audit : 15 constats actifs,
-  dont 3 HIGH de complexité (`PERF-010`, `PERF-011`, `PERF-012`).
-  Voir [le rapport](audits/2026-10-13/full-codebase-03/scoring.md).
-- Aucun DMG 0.4.0 n'est encore construit ou joint. Les binaires des sources annoncent
-  encore 0.3.0. Le numéro sera aligné lors de la préparation de la version retenue.
+La session 024 ferme les trois HIGH de l’audit précédent : construction groupée
+des appartenances, validation unique par scope et index temporaire de rapprochement.
+À 400 fenêtres, les microbenchmarks debug passent respectivement de 15,399 à 0,443 ms,
+de 6 622,379 à 17,085 ms et de 117,742 à 16,076 ms pour les homonymes ambigus.
+Les résultats restent identiques. Ces mesures ne décrivent pas la latence globale
+de l’interface. Le pire cas géométrique est documenté.
+
+### Vérification et limites connues
+
+- **1 354 tests Swift dans 143 suites et 26 tests des scripts réussis** après correction.
+- Revue indépendante favorable et [audit ciblé de clôture des trois HIGH](audits/2026-10-14/release-performance-024/report.md).
+  Les six MEDIUM et six LOW du précédent audit restent ouverts.
+- Binaires et application alignés sur 0.4.0. Construction et vérification du DMG
+  consignées dans le dossier de release.
 - Le packaging reste signé ad hoc, sans notarisation Apple. Le contrôle des Spaces
   natifs, `window close` et `toggle floating` ne font pas partie des fonctions livrées.
 
-[Notes de la version proposée, en français et en anglais](docs/releases/v0.4.0.md).
+[Notes de release, en français et en anglais](docs/releases/v0.4.0.md).
 
 ## 0.3.0 — 2026-05-25
 
