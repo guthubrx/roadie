@@ -517,9 +517,9 @@ en proportion ; sans valeur posée, l'aspect est celui d'avant.
   pas montrées. L'interface de la fenêtre est en français uniquement.
 
 Les briques du Mode Cibles sont configurables separement. Le socle CLI et le picker
-restent actifs par defaut, tandis que l'overlay graphique futur, les clics dans
-les apps et le scroll-mode applicatif restent coupes tant que l'utilisateur ne
-les demande pas.
+restent actifs par défaut. Les overlays graphiques existent ; leur activation
+reste facultative. Les clics et le défilement dans les applications restent
+désactivés par défaut.
 
 ```toml
 [experimental.target_mode]

@@ -25,7 +25,8 @@ Roadie combines automatic tiling, named stages, and Roadie virtual desktops. Eac
 - **Window tools:** focus border, focus follows mouse, optional title-bar actions, pins, bookmarks, and persistent groups.
 - **Reliable runtime:** local command socket, atomic state writes, shared snapshots, validated configuration reload, hidden-window recovery, and daemon health queries.
 - **Automation:** CLI, TOML rules, JSON queries, JSONL events, and read-only performance diagnostics.
-- **Optional modes:** Keyboard Targets, Hyper+F search across every visible window, experimental app-zone discovery, display/window grids, and short macros.
+- **Command box and settings:** a leading `/` in search, suggestions and history, the `/settings` window, `/set` read/write/reset, and label sizes from 8 to 48 points.
+- **Optional modes:** Keyboard Targets, search across every visible window, experimental app-zone discovery, display/window grids, and short macros.
 - **Modular execution:** separate tiler, rail, border, focus, title-bar, and target processes. Dedicated companion-only startup profiles remain future work.
 
 ## Update And Check

@@ -11,7 +11,9 @@
 
 Roadie est écrit en Swift. Il regroupe les fenêtres dans des stages et organise le stage actif sur chaque écran. Un panneau latéral natif, le **nav rail**, permet de changer de stage et de déplacer les fenêtres avec des vignettes.
 
-**État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit le projet actuel, avec les derniers correctifs du tiling réactif, du glisser-déposer entre écrans, du nav rail, du retour d’écran, de la signature et du redémarrage. Compile les sources de `main` pour utiliser ce code.
+**État du projet :** développement actif. Les commandes et la configuration peuvent encore changer. Ce README décrit les sources actuelles : tuilage réactif, recherche dans les fenêtres visibles, boîte de commandes, fenêtre de réglages et correctifs de fiabilité. Compile les sources de `main` pour utiliser ce code.
+
+La dernière release publiée est [v0.3.0](https://github.com/guthubrx/roadie/releases/tag/v0.3.0). Elle ne contient pas toutes les fonctions décrites ici. Consulte le [changelog](CHANGELOG.md) et le [brouillon de la v0.4.0](docs/releases/v0.4.0.md) pour les ajouts depuis cette release.
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Bureau Roadie avec tiling, nav rail et commandes CLI" width="100%">
@@ -45,6 +47,12 @@ Les bureaux et les stages appartiennent à Roadie. Ils ne créent pas et ne pilo
 | Sûreté | Sauvegardes, écriture atomique, récupération des fenêtres masquées, verrous et contrôles de santé |
 | Modes facultatifs | Cibles clavier, découverte des zones applicatives, grilles écran/fenêtre et macros courtes |
 | Exécution | Un daemon pour l’usage quotidien, ou des composants séparés |
+
+### Recherche, Boîte De Commandes Et Réglages
+
+Le raccourci `Cmd+Ctrl+Option+F` ouvre la recherche quand elle est activée. Elle lit les éléments des fenêtres visibles et affiche les résultats au fil de leur découverte. Un `/` en premier caractère ouvre la boîte de commandes. `/settings` affiche les réglages avec recherche et catégories. `/set` permet de lire, modifier ou rétablir un réglage. Les étiquettes ont une taille configurable de 8 à 48 points.
+
+Voir [le guide détaillé](docs/fr/features.md) et les exemples ci-dessous.
 
 ### Tiling Réactif Et Glisser-Déposer
 
@@ -217,7 +225,7 @@ make uninstall
 Le script fait ces étapes dans l’ordre :
 
 1. lance `roadie restore unhide-all` pour qu’aucune fenêtre ne reste masquée ou hors écran ;
-2. arrête le LaunchAgent (`launchctl bootout`) ;
+2. arrête le LaunchAgent, les composants modulaires et les instances autonomes ; si un processus refuse de s’arrêter, il conserve les fichiers installés ;
 3. supprime le fichier LaunchAgent, `~/Applications/Roadie.app` et les binaires de `~/.local/bin` ;
 4. demande s’il faut garder l’état de Roadie (`~/.roadies`, `~/.local/state/roadies`). Sans terminal, il le garde.
 
@@ -545,17 +553,56 @@ ecrans, desktops, bookmarks et, en option, les zones applicatives Accessibility.
 Ces cibles peuvent etre cherchees, inspectees, activees et exportees en JSON
 pour des scripts ou des agents.
 
-Le **mode recherche** (Hyper+F par defaut, `search_hotkey`) ouvre une barre de
+Le **mode recherche** (`Cmd+Ctrl+Option+F` par défaut, clé `search_hotkey`) ouvre une barre de
 saisie : tape quelques lettres d'un element de n'importe quelle fenetre visible,
 puis Retour pour le cliquer (Maj-Retour clic droit, Cmd-Retour Cmd-clic, deux
 Retour double-clic).
 
-Un `/` en premier caractère fait passer la même barre en **mode commande** :
-`/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` ouvre une
-fenêtre de réglages (catégories à gauche, recherche, changements appliqués tout
-de suite) et `/set table.clé valeur` modifie un réglage sans l'ouvrir (par exemple
-`/set target_grid.overlay_fill_opacity 0.4`). Le fichier de configuration garde ses commentaires.
-Voir [Mode commande et fenêtre de réglages](docs/fr/features.md).
+### Boîte de commandes et fenêtre de réglages
+
+Un `/` en premier caractère passe la barre en **mode commande**. Les suggestions
+complètent les commandes, les directions, les stages, les signets et les réglages.
+`Tab` complète la suggestion. Les flèches haut et bas parcourent l'historique.
+`Retour` exécute la commande ; `Échap` ferme la barre. Les raccourcis système restent
+interceptés pendant la saisie de commande.
+
+| Action | Exemple |
+|---|---|
+| Déplacer la fenêtre | `/move gauche` |
+| Échanger deux fenêtres | `/swap droite` |
+| Changer de stage | `/stage 2` ou `/stage Travail` |
+| Changer d'écran | `/screen droite` |
+| Envoyer la fenêtre vers un écran | `/send 2` |
+| Ouvrir les réglages | `/settings` |
+| Lire ou écrire un réglage | `/set target_mode.label_font_size 20` |
+| Rétablir la valeur par défaut | `/set target_mode.label_font_size défaut` |
+| Contrôler ou recharger | `/doctor`, `/heal`, `/reload` |
+
+La fenêtre de réglages propose des catégories, une recherche et des changements
+appliqués immédiatement. Les listes et les tableaux de tables restent en lecture
+seule. L'interface est en français. Les commentaires du fichier TOML sont conservés.
+Une sauvegarde précède la première modification de la session. Une écriture invalide
+est refusée. La taille des étiquettes est réglable de 8 à 48 points, avec 13 par défaut,
+pour les lettres et la recherche (`target_mode.label_font_size`) et la grille
+(`target_grid.label_font_size`).
+
+La barre et les réglages exigent un daemon démarré et `overlay_enabled = true`.
+Dans la table existante du fichier de configuration, active au minimum :
+
+```toml
+[experimental.target_mode]
+overlay_enabled = true
+search_hotkey = "command+control+alt+f"
+```
+
+Pour découvrir et cliquer les éléments des applications, active aussi
+`[experimental.app_targets].enabled = true` et
+`[experimental.target_mode].app_mouse_actions_enabled = true`. Les commandes
+et les réglages fonctionnent sans activer ces clics expérimentaux.
+
+Voir [le catalogue et les limites du mode commande](docs/fr/features.md#mode-commande--et-fenêtre-de-réglages).
+
+### Grilles écran et fenêtre
 
 Roadie fournit aussi deux grilles recursives :
 

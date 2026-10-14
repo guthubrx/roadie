@@ -11,7 +11,9 @@ English | [Français](README.fr.md)
 
 Roadie is written in Swift. It groups windows into stages and tiles the active stage on each display. A native side panel, the **nav rail**, lets you switch stages and move windows with thumbnails.
 
-**Status:** active development. Commands and configuration can still change. This README describes the current project, including the latest fixes to reactive tiling, cross-display drag and drop, the nav rail, display recovery, signing, and restart. Build from `main` to use this code.
+**Status:** active development. Commands and configuration can still change. This README describes the current sources: reactive tiling, search across visible windows, the command box, the settings window, and reliability fixes. Build from `main` to use this code.
+
+The latest published release is [v0.3.0](https://github.com/guthubrx/roadie/releases/tag/v0.3.0). It does not include every feature described here. See the [changelog](CHANGELOG.md) and the [v0.4.0 draft notes](docs/releases/v0.4.0.md) for changes since that release.
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie desktop with tiling, nav rail, and CLI" width="100%">
@@ -45,6 +47,12 @@ Roadie desktops and stages belong to Roadie. They do not create or control nativ
 | Safety | State backups, atomic persistence, hidden-window recovery, instance locks, and health checks |
 | Optional modes | Keyboard Targets, application-zone discovery, display/window grids, and short macros |
 | Runtime | One daemon for daily use, or separate modular components |
+
+### Search, Command Box, And Settings
+
+`Cmd+Ctrl+Option+F` opens search when enabled. It reads elements across visible windows and adds results as they are discovered. A leading `/` opens the command box. `/settings` opens searchable settings by category. `/set` reads, changes, or resets a setting. Labels have a configurable font size from 8 to 48 points.
+
+See [the full guide](docs/en/features.md) and the examples below.
 
 ### Reactive Tiling And Drag And Drop
 
@@ -217,7 +225,7 @@ make uninstall
 The script does these steps in order:
 
 1. runs `roadie restore unhide-all` so that no window stays hidden or off screen;
-2. stops the LaunchAgent (`launchctl bootout`);
+2. stops the LaunchAgent, modular components, and standalone instances; if a process refuses to stop, it keeps the installed files;
 3. deletes the LaunchAgent file, `~/Applications/Roadie.app`, and the binaries in `~/.local/bin`;
 4. asks whether to keep Roadie state (`~/.roadies`, `~/.local/state/roadies`). Without a terminal, it keeps it.
 
@@ -552,16 +560,53 @@ displays, desktops, bookmarks, and optional Accessibility application zones.
 Targets can be searched, inspected, activated, and exported as JSON for scripts
 or agents.
 
-**Search mode** (Hyper+F by default, `search_hotkey`) opens an input bar: type a
+**Search mode** (`Cmd+Ctrl+Option+F` by default, configured by `search_hotkey`) opens an input bar: type a
 few letters of any element in any visible window, then press Return to click it
 (Shift-Return right-click, Cmd-Return Cmd-click, Return twice double-click).
 
-A `/` as the first character switches the same bar to **command mode**:
-`/stage 2`, `/screen droite`, `/bm a`, `/grid`, `/doctor`... `/settings` opens a
-settings window (categories on the left, search, changes applied at once) and
-`/set table.key value` changes a setting without opening it (for example
-`/set target_grid.overlay_fill_opacity 0.4`). The configuration file keeps its comments. See
-[Command mode and settings window](docs/en/features.md).
+### Command box and settings window
+
+A leading `/` switches the bar to **command mode**. Suggestions complete commands,
+directions, stages, bookmarks, and settings. `Tab` completes a suggestion. Arrow
+keys navigate history. `Return` runs a command; `Esc` closes the
+bar. System shortcuts remain intercepted while entering a command.
+
+| Action | Example |
+|---|---|
+| Move the window | `/move left` |
+| Swap windows | `/swap right` |
+| Switch stage | `/stage 2` or `/stage Work` |
+| Switch display | `/screen right` |
+| Send the window to a display | `/send 2` |
+| Open settings | `/settings` |
+| Read or change a setting | `/set target_mode.label_font_size 20` |
+| Restore its default | `/set target_mode.label_font_size default` |
+| Diagnose or reload | `/doctor`, `/heal`, `/reload` |
+
+The settings window provides categories, search, and immediate changes. Lists and
+arrays of tables remain read-only. The interface is in French. TOML comments are
+preserved. A backup precedes the first change of the session. Invalid writes are
+rejected. Label font sizes range from 8 to 48 points, with a default of 13, for
+letters and search (`target_mode.label_font_size`) and the grid
+(`target_grid.label_font_size`).
+
+The bar and settings require a running daemon and `overlay_enabled = true`.
+In the existing configuration table, enable at least:
+
+```toml
+[experimental.target_mode]
+overlay_enabled = true
+search_hotkey = "command+control+alt+f"
+```
+
+To discover and click application elements, also enable
+`[experimental.app_targets].enabled = true` and
+`[experimental.target_mode].app_mouse_actions_enabled = true`. Commands and
+settings work without enabling those experimental clicks.
+
+See [the command catalog and limits](docs/en/features.md#command-mode--and-settings-window).
+
+### Display and window grids
 
 Roadie also provides two spatial grid modes:
 

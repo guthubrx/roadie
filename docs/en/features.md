@@ -509,8 +509,8 @@ in proportion; with no value set, the look is the same as before.
   not shown.
 
 Keyboard Target building blocks are independently configurable. The CLI foundation
-and picker stay enabled by default, while the future visual overlay, app mouse
-actions, and app scroll mode stay off until the user opts in.
+and picker stay enabled by default. Visual overlays are implemented and remain
+optional. Application mouse actions and scroll mode are disabled by default.
 
 ```toml
 [experimental.target_mode]
