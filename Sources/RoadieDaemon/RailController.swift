@@ -182,7 +182,7 @@ public final class RailController {
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20), execute: item)
     }
 
-    private static func railSignature(for state: PersistentStageState) -> String {
+    nonisolated static func railSignature(for state: PersistentStageState) -> String {
         var parts: [String] = []
         parts.append("activeDisplay=\(state.activeDisplayID?.rawValue ?? "-")")
         for selection in state.desktopSelections.sorted(by: { $0.displayID.rawValue < $1.displayID.rawValue }) {
@@ -195,7 +195,9 @@ public final class RailController {
         }) {
             parts.append("scope=\(scope.displayID.rawValue):\(scope.desktopID.rawValue):active=\(scope.activeStageID.rawValue)")
             for stage in scope.stages {
-                let members = stage.members.map { String($0.windowID.rawValue) }.joined(separator: ",")
+                let members = stage.members.map {
+                    "\($0.windowID.rawValue):closed=\($0.confirmedClosedAt == nil ? 0 : 1)"
+                }.joined(separator: ",")
                 parts.append("stage=\(stage.id.rawValue):\(stage.name):\(stage.mode.rawValue):\(members)")
             }
         }
@@ -1233,9 +1235,9 @@ public final class RailController {
             .map(\.id)
     }
 
-    // Un membre present dans le snapshot est toujours represente. Un membre absent (fenetre fermee, changement
-    // de stage, ou fenetre en plein ecran natif dans un autre Space) reste represente 15 s au plus apres
-    // `missingSince`, puis sa carte disparait (SPEC-016 FR-027). Cette grâce exige une observation
+    // Un membre present dans le snapshot est toujours represente. Une fermeture AX confirmée masque
+    // immédiatement le membre absent. Une autre absence (changement de stage ou plein écran natif) reste
+    // représentée 15 s après `missingSince`, puis sa carte disparait (SPEC-016 FR-027). Cette grâce exige une observation
     // réelle récente : une ancienne référence d'écran reconnecté ne crée pas de carte fantôme.
     nonisolated fileprivate static func isRailRepresentedMember(
         _ member: PersistentStageMember,
@@ -1244,6 +1246,9 @@ public final class RailController {
     ) -> Bool {
         if liveWindowIDs.contains(member.windowID) {
             return true
+        }
+        if member.confirmedClosedAt != nil {
+            return false
         }
         guard let missingSince = member.missingSince, let lastSeenAt = member.lastSeenAt else { return false }
         let observationAge = missingSince.timeIntervalSince(lastSeenAt)

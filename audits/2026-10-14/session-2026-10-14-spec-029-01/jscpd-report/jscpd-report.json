@@ -1,0 +1,3871 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 2239,
+        "endLoc": {
+          "column": 5,
+          "line": 2239,
+          "position": 108120
+        },
+        "name": "DaemonSnapshot.swift",
+        "start": 2234,
+        "startLoc": {
+          "column": 4,
+          "line": 2234,
+          "position": 107811
+        }
+      },
+      "format": "swift",
+      "fragment": "    func isClose(to other: Rect, positionTolerance: Double, sizeTolerance: Double) -> Bool {\n        abs(x - other.x) <= positionTolerance\n            && abs(y - other.y) <= positionTolerance\n            && abs(width - other.width) <= sizeTolerance\n            && abs(height - other.height) <= sizeTolerance\n    }",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3774,
+        "endLoc": {
+          "column": 5,
+          "line": 3774,
+          "position": 199824
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 3769,
+        "startLoc": {
+          "column": 4,
+          "line": 3769,
+          "position": 199515
+        }
+      },
+      "tokens": 71
+    },
+    {
+      "firstFile": {
+        "end": 1176,
+        "endLoc": {
+          "column": 39,
+          "line": 1176,
+          "position": 67144
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 1170,
+        "startLoc": {
+          "column": 54,
+          "line": 1170,
+          "position": 66702
+        }
+      },
+      "format": "swift",
+      "fragment": "           Self.matches(entry.requested, command.frame.cgRect) {\n            details[\"axWriteAttempts\"] = String(entry.writesInGeneration)\n            details[\"axReadBack\"] = entry.readBack.map { frameDescription(Rect($0)) } ?? \"-\"\n            details[\"axNativeFullscreenReading\"] = entry.nativeFullscreenReading.map { String($0) } ?? \"unknown\"\n            for (phase, code) in entry.axResultCodes ?? [:] { details[\"ax.\\(phase)\"] = String(code) }\n        }\n        events.append(RoadieEvent(type: \"layout_app_response_accepted\", details: details))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 2765,
+        "endLoc": {
+          "column": 47,
+          "line": 2765,
+          "position": 150903
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 2759,
+        "startLoc": {
+          "column": 63,
+          "line": 2759,
+          "position": 150413
+        }
+      },
+      "tokens": 93
+    },
+    {
+      "firstFile": {
+        "end": 1754,
+        "endLoc": {
+          "column": 74,
+          "line": 1754,
+          "position": 99166
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 1748,
+        "startLoc": {
+          "column": 15,
+          "line": 1748,
+          "position": 98882
+        }
+      },
+      "format": "swift",
+      "fragment": "        return abs(lhs.minX - rhs.minX) <= tolerance\n            && abs(lhs.minY - rhs.minY) <= tolerance\n            && abs(lhs.width - rhs.width) <= tolerance\n            && abs(lhs.height - rhs.height) <= tolerance\n    }\n\n    // MARK: - Placements de la passe (masquage, épinglages, zoom, focus)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 2697,
+        "endLoc": {
+          "column": 11,
+          "line": 2697,
+          "position": 147343
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 2691,
+        "startLoc": {
+          "column": 8,
+          "line": 2691,
+          "position": 147122
+        }
+      },
+      "tokens": 59
+    },
+    {
+      "firstFile": {
+        "end": 2379,
+        "endLoc": {
+          "column": 56,
+          "line": 2379,
+          "position": 132894
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 2374,
+        "startLoc": {
+          "column": 80,
+          "line": 2374,
+          "position": 132547
+        }
+      },
+      "format": "swift",
+      "fragment": "            events.append(RoadieEvent(type: \"window_manual_display_move_adopted\", scope: item.target, details: [\n                \"windowID\": String(item.window.id.rawValue),\n                \"fromDisplayID\": item.source.displayID.rawValue,\n                \"toDisplayID\": item.target.displayID.rawValue,\n                \"desktopID\": String(item.target.desktopID.rawValue),\n                \"stageID\": item.target.stageID.rawValue,",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3488,
+        "endLoc": {
+          "column": 56,
+          "line": 3488,
+          "position": 187195
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 3483,
+        "startLoc": {
+          "column": 89,
+          "line": 3483,
+          "position": 186848
+        }
+      },
+      "tokens": 66
+    },
+    {
+      "firstFile": {
+        "end": 3340,
+        "endLoc": {
+          "column": 12,
+          "line": 3340,
+          "position": 178956
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 3335,
+        "startLoc": {
+          "column": 14,
+          "line": 3335,
+          "position": 178730
+        }
+      },
+      "format": "swift",
+      "fragment": "    ) -> Bool {\n        guard let stage = state.scopes\n            .first(where: { $0.displayID == scope.displayID && $0.desktopID == scope.desktopID })?\n            .stages\n            .first(where: { $0.id == scope.stageID })\n        else { return false }",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3625,
+        "endLoc": {
+          "column": 65,
+          "line": 3625,
+          "position": 193090
+        },
+        "name": "LayoutMaintainer.swift",
+        "start": 3622,
+        "startLoc": {
+          "column": 85,
+          "line": 3622,
+          "position": 192877
+        }
+      },
+      "tokens": 53
+    },
+    {
+      "firstFile": {
+        "end": 265,
+        "endLoc": {
+          "column": 41,
+          "line": 265,
+          "position": 11021
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 250,
+        "startLoc": {
+          "column": 38,
+          "line": 250,
+          "position": 10187
+        }
+      },
+      "format": "swift",
+      "fragment": "            id: WindowID(rawValue: 100),\n            pid: 123,\n            appName: \"App\",\n            bundleID: \"com.example.app\",\n            title: \"Document\",\n            frame: Rect(x: 1200, y: 100, width: 400, height: 300),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: displayA, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),\n                    DisplaySnapshot(id: displayB, index: 2, name: \"B\", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 800), isMain: false),\n                ],\n                windowSnapshots: [window]",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 16,
+      "secondFile": {
+        "end": 358,
+        "endLoc": {
+          "column": 41,
+          "line": 358,
+          "position": 15542
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 343,
+        "startLoc": {
+          "column": 38,
+          "line": 343,
+          "position": 14708
+        }
+      },
+      "tokens": 188
+    },
+    {
+      "firstFile": {
+        "end": 265,
+        "endLoc": {
+          "column": 41,
+          "line": 265,
+          "position": 11021
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 250,
+        "startLoc": {
+          "column": 38,
+          "line": 250,
+          "position": 10187
+        }
+      },
+      "format": "swift",
+      "fragment": "            id: WindowID(rawValue: 100),\n            pid: 123,\n            appName: \"App\",\n            bundleID: \"com.example.app\",\n            title: \"Document\",\n            frame: Rect(x: 1200, y: 100, width: 400, height: 300),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: displayA, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),\n                    DisplaySnapshot(id: displayB, index: 2, name: \"B\", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 800), isMain: false),\n                ],\n                windowSnapshots: [window]",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 16,
+      "secondFile": {
+        "end": 398,
+        "endLoc": {
+          "column": 41,
+          "line": 398,
+          "position": 17431
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 383,
+        "startLoc": {
+          "column": 38,
+          "line": 383,
+          "position": 16597
+        }
+      },
+      "tokens": 188
+    },
+    {
+      "firstFile": {
+        "end": 262,
+        "endLoc": {
+          "column": 115,
+          "line": 262,
+          "position": 10679
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 255,
+        "startLoc": {
+          "column": 64,
+          "line": 255,
+          "position": 10376
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 1200, y: 100, width: 400, height: 300),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: displayA, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 678,
+        "endLoc": {
+          "column": 115,
+          "line": 678,
+          "position": 29435
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 671,
+        "startLoc": {
+          "column": 62,
+          "line": 671,
+          "position": 29132
+        }
+      },
+      "tokens": 54
+    },
+    {
+      "firstFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 192,
+          "line": 321,
+          "position": 13764
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 314,
+        "startLoc": {
+          "column": 132,
+          "line": 314,
+          "position": 13404
+        }
+      },
+      "format": "swift",
+      "fragment": "                    PersistentStageMember(windowID: progress.id, bundleID: progress.bundleID, title: progress.title, frame: progress.frame),\n                ]),\n            ]),\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1023,
+        "endLoc": {
+          "column": 192,
+          "line": 1023,
+          "position": 46693
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1016,
+        "startLoc": {
+          "column": 124,
+          "line": 1016,
+          "position": 46333
+        }
+      },
+      "tokens": 85
+    },
+    {
+      "firstFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 192,
+          "line": 321,
+          "position": 13764
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 316,
+        "startLoc": {
+          "column": 12,
+          "line": 316,
+          "position": 13445
+        }
+      },
+      "format": "swift",
+      "fragment": "            ]),\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 868,
+        "endLoc": {
+          "column": 192,
+          "line": 868,
+          "position": 37772
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 862,
+        "startLoc": {
+          "column": 88,
+          "line": 862,
+          "position": 37440
+        }
+      },
+      "tokens": 78
+    },
+    {
+      "firstFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 192,
+          "line": 321,
+          "position": 13764
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 316,
+        "startLoc": {
+          "column": 13,
+          "line": 316,
+          "position": 13446
+        }
+      },
+      "format": "swift",
+      "fragment": "            ]),\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1271,
+        "endLoc": {
+          "column": 192,
+          "line": 1271,
+          "position": 60454
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1266,
+        "startLoc": {
+          "column": 65,
+          "line": 1266,
+          "position": 60136
+        }
+      },
+      "tokens": 77
+    },
+    {
+      "firstFile": {
+        "end": 321,
+        "endLoc": {
+          "column": 192,
+          "line": 321,
+          "position": 13764
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 316,
+        "startLoc": {
+          "column": 14,
+          "line": 316,
+          "position": 13447
+        }
+      },
+      "format": "swift",
+      "fragment": "            ]),\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1396,
+        "endLoc": {
+          "column": 192,
+          "line": 1396,
+          "position": 65438
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1391,
+        "startLoc": {
+          "column": 35,
+          "line": 1391,
+          "position": 65121
+        }
+      },
+      "tokens": 76
+    },
+    {
+      "firstFile": {
+        "end": 498,
+        "endLoc": {
+          "column": 9,
+          "line": 498,
+          "position": 21928
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 487,
+        "startLoc": {
+          "column": 178,
+          "line": 487,
+          "position": 21593
+        }
+      },
+      "format": "swift",
+      "fragment": "                    PersistentStageMember(windowID: temporarilyMissing.id, bundleID: temporarilyMissing.bundleID, title: temporarilyMissing.title, frame: temporarilyMissing.frame),\n                ]),\n            ]),\n        ]))\n        let displaySnapshot = DisplaySnapshot(\n            id: display,\n            index: 1,\n            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 12,
+      "secondFile": {
+        "end": 2805,
+        "endLoc": {
+          "column": 9,
+          "line": 2805,
+          "position": 150823
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2793,
+        "startLoc": {
+          "column": 24,
+          "line": 2793,
+          "position": 150467
+        }
+      },
+      "tokens": 74
+    },
+    {
+      "firstFile": {
+        "end": 498,
+        "endLoc": {
+          "column": 9,
+          "line": 498,
+          "position": 21928
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 490,
+        "startLoc": {
+          "column": 10,
+          "line": 490,
+          "position": 21642
+        }
+      },
+      "format": "swift",
+      "fragment": "        ]))\n        let displaySnapshot = DisplaySnapshot(\n            id: display,\n            index: 1,\n            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 1640,
+        "endLoc": {
+          "column": 202,
+          "line": 1640,
+          "position": 80331
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1639,
+        "startLoc": {
+          "column": 207,
+          "line": 1639,
+          "position": 80127
+        }
+      },
+      "tokens": 64
+    },
+    {
+      "firstFile": {
+        "end": 498,
+        "endLoc": {
+          "column": 9,
+          "line": 498,
+          "position": 21928
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 490,
+        "startLoc": {
+          "column": 10,
+          "line": 490,
+          "position": 21642
+        }
+      },
+      "format": "swift",
+      "fragment": "        ]))\n        let displaySnapshot = DisplaySnapshot(\n            id: display,\n            index: 1,\n            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 1947,
+        "endLoc": {
+          "column": 202,
+          "line": 1947,
+          "position": 97066
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1946,
+        "startLoc": {
+          "column": 53,
+          "line": 1946,
+          "position": 96862
+        }
+      },
+      "tokens": 64
+    },
+    {
+      "firstFile": {
+        "end": 552,
+        "endLoc": {
+          "column": 34,
+          "line": 552,
+          "position": 24607
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 544,
+        "startLoc": {
+          "column": 8,
+          "line": 544,
+          "position": 24190
+        }
+      },
+      "format": "swift",
+      "fragment": "        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),\n                ],\n                windowSnapshots: [window]\n            ),\n            config: RoadieConfig()",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 590,
+        "endLoc": {
+          "column": 34,
+          "line": 590,
+          "position": 26005
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 582,
+        "startLoc": {
+          "column": 84,
+          "line": 582,
+          "position": 25588
+        }
+      },
+      "tokens": 88
+    },
+    {
+      "firstFile": {
+        "end": 552,
+        "endLoc": {
+          "column": 33,
+          "line": 552,
+          "position": 24606
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 546,
+        "startLoc": {
+          "column": 34,
+          "line": 546,
+          "position": 24265
+        }
+      },
+      "format": "swift",
+      "fragment": "            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true),\n                ],\n                windowSnapshots: [window]\n            ),\n            config: RoadieConfig()",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 1497,
+        "endLoc": {
+          "column": 33,
+          "line": 1497,
+          "position": 71133
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1491,
+        "startLoc": {
+          "column": 34,
+          "line": 1491,
+          "position": 70792
+        }
+      },
+      "tokens": 78
+    },
+    {
+      "firstFile": {
+        "end": 628,
+        "endLoc": {
+          "column": 11,
+          "line": 628,
+          "position": 27302
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 606,
+        "startLoc": {
+          "column": 47,
+          "line": 606,
+          "position": 26606
+        }
+      },
+      "format": "swift",
+      "fragment": "    func applyPlanUsesVisibleFrameOfEachDisplay() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let second = WindowSnapshot(\n            id: WindowID(rawValue: 2),\n            pid: 11,\n            appName: \"B\",\n            bundleID: \"b\",\n            title: \"two\",\n            frame: Rect(x: 100, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 23,
+      "secondFile": {
+        "end": 730,
+        "endLoc": {
+          "column": 11,
+          "line": 730,
+          "position": 31544
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 708,
+        "startLoc": {
+          "column": 69,
+          "line": 708,
+          "position": 30848
+        }
+      },
+      "tokens": 131
+    },
+    {
+      "firstFile": {
+        "end": 631,
+        "endLoc": {
+          "column": 114,
+          "line": 631,
+          "position": 27516
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 606,
+        "startLoc": {
+          "column": 47,
+          "line": 606,
+          "position": 26606
+        }
+      },
+      "format": "swift",
+      "fragment": "    func applyPlanUsesVisibleFrameOfEachDisplay() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let second = WindowSnapshot(\n            id: WindowID(rawValue: 2),\n            pid: 11,\n            appName: \"B\",\n            bundleID: \"b\",\n            title: \"two\",\n            frame: Rect(x: 100, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 20, width: 1000, height: 780), isMain: true),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 26,
+      "secondFile": {
+        "end": 787,
+        "endLoc": {
+          "column": 114,
+          "line": 787,
+          "position": 33943
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 762,
+        "startLoc": {
+          "column": 67,
+          "line": 762,
+          "position": 33033
+        }
+      },
+      "tokens": 174
+    },
+    {
+      "firstFile": {
+        "end": 614,
+        "endLoc": {
+          "column": 42,
+          "line": 614,
+          "position": 26883
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 606,
+        "startLoc": {
+          "column": 47,
+          "line": 606,
+          "position": 26606
+        }
+      },
+      "format": "swift",
+      "fragment": "    func applyPlanUsesVisibleFrameOfEachDisplay() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 975,
+        "endLoc": {
+          "column": 144,
+          "line": 975,
+          "position": 43455
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 973,
+        "startLoc": {
+          "column": 45,
+          "line": 973,
+          "position": 43251
+        }
+      },
+      "tokens": 56
+    },
+    {
+      "firstFile": {
+        "end": 614,
+        "endLoc": {
+          "column": 42,
+          "line": 614,
+          "position": 26883
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 606,
+        "startLoc": {
+          "column": 47,
+          "line": 606,
+          "position": 26606
+        }
+      },
+      "format": "swift",
+      "fragment": "    func applyPlanUsesVisibleFrameOfEachDisplay() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 1330,
+        "endLoc": {
+          "column": 42,
+          "line": 1330,
+          "position": 62602
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1322,
+        "startLoc": {
+          "column": 51,
+          "line": 1322,
+          "position": 62325
+        }
+      },
+      "tokens": 56
+    },
+    {
+      "firstFile": {
+        "end": 624,
+        "endLoc": {
+          "column": 26,
+          "line": 624,
+          "position": 27179
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 608,
+        "startLoc": {
+          "column": 8,
+          "line": 608,
+          "position": 26674
+        }
+      },
+      "format": "swift",
+      "fragment": "        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let second = WindowSnapshot(\n            id: WindowID(rawValue: 2),\n            pid: 11,\n            appName: \"B\",\n            bundleID: \"b\",\n            title: \"two\",\n            frame: Rect(x: 100, y: 0, width: 100, height: 100),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 17,
+      "secondFile": {
+        "end": 671,
+        "endLoc": {
+          "column": 26,
+          "line": 671,
+          "position": 29096
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 655,
+        "startLoc": {
+          "column": 8,
+          "line": 655,
+          "position": 28591
+        }
+      },
+      "tokens": 95
+    },
+    {
+      "firstFile": {
+        "end": 617,
+        "endLoc": {
+          "column": 9,
+          "line": 617,
+          "position": 26976
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 608,
+        "startLoc": {
+          "column": 20,
+          "line": 608,
+          "position": 26686
+        }
+      },
+      "format": "swift",
+      "fragment": "        let first = WindowSnapshot(\n            id: WindowID(rawValue: 1),\n            pid: 10,\n            appName: \"A\",\n            bundleID: \"a\",\n            title: \"one\",\n            frame: Rect(x: 0, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 10,
+      "secondFile": {
+        "end": 847,
+        "endLoc": {
+          "column": 196,
+          "line": 847,
+          "position": 36367
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 847,
+        "startLoc": {
+          "column": 12,
+          "line": 847,
+          "position": 36183
+        }
+      },
+      "tokens": 56
+    },
+    {
+      "firstFile": {
+        "end": 627,
+        "endLoc": {
+          "column": 9,
+          "line": 627,
+          "position": 27290
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 618,
+        "startLoc": {
+          "column": 21,
+          "line": 618,
+          "position": 26998
+        }
+      },
+      "format": "swift",
+      "fragment": "        let second = WindowSnapshot(\n            id: WindowID(rawValue: 2),\n            pid: 11,\n            appName: \"B\",\n            bundleID: \"b\",\n            title: \"two\",\n            frame: Rect(x: 100, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 10,
+      "secondFile": {
+        "end": 848,
+        "endLoc": {
+          "column": 198,
+          "line": 848,
+          "position": 36567
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 848,
+        "startLoc": {
+          "column": 12,
+          "line": 848,
+          "position": 36381
+        }
+      },
+      "tokens": 56
+    },
+    {
+      "firstFile": {
+        "end": 636,
+        "endLoc": {
+          "column": 9,
+          "line": 636,
+          "position": 27724
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 624,
+        "startLoc": {
+          "column": 61,
+          "line": 624,
+          "position": 27214
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 100, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 20, width: 1000, height: 780), isMain: true),\n                ],\n                windowSnapshots: [first, second]\n            ),\n            config: RoadieConfig()\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 13,
+      "secondFile": {
+        "end": 838,
+        "endLoc": {
+          "column": 9,
+          "line": 838,
+          "position": 35907
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 826,
+        "startLoc": {
+          "column": 62,
+          "line": 826,
+          "position": 35397
+        }
+      },
+      "tokens": 100
+    },
+    {
+      "firstFile": {
+        "end": 631,
+        "endLoc": {
+          "column": 114,
+          "line": 631,
+          "position": 27516
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 624,
+        "startLoc": {
+          "column": 61,
+          "line": 624,
+          "position": 27214
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 100, y: 0, width: 100, height: 100),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 20, width: 1000, height: 780), isMain: true),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1311,
+        "endLoc": {
+          "column": 114,
+          "line": 1311,
+          "position": 61889
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1304,
+        "startLoc": {
+          "column": 59,
+          "line": 1304,
+          "position": 61587
+        }
+      },
+      "tokens": 54
+    },
+    {
+      "firstFile": {
+        "end": 631,
+        "endLoc": {
+          "column": 148,
+          "line": 631,
+          "position": 27550
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 625,
+        "startLoc": {
+          "column": 28,
+          "line": 625,
+          "position": 27245
+        }
+      },
+      "format": "swift",
+      "fragment": "            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 20, width: 1000, height: 780), isMain: true),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 1493,
+        "endLoc": {
+          "column": 148,
+          "line": 1493,
+          "position": 70978
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1487,
+        "startLoc": {
+          "column": 28,
+          "line": 1487,
+          "position": 70673
+        }
+      },
+      "tokens": 62
+    },
+    {
+      "firstFile": {
+        "end": 641,
+        "endLoc": {
+          "column": 49,
+          "line": 641,
+          "position": 27912
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 636,
+        "startLoc": {
+          "column": 8,
+          "line": 636,
+          "position": 27723
+        }
+      },
+      "format": "swift",
+      "fragment": "        )\n\n        let plan = service.applyPlan(from: service.snapshot())\n\n        #expect(plan.commands.map(\\.window.id) == [first.id, second.id])\n        #expect(plan.commands[0].frame == Rect(x: 8, y: 28, width: 490, height: 764))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 757,
+        "endLoc": {
+          "column": 49,
+          "line": 757,
+          "position": 32824
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 752,
+        "startLoc": {
+          "column": 8,
+          "line": 752,
+          "position": 32635
+        }
+      },
+      "tokens": 60
+    },
+    {
+      "firstFile": {
+        "end": 641,
+        "endLoc": {
+          "column": 55,
+          "line": 641,
+          "position": 27918
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 636,
+        "startLoc": {
+          "column": 8,
+          "line": 636,
+          "position": 27723
+        }
+      },
+      "format": "swift",
+      "fragment": "        )\n\n        let plan = service.applyPlan(from: service.snapshot())\n\n        #expect(plan.commands.map(\\.window.id) == [first.id, second.id])\n        #expect(plan.commands[0].frame == Rect(x: 8, y: 28, width: 490, height: 764))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 803,
+        "endLoc": {
+          "column": 55,
+          "line": 803,
+          "position": 34602
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 798,
+        "startLoc": {
+          "column": 8,
+          "line": 798,
+          "position": 34407
+        }
+      },
+      "tokens": 64
+    },
+    {
+      "firstFile": {
+        "end": 742,
+        "endLoc": {
+          "column": 34,
+          "line": 742,
+          "position": 32259
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 735,
+        "startLoc": {
+          "column": 73,
+          "line": 735,
+          "position": 31896
+        }
+      },
+      "format": "swift",
+      "fragment": "        defer { try? FileManager.default.removeItem(atPath: railStatePath) }\n\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 3482,
+        "endLoc": {
+          "column": 34,
+          "line": 3482,
+          "position": 187462
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3475,
+        "startLoc": {
+          "column": 65,
+          "line": 3475,
+          "position": 187092
+        }
+      },
+      "tokens": 80
+    },
+    {
+      "firstFile": {
+        "end": 748,
+        "endLoc": {
+          "column": 30,
+          "line": 748,
+          "position": 32528
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 740,
+        "startLoc": {
+          "column": 65,
+          "line": 740,
+          "position": 32077
+        }
+      },
+      "format": "swift",
+      "fragment": "                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]\n            ),\n            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 8, gapsOuterLeft: 150, gapsInner: 10)),\n            railSettings: RailSettings.load(raw: \"\"\"\n            [fx.rail]\n            auto_hide = true\n            edge_hit_width = 8",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 795,
+        "endLoc": {
+          "column": 30,
+          "line": 795,
+          "position": 34345
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 787,
+        "startLoc": {
+          "column": 65,
+          "line": 787,
+          "position": 33894
+        }
+      },
+      "tokens": 103
+    },
+    {
+      "firstFile": {
+        "end": 791,
+        "endLoc": {
+          "column": 64,
+          "line": 791,
+          "position": 34170
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 781,
+        "startLoc": {
+          "column": 28,
+          "line": 781,
+          "position": 33672
+        }
+      },
+      "format": "swift",
+      "fragment": "            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]\n            ),\n            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 8, gapsOuterLeft: 150, gapsInner: 10)),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 1315,
+        "endLoc": {
+          "column": 64,
+          "line": 1315,
+          "position": 62116
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1305,
+        "startLoc": {
+          "column": 28,
+          "line": 1305,
+          "position": 61618
+        }
+      },
+      "tokens": 99
+    },
+    {
+      "firstFile": {
+        "end": 905,
+        "endLoc": {
+          "column": 11,
+          "line": 905,
+          "position": 39572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 900,
+        "startLoc": {
+          "column": 16,
+          "line": 900,
+          "position": 39386
+        }
+      },
+      "format": "swift",
+      "fragment": "            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"one\", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1641,
+        "endLoc": {
+          "column": 11,
+          "line": 1641,
+          "position": 80343
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1640,
+        "startLoc": {
+          "column": 73,
+          "line": 1640,
+          "position": 80202
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 905,
+        "endLoc": {
+          "column": 11,
+          "line": 905,
+          "position": 39572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 900,
+        "startLoc": {
+          "column": 16,
+          "line": 900,
+          "position": 39386
+        }
+      },
+      "format": "swift",
+      "fragment": "            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"one\", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1948,
+        "endLoc": {
+          "column": 11,
+          "line": 1948,
+          "position": 97078
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1947,
+        "startLoc": {
+          "column": 73,
+          "line": 1947,
+          "position": 96937
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 905,
+        "endLoc": {
+          "column": 11,
+          "line": 905,
+          "position": 39572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 900,
+        "startLoc": {
+          "column": 16,
+          "line": 900,
+          "position": 39386
+        }
+      },
+      "format": "swift",
+      "fragment": "            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"one\", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2319,
+        "endLoc": {
+          "column": 11,
+          "line": 2319,
+          "position": 121386
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2318,
+        "startLoc": {
+          "column": 74,
+          "line": 2318,
+          "position": 121245
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 905,
+        "endLoc": {
+          "column": 11,
+          "line": 905,
+          "position": 39572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 900,
+        "startLoc": {
+          "column": 16,
+          "line": 900,
+          "position": 39386
+        }
+      },
+      "format": "swift",
+      "fragment": "            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"one\", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2806,
+        "endLoc": {
+          "column": 11,
+          "line": 2806,
+          "position": 150835
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2801,
+        "startLoc": {
+          "column": 16,
+          "line": 2801,
+          "position": 150649
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 905,
+        "endLoc": {
+          "column": 11,
+          "line": 905,
+          "position": 39572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 900,
+        "startLoc": {
+          "column": 16,
+          "line": 900,
+          "position": 39386
+        }
+      },
+      "format": "swift",
+      "fragment": "            name: \"A\",\n            frame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500),\n            isMain: true\n        )\n        let first = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"one\", frame: Rect(x: 999, y: 499, width: 300, height: 200), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3719,
+        "endLoc": {
+          "column": 11,
+          "line": 3719,
+          "position": 201972
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3718,
+        "startLoc": {
+          "column": 72,
+          "line": 3718,
+          "position": 201831
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 926,
+        "endLoc": {
+          "column": 13,
+          "line": 926,
+          "position": 41149
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 919,
+        "startLoc": {
+          "column": 8,
+          "line": 919,
+          "position": 40854
+        }
+      },
+      "format": "swift",
+      "fragment": "        ]))\n        intentStore.save(LayoutIntent(\n            scope: scope,\n            windowIDs: [first.id, second.id],\n            placements: [\n                first.id: Rect(x: 0, y: 0, width: 495, height: 500),\n                second.id: Rect(x: 505, y: 0, width: 495, height: 500),\n            ],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1267,
+        "endLoc": {
+          "column": 9,
+          "line": 1267,
+          "position": 60148
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1263,
+        "startLoc": {
+          "column": 8,
+          "line": 1263,
+          "position": 59902
+        }
+      },
+      "tokens": 75
+    },
+    {
+      "firstFile": {
+        "end": 939,
+        "endLoc": {
+          "column": 81,
+          "line": 939,
+          "position": 41830
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 934,
+        "startLoc": {
+          "column": 8,
+          "line": 934,
+          "position": 41522
+        }
+      },
+      "format": "swift",
+      "fragment": "        )\n\n        let commands = service.applyPlan(from: service.snapshot()).commands\n        #expect(commands.map(\\.window.id) == [first.id, second.id])\n        #expect(commands[0].frame == Rect(x: 0, y: 0, width: 495, height: 500))\n        #expect(commands[1].frame == Rect(x: 505, y: 0, width: 495, height: 500))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1358,
+        "endLoc": {
+          "column": 81,
+          "line": 1358,
+          "position": 63799
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1352,
+        "startLoc": {
+          "column": 8,
+          "line": 1352,
+          "position": 63490
+        }
+      },
+      "tokens": 103
+    },
+    {
+      "firstFile": {
+        "end": 956,
+        "endLoc": {
+          "column": 34,
+          "line": 956,
+          "position": 42667
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 948,
+        "startLoc": {
+          "column": 89,
+          "line": 948,
+          "position": 42236
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-config-stage-names-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: []",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 986,
+        "endLoc": {
+          "column": 34,
+          "line": 986,
+          "position": 44302
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 978,
+        "startLoc": {
+          "column": 84,
+          "line": 978,
+          "position": 43871
+        }
+      },
+      "tokens": 90
+    },
+    {
+      "firstFile": {
+        "end": 1007,
+        "endLoc": {
+          "column": 36,
+          "line": 1007,
+          "position": 45581
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1002,
+        "startLoc": {
+          "column": 69,
+          "line": 1002,
+          "position": 44998
+        }
+      },
+      "format": "swift",
+      "fragment": "    func snapshotSwitchesStageWhenMacFocusPointsToHiddenInactiveStage() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let active = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"active\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)\n        let hidden = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: \"B\", bundleID: \"b\", title: \"hidden\", frame: Rect(x: 999, y: 499, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)\n        let stagePath = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1047,
+        "endLoc": {
+          "column": 36,
+          "line": 1047,
+          "position": 48026
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1042,
+        "startLoc": {
+          "column": 65,
+          "line": 1042,
+          "position": 47443
+        }
+      },
+      "tokens": 141
+    },
+    {
+      "firstFile": {
+        "end": 1011,
+        "endLoc": {
+          "column": 52,
+          "line": 1011,
+          "position": 45808
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1005,
+        "startLoc": {
+          "column": 157,
+          "line": 1005,
+          "position": 45425
+        }
+      },
+      "format": "swift",
+      "fragment": "        let hidden = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: \"B\", bundleID: \"b\", title: \"hidden\", frame: Rect(x: 999, y: 499, width: 1000, height: 500), isOnScreen: true, isTileCandidate: true)\n        let stagePath = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 2219,
+        "endLoc": {
+          "column": 56,
+          "line": 2219,
+          "position": 115230
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2212,
+        "startLoc": {
+          "column": 168,
+          "line": 2212,
+          "position": 114830
+        }
+      },
+      "tokens": 53
+    },
+    {
+      "firstFile": {
+        "end": 1027,
+        "endLoc": {
+          "column": 14,
+          "line": 1027,
+          "position": 46816
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [\n                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame),\n                ]),\n                PersistentStage(id: StageID(rawValue: \"2\"), focusedWindowID: hidden.id, members: [\n                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: hidden.frame),\n                ]),\n            ]),\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [active, hidden],\n                focusedID: hidden.id\n            ),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 21,
+      "secondFile": {
+        "end": 1067,
+        "endLoc": {
+          "column": 14,
+          "line": 1067,
+          "position": 49270
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1047,
+        "startLoc": {
+          "column": 92,
+          "line": 1047,
+          "position": 48082
+        }
+      },
+      "tokens": 235
+    },
+    {
+      "firstFile": {
+        "end": 1019,
+        "endLoc": {
+          "column": 9,
+          "line": 1019,
+          "position": 46387
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [\n                    PersistentStageMember(windowID: active.id, bundleID: active.bundleID, title: active.title, frame: active.frame),\n                ]),\n                PersistentStage(id: StageID(rawValue: \"2\"), focusedWindowID: hidden.id, members: [\n                    PersistentStageMember(windowID: hidden.id, bundleID: hidden.bundleID, title: hidden.title, frame: hidden.frame),\n                ]),\n            ]),\n        ]))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 13,
+      "secondFile": {
+        "end": 1098,
+        "endLoc": {
+          "column": 13,
+          "line": 1098,
+          "position": 51263
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1085,
+        "startLoc": {
+          "column": 89,
+          "line": 1085,
+          "position": 50455
+        }
+      },
+      "tokens": 143
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 59,
+          "line": 1012,
+          "position": 45917
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1958,
+        "endLoc": {
+          "column": 63,
+          "line": 1958,
+          "position": 98008
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1953,
+        "startLoc": {
+          "column": 98,
+          "line": 1953,
+          "position": 97699
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 76,
+          "line": 1012,
+          "position": 45934
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2000,
+        "endLoc": {
+          "column": 76,
+          "line": 2000,
+          "position": 100779
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1995,
+        "startLoc": {
+          "column": 87,
+          "line": 1995,
+          "position": 100473
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 76,
+          "line": 1012,
+          "position": 45934
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2047,
+        "endLoc": {
+          "column": 76,
+          "line": 2047,
+          "position": 103946
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2042,
+        "startLoc": {
+          "column": 77,
+          "line": 2042,
+          "position": 103640
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 76,
+          "line": 1012,
+          "position": 45934
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3181,
+        "endLoc": {
+          "column": 76,
+          "line": 3181,
+          "position": 171600
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3176,
+        "startLoc": {
+          "column": 79,
+          "line": 3176,
+          "position": 171294
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 76,
+          "line": 1012,
+          "position": 45934
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3216,
+        "endLoc": {
+          "column": 76,
+          "line": 3216,
+          "position": 173456
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3211,
+        "startLoc": {
+          "column": 80,
+          "line": 3211,
+          "position": 173150
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 59,
+          "line": 1012,
+          "position": 45917
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3298,
+        "endLoc": {
+          "column": 59,
+          "line": 3298,
+          "position": 177583
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3293,
+        "startLoc": {
+          "column": 90,
+          "line": 3293,
+          "position": 177294
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 1012,
+        "endLoc": {
+          "column": 59,
+          "line": 1012,
+          "position": 45917
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1007,
+        "startLoc": {
+          "column": 83,
+          "line": 1007,
+          "position": 45628
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-hidden-focus-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: active.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3558,
+        "endLoc": {
+          "column": 59,
+          "line": 3558,
+          "position": 191874
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3553,
+        "startLoc": {
+          "column": 78,
+          "line": 3553,
+          "position": 191585
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 1028,
+        "endLoc": {
+          "column": 34,
+          "line": 1028,
+          "position": 46851
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1023,
+        "startLoc": {
+          "column": 81,
+          "line": 1023,
+          "position": 46582
+        }
+      },
+      "format": "swift",
+      "fragment": "                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [active, hidden],\n                focusedID: hidden.id\n            ),\n            stageStore: stageStore,",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1117,
+        "endLoc": {
+          "column": 34,
+          "line": 1117,
+          "position": 52158
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1112,
+        "startLoc": {
+          "column": 81,
+          "line": 1112,
+          "position": 51889
+        }
+      },
+      "tokens": 64
+    },
+    {
+      "firstFile": {
+        "end": 1080,
+        "endLoc": {
+          "column": 8,
+          "line": 1080,
+          "position": 49742
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1075,
+        "startLoc": {
+          "column": 24,
+          "line": 1075,
+          "position": 49519
+        }
+      },
+      "format": "swift",
+      "fragment": "        #expect(snapshot.state.activeScope(on: display) == StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: \"1\")))\n        try? FileManager.default.removeItem(atPath: stagePath)\n    }\n\n    @Test\n    func snapshotIgnoresStaleHiddenFocusAfterExplicitStageSwitch() {",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2036,
+        "endLoc": {
+          "column": 8,
+          "line": 2036,
+          "position": 102771
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2031,
+        "startLoc": {
+          "column": 27,
+          "line": 2031,
+          "position": 102548
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1145,
+        "endLoc": {
+          "column": 36,
+          "line": 1145,
+          "position": 53446
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1135,
+        "startLoc": {
+          "column": 47,
+          "line": 1135,
+          "position": 53042
+        }
+      },
+      "format": "swift",
+      "fragment": "        let missingLeft = powerWindow(2, x: 500)\n        let hiddenRight = powerWindow(\n            3,\n            x: rightDisplay.visibleFrame.x + rightDisplay.visibleFrame.width - 1,\n            y: rightDisplay.visibleFrame.y + rightDisplay.visibleFrame.height - 1,\n            width: 300,\n            height: 240,\n            app: \"Teams\"\n        )\n        let stagePath = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"roadie-cross-display-missing-focus-\\(UUID().uuidString).json\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 1206,
+        "endLoc": {
+          "column": 36,
+          "line": 1206,
+          "position": 56725
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1196,
+        "startLoc": {
+          "column": 46,
+          "line": 1196,
+          "position": 56321
+        }
+      },
+      "tokens": 63
+    },
+    {
+      "firstFile": {
+        "end": 1159,
+        "endLoc": {
+          "column": 148,
+          "line": 1159,
+          "position": 54346
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1152,
+        "startLoc": {
+          "column": 65,
+          "line": 1152,
+          "position": 53865
+        }
+      },
+      "format": "swift",
+      "fragment": "            try? FileManager.default.removeItem(atPath: eventPath)\n        }\n\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay.id, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: activeLeft.id, members: [\n                    PersistentStageMember(windowID: activeLeft.id, bundleID: activeLeft.bundleID, title: activeLeft.title, frame: activeLeft.frame),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1216,
+        "endLoc": {
+          "column": 148,
+          "line": 1216,
+          "position": 57369
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1209,
+        "startLoc": {
+          "column": 65,
+          "line": 1209,
+          "position": 56888
+        }
+      },
+      "tokens": 87
+    },
+    {
+      "firstFile": {
+        "end": 1176,
+        "endLoc": {
+          "column": 35,
+          "line": 1176,
+          "position": 55335
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1160,
+        "startLoc": {
+          "column": 144,
+          "line": 1160,
+          "position": 54491
+        }
+      },
+      "format": "swift",
+      "fragment": "                    PersistentStageMember(windowID: missingLeft.id, bundleID: missingLeft.bundleID, title: missingLeft.title, frame: missingLeft.frame),\n                ]),\n            ]),\n            PersistentStageScope(displayID: rightDisplay.id, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\")),\n                PersistentStage(id: StageID(rawValue: \"2\"), focusedWindowID: hiddenRight.id, members: [\n                    PersistentStageMember(windowID: hiddenRight.id, bundleID: hiddenRight.bundleID, title: hiddenRight.title, frame: hiddenRight.frame),\n                ]),\n            ]),\n        ], activeDisplayID: leftDisplay.id))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [leftDisplay, rightDisplay],\n                windowSnapshots: [activeLeft, hiddenRight],\n                focusedID: hiddenRight.id\n            ),\n            stageStore: stageStore,",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 17,
+      "secondFile": {
+        "end": 1232,
+        "endLoc": {
+          "column": 35,
+          "line": 1232,
+          "position": 58205
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1216,
+        "startLoc": {
+          "column": 140,
+          "line": 1216,
+          "position": 57361
+        }
+      },
+      "tokens": 140
+    },
+    {
+      "firstFile": {
+        "end": 1276,
+        "endLoc": {
+          "column": 36,
+          "line": 1276,
+          "position": 60660
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1271,
+        "startLoc": {
+          "column": 118,
+          "line": 1271,
+          "position": 60380
+        }
+      },
+      "format": "swift",
+      "fragment": "                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]\n            ),\n            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),\n            intentStore: intentStore,",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1401,
+        "endLoc": {
+          "column": 36,
+          "line": 1401,
+          "position": 65644
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1396,
+        "startLoc": {
+          "column": 118,
+          "line": 1396,
+          "position": 65364
+        }
+      },
+      "tokens": 60
+    },
+    {
+      "firstFile": {
+        "end": 1316,
+        "endLoc": {
+          "column": 9,
+          "line": 1316,
+          "position": 62145
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1304,
+        "startLoc": {
+          "column": 46,
+          "line": 1304,
+          "position": 61574
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 0, y: 0, width: 495, height: 500),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]\n            ),\n            config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10))\n        )",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 13,
+      "secondFile": {
+        "end": 1352,
+        "endLoc": {
+          "column": 9,
+          "line": 1352,
+          "position": 63491
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1340,
+        "startLoc": {
+          "column": 48,
+          "line": 1340,
+          "position": 62920
+        }
+      },
+      "tokens": 116
+    },
+    {
+      "firstFile": {
+        "end": 1311,
+        "endLoc": {
+          "column": 114,
+          "line": 1311,
+          "position": 61889
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1304,
+        "startLoc": {
+          "column": 46,
+          "line": 1304,
+          "position": 61574
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 0, y: 0, width: 495, height: 500),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1493,
+        "endLoc": {
+          "column": 114,
+          "line": 1493,
+          "position": 70944
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1486,
+        "startLoc": {
+          "column": 48,
+          "line": 1486,
+          "position": 70629
+        }
+      },
+      "tokens": 58
+    },
+    {
+      "firstFile": {
+        "end": 1386,
+        "endLoc": {
+          "column": 36,
+          "line": 1386,
+          "position": 64822
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1380,
+        "startLoc": {
+          "column": 48,
+          "line": 1380,
+          "position": 64513
+        }
+      },
+      "format": "swift",
+      "fragment": "            frame: Rect(x: 505, y: 0, width: 495, height: 500),\n            isOnScreen: true,\n            isTileCandidate: true\n        )\n        let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: \"1\"))\n        let intentPath = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"roadie-stale-intent-\\(UUID().uuidString).json\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 1419,
+        "endLoc": {
+          "column": 36,
+          "line": 1419,
+          "position": 66948
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1416,
+        "startLoc": {
+          "column": 152,
+          "line": 1416,
+          "position": 66672
+        }
+      },
+      "tokens": 52
+    },
+    {
+      "firstFile": {
+        "end": 1398,
+        "endLoc": {
+          "column": 34,
+          "line": 1398,
+          "position": 65493
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1391,
+        "startLoc": {
+          "column": 29,
+          "line": 1391,
+          "position": 65115
+        }
+      },
+      "format": "swift",
+      "fragment": "            second.id: second.frame,\n        ]))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [first, second]",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 1432,
+        "endLoc": {
+          "column": 34,
+          "line": 1432,
+          "position": 67685
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1425,
+        "startLoc": {
+          "column": 27,
+          "line": 1425,
+          "position": 67307
+        }
+      },
+      "tokens": 84
+    },
+    {
+      "firstFile": {
+        "end": 1541,
+        "endLoc": {
+          "column": 11,
+          "line": 1541,
+          "position": 73904
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1536,
+        "startLoc": {
+          "column": 67,
+          "line": 1536,
+          "position": 73188
+        }
+      },
+      "format": "swift",
+      "fragment": "    func warpMovesSmallWindowAcrossRootSplitInsteadOfSwappingFrames() {\n        let display = DisplayID(rawValue: \"display-a\")\n        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"left\", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)\n        let topRight = WindowSnapshot(id: WindowID(rawValue: 2), pid: 11, appName: \"B\", bundleID: \"b\", title: \"top-right\", frame: Rect(x: 505, y: 0, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)\n        let bottomRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: \"C\", bundleID: \"c\", title: \"bottom-right\", frame: Rect(x: 505, y: 255, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)\n        let provider = FakeProvider(",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1877,
+        "endLoc": {
+          "column": 11,
+          "line": 1877,
+          "position": 93101
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1872,
+        "startLoc": {
+          "column": 72,
+          "line": 1872,
+          "position": 92385
+        }
+      },
+      "tokens": 190
+    },
+    {
+      "firstFile": {
+        "end": 1545,
+        "endLoc": {
+          "column": 30,
+          "line": 1545,
+          "position": 74197
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1540,
+        "startLoc": {
+          "column": 104,
+          "line": 1540,
+          "position": 73773
+        }
+      },
+      "format": "swift",
+      "fragment": "        let bottomRight = WindowSnapshot(id: WindowID(rawValue: 3), pid: 12, appName: \"C\", bundleID: \"c\", title: \"bottom-right\", frame: Rect(x: 505, y: 255, width: 495, height: 245), isOnScreen: true, isTileCandidate: true)\n        let provider = FakeProvider(\n            displaySnapshots: [\n                DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n            ],\n            windowSnapshots: [left, topRight, bottomRight],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 1589,
+        "endLoc": {
+          "column": 30,
+          "line": 1589,
+          "position": 77263
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1584,
+        "startLoc": {
+          "column": 104,
+          "line": 1584,
+          "position": 76839
+        }
+      },
+      "tokens": 108
+    },
+    {
+      "firstFile": {
+        "end": 1711,
+        "endLoc": {
+          "column": 8,
+          "line": 1711,
+          "position": 84053
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1696,
+        "startLoc": {
+          "column": 35,
+          "line": 1696,
+          "position": 83548
+        }
+      },
+      "format": "swift",
+      "fragment": "                frameWriter: writer,\n                config: RoadieConfig(tiling: TilingConfig(gapsOuter: 0, gapsInner: 10)),\n                intentStore: intentStore\n            )\n        )\n\n        let result = service.move(Direction.left)\n\n        let intent = intentStore.intent(for: StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: \"1\")))\n        #expect(result.changed)\n        #expect(intent == nil)\n        try? FileManager.default.removeItem(atPath: intentPath)\n    }\n\n    @Test\n    func commandIntentIsNotPersistedOnPartialCommandFailure() {",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 16,
+      "secondFile": {
+        "end": 1745,
+        "endLoc": {
+          "column": 8,
+          "line": 1745,
+          "position": 86011
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1730,
+        "startLoc": {
+          "column": 18,
+          "line": 1730,
+          "position": 85506
+        }
+      },
+      "tokens": 100
+    },
+    {
+      "firstFile": {
+        "end": 1973,
+        "endLoc": {
+          "column": 101,
+          "line": 1973,
+          "position": 98924
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 1964,
+        "startLoc": {
+          "column": 14,
+          "line": 1964,
+          "position": 98456
+        }
+      },
+      "format": "swift",
+      "fragment": "            ]))\n\n            let assignWriter = RecordingWriter()\n            let assignService = SnapshotService(\n                provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, right], focusedID: right.id),\n                frameWriter: assignWriter,\n                config: RoadieConfig(),\n                stageStore: stageStore\n            )\n            let assignResult = StageCommandService(service: assignService, store: stageStore).assign(\"2\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 10,
+      "secondFile": {
+        "end": 2017,
+        "endLoc": {
+          "column": 20,
+          "line": 2017,
+          "position": 101847
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2008,
+        "startLoc": {
+          "column": 234,
+          "line": 2008,
+          "position": 101399
+        }
+      },
+      "tokens": 67
+    },
+    {
+      "firstFile": {
+        "end": 2082,
+        "endLoc": {
+          "column": 58,
+          "line": 2082,
+          "position": 106187
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2077,
+        "startLoc": {
+          "column": 58,
+          "line": 2077,
+          "position": 105588
+        }
+      },
+      "format": "swift",
+      "fragment": "    func stageSummonRepairsWindowVisibleOnDifferentDisplay() {\n        let leftDisplay = DisplayID(rawValue: \"display-a\")\n        let rightDisplay = DisplayID(rawValue: \"display-b\")\n        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 800), isMain: true)\n        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: \"B\", frame: Rect(x: 1000, y: 0, width: 1000, height: 800), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 800), isMain: false)\n        let window = WindowSnapshot(id: WindowID(rawValue: 7), pid: 7, appName: \"Settings\", bundleID: \"settings\", title: \"Settings\", frame: Rect(x: 1200, y: 100, width: 300, height: 300), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2124,
+        "endLoc": {
+          "column": 58,
+          "line": 2124,
+          "position": 108796
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2119,
+        "startLoc": {
+          "column": 61,
+          "line": 2119,
+          "position": 108197
+        }
+      },
+      "tokens": 158
+    },
+    {
+      "firstFile": {
+        "end": 2134,
+        "endLoc": {
+          "column": 59,
+          "line": 2134,
+          "position": 109591
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2129,
+        "startLoc": {
+          "column": 93,
+          "line": 2129,
+          "position": 109298
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-scope-physical-repair-\\(UUID().uuidString).jsonl\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2331,
+        "endLoc": {
+          "column": 59,
+          "line": 2331,
+          "position": 122609
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2326,
+        "startLoc": {
+          "column": 85,
+          "line": 2326,
+          "position": 122316
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 2134,
+        "endLoc": {
+          "column": 59,
+          "line": 2134,
+          "position": 109591
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2129,
+        "startLoc": {
+          "column": 93,
+          "line": 2129,
+          "position": 109298
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-scope-physical-repair-\\(UUID().uuidString).jsonl\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2411,
+        "endLoc": {
+          "column": 59,
+          "line": 2411,
+          "position": 127971
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2406,
+        "startLoc": {
+          "column": 88,
+          "line": 2406,
+          "position": 127678
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 2134,
+        "endLoc": {
+          "column": 59,
+          "line": 2134,
+          "position": 109591
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2129,
+        "startLoc": {
+          "column": 93,
+          "line": 2129,
+          "position": 109298
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-scope-physical-repair-\\(UUID().uuidString).jsonl\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2454,
+        "endLoc": {
+          "column": 59,
+          "line": 2454,
+          "position": 130894
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2449,
+        "startLoc": {
+          "column": 90,
+          "line": 2449,
+          "position": 130601
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 2134,
+        "endLoc": {
+          "column": 59,
+          "line": 2134,
+          "position": 109591
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2129,
+        "startLoc": {
+          "column": 93,
+          "line": 2129,
+          "position": 109298
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-scope-physical-repair-\\(UUID().uuidString).jsonl\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 2499,
+        "endLoc": {
+          "column": 59,
+          "line": 2499,
+          "position": 134464
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2494,
+        "startLoc": {
+          "column": 89,
+          "line": 2494,
+          "position": 134171
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 2175,
+        "endLoc": {
+          "column": 80,
+          "line": 2175,
+          "position": 112339
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2169,
+        "startLoc": {
+          "column": 79,
+          "line": 2169,
+          "position": 111977
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-desktops-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(\n            scopes: [\n                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: \"1\"), stages: [\n                    PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: left.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 2220,
+        "endLoc": {
+          "column": 80,
+          "line": 2220,
+          "position": 115395
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2214,
+        "startLoc": {
+          "column": 83,
+          "line": 2214,
+          "position": 115033
+        }
+      },
+      "tokens": 61
+    },
+    {
+      "firstFile": {
+        "end": 2179,
+        "endLoc": {
+          "column": 90,
+          "line": 2179,
+          "position": 112623
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2169,
+        "startLoc": {
+          "column": 79,
+          "line": 2169,
+          "position": 111977
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-desktops-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(\n            scopes: [\n                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 1), activeStageID: StageID(rawValue: \"1\"), stages: [\n                    PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: left.id, members: [\n                        PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),\n                    ]),\n                ]),\n                PersistentStageScope(displayID: display, desktopID: DesktopID(rawValue: 2), activeStageID: StageID(rawValue: \"1\"), stages: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 2264,
+        "endLoc": {
+          "column": 90,
+          "line": 2264,
+          "position": 118370
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2254,
+        "startLoc": {
+          "column": 85,
+          "line": 2254,
+          "position": 117724
+        }
+      },
+      "tokens": 115
+    },
+    {
+      "firstFile": {
+        "end": 2189,
+        "endLoc": {
+          "column": 94,
+          "line": 2189,
+          "position": 113305
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2183,
+        "startLoc": {
+          "column": 17,
+          "line": 2183,
+          "position": 112982
+        }
+      },
+      "format": "swift",
+      "fragment": "                ]),\n            ],\n            desktopSelections: [PersistentDesktopSelection(displayID: display, currentDesktopID: DesktopID(rawValue: 1))]\n        ))\n        let writer = RecordingWriter()\n        let service = SnapshotService(\n            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [left, right], focusedID: left.id),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 2270,
+        "endLoc": {
+          "column": 94,
+          "line": 2270,
+          "position": 118693
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2264,
+        "startLoc": {
+          "column": 90,
+          "line": 2264,
+          "position": 118370
+        }
+      },
+      "tokens": 50
+    },
+    {
+      "firstFile": {
+        "end": 2323,
+        "endLoc": {
+          "column": 36,
+          "line": 2323,
+          "position": 122100
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2316,
+        "startLoc": {
+          "column": 35,
+          "line": 2316,
+          "position": 121087
+        }
+      },
+      "format": "swift",
+      "fragment": "        let leftDisplay = DisplayID(rawValue: \"display-a\")\n        let rightDisplay = DisplayID(rawValue: \"display-b\")\n        let leftSnapshot = DisplaySnapshot(id: leftDisplay, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)\n        let rightSnapshot = DisplaySnapshot(id: rightDisplay, index: 2, name: \"B\", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500), isMain: false)\n        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 1, appName: \"A\", bundleID: \"a\", title: \"left\", frame: Rect(x: 0, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)\n        let right = WindowSnapshot(id: WindowID(rawValue: 2), pid: 2, appName: \"B\", bundleID: \"b\", title: \"right\", frame: Rect(x: 1000, y: 0, width: 500, height: 500), isOnScreen: true, isTileCandidate: true)\n        let stagePath = FileManager.default.temporaryDirectory\n            .appendingPathComponent(\"roadie-display-focus-\\(UUID().uuidString).json\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 2406,
+        "endLoc": {
+          "column": 36,
+          "line": 2406,
+          "position": 127626
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2399,
+        "startLoc": {
+          "column": 35,
+          "line": 2399,
+          "position": 126613
+        }
+      },
+      "tokens": 269
+    },
+    {
+      "firstFile": {
+        "end": 2340,
+        "endLoc": {
+          "column": 9,
+          "line": 2340,
+          "position": 123187
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2327,
+        "startLoc": {
+          "column": 12,
+          "line": 2327,
+          "position": 122330
+        }
+      },
+      "format": "swift",
+      "fragment": "            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: leftDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: left.id, members: [\n                    PersistentStageMember(windowID: left.id, bundleID: left.bundleID, title: left.title, frame: left.frame),\n                ]),\n            ]),\n            PersistentStageScope(displayID: rightDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: right.id, members: [\n                    PersistentStageMember(windowID: right.id, bundleID: right.bundleID, title: right.title, frame: right.frame),\n                ]),\n            ]),\n        ]))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 14,
+      "secondFile": {
+        "end": 2420,
+        "endLoc": {
+          "column": 9,
+          "line": 2420,
+          "position": 128549
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2407,
+        "startLoc": {
+          "column": 12,
+          "line": 2407,
+          "position": 127692
+        }
+      },
+      "tokens": 163
+    },
+    {
+      "firstFile": {
+        "end": 2667,
+        "endLoc": {
+          "column": 79,
+          "line": 2667,
+          "position": 143575
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2660,
+        "startLoc": {
+          "column": 51,
+          "line": 2660,
+          "position": 143208
+        }
+      },
+      "format": "swift",
+      "fragment": "        let stageStore = StageStore(path: stagePath)\n        let service = SnapshotService(\n            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [window], focusedID: window.id),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n        let commands = StageCommandService(service: service, store: stageStore)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 2749,
+        "endLoc": {
+          "column": 79,
+          "line": 2749,
+          "position": 148340
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2742,
+        "startLoc": {
+          "column": 9,
+          "line": 2742,
+          "position": 147973
+        }
+      },
+      "tokens": 58
+    },
+    {
+      "firstFile": {
+        "end": 2788,
+        "endLoc": {
+          "column": 37,
+          "line": 2788,
+          "position": 150183
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2778,
+        "startLoc": {
+          "column": 83,
+          "line": 2778,
+          "position": 149671
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-short-ax-gap-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(\n                displayID: display,\n                stages: [\n                    PersistentStage(id: StageID(rawValue: \"1\"), members: [\n                        PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),\n                        PersistentStageMember(\n                            windowID: transient,",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 2852,
+        "endLoc": {
+          "column": 55,
+          "line": 2852,
+          "position": 152784
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2843,
+        "startLoc": {
+          "column": 83,
+          "line": 2843,
+          "position": 152301
+        }
+      },
+      "tokens": 75
+    },
+    {
+      "firstFile": {
+        "end": 2816,
+        "endLoc": {
+          "column": 73,
+          "line": 2816,
+          "position": 151292
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2805,
+        "startLoc": {
+          "column": 8,
+          "line": 2805,
+          "position": 150822
+        }
+      },
+      "format": "swift",
+      "fragment": "        )\n        let service = SnapshotService(\n            provider: FakeProvider(displaySnapshots: [displaySnapshot], windowSnapshots: [live], focusedID: live.id),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        _ = service.snapshot()\n\n        let scope = stageStore.state().scopes.first { $0.displayID == display }\n        #expect(scope?.memberIDs(in: StageID(rawValue: \"1\")) == [live.id, transient])",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 12,
+      "secondFile": {
+        "end": 2867,
+        "endLoc": {
+          "column": 73,
+          "line": 2867,
+          "position": 153418
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 2856,
+        "startLoc": {
+          "column": 10,
+          "line": 2856,
+          "position": 152948
+        }
+      },
+      "tokens": 96
+    },
+    {
+      "firstFile": {
+        "end": 3199,
+        "endLoc": {
+          "column": 20,
+          "line": 3199,
+          "position": 172395
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3178,
+        "startLoc": {
+          "column": 8,
+          "line": 3178,
+          "position": 171322
+        }
+      },
+      "format": "swift",
+      "fragment": "        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: window.id, members: [\n                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),\n                ]),\n            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],\n                focusedID: window.id\n            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = StateAuditService(service: service, stageStore: stageStore).run()",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 22,
+      "secondFile": {
+        "end": 3418,
+        "endLoc": {
+          "column": 20,
+          "line": 3418,
+          "position": 184349
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3397,
+        "startLoc": {
+          "column": 8,
+          "line": 3397,
+          "position": 183276
+        }
+      },
+      "tokens": 203
+    },
+    {
+      "firstFile": {
+        "end": 3201,
+        "endLoc": {
+          "column": 16,
+          "line": 3201,
+          "position": 172479
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3181,
+        "startLoc": {
+          "column": 86,
+          "line": 3181,
+          "position": 171610
+        }
+      },
+      "format": "swift",
+      "fragment": "                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: window.id, members: [\n                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),\n                ]),\n            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],\n                focusedID: window.id\n            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = StateAuditService(service: service, stageStore: stageStore).run()\n\n        #expect(!report.failed)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 21,
+      "secondFile": {
+        "end": 3239,
+        "endLoc": {
+          "column": 16,
+          "line": 3239,
+          "position": 174572
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3219,
+        "startLoc": {
+          "column": 58,
+          "line": 3219,
+          "position": 173703
+        }
+      },
+      "tokens": 168
+    },
+    {
+      "firstFile": {
+        "end": 3191,
+        "endLoc": {
+          "column": 34,
+          "line": 3191,
+          "position": 172188
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3182,
+        "startLoc": {
+          "column": 124,
+          "line": 3182,
+          "position": 171747
+        }
+      },
+      "format": "swift",
+      "fragment": "                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),\n                ]),\n            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 10,
+      "secondFile": {
+        "end": 3694,
+        "endLoc": {
+          "column": 34,
+          "line": 3694,
+          "position": 200598
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3685,
+        "startLoc": {
+          "column": 127,
+          "line": 3685,
+          "position": 200157
+        }
+      },
+      "tokens": 95
+    },
+    {
+      "firstFile": {
+        "end": 3191,
+        "endLoc": {
+          "column": 34,
+          "line": 3191,
+          "position": 172188
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3183,
+        "startLoc": {
+          "column": 17,
+          "line": 3183,
+          "position": 171773
+        }
+      },
+      "format": "swift",
+      "fragment": "                ]),\n            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 9,
+      "secondFile": {
+        "end": 3273,
+        "endLoc": {
+          "column": 34,
+          "line": 3273,
+          "position": 176338
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3265,
+        "startLoc": {
+          "column": 138,
+          "line": 3265,
+          "position": 175923
+        }
+      },
+      "tokens": 90
+    },
+    {
+      "firstFile": {
+        "end": 3191,
+        "endLoc": {
+          "column": 34,
+          "line": 3191,
+          "position": 172188
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3184,
+        "startLoc": {
+          "column": 13,
+          "line": 3184,
+          "position": 171789
+        }
+      },
+      "format": "swift",
+      "fragment": "            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 3574,
+        "endLoc": {
+          "column": 34,
+          "line": 3574,
+          "position": 193012
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3567,
+        "startLoc": {
+          "column": 56,
+          "line": 3567,
+          "position": 192613
+        }
+      },
+      "tokens": 87
+    },
+    {
+      "firstFile": {
+        "end": 3191,
+        "endLoc": {
+          "column": 34,
+          "line": 3191,
+          "position": 172188
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3185,
+        "startLoc": {
+          "column": 11,
+          "line": 3185,
+          "position": 171803
+        }
+      },
+      "format": "swift",
+      "fragment": "        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 3443,
+        "endLoc": {
+          "column": 34,
+          "line": 3443,
+          "position": 185775
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3437,
+        "startLoc": {
+          "column": 45,
+          "line": 3437,
+          "position": 185390
+        }
+      },
+      "tokens": 83
+    },
+    {
+      "firstFile": {
+        "end": 3202,
+        "endLoc": {
+          "column": 63,
+          "line": 3202,
+          "position": 172558
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3193,
+        "startLoc": {
+          "column": 12,
+          "line": 3193,
+          "position": 172246
+        }
+      },
+      "format": "swift",
+      "fragment": "            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = StateAuditService(service: service, stageStore: stageStore).run()\n\n        #expect(!report.failed)\n        #expect(report.checks.contains(StateAuditCheck(level: .ok, name: \"duplicate-membership\", message: \"windows=0\")))",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 10,
+      "secondFile": {
+        "end": 3284,
+        "endLoc": {
+          "column": 63,
+          "line": 3284,
+          "position": 176696
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3275,
+        "startLoc": {
+          "column": 12,
+          "line": 3275,
+          "position": 176384
+        }
+      },
+      "tokens": 57
+    },
+    {
+      "firstFile": {
+        "end": 3245,
+        "endLoc": {
+          "column": 8,
+          "line": 3245,
+          "position": 174798
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3216,
+        "startLoc": {
+          "column": 98,
+          "line": 3216,
+          "position": 173478
+        }
+      },
+      "format": "swift",
+      "fragment": "                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: WindowID(rawValue: 99), members: [\n                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),\n                ]),\n                PersistentStage(id: StageID(rawValue: \"2\"), members: [\n                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),\n                ]),\n            ]),\n        ], activeDisplayID: display))\n        let service = SnapshotService(\n            provider: FakeProvider(\n                displaySnapshots: [\n                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [window],\n                focusedID: window.id\n            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = StateAuditService(service: service, stageStore: stageStore).run()\n\n        #expect(report.failed)\n        #expect(report.checks.contains(StateAuditCheck(level: .fail, name: \"duplicate-membership\", message: \"windows=1\")))\n        try? FileManager.default.removeItem(atPath: stagePath)\n    }\n\n    @Test\n    func parkedStagesAreWarnNotFail() {",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 30,
+      "secondFile": {
+        "end": 3327,
+        "endLoc": {
+          "column": 8,
+          "line": 3327,
+          "position": 178901
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3298,
+        "startLoc": {
+          "column": 57,
+          "line": 3298,
+          "position": 177581
+        }
+      },
+      "tokens": 259
+    },
+    {
+      "firstFile": {
+        "end": 3299,
+        "endLoc": {
+          "column": 51,
+          "line": 3299,
+          "position": 177646
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3294,
+        "startLoc": {
+          "column": 12,
+          "line": 3294,
+          "position": 177308
+        }
+      },
+      "format": "swift",
+      "fragment": "            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), members: [\n                    PersistentStageMember(windowID: window.id, bundleID: window.bundleID, title: window.title, frame: window.frame),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3559,
+        "endLoc": {
+          "column": 51,
+          "line": 3559,
+          "position": 191937
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3554,
+        "startLoc": {
+          "column": 12,
+          "line": 3554,
+          "position": 191599
+        }
+      },
+      "tokens": 56
+    },
+    {
+      "firstFile": {
+        "end": 3371,
+        "endLoc": {
+          "column": 11,
+          "line": 3371,
+          "position": 181610
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3361,
+        "startLoc": {
+          "column": 81,
+          "line": 3361,
+          "position": 181250
+        }
+      },
+      "format": "swift",
+      "fragment": "                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: [live],\n                focusedID: live.id\n            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = StateAuditService(service: service, stageStore: stageStore).heal(isProcessAlive: { $0 != stale.pid })  // REL-002 : retrait sur preuve de fermeture",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 3702,
+        "endLoc": {
+          "column": 11,
+          "line": 3702,
+          "position": 200792
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3692,
+        "startLoc": {
+          "column": 81,
+          "line": 3692,
+          "position": 200432
+        }
+      },
+      "tokens": 76
+    },
+    {
+      "firstFile": {
+        "end": 3400,
+        "endLoc": {
+          "column": 59,
+          "line": 3400,
+          "position": 183537
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3394,
+        "startLoc": {
+          "column": 80,
+          "line": 3394,
+          "position": 183128
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-health-pid-\\(UUID().uuidString).pid\")\n            .path\n        try String(ProcessInfo.processInfo.processIdentifier).write(toFile: pidPath, atomically: true, encoding: .utf8)\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), focusedWindowID: window.id, members: [",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 3522,
+        "endLoc": {
+          "column": 59,
+          "line": 3522,
+          "position": 189625
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3516,
+        "startLoc": {
+          "column": 81,
+          "line": 3516,
+          "position": 189216
+        }
+      },
+      "tokens": 75
+    },
+    {
+      "firstFile": {
+        "end": 3454,
+        "endLoc": {
+          "column": 34,
+          "line": 3454,
+          "position": 186101
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3441,
+        "startLoc": {
+          "column": 85,
+          "line": 3441,
+          "position": 185613
+        }
+      },
+      "format": "swift",
+      "fragment": "                    DisplaySnapshot(id: display, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true),\n                ],\n                windowSnapshots: []\n            ),\n            frameWriter: RecordingWriter(),\n            config: RoadieConfig(),\n            stageStore: stageStore\n        )\n\n        let report = DaemonHealthService(\n            service: service,\n            stageStore: stageStore,\n            pidFilePath: missingPidPath,\n            componentRegistry: { [] }",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 14,
+      "secondFile": {
+        "end": 3494,
+        "endLoc": {
+          "column": 17,
+          "line": 3494,
+          "position": 187804
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3480,
+        "startLoc": {
+          "column": 85,
+          "line": 3480,
+          "position": 187300
+        }
+      },
+      "tokens": 86
+    },
+    {
+      "firstFile": {
+        "end": 3605,
+        "endLoc": {
+          "column": 72,
+          "line": 3605,
+          "position": 194733
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3600,
+        "startLoc": {
+          "column": 98,
+          "line": 3600,
+          "position": 194427
+        }
+      },
+      "format": "swift",
+      "fragment": "            .appendingPathComponent(\"roadie-display-disconnect-preserve-\\(UUID().uuidString).json\")\n            .path\n        let stageStore = StageStore(path: stagePath)\n        stageStore.save(PersistentStageState(scopes: [\n            PersistentStageScope(displayID: hostDisplay, activeStageID: StageID(rawValue: \"1\"), stages: [\n                PersistentStage(id: StageID(rawValue: \"1\"), name: \"Host\"),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3648,
+        "endLoc": {
+          "column": 72,
+          "line": 3648,
+          "position": 197613
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3643,
+        "startLoc": {
+          "column": 94,
+          "line": 3643,
+          "position": 197307
+        }
+      },
+      "tokens": 53
+    },
+    {
+      "firstFile": {
+        "end": 3614,
+        "endLoc": {
+          "column": 86,
+          "line": 3614,
+          "position": 195336
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3609,
+        "startLoc": {
+          "column": 130,
+          "line": 3609,
+          "position": 195077
+        }
+      },
+      "format": "swift",
+      "fragment": "                    PersistentStageMember(windowID: movedBySystem.id, bundleID: movedBySystem.bundleID, title: movedBySystem.title, frame: Rect(x: 1000, y: 0, width: 500, height: 500)),\n                ]),\n            ]),\n        ], activeDisplayID: hostDisplay))\n        let service = SnapshotService(\n            provider: FakeProvider(displaySnapshots: [liveDisplay], windowSnapshots: [movedBySystem], focusedID: nil),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3659,
+        "endLoc": {
+          "column": 86,
+          "line": 3659,
+          "position": 198393
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3654,
+        "startLoc": {
+          "column": 98,
+          "line": 3654,
+          "position": 198134
+        }
+      },
+      "tokens": 54
+    },
+    {
+      "firstFile": {
+        "end": 3720,
+        "endLoc": {
+          "column": 11,
+          "line": 3720,
+          "position": 202181
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3715,
+        "startLoc": {
+          "column": 64,
+          "line": 3715,
+          "position": 201645
+        }
+      },
+      "format": "swift",
+      "fragment": "    func sendToDisplayMovesMembershipAndRelayoutsBothDisplays() {\n        let displayA = DisplayID(rawValue: \"display-a\")\n        let displayB = DisplayID(rawValue: \"display-b\")\n        let sourceDisplay = DisplaySnapshot(id: displayA, index: 1, name: \"A\", frame: Rect(x: 0, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 0, y: 0, width: 1000, height: 500), isMain: true)\n        let targetDisplay = DisplaySnapshot(id: displayB, index: 2, name: \"B\", frame: Rect(x: 1000, y: 0, width: 1000, height: 500), visibleFrame: Rect(x: 1000, y: 0, width: 1000, height: 500), isMain: false)\n        let left = WindowSnapshot(id: WindowID(rawValue: 1), pid: 10, appName: \"A\", bundleID: \"a\", title: \"left\", frame: Rect(x: 0, y: 0, width: 495, height: 500), isOnScreen: true, isTileCandidate: true)",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 3779,
+        "endLoc": {
+          "column": 11,
+          "line": 3779,
+          "position": 206345
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 3774,
+        "startLoc": {
+          "column": 79,
+          "line": 3774,
+          "position": 205809
+        }
+      },
+      "tokens": 146
+    },
+    {
+      "firstFile": {
+        "end": 4151,
+        "endLoc": {
+          "column": 11,
+          "line": 4151,
+          "position": 225760
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4145,
+        "startLoc": {
+          "column": 68,
+          "line": 4145,
+          "position": 225485
+        }
+      },
+      "format": "swift",
+      "fragment": "    func confirmedDestructionHidesRailMemberAndEmptyStageImmediately() throws {\n        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let eventPath = tempPath(\"confirmed-close-events\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 4185,
+        "endLoc": {
+          "column": 11,
+          "line": 4185,
+          "position": 227564
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4179,
+        "startLoc": {
+          "column": 58,
+          "line": 4179,
+          "position": 227289
+        }
+      },
+      "tokens": 63
+    },
+    {
+      "firstFile": {
+        "end": 4151,
+        "endLoc": {
+          "column": 11,
+          "line": 4151,
+          "position": 225760
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4145,
+        "startLoc": {
+          "column": 68,
+          "line": 4145,
+          "position": 225485
+        }
+      },
+      "format": "swift",
+      "fragment": "    func confirmedDestructionHidesRailMemberAndEmptyStageImmediately() throws {\n        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let eventPath = tempPath(\"confirmed-close-events\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 4270,
+        "endLoc": {
+          "column": 11,
+          "line": 4270,
+          "position": 231195
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4264,
+        "startLoc": {
+          "column": 48,
+          "line": 4264,
+          "position": 230920
+        }
+      },
+      "tokens": 63
+    },
+    {
+      "firstFile": {
+        "end": 4151,
+        "endLoc": {
+          "column": 11,
+          "line": 4151,
+          "position": 225760
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4145,
+        "startLoc": {
+          "column": 78,
+          "line": 4145,
+          "position": 225495
+        }
+      },
+      "format": "swift",
+      "fragment": "    func confirmedDestructionHidesRailMemberAndEmptyStageImmediately() throws {\n        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let eventPath = tempPath(\"confirmed-close-events\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 4294,
+        "endLoc": {
+          "column": 11,
+          "line": 4294,
+          "position": 232313
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4288,
+        "startLoc": {
+          "column": 66,
+          "line": 4288,
+          "position": 232048
+        }
+      },
+      "tokens": 60
+    },
+    {
+      "firstFile": {
+        "end": 4151,
+        "endLoc": {
+          "column": 11,
+          "line": 4151,
+          "position": 225760
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4145,
+        "startLoc": {
+          "column": 68,
+          "line": 4145,
+          "position": 225485
+        }
+      },
+      "format": "swift",
+      "fragment": "    func confirmedDestructionHidesRailMemberAndEmptyStageImmediately() throws {\n        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let eventPath = tempPath(\"confirmed-close-events\")",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 7,
+      "secondFile": {
+        "end": 4329,
+        "endLoc": {
+          "column": 11,
+          "line": 4329,
+          "position": 233893
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4323,
+        "startLoc": {
+          "column": 51,
+          "line": 4323,
+          "position": 233618
+        }
+      },
+      "tokens": 63
+    },
+    {
+      "firstFile": {
+        "end": 4165,
+        "endLoc": {
+          "column": 71,
+          "line": 4165,
+          "position": 226406
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4160,
+        "startLoc": {
+          "column": 32,
+          "line": 4160,
+          "position": 226190
+        }
+      },
+      "format": "swift",
+      "fragment": "        provider.windowList = [a]\n        clock.now += 0.02\n        _ = snapshotService.producerSnapshot(cycle: 2)\n\n        let scope = try #require(store.state().scopes.first)\n        let stage = try #require(scope.stages.first { $0.id.rawValue == \"2\" })",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 6,
+      "secondFile": {
+        "end": 4258,
+        "endLoc": {
+          "column": 71,
+          "line": 4258,
+          "position": 230649
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4253,
+        "startLoc": {
+          "column": 35,
+          "line": 4253,
+          "position": 230433
+        }
+      },
+      "tokens": 54
+    },
+    {
+      "firstFile": {
+        "end": 4187,
+        "endLoc": {
+          "column": 63,
+          "line": 4187,
+          "position": 227751
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4180,
+        "startLoc": {
+          "column": 37,
+          "line": 4180,
+          "position": 227338
+        }
+      },
+      "format": "swift",
+      "fragment": "        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let snapshotService = SnapshotService(\n            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),\n            stageStore: store, events: EventLog(path: tempPath(\"in-scan-close-events\")),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 4272,
+        "endLoc": {
+          "column": 63,
+          "line": 4272,
+          "position": 231382
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4265,
+        "startLoc": {
+          "column": 37,
+          "line": 4265,
+          "position": 230969
+        }
+      },
+      "tokens": 81
+    },
+    {
+      "firstFile": {
+        "end": 4187,
+        "endLoc": {
+          "column": 63,
+          "line": 4187,
+          "position": 227751
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4180,
+        "startLoc": {
+          "column": 37,
+          "line": 4180,
+          "position": 227338
+        }
+      },
+      "format": "swift",
+      "fragment": "        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let snapshotService = SnapshotService(\n            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),\n            stageStore: store, events: EventLog(path: tempPath(\"in-scan-close-events\")),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 4296,
+        "endLoc": {
+          "column": 63,
+          "line": 4296,
+          "position": 232500
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4289,
+        "startLoc": {
+          "column": 37,
+          "line": 4289,
+          "position": 232087
+        }
+      },
+      "tokens": 81
+    },
+    {
+      "firstFile": {
+        "end": 4187,
+        "endLoc": {
+          "column": 63,
+          "line": 4187,
+          "position": 227751
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4180,
+        "startLoc": {
+          "column": 37,
+          "line": 4180,
+          "position": 227338
+        }
+      },
+      "format": "swift",
+      "fragment": "        let a = powerWindow(1, x: 100)\n        let b = powerWindow(2, x: 400)\n        let store = twoStageStore(a: a, b: b)\n        let clock = StabilizationClock()\n        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])\n        let snapshotService = SnapshotService(\n            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),\n            stageStore: store, events: EventLog(path: tempPath(\"in-scan-close-events\")),",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 8,
+      "secondFile": {
+        "end": 4331,
+        "endLoc": {
+          "column": 63,
+          "line": 4331,
+          "position": 234080
+        },
+        "name": "SnapshotServiceTests.swift",
+        "start": 4324,
+        "startLoc": {
+          "column": 37,
+          "line": 4324,
+          "position": 233667
+        }
+      },
+      "tokens": 81
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-10-14T08:11:00.339Z",
+    "formats": {
+      "swift": {
+        "clones": 101,
+        "duplicatedLines": 824,
+        "duplicatedTokens": 8770,
+        "lines": 14286,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 5.767884642307155,
+        "percentageTokens": 7.44823603349583,
+        "sources": 5,
+        "tokens": 117746
+      }
+    },
+    "total": {
+      "clones": 101,
+      "duplicatedLines": 824,
+      "duplicatedTokens": 8770,
+      "lines": 14286,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 5.767884642307155,
+      "percentageTokens": 7.44823603349583,
+      "sources": 5,
+      "tokens": 117746
+    }
+  }
+}

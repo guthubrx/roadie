@@ -1,0 +1,8 @@
+{
+  "module": "12",
+  "findings": [],
+  "positive_findings": [
+    "Le correctif ajoute un seul champ persistant et réutilise les chemins existants de snapshot, de store et de rafraîchissement.",
+    "Aucun nouveau service, protocole, dépendance ou thread n’est ajouté."
+  ]
+}

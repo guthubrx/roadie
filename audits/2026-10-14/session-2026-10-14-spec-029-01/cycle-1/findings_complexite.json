@@ -1,0 +1,8 @@
+{
+  "module": "04",
+  "findings": [],
+  "positive_findings": [
+    "Les ensembles pending, recent et live utilisent Set pour les intersections et soustractions.",
+    "La boucle de reprise est bornée à dix passages par identifiant."
+  ]
+}

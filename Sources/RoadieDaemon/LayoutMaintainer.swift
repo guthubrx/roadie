@@ -566,6 +566,9 @@ public final class LayoutMaintainer {
         due += settingsRetryAt.compactMap { scope, at in
             settingsRetryRunnableScopes.contains(scope) ? ("settings_retry", at, true) : nil
         }
+        if let retryAt = service.destroyedWindowRetryDeadline(now: now) {
+            due.append(("destroyed_window", retryAt, true))
+        }
         for guardState in spaceGuards.values {
             due.append(("guard_cap", guardState.openedAt.addingTimeInterval(LayoutTolerance.spaceGuardCap), true))
             due.append(("guard_poll", (guardState.lastPollAt ?? guardState.openedAt).addingTimeInterval(LayoutTolerance.spaceGuardPoll), true))

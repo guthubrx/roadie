@@ -1,0 +1,47 @@
+{
+  "audit_meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-14T08:12:00Z",
+    "scope": "SPEC-029 navrail fermeture",
+    "scope_mode": "full-feature",
+    "diff": {
+      "base": "HEAD 6a901de1dd0256dd50abd3e65607a7bce34a7860",
+      "files_count": 5
+    },
+    "mode": "STANDARD",
+    "grid": "all"
+  },
+  "repo": {
+    "files_count": 250,
+    "languages": ["swift"],
+    "frameworks": ["AppKit", "ApplicationServices", "Swift Testing", "TOMLKit"],
+    "type": "macOS desktop daemon + CLI",
+    "has_ui": true,
+    "has_llm_integration": false,
+    "db_type": "JSON files",
+    "ci_system": null,
+    "container": false
+  },
+  "sampling": null,
+  "hot_paths": [
+    {"type": "window_snapshot", "path": "Sources/RoadieDaemon/DaemonSnapshot.swift:230", "trigger": "tiler producer snapshot"},
+    {"type": "deadline_scheduler", "path": "Sources/RoadieDaemon/LayoutMaintainer.swift:557", "trigger": "maintenance tick"},
+    {"type": "rail_refresh", "path": "Sources/RoadieDaemon/RailController.swift:165", "trigger": "stage-store watcher"},
+    {"type": "stage_persistence", "path": "Sources/RoadieDaemon/StageStore.swift:744", "trigger": "window reconciliation"}
+  ],
+  "threat_model": {
+    "assets": ["persistent stage membership", "window identity mapping", "UI focus state"],
+    "attackers": ["local application emitting rapid or reordered window events"],
+    "surface": ["Accessibility destruction notifications", "CoreGraphics window enumeration", "persistent JSON stage state"],
+    "risk": "local reliability and UI consistency; no network or authentication surface in scope"
+  },
+  "slos": {
+    "defined": true,
+    "targets": {
+      "confirmed_close_navrail_p95_ms": 400,
+      "retry_delay_ms": 50,
+      "retry_limit": 10
+    }
+  },
+  "modules_actifs": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "10", "11", "12"]
+}
