@@ -17,10 +17,26 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func catalogHas167SimpleSettings() {
-        #expect(simple.count == 167)
+    func catalogHas173SimpleSettings() {
+        #expect(simple.count == 173)
         #expect(railSimple.count == 75)
-        #expect(simple.count - railSimple.count == 92)
+        #expect(simple.count - railSimple.count == 98)
+    }
+
+    @Test
+    func tilingChoiceLabelsAreReadableAndRetainTheirTechnicalNames() throws {
+        for id in ["tiling.default_strategy", "tiling.split_policy"] {
+            let descriptor = try #require(SettingsCatalog.find(id: id))
+            guard case .choice(let choices) = descriptor.kind else { Issue.record("choix attendu"); return }
+            let labels = choices.map { descriptor.choiceLabel($0) }
+            #expect(Set(labels).count == choices.count)
+            for value in choices {
+                #expect(descriptor.choiceLabel(value) != value)
+                #expect(descriptor.choiceLabel(value).hasSuffix("(\(value))"))
+            }
+        }
+        let other = try #require(SettingsCatalog.find(id: "window_placement.new_window_side"))
+        #expect(other.choiceLabel("left") == "left")
     }
 
     @Test
@@ -54,9 +70,8 @@ struct SettingsCatalogTests {
     }
 
     @Test
-    func categoriesAreFilledExceptGeneral() {
-        #expect(SettingsCatalog.descriptors(in: .general).isEmpty)
-        for category in SettingCategory.allCases where category != .general {
+    func categoriesAreFilled() {
+        for category in SettingCategory.allCases {
             #expect(!SettingsCatalog.descriptors(in: category).isEmpty, "catégorie vide : \(category.rawValue)")
             #expect(!category.label.isEmpty && !category.symbolName.isEmpty)
         }
@@ -127,7 +142,7 @@ struct SettingsCatalogTests {
         let extra = described.subtracting(expected).sorted()
         #expect(missing.isEmpty, "clés du validateur sans descripteur : \(missing.joined(separator: ", "))")
         #expect(extra.isEmpty, "descripteurs sans clé connue du validateur : \(extra.joined(separator: ", "))")
-        #expect(expected.count == 167)
+        #expect(expected.count == 173)
     }
 
     // MARK: - Défauts
@@ -220,8 +235,8 @@ struct SettingsCatalogTests {
             }
             checked += 1
         }
-        // 21 réglages hors rail ont une plage.
-        #expect(checked == 21)
+        // 27 réglages hors rail ont une plage.
+        #expect(checked == 27)
     }
 
     // MARK: - Recherche

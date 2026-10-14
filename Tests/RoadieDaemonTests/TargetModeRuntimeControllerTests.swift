@@ -99,7 +99,7 @@ struct TargetModeRuntimeControllerTests {
 
     @Test
     func labelStylesFollowTheConfiguredFontSize() {
-        let letters = TargetOverlayStyle.labels(TargetModeConfig(labelFontSize: 20))
+        let letters = TargetOverlayStyle.labels(TargetModeConfig(labelFontSize: 20, searchLabelFontSize: 24))
         let grid = TargetOverlayStyle.grid(TargetGridConfig(labelFontSize: 20))
 
         #expect(abs(letters.scale - 20.0 / 13.0) < 0.001)
@@ -145,18 +145,50 @@ struct TargetModeRuntimeControllerTests {
     /// Fusion 022/023 : le présentateur injectable reçoit le style et les actions de la boîte.
     @Test @MainActor
     func searchKeepsCommandBoxAndConfiguredLabelStyle() throws {
-        let service = targetModeService(name: "search-command-box", displays: [powerDisplay()], labelFontSize: 20)
+        let service = targetModeService(name: "search-command-box", displays: [powerDisplay()], labelFontSize: 20, searchLabelFontSize: 24)
         let presenter = SpyTargetModeOverlayPresenter()
         let controller = TargetModeRuntimeController(service: service, events: EventLog(), presenter: presenter)
 
         controller.handle(TargetModeRuntimeCommand(name: "targets.search"))
 
         let style = try #require(presenter.searchStyle)
-        #expect(abs(style.scale - 20.0 / 13.0) < 0.001)
+        #expect(service.effectiveConfig.experimental.targetMode.labelFontSize == 20)
+        #expect(style.labelFontSize == 24)
+        #expect(abs(style.scale - 24.0 / 13.0) < 0.001)
         #expect(presenter.searchTargets?.isEmpty == false)
         #expect(presenter.searchCommands != nil)
         #expect(presenter.searchRunDeferred != nil)
         #expect(presenter.searchOpenSettings != nil)
+    }
+
+    @Test @MainActor
+    func openSessionsReceiveOnlyTheirOwnConfiguredFonts() throws {
+        let service = targetModeService(name: "live-fonts", displays: [powerDisplay()])
+        let presenter = SpyTargetModeOverlayPresenter()
+        let session = SpyFontSession()
+        presenter.session = session
+        let controller = TargetModeRuntimeController(service: service, events: EventLog(), presenter: presenter)
+        defer { controller.stop() }
+        var config = service.effectiveConfig
+        config.experimental.targetMode.labelFontSize = 18
+        config.experimental.targetMode.searchLabelFontSize = 24
+        config.experimental.targetMode.searchTextFontSize = 32
+        config.experimental.targetMode.commandTextFontSize = 40
+        config.experimental.targetGrid.labelFontSize = 28
+        for (command, expected) in [("targets.interactive", CGFloat(18)), ("targets.search", CGFloat(24)), ("grid.interactive", CGFloat(28))] {
+            controller.handle(TargetModeRuntimeCommand(name: command))
+            controller.refreshOverlayStyle(config: config)
+            let style = try #require(session.styles.last)
+            #expect(style.labelFontSize == expected)
+            if command == "targets.search" {
+                #expect(style.searchTextFontSize == 32)
+                #expect(style.commandTextFontSize == 40)
+            }
+        }
+        controller.stop()
+        let count = session.styles.count
+        controller.refreshOverlayStyle(config: config)
+        #expect(session.styles.count == count)
     }
 
     // TEST-002 / REL-003 : la lettre validée active la cible de la liste affichée (filtrée), pas
@@ -256,7 +288,7 @@ private final class StepLog {
 }
 
 @MainActor
-private func targetModeService(name: String, displays: [DisplaySnapshot], labelFontSize: Double = 13) -> SnapshotService {
+private func targetModeService(name: String, displays: [DisplaySnapshot], labelFontSize: Double = 13, searchLabelFontSize: Double = 13) -> SnapshotService {
     let displayID = displays[0].id
     let stageID = StageID(rawValue: "1")
     let first = powerWindow(1, x: 100, app: "iTerm")
@@ -272,7 +304,7 @@ private func targetModeService(name: String, displays: [DisplaySnapshot], labelF
     ], activeDisplayID: displayID))
     let provider = PowerUserProvider(displays: displays, windows: [first, second])
     let config = RoadieConfig(experimental: ExperimentalConfig(
-        targetMode: TargetModeConfig(overlayEnabled: true, labelFontSize: labelFontSize),
+        targetMode: TargetModeConfig(overlayEnabled: true, labelFontSize: labelFontSize, searchLabelFontSize: searchLabelFontSize),
         targetGrid: TargetGridConfig(enabled: true)
     ))
     return SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), config: config, stageStore: store)
@@ -281,6 +313,7 @@ private func targetModeService(name: String, displays: [DisplaySnapshot], labelF
 /// Présentation espionne : conserve la liste affichée et les fermetures, sans overlay réel.
 @MainActor
 private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
+    var session: SpyFontSession?
     var interactiveState: TargetOverlayState?
     var interactiveActivate: (@MainActor (String) -> TargetActionResult)?
     var gridStateProvider: (@MainActor (Int?, String) -> TargetOverlayState)?
@@ -301,7 +334,7 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
     ) -> TargetOverlaySessionHandle? {
         interactiveState = state
         interactiveActivate = activate
-        return nil
+        return session
     }
 
     func startGridInteractive(
@@ -318,7 +351,7 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         gridStateProvider = stateProvider
         gridActivate = activate
         gridFinish = onFinish
-        return nil
+        return session
     }
 
     func startSearch(
@@ -340,6 +373,13 @@ private final class SpyTargetModeOverlayPresenter: TargetModeOverlayPresenting {
         searchCommands = commands
         searchRunDeferred = runDeferred
         searchOpenSettings = openSettings
-        return nil
+        return session
     }
+}
+
+@MainActor
+private final class SpyFontSession: TargetOverlaySessionHandle {
+    var styles: [TargetOverlayStyle] = []
+    func cancel() {}
+    func updateStyle(_ style: TargetOverlayStyle) { styles.append(style) }
 }

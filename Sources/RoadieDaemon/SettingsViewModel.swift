@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import RoadieCore
 
 /// Groupe de réglages affiché dans la zone droite de la fenêtre.
 struct SettingsSection: Identifiable, Equatable {
@@ -53,11 +54,25 @@ final class SettingsViewModel: ObservableObject {
         !validity.isValid
     }
 
+    /// Polices dérivées du cache déjà lu : aucun accès disque pendant le dessin. O(1).
+    var interfaceFonts: InterfaceConfig {
+        let defaults = InterfaceConfig()
+        return InterfaceConfig(
+            settingsTextFontSize: cachedFontSize("settings_text_font_size", fallback: defaults.settingsTextFontSize),
+            settingsHelpFontSize: cachedFontSize("settings_help_font_size", fallback: defaults.settingsHelpFontSize),
+            settingsTitleFontSize: cachedFontSize("settings_title_font_size", fallback: defaults.settingsTitleFontSize)
+        )
+    }
+
+    private func cachedFontSize(_ key: String, fallback: Double) -> Double {
+        Self.number(values["interface.\(key)"]?.value ?? .double(fallback)) ?? fallback
+    }
+
     /// Réglages de la catégorie, ou résultats de la recherche groupés par catégorie
     /// (modifiables d'abord, puis lecture seule). O(n) - n = nombre de réglages.
     var sections: [SettingsSection] {
         guard isSearching else {
-            return category == .general ? [] : [SettingsSection(category: category, descriptors: SettingsCatalog.descriptors(in: category))]
+            return [SettingsSection(category: category, descriptors: SettingsCatalog.descriptors(in: category))]
         }
         let grouped = Dictionary(grouping: SettingsCatalog.search(query), by: \.category)
         return SettingCategory.allCases.compactMap { category in
@@ -94,7 +109,10 @@ final class SettingsViewModel: ObservableObject {
     /// Lit les valeurs affichées absentes du cache, avec une seule lecture du fichier.
     /// O(v * L) - v réglages affichés non lus, L taille du fichier.
     private func loadVisibleValues() {
-        let missing = sections.flatMap(\.descriptors).filter { values[$0.id] == nil }
+        // Les polices restent accessibles dans toutes les catégories, y compris après une relecture externe.
+        let displayed = SettingsCatalog.descriptors(in: .general)
+            + sections.filter { $0.category != .general }.flatMap(\.descriptors)
+        let missing = displayed.filter { values[$0.id] == nil }
         guard !missing.isEmpty else { return }
         let text = service.configText()
         var read = values
@@ -157,6 +175,16 @@ final class SettingsViewModel: ObservableObject {
     func apply(_ descriptor: SettingDescriptor, raw: String) {
         guard !isLocked, descriptor.readOnlyReason == nil else { return }
         handle(service.set(descriptor.id, to: raw), for: descriptor, isReset: false)
+    }
+
+    /// Les tailles valides se voient immédiatement, mais « 8. » reste saisissable comme début de « 8.5 ».
+    func editText(_ descriptor: SettingDescriptor, raw: String) {
+        drafts[descriptor.id] = raw
+        guard descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size"),
+              case .double(let range?) = descriptor.kind,
+              let number = Double(raw), number.isFinite, range.contains(number) else { return }
+        apply(descriptor, raw: raw)
+        if errors[descriptor.id] == nil { drafts[descriptor.id] = raw }
     }
 
     /// « Rétablir » : retour à la valeur par défaut.
@@ -228,6 +256,7 @@ final class SettingsViewModel: ObservableObject {
         switch result {
         case .applied(_, let new):
             errors[descriptor.id] = nil
+            drafts[descriptor.id] = nil
             // Rétablir retire la ligne ; une écriture qui répète le défaut n'a rien à rétablir.
             values[descriptor.id] = (new, isDefault: isReset || new == descriptor.defaultValue)
         case .rejected(let reason):

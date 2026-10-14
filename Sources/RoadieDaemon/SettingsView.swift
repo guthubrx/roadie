@@ -1,18 +1,22 @@
 import AppKit
 import SwiftUI
+import RoadieCore
 
 /// Fenêtre de réglages (contracts/settings.md « Fenêtre ») : affichage mince au-dessus de `SettingsViewModel`.
 /// Les couleurs viennent du système : l'apparence claire ou sombre suit macOS.
 struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
+    private var fonts: InterfaceConfig { model.interfaceFonts }
 
     var body: some View {
         HStack(spacing: 0) {
-            sidebar.frame(width: 220)
+            sidebar.frame(width: min(320, max(240, fonts.settingsTextFontSize * 12)))
             Divider()
             detail.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 760, minHeight: 520)
+        .font(.system(size: fonts.settingsTextFontSize))
+        .buttonStyle(SettingsButtonStyle(fontSize: fonts.settingsTextFontSize))
     }
 
     // MARK: - Colonne gauche
@@ -28,7 +32,14 @@ struct SettingsView: View {
                 set: { if let category = $0 { model.select(category) } }
             )) {
                 ForEach(SettingCategory.allCases, id: \.self) { category in
-                    Label(category.label, systemImage: category.symbolName).tag(category)
+                    Label {
+                        Text(category.label)
+                            .font(.system(size: fonts.settingsTextFontSize))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: category.symbolName).font(.system(size: min(16, fonts.settingsTextFontSize)))
+                    }
+                        .tag(category)
                 }
             }
             .listStyle(.sidebar)
@@ -47,11 +58,11 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     ForEach(model.sections) { section in
-                        Text(section.category.label).font(.headline)
+                        Text(section.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
                         card(section.descriptors)
                     }
                 } else {
-                    Text(model.category.label).font(.title2.bold())
+                    Text(model.category.label).font(.system(size: fonts.settingsTitleFontSize, weight: .bold))
                     if model.category == .general {
                         general
                     } else {
@@ -68,10 +79,10 @@ struct SettingsView: View {
     private var invalidBanner: some View {
         VStack(alignment: .leading, spacing: 6) {
             Label("Le fichier de configuration est invalide", systemImage: "exclamationmark.triangle.fill")
-                .font(.headline)
+                .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
                 .foregroundStyle(.red)
             ForEach(Array(model.validity.messages.prefix(10).enumerated()), id: \.offset) { _, message in
-                Text(message).font(.caption).textSelection(.enabled)
+                Text(message).font(.system(size: fonts.settingsHelpFontSize)).textSelection(.enabled)
             }
             Button("Ouvrir le fichier") { openConfigFile() }
         }
@@ -99,22 +110,24 @@ struct SettingsView: View {
 
     private var general: some View {
         VStack(alignment: .leading, spacing: 16) {
+            card(SettingsCatalog.descriptors(in: .general))
             VStack(alignment: .leading, spacing: 10) {
                 LabeledContent("Fichier de configuration") {
                     Text(model.service.configPath)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: fonts.settingsTextFontSize, design: .monospaced))
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 LabeledContent("État") {
                     Text(model.validityText).foregroundStyle(model.isLocked ? .red : .primary)
                 }
-                HStack {
+                VStack(alignment: .leading, spacing: 10) {
                     Button("Ouvrir le fichier de configuration") { openConfigFile() }
                     Button("Recharger") { model.reloadConfig() }
                     Button("Diagnostic") { model.runDiagnostic() }
                 }
                 if let notice = model.notice {
-                    Text(notice).font(.caption).foregroundStyle(.secondary)
+                    Text(notice).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.secondary)
                 }
             }
             .padding(14)
@@ -122,7 +135,7 @@ struct SettingsView: View {
             if let diagnostic = model.diagnostic {
                 ScrollView {
                     Text(diagnostic)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(size: fonts.settingsHelpFontSize, design: .monospaced))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(10)
@@ -138,47 +151,71 @@ struct SettingsView: View {
     }
 }
 
+/// Le style natif impose une petite police aux boutons ; garder la taille choisie pour leurs libellés.
+private struct SettingsButtonStyle: ButtonStyle {
+    let fontSize: Double
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: fontSize))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
 // MARK: - Ligne d'un réglage
 
-/// Libellé, description, contrôle à droite, « Rétablir » si la valeur n'est pas celle par défaut,
+/// Libellé et description au-dessus du contrôle, « Rétablir » si la valeur n'est pas celle par défaut,
 /// ligne rouge sous un réglage refusé.
 private struct SettingRow: View {
     @ObservedObject var model: SettingsViewModel
     let descriptor: SettingDescriptor
     let openConfigFile: () -> Void
     @FocusState private var fieldFocused: Bool
+    private var fonts: InterfaceConfig { model.interfaceFonts }
+    private var isFontSize: Bool { descriptor.key == "font_size" || descriptor.key.hasSuffix("_font_size") }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(descriptor.label)
-                    Text(descriptor.help)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let detail = descriptor.readOnlyReason ?? model.rangeText(descriptor) {
-                        Text(detail).font(.caption2).foregroundStyle(.tertiary)
-                    }
-                }
+                Text(descriptor.label)
+                    .font(.system(size: fonts.settingsTextFontSize, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 12)
+                if descriptor.readOnlyReason == nil && !model.isDefault(descriptor) {
+                    Button("Rétablir") { model.reset(descriptor) }
+                        .buttonStyle(.link)
+                        .font(.system(size: fonts.settingsHelpFontSize))
+                        .disabled(model.isLocked)
+                        .fixedSize()
+                }
+            }
+            Text(descriptor.help)
+                .font(.system(size: fonts.settingsHelpFontSize))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail = descriptor.readOnlyReason ?? model.rangeText(descriptor) {
+                Text(detail)
+                    .font(.system(size: fonts.settingsHelpFontSize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
                 if descriptor.readOnlyReason != nil {
                     Button("Ouvrir le fichier de configuration", action: openConfigFile)
                 } else {
-                    if !model.isDefault(descriptor) {
-                        Button("Rétablir") { model.reset(descriptor) }
-                            .buttonStyle(.link)
-                            .font(.caption)
-                            .disabled(model.isLocked)
-                    }
-                    control.disabled(model.isLocked)
+                    control.disabled(model.isLocked).accessibilityLabel(descriptor.label)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             // Valeur actuelle d'une entrée en lecture seule : texte sélectionnable, 6 lignes visibles au plus.
             if let summary = model.readOnlySummary(descriptor), !summary.isEmpty {
                 // Hauteur qui suit le contenu, plafonnée à 6 lignes : le texte seul s'il tient, sinon un ScrollView de 6 lignes.
                 let text = Text(summary)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(size: fonts.settingsHelpFontSize, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(6)
@@ -186,15 +223,15 @@ private struct SettingRow: View {
                     text.fixedSize(horizontal: false, vertical: true)
                     ScrollView { text }
                 }
-                .frame(maxHeight: 6 * 15 + 12)
+                .frame(maxHeight: 6 * (fonts.settingsHelpFontSize + 5) + 12)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .textBackgroundColor)))
             }
             if let error = model.errors[descriptor.id] {
-                Text(error).font(.caption).foregroundStyle(.red)
+                Text(error).font(.system(size: fonts.settingsHelpFontSize)).foregroundStyle(.red)
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
@@ -208,22 +245,35 @@ private struct SettingRow: View {
             .toggleStyle(.switch)
             .labelsHidden()
         case .int, .double:
-            HStack(spacing: 4) {
-                field.frame(width: 90)
-                Stepper("", onIncrement: { model.step(descriptor, by: 1) }, onDecrement: { model.step(descriptor, by: -1) })
-                    .labelsHidden()
+            VStack(alignment: .leading, spacing: 6) {
+                if isFontSize, case .double(let range?) = descriptor.kind {
+                    Slider(value: Binding(
+                        get: {
+                            if case .double(let value) = model.value(descriptor) {
+                                return min(range.upperBound, max(range.lowerBound, value))
+                            }
+                            return range.lowerBound
+                        },
+                        set: { model.apply(descriptor, raw: SettingsService.display(.double($0))) }
+                    ), in: range, step: 1)
+                    .frame(maxWidth: 320)
+                    .accessibilityLabel(descriptor.label)
+                }
+                HStack(spacing: 4) {
+                    field.frame(width: max(120, fonts.settingsTextFontSize * 7))
+                    Stepper("", onIncrement: { model.step(descriptor, by: 1) }, onDecrement: { model.step(descriptor, by: -1) })
+                        .labelsHidden()
+                        .accessibilityLabel("Ajuster : \(descriptor.label)")
+                }
             }
-        case .choice(let choices):
-            Picker("", selection: Binding(
+        case .choice:
+            SettingsChoicePicker(descriptor: descriptor, fontSize: fonts.settingsTextFontSize, selection: Binding(
                 get: { model.text(for: descriptor) },
                 set: { model.apply(descriptor, raw: $0) }
-            )) {
-                ForEach(choices, id: \.self) { Text($0).tag($0) }
-            }
-            .labelsHidden()
-            .frame(width: 200)
+            ))
+            .frame(maxWidth: .infinity)
         case .text:
-            field.frame(width: 240)
+            field.frame(maxWidth: 360)
         case .color:
             HStack(spacing: 6) {
                 ColorPicker("", selection: Binding(
@@ -231,7 +281,7 @@ private struct SettingRow: View {
                     set: { model.setColor(descriptor, hex: $0.hexString) }
                 ), supportsOpacity: true)
                 .labelsHidden()
-                field.frame(width: 100)
+                field.frame(width: max(100, fonts.settingsTextFontSize * 8))
             }
         }
     }
@@ -240,9 +290,10 @@ private struct SettingRow: View {
     private var field: some View {
         TextField(descriptor.defaultValue == .unset ? "non défini" : "", text: Binding(
             get: { model.text(for: descriptor) },
-            set: { model.drafts[descriptor.id] = $0 }
+            set: { model.editText(descriptor, raw: $0) }
         ))
         .textFieldStyle(.roundedBorder)
+        .accessibilityLabel(descriptor.label)
         .focused($fieldFocused)
         .onSubmit { model.commitDraft(descriptor) }
         .onChange(of: fieldFocused) { _, focused in

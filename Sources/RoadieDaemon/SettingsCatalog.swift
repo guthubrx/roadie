@@ -85,6 +85,28 @@ public struct SettingDescriptor: Equatable, Sendable {
     /// Présent pour les listes et les tableaux de tables : affichés, jamais modifiés.
     public let readOnlyReason: String?
 
+    /// Libellé de présentation seulement : le menu conserve la valeur brute comme tag. O(1).
+    public func choiceLabel(_ value: String) -> String {
+        let label: String
+        switch (id, value) {
+        case ("tiling.default_strategy", "bsp"): label = "Arbre automatique"
+        case ("tiling.default_strategy", "spatialBsp"): label = "Arbre persistant"
+        case ("tiling.default_strategy", "masterStack"): label = "Fenêtre principale et pile"
+        case ("tiling.default_strategy", "float"): label = "Placement libre"
+        case ("tiling.split_policy", "largest_dim"): label = "Répartition équilibrée par défaut"
+        case ("tiling.split_policy", "balanced"): label = "Répartition équilibrée héritée"
+        case ("tiling.split_policy", "dwindle"): label = "Découpage en spirale"
+        default: return value
+        }
+        return "\(label) (\(value))"
+    }
+
+    /// Une valeur déjà présente reste visible même si elle n'est pas proposée à l'écriture. O(c).
+    public func choiceValues(includingCurrent value: String) -> [String] {
+        guard case .choice(let choices) = kind else { return [] }
+        return choices.contains(value) ? choices : choices + [value]
+    }
+
     public init(
         category: SettingCategory,
         tablePath: String,
@@ -110,7 +132,7 @@ public struct SettingDescriptor: Equatable, Sendable {
 public enum SettingsCatalog {
     /// Tous les réglages, dans l'ordre d'affichage : l'ordre de `all` fixe celui d'une catégorie.
     public static let all: [SettingDescriptor] =
-        tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
+        interfaceDescriptors + tilingDescriptors + stageDescriptors + focusDescriptors + borderDescriptors
         + targetModeDescriptors + appTargetDescriptors + targetGridDescriptors
         + advancedDescriptors + ruleDescriptors + railDescriptors
 
@@ -174,6 +196,15 @@ public enum SettingsCatalog {
 // MARK: - Fabrique et textes communs
 
 extension SettingsCatalog {
+    static let interfaceDescriptors: [SettingDescriptor] = [
+        entry(.general, "interface", "settings_text_font_size", "Texte des paramètres (points)",
+              "Taille des libellés et des champs. Le changement s'applique immédiatement.", .double(8...32), .double(16)),
+        entry(.general, "interface", "settings_help_font_size", "Descriptions des paramètres (points)",
+              "Taille des aides et des messages dans les paramètres, indépendante des champs.", .double(8...32), .double(14)),
+        entry(.general, "interface", "settings_title_font_size", "Titres des paramètres (points)",
+              "Taille des titres de catégorie dans les paramètres.", .double(10...48), .double(22)),
+    ]
+
     static let readOnlyMessage = "lecture seule : modifier le fichier de configuration"
 
     /// Réglage simple modifiable.
@@ -219,11 +250,11 @@ extension SettingsCatalog {
 extension SettingsCatalog {
     static let tilingDescriptors: [SettingDescriptor] = [
         entry(.tuilage, "tiling", "default_strategy", "Méthode de tuilage",
-              "Façon de disposer les fenêtres : arbre (bsp), arbre persistant (spatialBsp), maître et pile (masterStack) ou libre (float).",
+              "Dispose les fenêtres automatiquement en arbre, conserve un arbre ajustable, privilégie une fenêtre principale ou laisse le placement libre.",
               .choice(["bsp", "spatialBsp", "masterStack", "float"]), .string("bsp")),
         entry(.tuilage, "tiling", "split_policy", "Découpage de l'espace",
-              "« largest_dim » répartit les fenêtres à parts égales ; « dwindle » donne la moitié à la première fenêtre, puis réduit en spirale.",
-              .choice(["largest_dim", "dwindle"]), .string("largest_dim")),
+              "En mode Arbre automatique (bsp), la répartition équilibrée partage le groupe en deux à chaque découpe. La spirale réserve la moitié à la première fenêtre, puis découpe le reste. Sans effet en mode Arbre persistant.",
+              .choice(["largest_dim", "balanced", "dwindle"]), .string("largest_dim")),
         entry(.tuilage, "tiling", "gaps_outer", "Marge extérieure (points)",
               "Espace entre les fenêtres et le bord de l'écran.", .double(nil), .double(8)),
         gap("gaps_outer_top", "en haut"),
@@ -328,7 +359,13 @@ extension SettingsCatalog {
         entry(.lettres, "experimental.target_mode", "scroll_mode_enabled", "Mode défilement",
               "Autorise le défilement au clavier dans le mode lettres.", .bool, .bool(false)),
         entry(.lettres, "experimental.target_mode", "label_font_size", "Taille des étiquettes (points)",
-              "Taille du texte des étiquettes du mode lettres et de la recherche.", .double(8...48), .double(13)),
+              "Taille du texte des étiquettes du mode lettres, indépendante de la recherche.", .double(8...48), .double(13)),
+        entry(.recherche, "experimental.target_mode", "search_label_font_size", "Étiquettes de recherche (points)",
+              "Taille des lettres sur les résultats de recherche.", .double(8...48), .double(13)),
+        entry(.recherche, "experimental.target_mode", "search_text_font_size", "Texte de la barre de recherche (points)",
+              "Taille de la saisie et du nombre de correspondances. La barre suit cette taille.", .double(8...48), .double(15)),
+        entry(.recherche, "experimental.target_mode", "command_text_font_size", "Suggestions et réponses des commandes (points)",
+              "Taille de la liste et des messages après la saisie de /, indépendante de la barre.", .double(8...48), .double(13)),
         entry(.recherche, "experimental.target_mode", "search_hotkey", "Raccourci de la recherche",
               "Raccourci global qui ouvre la recherche, par exemple command+control+alt+f. Vide : désactivé.",
               .text, .string("command+control+alt+f")),

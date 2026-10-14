@@ -33,7 +33,7 @@ final class RailHeaderView: NSView {
             (config.desktopLabel, render(template: config.desktopLabel.template)),
         ].filter { $0.0.enabled && !$0.1.isEmpty }
         guard !labels.isEmpty else { return }
-        let lineHeights = labels.map { max($0.0.fontSize + 5, 1) }
+        let lineHeights = labels.map { $0.0.lineHeight }
         let gap: CGFloat = labels.count > 1 ? 2 : 0
         let blockHeight = lineHeights.reduce(0, +) + gap * CGFloat(max(0, labels.count - 1))
         let top = max(0, (bounds.height - blockHeight) / 2)
@@ -43,7 +43,7 @@ final class RailHeaderView: NSView {
             y -= lineHeight
             item.1.draw(in: CGRect(x: item.0.offsetX, y: y + item.0.offsetY, width: bounds.width, height: lineHeight), withAttributes: [
                 .foregroundColor: item.0.color,
-                .font: headerFont(label: item.0),
+                .font: item.0.font,
                 .paragraphStyle: paragraphStyle(for: item.0),
             ])
             y -= gap
@@ -70,14 +70,6 @@ final class RailHeaderView: NSView {
         return style
     }
 
-    private func headerFont(label: RailLabelConfig) -> NSFont {
-        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !family.isEmpty, family.lowercased() != "system",
-           let font = NSFont(name: family, size: label.fontSize) {
-            return font
-        }
-        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
-    }
 }
 
 @MainActor
@@ -117,11 +109,13 @@ final class StageCardView: NSControl {
         self.presentationStates = presentationStates
         self.thumbnails = thumbnails
         self.visualMembers = Self.focusFirstMembers(stage)
-        super.init(frame: CGRect(x: 0, y: 0, width: 224, height: 142))
+        let width = Self.width(for: config)
+        let height = Self.height(for: config, memberCount: stage.members.count)
+        super.init(frame: CGRect(x: 0, y: 0, width: width, height: height))
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 224).isActive = true
-        heightAnchor.constraint(equalToConstant: Self.height(for: config)).isActive = true
+        widthAnchor.constraint(equalToConstant: width).isActive = true
+        heightAnchor.constraint(equalToConstant: height).isActive = true
         layer?.cornerRadius = 18
         layer?.masksToBounds = false
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -133,8 +127,28 @@ final class StageCardView: NSControl {
         layer?.shadowOffset = .zero
     }
 
-    static func height(for config: RailVisualConfig) -> CGFloat {
-        config.mode == .icons ? 78 : max(150, config.previewHeight + 66)
+    static func width(for config: RailVisualConfig) -> CGFloat {
+        config.mode == .icons ? max(1, config.railWidth - 12) : 224
+    }
+
+    static func height(for config: RailVisualConfig, memberCount: Int = 6) -> CGFloat {
+        // Les deux marges augmentent avec le texte ; le dessin et les zones de clic restent communs.
+        let extra = max(0, config.stageLabel.lineHeight - 16)
+        if config.mode == .icons {
+            let size = iconSize(for: config)
+            let columns = iconColumns(availableWidth: width(for: config) - 24, config: config)
+            let rows = max(1, ceil(CGFloat(min(7, memberCount)) / CGFloat(columns)))
+            return 78 + extra * 2 + (rows - 1) * (size + 8)
+        }
+        return max(150, config.previewHeight + 66) + extra * 2
+    }
+
+    private static func iconSize(for config: RailVisualConfig) -> CGFloat {
+        max(24, config.stageLabel.lineHeight + 8)
+    }
+
+    private static func iconColumns(availableWidth: CGFloat, config: RailVisualConfig) -> Int {
+        max(1, Int((availableWidth + 8) / (iconSize(for: config) + 8)))
     }
 
     private static func focusFirstMembers(_ stage: PersistentStage) -> [PersistentStageMember] {
@@ -205,7 +219,7 @@ final class StageCardView: NSControl {
         let labelConfig = config.stageLabel
         let now = Date()
         guard labelConfig.opacityMultiplier(now: now) > 0 else { return }
-        let lineHeight = max(labelConfig.fontSize + 5, 1)
+        let lineHeight = labelConfig.lineHeight
         let baseY: CGFloat
         switch labelConfig.placement {
         case .above:
@@ -227,7 +241,7 @@ final class StageCardView: NSControl {
         let label = displayLabel as NSString
         label.draw(in: labelRect, withAttributes: [
             .foregroundColor: labelConfig.resolvedColor(stageAccent: accent, now: now),
-            .font: stageLabelFont(),
+            .font: labelConfig.font,
             .paragraphStyle: paragraph,
         ])
     }
@@ -240,20 +254,10 @@ final class StageCardView: NSControl {
         case .mosaic:
             frames = mosaicPreviewFrames(in: preview)
         case .icons:
-            frames = iconPreviewFrames(in: rect.insetBy(dx: 8, dy: 18))
+            frames = iconDisplayFrames()
         }
         guard let first = frames.first else { return preview }
         return frames.dropFirst().reduce(first) { $0.union($1) }
-    }
-
-    private func stageLabelFont() -> NSFont {
-        let label = config.stageLabel
-        let family = label.fontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !family.isEmpty, family.lowercased() != "system",
-           let font = NSFont(name: family, size: label.fontSize) {
-            return font
-        }
-        return NSFont.systemFont(ofSize: label.fontSize, weight: label.weight)
     }
 
     private func drawStacked(in rect: CGRect) {
@@ -295,20 +299,23 @@ final class StageCardView: NSControl {
             drawEmpty(in: rect)
             return
         }
-        let members = Array(visualMembers.prefix(6))
+        let members = Array(visualMembers.prefix(iconMemberCount))
         for (index, member) in members.enumerated() {
             let r = iconFrame(in: rect, index: index)
             rounded(r, radius: 7, color: color(for: member, index: index))
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
             iconLetter(for: member).draw(in: r.insetBy(dx: 0, dy: 4), withAttributes: [
                 .foregroundColor: NSColor.white,
-                .font: NSFont.boldSystemFont(ofSize: 11),
+                .font: config.stageLabel.font,
+                .paragraphStyle: paragraph,
             ])
             drawPresentationIndicator(in: r, state: presentationState(for: member), radius: 7)
         }
         if visualMembers.count > 6 {
-            "+\(visualMembers.count - 6)".draw(in: CGRect(x: rect.minX + 196, y: rect.midY - 8, width: 28, height: 18), withAttributes: [
+            "+\(visualMembers.count - iconMemberCount)".draw(in: iconFrame(in: rect, index: iconMemberCount), withAttributes: [
                 .foregroundColor: NSColor.white.withAlphaComponent(0.65),
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+                .font: config.stageLabel.font,
             ])
         }
     }
@@ -343,11 +350,28 @@ final class StageCardView: NSControl {
     }
 
     private func iconPreviewFrames(in rect: CGRect) -> [CGRect] {
-        (0..<min(visualMembers.count, 6)).map { iconFrame(in: rect, index: $0) }
+        (0..<iconMemberCount).map { iconFrame(in: rect, index: $0) }
+    }
+
+    private var iconMemberCount: Int { min(visualMembers.count, 6) }
+
+    /// Tous les cadres dessinés, compteur compris ; les cibles de clic ne comprennent que les membres.
+    func iconDisplayFrames() -> [CGRect] {
+        let rect = bounds.insetBy(dx: contentInset, dy: 12).insetBy(dx: 8, dy: 18)
+        return (0..<min(7, visualMembers.count)).map { iconFrame(in: rect, index: $0) }
     }
 
     private func iconFrame(in rect: CGRect, index: Int) -> CGRect {
-        CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24)
+        let size = Self.iconSize(for: config)
+        let columns = Self.iconColumns(availableWidth: rect.width, config: config)
+        let slots = min(7, visualMembers.count)
+        let rows = ceil(CGFloat(slots) / CGFloat(columns))
+        let blockHeight = rows * size + max(0, rows - 1) * 8
+        return CGRect(
+            x: rect.minX + CGFloat(index % columns) * (size + 8),
+            y: rect.midY + blockHeight / 2 - size - CGFloat(index / columns) * (size + 8),
+            width: size, height: size
+        )
     }
 
     private func previewArea(in rect: CGRect, visibleCount: Int) -> CGRect {

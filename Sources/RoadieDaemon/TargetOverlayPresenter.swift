@@ -2,7 +2,7 @@ import AppKit
 import os
 import RoadieCore
 
-public struct TargetOverlayStyle: Sendable {
+public struct TargetOverlayStyle: Sendable, Equatable {
     public var drawTargetFrames: Bool
     public var fillColor: String
     public var fillOpacity: Double
@@ -13,6 +13,8 @@ public struct TargetOverlayStyle: Sendable {
     public var labelPlacement: TargetGridLabelPlacement
     /// Taille de police des étiquettes, 8 à 48 pt (SPEC-023). Les dimensions du badge suivent `scale`.
     public var labelFontSize: CGFloat
+    public var searchTextFontSize: CGFloat
+    public var commandTextFontSize: CGFloat
 
     public init(
         drawTargetFrames: Bool = false,
@@ -23,7 +25,9 @@ public struct TargetOverlayStyle: Sendable {
         labelColor: String = "#FFFFFF",
         labelBackgroundOpacity: Double = 0.84,
         labelPlacement: TargetGridLabelPlacement = .callout,
-        labelFontSize: CGFloat = 13
+        labelFontSize: CGFloat = 13,
+        searchTextFontSize: CGFloat = 15,
+        commandTextFontSize: CGFloat = 13
     ) {
         self.drawTargetFrames = drawTargetFrames
         self.fillColor = fillColor
@@ -34,6 +38,8 @@ public struct TargetOverlayStyle: Sendable {
         self.labelBackgroundOpacity = min(1, max(0, labelBackgroundOpacity))
         self.labelPlacement = labelPlacement
         self.labelFontSize = min(48, max(8, labelFontSize))
+        self.searchTextFontSize = min(48, max(8, searchTextFontSize))
+        self.commandTextFontSize = min(48, max(8, commandTextFontSize))
     }
 
     /// Facteur appliqué aux dimensions des étiquettes : 1 à 13 pt, taille d'origine.
@@ -41,9 +47,17 @@ public struct TargetOverlayStyle: Sendable {
 
     public static let labels = TargetOverlayStyle()
 
-    /// Style des lettres et de la recherche, à la taille de `experimental.target_mode.label_font_size`.
+    /// Style des lettres, à la taille de `experimental.target_mode.label_font_size`.
     public static func labels(_ config: TargetModeConfig) -> TargetOverlayStyle {
         TargetOverlayStyle(labelFontSize: CGFloat(config.labelFontSize))
+    }
+
+    public static func search(_ config: TargetModeConfig) -> TargetOverlayStyle {
+        TargetOverlayStyle(
+            labelFontSize: CGFloat(config.searchLabelFontSize),
+            searchTextFontSize: CGFloat(config.searchTextFontSize),
+            commandTextFontSize: CGFloat(config.commandTextFontSize)
+        )
     }
 
     public static func grid(_ config: TargetGridConfig) -> TargetOverlayStyle {
@@ -100,6 +114,11 @@ public enum TargetGridArrowDirection: Sendable {
 @MainActor
 public protocol TargetOverlaySessionHandle: AnyObject {
     func cancel()
+    func updateStyle(_ style: TargetOverlayStyle)
+}
+
+extension TargetOverlaySessionHandle {
+    public func updateStyle(_ style: TargetOverlayStyle) {}
 }
 
 @MainActor
@@ -304,7 +323,7 @@ extension KeyEventTapSession {
 private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEventTapSession {
     private let state: TargetOverlayState
     private let duration: TimeInterval
-    private let style: TargetOverlayStyle
+    private var style: TargetOverlayStyle
     private let activate: @MainActor (String) -> TargetActionResult
     private let onFinish: (@MainActor (TargetActionResult) -> Void)?
     private let labels: Set<String>
@@ -354,6 +373,12 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
             RunLoop.main.add(timer, forMode: .common)
         }
         return nil
+    }
+
+    func updateStyle(_ style: TargetOverlayStyle) {
+        guard !finished, self.style != style else { return }
+        self.style = style
+        windows.forEach { $0.updateStyle(style) }
     }
 
     func cancel() {
@@ -468,7 +493,7 @@ private final class TargetInteractiveSession: TargetOverlaySessionHandle, KeyEve
 private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, KeyEventTapSession {
     private let duration: TimeInterval
     private let config: TargetGridConfig
-    private let style: TargetOverlayStyle
+    private var style: TargetOverlayStyle
     private let stateProvider: @MainActor (Int?, String) -> TargetOverlayState
     private let activate: @MainActor (Int?, String) -> TargetActionResult
     private let focusAt: @MainActor (CGRect) -> Void
@@ -526,6 +551,12 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
             RunLoop.main.add(timer, forMode: .common)
         }
         return nil
+    }
+
+    func updateStyle(_ style: TargetOverlayStyle) {
+        guard !finished, self.style != style else { return }
+        self.style = style
+        windows.forEach { $0.updateStyle(style) }
     }
 
     func cancel() {
@@ -801,7 +832,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     /// État de la saisie pour le tap clavier, lu hors de l'acteur principal (T027) : mis à jour à
     /// chaque affichage, remis en recherche à la fin de la session.
     nonisolated let keyMode = OSAllocatedUnfairLock(initialState: SearchKeyInput.Mode.emptySearch)
-    private let style: TargetOverlayStyle
+    private var style: TargetOverlayStyle
     private let commands: SlashCommandRunner
     private let runDeferred: @MainActor ([String]) -> Void
     private let openSettings: @MainActor (SettingCategory?) -> Void
@@ -876,6 +907,12 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
             RunLoop.main.add(timer, forMode: .common)
         }
         return nil
+    }
+
+    func updateStyle(_ style: TargetOverlayStyle) {
+        guard !finished, self.style != style else { return }
+        self.style = style
+        windows.forEach { $0.updateStyle(style) }
     }
 
     func cancel() {
@@ -1149,9 +1186,14 @@ struct SearchBarLayout: Equatable {
 
     /// `contentWidth` : largeur du texte le plus long. Faute de place, les suggestions cèdent la
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
-    static func make(bounds: CGRect, contentWidth: CGFloat, suggestions: Int, messageLines: Int) -> SearchBarLayout {
+    static func make(
+        bounds: CGRect, contentWidth: CGFloat, suggestions: Int, messageLines: Int,
+        searchTextFontSize: CGFloat = 15, commandTextFontSize: CGFloat = 13
+    ) -> SearchBarLayout {
+        let lineHeight = Self.lineHeight * min(48, max(8, commandTextFontSize)) / 13
+        let barHeight = 40 * min(48, max(8, searchTextFontSize)) / 15
         let width = min(bounds.width - 40, max(420, contentWidth + 40))
-        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + 48, width: width, height: 40).integral
+        let bar = CGRect(x: bounds.midX - width / 2, y: bounds.minY + min(48, max(0, bounds.height - barHeight)), width: width, height: min(bounds.height, barHeight)).integral
         let room = max(0, Int((bounds.maxY - 8 - bar.maxY - gap - 2 * padding) / lineHeight))
         let messageCount = min(messageLines, maxMessageLines, room)
         let suggestionCount = min(suggestions, maxSuggestions, room - messageCount)
@@ -1455,6 +1497,11 @@ private final class TargetOverlayWindow: NSPanel {
         contentView = content
     }
 
+    func updateStyle(_ style: TargetOverlayStyle) {
+        guard let view = contentView as? TargetOverlayView else { return }
+        view.updateStyle(style)
+    }
+
     /// Mode recherche : nouvelles étiquettes et barre de saisie (nil = pas de barre sur cet écran).
     func update(badges: [TargetOverlayBadge], searchBar: TargetSearchBar?) {
         guard let view = contentView as? TargetOverlayView else { return }
@@ -1481,8 +1528,14 @@ private final class TargetOverlayView: NSView {
     fileprivate var badges: [TargetOverlayBadge]
     fileprivate var searchBar: TargetSearchBar?
     private let screenOrigin: CGPoint
-    private let style: TargetOverlayStyle
-    private let textAttributes: [NSAttributedString.Key: Any]
+    private var style: TargetOverlayStyle
+    // Réutilisés pour mesurer et dessiner chaque badge : aucune allocation de police dans la boucle.
+    private var textAttributes: [NSAttributedString.Key: Any]
+
+    private static func badgeTextAttributes(_ style: TargetOverlayStyle) -> [NSAttributedString.Key: Any] {
+        [.font: NSFont.monospacedSystemFont(ofSize: style.labelFontSize, weight: .semibold),
+         .foregroundColor: NSColor.white]
+    }
 
     private struct BadgePlacement {
         var badge: CGRect
@@ -1493,10 +1546,7 @@ private final class TargetOverlayView: NSView {
         self.badges = badges
         self.screenOrigin = screenOrigin
         self.style = style
-        self.textAttributes = [
-            .font: NSFont.monospacedSystemFont(ofSize: style.labelFontSize, weight: .semibold),
-            .foregroundColor: NSColor.white,
-        ]
+        self.textAttributes = Self.badgeTextAttributes(style)
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
@@ -1504,6 +1554,14 @@ private final class TargetOverlayView: NSView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    func updateStyle(_ style: TargetOverlayStyle) {
+        if self.style.labelFontSize != style.labelFontSize {
+            textAttributes = Self.badgeTextAttributes(style)
+        }
+        self.style = style
+        needsDisplay = true
     }
 
     override var isOpaque: Bool { false }
@@ -1534,19 +1592,20 @@ private final class TargetOverlayView: NSView {
             text = "🔍 \(bar.query)▏   \(count)\(bar.isLoading ? " · lecture…" : "")"
         }
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 15, weight: .medium),
+            .font: NSFont.monospacedSystemFont(ofSize: style.searchTextFontSize, weight: .medium),
             .foregroundColor: NSColor.white,
         ]
         let size = text.size(withAttributes: attributes)
         // Mode commande (SPEC-023 R4) : liste et message au-dessus de la barre.
-        let messageLines = Self.messageLines(bar.message)
+        let messageLines = messageLines(bar.message)
         let candidates = SearchBarLayout.visibleSuggestions(
             count: bar.suggestions.count, selected: bar.selectedSuggestion, rows: SearchBarLayout.maxSuggestions
         )
-        let widest = (candidates.map { Self.suggestionLine(bar.suggestions[$0]) } + messageLines)
+        let widest = (candidates.map { suggestionLine(bar.suggestions[$0]) } + messageLines)
             .reduce(size.width) { max($0, $1.size().width) }
         let layout = SearchBarLayout.make(
-            bounds: bounds, contentWidth: widest, suggestions: bar.suggestions.count, messageLines: messageLines.count
+            bounds: bounds, contentWidth: widest, suggestions: bar.suggestions.count, messageLines: messageLines.count,
+            searchTextFontSize: style.searchTextFontSize, commandTextFontSize: style.commandTextFontSize
         )
         let rect = layout.bar
         let path = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
@@ -1574,26 +1633,26 @@ private final class TargetOverlayView: NSView {
                 NSColor.systemGreen.withAlphaComponent(0.35).setFill()
                 NSBezierPath(roundedRect: row.insetBy(dx: -6, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
-            Self.draw(Self.suggestionLine(bar.suggestions[index]), in: row)
+            Self.draw(suggestionLine(bar.suggestions[index]), in: row)
         }
         for (row, line) in zip(layout.messageRows, messageLines) {
             Self.draw(line, in: row)
         }
     }
 
-    /// Ligne de la boîte : police monospace 13 pt, coupée en fin de ligne si elle est trop longue.
-    private static func lineText(_ string: String, color: NSColor) -> NSAttributedString {
+    /// Ligne de la boîte : police monospace configurée, coupée en fin de ligne si elle est trop longue.
+    private func lineText(_ string: String, color: NSColor) -> NSAttributedString {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         return NSAttributedString(string: string, attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+            .font: NSFont.monospacedSystemFont(ofSize: style.commandTextFontSize, weight: .regular),
             .foregroundColor: color,
             .paragraphStyle: paragraph,
         ])
     }
 
     /// `/stage   Changer de stage` : nom en blanc, description en gris.
-    private static func suggestionLine(_ suggestion: SlashSuggestion) -> NSAttributedString {
+    private func suggestionLine(_ suggestion: SlashSuggestion) -> NSAttributedString {
         let name = (suggestion.kind == .command ? "/" : "") + suggestion.text.trimmingCharacters(in: .whitespaces)
         let line = NSMutableAttributedString(attributedString: lineText(name, color: .white))
         if !suggestion.detail.isEmpty {
@@ -1603,7 +1662,7 @@ private final class TargetOverlayView: NSView {
     }
 
     /// Information en blanc ; erreur en rouge, suivie de la forme attendue.
-    private static func messageLines(_ message: SlashMessage?) -> [NSAttributedString] {
+    private func messageLines(_ message: SlashMessage?) -> [NSAttributedString] {
         switch message {
         case .info(let lines):
             return lines.prefix(SearchBarLayout.maxMessageLines).map { lineText($0, color: .white) }

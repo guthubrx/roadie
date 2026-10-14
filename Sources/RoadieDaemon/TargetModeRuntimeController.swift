@@ -168,6 +168,8 @@ public final class TargetModeRuntimeController: NSObject {
     private var observer: NSObjectProtocol?
     private var currentSession: TargetOverlaySessionHandle?
     private var currentCommand: String?
+    private var styleTimer: Timer?
+    private var settingsObserver: NSObjectProtocol?
     /// Émission des événements souris de la grille. Point d'injection des tests (TEST-002) : clic
     /// réellement émis par `TargetGridService`, observé sans événement réel.
     private let gridPostEvent: (CGEvent) -> Void
@@ -213,6 +215,7 @@ public final class TargetModeRuntimeController: NSObject {
             DistributedNotificationCenter.default().removeObserver(observer)
         }
         observer = nil
+        stopStyleUpdates()
         currentSession?.cancel()
         currentSession = nil
         events.append(RoadieEvent(type: "target_mode.runtime_stopped"))
@@ -244,6 +247,49 @@ public final class TargetModeRuntimeController: NSObject {
                 "reason": "unknown_command"
             ]))
         }
+        startStyleUpdatesIfNeeded()
+    }
+
+    /// Relit la configuration existante et actualise les sessions déjà ouvertes, sans effacer la saisie.
+    func refreshOverlayStyle(config suppliedConfig: RoadieConfig? = nil) {
+        guard let currentSession, let currentCommand else { return }
+        let config = suppliedConfig ?? service.effectiveConfig
+        let style: TargetOverlayStyle
+        switch currentCommand {
+        case "targets.search": style = .search(config.experimental.targetMode)
+        case "grid.interactive": style = .grid(config.experimental.targetGrid)
+        default: style = .labels(config.experimental.targetMode)
+        }
+        currentSession.updateStyle(style)
+    }
+
+    private func startStyleUpdatesIfNeeded() {
+        stopStyleUpdates()
+        guard currentSession != nil else { return }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .roadieSettingsDidChange, object: nil, queue: .main
+        ) { [weak self] notification in
+            let path = notification.userInfo?["configPath"] as? String
+            Task { @MainActor in
+                let activePath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                guard let self, let path,
+                      URL(fileURLWithPath: path).resolvingSymlinksInPath()
+                        == URL(fileURLWithPath: activePath).resolvingSymlinksInPath() else { return }
+                self.refreshOverlayStyle()
+            }
+        }
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshOverlayStyle() }
+        }
+        styleTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func stopStyleUpdates() {
+        styleTimer?.invalidate()
+        styleTimer = nil
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+        settingsObserver = nil
     }
 
     private func startTargetsInteractive(_ command: TargetModeRuntimeCommand) {
@@ -315,7 +361,7 @@ public final class TargetModeRuntimeController: NSObject {
         currentSession = presenter.startSearch(
             targets: roadieTargets,
             alphabet: appTargets.hintCharacters,
-            style: .labels(config),
+            style: .search(config),
             commands: commands,
             runDeferred: { argv in commands.runDeferred(argv) },
             openSettings: { category in SettingsWindowController.shared.show(category: category) },
@@ -476,6 +522,7 @@ public final class TargetModeRuntimeController: NSObject {
     }
 
     private func finish(_ result: TargetActionResult, command: String) {
+        stopStyleUpdates()
         currentSession = nil
         currentCommand = nil
         events.append(RoadieEvent(type: "target_mode.finished", details: [

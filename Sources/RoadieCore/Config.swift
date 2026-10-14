@@ -2,6 +2,7 @@ import Foundation
 import TOMLKit
 
 public struct RoadieConfig: Equatable, Codable, Sendable {
+    public var interface: InterfaceConfig
     public var tiling: TilingConfig
     public var desktops: DesktopsConfig
     public var stageManager: StageManagerConfig
@@ -14,6 +15,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     public var experimental: ExperimentalConfig
 
     public init(
+        interface: InterfaceConfig = InterfaceConfig(),
         tiling: TilingConfig = TilingConfig(),
         desktops: DesktopsConfig = DesktopsConfig(),
         stageManager: StageManagerConfig = StageManagerConfig(),
@@ -25,6 +27,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         widthAdjustment: WidthAdjustmentConfig = WidthAdjustmentConfig(),
         experimental: ExperimentalConfig = ExperimentalConfig()
     ) {
+        self.interface = interface
         self.tiling = tiling
         self.desktops = desktops
         self.stageManager = stageManager
@@ -38,6 +41,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     }
 
     public init(
+        interface: InterfaceConfig = InterfaceConfig(),
         tiling: TilingConfig = TilingConfig(),
         desktops: DesktopsConfig = DesktopsConfig(),
         stageManager: StageManagerConfig = StageManagerConfig(),
@@ -49,6 +53,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         experimental: ExperimentalConfig = ExperimentalConfig()
     ) {
         self.init(
+            interface: interface,
             tiling: tiling,
             desktops: desktops,
             stageManager: stageManager,
@@ -63,6 +68,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case interface
         case tiling
         case desktops
         case stageManager = "stage_manager"
@@ -77,6 +83,7 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.interface = try c.decodeIfPresent(InterfaceConfig.self, forKey: .interface) ?? InterfaceConfig()
         self.tiling = try c.decodeIfPresent(TilingConfig.self, forKey: .tiling) ?? TilingConfig()
         self.desktops = try c.decodeIfPresent(DesktopsConfig.self, forKey: .desktops) ?? DesktopsConfig()
         self.stageManager = try c.decodeIfPresent(StageManagerConfig.self, forKey: .stageManager) ?? StageManagerConfig()
@@ -87,6 +94,34 @@ public struct RoadieConfig: Equatable, Codable, Sendable {
         self.rules = try c.decodeIfPresent([WindowRule].self, forKey: .rules) ?? []
         self.widthAdjustment = try c.decodeIfPresent(WidthAdjustmentConfig.self, forKey: .widthAdjustment) ?? WidthAdjustmentConfig()
         self.experimental = try c.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental) ?? ExperimentalConfig()
+    }
+}
+
+/// Polices de la fenêtre de réglages. Les autres surfaces gardent leurs tailles indépendantes.
+public struct InterfaceConfig: Equatable, Codable, Sendable {
+    public var settingsTextFontSize: Double
+    public var settingsHelpFontSize: Double
+    public var settingsTitleFontSize: Double
+
+    public init(settingsTextFontSize: Double = 16, settingsHelpFontSize: Double = 14, settingsTitleFontSize: Double = 22) {
+        self.settingsTextFontSize = min(32, max(8, settingsTextFontSize))
+        self.settingsHelpFontSize = min(32, max(8, settingsHelpFontSize))
+        self.settingsTitleFontSize = min(48, max(10, settingsTitleFontSize))
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case settingsTextFontSize = "settings_text_font_size"
+        case settingsHelpFontSize = "settings_help_font_size"
+        case settingsTitleFontSize = "settings_title_font_size"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            settingsTextFontSize: try c.decodeFlexibleDouble(forKey: .settingsTextFontSize) ?? 16,
+            settingsHelpFontSize: try c.decodeFlexibleDouble(forKey: .settingsHelpFontSize) ?? 14,
+            settingsTitleFontSize: try c.decodeFlexibleDouble(forKey: .settingsTitleFontSize) ?? 22
+        )
     }
 }
 
@@ -576,6 +611,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
     public var searchHotkey: String
     /// Taille de police des étiquettes en points (SPEC-023). Le décodage ramène toute valeur dans 8…48 (clamp dans l'init) : aucune validation hors plage n'est nécessaire.
     public var labelFontSize: Double
+    public var searchLabelFontSize: Double
+    public var searchTextFontSize: Double
+    public var commandTextFontSize: Double
 
     public static let defaultSearchHotkey = "command+control+alt+f"
 
@@ -588,7 +626,10 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         appMouseActionsEnabled: Bool = false,
         scrollModeEnabled: Bool = false,
         searchHotkey: String = TargetModeConfig.defaultSearchHotkey,
-        labelFontSize: Double = 13
+        labelFontSize: Double = 13,
+        searchLabelFontSize: Double = 13,
+        searchTextFontSize: Double = 15,
+        commandTextFontSize: Double = 13
     ) {
         self.enabled = enabled
         self.pickerEnabled = pickerEnabled
@@ -599,6 +640,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         self.scrollModeEnabled = scrollModeEnabled
         self.searchHotkey = TargetGridConfig.normalizedKey(searchHotkey, fallback: "")
         self.labelFontSize = min(48, max(8, labelFontSize))
+        self.searchLabelFontSize = min(48, max(8, searchLabelFontSize))
+        self.searchTextFontSize = min(48, max(8, searchTextFontSize))
+        self.commandTextFontSize = min(48, max(8, commandTextFontSize))
     }
 
     /// Modificateurs (`command`, `control`, `alt`, `shift`) et touche d'un raccourci normalisé ;
@@ -622,6 +666,9 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
         case scrollModeEnabled = "scroll_mode_enabled"
         case searchHotkey = "search_hotkey"
         case labelFontSize = "label_font_size"
+        case searchLabelFontSize = "search_label_font_size"
+        case searchTextFontSize = "search_text_font_size"
+        case commandTextFontSize = "command_text_font_size"
     }
 
     public init(from decoder: Decoder) throws {
@@ -635,7 +682,10 @@ public struct TargetModeConfig: Equatable, Codable, Sendable {
             appMouseActionsEnabled: try c.decodeIfPresent(Bool.self, forKey: .appMouseActionsEnabled) ?? false,
             scrollModeEnabled: try c.decodeIfPresent(Bool.self, forKey: .scrollModeEnabled) ?? false,
             searchHotkey: try c.decodeIfPresent(String.self, forKey: .searchHotkey) ?? TargetModeConfig.defaultSearchHotkey,
-            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13
+            labelFontSize: try c.decodeFlexibleDouble(forKey: .labelFontSize) ?? 13,
+            searchLabelFontSize: try c.decodeFlexibleDouble(forKey: .searchLabelFontSize) ?? 13,
+            searchTextFontSize: try c.decodeFlexibleDouble(forKey: .searchTextFontSize) ?? 15,
+            commandTextFontSize: try c.decodeFlexibleDouble(forKey: .commandTextFontSize) ?? 13
         )
     }
 }
@@ -1207,6 +1257,7 @@ public struct ConfigValidationReport: Equatable, Codable, Sendable {
 
 private enum ConfigValidationRules {
     private static let supportedTables: Set<String> = [
+        "interface",
         "tiling",
         "desktops",
         "stage_manager",
@@ -1262,6 +1313,7 @@ private enum ConfigValidationRules {
         return [
             "": [],
             "fx": [],
+            "interface": ["settings_text_font_size", "settings_help_font_size", "settings_title_font_size"],
             "tiling": gapKeys.union(["default_strategy", "split_policy", "display_overrides", "gaps_inner", "master_ratio", "smart_gaps_solo", "smart_gaps_solo_sides", "allowed_subroles", "popup_filter"]),
             "tiling.display_overrides": gapKeys.union(["display_id", "display_name"]),
             "desktops": ["enabled", "count", "back_and_forth", "mode"],
@@ -1286,7 +1338,7 @@ private enum ConfigValidationRules {
             "width_adjustment": ["presets", "nudge_step", "minimum_ratio", "maximum_ratio"],
             "experimental": [],
             "experimental.titlebar_context_menu": ["enabled", "height", "leading_exclusion", "trailing_exclusion", "managed_windows_only", "tile_candidates_only", "include_stage_destinations", "include_desktop_destinations", "include_display_destinations"],
-            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size"],
+            "experimental.target_mode": ["enabled", "picker_enabled", "overlay_enabled", "overlay_labels_only", "overlay_duration_seconds", "app_mouse_actions_enabled", "scroll_mode_enabled", "search_hotkey", "label_font_size", "search_label_font_size", "search_text_font_size", "command_text_font_size"],
             "experimental.app_targets": ["enabled", "scope", "max_targets", "timeout_ms", "hint_characters", "include_roles", "ax_boost_enabled", "max_depth", "additional_boost_bundle_ids"],
             "experimental.target_grid": ["enabled", "mode", "overlay_enabled", "overlay_draw_grid", "overlay_fill_color", "overlay_fill_opacity", "overlay_border_color", "overlay_border_opacity", "overlay_label_color", "overlay_label_background_opacity", "rows", "columns", "max_depth", "hint_characters", "confirm_action_key", "reset_key", "back_key", "exit_key", "arrow_navigation_enabled", "arrow_edge_behavior", "action_delay_ms", "wake_mouse_pixels", "mouse_follow_grid", "focus_follow_grid", "label_placement", "default_scope", "label_font_size"],
             "experimental.target_record": ["enabled", "replay_enabled", "directory", "default_duration_seconds", "max_duration_seconds", "max_events", "include_mouse_moves", "include_key_events", "include_ax_context", "record_text_input", "indicator", "navrail_bottom_offset"],

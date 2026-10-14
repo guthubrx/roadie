@@ -35,11 +35,111 @@ struct SettingsViewModelTests {
     }
 
     @Test
+    func typingAFontKeepsDecimalDraftAndUpdatesImmediately() throws {
+        let (model, _) = try makeModel()
+        let setting = try descriptor("interface.settings_text_font_size")
+        model.editText(setting, raw: "8.")
+        #expect(model.text(for: setting) == "8.")
+        #expect(model.interfaceFonts.settingsTextFontSize == 8)
+        model.editText(setting, raw: "8.5")
+        #expect(model.interfaceFonts.settingsTextFontSize == 8.5)
+        #expect(model.text(for: setting) == "8.5")
+        model.editText(setting, raw: "2")
+        #expect(model.interfaceFonts.settingsTextFontSize == 8.5)
+        model.editText(setting, raw: "24")
+        #expect(model.interfaceFonts.settingsTextFontSize == 24)
+        model.step(setting, by: 1)
+        #expect(model.text(for: setting) == "25")
+    }
+
+    @Test
+    func fontSizesAreIndependentImmediateAndPersistAcrossCategories() throws {
+        let original = """
+        [interface]
+        settings_text_font_size = 17
+        settings_help_font_size = 13
+        settings_title_font_size = 25
+        """
+        let (model, config) = try makeModel(original)
+        model.select(.grille)
+        #expect(model.interfaceFonts.settingsTextFontSize == 17)
+        #expect(model.interfaceFonts.settingsHelpFontSize == 13)
+        #expect(model.interfaceFonts.settingsTitleFontSize == 25)
+        let body = try descriptor("interface.settings_text_font_size")
+        let help = try descriptor("interface.settings_help_font_size")
+        model.apply(body, raw: "23")
+        #expect(model.interfaceFonts.settingsTextFontSize == 23)
+        #expect(model.interfaceFonts.settingsHelpFontSize == 13)
+        #expect(model.interfaceFonts.settingsTitleFontSize == 25)
+        model.apply(help, raw: "15")
+        #expect(model.interfaceFonts.settingsHelpFontSize == 15)
+        model.reset(body)
+        #expect(model.interfaceFonts.settingsTextFontSize == 16)
+        #expect(model.interfaceFonts.settingsHelpFontSize == 15)
+        let reopened = SettingsViewModel(service: SettingsService(configPath: config.path, afterWrite: {}))
+        #expect(reopened.interfaceFonts.settingsHelpFontSize == 15)
+        #expect(reopened.interfaceFonts.settingsTitleFontSize == 25)
+        #expect(try String(contentsOf: config, encoding: .utf8).contains("settings_help_font_size = 15"))
+    }
+
+    @Test
+    func externalFontChangeUpdatesTheCacheWhileAnotherCategoryIsOpen() throws {
+        let (model, config) = try makeModel("[interface]\nsettings_text_font_size = 16\n")
+        model.select(.rail)
+        try "[interface]\nsettings_text_font_size = 22\n".write(to: config, atomically: true, encoding: .utf8)
+        model.refresh()
+        #expect(model.category == .rail)
+        #expect(model.interfaceFonts.settingsTextFontSize == 22)
+        #expect(model.interfaceFonts.settingsHelpFontSize == 14)
+    }
+
+    @Test
+    func nonCanonicalSplitPolicyIsDisplayedWithoutChangingItsMeaning() throws {
+        let original = "[tiling]\nsplit_policy = \"Dwindle\"\n"
+        let (model, config) = try makeModel(original)
+        model.select(.tuilage)
+        let split = try descriptor("tiling.split_policy")
+        #expect(model.text(for: split) == "Dwindle")
+        #expect(split.choiceValues(includingCurrent: model.text(for: split)).contains("Dwindle"))
+        #expect(try String(contentsOf: config, encoding: .utf8) == original)
+        model.apply(split, raw: "balanced")
+        #expect(model.errors[split.id] == nil)
+        #expect(model.text(for: split) == "balanced")
+        #expect(!split.choiceValues(includingCurrent: model.text(for: split)).contains("Dwindle"))
+    }
+
+    @Test
+    func legacyTilingChoicesAreDisplayedWithoutRewritingAndKeepTheirRawValues() throws {
+        let original = "[tiling]\nsplit_policy = \"balanced\"\ndefault_strategy = \"mutableBsp\"\n"
+        let (model, config) = try makeModel(original)
+        model.select(.tuilage)
+        let split = try descriptor("tiling.split_policy")
+        let strategy = try descriptor("tiling.default_strategy")
+        #expect(model.text(for: split) == "balanced")
+        #expect(model.text(for: strategy) == "spatialBsp")
+        guard case .choice(let choices) = split.kind else { Issue.record("choix attendu"); return }
+        #expect(choices.contains(model.text(for: split)))
+        #expect(try String(contentsOf: config, encoding: .utf8) == original)
+
+        model.apply(split, raw: "dwindle")
+        #expect(model.errors[split.id] == nil)
+        #expect(model.text(for: split) == "dwindle")
+        model.apply(split, raw: "balanced")
+        #expect(model.errors[split.id] == nil)
+        #expect(model.text(for: split) == "balanced")
+        #expect(try String(contentsOf: config, encoding: .utf8).contains("split_policy = \"balanced\""))
+        #expect(try String(contentsOf: config, encoding: .utf8).contains("default_strategy = \"mutableBsp\""))
+        model.reset(split)
+        #expect(model.text(for: split) == "largest_dim")
+        #expect(model.isDefault(split))
+    }
+
+    @Test
     func opensOnGeneralThenRemembersTheLastCategory() throws {
         let (model, _) = try makeModel()
         model.prepareForShow(category: nil)
         #expect(model.category == .general)
-        #expect(model.sections.isEmpty)
+        #expect(model.sections.map(\.category) == [.general])
 
         model.select(.grille)
         #expect(model.sections.map(\.category) == [.grille])

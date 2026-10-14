@@ -5,6 +5,18 @@ import RoadieCore
 import RoadieStages
 
 @MainActor
+private func railFont(family: String, size: CGFloat, weight: NSFont.Weight) -> NSFont {
+    let name = family.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !name.isEmpty, name.lowercased() != "system", let font = NSFont(name: name, size: size) { return font }
+    return NSFont.systemFont(ofSize: size, weight: weight)
+}
+
+@MainActor
+private func railLineHeight(font: NSFont, size: CGFloat) -> CGFloat {
+    max(size + 5, ceil(font.ascender - font.descender + font.leading))
+}
+
+@MainActor
 struct RailVisualConfig {
     var mode: RailRenderMode = .stacked
     var stageAccents: [StageID: NSColor] = [:]
@@ -99,12 +111,19 @@ struct RailVisualConfig {
             layoutSpacing: CGFloat(settings.stages.gap > 0 ? settings.stages.gap : settings.layout.spacing),
             layoutTopPadding: CGFloat(settings.layout.topPadding),
             layoutBottomPadding: CGFloat(settings.layout.bottomPadding),
-            headerHeight: max(CGFloat(displayLabel.fontSize + desktopLabel.fontSize + 12), 1),
+            headerHeight: headerHeight(display: displayLabel, desktop: desktopLabel),
             headerWidth: 0,
             displayLabel: RailLabelConfig(settings: displayLabel, fallbackColor: .white.withAlphaComponent(0.86)),
             desktopLabel: RailLabelConfig(settings: desktopLabel, fallbackColor: .white.withAlphaComponent(0.42)),
             stageLabel: RailStageLabelConfig(settings: stageLabel)
         )
+    }
+
+    private static func headerHeight(display: RailSettings.Label, desktop: RailSettings.Label) -> CGFloat {
+        let labels = [display, desktop].filter(\.enabled).map {
+            RailLabelConfig(settings: $0, fallbackColor: .white)
+        }
+        return max(1, labels.reduce(0) { $0 + $1.lineHeight } + (labels.count > 1 ? 2 : 0))
     }
 }
 
@@ -163,6 +182,9 @@ struct RailLabelConfig {
     var alignment: RailTextAlignment
     var offsetX: CGFloat
     var offsetY: CGFloat
+
+    var font: NSFont { railFont(family: fontFamily, size: fontSize, weight: weight) }
+    var lineHeight: CGFloat { railLineHeight(font: font, size: fontSize) }
 
     static let displayDefault = RailLabelConfig(
         enabled: true,
@@ -242,6 +264,9 @@ struct RailStageLabelConfig {
     var visibilitySeconds: TimeInterval
     var fadeSeconds: TimeInterval
     var visibleUntil: TimeInterval?
+
+    var font: NSFont { railFont(family: fontFamily, size: fontSize, weight: weight) }
+    var lineHeight: CGFloat { railLineHeight(font: font, size: fontSize) }
 
     static let `default` = RailStageLabelConfig(
         enabled: true,

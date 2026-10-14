@@ -1,6 +1,11 @@
 import Foundation
 import RoadieCore
 
+extension Notification.Name {
+    /// Écriture validée : les composants visibles peuvent se redessiner sans attendre le watcher.
+    static let roadieSettingsDidChange = Notification.Name("roadie.settings.didChange")
+}
+
 public enum SettingChangeResult: Equatable, Sendable {
     case applied(old: SettingValue, new: SettingValue)
     case rejected(reason: String)
@@ -225,6 +230,7 @@ public final class SettingsService: @unchecked Sendable {
             }
             if backup != nil { hasBackup = true }
             afterWrite()
+            NotificationCenter.default.post(name: .roadieSettingsDidChange, object: nil, userInfo: ["configPath": configPath])
             return applied(descriptor.id, old: old, new: newValue)
         }
         return reject(descriptor.id, "le fichier a changé pendant l'écriture")

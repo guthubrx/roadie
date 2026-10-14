@@ -294,7 +294,7 @@ final class RailPanel: NSPanel {
         emptyClickHideActive = config.emptyClickHideActive
         emptyClickSafetyMargin = config.emptyClickSafetyMargin
         positionContent(config: config)
-        if let spacer = stageLeadingSpacer(count: content.stages.count, config: config) {
+        if let spacer = stageLeadingSpacer(stages: content.stages, config: config) {
             stack.addArrangedSubview(spacer)
         }
         for (index, stage) in content.stages.enumerated() {
@@ -313,12 +313,12 @@ final class RailPanel: NSPanel {
             stack.addArrangedSubview(RailHeaderView(displayName: displayName, desktopID: scope.desktopID, config: config))
         }
         if let recordingStatus {
-            showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset)
+            showRecordingIndicator(recordingStatus, bottomOffset: recordingIndicatorBottomOffset, textConfig: config.stageLabel)
         }
     }
 
-    private func showRecordingIndicator(_ status: TargetRecordingStatus, bottomOffset: CGFloat) {
-        let indicator = RecordingIndicatorView(status: status)
+    private func showRecordingIndicator(_ status: TargetRecordingStatus, bottomOffset: CGFloat, textConfig: RailStageLabelConfig) {
+        let indicator = RecordingIndicatorView(status: status, textConfig: textConfig)
         recordingIndicatorView = indicator
         stack.addSubview(indicator)
         NSLayoutConstraint.activate([
@@ -341,12 +341,14 @@ final class RailPanel: NSPanel {
             topInset = max(20, config.layoutTopPadding)
             bottomInset = max(20, config.layoutBottomPadding)
         }
-        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: 18)
+        let rightInset: CGFloat = config.mode == .icons ? horizontalInset : 18
+        stack.edgeInsets = NSEdgeInsets(top: topInset, left: horizontalInset, bottom: bottomInset, right: rightInset)
     }
 
-    private func stageLeadingSpacer(count: Int, config: RailVisualConfig) -> NSView? {
+    private func stageLeadingSpacer(stages: [PersistentStage], config: RailVisualConfig) -> NSView? {
+        let count = stages.count
         guard count > 0 else { return nil }
-        let stageHeight = CGFloat(count) * StageCardView.height(for: config)
+        let stageHeight = stages.reduce(CGFloat.zero) { $0 + StageCardView.height(for: config, memberCount: $1.members.count) }
             + CGFloat(max(0, count - 1)) * config.layoutSpacing
         let centeredTop = max(20, floor((frame.height - stageHeight) / 2))
         let currentTop: CGFloat
@@ -563,13 +565,18 @@ final class FixedHeightSpacer: NSView {
 @MainActor
 final class RecordingIndicatorView: NSView {
     private let status: TargetRecordingStatus
+    private let textConfig: RailStageLabelConfig
+    private let indicatorSize: NSSize
 
-    init(status: TargetRecordingStatus) {
+    init(status: TargetRecordingStatus, textConfig: RailStageLabelConfig = .default) {
         self.status = status
-        super.init(frame: CGRect(x: 0, y: 0, width: 118, height: 26))
+        self.textConfig = textConfig
+        let labelWidth = ("record" as NSString).size(withAttributes: [.font: textConfig.font]).width
+        indicatorSize = NSSize(width: max(118, ceil(labelWidth) + 40), height: max(26, textConfig.lineHeight + 12))
+        super.init(frame: CGRect(origin: .zero, size: indicatorSize))
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 118).isActive = true
-        heightAnchor.constraint(equalToConstant: 26).isActive = true
+        widthAnchor.constraint(equalToConstant: indicatorSize.width).isActive = true
+        heightAnchor.constraint(equalToConstant: indicatorSize.height).isActive = true
         toolTip = "Recording \(status.name)"
     }
 
@@ -578,7 +585,7 @@ final class RecordingIndicatorView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: 118, height: 26)
+        indicatorSize
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -597,7 +604,7 @@ final class RecordingIndicatorView: NSView {
 
         let label = "record"
         label.draw(in: CGRect(x: dotRect.maxX + 8, y: rect.minY + 4, width: rect.width - 28, height: rect.height - 6), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
+            .font: textConfig.font,
             .foregroundColor: NSColor.systemRed.withAlphaComponent(0.92),
         ])
     }

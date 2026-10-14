@@ -27,10 +27,13 @@ public final class RailController {
     private var managedWindowFrames: [DisplayID: [CGRect]] = [:]
     private var lastRenderSignature: String?
     private var lastRenderedSettings: RailSettings?
+    private var lastConfigRefreshPath: String?
+    private var lastConfigRefreshStamp: [Int64]?
     private var refreshTimer: Timer?
     private var hoverTimer: Timer?
     private var stageLabelTimer: Timer?
     private var screenObserver: NSObjectProtocol?
+    private var settingsObserver: NSObjectProtocol?
     private var stageStoreWatcher: RailFileWatcher?
     private var configWatcher: RailFileWatcher?
     private var recordingStatusWatcher: RailFileWatcher?
@@ -67,6 +70,7 @@ public final class RailController {
         startClickMonitors()
         startHoverTimer()
         startWatchers()
+        startSettingsObserver()
         refreshTimer?.invalidate()
         let newRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.rebuildPanels(reason: "timer") }
@@ -104,18 +108,22 @@ public final class RailController {
             NotificationCenter.default.removeObserver(screenObserver)
         }
         screenObserver = nil
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+        settingsObserver = nil
         cancelRailDrags()
         panels.values.forEach { $0.orderOut(nil) }
         panels.removeAll()
         screenFrames.removeAll()
         lastRenderSignature = nil
         lastRenderedSettings = nil
+        lastConfigRefreshPath = nil
+        lastConfigRefreshStamp = nil
     }
 
     private func startWatchers() {
         configWatcher = RailFileWatcher(
-            path: { NSString(string: "~/.config/roadies/roadies.toml").expandingTildeInPath },
-            onChange: { [weak self] in self?.rebuildPanels(reason: "config") }
+            path: { ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath() },
+            onChange: { [weak self] in self?.refreshPanelsForConfigChange(reason: "config") }
         )
         recordingStatusWatcher = RailFileWatcher(
             path: {
@@ -130,6 +138,30 @@ public final class RailController {
             onChange: { [weak self] in self?.scheduleStageStoreRefresh(reason: "stage_store") }
         )
         [configWatcher, recordingStatusWatcher, stageStoreWatcher].forEach { $0?.start() }
+    }
+
+    private func startSettingsObserver() {
+        if let settingsObserver { NotificationCenter.default.removeObserver(settingsObserver) }
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: .roadieSettingsDidChange, object: nil, queue: .main
+        ) { [weak self] notification in
+            let changedPath = notification.userInfo?["configPath"] as? String
+            Task { @MainActor in
+                guard let self, let changedPath else { return }
+                let activePath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+                guard URL(fileURLWithPath: changedPath).resolvingSymlinksInPath()
+                    == URL(fileURLWithPath: activePath).resolvingSymlinksInPath() else { return }
+                self.refreshPanelsForConfigChange(reason: "settings")
+            }
+        }
+    }
+
+    /// Notification des réglages et événement vnode portent la même écriture : un seul cycle.
+    private func refreshPanelsForConfigChange(reason: String) {
+        let path = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+        let stamp = fileModificationStamp(path)
+        guard path != lastConfigRefreshPath || stamp != lastConfigRefreshStamp else { return }
+        rebuildPanels(reason: reason)
     }
 
     private func scheduleStageStoreRefresh(reason: String) {
@@ -451,7 +483,19 @@ public final class RailController {
         moveItem.submenu = moveMenu
         menu.addItem(moveItem)
 
+        applyFont(to: menu, font: currentStageTextConfig.font)
         menu.popUp(positioning: nil, at: panel.convertPoint(fromScreen: screenPoint), in: panel.contentView)
+    }
+
+    private var currentStageTextConfig: RailStageLabelConfig {
+        RailVisualConfig.load(settings: RailSettings.load(
+            path: ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+        )).stageLabel
+    }
+
+    private func applyFont(to menu: NSMenu, font: NSFont) {
+        menu.font = font
+        menu.items.compactMap(\.submenu).forEach { applyFont(to: $0, font: font) }
     }
 
     private func addWindowSection(
@@ -553,7 +597,9 @@ public final class RailController {
     private func promptRenameStage(stageID: StageID, displayID: DisplayID, currentName: String) {
         // `ignoringOtherApps` est ignore depuis macOS 14 : l'activation cooperative suffit pour l'alerte.
         NSApplication.shared.activate()
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        let textConfig = currentStageTextConfig
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: textConfig.lineHeight + 8))
+        input.font = textConfig.font
         input.stringValue = currentName
         input.selectText(nil)
 
@@ -563,6 +609,7 @@ public final class RailController {
         alert.accessoryView = input
         alert.addButton(withTitle: "Renommer")
         alert.addButton(withTitle: "Annuler")
+        alert.buttons.forEach { $0.font = textConfig.font }
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let trimmed = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -812,12 +859,15 @@ public final class RailController {
     private func rebuildPanels(reason: String = "direct", requestedAt: Date? = nil, railSignature: String? = nil) {
         let startedAt = Date()
         let latencyMs = requestedAt.map { startedAt.timeIntervalSince($0) * 1000 }
+        let configPath = ConfigReloadService.shared.state.activePath ?? RoadieConfigLoader.defaultConfigPath()
+        lastConfigRefreshPath = configPath
+        lastConfigRefreshStamp = fileModificationStamp(configPath)
         let snapshot = snapshotService.sharedSnapshot()
         let snapshotMs = Date().timeIntervalSince(startedAt) * 1000
         updateFocusSensitiveCaptureProtection(from: snapshot)
         let state = store.state()
         lastStageStoreRailSignature = railSignature ?? Self.railSignature(for: state)
-        let settings = RailSettings.load()
+        let settings = RailSettings.load(path: configPath)
         var config = RailVisualConfig.load(settings: settings)
         let runtimeState = railRuntimeStateStore.load()
         config.stageLabel.visibleUntil = runtimeState.stageLabelsVisibleUntil

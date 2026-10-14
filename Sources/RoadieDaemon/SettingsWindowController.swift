@@ -75,14 +75,14 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         // La taille vient de la fenêtre, pas de la taille idéale de la vue.
         hosting.sizingOptions = []
         let window = SettingsWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 1040, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
         window.title = "Réglages Roadie"
         window.contentViewController = hosting
-        window.setContentSize(NSSize(width: 860, height: 600))
+        window.setContentSize(NSSize(width: 1040, height: 760))
         window.contentMinSize = NSSize(width: 760, height: 520)
         window.isReleasedWhenClosed = false
         window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
