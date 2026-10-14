@@ -1,12 +1,12 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `021-target-search-mode`.
+Current SpecKit feature: `023-command-box-settings`.
 
 Contexte :
-- `specs/021-target-search-mode/spec.md`
-- `specs/021-target-search-mode/plan.md`
-- `specs/021-target-search-mode/research.md`
-- `specs/021-target-search-mode/data-model.md`
-- `specs/021-target-search-mode/contracts/`
+- `specs/023-command-box-settings/spec.md`
+- `specs/023-command-box-settings/plan.md`
+- `specs/023-command-box-settings/research.md`
+- `specs/023-command-box-settings/data-model.md`
+- `specs/023-command-box-settings/contracts/`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

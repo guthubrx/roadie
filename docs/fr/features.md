@@ -37,7 +37,7 @@ composants runtime separes :
 - `rail` : affiche le navrail et les thumbnails;
 - `border` : dessine la bordure de focus;
 - `focus-mouse` : gere le focus-follows-mouse;
-- `titlebar-menu` : gere drag/drop et actions de barre de titre;
+- `titlebar-menu` : affiche le menu contextuel de clic droit sur la barre de titre (le glisser-deposer vers le navrail est gere par `rail`);
 - `target-mode` : expose les cibles clavier, grilles et activations de cible.
 
 La sécurité de restauration n'est pas un composant séparé : elle tourne dans `roadied run` et `roadied tiler`. L'ancienne commande `roadied restore-safety` existe encore, mais elle affiche seulement un message et sort avec le code 0.
@@ -141,7 +141,9 @@ Interactions principales :
 - tirer une miniature vers une autre stage pour y deplacer la fenetre;
 - tirer une miniature vers l'espace de travail actif pour y rappeler la fenetre;
 - tirer une fenetre d'application par sa barre de titre vers une stage pour l'y deplacer;
-- tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide.
+- tirer une fenetre d'application par sa barre de titre vers une zone vide du navrail pour creer ou utiliser une stage vide;
+- tirer une stage avec le bouton droit de la souris pour la reordonner;
+- faire un clic droit sur une stage, sans tirer, pour ouvrir son menu : renommer la stage, l'envoyer vers un autre ecran ou envoyer une fenetre vers une autre stage.
 
 Les zones reservees par macOS, comme la barre de menu, sont ignorees par les actions de clic vide du navrail.
 

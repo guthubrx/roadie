@@ -1,0 +1,200 @@
+{
+  "module": "04",
+  "findings": [
+    {
+      "id": "PERF-010",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieStages/RoadieState.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+      "line": 77,
+      "title": "La reconstruction du snapshot rescane toutes les fenêtres pour chaque affectation",
+      "evidence": "    public mutating func assignWindow(_ windowID: WindowID, to scope: StageScope) throws {\n        guard displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID] != nil else {\n            throw RoadieStateError.unknownStage(scope)\n        }\n        removeWindow(windowID)\n        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.insert(windowID)\n        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.focusedWindowID = windowID\n    }",
+      "description": "assignWindow appelle removeWindow, qui traverse tous les scopes et applique removeAll sur leurs fenêtres. Il appelle ensuite insert, qui refait removeAll dans la stage cible. reconcile construit un RoadieState neuf et appelle assignWindow pour chaque fenêtre. Avec un écran, une stage et w fenêtres distinctes, chaque insertion reparcourt les i fenêtres précédentes. Le coût est O(w²), alors que le commentaire de reconcile annonce O(w + m).",
+      "proof": "Lecture intégrale de RoadieState.swift ; lecture de DaemonSnapshot.swift:347-525 ; confirmation indépendante de la boucle par l’auditeur runtime_full. La somme des longueurs parcourues par removeAll vaut 0+1+...+(w-1) pour un snapshot à une stage. Aucun plafond de fenêtres ou compromis documenté trouvé.",
+      "grep_command": "rg -n \"assignWindow\\(|removeWindow\\(|removeAll|for window in windows|O\\(w\" Sources/RoadieStages/RoadieState.swift Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieStages/RoadieState.swift",
+          "line": 95,
+          "evidence": "    public mutating func removeWindow(_ windowID: WindowID) {\n        for displayID in Array(displays.keys) {\n            guard let display = displays[displayID] else { continue }\n            let desktopIDs = Array(display.desktops.keys)\n            for desktopID in desktopIDs {\n                guard let desktop = displays[displayID]?.desktops[desktopID] else { continue }\n                let stageIDs = Array(desktop.stages.keys)\n                for stageID in stageIDs {\n                    displays[displayID]?.desktops[desktopID]?.stages[stageID]?.remove(windowID)\n                }"
+        },
+        {
+          "file": "Sources/RoadieStages/RoadieState.swift",
+          "line": 171,
+          "evidence": "    public mutating func insert(_ windowID: WindowID) {\n        windowIDs.removeAll { $0 == windowID }\n        windowIDs.append(windowID)\n    }\n\n    public mutating func remove(_ windowID: WindowID) {\n        windowIDs.removeAll { $0 == windowID }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 415,
+          "evidence": "        let fallbackDisplayID = displays.first?.id\n        // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.\n        var stageIndex = persistedStages.stageScopeIndex()\n        for window in windows {\n            guard stageManagedWindowIDs.contains(window.id) else {\n                scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))\n                continue\n            }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 516,
+          "evidence": "            try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)\n            if window.isTileCandidate, pin == nil {\n                try? state.assignWindow(window.id, to: scope)\n            }\n            try? state.setGroups(persistedStage?.groups ?? [], for: scope)\n            scopedWindows.append(ScopedWindowSnapshot("
+        }
+      ],
+      "complexity_current": "O(w²) même avec un écran et une stage",
+      "complexity_target": "O(w+s) pour construire les appartenances, hors travail indépendant du snapshot",
+      "exploitability": "CONFIRMED",
+      "status": "open",
+      "path_type": "hot",
+      "scenario": "Fournir au SnapshotService un écran, une stage existante et w fenêtres distinctes non épinglées isTileCandidate=true, puis demander un snapshot. La boucle affecte les fenêtres une à une et rescane les i précédentes. Aucun état corrompu ou entrée invalide n’est nécessaire.",
+      "impact": "Travail CPU quadratique à chaque snapshot/reconciliation ; latence non mesurée. HIGH retenu pour le daemon local et l’impact performance, sans allégation de panne mesurée.",
+      "remediation": "Construire les appartenances initiales en un passage groupé. Dédupliquer les identifiants avec un Set en conservant l’ordre de dernière occurrence ; affecter chaque tableau de stage une seule fois. Garder assignWindow pour les vrais déplacements, et la restauration ultérieure du focus réel.",
+      "remediation_code": "// Dans RoadieState : construction initiale uniquement, après création des scopes.\n// O(w + s) : w affectations, s scopes alimentés. Le dernier doublon conserve sa position.\npublic mutating func initializeWindowMemberships(_ assignments: [(WindowID, StageScope)]) throws {\n    var reversedIDs: [StageScope: [WindowID]] = [:]\n    var seen: Set<WindowID> = []\n    for (windowID, scope) in assignments.reversed() {\n        guard stage(scope: scope) != nil else { throw RoadieStateError.unknownStage(scope) }\n        if seen.insert(windowID).inserted {\n            reversedIDs[scope, default: []].append(windowID)\n        }\n    }\n    for (scope, ids) in reversedIDs {\n        displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?\n            .setInitialWindowIDs(Array(ids.reversed()))\n    }\n}\n\n// Dans StageState : utilisé uniquement par la construction ci-dessus, sur un état neuf.\nfileprivate mutating func setInitialWindowIDs(_ ids: [WindowID]) {\n    windowIDs = ids\n    focusedWindowID = ids.last\n}\n\n// Dans SnapshotService.reconcile : avant la boucle for window in windows.\nvar initialMemberships: [(WindowID, StageScope)] = []\n// Remplace uniquement state.assignWindow dans cette boucle :\nif window.isTileCandidate, pin == nil {\n    initialMemberships.append((window.id, scope))\n}\n// Après la boucle, avant la restauration du focus réel :\ndo {\n    try state.initializeWindowMemberships(initialMemberships)\n} catch {\n    // Même comportement partiel que les anciens try? individuels si un scope manque.\n    for (windowID, scope) in initialMemberships { try? state.assignWindow(windowID, to: scope) }\n}\n// Conserver les appels setGroups et la restauration ultérieure du focus et des métadonnées.\n// assignWindow reste utilisé pour les déplacements d'une fenêtre déjà présente.",
+      "verification": "Comparer l’ancien et le nouveau constructeur sur 1 puis plusieurs écrans/bureaux/stages : même ordre windowIDs, même focusedWindowID, mêmes groupes, fenêtres épinglées exclues et dernier doublon conservé. Ajouter un benchmark avec w=50,100,200,400 sur une stage ; vérifier croissance linéaire du constructeur. Aucun benchmark ni test exécuté par cet auditeur.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "counter_audit": "CONFIRMED",
+      "references": [
+        "v14 module 04, anti-patterns 1/2",
+        "Distinct de PERF-001 (grille de trous), PERF-005 (commandes), PERF-002 (arbre BSP)."
+      ],
+      "source_id": "MODEL-NEW-001",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-models-completion.json",
+      "verification_status": "confirmé par lecture ; scénario système non exécuté",
+      "exploitation_scenario": "Fournir au SnapshotService un écran, une stage existante et w fenêtres distinctes non épinglées isTileCandidate=true, puis demander un snapshot. La boucle affecte les fenêtres une à une et rescane les i précédentes. Aucun état corrompu ou entrée invalide n’est nécessaire.",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "counter_audit_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-snapshot.json",
+      "fingerprint": "f169bec87986"
+    },
+    {
+      "id": "PERF-011",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 3354,
+      "title": "La même disposition est revalidée pour chaque fenêtre modifiée du scope",
+      "description": "authoritativeModelScopes valide l’intent dans compactMap, avant de dédupliquer les scopes avec Set. Pour k fenêtres modifiées d’un scope de n membres, les mêmes placements passent k fois par validIntent puis intentStillTilesCurrentContainer. Le contrôle des chevauchements parcourt toutes les paires lorsque l’intent est valide ; la détection des trous coûte également O(n²) au pire. Le coût peut donc atteindre O(k·n²), soit O(n³) lorsque k=n. Le cache de JSONPersistence ne mémorise que le JSON décodé ; il ne mémorise pas la validation géométrique.",
+      "evidence": "        Set(snapshot.windows.compactMap { entry -> StageScope? in\n            guard windowIDs.contains(entry.window.id),\n                  let scope = entry.scope,\n                  let stage = snapshot.state.stage(scope: scope),\n                  stage.mode == .bsp,\n                  snapshot.state.activeScope(on: scope.displayID) == scope,\n                  service.hasValidLayoutIntent(scope: scope, in: snapshot)\n            else { return nil }\n            return scope\n        })",
+      "exploitability": "CONFIRMED",
+      "path_type": "hot",
+      "status": "open",
+      "confirmation": "Lecture statique de la chaîne complète ; aucun benchmark exécuté.",
+      "exploitation_scenario": "1. Avoir un scope actif en mode bsp, n fenêtres et un intent de commande valide avec les mêmes n IDs. 2. Faire varier les cadres de k fenêtres au-delà de observedChange entre deux relevés, en gardant leurs centres sur le même écran, sans bouton de souris enfoncé, garde de topologie ou commande active. Une application peut repositionner plusieurs fenêtres avant la passe. 3. changedWindows ajoute tous les IDs modifiés (3332–3341), sans borne k. adoptManualDisplayMoves ne les déplace pas (2166–2167) et le rapprochement des dérives est sauté puisque changedWindowIDs n’est pas vide (278). 4. changedFramesMatchSavedIntent est faux parce que les cadres observés ont changé ; nonTreeLayout appelle authoritativeModelScopes à 744, avant sa garde changedWindowIDs.count >= 2 à 756. 5. L’intent reste géométriquement valide : validIntent contrôle ses placements enregistrés et les IDs présents, pas les cadres courants. Le même calcul est donc exécuté k fois.",
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 740,
+          "note": "Validation du modèle avant la garde de cardinalité à 756."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3332,
+          "note": "changedWindows retient tous les IDs modifiés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1569,
+          "note": "hasValidLayoutIntent délègue à validIntent sans cache de validation."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1707,
+          "note": "Identités vivantes puis validation des placements mémorisés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1766,
+          "note": "Contrôle des chevauchements et des trous."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1884,
+          "note": "Pour un intent valide sans chevauchement, toutes les paires sont comparées."
+        }
+      ],
+      "complexity_current": "O(w + k·n²) pour un scope : w fenêtres du snapshot, k fenêtres modifiées, n membres de la disposition valide ; O(n³) pour w=k=n.",
+      "complexity_target": "O(w + somme(n_s²)) : validation une seule fois par scope candidat s ; O(n²) pour un scope.",
+      "impact": "Travail CPU redondant dans la passe de disposition. Le coût croît d’un facteur k pendant les changements groupés. Aucune latence ni consommation chiffrée n’a été mesurée.",
+      "remediation": "Construire l’ensemble des scopes BSP actifs concernés, puis valider chaque scope une seule fois. Conserver les mêmes critères et la même vérification de validité.",
+      "remediation_code": "private func authoritativeModelScopes(\n    for windowIDs: Set<WindowID>,\n    in snapshot: DaemonSnapshot\n) -> Set<StageScope> {\n    let candidates = Set(snapshot.windows.compactMap { entry -> StageScope? in\n        guard windowIDs.contains(entry.window.id),\n              let scope = entry.scope,\n              snapshot.state.stage(scope: scope)?.mode == .bsp,\n              snapshot.state.activeScope(on: scope.displayID) == scope\n        else { return nil }\n        return scope\n    })\n    return Set(candidates.filter { scope in\n        service.hasValidLayoutIntent(scope: scope, in: snapshot)\n    })\n}",
+      "verification": "Étendre le scénario externalResizeAfterRecentCommandIntentSnapsBackToCommandLayout à 10, 50 puis 100 fenêtres du même scope et changer plusieurs cadres dans le second relevé. Vérifier les mêmes placements et instrumenter le nombre de validations : une par scope, quelle que soit la quantité de fenêtres modifiées. Comparer le temps de la passe avant/après avec les mêmes fixtures. Tests non exécutés par ce sous-agent.",
+      "rollback": "Rétablir uniquement authoritativeModelScopes si la liste des scopes retenus ou les placements diffèrent des résultats avant correction.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII",
+        "Audit v14 module 04, recherche répétée en boucle"
+      ],
+      "counter_audit_required": true,
+      "source_id": "RUNTIME-NEW-001",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-runtime-completion.json",
+      "verification_status": "confirmé par lecture ; scénario système non exécuté",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-layout.json",
+      "fingerprint": "0213a67eab08"
+    },
+    {
+      "id": "PERF-012",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "severity_review_required": false,
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 1519,
+      "title": "Le rapprochement rescane les mêmes candidats pour chaque membre absent",
+      "description": "L’index bundle+titre évite une recherche dans toutes les fenêtres si les signatures sont distinctes. Dans un groupe de signatures identiques, chaque membre disparu appelle bestReplacement, qui alloue, calcule puis trie toute la liste disponible pour lire seulement les deux meilleurs scores. Le commentaire O(M+W) est donc faux dans ce cas. Cette fonction est appelée par chaque réconciliation de snapshot, sous verrou exclusif dans le producteur.",
+      "evidence": "    let available = candidates.filter { !claimed.contains($0.id) }\n    guard !available.isEmpty else { return nil }\n\n    // Proximité de cadre exigée même pour un candidat unique (SPEC-016 FR-006) : un titre\n    // identique ne suffit pas.\n    let scored = available\n        .map { window in (window: window, score: frameDistance(member.frame, window.frame)) }\n        .sorted { lhs, rhs in lhs.score < rhs.score }\n    guard let best = scored.first else { return nil }\n    let second = scored.dropFirst().first?.score ?? .greatestFiniteMagnitude",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Construire une PersistentStageState avec m membres absents portant tous le même bundle et titre, ancien pid nul ou mort, et des IDs différents des fenêtres vivantes. Fournir w fenêtres vivantes de la même signature, avec cadres en ordre non trié et les deux meilleures distances séparées de moins de 120 : chaque rapprochement est ambigu, aucune fenêtre n’est réclamée. Chaque ancien membre filtre et retrie les mêmes w candidats. Appeler reconcileWindowIDs(with:..., isProcessAlive:{_ in false}) en fixture isolée. Ce cas correspond à une application relancée avec plusieurs fenêtres de titre générique ; les tests actuels couvrent l’ambiguïté sur un membre et deux candidats.",
+      "impact": "Travail O(m*w log w) dans la branche de rapprochement et allocations répétées ; ce travail retient le verrou d’état. Le surcoût apparaît pendant le rapprochement de fenêtres après disparition/relance, pas quand tous les IDs sont encore présents. Aucune latence réelle n’a été mesurée.",
+      "path_type": "hot",
+      "frequency_notes": "Appel depuis chaque snapshot (DaemonSnapshot.reconcile:371), dont le producteur sous StageStore.mutate:272. Branche conditionnée aux IDs disparus et au pid ancien mort/inconnu. L’événement qui ouvre cette branche est rare ; sévérité finale à arbitrer par le coordinateur selon module 01. Aucun plafond cardinalité n’a été trouvé dans les fichiers lus.",
+      "complexity_current": "O(M + W + Σ(m_s * w_s log w_s)) ; O(m*w log w) si tous les membres/candidats ont la même signature",
+      "complexity_target": "Passe avec tous les candidats déjà revendiqués : O(M+W) ; rapprochement avec groupes homonymes non revendiqués : O(M+W+m*w) au pire après suppression du tri, à documenter honnêtement.",
+      "remediation": "Construire une fois les groupes uniquement avec les fenêtres initialement non revendiquées. Remplacer le tri complet par une recherche des deux meilleurs scores en un passage. Conserver le Set des revendications de la passe pour empêcher les doubles attributions. Pour de gros groupes non résolus, un index géométrique ou une mémoïsation invalidée par les changements est nécessaire si une borne linéaire globale est exigée ; ne pas supprimer la garde d’ambiguïté.",
+      "remediation_code": "private func bestReplacement(\n    for member: PersistentStageMember,\n    in candidates: [WindowSnapshot],\n    claimed: Set<WindowID>\n) -> WindowSnapshot? {\n    var best: WindowSnapshot?\n    var bestScore = Double.greatestFiniteMagnitude\n    var secondScore = Double.greatestFiniteMagnitude\n    for window in candidates where !claimed.contains(window.id) {\n        let score = frameDistance(member.frame, window.frame)\n        if best == nil || score < bestScore {\n            secondScore = bestScore\n            best = window\n            bestScore = score\n        } else if score < secondScore {\n            secondScore = score\n        }\n    }\n    guard let best, bestScore <= 360, secondScore - bestScore >= 120 else { return nil }\n    return best\n}\n// Construire les listes après claimedWindowIDs, en excluant une fois les fenêtres déjà revendiquées :\nvar windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]\nfor window in tileableWindows where !claimedWindowIDs.contains(window.id) {\n    windowsBySignature[StableWindowSignature(window: window), default: []].append(window)\n}\n// Conserver claimedWindowIDs pendant la passe pour interdire toute double réattribution.\n// Mettre à jour la documentation : O(M + W + somme des tailles des groupes candidats examinés),\n// pas O(M + W) pour une phase de rapprochement géométrique avec plusieurs homonymes.",
+      "verification": "Conserver les tests de PID vivant/mort, proximité, ambiguïté et candidat nettement meilleur. Ajouter une série de m anciens membres et w fenêtres nouvelles homonymes ambiguës ; instrumenter les visites de candidats. Répéter après adoption des w fenêtres. Le second appel ne doit plus visiter w candidats par ancien membre. Tester qu’aucune fenêtre ne peut être revendiquée par deux anciens membres et que les égalités de scores restent refusées.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture et contre-audit indépendant ; aucun benchmark exécuté",
+      "counter_audit_pending": false,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageStore.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 639,
+          "evidence": "                for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {\n                    let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]\n                    guard !liveWindowIDs.contains(member.windowID),\n                          member.pid.map(isProcessAlive) != true,\n                          let replacement = bestReplacement(\n                              for: member,\n                              in: windowsBySignature[StableWindowSignature(member: member)] ?? [],\n                              claimed: claimedWindowIDs\n                          )",
+          "note": "Appel du tri pour chaque membre disparu."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 270,
+          "evidence": "            // Les events de reconciliation decrivent une mutation de l'etat persiste. En mode\n            // lecteur (persistStateChanges=false, SPEC-011 atomique), plusieurs process appellent\n            // snapshot() : seul le writer (tiler/run) doit emettre ces events, sinon ils sont\n            // dupliques N fois (un par composant) dans events.jsonl.\n            appendReconciliationEvents(result)\n            // Une destruction est consommée quand la fenêtre a quitté la liste vivante : avant,\n            // elle bloque seulement sa réinsertion (liste CoreGraphics en retard sur AX).",
+          "note": "Réconciliation tenue sous le verrou de StageStore.mutate."
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 367,
+          "evidence": "        }\n        let activeDisplayIDBeforeMissingReconciliation = persistedStages.activeDisplayID\n        let liveWindowIDs = stageManagedWindowIDs\n        let mouseLocation = input.mouseLocation\n        persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })\n        let missingWindows = persistedStages.pruneMissingWindows(\n            keeping: liveWindowIDs,\n            liveDisplayIDs: liveDisplayIDs,\n            missingGrace: Self.stageMembershipMissingGrace,\n            lastObservedAt: input.lastObservedWindowAt,",
+          "note": "Entrée de la réconciliation des identifiants."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+          "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+          "line": 185,
+          "evidence": "    func reconcileWindowIDsRefusesTwoNearCandidatesWithSmallScoreGap() {\n        let scope = PersistentStageScope(displayID: DisplayID(rawValue: \"main\"), stages: [\n            PersistentStage(id: StageID(rawValue: \"1\"), members: [member(10, title: \"Default\")]),\n        ])\n        var state = stateWith(scopes: [scope])\n\n        state.reconcileWindowIDs(with: [\n            window(110, title: \"Default\", x: 50),\n            window(120, title: \"Default\", x: 100),\n        ])\n\n        let index = state.stageScopeIndex()\n        #expect(index[WindowID(rawValue: 10)]?.stageID == StageID(rawValue: \"1\"))\n        #expect(index[WindowID(rawValue: 110)] == nil)\n        #expect(index[WindowID(rawValue: 120)] == nil)\n    }",
+          "note": "Ambiguïté déjà prévue et testée, sans test de cardinalité."
+        }
+      ],
+      "discovery_command": "rg -n \"bestReplacement|reconcileWindowIDs|sorted\" Sources/RoadieDaemon/StageStore.swift Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "source_id": "CMD-NEW-02",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-commands-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-reconcile.json",
+      "fingerprint": "60e6655522b4"
+    }
+  ]
+}

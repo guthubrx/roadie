@@ -123,12 +123,17 @@ enum ShutdownRegistry {
 /// message clair si un autre process le détient. Le verrou est libéré par le registre d'arrêt.
 @MainActor
 private func acquireInstanceLock(_ lockName: String, label: String) {
-    let lock = ComponentLockFile(component: lockName)
+    // Le process qui sert les commandes CLI (`roadied`) attend aussi la fin des commandes `roadie`
+    // exécutées en local avant de démarrer (REL-015, voir `ComponentLockFile`).
+    let lock = ComponentLockFile(component: lockName, guardsLocalExecution: lockName == "roadied")
     do {
         try lock.acquire()
     } catch ComponentLockError.alreadyRunning(let pid) {
         let owner = pid > 0 ? "pid \(pid)" : "pid inconnu"
         fputs("roadied \(label): already running (\(owner), lock ~/.roadies/\(lockName).lock); stop it before starting another instance\n", stderr)
+        exit(1)
+    } catch ComponentLockError.localExecutionBusy(let path) {
+        fputs("roadied \(label): a local roadie command still holds \(path) after \(Int(ComponentLockFile.defaultLocalExecutionTimeout)) s; retry when it ends\n", stderr)
         exit(1)
     } catch {
         fputs("roadied \(label): failed to acquire lock: \(error)\n", stderr)

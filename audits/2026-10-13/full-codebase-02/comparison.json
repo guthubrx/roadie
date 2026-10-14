@@ -1,0 +1,1622 @@
+{
+  "baseline_path": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01",
+  "baseline_score": 83.16,
+  "current_score": 93.21,
+  "summary": {
+    "partiel": 4,
+    "résolu": 46
+  },
+  "method": "Lecture du scénario de chaque constat et de son correctif; correspondance manuelle conservée même si l’empreinte change. L’absence d’empreinte n’est pas utilisée comme preuve de résolution.",
+  "original_findings": [
+    {
+      "id": "REL-001",
+      "status": "partiel",
+      "reason": "Les deux scénarios initiaux sont corrigés : reorder borne avant soustraction, et les entrées publiques contrôlent les identifiants vides. Un autre argument stage provoque encore un dépassement fatal : une stage nommée Int.max mène à Int.max + 1 lors de assign-empty. Voir REL-001. Deux chemins fatals restent ouverts : génération après Int.max et stage summon 0.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 1153,
+          "note": "Bornage sans soustraction pour les positions <= 1."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 318,
+          "note": "Identifiant vide refusé avant StageID."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1704,
+          "note": "Dépassement résiduel dans la génération de stage."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 1064,
+          "note": "Zéro accepté puis WindowID(0) à1076."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: reorderStageClampsExtremePositionsWithoutTrap; stageCommandsRefuseEmptyStageIDAndExtremePosition"
+      ],
+      "title": "Des arguments stage invalides peuvent arrêter le daemon",
+      "original_severity": "HIGH",
+      "original_fingerprint": "bcbbf79b3e3a",
+      "active_finding_id": "REL-001"
+    },
+    {
+      "id": "REL-002",
+      "status": "résolu",
+      "reason": "La réparation ne retire plus un membre absent qu’avec un PID connu et déclaré mort. La déduplication reste indépendante de la visibilité. La grâce de réconciliation de 30 minutes reste la politique générale du snapshot ; elle n’est pas une nouvelle preuve de fermeture.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+          "line": 237,
+          "note": "Garde liveWindowIDs + PID mort avant retrait ; ordre conservé pour les membres gardés."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 89,
+          "name": "absentMemberWithLiveProcessKeepsMembershipOrderAndFocus",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 116,
+          "name": "memberOfDisconnectedDisplayWithLiveProcessIsKept",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 133,
+          "name": "absentMemberWithDeadProcessIsRemoved",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 147,
+          "name": "absentMemberWithoutKnownPidIsKept",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 160,
+          "name": "duplicateAbsentMemberIsDeduplicated",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "La réparation efface les associations des fenêtres encore ouvertes mais invisibles",
+      "original_severity": "HIGH",
+      "original_fingerprint": "536a679913f2",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-003",
+      "status": "résolu",
+      "reason": "La fermeture résout désormais la lettre dans overlay.report.targets, puis transmet exactement la cible conservée à activate(target:action:).",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 255,
+          "note": "Résolution de la liste effectivement affichée, puis activate(target:) à la ligne 263."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103"
+      ],
+      "title": "Le mode lettres réinterprète la lettre dans une autre liste",
+      "original_severity": "HIGH",
+      "original_fingerprint": "0ac197da913e",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-001",
+      "status": "résolu",
+      "reason": "La recherche parmi tous les cadres pour chaque cellule a disparu. Les intervalles de centres sont calculés une fois ; chaque colonne cumule les intervalles de lignes dans un tableau de différences. Complexité O(n²), mémoire O(n), au lieu de O(n³). Aucun gain de latence mesuré dans cette revue.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1794,
+          "note": "framesLeaveLargeUntiledCells : intervalles préindexés et cumul par colonne."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1821,
+          "note": "Pas de frames.contains dans la boucle des cellules."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 191,
+          "name": "untiledCellDetectionMatchesReference : 600 cas déterministes, pavages et trous",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 233,
+          "name": "columnFamilyWithoutHoleStaysValid : famille du constat initial",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "La validation des trous de disposition parcourt les fenêtres dans chaque cellule",
+      "original_severity": "HIGH",
+      "original_fingerprint": "1e88a8f2a195",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-002",
+      "status": "résolu",
+      "reason": "Le chemin normal spatialBsp utilise un Set de feuilles, sans contains récursif par fenêtre. BSPTree.windowIDs remplit un accumulateur unique. La réconciliation amont retire les feuilles en un passage et utilise aussi un Set. Les insertions de secours restent un chemin distinct explicitement documenté.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+          "line": 28,
+          "note": "Collecte puis intersection des feuilles et Set.insert dans la boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPTree.swift",
+          "line": 56,
+          "note": "windowIDs et appendWindowIDs : parcours avec accumulateur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 662,
+          "note": "reconciledTree projette puis réutilise leaves."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 56,
+          "note": "Arbre complet, projection, feuilles manquantes et doublons comparés à une référence."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 36,
+          "note": "Ordre des feuilles identique sur chaînes et arbre équilibré."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 100,
+          "note": "400 cas déterministes de réconciliation comparés à la référence ; chaîne de 50 feuilles sans changement."
+        }
+      ],
+      "title": "Le plan BSP normal reparcourt tout l'arbre pour chaque fenêtre",
+      "original_severity": "HIGH",
+      "original_fingerprint": "0e6d1d177331",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-003",
+      "status": "résolu",
+      "reason": "Les deux appelants utilisent DropGroupGeometry.planGroup. Une boucle remplit un seul dictionnaire, sans copie de suffixe ni fusion récursive : O(n). Le calcul de structuralPlacements utilise aussi un Set pour le groupe cible.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 488,
+          "note": "Passe unique, capacité réservée, première occurrence conservée."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 1135,
+          "note": "Les deux groupes partagent le même helper linéaire."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:25 perf003PlanGroupMatchesRecursiveVersion : n=0,1,2,3,10,100 ; rectangles, orientations et gaps variés.",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:39 perf003RepeatedIdentifierKeepsFirstPlacement",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:48 perf003StructuralPreviewKeepsPlacements"
+      ],
+      "title": "La géométrie de groupe copie et fusionne des suffixes en O(n²) pendant le glisser",
+      "original_severity": "HIGH",
+      "original_fingerprint": "015cfd241481",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-004",
+      "status": "résolu",
+      "reason": "L’intersection de la stage et des voisines utilise un Set construit une seule fois. Le filtre conserve l’ordre initial de la stage et devient O(n+m). Un autre parcours répété, distinct, est signalé dans PERF-009.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2689,
+          "note": "siblingIDSet puis stage.windowIDs.filter(siblingIDSet.contains)."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 177,
+          "name": "clampedSiblingRepairKeepsRequestedFrames : ordre et cadres exacts",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "La réparation de voisinage refait une recherche linéaire pour chaque fenêtre",
+      "original_severity": "HIGH",
+      "original_fingerprint": "0f06aa450605",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-004",
+      "status": "résolu",
+      "reason": "Affichage et activation utilisent la même fermeture rootFor ; un index différent de celui de la racine figée résout le nouvel écran.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 348,
+          "note": "Racine choisie par index."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 358,
+          "note": "Affichage depuis rootFor."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 372,
+          "note": "Clic depuis le même rootFor."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:124",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147"
+      ],
+      "title": "La grille écran ignore le changement de moniteur demandé par les flèches",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "4bfeeee38f05",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-005",
+      "status": "résolu",
+      "reason": "La réconciliation fusionne les stages persistées, même vides, avec leur nom et leur mode. Elle reporte les labels des desktops et l’activeStageID des desktops non courants. Les modes des stages runtime déjà créées sont aussi mis à jour ; les décisions de focus du desktop courant sont conservées.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 564,
+          "note": "Fusion après la décision de focus et la réconciliation des arbres."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 582,
+          "note": "applyPersistedMetadata copie noms, modes, stages vides, desktop actif et labels."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 27,
+          "name": "automationSnapshotKeepsPersistedNamesEmptyStagesAndDesktopLabel",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 52,
+          "name": "runtimeStateUsesRenamedStageName",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 29,
+          "name": "emptyInactiveStageKeepsPersistedMode",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 57,
+          "name": "inactiveDesktopKeepsPersistedActiveStage",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Le snapshot d’automatisation perd les noms et les stages vides persistées",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "22cd1c9e929a",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-006",
+      "status": "résolu",
+      "reason": "Le comparateur dépend désormais de clés de bandes calculées avant le tri, puis de l’ID. Il n’alterne plus les axes selon chaque paire. Les permutations du triplet initial conduisent au même ordre.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2116,
+          "note": "spatialSortOrder calcule des bandes fixes puis trie le triplet bande principale, bande secondaire, ID."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 124,
+          "name": "spatialOrderIsIndependentOfInputOrder",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 159,
+          "name": "spatialOrderKeepsColumnsThenRows",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Le tri spatial utilise une relation non transitive",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "18520f10b502",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-007",
+      "status": "résolu",
+      "reason": "Le contexte de placement reçoit role et subrole depuis la fenêtre AX. Il reçoit aussi une classification flottante explicite : hors mosaïque, épinglée ou stage float ; une candidate en attente d’écran conserve nil.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1882,
+          "note": "Passage des rôles et de isFloating à WindowRuleMatchContext."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1813,
+          "note": "Classification commune ruleFloatingState."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 15,
+          "name": "rulePlacementMatchesWindowRoleAndSubrole",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 33,
+          "name": "rulePlacementIgnoresWindowWithAnotherRole",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 87,
+          "name": "isFloatingFalseRuleMatchesTiledWindow",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 115,
+          "name": "isFloatingTrueRuleMatchesWindowOfFloatStage",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 147,
+          "name": "isFloatingRuleNeverMovesWindowWaitingForUnpluggedDisplay",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift",
+          "line": 219,
+          "name": "automationIsFloatingFollowsRuleClassification",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Les règles de placement ignorent le rôle AX de la fenêtre",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "3ca0e8552479",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-008",
+      "status": "résolu",
+      "reason": "Le résultat de placement distingue placed, deferred et settled. Une destination indisponible provoque continue avant l’insertion dans observedRulePlacementWindowIDs. La fenêtre reste donc retentable après retour de l’écran.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1892,
+          "note": "La branche deferred saute le marquage observé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2129,
+          "note": "Une destination indisponible rend explicitement deferred."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 53,
+          "name": "deferredPlacementIsRetriedWhenTargetDisplayAppears",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 90,
+          "name": "placedRuleIsNotReappliedAfterDeferredRetry",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Une règle différée faute d’écran cible n’est jamais retentée",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "21bab2282242",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-009",
+      "status": "résolu",
+      "reason": "La fusion des résultats d’écriture ne parcourt que les IDs de la stage courante. Les résultats des autres écrans ne polluent plus placements avant la garde d’égalité.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3135,
+          "note": "Seuls stage.windowIDs peuvent recevoir resultFrames avant sauvegarde."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 132,
+          "name": "layoutIntentsAreSavedForEveryDisplayWrittenInTheSamePass",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Les placements de plusieurs écrans empêchent de sauver leurs dispositions",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "d6c3f12141ac",
+      "active_finding_id": null
+    },
+    {
+      "id": "DUP-001",
+      "status": "résolu",
+      "reason": "Les trois familles de menus appellent actionTarget, qui délègue à une seule méthode executeAndLog. La construction des destinations reste distincte.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 481,
+          "note": "Fabrique commune de cible AppKit, retenue dans menuTargets."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 490,
+          "note": "Exécution et journal centralisés."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:170 dup001EveryMenuFamilyLogsTheSameFailureEvent",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:192 dup001SuccessfulActionLogsActionEvent"
+      ],
+      "title": "Le menu recopie trois fois l’exécution et le journal d’une action",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "e7e3b0b9315e",
+      "active_finding_id": null
+    },
+    {
+      "id": "MIN-001",
+      "status": "résolu",
+      "reason": "RailPanel réutilise stageCard pour les actions et les charges de glisser. StageCardView partage les cadres de mosaïque/icônes entre rendu et sélection. Le double adaptateur de renommage a disparu. Le nouveau défaut parallax concerne une transformation graphique et ne réouvre pas la duplication initiale.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+          "line": 373,
+          "note": "action appelle stageCard ; même helper pour stageID, dragPayload, stageDragPayload."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 660,
+          "note": "mosaicPreviewFrames et iconPreviewFrames réutilisés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 422,
+          "note": "Le renommage utilise RailMenuActionTarget."
+        }
+      ],
+      "tests": [],
+      "title": "Le rail recopie des helpers disponibles et conserve un double adaptateur de menu",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "8f2e0ed99159",
+      "active_finding_id": null
+    },
+    {
+      "id": "OBS-001",
+      "status": "résolu",
+      "reason": "La rotation de stdout/stderr conserve l’inode : copie vers .1 puis troncature du fichier courant. La copie doit réussir avant la troncature; applied reflète son résultat. La perte possible entre copie et troncature est explicitement documentée.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 129,
+          "note": "Politique copy-truncate et limite documentée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 151,
+          "note": "Copie puis troncature sur le fichier courant"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 255,
+          "note": "Descripteur O_APPEND conservé, nouvelle ligne visible et seconde rotation vérifiées"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+          "line": 57,
+          "note": "Fichier courant présent et vide, sauvegarde correcte"
+        }
+      ],
+      "title": "La rotation des logs ouverts coupe leur consultation courante",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "7ea985b891fd",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-005",
+      "status": "résolu",
+      "reason": "Les trois recherches répétées citées sont supprimées. Le classement des stages partitionne sur members.isEmpty; normalizedOrder et applyPlan construisent leurs ensembles hors boucle. Les résultats restent ordonnés.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1553,
+          "note": "scopedIDSet construit hors boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1608,
+          "note": "orderedSet construit hors boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1666,
+          "note": "Partition directe entre stages pleines et vides."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: assignPositionKeepsVisibleThenEmptyOrderAndSkipsParked"
+      ],
+      "title": "Les commandes répètent des recherches linéaires évitables",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "fa872d097db6",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-006",
+      "status": "résolu",
+      "reason": "La garde enabled précède snapshot et le reste du traitement. Les moniteurs restent installés pour le rechargement à chaud.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 209,
+          "note": "Retour avant snapshot si menu désactivé."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:149 perf006DisabledMenuSkipsSnapshot vérifie zéro windowsCalls et displaysCalls.",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:159 perf006EnabledMenuStillReadsSnapshot"
+      ],
+      "title": "Le menu désactivé déclenche quand même un relevé complet à chaque clic droit",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "249a153738c4",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-010",
+      "status": "résolu",
+      "reason": "AXRaise doit réussir. Une erreur de mise au premier plan ou de fenêtre focalisée doit être compensée par une confirmation explicite de l’état réel.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 1072,
+          "note": "Collecte des résultats frontmost, focusedWindow et raise ; relecture conditionnelle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 322,
+          "note": "AXFocusDecision.succeeded exige raise == .success."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022LotJTests.swift:10",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022R2LotGTests.swift:31",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieAXTests/Audit022R2LotGTests.swift:38"
+      ],
+      "title": "Le focus annonce un succès lorsque AXRaise échoue sans délai dépassé",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "dac933dd2818",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-011",
+      "status": "résolu",
+      "reason": "decodeFlexibleDouble ne confond plus type invalide et clé absente. Il propage la première erreur quand le repli entier échoue. load et validate utilisent ce décodage ; le rattrapage textuel ancien a disparu.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1611,
+          "note": "Erreur propagée, entier accepté uniquement si son décodage réussit."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1082,
+          "note": "validate décode avant ses contrôles complémentaires."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 20,
+          "note": "Booléens, chaînes des deux formes, tableau et table inline refusés par load et validate."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 43,
+          "note": "Absence, entier et décimal gardent leur comportement voulu."
+        }
+      ],
+      "title": "Les mauvais types numériques peuvent passer la validation puis devenir des défauts",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "15eed64ce396",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-012",
+      "status": "partiel",
+      "reason": "La portée visible_windows refuse désormais les fenêtres absentes/non focalisées et les éléments déplacés ou remplacés. La portée frontmost_window ne renseigne cependant aucun windowId : elle saute entièrement le contrôle de focus. Une fenêtre recouverte conserve son cadre et peut provoquer un clic sur la fenêtre de devant.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 426,
+          "note": "frontmostWindowCandidates ne renseigne pas le scope de fenêtre."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 807,
+          "note": "Attente du focus conditionnée par windowId et pid."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 819,
+          "note": "Le seul contrôle restant porte sur les coordonnées AX."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 506,
+          "note": "visible_windows, contrairement à frontmost_window, renseigne windowId."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:14",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:15",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift:17"
+      ],
+      "title": "Le clic part même si la fenêtre cible ne peut plus être focalisée",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "f545ca40e4f7",
+      "active_finding_id": "REL-012"
+    },
+    {
+      "id": "REL-013",
+      "status": "résolu",
+      "reason": "Chaque stage porte désormais displayId ; chaque groupe porte displayId et desktopId. Le contrat conserve le décodage des anciens JSON grâce à des champs optionnels.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 103,
+          "note": "displayId présent dans chaque AutomationStageSnapshot."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 146,
+          "note": "Portée composite présente dans AutomationGroupSnapshot."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationSnapshot.swift",
+          "line": 75,
+          "note": "Champ displayId ajouté au modèle public."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift:78",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ],
+      "title": "La réponse stages ne précise pas l’écran de chaque stage",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "f1c29bf9c66e",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-014",
+      "status": "résolu",
+      "reason": "config reload appelle le ConfigReloadService partagé du daemon, publie activePath/config et maintient la configuration précédente en cas de validation refusée. Le cache des règles compare la liste des règles réellement actives, y compris après chargement d’un autre fichier.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 296,
+          "note": "Routage config reload au daemon."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 516,
+          "note": "Appel effectif configReload.reload."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+          "line": 183,
+          "note": "Publication de la configuration chargée et de son chemin actif."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1826,
+          "note": "Cache du moteur construit depuis effectiveConfig.rules."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift"
+      ],
+      "title": "config reload annonce une application sans changer la configuration du daemon",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "173dea745bc6",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-015",
+      "status": "résolu",
+      "reason": "La CLI tient une réservation partagée avant ses sondes et pendant toute exécution locale. Le daemon prend cette réservation en exclusif avant son PID et ses composants. Le socket complète le PID informatif. Le script start conserve le PID d’un processus encore vivant.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 223,
+          "note": "Réservation couvrant local()"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ComponentLockFile.swift",
+          "line": 98,
+          "note": "Exclusivité avant publication du PID"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+          "line": 128,
+          "note": "Verrou roadied configuré avec guardsLocalExecution"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start",
+          "line": 54,
+          "note": "PID vivant conservé"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 44,
+          "note": "Démarrage attend la fin de la commande locale"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 79,
+          "note": "Daemon sans PID ni socket bloque le repli"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 99,
+          "note": "Expiration bornée et libération des verrous"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 55,
+          "note": "Socket vivant sans PID"
+        }
+      ],
+      "title": "Le PID informatif ne prouve pas que le verrou du daemon est libre",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "11fd538580a5",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-016",
+      "status": "résolu",
+      "reason": "Les deux entrées publiques refusent le bureau actuel. Le corps partagé ne masque que si le bureau cible est invisible. Il restaure explicitement une fenêtre garée sur un bureau affiché, y compris en mode float.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 146,
+          "note": "Garde pour le bureau actuel."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 224,
+          "note": "Décision de visibilité et frame de restauration avant plan commun."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: assignActiveWindowToCurrentDesktopDoesNothing; assignActiveWindowToOtherDesktopStillHidesWindow; assignWindowToDisplayedDesktopDoesNotHideIt; assignParkedWindowToDisplayedFloatDesktopRestoresVisibleFrame"
+      ],
+      "title": "Déplacer une fenêtre vers son bureau actuel la masque",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "5dadf550b791",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-017",
+      "status": "résolu",
+      "reason": "Après reconnaissance de l’écran, la restauration partitionne les stages par origin.desktopID et construit un targetScope distinct par bureau.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayParkingService.swift",
+          "line": 260,
+          "note": "Regroupement secondaire par bureau puis scope propre."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: reconnectRestoresStagesIntoTheirOwnDesktops"
+      ],
+      "title": "La reconnexion d’un écran fusionne les stages de bureaux différents",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "4bc775fabd2d",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-018",
+      "status": "résolu",
+      "reason": "Le curseur associe décalage et inode; les générations sont ouvertes sous verrou partagé, identifiées sur leur descripteur, puis lues dans l’ordre avant le courant. Les inodes doublons sont écartés. Une génération disparue ou une troncature détectée émet events.gap, même hors des filtres. Les lignes partielles ne font pas avancer le curseur.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 99,
+          "note": "Recherche de l’ancienne génération, lecture des suivantes et gap"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 159,
+          "note": "Ouverture sous le verrou partagé de rotation"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 183,
+          "note": "Déduplication des inodes"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 123,
+          "note": "Curseur avancé uniquement sur lignes terminées"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 192,
+          "note": "Queue non lue et nouveau fichier plus long"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 216,
+          "note": "Deux rotations successives"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 150,
+          "note": "Génération perdue signalée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotCTests.swift",
+          "line": 188,
+          "note": "Troncature signalée"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotCTests.swift",
+          "line": 35,
+          "note": "Rotation pendant collecte : chaque événement une fois"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotCTests.swift",
+          "line": 79,
+          "note": "Écrivain bloqué pendant collecte"
+        }
+      ],
+      "title": "L’abonnement perd des événements lors du remplacement du journal",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "8a0a2383b1d0",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-019",
+      "status": "résolu",
+      "reason": "La première fenêtre à l’écran dans l’ordre du snapshot est choisie avant le filtre d’éligibilité. Une fenêtre non gérée masque donc les fenêtres derrière. Le focus et le départ du glisser partagent cette sélection. Le fournisseur conserve l’ordre CG et inclut les fenêtres non candidates.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+          "line": 261,
+          "note": "Premier élément isOnScreen dont le cadre contient le point."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 640,
+          "note": "Éligibilité puis bande de titre appliquées à la première fenêtre."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 647,
+          "note": "compactMap dans l’ordre CoreGraphics ; filtre layer uniquement pour isTileCandidate."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:88 rel019FocusPicksFrontWindowOverSmallerHiddenOne",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:98 rel019UnmanagedFrontWindowBlocksWindowsBehind",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:110 rel019OffscreenWindowDoesNotBlock",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:120 rel019DragStartIgnoresTitlebarCoveredByAnotherWindow"
+      ],
+      "title": "Le focus souris sélectionne une fenêtre cachée derrière une autre",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "1c4b1feb076a",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-020",
+      "status": "résolu",
+      "reason": "La détection historique des coordonnées négatives vérifie désormais l’absence d’intersection avec tous les écrans présents. La fenêtre visible sur un écran à gauche n’est plus exclue.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+          "line": 38,
+          "note": "Test géométrique après seuil legacy."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: leftDisplayWindowIsNotLegacyOffscreen; legacyOffscreenFrameIsStillHidden"
+      ],
+      "title": "Un écran placé à gauche est confondu avec une ancienne zone de masquage",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "4ed52b5014ed",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-021",
+      "status": "partiel",
+      "reason": "mutateChecked et les commandes contrôlées propagent les erreurs. Les tests de rail pin et de panne initiale sont utiles. Des commandes effectuent encore des écritures durables ou des effets AX avant une seconde persistance faillible, puis annoncent changed=false sans restaurer : zoomParent, transfert de bureau, transfert de fenêtre et de stage. Voir REL-021, à fusionner avec les occurrences StateAudit/UI collectées par le coordinateur.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+          "line": 86,
+          "note": "Variante contrôlée qui lève PersistenceError."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 230,
+          "note": "Effet AX avant saveLayoutIntentChecked."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 190,
+          "note": "Changement durable de bureau avant retrait des intents."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift: mutateCheckedPersistsAndReturnsOutput; mutateCheckedRefusesUnreadableFileWithoutRunningBodyOrTouchingFile; mutateCheckedReportsLockFailureAndKeepsFile; railPinExitsNonZeroWhenStateIsNotPersisted",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift: create/assign/switch/moveToDisplay : erreurs de persistance",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift: échecs initiaux fenêtre/bureau/signet/groupe/écran/disposition",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotATests.swift: zoomOn; mode; balance avec refus des écritures et restauration"
+      ],
+      "title": "Une mutation renvoie un succès métier après échec de persistance",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "961f54a14e44",
+      "active_finding_id": "REL-021"
+    },
+    {
+      "id": "REL-022",
+      "status": "résolu",
+      "reason": "La garde compare maintenant le couple écran/stage. Deux stages de même identifiant sur des écrans distincts déclenchent le déplacement.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 776,
+          "note": "Le chemin réel de dépôt appelle railDropMovesWindow."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 1107,
+          "note": "Comparaison de sourceDisplayID/targetDisplayID et des stages."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:134 rel022RailDropComparesDisplayAndStage couvre quatre couples écran/stage."
+      ],
+      "title": "Le dépôt entre deux rails échoue si leurs stages portent le même identifiant",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "9eeb3540ff0f",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-023",
+      "status": "résolu",
+      "reason": "Une stage déplacée sans activation produit maintenant des frames de masquage. Les frames de retour sont recentrées sur le scope exact et seulement pour les membres transférés encore présents, ce qui couvre R1-14.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 664,
+          "note": "Branches restoring/hiding selon activation effective."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 686,
+          "note": "Scope exact et ensemble movedIDs pour les frames mémorisées."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: noFollowMoveKeepsMovedStageHiddenThenRestoresItOnTargetDisplay; followMoveStillShowsMovedStageCenteredOnTargetDisplay",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift: noFollowMoveRecentersInExactTargetScopeAfterConcurrentDesktopSwitch; noFollowMoveRecentersOnlyTransferredMembers"
+      ],
+      "title": "Le déplacement --no-follow rend visible une stage inactive",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "5aabb8a14954",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-024",
+      "status": "résolu",
+      "reason": "Le replay traite une paire down/up applicative comme un geste avant toute émission. Un échec sémantique retombe sur les événements bruts, dont le relâchement. Le nombre de replis apparaît dans la réponse.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 327,
+          "note": "Tentative sémantique avant émission ; sinon replay de chaque événement."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 292,
+          "note": "Nombre de replis annoncé."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:61",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:78"
+      ],
+      "title": "Le replay avale le relâchement de souris si la cible AX est absente",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "07868aa7170c",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-025",
+      "status": "résolu",
+      "reason": "Le bouton est enregistré et les événements bruts conservent leurs drapeaux. Seuls clic gauche, droit ou Commande-clic sont sémantiques ; les combinaisons non représentables restent brutes.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 527,
+          "note": "Bouton conservé par le capteur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 356,
+          "note": "Sélection des combinaisons sémantiques fidèles."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 390,
+          "note": "Type, bouton et flags préservés au replay."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:101",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:120",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotETests.swift:159"
+      ],
+      "title": "Les macros perdent le bouton droit et les modificateurs souris",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "9abdb22a0407",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-026",
+      "status": "résolu",
+      "reason": "Le scope et l’écran sont dérivés de la fenêtre focalisée lorsqu’elle est une candidate de la stage active. Le repli sur le premier écran reste réservé à l’absence de cette fenêtre.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 40,
+          "note": "Sélection focusedEntry avant écran/scope."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: widthTargetsFocusedWindowOnSecondDisplay; widthAllWindowsUsesFocusedDisplay"
+      ],
+      "title": "La commande width sélectionne toujours le premier écran",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "44ac2f2ed8e7",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-027",
+      "status": "résolu",
+      "reason": "Le ratio de référence est celui de activeID, avant le calcul de nudge/preset. La règle pour allWindows utilise explicitement cette même fenêtre active.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 68,
+          "note": "activeID puis referenceEntry puis currentRatio."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: relativeWidthStartsFromFocusedWindow; presetNextStartsFromFocusedWindow"
+      ],
+      "title": "Les ajustements relatifs utilisent la largeur de la première fenêtre",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "fbee254086c3",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-028",
+      "status": "résolu",
+      "reason": "L’absence ponctuelle conserve le signet et produit un échec explicite. La suppression immédiate exige désormais un PID mémorisé dont le processus est mort. La purge différée conserve sa grâce.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+          "line": 64,
+          "note": "Conservation sans preuve de mort du processus."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+          "line": 212,
+          "note": "Résolution du PID depuis le membre persistant."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 473,
+          "note": "Purge seulement après expiration de missingGrace."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift: absentWindowWithLiveProcessKeepsBookmark; absentWindowWithoutKnownPidKeepsBookmark; absentWindowWithDeadProcessRemovesBookmark; bookmarkSurvivesTemporaryAbsenceAndFocusesOnReturn"
+      ],
+      "title": "Focaliser une fenêtre temporairement absente efface son signet",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "7a46f1db2fa0",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-029",
+      "status": "résolu",
+      "reason": "Le rendu réécrit désormais tous les champs d’action du modèle : manage, exclude, floating, layout, gap_override, scratchpad et emit_event, en plus des affectations et follow. Le défaut initial de suppression systématique de ces actions est corrigé. REL-035 relève un défaut distinct de conservation des valeurs chaîne.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 181,
+          "note": "Sérialisation explicite des booléens, chaînes et entier de toutes les actions."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 226,
+          "name": "saveAndRemoveAffinityKeepEveryActionOfOtherRules : comparaison du modèle complet avant/après ajout et retrait",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Enregistrer une affinité supprime les autres actions des règles générées",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "58ef7c1b2a55",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-030",
+      "status": "résolu",
+      "reason": "masterRatio fait partie de LayoutRequest, est transmis par les producteurs de layout et de réparation, puis utilisé par MasterStackLayoutStrategy. Les fenêtres nouvelles sont exclues de la géométrie à préserver ; les fenêtres existantes et les priorités conservent leur ratio manuel.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutTypes.swift",
+          "line": 79,
+          "note": "La stratégie reçoit request.masterRatio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1685,
+          "note": "Le plan courant reçoit config.tiling.masterRatio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1876,
+          "note": "Le calcul de la surface canonique reçoit aussi le ratio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2707,
+          "note": "La réparation des voisines reçoit le ratio de la configuration active."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+          "line": 94,
+          "note": "Les fenêtres nouvelles ne fournissent pas de largeur observée candidate."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 103,
+          "note": "Ratios 0,8 et 0,7, défaut 0,6 et décodage depuis TOML."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 105,
+          "note": "Fenêtres nouvelles, géométrie existante et groupes mixtes."
+        }
+      ],
+      "title": "La configuration master_ratio n'arrive jamais au moteur de disposition",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "bcd192a2523f",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-031",
+      "status": "résolu",
+      "reason": "Le cas initial masterStack avec espacement 600 dans 1000×500 est corrigé par des espacements horizontal et vertical bornés. BSPTree dispose aussi de cette borne. Le mode historique bsp garde un défaut analogue distinct, enregistré comme REL-033.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+          "line": 30,
+          "note": "Espacements bornés selon largeur, hauteur et nombre de fenêtres de pile."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPTree.swift",
+          "line": 131,
+          "note": "Borne géométrique commune aux enfants du BSP persistant."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 142,
+          "note": "Reprend exactement gap=600 dans 1000×500 avec 3 fenêtres ; couvre aussi infini, normal et une seule fenêtre."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 60,
+          "note": "Les deux orientations du BSP persistant restent dans le conteneur avec gros gaps."
+        }
+      ],
+      "title": "Un espacement trop grand produit une fenêtre hors du conteneur",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "ec03c78cde8a",
+      "active_finding_id": null
+    },
+    {
+      "id": "REL-032",
+      "status": "partiel",
+      "reason": "L’instance Roadie.app ou tmux monolithique est maintenant arrêtée par scripts/stop avant les suppressions. Le mode modulaire fourni par scripts/start-modular lance aussi cinq processus avec leurs propres PID. scripts/stop ne lit que roadied.pid ou daemon-status.json : ces composants restent actifs et la désinstallation poursuit ses suppressions.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/uninstall",
+          "line": 30,
+          "note": "Arrêt via stop puis suppression"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/stop",
+          "line": 22,
+          "note": "Un seul PID considéré : roadied ou daemon-status"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start-modular",
+          "line": 47,
+          "note": "Six composants lancés séparément"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/roadied/main.swift",
+          "line": 479,
+          "note": "Verrous et processus distincts pour rail, border, focus-mouse, titlebar-menu et target-mode"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 191,
+          "note": "Arrêt Roadie.app couvert"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 225,
+          "note": "Refus si daemon ne sort pas"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/tests/test_lifecycle.py",
+          "line": 124,
+          "note": "Tests ne copient ni uninstall ni start-modular; pas de scénario de désinstallation modulaire"
+        }
+      ],
+      "title": "La désinstallation laisse une instance autonome active",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "e7af38869da7",
+      "active_finding_id": "REL-032"
+    },
+    {
+      "id": "TEST-001",
+      "status": "résolu",
+      "reason": "Les réponses sont décodées en types métier. Les tests vérifient les IDs, les scopes, les membres du groupe et les règles ; null ou un tableau vide ne passent plus.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift",
+          "line": 52,
+          "note": "Décodage et assertions de contenu des cinq familles de réponses."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:10",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ],
+      "title": "Le test des requêtes vérifie seulement le nom recopié dans la réponse",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "d0c322128472",
+      "active_finding_id": null
+    },
+    {
+      "id": "TEST-002",
+      "status": "résolu",
+      "reason": "Le contrôleur est réellement instancié avec un présentateur espion. Ses fermetures de sélection et de clic sont appelées. Les adaptateurs de focus, de géométrie et d’émission souris sont testés avec erreurs et replis. Les frontières natives Carbon/AX/CGEvent restent à valider manuellement, limite explicite distincte de l’absence ancienne de tests de raccordement.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 103,
+          "note": "Activation de la liste filtrée réellement transmise au présentateur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 147,
+          "note": "Activation de grille puis inspection des vrais CGEvent construits."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift",
+          "line": 14,
+          "note": "Échec de focus et replay observés à la frontière système."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift",
+          "line": 17,
+          "note": "Références AX et relecture du contenu cliqué."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotFTests.swift:61",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotBTests.swift:17"
+      ],
+      "title": "Les tests de cibles ne couvrent pas le raccordement aux effets système",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "e5f4fd8e2a01",
+      "active_finding_id": null
+    },
+    {
+      "id": "TEST-003",
+      "status": "résolu",
+      "reason": "Le test relit désormais les membres exacts et activeWindowID après create/add/focus/remove, puis l’absence du groupe après dissolve. Des tests séparés couvrent retrait du membre actif, dissolution sous deux membres, identifiants absents et déduplication.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "line": 26,
+          "note": "Contrôles métier intermédiaires depuis le store réel."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift: fichier intégral : 6 tests et helpers"
+      ],
+      "title": "Le test des commandes de groupe ne contrôle que changed",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "8ba46453624d",
+      "active_finding_id": null
+    },
+    {
+      "id": "TEST-004",
+      "status": "résolu",
+      "reason": "refresh transmet groupLabel dans BorderRenderModel au panneau réel. BorderView le dessine. Les nouveaux tests remplacent seulement le panneau et observent les modèles envoyés par refresh, y compris hors groupe et après dissolution. La borne de la pastille demandée en R2-05 est aussi présente.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift",
+          "line": 85,
+          "note": "groupLabel inclus dans le modèle de rendu."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift",
+          "line": 225,
+          "note": "Dessin réel de la pastille et du texte ; géométrie bornée."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotHTests.swift",
+          "line": 58,
+          "note": "refreshSendsGroupLabelOfActiveMemberToThePanel observe le modèle transmis."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotHTests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotDTests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift"
+      ],
+      "title": "Le test de l’indicateur de groupe ne couvre aucun rendu réellement utilisé",
+      "original_severity": "MEDIUM",
+      "original_fingerprint": "00301c58373a",
+      "active_finding_id": null
+    },
+    {
+      "id": "MIN-002",
+      "status": "résolu",
+      "reason": "Les neuf surcharges sont remplacées par une seule fonction générique Encodable, avec les mêmes réglages JSON.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2231,
+          "note": "SnapshotEncoding.json<T: Encodable>."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 245,
+          "name": "snapshotEncodingKeepsFormat : compact, indenté, deux modèles et JSON vide exact",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ],
+      "title": "Neuf surcharges répètent le même encodeur JSON",
+      "original_severity": "LOW",
+      "original_fingerprint": "4a3bef8c5af9",
+      "active_finding_id": null
+    },
+    {
+      "id": "MIN-003",
+      "status": "résolu",
+      "reason": "Les quatre branches de plage sur maxDepth, rows et columns ont été retirées. Les initialisateurs conservent les bornes antérieures. Une autre garde inatteignable préexistante, sur les raccourcis normalisés, est relevée séparément dans MIN-005.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1531,
+          "note": "validateAppTargets ne vérifie plus maxDepth déjà borné."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1557,
+          "note": "validateTargetGrid ne vérifie plus rows, columns ou maxDepth déjà bornés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 779,
+          "note": "Bornes maintenues dans TargetGridConfig.init."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 83,
+          "note": "Valeurs hors plages normalisées sans erreur, comportement conservé."
+        }
+      ],
+      "title": "Quatre contrôles de plage portent sur des valeurs déjà bornées",
+      "original_severity": "LOW",
+      "original_fingerprint": "a7c9d83b3ef6",
+      "active_finding_id": null
+    },
+    {
+      "id": "MIN-004",
+      "status": "résolu",
+      "reason": "assignActiveWindow et assign(windowID:...) délèguent au même corps moveWindow. Les gardes restent aux entrées, et les règles de placement/pin/intent sont centralisées.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 149,
+          "note": "Premier appel au helper partagé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 170,
+          "note": "Deuxième appel au même helper."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 176,
+          "note": "Unique corps de déplacement."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: transferts de bureau par les deux entrées publiques"
+      ],
+      "title": "Deux pipelines presque identiques gèrent les déplacements de bureau",
+      "original_severity": "LOW",
+      "original_fingerprint": "2bc893e8aacd",
+      "active_finding_id": null
+    },
+    {
+      "id": "PERF-007",
+      "status": "résolu",
+      "reason": "readLine cherche le saut de ligne dans le seul fragment reçu. Chaque octet est parcouru une fois pour cette recherche : le coût quadratique du préfixe a disparu. La taille de réponse reste Int.max; le défaut algorithmique constaté est corrigé, sans assertion de gain de latence mesuré.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 384,
+          "note": "Recherche limitée au nouveau fragment"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 316,
+          "note": "Limite de réponse encore Int.max"
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 140,
+          "note": "Fragments assemblés et données après newline ignorées"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 151,
+          "note": "Newline à la frontière de fragment"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+          "line": 164,
+          "note": "Fin de flux et bornes de taille"
+        }
+      ],
+      "title": "Le lecteur de ligne réanalyse tout le préfixe à chaque paquet",
+      "original_severity": "LOW",
+      "original_fingerprint": "7c585cdbd60d",
+      "active_finding_id": null
+    },
+    {
+      "id": "QUAL-001",
+      "status": "résolu",
+      "reason": "Les README FR/EN décrivent le glisser au bouton droit. Les deux guides attribuent le drag/drop au rail. Les pages CLI documentent explicitement l’exception search_hotkey. Les gestes concordent avec handleRightMouse et la création de WindowDragReorderController dans RailController.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.fr.md",
+          "line": 534,
+          "note": "Glisser au bouton droit."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.md",
+          "line": 540,
+          "note": "Right mouse button."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md",
+          "line": 40,
+          "note": "Drag/drop attribué au rail."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/features.md",
+          "line": 40,
+          "note": "Même correction anglaise."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/cli.md",
+          "line": 331,
+          "note": "Exception search_hotkey."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/cli.md",
+          "line": 329,
+          "note": "Même exception anglaise."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 344,
+          "note": "Traitement mouse-down/drag/up du bouton droit."
+        }
+      ],
+      "tests": [],
+      "title": "Les guides décrivent des interactions qui ne correspondent plus au code",
+      "original_severity": "LOW",
+      "original_fingerprint": "bfc011708120",
+      "active_finding_id": null
+    }
+  ],
+  "new_finding_ids": [
+    "PERF-008",
+    "PERF-009",
+    "REL-033",
+    "REL-034",
+    "REL-035",
+    "REL-036",
+    "REL-037",
+    "REL-039",
+    "REL-040",
+    "MIN-005",
+    "OBS-002",
+    "OBS-003",
+    "REL-038",
+    "REL-041",
+    "REL-042"
+  ]
+}

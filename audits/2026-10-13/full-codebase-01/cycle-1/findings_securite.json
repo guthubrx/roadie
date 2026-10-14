@@ -1,0 +1,46 @@
+{
+  "module": "03",
+  "findings": [
+    {
+      "id": "OBS-001",
+      "category": "observability",
+      "subcategory": "log_rotation",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/FileAdministration.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FileAdministration.swift",
+      "line": 140,
+      "title": "La rotation des logs ouverts coupe leur consultation courante",
+      "description": "Le nettoyage renomme stdout et stderr en .1. Le daemon conserve ses descripteurs ouverts vers le même fichier renommé. Aucun code ne rouvre les sorties. Les lectures via scripts/logs et les nettoyages suivants inspectent uniquement le nom sans suffixe.",
+      "evidence": "            if !dryRun {\n                let backup = URL(fileURLWithPath: \"\\(url.path).1\")\n                try? manager.removeItem(at: backup)\n                action.applied = (try? manager.moveItem(at: url, to: backup)) != nil\n            }\n            return action",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Avec un daemon lancé par launchd et un log supérieur au seuil, exécuter cleanup --apply. La sortie suivante du daemon est ajoutée dans .log.1. Le chemin .log a disparu et les nettoyages suivants ne bornent plus le fichier qui continue de grossir.",
+      "impact": "Le diagnostic courant perd les nouvelles traces. La rotation cesse de limiter la taille du log de cette instance.",
+      "path_type": "cold",
+      "remediation": "Choisir une rotation compatible avec les descripteurs ouverts. Prévoir une réouverture explicite coordonnée avec le daemon, ou une copie puis troncature documentée avec ses limites. N’annoncer la rotation réussie que lorsque les nouvelles écritures vont vers le journal courant.",
+      "verification": "Test avec un descripteur déjà ouvert : écrire, lancer la rotation, réécrire avec le même descripteur, puis vérifier que le lecteur courant voit la nouvelle ligne et que les rotations suivantes fonctionnent.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/install",
+          "line": 126
+        },
+        {
+          "file": "scripts/logs",
+          "line": 4
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+          "line": 59
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-security.json",
+      "source_id": "OBS-301",
+      "remediation_applied": false,
+      "fingerprint": "7ea985b891fd"
+    }
+  ]
+}

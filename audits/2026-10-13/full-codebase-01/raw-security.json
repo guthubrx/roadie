@@ -1,0 +1,373 @@
+{
+  "audit_version": "14.0",
+  "scope": "Sécurité, IPC, persistance et cycle de vie",
+  "mode": "readonly",
+  "findings": [
+    {
+      "id": "REL-301",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/JSONPersistence.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/JSONPersistence.swift",
+      "line": 95,
+      "title": "Une mutation renvoie un succès métier après échec de persistance",
+      "description": "La transaction conserve correctement le fichier existant, mais avale les erreurs de verrouillage et d’écriture. Elle retourne tout de même la valeur calculée par le bloc métier. RailRuntimeStateStore.setPinned renvoie ainsi isPinned=true, et la commande rail pin affiche ce résultat avec un code 0, même si aucune nouvelle valeur n’a été persistée. Le cas du fichier corrompu exécute aussi le bloc sur une valeur de repli.",
+      "evidence": "        var value = original ?? defaultValue\n        let output = try body(&value)\n        guard original != value else { return output }\n        do {\n            try writeLocked(value, to: url, existing: nil)\n            publish(value, at: url, signature: FileSignature(path: url.path))\n        } catch {\n            fputs(\"roadie: failed to persist \\(label): \\(error)\\n\", stderr)\n        }\n        return output",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Dans un environnement de test isolé, rendre rail.json illisible ou invalide puis appeler rail pin. Le bloc setPinned produit true, JSONPersistence refuse l’écriture, et CLICommandRouter termine avec 0. Une lecture suivante retrouve l’état précédent ou la valeur par défaut.",
+      "impact": "Un script appelant prend une mutation perdue pour une réussite. Pour les commandes routées, le message fputs reste en plus dans stderr du daemon, et non dans la réponse CLI.",
+      "path_type": "hot",
+      "remediation": "Rentrer explicitement le résultat de persistance dans le contrat de mutate, ou propager les erreurs. Faire dépendre le code de sortie CLI de ce résultat et conserver la protection contre l’écrasement des fichiers corrompus.",
+      "verification": "Injecter une erreur de verrou, une erreur d’écriture et un fichier corrompu. Vérifier à chaque fois le code de sortie non nul et une erreur dans la réponse CLI. Vérifier que le fichier original est inchangé.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/JSONPersistence.swift",
+          "line": 76
+        },
+        {
+          "file": "Sources/RoadieDaemon/RailRuntimeState.swift",
+          "line": 54
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 545
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+          "line": 243
+        }
+      ]
+    },
+    {
+      "id": "REL-302",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 239,
+      "title": "Le PID informatif ne prouve pas que le verrou du daemon est libre",
+      "description": "Le client assimile un fichier PID absent ou illisible à une absence du daemon. Pourtant ComponentLockFile possède le verrou avant d’écrire le PID, et scripts/start supprime ce PID même si le processus vivant ne correspond pas au binaire de développement. Le client peut alors exécuter une commande localement alors que le daemon possède encore le verrou et son socket.",
+      "evidence": "    public static func isDaemonLockHeld(path: String = defaultLockPath) -> Bool {\n        let pidPath = (path as NSString).deletingPathExtension + \".pid\"\n        guard let raw = try? String(contentsOfFile: pidPath, encoding: .utf8),\n              let pid = Int32(raw.trimmingCharacters(in: .whitespacesAndNewlines))\n        else { return false }\n        return ProcessLiveness.isAlive(pid)\n    }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Démarrer un daemon autonome depuis Roadie.app, puis utiliser scripts/start : le test du chemin repo/bin/roadied ne reconnaît pas le daemon autonome, mais rm -f supprime roadied.pid. Une commande focus ou stage suivante passe alors dans local() malgré le daemon toujours vivant. Le même état existe brièvement entre flock et l’écriture du PID.",
+      "impact": "Le principe du seul exécutant des actions n’est plus garanti. La CLI peut utiliser une identité Accessibility différente et des registres de géométrie distincts pendant que le daemon continue ses actions.",
+      "path_type": "hot",
+      "remediation": "Essayer le socket avant le repli et établir réellement l’exclusion interprocessus pour toute la durée de l’exécution locale. Coordonner cette réservation avec un démarrage qui attend un client local au lieu d’échouer. Conserver le PID en cas de processus vivant non reconnu dans les scripts.",
+      "verification": "Test isolé : prendre le vrai verrou sans publier de PID, puis appeler execute avec un callback local espion. Exiger zéro exécution locale. Couvrir aussi une instance Roadie.app autonome et le démarrage simultané de la CLI.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 219
+        },
+        {
+          "file": "Sources/RoadieDaemon/ComponentLockFile.swift",
+          "line": 64
+        },
+        {
+          "file": "scripts/start",
+          "line": 43
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/CLICommandRouterTests.swift",
+          "line": 249
+        }
+      ]
+    },
+    {
+      "id": "OBS-301",
+      "category": "observability",
+      "subcategory": "log_rotation",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/FileAdministration.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FileAdministration.swift",
+      "line": 140,
+      "title": "La rotation des logs ouverts coupe leur consultation courante",
+      "description": "Le nettoyage renomme stdout et stderr en .1. Le daemon conserve ses descripteurs ouverts vers le même fichier renommé. Aucun code ne rouvre les sorties. Les lectures via scripts/logs et les nettoyages suivants inspectent uniquement le nom sans suffixe.",
+      "evidence": "            if !dryRun {\n                let backup = URL(fileURLWithPath: \"\\(url.path).1\")\n                try? manager.removeItem(at: backup)\n                action.applied = (try? manager.moveItem(at: url, to: backup)) != nil\n            }\n            return action",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Avec un daemon lancé par launchd et un log supérieur au seuil, exécuter cleanup --apply. La sortie suivante du daemon est ajoutée dans .log.1. Le chemin .log a disparu et les nettoyages suivants ne bornent plus le fichier qui continue de grossir.",
+      "impact": "Le diagnostic courant perd les nouvelles traces. La rotation cesse de limiter la taille du log de cette instance.",
+      "path_type": "cold",
+      "remediation": "Choisir une rotation compatible avec les descripteurs ouverts. Prévoir une réouverture explicite coordonnée avec le daemon, ou une copie puis troncature documentée avec ses limites. N’annoncer la rotation réussie que lorsque les nouvelles écritures vont vers le journal courant.",
+      "verification": "Test avec un descripteur déjà ouvert : écrire, lancer la rotation, réécrire avec le même descripteur, puis vérifier que le lecteur courant voit la nouvelle ligne et que les rotations suivantes fonctionnent.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/install",
+          "line": 126
+        },
+        {
+          "file": "scripts/logs",
+          "line": 4
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+          "line": 59
+        }
+      ]
+    },
+    {
+      "id": "REL-303",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/EventSubscriptionService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/EventSubscriptionService.swift",
+      "line": 74,
+      "title": "L’abonnement perd des événements lors du remplacement du journal",
+      "description": "Le curseur ne mémorise que le nombre d’octets lus. Une rotation est détectée seulement si le nouveau fichier est plus court. Le service ne termine jamais la lecture de l’ancien fichier renommé et peut reprendre au milieu d’un nouveau fichier de taille égale ou supérieure.",
+      "evidence": "        defer { try? handle.close() }\n        do {\n            // Fichier plus court que le curseur : il a tourné (rotation), on relit depuis 0.\n            let size = try handle.seekToEnd()\n            let offset = size < cursor.offset ? 0 : cursor.offset\n            try handle.seek(toOffset: offset)\n            let data = try handle.readToEnd() ?? Data()",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Lire A et conserver le curseur. Ajouter B, puis faire tourner le journal avant la lecture suivante en ajoutant C. B reste dans events.jsonl.1, que le service ne consulte pas. Si le nouveau fichier atteint déjà la taille du curseur, C peut également être sauté ou décodé depuis le milieu d’une ligne.",
+      "impact": "Le flux events subscribe manque silencieusement des notifications. Le consommateur ne peut plus reconstruire l’état par la seule succession des événements.",
+      "path_type": "hot",
+      "remediation": "Associer le curseur à l’identité du fichier (device/inode) et conserver le descripteur jusqu’à épuisement de l’ancienne génération. Reprendre ensuite le nouveau fichier depuis zéro. Si la rétention a déjà supprimé une génération, publier explicitement une rupture du flux.",
+      "verification": "Tester une rotation avec une dernière ligne non encore lue, puis des fichiers de remplacement plus courts, de même taille et plus longs. Vérifier chaque identifiant attendu exactement une fois. Le test existant ne couvre que le fichier plus court après consommation complète.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 18
+        },
+        {
+          "file": "Sources/RoadieDaemon/EventLog.swift",
+          "line": 265
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+          "line": 388
+        }
+      ]
+    },
+    {
+      "id": "REL-304",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "MEDIUM",
+      "file": "scripts/uninstall",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/uninstall",
+      "line": 28,
+      "title": "La désinstallation laisse une instance autonome active",
+      "description": "Le script arrête seulement le LaunchAgent s’il est chargé. Une instance démarrée en ouvrant Roadie.app ou depuis tmux n’est pas arrêtée. Le script supprime ensuite les binaires et propose la suppression des dossiers d’état alors que cette instance continue à les utiliser.",
+      "evidence": "# 2. Arrêter et décharger le service (sans kill : launchd envoie le signal d'arrêt).\nif launchctl print \"$service\" >/dev/null 2>&1; then\n  launchctl bootout \"$service\"\n  echo \"$label arrêté\"\nelse\n  echo \"$label n'était pas chargé\"\nfi\n\n# 3. Supprimer le LaunchAgent et les binaires installés.\nrm -f \"$plist\" \"$local_bin_dir/roadied\" \"$local_bin_dir/roadie\"",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Dans un environnement de validation isolé, ouvrir Roadie.app sans LaunchAgent chargé puis lancer la désinstallation. Le bloc launchctl prend la branche non chargé, mais les suppressions s’exécutent quand même. Le processus autonome reste vivant.",
+      "impact": "Roadie continue de gérer les fenêtres après désinstallation. La suppression facultative d’état peut intervenir pendant son utilisation, et les fichiers peuvent être recréés par l’instance restée active.",
+      "path_type": "cold",
+      "remediation": "Réutiliser la procédure de scripts/stop avant toute suppression. Vérifier que tous les composants concernés sont arrêtés. Refuser la suppression des binaires et de l’état si l’arrêt n’est pas confirmé.",
+      "verification": "Ajouter aux tests simulés de cycle de vie le cas Roadie.app autonome sans LaunchAgent et le cas d’un processus qui refuse de sortir. Aucune suppression ne doit suivre un échec d’arrêt.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/stop",
+          "line": 39
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 541
+        },
+        {
+          "file": "scripts/tests/test_lifecycle.py",
+          "line": 124
+        }
+      ]
+    },
+    {
+      "id": "REL-305",
+      "category": "reliability",
+      "subcategory": "state_consistency",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 77,
+      "title": "Une annulation différée peut supprimer le socket suivant",
+      "description": "stop annule la source de manière asynchrone, puis retourne. Le handler d’annulation supprime ensuite le chemin sans vérifier qu’il désigne encore son socket. start peut déjà avoir lié une nouvelle instance au même chemin. Le redémarrage normal entre deux processus possède aussi une fenêtre possible entre libération du verrou et annulation effective.",
+      "evidence": "        source.setEventHandler { [weak self] in self?.acceptPending() }\n        source.setCancelHandler {\n            close(fd)\n            unlink(path)\n        }",
+      "exploitability": "LIKELY",
+      "verification_status": "plausible",
+      "exploitation_scenario": "Appeler start deux fois avec le même chemin, tandis que l’ancienne file socket traite encore un client. Le second start crée son socket avant l’exécution différée du premier cancel handler. Ce handler peut alors supprimer le nouveau chemin.",
+      "impact": "Le nouveau serveur peut rester vivant avec un socket inaccessible par son nom. Le scénario a été établi par l’ordre du code, mais n’a pas été reproduit à l’exécution.",
+      "path_type": "cold",
+      "remediation": "Supprimer le chemin de manière synchrone pendant que le propriétaire détient encore le verrou d’instance ; ne laisser au handler différé que la fermeture du descripteur. À défaut, vérifier l’identité du fichier avant sa suppression.",
+      "verification": "Test isolé de redémarrage sur le même chemin avec un client lent sur l’ancienne instance. Après le handler d’annulation, vérifier que le nouveau chemin existe et que la nouvelle instance répond.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 62
+        },
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 87
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 210
+        }
+      ]
+    },
+    {
+      "id": "PERF-301",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 329,
+      "title": "Le lecteur de ligne réanalyse tout le préfixe à chaque paquet",
+      "description": "Le commentaire annonce O(n), mais firstIndex repart du début de data après chaque réception. Avec des fragments de taille fixe et le saut de ligne en fin de réponse, le travail cumulé est quadratique. Les requêtes sont bornées à 64 Kio, mais les réponses sont lues avec limit égal à Int.max.",
+      "evidence": "    /// Lit jusqu'au premier `\\n` (exclu) ou la fin du flux. O(n), n = taille de la ligne.\n    static func readLine(_ fd: Int32, limit: Int, deadline: Date) -> ReadResult {\n        var data = Data()\n        var chunk = [UInt8](repeating: 0, count: 4096)\n        while true {\n            if let newline = data.firstIndex(of: 0x0A) {\n                return newline - data.startIndex > limit ? .tooLarge : .line(data[data.startIndex..<newline])\n            }\n            guard data.count <= limit else { return .tooLarge }\n            let count = recv(fd, &chunk, chunk.count, 0)",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture",
+      "exploitation_scenario": "Une réponse JSON de grande taille arrive en nombreux fragments avant son unique saut de ligne final. Chaque fragment déclenche une nouvelle recherche sur tous les octets déjà reçus.",
+      "impact": "Le coût CPU de lecture augmente plus vite que la taille de la réponse. Aucun temps d’exécution n’a été mesuré pendant cet audit.",
+      "path_type": "hot",
+      "remediation": "Rechercher le saut de ligne seulement dans le nouveau fragment ou mémoriser le dernier index parcouru. Fixer également une limite de réponse conforme au contrat attendu.",
+      "verification": "Injecter la même ligne en fragments fixes pour plusieurs tailles et vérifier que chaque octet est parcouru au plus une fois, sans changer les règles de fin de flux et de taille maximale.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 261
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    {
+      "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+      "line": 112,
+      "description": "Le socket naît en 0600 sous umask 0177. Les requêtes sont plafonnées à 64 Kio, les versions sont vérifiées, les commandes en flux continu sont refusées et SO_NOSIGPIPE évite une terminaison sur client fermé."
+    },
+    {
+      "file": "Sources/RoadieDaemon/ComponentLockFile.swift",
+      "line": 60,
+      "description": "Le verrou d’instance est tenu par flock et O_CLOEXEC. Il est libéré aussi après crash. Le fichier de verrou reste en place pour éviter une course sur son inode."
+    },
+    {
+      "file": "Sources/RoadieDaemon/JSONPersistence.swift",
+      "line": 192,
+      "description": "Le cache lit signature et données depuis le même descripteur. Les mutations utilisent un verrou interprocessus et un remplacement atomique. Les fichiers corrompus sont sauvegardés et ne sont pas écrasés par mutate."
+    },
+    {
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 1753,
+      "description": "La relance utilise un exécutable système fixe et un tableau d’arguments. Le watcher est lancé avec posix_spawn et des arguments fixes, sans shell."
+    },
+    {
+      "file": "scripts/stop",
+      "line": 34,
+      "description": "Le script valide le PID puis l’exécutable avant SIGTERM. Il garde le fichier PID lorsque le processus refuse de sortir. Des tests simulés couvrent explicitement Firefox et un processus inconnu."
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/EventSubscriptionService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FileLock.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/ComponentLockFile.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/ProcessLiveness.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/JSONPersistence.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FileAdministration.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CLICommandRouter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/EventLog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailRuntimeState.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/roadie/main.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/roadied/main.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Makefile",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/start",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/stop",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/status",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/roadiedctl",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/start-modular",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/install",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/uninstall",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/build-app-bundle",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/package-dmg",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/with-xcode",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/doctor",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/test",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/roadie",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/roadied",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/logs",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/btt/roadie-record-toggle.sh",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/scripts/tests/test_lifecycle.py",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/EventSubscriptionTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/FileAdministrationTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/FileLockTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/ComponentLockFileTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/specs/016-roadie-stabilization/contracts/cli-daemon-socket.md"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/CLICommandRouterTests.swift",
+      "ranges": [
+        [
+          1,
+          335
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+      "ranges": [
+        [
+          235,
+          280
+        ],
+        [
+          360,
+          420
+        ]
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetMacroService.swift",
+      "ranges": [
+        [
+          310,
+          375
+        ]
+      ]
+    }
+  ],
+  "warnings": [
+    "Aucun build, test, signal ou appel au daemon réel n’a été exécuté par ce sous-agent. Les constats confirmés le sont par lecture des chaînes d’appels et scénarios déterministes ; aucun résultat de reproduction runtime n’est revendiqué.",
+    "Les scripts measure-layout-reactivity et leurs tests ne sont pas analysés dans ce volet : ils relèvent du volet performances.",
+    "Les tests IPC couvrent le parcours nominal, les permissions 0600, la version et la requête trop grande. Ils ne couvrent pas la génération du socket, les clients lents ni le cas vrai verrou tenu avec PID absent.",
+    "Le test de rotation d’abonnement existant couvre bien la remise à zéro et la ligne partielle, mais pas la dernière ligne non lue avant rotation ni une nouvelle génération plus grande.",
+    "Aucune faille de sécurité HIGH/CRITICAL confirmée dans ce volet. Les hypothèses de symlink arbitraire ou de franchissement de frontière utilisateur n’ont pas été élevées en constat sans modèle d’attaquant démontré.",
+    "Contrat specs/016-roadie-stabilization/contracts/cli-daemon-socket.md obsolète sur la sonde flock et la liste de commandes. Signalé séparément au coordinateur pour fusion au volet documentation."
+  ],
+  "tests_executed": [],
+  "counter_audit_required": []
+}

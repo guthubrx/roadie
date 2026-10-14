@@ -101,12 +101,12 @@ struct CLICommandRouterTests {
 
     @Test
     func actionWithoutChangeExitsZeroAndFailureExitsOne() {
-        #expect(CLICommandRouter.actionExitCode(changed: true, message: "focus left") == 0)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "no neighbor left") == 0)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "warp left: no structural change") == 0)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "display 2: already on target display") == 0)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "stage switch-position 9: not found") == 1)
-        #expect(CLICommandRouter.actionExitCode(changed: false, message: "focus: unknown window 12") == 1)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult(message: "focus left", changed: true).outcome) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult.noChange("no neighbor left").outcome) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult.noChange("warp left: no structural change").outcome) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult.noChange("display 2: already on target display").outcome) == 0)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult.failure("stage switch-position 9: not found").outcome) == 1)
+        #expect(CLICommandRouter.actionExitCode(outcome: StageCommandResult.failure("focus: unknown window 12").outcome) == 1)
     }
 
     @Test

@@ -38,6 +38,8 @@ public final class LayoutMaintainer {
     private let intervalSeconds: TimeInterval
     private let now: () -> Date
     private let staticRuleEngine: WindowRuleEngine?
+    /// Configuration active du processus, rechargée par `roadie config reload` (REL-014).
+    private let configService: ConfigReloadService
     private let store: StageStore
     private let dragActivity: WindowDragActivity
     private let commandActivity: LayoutCommandActivity
@@ -58,7 +60,8 @@ public final class LayoutMaintainer {
     private let scanReplay: ReplayableSnapshotProvider?
     private let episodes: EpisodeContext
     private var cachedRuleEngine: WindowRuleEngine?
-    private var cachedRulesVersion: String?
+    /// Règles du moteur en cache ; nil = jamais lues.
+    private var cachedRules: [WindowRule]?
     private var clampedFrames: [UInt32: ClampedFrame] = [:]
     private var failedFrames: [UInt32: FailedFrame] = [:]
     /// Transfert échoué : attend avant de refaire la même réparation (même PID et même cadre).
@@ -131,6 +134,7 @@ public final class LayoutMaintainer {
         spaceProbe: ((String) -> Bool?)? = nil,
         readFrame: ((WindowSnapshot) -> CGRect?)? = nil,
         episodes: EpisodeContext = .shared,
+        configService: ConfigReloadService = .shared,
         now: @escaping () -> Date = Date.init
     ) {
         let replay = service == nil ? ReplayableSnapshotProvider(base: LiveSystemSnapshotProvider()) : scanReplay
@@ -140,6 +144,7 @@ public final class LayoutMaintainer {
         self.events = events
         self.intervalSeconds = intervalSeconds
         self.staticRuleEngine = ruleEngine
+        self.configService = configService
         self.store = store ?? service.effectiveStageStore
         self.dragActivity = dragActivity
         self.commandActivity = commandActivity
@@ -1796,22 +1801,36 @@ public final class LayoutMaintainer {
         }
     }
 
-    public static func defaultRuleEngine() -> WindowRuleEngine? {
-        let config = ConfigReloadService.shared.currentConfig()
-        guard !config.rules.isEmpty else {
-            return nil
-        }
-        return WindowRuleEngine(rules: config.rules)
+    /// Valeur du critère `is_floating` des règles (REL-007). Flottante = non gérée par la mosaïque :
+    /// - hors du tiling (`isTileCandidate` faux : floating_bundles, action de règle `floating`,
+    ///   popup) - c'est aussi `floating` dans `TargetInspectionService` ;
+    /// - épinglée (jamais membre de la mosaïque, restaurée à son dernier cadre) ;
+    /// - membre d'une stage en mode `float`.
+    /// Une candidate sans scope (membre gardé pour un écran débranché, ou aucun écran) donne nil :
+    /// son état n'est pas observable, aucune règle `is_floating` ne lui correspond, donc aucune
+    /// règle `is_floating = true` ne la déplace hors de sa stage d'origine (`scope == nil` n'est pas
+    /// une preuve de flottement). `AutomationSnapshotService` publie la même valeur, nil rendu faux. O(1).
+    public static func ruleFloatingState(of entry: ScopedWindowSnapshot, in state: RoadieState) -> Bool? {
+        guard entry.window.isTileCandidate else { return true }
+        guard let scope = entry.scope else { return nil }
+        if entry.pin != nil { return true }
+        return state.stage(scope: scope).map { $0.mode == .float }
     }
 
+    /// Moteur de règles de la configuration réellement active (REL-014). `currentConfig()` lit le
+    /// chemin actif, y compris celui d'un `roadie config reload <fichier>` : le cache est invalidé
+    /// par le contenu des règles, pas par la version du fichier par défaut. Des règles identiques
+    /// venues d'un autre fichier donnent un moteur identique : rien à invalider.
+    // O(r) par passe (comparaison des règles, r = nombre de règles) ; avant : relecture et somme de
+    // contrôle complètes du fichier par défaut et de ses règles générées à chaque passe.
     private func currentRuleEngine() -> WindowRuleEngine? {
         if let staticRuleEngine {
             return staticRuleEngine
         }
-        let version = RoadieConfigLoader.rulesVersion()
-        if cachedRulesVersion != version {
-            cachedRulesVersion = version
-            cachedRuleEngine = Self.defaultRuleEngine()
+        let rules = configService.currentConfig().rules
+        if cachedRules != rules {
+            cachedRules = rules
+            cachedRuleEngine = rules.isEmpty ? nil : WindowRuleEngine(rules: rules)
             emittedRuleSkippedKeys.removeAll()
             emittedRulePlacementIssueKeys.removeAll()
         }
@@ -1858,19 +1877,41 @@ public final class LayoutMaintainer {
         observedRulePlacementWindowIDs.formIntersection(liveWindowIDs)
         pruneRuleEventKeys(keeping: liveWindowIDs)
         for entry in snapshot.windows where entry.window.isOnScreen {
+            // Rôle et sous-rôle AX transmis comme dans la politique du relevé ; état flottant
+            // explicite (REL-007).
             let context = WindowRuleMatchContext(
+                role: entry.window.role,
+                subrole: entry.window.subrole,
                 display: entry.scope?.displayID.rawValue,
                 desktop: entry.scope.map { String($0.desktopID.rawValue) },
-                stage: entry.scope?.stageID.rawValue
+                stage: entry.scope?.stageID.rawValue,
+                isFloating: Self.ruleFloatingState(of: entry, in: snapshot.state)
             )
             let application = ruleEngine.evaluate(window: entry.window, context: context)
             appendRuleEvents(application, window: entry.window)
-            if let placement = applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+            switch applyRulePlacement(application, entry: entry, snapshot: snapshot) {
+            case .placed(let placement):
                 placements.append(placement)
+            case .deferred:
+                // Destination indisponible : fenêtre non marquée, retentée à la passe suivante
+                // (REL-008). Le refus est journalisé une seule fois (clé d'incident).
+                continue
+            case .settled:
+                break
             }
             observedRulePlacementWindowIDs.insert(entry.window.id)
         }
         return placements
+    }
+
+    /// Issue d'une règle de placement pour une fenêtre dans la passe.
+    private enum RulePlacementOutcome {
+        /// Fenêtre placée dans la passe.
+        case placed(RulePlacement)
+        /// Destination indisponible (écran absent, bureau inconnu) : à retenter.
+        case deferred
+        /// Aucune action ou refus définitif.
+        case settled
     }
 
     private func appendRuleFailedEvents(_ validationErrors: [ConfigValidationItem]) {
@@ -2028,21 +2069,21 @@ public final class LayoutMaintainer {
         _ application: WindowRuleApplication,
         entry: ScopedWindowSnapshot,
         snapshot: DaemonSnapshot
-    ) -> RulePlacement? {
+    ) -> RulePlacementOutcome {
         guard application.matchedRuleID != nil,
               application.assignDisplay != nil || application.assignDesktop != nil || application.assignStage != nil
-        else { return nil }
+        else { return .settled }
         guard !application.excluded else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "excluded")
-            return nil
+            return .settled
         }
         guard entry.window.isTileCandidate else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "not a tile candidate")
-            return nil
+            return .settled
         }
         guard !observedRulePlacementWindowIDs.contains(entry.window.id) else {
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, reason: "window already managed")
-            return nil
+            return .settled
         }
 
         // Décision et écriture dans une seule transaction sur l'état relu sous verrou (SPEC-016
@@ -2084,10 +2125,10 @@ public final class LayoutMaintainer {
         switch decision {
         case .skipped(let reason, let target):
             appendPlacementEvent("rule.placement_skipped", application: application, entry: entry, destination: target, reason: reason)
-            return nil
+            return .settled
         case .deferred:
             appendPlacementEvent("rule.placement_deferred", application: application, entry: entry, reason: "destination unavailable")
-            return nil
+            return .deferred
         case .placed(let placed):
             destination = placed
         }
@@ -2103,7 +2144,7 @@ public final class LayoutMaintainer {
             destination: destination.scope,
             reason: "placed"
         )
-        return RulePlacement(window: entry.window, follow: destination.follow)
+        return .placed(RulePlacement(window: entry.window, follow: destination.follow))
     }
 
     /// Fenêtre déplacée à la main sur un autre écran : adoptée par la stage active de cet écran,
@@ -2645,9 +2686,9 @@ public final class LayoutMaintainer {
                     && !clampedIDs.contains(entry.window.id)
             }
             guard !siblingEntries.isEmpty else { continue }
-            let siblingIDs = stage.windowIDs.filter { id in
-                siblingEntries.contains { $0.window.id == id }
-            }
+            // Index des voisines hors boucle : O(n + m) au lieu de O(n · m), ordre de la stage conservé (PERF-004).
+            let siblingIDSet = Set(siblingEntries.map(\.window.id))
+            let siblingIDs = stage.windowIDs.filter(siblingIDSet.contains)
             guard !siblingIDs.isEmpty else { continue }
 
             let currentFrames = siblingEntries.reduce(into: [WindowID: CGRect]()) { result, entry in
@@ -2662,7 +2703,8 @@ public final class LayoutMaintainer {
                 priorityWindowIDs: [],
                 newWindowIDs: [],
                 splitPolicy: service.effectiveConfig.tiling.splitPolicy,
-                innerGap: service.innerGap()
+                innerGap: service.innerGap(),
+                masterRatio: service.effectiveConfig.tiling.masterRatio
             ))
             let windowsByID = siblingEntries.reduce(into: [WindowID: WindowSnapshot]()) { result, entry in
                 result[entry.window.id] = entry.window
@@ -2682,7 +2724,8 @@ public final class LayoutMaintainer {
     /// Scopes actifs sans arbre (A3) où au moins deux fenêtres clampées se chevauchent ou débordent encore.
     /// Replanifie avec les tailles minimales connues ; garde la fenêtre focalisée et cache les
     /// autres seulement si aucune disposition n'existe (dernier recours journalisé, FR-003).
-    // O(s · n³) au pire — s scopes concernés, n fenêtres par scope (n petit).
+    // O(r + s · n³) au pire - r résultats indexés une fois, s scopes concernés, n fenêtres par scope.
+    // Avant PERF-009, la préparation des minimums ajoutait O(n·r) par scope.
     private func resolveInfeasibleClampedScopes(
         from result: ApplyResult,
         in snapshot: DaemonSnapshot
@@ -2704,6 +2747,9 @@ public final class LayoutMaintainer {
             frames[item.windowID] = item.requested.cgRect
         }
         let innerGap = CGFloat(service.innerGap())
+        // Index des refus partagé par tous les scopes : un seul parcours des résultats (PERF-009).
+        let refusedMinimums = Self.refusedMinimumSizes(in: result)
+        let minimumFloor = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)
 
         for (optionalScope, scopedClampedItems) in clampedScopes {
             guard let scope = optionalScope,
@@ -2736,8 +2782,14 @@ public final class LayoutMaintainer {
                 .compactMap { requestedFrames[$0] ?? liveFrames[$0] }
                 .reduce(CGRect.null) { $0.union($1) }
                 .intersection(visibleFrame)
+            // Taille minimale connue : plancher, refus mémorisés, refus de ce résultat.
+            // O(n) par scope avec l'index ; avant : O(n·r), un parcours des r résultats par fenêtre.
             var minimumSizes = orderedIDs.reduce(into: [WindowID: CGSize]()) { sizes, id in
-                sizes[id] = knownMinimumSize(of: id, in: result)
+                var size = Self.largest(minimumFloor, refusedMinimums[id] ?? .zero)
+                if let known = clampedFrames[id.rawValue] {
+                    size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))
+                }
+                sizes[id] = size
             }
             // Deux essais au plus : le premier peut révéler de nouveaux minimums.
             var arranged = false
@@ -2806,18 +2858,15 @@ public final class LayoutMaintainer {
         return (resolution, commands, hidden)
     }
 
-    /// Taille minimale connue d'une fenêtre : refus de ce résultat et refus mémorisés. O(r).
-    private func knownMinimumSize(of windowID: WindowID, in result: ApplyResult) -> CGSize {
-        var size = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)
-        if let known = clampedFrames[windowID.rawValue] {
-            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))
+    /// Minimums révélés par les refus (`clamped` avec cadre réel) d'un résultat, par fenêtre.
+    /// Plusieurs refus d'une même fenêtre gardent le plus grand minimum de chaque axe.
+    // O(r) - un seul parcours des r éléments du résultat.
+    static func refusedMinimumSizes(in result: ApplyResult) -> [WindowID: CGSize] {
+        result.items.reduce(into: [WindowID: CGSize]()) { sizes, item in
+            guard item.status == .clamped, let actual = item.actual else { return }
+            let size = minimumSize(requested: item.requested, actual: actual)
+            sizes[item.windowID] = sizes[item.windowID].map { largest($0, size) } ?? size
         }
-        for item in result.items where item.windowID == windowID && item.status == .clamped {
-            if let actual = item.actual {
-                size = Self.largest(size, Self.minimumSize(requested: item.requested, actual: actual))
-            }
-        }
-        return size
     }
 
     /// Vrai si des cadres se chevauchent ou débordent de la zone visible au-delà de la tolérance
@@ -3088,8 +3137,10 @@ public final class LayoutMaintainer {
                 guard entry.scope == scope, entry.window.isTileCandidate else { return nil }
                 return (entry.window.id, entry.window.frame)
             })
-            for (id, frame) in resultFrames {
-                placements[id] = frame
+            // Seules les frames des membres de la stage : une fenêtre écrite sur un autre écran
+            // dans la même passe n'empêche pas de sauver cette disposition (REL-009). O(k).
+            for id in stage.windowIDs {
+                if let frame = resultFrames[id] { placements[id] = frame }
             }
             guard Set(placements.keys) == Set(stage.windowIDs) else { continue }
             service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)

@@ -96,7 +96,9 @@ public struct AutomationEventCatalog: Equatable, Sendable {
         "titlebar_context_menu.action",
         "titlebar_context_menu.failed",
         "state.snapshot",
-        "state.load_failed"
+        "state.load_failed",
+        // Rupture du flux `events subscribe` : des événements ont pu être perdus (REL-018).
+        "events.gap"
     ]
 
     /// Événements de placement de la SPEC-017 (contrat `layout-events.md`). Noms plats, comme `layout_apply`.

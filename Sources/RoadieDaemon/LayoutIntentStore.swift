@@ -95,6 +95,16 @@ public struct LayoutIntentStore: Sendable {
         mutate { $0.removeValue(forKey: scope.description) }
     }
 
+    /// Variantes pour les commandes (REL-021) : lèvent `JSONPersistence.PersistenceError` si
+    /// rien n'a été écrit, au lieu d'un succès silencieux.
+    public func saveChecked(_ intent: LayoutIntent) throws {
+        try mutateChecked { $0[intent.scope.description] = intent }
+    }
+
+    public func removeChecked(scope: StageScope) throws {
+        try mutateChecked { $0.removeValue(forKey: scope.description) }
+    }
+
     /// Purge les intents dont le display est absent depuis plus de `missingGrace` (10 min par
     /// défaut, un débranchement bref ne perd pas la disposition). Pré-contrôle sans verrou :
     /// au repos, ni verrou ni écriture. O(n), n = nombre d'intents.
@@ -117,6 +127,12 @@ public struct LayoutIntentStore: Sendable {
     @discardableResult
     public func mutate<R>(_ body: (inout [String: LayoutIntent]) throws -> R) rethrows -> R {
         try JSONPersistence.mutate([String: LayoutIntent].self, at: url, default: [:], label: "layout intent", body)
+    }
+
+    /// Comme `mutate`, mais lève si rien n'a été écrit (commandes, REL-021).
+    @discardableResult
+    func mutateChecked<R>(_ body: (inout [String: LayoutIntent]) throws -> R) throws -> R {
+        try JSONPersistence.mutateChecked([String: LayoutIntent].self, at: url, default: [:], label: "layout intent", body)
     }
 
     private func load() -> [String: LayoutIntent] {

@@ -146,7 +146,17 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             at: url.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try render(rules).write(to: url, atomically: true, encoding: .utf8)
+        let text = render(rules)
+        // Relire le texte produit avant de remplacer le fichier : une règle altérée ne doit jamais être écrite (REL-035).
+        let check = FileManager.default.temporaryDirectory
+            .appendingPathComponent("roadie-rules-check-\(UUID().uuidString).toml")
+        defer { try? FileManager.default.removeItem(at: check) }
+        try text.write(to: check, atomically: true, encoding: .utf8)
+        let reloaded = try RoadieConfigLoader.loadRulesFile(from: check.path)
+        guard reloaded == rules.sorted(by: { $0.id < $1.id }) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "les regles relues different des regles a ecrire"])
+        }
+        try text.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func render(_ rules: [WindowRule]) -> String {
@@ -172,31 +182,51 @@ public final class WindowRuleAffinityService: @unchecked Sendable {
             append("display", rule.match.display, to: &lines)
             append("desktop", rule.match.desktop, to: &lines)
             append("stage", rule.match.stage, to: &lines)
-            if let isFloating = rule.match.isFloating {
-                lines.append("is_floating = \(isFloating ? "true" : "false")")
-            }
+            appendBool("is_floating", rule.match.isFloating, to: &lines)
             lines.append("")
             lines.append("[rules.action]")
             append("assign_desktop", rule.action.assignDesktop, to: &lines)
             append("assign_display", rule.action.assignDisplay, to: &lines)
             append("assign_stage", rule.action.assignStage, to: &lines)
-            if let follow = rule.action.follow {
-                lines.append("follow = \(follow ? "true" : "false")")
+            appendBool("follow", rule.action.follow, to: &lines)
+            // Les autres actions des règles du fichier doivent survivre à la réécriture (REL-029).
+            appendBool("manage", rule.action.manage, to: &lines)
+            appendBool("exclude", rule.action.exclude, to: &lines)
+            appendBool("floating", rule.action.floating, to: &lines)
+            append("layout", rule.action.layout, to: &lines)
+            if let gapOverride = rule.action.gapOverride {
+                lines.append("gap_override = \(gapOverride)")
             }
+            append("scratchpad", rule.action.scratchpad, to: &lines)
+            appendBool("emit_event", rule.action.emitEvent, to: &lines)
             lines.append("")
         }
         return lines.joined(separator: "\n")
     }
 
     private func append(_ key: String, _ value: String?, to lines: inout [String]) {
-        guard let value, !value.isEmpty else { return }
+        // Une chaîne vide reste écrite : "title = \"\"" ne correspond qu'à un titre vide, l'absence du champ à tous (REL-035).
+        guard let value else { return }
         lines.append("\(key) = \"\(toml(value))\"")
     }
 
+    private func appendBool(_ key: String, _ value: Bool?, to lines: inout [String]) {
+        guard let value else { return }
+        lines.append("\(key) = \(value ? "true" : "false")")
+    }
+
+    /// Échappe une chaîne TOML entre guillemets : `"`, `\\` et tout caractère de contrôle (REL-035).
     private func toml(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
+        var escaped = ""
+        for scalar in value.unicodeScalars {
+            switch scalar.value {
+            case 0x22: escaped += "\\\""
+            case 0x5C: escaped += "\\\\"
+            case 0x00...0x1F, 0x7F: escaped += String(format: "\\u%04X", scalar.value)
+            default: escaped.unicodeScalars.append(scalar)
+            }
+        }
+        return escaped
     }
 
     private func slug(_ value: String) -> String {

@@ -1,0 +1,10 @@
+{
+  "not_retained": {
+    "raw-security-completion.json:MIN-001": "Non retenu : double appel dans self-test froid, aucun effet visible démontré ; le remplacement par une variable ne supprime pas de complexité significative.",
+    "raw-security-completion.json:REL-402": "Scénario réfuté : scripts/install:35-40 rejette une identité nommée inconnue avant copie ou signature. Un autre échec de codesign n’a pas été reproduit. Le pseudo-code de preuve contenait aussi des commentaires absents du source.",
+    "raw-security-completion.json:SEC-001": "Scénario réfuté tel que formulé : un répertoire 0755 ne permet pas à un autre utilisateur de créer le fichier stop. Précréation du chemin ou lien symbolique du journal prévisible restent des pistes non vérifiées, sans conclusion d’absence de risque.",
+    "raw-ui-completion.json:UI-NEW-002": "Non retenu : gap=0 interprété comme repli vers layout.spacing ; contrat utilisateur insuffisant pour affirmer que ce comportement est erroné."
+  },
+  "merged": [],
+  "baseline_suppressions": []
+}

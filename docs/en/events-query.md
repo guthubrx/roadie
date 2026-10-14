@@ -43,6 +43,7 @@ Semantics:
 - without `--from-now`, Roadie replays the journal and then follows new lines;
 - with `--from-now`, Roadie starts at the end of the current journal;
 - with `--initial-state`, Roadie first emits `state.snapshot`;
+- if events may have been lost between two reads (old journal rotation already deleted, truncated journal), Roadie emits `events.gap` before the rest of the stream, whatever the filters; its `payload` gives `reason` (`rotated_generation_missing` or `file_truncated`) and `lostAfterOffset`;
 - consumers must ignore unknown fields.
 
 ## Useful Catalog
@@ -97,6 +98,10 @@ Display parking:
 - `display.parking_restored`
 - `display.parking_ambiguous`
 - `display.parking_noop`
+
+Event stream:
+
+- `events.gap`
 
 Administration:
 

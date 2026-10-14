@@ -18,6 +18,58 @@ public struct CLIResponse: Codable, Equatable, Sendable {
     }
 }
 
+/// Statut d'une commande d'action (REL-042) : le code de sortie CLI en découle.
+public enum CommandOutcome: String, Codable, Equatable, Sendable {
+    case changed
+    case noOp
+    case failed
+}
+
+/// Résultat d'une commande d'action portant son statut (REL-042). Le code de sortie CLI se lit sur
+/// `outcome`, jamais sur `message`, qui peut contenir une valeur utilisateur. `outcome` nil (aucun
+/// résultat du code livré n'en laisse) : code 0.
+protocol CommandResult {
+    var message: String { get }
+    var changed: Bool { get }
+    var outcome: CommandOutcome? { get }
+    init(message: String, changed: Bool, outcome: CommandOutcome?)
+}
+
+extension CommandResult {
+    /// Échec : rien n'a changé, code de sortie 1.
+    static func failure(_ message: String) -> Self {
+        Self(message: message, changed: false, outcome: .failed)
+    }
+
+    /// Action sans objet : rien à faire, code de sortie 0.
+    static func noChange(_ message: String) -> Self {
+        Self(message: message, changed: false, outcome: .noOp)
+    }
+
+    /// Résultat partiel (REL-021) : une écriture reste alors que la commande a échoué et que son
+    /// retour arrière aussi. `changed` vrai, code de sortie 1.
+    static func partial(_ message: String) -> Self {
+        Self(message: message, changed: true, outcome: .failed)
+    }
+
+    /// Changement si `changed`, sinon échec : commandes dont toutes les écritures AX ont échoué.
+    static func changedOrFailed(_ message: String, changed: Bool) -> Self {
+        Self(message: message, changed: changed, outcome: changed ? .changed : .failed)
+    }
+
+    /// Changement si `changed`, sinon action sans objet.
+    static func changedOrNoOp(_ message: String, changed: Bool) -> Self {
+        Self(message: message, changed: changed, outcome: changed ? .changed : .noOp)
+    }
+
+    /// Échec de persistance (REL-021). Un retour arrière lui-même en échec (`PartialCommitError`)
+    /// est signalé comme résultat partiel. « failed » reste dans le message pour les journaux.
+    static func persistenceFailure(_ command: String, _ error: Error) -> Self {
+        let message = JSONPersistence.commandFailureMessage(command, error)
+        return error is PartialCommitError ? .partial(message) : .failure(message)
+    }
+}
+
 /// Arrêt anticipé d'une commande depuis un helper profond (remplace `exit()`).
 struct CLIExit: Error {
     let code: Int32
@@ -40,6 +92,10 @@ struct CLICommandSpec {
 public final class CLICommandRouter {
     private let makeService: (_ readOnly: Bool) -> SnapshotService
     private let streamSink: ((String) -> Void)?
+    /// Service de configuration du processus : `config reload` doit agir sur celui que lisent
+    /// les composants (REL-014), donc l'instance partagée par défaut.
+    private let configReload: ConfigReloadService
+    private let railRuntimeStore: RailRuntimeStateStore
     private var cachedService: SnapshotService?
     private var stdoutBuffer = ""
     private var stderrBuffer = ""
@@ -54,10 +110,14 @@ public final class CLICommandRouter {
     /// fourni seulement en exécution locale.
     public init(
         makeService: @escaping (_ readOnly: Bool) -> SnapshotService = CLICommandRouter.defaultService,
-        streamSink: ((String) -> Void)? = nil
+        streamSink: ((String) -> Void)? = nil,
+        configReload: ConfigReloadService = .shared,
+        railRuntimeStore: RailRuntimeStateStore = RailRuntimeStateStore()
     ) {
         self.makeService = makeService
         self.streamSink = streamSink
+        self.configReload = configReload
+        self.railRuntimeStore = railRuntimeStore
     }
 
     /// Service par défaut. Une lecture n'écrit pas l'état et ne fait pas suivre le focus par la
@@ -243,19 +303,29 @@ public final class CLICommandRouter {
 
     /// Fin d'une commande d'action : message sur stdout, code 0 si changement ou action
     /// sans objet, 1 si la commande a échoué (FR-039).
-    private func finish(_ message: String, changed: Bool) -> Int32 {
-        out(message)
-        return Self.actionExitCode(changed: changed, message: message)
+    /// `RailRuntimeStateStore` rend nil si l'état n'a pas été écrit (REL-021) : code 1, pas de succès perdu.
+    private func railNotPersisted() -> Int32 {
+        err("roadie: rail state not persisted (rail.json unreadable or not writable); see roadied stderr")
+        return 1
     }
 
-    /// Les résultats d'action n'ont qu'un booléen `changed` : un échec se reconnaît à son
-    /// message (cible inconnue, argument invalide, opération en échec). Le reste est une
-    /// action sans objet (« already », « no neighbor », « no structural change ») : code 0.
-    nonisolated static func actionExitCode(changed: Bool, message: String) -> Int32 {
-        guard !changed else { return 0 }
-        let failureMarkers = ["not found", "unknown", "requires", "failed", "unavailable", "must "]
-        let lowered = message.lowercased()
-        return failureMarkers.contains { lowered.contains($0) } ? 1 : 0
+    /// Fin d'une commande dont le résultat porte son statut (REL-042) : code calculé sur ce statut.
+    private func finish(_ result: some CommandResult) -> Int32 {
+        out(result.message)
+        return Self.actionExitCode(outcome: result.outcome)
+    }
+
+    /// Statut explicite (REL-042) : 1 pour un échec, 0 sinon, sans lire le message, qui peut
+    /// contenir une valeur utilisateur (stage nommée « failed »). O(1).
+    nonisolated static func actionExitCode(outcome: CommandOutcome?) -> Int32 {
+        outcome == .failed ? 1 : 0
+    }
+
+    /// Identifiant de fenêtre d'un argument : entier positif. `WindowID(rawValue: 0)` arrête le
+    /// processus (précondition), donc zéro est refusé ici (REL-001). O(1).
+    nonisolated static func windowID(_ raw: String) -> WindowID? {
+        guard let value = UInt32(raw), value > 0 else { return nil }
+        return WindowID(rawValue: value)
     }
 
     /// Commandes que le binaire `roadie` envoie au daemon (liste explicite, contrat
@@ -275,6 +345,9 @@ public final class CLICommandRouter {
             return args.dropFirst().first == "unhide-all"
         case "state":
             return ["dump", "audit"].contains(args.dropFirst().first ?? "")
+        // `config reload` : l'instance partagée à recharger est celle du daemon (REL-014).
+        case "config":
+            return args.dropFirst().first == "reload"
         default:
             return false
         }
@@ -312,11 +385,11 @@ public final class CLICommandRouter {
                     err("roadie: display focus requires N|left|right|up|down")
                     return 64
                 }
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             }
             let snapshot = service.snapshot()
             if args.contains("--json"), verb == "current" {
-                guard let display = TextFormatter.currentDisplaySnapshot(snapshot, state: StageStore().state()) else {
+                guard let display = TextFormatter.currentDisplaySnapshot(snapshot, state: service.effectiveStageStore.state()) else {
                     err("roadie: no displays found")
                     return 1
                 }
@@ -324,9 +397,9 @@ public final class CLICommandRouter {
             } else if args.contains("--json") {
                 try printJSON(snapshot.displays, label: "displays")
             } else if verb == "current" {
-                out(TextFormatter.currentDisplay(snapshot, state: StageStore().state()))
+                out(TextFormatter.currentDisplay(snapshot, state: service.effectiveStageStore.state()))
             } else {
-                out(TextFormatter.displays(snapshot.displays, state: StageStore().state()))
+                out(TextFormatter.displays(snapshot.displays, state: service.effectiveStageStore.state()))
             }
         case "state":
             let verb = args.dropFirst().first
@@ -350,7 +423,11 @@ public final class CLICommandRouter {
                 } else {
                     out(TextFormatter.stateHeal(report))
                 }
-                return report.audit.failed ? 1 : 0
+                // Réparations non écrites (REL-021) : signalées et code non nul.
+                if let persistenceError = report.persistenceError {
+                    err("roadie: \(persistenceError)")
+                }
+                return report.failed ? 1 : 0
             }
         case "layout":
             let verb = args.dropFirst().first
@@ -382,10 +459,10 @@ public final class CLICommandRouter {
                 }
             case "flatten":
                 let result = LayoutCommandService(service: service).flatten()
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "split":
                 let result = LayoutCommandService(service: service).split(args.dropFirst(2).first ?? "")
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "toggle-split":
                 let rawDirection = args.dropFirst(2).first
                 let direction = rawDirection.flatMap(Direction.init(rawValue:))
@@ -394,27 +471,27 @@ public final class CLICommandRouter {
                     return 64
                 }
                 let result = LayoutCommandService(service: service).toggleSplit(direction)
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "insert":
                 guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
                     err("roadie: layout insert requires left|right|up|down")
                     return 64
                 }
                 let result = LayoutCommandService(service: service).insert(direction)
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "join-with":
                 guard let rawDirection = args.dropFirst(2).first, let direction = Direction(rawValue: rawDirection) else {
                     err("roadie: layout join-with requires left|right|up|down")
                     return 64
                 }
                 let result = LayoutCommandService(service: service).join(with: direction)
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "zoom-parent":
                 let result = LayoutCommandService(service: service).zoomParent()
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             case "width":
                 let result = runWidthLayoutCommand(Array(args.dropFirst(2)))
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             default:
                 return usageError()
             }
@@ -443,7 +520,7 @@ public final class CLICommandRouter {
                 config: RoadieConfigLoader.validate(path: nil),
                 snapshot: snapshot,
                 plan: service.applyPlan(from: snapshot),
-                persistentState: StageStore().state()
+                persistentState: service.effectiveStageStore.state()
             ))
         case "self-test":
             let report = SelfTestService(service: service).run()
@@ -499,7 +576,7 @@ public final class CLICommandRouter {
                 }
                 return report.hasErrors ? 1 : 0
             } else if verb == "reload" {
-                let result = ConfigReloadService().reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())
+                let result = configReload.reload(path: configPath ?? RoadieConfigLoader.defaultConfigPath())
                 if args.contains("--json") {
                     try printCodableJSON(result)
                 } else {
@@ -537,33 +614,33 @@ public final class CLICommandRouter {
             else {
                 return usageError()
             }
-            let runtimeStore = RailRuntimeStateStore()
+            let runtimeStore = railRuntimeStore
             switch verb {
             case "status":
                 let pinned = runtimeStore.load().isPinned
                 out((RailSettings.load().statusLines + ["runtime.pinned=\(pinned)"]).joined(separator: "\n"))
             case "pin":
-                let state = runtimeStore.setPinned(true)
+                guard let state = runtimeStore.setPinned(true) else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "unpin":
-                let state = runtimeStore.setPinned(false)
+                guard let state = runtimeStore.setPinned(false) else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "toggle":
-                let state = runtimeStore.togglePinned()
+                guard let state = runtimeStore.togglePinned() else { return railNotPersisted() }
                 out("rail pinned=\(state.isPinned)")
             case "labels":
                 let subcommand = args.dropFirst(2).first ?? "show"
                 let settings = RailSettings.load().stageLabel
                 switch subcommand {
                 case "show":
-                    let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds)
+                    guard let state = runtimeStore.showStageLabels(for: settings.visibilitySeconds) else { return railNotPersisted() }
                     if settings.visibilitySeconds <= 0 {
                         out("rail labels visible=always")
                     } else {
                         out("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
                     }
                 case "hide":
-                    let state = runtimeStore.hideStageLabels()
+                    guard let state = runtimeStore.hideStageLabels() else { return railNotPersisted() }
                     out("rail labels visible_until=\(state.stageLabelsVisibleUntil ?? 0)")
                 case "status":
                     let state = runtimeStore.load()
@@ -581,7 +658,7 @@ public final class CLICommandRouter {
                 return 0
             } else if args.dropFirst().first == "back-and-forth" {
                 let result = WindowCommandService(service: service).focusBackAndForth()
-                return finish(result.message, changed: result.changed)
+                return finish(result)
             } else {
                 return runDirectionalCommand(args.dropFirst().first, verb: "focus") {
                     WindowCommandService(service: service).focus($0)
@@ -611,10 +688,10 @@ public final class CLICommandRouter {
             return try runStageCommand(Array(args.dropFirst()))
         case "balance":
             let result = LayoutCommandService(service: service).balance()
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "daemon":
             if args.dropFirst().first == "health" {
-                let report = DaemonHealthService(service: service).run()
+                let report = DaemonHealthService(service: service, stageStore: service.effectiveStageStore).run()
                 if args.contains("--json") {
                     try printJSON(report, label: "daemon health")
                 } else {
@@ -622,11 +699,14 @@ public final class CLICommandRouter {
                 }
                 return report.failed ? 1 : 0
             } else if args.dropFirst().first == "heal" {
-                let report = DaemonHealthService(service: service).heal()
+                let report = DaemonHealthService(service: service, stageStore: service.effectiveStageStore).heal()
                 if args.contains("--json") {
                     try printJSON(report, label: "daemon heal")
                 } else {
                     out(TextFormatter.daemonHeal(report))
+                }
+                if let persistenceError = report.state.persistenceError {
+                    err("roadie: \(persistenceError)")
                 }
                 return report.failed ? 1 : 0
             } else if args.dropFirst().first == "restart" {
@@ -651,7 +731,7 @@ public final class CLICommandRouter {
             default:
                 return usageError()
             }
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "--version", "version":
             out("roadie \(RoadieVersion.current)")
         case nil:
@@ -799,9 +879,9 @@ public final class CLICommandRouter {
         }
     }
 
-    private func runWidthLayoutCommand(_ args: [String]) -> WindowCommandResult {
+    private func runWidthLayoutCommand(_ args: [String]) -> WidthAdjustmentResult {
         guard let verb = args.first else {
-            return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+            return .failure("layout width: requires next|prev|nudge|ratio")
         }
         let scope: WidthAdjustmentScope = args.contains("--all") ? .allWindows : .activeWindow
         let widthService = WidthAdjustmentService(service: service)
@@ -819,13 +899,13 @@ public final class CLICommandRouter {
             ))
         case "ratio":
             guard let raw = args.dropFirst().first, let ratio = Double(raw) else {
-                return WindowCommandResult(message: "layout width ratio: requires numeric ratio", changed: false)
+                return .failure("layout width ratio: requires numeric ratio")
             }
             result = widthService.apply(WidthAdjustmentIntent(scope: scope, mode: .explicitRatio, targetRatio: ratio))
         default:
-            return WindowCommandResult(message: "layout width: requires next|prev|nudge|ratio", changed: false)
+            return .failure("layout width: requires next|prev|nudge|ratio")
         }
-        return WindowCommandResult(message: result.message, changed: result.changed)
+        return result
     }
 
     private func runDirectionalCommand(
@@ -838,7 +918,7 @@ public final class CLICommandRouter {
             return 64
         }
         let result = action(direction)
-        return finish(result.message, changed: result.changed)
+        return finish(result)
     }
 
     private func runWindowCommand(_ args: [String]) throws -> Int32 {
@@ -851,10 +931,10 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = WindowCommandService(service: service).sendToDisplay(index)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "reset":
             let result = WindowCommandService(service: service).reset()
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "desktop":
             guard args.indices.contains(1), let id = Int(args[1]), id > 0 else {
                 err("roadie: window desktop requires a positive id")
@@ -864,7 +944,7 @@ public final class CLICommandRouter {
                 to: DesktopID(rawValue: id),
                 follow: args.contains("--follow")
             )
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "swap":
             return runDirectionalCommand(args.dropFirst().first, verb: "window swap") {
                 WindowCommandService(service: service).move($0)
@@ -878,7 +958,7 @@ public final class CLICommandRouter {
     }
 
     private func runBookmarkCommand(_ args: [String]) throws -> Int32 {
-        let command = WindowBookmarkCommandService(service: service)
+        let command = WindowBookmarkCommandService(service: service, store: service.effectiveStageStore)
         switch args.first {
         case "set":
             guard let name = args.dropFirst().first else {
@@ -886,21 +966,21 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = command.set(name)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "focus", "jump":
             guard let name = args.dropFirst().first else {
                 err("roadie: bookmark focus requires a name")
                 return 64
             }
             let result = command.focus(name)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "clear", "remove":
             guard let name = args.dropFirst().first else {
                 err("roadie: bookmark clear requires a name")
                 return 64
             }
             let result = command.clear(name)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "list":
             let result = command.list()
             out(result.message)
@@ -929,33 +1009,33 @@ public final class CLICommandRouter {
                 DesktopID(rawValue: id),
                 as: args.dropFirst(2).joined(separator: " ")
             )
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "focus":
             guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
                 err("roadie: desktop focus requires a positive id")
                 return 64
             }
             let result = DesktopCommandService(service: service).focus(DesktopID(rawValue: id))
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "prev":
             let result = DesktopCommandService(service: service).cycle(.prev)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "next":
             let result = DesktopCommandService(service: service).cycle(.next)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "last", "back":
             let result = DesktopCommandService(service: service).last()
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "back-and-forth":
             let result = DesktopCommandService(service: service).backAndForth()
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "summon":
             guard let rawID = args.dropFirst().first, let id = Int(rawID), id > 0 else {
                 err("roadie: desktop summon requires a positive id")
                 return 64
             }
             let result = DesktopCommandService(service: service).summon(DesktopID(rawValue: id))
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         default:
             return usageError()
         }
@@ -968,37 +1048,37 @@ public final class CLICommandRouter {
             out(result.message)
             return 0
         case "create":
-            guard let stageID = args.dropFirst().first else {
+            guard let stageID = args.dropFirst().first, !stageID.isEmpty else {
                 err("roadie: stage create requires a stage id")
                 return 64
             }
             let name = args.dropFirst(2).isEmpty ? nil : args.dropFirst(2).joined(separator: " ")
             let result = StageCommandService(service: service).create(stageID, name: name)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "rename":
             guard let stageID = args.dropFirst().first, !args.dropFirst(2).isEmpty else {
                 err("roadie: stage rename requires a stage id and name")
                 return 64
             }
             let result = StageCommandService(service: service).rename(stageID, to: args.dropFirst(2).joined(separator: " "))
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "reorder":
             guard let stageID = args.dropFirst().first,
                   let rawPosition = args.dropFirst(2).first,
-                  let position = Int(rawPosition)
+                  let position = Int(rawPosition), position > 0
             else {
-                err("roadie: stage reorder requires a stage id and numeric position")
+                err("roadie: stage reorder requires a stage id and a positive numeric position")
                 return 64
             }
             let result = StageCommandService(service: service).reorder(stageID, to: position)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "delete":
             guard let stageID = args.dropFirst().first else {
                 err("roadie: stage delete requires a stage id")
                 return 64
             }
             let result = StageCommandService(service: service).delete(stageID)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "mode":
             return try runModeCommand(args.dropFirst().first)
         case "switch":
@@ -1007,14 +1087,14 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = StageCommandService(service: service).switchTo(stageID)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "switch-position", "switch-pos":
             guard let rawPosition = args.dropFirst().first, let position = Int(rawPosition), position > 0 else {
                 err("roadie: stage switch-position requires a positive position")
                 return 64
             }
             let result = StageCommandService(service: service).switchToPosition(position)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "switch-visible":
             guard let rawDirection = args.dropFirst().first,
                   let direction = StageCycleDirection(rawValue: rawDirection)
@@ -1023,39 +1103,39 @@ public final class CLICommandRouter {
                 return 64
             }
             let result = StageCommandService(service: service).switchVisible(direction)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "assign":
             guard let stageID = args.dropFirst().first else {
                 err("roadie: stage assign requires a stage id")
                 return 64
             }
             let result = StageCommandService(service: service).assign(stageID)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "assign-position", "assign-pos":
             guard let rawPosition = args.dropFirst().first, let position = Int(rawPosition), position > 0 else {
                 err("roadie: stage assign-position requires a positive position")
                 return 64
             }
             let result = StageCommandService(service: service).assignPosition(position)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "assign-empty":
             let result = StageCommandService(service: service).assignEmpty()
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "summon":
-            guard let rawWindowID = args.dropFirst().first, let id = UInt32(rawWindowID) else {
-                err("roadie: stage summon requires a window id")
+            guard let rawWindowID = args.dropFirst().first, let windowID = Self.windowID(rawWindowID) else {
+                err("roadie: stage summon requires a positive window id")
                 return 64
             }
             let snapshot = service.snapshot()
-            let state = StageStore().state()
+            let state = service.effectiveStageStore.state()
             guard let activeDisplayID = state.activeDisplayID ?? snapshot.focusedWindowID.flatMap({ focusedID in
                 snapshot.windows.first { $0.window.id == focusedID }?.scope?.displayID
             }) ?? snapshot.displays.first?.id else {
                 err("roadie: stage summon: no active display")
                 return 1
             }
-            let result = StageCommandService(service: service).summon(windowID: WindowID(rawValue: id), displayID: activeDisplayID)
-            return finish(result.message, changed: result.changed)
+            let result = StageCommandService(service: service).summon(windowID: windowID, displayID: activeDisplayID)
+            return finish(result)
         case "move-to-display":
             guard let rawTarget = args.dropFirst().first else {
                 err("roadie: stage move-to-display requires a display index or direction")
@@ -1082,16 +1162,16 @@ public final class CLICommandRouter {
                 err("roadie: stage move-to-display requires a display index or left|right|up|down")
                 return 64
             }
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "prev":
             let result = StageCommandService(service: service).cycle(.prev)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "next":
             let result = StageCommandService(service: service).cycle(.next)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case .some(let rawStageID):
             let result = StageCommandService(service: service).switchTo(rawStageID)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case nil:
             return usageError()
         }
@@ -1262,7 +1342,7 @@ public final class CLICommandRouter {
     }
 
     private func runGroupCommand(_ args: [String]) throws -> Int32 {
-        let service = WindowGroupCommandService()
+        let service = WindowGroupCommandService(service: self.service, store: self.service.effectiveStageStore)
         switch args.first {
         case "list":
             let result = service.list()
@@ -1273,46 +1353,46 @@ public final class CLICommandRouter {
                 err("roadie: group create requires an id")
                 return 64
             }
-            let ids = args.dropFirst(2).compactMap(UInt32.init).map(WindowID.init(rawValue:))
+            let ids = args.dropFirst(2).compactMap(Self.windowID)
             let result = service.create(id: id, windowIDs: ids)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         case "add":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
-                  let windowID = UInt32(rawWindowID)
+                  let windowID = Self.windowID(rawWindowID)
             else {
                 err("roadie: group add requires GROUP_ID WINDOW_ID")
                 return 64
             }
-            let result = service.add(windowID: WindowID(rawValue: windowID), to: id)
-            return finish(result.message, changed: result.changed)
+            let result = service.add(windowID: windowID, to: id)
+            return finish(result)
         case "remove":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
-                  let windowID = UInt32(rawWindowID)
+                  let windowID = Self.windowID(rawWindowID)
             else {
                 err("roadie: group remove requires GROUP_ID WINDOW_ID")
                 return 64
             }
-            let result = service.remove(windowID: WindowID(rawValue: windowID), from: id)
-            return finish(result.message, changed: result.changed)
+            let result = service.remove(windowID: windowID, from: id)
+            return finish(result)
         case "focus":
             guard let id = args.dropFirst().first,
                   let rawWindowID = args.dropFirst(2).first,
-                  let windowID = UInt32(rawWindowID)
+                  let windowID = Self.windowID(rawWindowID)
             else {
                 err("roadie: group focus requires GROUP_ID WINDOW_ID")
                 return 64
             }
-            let result = service.focus(windowID: WindowID(rawValue: windowID), in: id)
-            return finish(result.message, changed: result.changed)
+            let result = service.focus(windowID: windowID, in: id)
+            return finish(result)
         case "dissolve":
             guard let id = args.dropFirst().first else {
                 err("roadie: group dissolve requires GROUP_ID")
                 return 64
             }
             let result = service.dissolve(id: id)
-            return finish(result.message, changed: result.changed)
+            return finish(result)
         default:
             return usageError()
         }
@@ -1744,7 +1824,7 @@ public final class CLICommandRouter {
         // `mutableBsp` (et `yabai`) reste accepté comme alias de l'arbre (SPEC-017 A8).
         let mode: WindowManagementMode = parsed == .mutableBsp ? .spatialBsp : parsed
         let result = StageCommandService(service: service).setMode(mode)
-        return finish(result.message, changed: result.changed)
+        return finish(result)
     }
 
     /// `daemon restart` : relance le service launchd installé (T092, aucun chemin utilisateur).

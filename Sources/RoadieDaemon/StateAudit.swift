@@ -34,10 +34,18 @@ public struct StateAuditReport: Equatable, Codable, Sendable {
 public struct StateHealReport: Equatable, Codable, Sendable {
     public var repaired: Int
     public var audit: StateAuditReport
+    /// Réparations non écrites (REL-021) : `repaired` vaut alors 0 et `failed` est vrai.
+    public var persistenceError: String?
 
-    public init(repaired: Int, audit: StateAuditReport) {
+    public init(repaired: Int, audit: StateAuditReport, persistenceError: String? = nil) {
         self.repaired = repaired
         self.audit = audit
+        self.persistenceError = persistenceError
+    }
+
+    /// Échec du rapport : audit en échec ou réparations non persistées.
+    public var failed: Bool {
+        audit.failed || persistenceError != nil
     }
 }
 
@@ -45,9 +53,10 @@ public struct StateAuditService {
     private let service: SnapshotService
     private let stageStore: StageStore
 
-    public init(service: SnapshotService = SnapshotService(), stageStore: StageStore = StageStore()) {
+    /// `stageStore` nil : celui du service (le même fichier en production, isolé en test).
+    public init(service: SnapshotService = SnapshotService(), stageStore: StageStore? = nil) {
         self.service = service
-        self.stageStore = stageStore
+        self.stageStore = stageStore ?? service.effectiveStageStore
     }
 
     public func run() -> StateAuditReport {
@@ -71,23 +80,33 @@ public struct StateAuditService {
         return StateAuditReport(checks: checks)
     }
 
-    public func heal() -> StateHealReport {
+    /// `isProcessAlive` : preuve de fermeture d'un membre absent du relevé (injectable en test).
+    public func heal(isProcessAlive: (Int32) -> Bool = ProcessLiveness.isAlive) -> StateHealReport {
         // Snapshot (AX) hors verrou, réparation sur l'état relu sous verrou (SPEC-016 FR-013).
         let snapshot = service.snapshot()
         let liveDisplayIDs = Set(snapshot.displays.map(\.id))
         let liveManagedWindowIDs = Set(snapshot.windows.compactMap { entry in
             entry.scope == nil ? nil : entry.window.id
         })
-        let repaired = stageStore.mutate { state -> Int in
-            var repaired = 0
-            if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
-                state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
-                repaired += state.activeDisplayID == nil ? 0 : 1
+        // Écriture contrôlée (REL-021) : une réparation non écrite n'est pas comptée.
+        do {
+            let repaired = try stageStore.mutateChecked { state -> Int in
+                var repaired = 0
+                if state.activeDisplayID.map({ !liveDisplayIDs.contains($0) }) != false {
+                    state.activeDisplayID = fallbackDisplayID(in: snapshot, state: state)
+                    repaired += state.activeDisplayID == nil ? 0 : 1
+                }
+                repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs, isProcessAlive: isProcessAlive)
+                return repaired
             }
-            repaired += repairScopes(&state, liveWindowIDs: liveManagedWindowIDs)
-            return repaired
+            return StateHealReport(repaired: repaired, audit: run())
+        } catch {
+            return StateHealReport(
+                repaired: 0,
+                audit: run(),
+                persistenceError: JSONPersistence.commandFailureMessage("state heal", error)
+            )
         }
-        return StateHealReport(repaired: repaired, audit: run())
     }
 
     private func activeDisplayCheck(state: PersistentStageState, liveDisplayIDs: Set<DisplayID>) -> StateAuditCheck {
@@ -206,7 +225,17 @@ public struct StateAuditService {
         return snapshot.displays.first(where: \.isMain)?.id ?? snapshot.displays.first?.id
     }
 
-    private func repairScopes(_ state: inout PersistentStageState, liveWindowIDs: Set<WindowID>) -> Int {
+    /// Un membre absent du relevé n'est retiré que sur preuve de fermeture : pid connu et mort.
+    /// Le relevé ne liste que les fenêtres à l'écran ; une fenêtre réduite, sur un autre Space,
+    /// d'une application qui ne répond pas ou d'un écran débranché y manque sans être fermée.
+    /// Sans pid connu (anciens fichiers), la grâce du snapshot (30 min) s'en charge (REL-002).
+    /// La déduplication s'applique à tous les membres, visibles ou non.
+    /// Complexite : O(total_members) avec lookup Set O(1) par membre.
+    private func repairScopes(
+        _ state: inout PersistentStageState,
+        liveWindowIDs: Set<WindowID>,
+        isProcessAlive: (Int32) -> Bool
+    ) -> Int {
         var repaired = 0
         var seenWindowIDs: Set<WindowID> = []
 
@@ -224,14 +253,11 @@ public struct StateAuditService {
             for stageIndex in state.scopes[scopeIndex].stages.indices {
                 let beforeCount = state.scopes[scopeIndex].stages[stageIndex].members.count
                 state.scopes[scopeIndex].stages[stageIndex].members.removeAll { member in
-                    if !liveWindowIDs.contains(member.windowID) {
+                    if !liveWindowIDs.contains(member.windowID),
+                       let pid = member.pid, !isProcessAlive(pid) {
                         return true
                     }
-                    if seenWindowIDs.contains(member.windowID) {
-                        return true
-                    }
-                    seenWindowIDs.insert(member.windowID)
-                    return false
+                    return !seenWindowIDs.insert(member.windowID).inserted
                 }
                 repaired += beforeCount - state.scopes[scopeIndex].stages[stageIndex].members.count
 

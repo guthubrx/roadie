@@ -8,17 +8,20 @@ public struct WindowBookmarkCommandService {
     private let store: StageStore
     private let mouseFollower: MouseFollower
     private let events: EventLog
+    private let isProcessAlive: (Int32) -> Bool
 
     public init(
         service: SnapshotService = SnapshotService(),
         store: StageStore = StageStore(),
         mouseFollower: MouseFollower = MouseFollower(),
-        events: EventLog = EventLog()
+        events: EventLog = EventLog(),
+        isProcessAlive: @escaping (Int32) -> Bool = ProcessLiveness.isAlive
     ) {
         self.service = service
         self.store = store
         self.mouseFollower = mouseFollower
         self.events = events
+        self.isProcessAlive = isProcessAlive
     }
 
     public func set(_ rawName: String) -> WindowCommandResult {
@@ -27,11 +30,16 @@ public struct WindowBookmarkCommandService {
         guard let active = activeWindow(in: snapshot),
               let scope = active.scope
         else {
-            return WindowCommandResult(message: "bookmark set \(name): no active tiled window", changed: false)
+            return .noChange("bookmark set \(name): no active tiled window")
         }
 
-        let bookmark = store.mutate { state in
-            state.setBookmark(name: name, window: active.window, scope: scope)
+        let bookmark: PersistentWindowBookmark
+        do {
+            bookmark = try store.mutateChecked { state in
+                state.setBookmark(name: name, window: active.window, scope: scope)
+            }
+        } catch {
+            return .persistenceFailure("bookmark set \(name)", error)
         }
         events.append(RoadieEvent(
             type: "window.bookmark_set",
@@ -47,10 +55,21 @@ public struct WindowBookmarkCommandService {
         let snapshot = service.snapshot(followFocus: false)
         let state = store.state()
         guard let bookmark = state.bookmark(named: name) else {
-            return WindowCommandResult(message: "bookmark focus \(name): not found", changed: false)
+            return .failure("bookmark focus \(name): not found")
         }
         guard let targetEntry = snapshot.windows.first(where: { $0.window.id == bookmark.windowID }) else {
-            let removed = store.mutate { $0.removeBookmark(named: name) }
+            // Absente du snapshot n'est pas fermée : autre Space, fenêtre réduite, application qui
+            // ne répond pas. Seul un processus mort le prouve ; sinon le signet reste et la purge
+            // différée (délai de grâce) tranche (REL-028).
+            guard processIsDead(owningWindow: bookmark.windowID, in: state) else {
+                return .failure("bookmark focus \(name): failed - window not visible (other Space, minimized or unresponsive app), bookmark kept")
+            }
+            let removed: PersistentWindowBookmark?
+            do {
+                removed = try store.mutateChecked { $0.removeBookmark(named: name) }
+            } catch {
+                return .persistenceFailure("bookmark focus \(name)", error)
+            }
             if let removed {
                 events.append(RoadieEvent(
                     type: "window.bookmark_pruned",
@@ -63,7 +82,7 @@ public struct WindowBookmarkCommandService {
 
         let targetScope = targetEntry.scope ?? state.stageScope(for: bookmark.windowID) ?? bookmark.scope
         guard let display = snapshot.displays.first(where: { $0.id == targetScope.displayID }) else {
-            return WindowCommandResult(message: "bookmark focus \(name): display unavailable", changed: false)
+            return .failure("bookmark focus \(name): display unavailable")
         }
 
         let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })
@@ -74,35 +93,40 @@ public struct WindowBookmarkCommandService {
 
         // Scopes relus et modifiés sous verrou (FR-013) : les autres scopes ne sont pas écrasés.
         // Le bloc renvoie les membres utiles aux appels AX faits après la transaction.
-        let plan = store.mutate { state -> BookmarkFocusPlan in
-            var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
-            targetPersistentScope.ensureStage(targetScope.stageID)
-            let previousDesktopID = state.currentDesktopID(for: display.id)
-            var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
-            let previousStageID = previousPersistentScope.activeStageID
-            let result = BookmarkFocusPlan(
-                previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
-                previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
-                targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
-                // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
-                targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
-            )
-            for window in visibleWindows {
-                if previousDesktopID == targetScope.desktopID {
-                    targetPersistentScope.updateFrame(window: window)
-                } else {
-                    previousPersistentScope.updateFrame(window: window)
+        let plan: BookmarkFocusPlan
+        do {
+            plan = try store.mutateChecked { state -> BookmarkFocusPlan in
+                var targetPersistentScope = state.scope(displayID: targetScope.displayID, desktopID: targetScope.desktopID)
+                targetPersistentScope.ensureStage(targetScope.stageID)
+                let previousDesktopID = state.currentDesktopID(for: display.id)
+                var previousPersistentScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
+                let previousStageID = previousPersistentScope.activeStageID
+                let result = BookmarkFocusPlan(
+                    previousScope: StageScope(displayID: display.id, desktopID: previousDesktopID, stageID: previousStageID),
+                    previousMembers: Set(previousPersistentScope.memberIDs(in: previousStageID)),
+                    targetMembers: Set(targetPersistentScope.memberIDs(in: targetScope.stageID)),
+                    // Capturé avant la mise à jour des frames : les membres reprennent leur frame mémorisée.
+                    targetStage: targetPersistentScope.stages.first { $0.id == targetScope.stageID }
+                )
+                for window in visibleWindows {
+                    if previousDesktopID == targetScope.desktopID {
+                        targetPersistentScope.updateFrame(window: window)
+                    } else {
+                        previousPersistentScope.updateFrame(window: window)
+                    }
                 }
+                targetPersistentScope.activeStageID = targetScope.stageID
+                targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
+                if previousDesktopID != targetScope.desktopID {
+                    state.update(previousPersistentScope)
+                }
+                state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
+                state.focusDisplay(display.id)
+                state.update(targetPersistentScope)
+                return result
             }
-            targetPersistentScope.activeStageID = targetScope.stageID
-            targetPersistentScope.setFocusedWindow(bookmark.windowID, in: targetScope.stageID)
-            if previousDesktopID != targetScope.desktopID {
-                state.update(previousPersistentScope)
-            }
-            state.switchDesktop(displayID: display.id, to: targetScope.desktopID)
-            state.focusDisplay(display.id)
-            state.update(targetPersistentScope)
-            return result
+        } catch {
+            return .persistenceFailure("bookmark focus \(name)", error)
         }
 
         // Plan unique (A15, T212) : masquage de la stage quittée et disposition de la stage du signet
@@ -126,6 +150,8 @@ public struct WindowBookmarkCommandService {
         let ok = service.focus(targetEntry.window)
         if ok {
             mouseFollower.follow(targetEntry.window)
+            // Gardé en `mutate` (REL-021) : simple observation après le focus déjà donné, que le
+            // snapshot suivant réécrit (`updateBookmarkObservation` à chaque passe).
             store.mutate { $0.updateBookmarkObservation(window: targetEntry.window, scope: targetScope) }
         }
         events.append(RoadieEvent(
@@ -136,8 +162,8 @@ public struct WindowBookmarkCommandService {
                 "layout": String(layoutAttempted)
             ], uniquingKeysWith: { lhs, _ in lhs })
         ))
-        return WindowCommandResult(
-            message: ok
+        return .changedOrFailed(
+            ok
                 ? "bookmark focus \(name): window=\(bookmark.windowID.rawValue) restored=\(applied) layout=\(layoutAttempted)"
                 : "bookmark focus \(name): focus failed",
             changed: ok
@@ -146,8 +172,14 @@ public struct WindowBookmarkCommandService {
 
     public func clear(_ rawName: String) -> WindowCommandResult {
         let name = PersistentWindowBookmark.normalizedName(rawName)
-        guard let removed = store.mutate({ $0.removeBookmark(named: name) }) else {
-            return WindowCommandResult(message: "bookmark clear \(name): not found", changed: false)
+        let removal: PersistentWindowBookmark?
+        do {
+            removal = try store.mutateChecked { $0.removeBookmark(named: name) }
+        } catch {
+            return .persistenceFailure("bookmark clear \(name)", error)
+        }
+        guard let removed = removal else {
+            return .failure("bookmark clear \(name): not found")
         }
         events.append(RoadieEvent(
             type: "window.bookmark_removed",
@@ -160,7 +192,7 @@ public struct WindowBookmarkCommandService {
     public func list() -> WindowCommandResult {
         let bookmarks = store.state().windowBookmarks
         guard !bookmarks.isEmpty else {
-            return WindowCommandResult(message: "NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS", changed: false)
+            return .noChange("NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS")
         }
         let liveWindowIDs = Set(service.snapshot(followFocus: false).windows.map(\.window.id))
         var lines = ["NAME\tWINDOW\tAPP\tTITLE\tSCOPE\tSTATUS"]
@@ -168,7 +200,20 @@ public struct WindowBookmarkCommandService {
             let status = liveWindowIDs.contains(bookmark.windowID) ? "live" : "missing"
             lines.append("\(bookmark.name)\t\(bookmark.windowID.rawValue)\t\(bookmark.bundleID)\t\(bookmark.title)\t\(bookmark.scope)\t\(status)")
         }
-        return WindowCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return .noChange(lines.joined(separator: "\n"))
+    }
+
+    /// Vrai si le pid mémorisé du membre de stage portant cette fenêtre n'existe plus.
+    /// Sans membre ou sans pid connu (anciens fichiers) : pas de preuve, donc faux.
+    /// O(scopes * stages * membres).
+    private func processIsDead(owningWindow windowID: WindowID, in state: PersistentStageState) -> Bool {
+        for scope in state.scopes {
+            for stage in scope.stages {
+                guard let member = stage.members.first(where: { $0.windowID == windowID }) else { continue }
+                if let pid = member.pid { return !isProcessAlive(pid) }
+            }
+        }
+        return false
     }
 
     private func activeWindow(in snapshot: DaemonSnapshot) -> ScopedWindowSnapshot? {

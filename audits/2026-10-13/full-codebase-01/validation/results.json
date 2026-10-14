@@ -1,0 +1,14 @@
+{
+  "swift_build": "PASS 29.62s",
+  "swift_tests_selected": 880,
+  "swift_tests_total_expected": 881,
+  "swift_initial_passed": 879,
+  "swift_initial_failed": 1,
+  "swift_rechecked_passed": 1,
+  "swift_final_unresolved_failures": 0,
+  "swift_skipped": [
+    "CLICommandRouterTests.socketRoundTripRunsRouterAndRefusesOthers : socket écrit sous /tmp en dur, hors dossier autorisé"
+  ],
+  "python_measure_tests": "7 PASS",
+  "pure_probes": "5 scénarios exécutés; mauvais types bool et chaîne = deux variantes"
+}

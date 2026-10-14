@@ -3,9 +3,17 @@ import RoadieAX
 import RoadieCore
 import RoadieStages
 
-public struct WindowGroupCommandResult: Equatable, Sendable {
+public struct WindowGroupCommandResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil.
+    public var outcome: CommandOutcome?
+
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
+        self.message = message
+        self.changed = changed
+        self.outcome = outcome ?? (changed ? .changed : nil)
+    }
 }
 
 public struct WindowGroupCommandService {
@@ -30,7 +38,7 @@ public struct WindowGroupCommandService {
                 }
             }
         }
-        return WindowGroupCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return .noChange(lines.joined(separator: "\n"))
     }
 
     public func create(id: String, windowIDs: [WindowID]) -> WindowGroupCommandResult {
@@ -54,61 +62,72 @@ public struct WindowGroupCommandService {
     }
 
     public func dissolve(id: String) -> WindowGroupCommandResult {
-        let removed = store.mutate { state in
-            var removed = false
-            for scopeIndex in state.scopes.indices {
-                for stageIndex in state.scopes[scopeIndex].stages.indices {
-                    let before = state.scopes[scopeIndex].stages[stageIndex].groups.count
-                    state.scopes[scopeIndex].stages[stageIndex].groups.removeAll { $0.id == id }
-                    removed = removed || state.scopes[scopeIndex].stages[stageIndex].groups.count != before
+        let removed: Bool
+        do {
+            removed = try store.mutateChecked { state in
+                var removed = false
+                for scopeIndex in state.scopes.indices {
+                    for stageIndex in state.scopes[scopeIndex].stages.indices {
+                        let before = state.scopes[scopeIndex].stages[stageIndex].groups.count
+                        state.scopes[scopeIndex].stages[stageIndex].groups.removeAll { $0.id == id }
+                        removed = removed || state.scopes[scopeIndex].stages[stageIndex].groups.count != before
+                    }
                 }
+                return removed
             }
-            return removed
+        } catch {
+            return .persistenceFailure("group dissolve \(id)", error)
         }
         if removed {
             events.append(RoadieEvent(type: "window.ungrouped", details: ["groupID": id]))
         }
-        return WindowGroupCommandResult(message: removed ? "group dissolve \(id)" : "group dissolve \(id): not found", changed: removed)
+        return removed ? WindowGroupCommandResult(message: "group dissolve \(id)", changed: true) : .failure("group dissolve \(id): not found")
     }
 
     private enum GroupMutation {
-        case failed(String)
+        /// `outcome` : `.noOp` (pas de scope ou de stage actifs) ou `.failed` (groupe introuvable).
+        case failed(String, CommandOutcome)
         case applied(StageScope, WindowGroup)
     }
 
     private func mutateGroup(id: String, createIfMissing: Bool, mutate: (inout WindowGroup) -> Void) -> WindowGroupCommandResult {
         let snapshot = service.snapshot()
         // Snapshot pris hors transaction ; la modification relit l'état sous verrou (FR-013).
-        let outcome = store.mutate { state -> GroupMutation in
-            guard let scopeID = activeScope(in: snapshot, state: &state) else {
-                return .failed("group \(id): no active scope")
+        let outcome: GroupMutation
+        do {
+            outcome = try store.mutateChecked { state -> GroupMutation in
+                guard let scopeID = activeScope(in: snapshot, state: &state) else {
+                    return .failed("group \(id): no active scope", .noOp)
+                }
+                // `scope(displayID:)` peut créer le scope : en cas d'échec, l'état d'origine est
+                // remis pour que la transaction n'écrive rien.
+                let original = state
+                var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
+                guard let stageIndex = scope.stages.firstIndex(where: { $0.id == scopeID.stageID }) else {
+                    state = original
+                    return .failed("group \(id): no active stage", .noOp)
+                }
+                var group = scope.stages[stageIndex].groups.first { $0.id == id } ?? WindowGroup(id: id)
+                if group.windowIDs.isEmpty && !createIfMissing && !scope.stages[stageIndex].groups.contains(where: { $0.id == id }) {
+                    state = original
+                    return .failed("group \(id): not found", .failed)
+                }
+                mutate(&group)
+                scope.stages[stageIndex].groups.removeAll { $0.id == id }
+                if group.windowIDs.count >= 2 || createIfMissing {
+                    scope.stages[stageIndex].groups.append(group)
+                }
+                state.update(scope)
+                return .applied(scopeID, group)
             }
-            // `scope(displayID:)` peut créer le scope : en cas d'échec, l'état d'origine est
-            // remis pour que la transaction n'écrive rien.
-            let original = state
-            var scope = state.scope(displayID: scopeID.displayID, desktopID: scopeID.desktopID)
-            guard let stageIndex = scope.stages.firstIndex(where: { $0.id == scopeID.stageID }) else {
-                state = original
-                return .failed("group \(id): no active stage")
-            }
-            var group = scope.stages[stageIndex].groups.first { $0.id == id } ?? WindowGroup(id: id)
-            if group.windowIDs.isEmpty && !createIfMissing && !scope.stages[stageIndex].groups.contains(where: { $0.id == id }) {
-                state = original
-                return .failed("group \(id): not found")
-            }
-            mutate(&group)
-            scope.stages[stageIndex].groups.removeAll { $0.id == id }
-            if group.windowIDs.count >= 2 || createIfMissing {
-                scope.stages[stageIndex].groups.append(group)
-            }
-            state.update(scope)
-            return .applied(scopeID, group)
+        } catch {
+            return .persistenceFailure("group \(id)", error)
         }
         let scopeID: StageScope
         let group: WindowGroup
         switch outcome {
-        case .failed(let message):
-            return WindowGroupCommandResult(message: message, changed: false)
+        case .failed(let message, let outcome):
+            return WindowGroupCommandResult(message: message, changed: false, outcome: outcome)
         case .applied(let appliedScope, let appliedGroup):
             scopeID = appliedScope
             group = appliedGroup

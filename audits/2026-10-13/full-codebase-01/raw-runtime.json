@@ -1,0 +1,360 @@
+{
+  "scope": "Sources/RoadieAX et 12 services runtime daemon désignés ; lecture seule",
+  "source_files_read_entirely": [
+    "Sources/RoadieAX/AXWindowEventObserver.swift",
+    "Sources/RoadieAX/PermissionSnapshot.swift",
+    "Sources/RoadieAX/SpaceProbe.swift",
+    "Sources/RoadieAX/SystemSnapshotProvider.swift",
+    "Sources/RoadieAX/WrittenFrameRegistry.swift",
+    "Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "Sources/RoadieDaemon/TickScheduler.swift",
+    "Sources/RoadieDaemon/StateAudit.swift",
+    "Sources/RoadieDaemon/DisplayTopology.swift",
+    "Sources/RoadieDaemon/DisplayParkingService.swift",
+    "Sources/RoadieDaemon/RestoreSafetyService.swift",
+    "Sources/RoadieDaemon/WindowRuleEngine.swift",
+    "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+    "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+    "Sources/RoadieDaemon/WindowRuleValidator.swift",
+    "Sources/RoadieDaemon/ConfigReloadService.swift",
+    "Sources/RoadieDaemon/LayoutIntentStore.swift"
+  ],
+  "source_lines_read_entirely": 8113,
+  "test_files_read_entirely": [
+    "Tests/RoadieAXTests/AXUnresponsiveAppsTests.swift",
+    "Tests/RoadieAXTests/ReactiveTilingAXTests.swift",
+    "Tests/RoadieDaemonTests/ConfigReloadTests.swift",
+    "Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift",
+    "Tests/RoadieDaemonTests/TickSchedulerTests.swift",
+    "Tests/RoadieDaemonTests/RestoreSafetyServiceTests.swift"
+  ],
+  "test_excerpts_read": {
+    "Tests/RoadieDaemonTests/DisplayParkingServiceTests.swift": [
+      "280-430"
+    ],
+    "Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift": [
+      "390-482"
+    ],
+    "Tests/RoadieDaemonTests/WindowRuleMaintainerTests.swift": [
+      "530-632"
+    ],
+    "Tests/RoadieDaemonTests/SnapshotServiceTests.swift": [
+      "3315-3385"
+    ],
+    "Tests/RoadieDaemonTests/StatePersistenceTests.swift": [
+      "410-459"
+    ]
+  },
+  "symbol_scans_only": [
+    "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift"
+  ],
+  "additional_source_excerpts_read": {
+    "Sources/RoadieDaemon/DaemonSnapshot.swift": [
+      "225-256",
+      "365-385",
+      "410-426",
+      "500-530",
+      "810-855"
+    ],
+    "Sources/RoadieDaemon/CLICommandRouter.swift": [
+      "330-355",
+      "1231-1258"
+    ],
+    "Sources/RoadieDaemon/DaemonHealth.swift": [
+      "83-125"
+    ],
+    "Sources/RoadieCore/Config.swift": [
+      "1030-1115"
+    ],
+    "Sources/RoadieDaemon/ProcessLiveness.swift": [
+      "entier"
+    ]
+  },
+  "findings": [
+    {
+      "id": "REL-301",
+      "category": "reliability",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/StateAudit.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StateAudit.swift",
+      "line": 224,
+      "title": "La réparation efface les associations des fenêtres encore ouvertes mais invisibles",
+      "description": "heal construit liveWindowIDs uniquement depuis les fenêtres présentes dans le relevé à l’écran. repairScopes supprime ensuite tout membre absent sans vérifier sa fermeture ni garder la grâce de réconciliation. Le relevé ne réintroduit pas les fenêtres minimisées ou sur un autre Space.",
+      "evidence": "            for stageIndex in state.scopes[scopeIndex].stages.indices {\n                let beforeCount = state.scopes[scopeIndex].stages[stageIndex].members.count\n                state.scopes[scopeIndex].stages[stageIndex].members.removeAll { member in\n                    if !liveWindowIDs.contains(member.windowID) {\n                        return true\n                    }\n                    if seenWindowIDs.contains(member.windowID) {\n                        return true",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Associer une fenêtre à un stage distinct du stage actif, puis minimiser cette fenêtre (ou changer de Space macOS). Exécuter roadie state heal, puis réafficher la fenêtre : son ancien membre a été supprimé. Le chemin CLI appelle StateAuditService.heal à CLICommandRouter.swift:347.",
+      "impact": "Perte persistante de l’association fenêtre/stage et de sa place dans le groupe ; la commande annoncée comme conservatrice traite une absence temporaire comme une fermeture.",
+      "path_type": "cold",
+      "remediation": "Conserver un membre absent tant que sa fermeture n’est pas prouvée. Réutiliser la preuve AX de destruction ou, au minimum, vérifier que son PID est mort. Garder la déduplication indépendante de la visibilité.",
+      "verification": "Ajouter un test avec un membre PID vivant absent de provider.windows : après heal, appartenance, ordre et focus persistent. Ajouter un cas PID prouvé mort et un cas doublon.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "subcategory": "destructive_repair",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_scope": "Auto-contre-lecture entière de StateAudit.swift ; contrôle indépendant demandé au parent.",
+      "counter_audit_notes": "Aucune garde avant removeAll. DaemonSnapshot.swift:371-377 conserve les absents par grâce mais ne les ajoute pas à scopedWindows (415-525). DaemonHealth.swift:117-120 reconnaît la purge et évite seulement le heal complet pendant une reconfiguration écran. Le risque subsiste pour la commande explicite.",
+      "remediation_code": "state.scopes[scopeIndex].stages[stageIndex].members.removeAll { member in\n    if !liveWindowIDs.contains(member.windowID),\n       let pid = member.pid, !ProcessLiveness.isAlive(pid) {\n        return true\n    }\n    return !seenWindowIDs.insert(member.windowID).inserted\n}",
+      "grep_command": "rg -n 'liveWindowIDs|removeAll|repairScopes' Sources/RoadieDaemon/StateAudit.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 612
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 415
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonHealth.swift",
+          "line": 117
+        }
+      ]
+    },
+    {
+      "id": "PERF-301",
+      "category": "performance",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 2647,
+      "title": "La réparation de voisinage refait une recherche linéaire pour chaque fenêtre",
+      "description": "clampedSiblingRepairPlan filtre les n IDs du stage avec contains sur les m fenêtres voisines. Cette intersection coûte O(n*m), alors qu’un Set conserve exactement l’ordre et le résultat en O(n+m). Le code est atteint lors d’un refus de taille des modes sans arbre ; aucune borne de nombre de fenêtres n’est imposée ici.",
+      "evidence": "            guard !siblingEntries.isEmpty else { continue }\n            let siblingIDs = stage.windowIDs.filter { id in\n                siblingEntries.contains { $0.window.id == id }\n            }\n            guard !siblingIDs.isEmpty else { continue }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Utiliser un stage bsp ou masterStack avec n fenêtres, dont une refuse la taille demandée. Chaque appel de réparation recherche chaque ID dans siblingEntries ; avec n voisins, le nombre de comparaisons croît au carré.",
+      "impact": "Travail CPU évitable dans une passe synchrone du tiler. Aucun retard en millisecondes n’a été mesuré ; le constat porte sur la classe de complexité.",
+      "path_type": "hot",
+      "remediation": "Construire un Set des IDs voisins une fois avant le filtre.",
+      "verification": "Comparer le résultat et son ordre sur 10, 100 et 1000 fenêtres synthétiques. Mesurer le nombre de recherches ou le temps de la seule intersection. Revenir à l’ancien filtre si le résultat diffère.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "subcategory": "algorithmic_complexity",
+      "complexity_current": "O(n*m)",
+      "complexity_target": "O(n+m)",
+      "counter_audit": "CONFIRMED",
+      "counter_audit_scope": "Fichier LayoutMaintainer.swift lu entièrement ; contre-audit indépendant à finaliser par le parent.",
+      "counter_audit_notes": "La garde ne borne que le mode et la présence d’un refus. Pas de maximum de fenêtres. Le commentaire O(s*n) ne couvre pas cette recherche imbriquée. Sévérité HIGH pour la branche exceptionnelle de réparation, pas CRITICAL : aucun seuil de latence réel vérifié.",
+      "remediation_code": "let siblingIDSet = Set(siblingEntries.map(\\.window.id))\nlet siblingIDs = stage.windowIDs.filter { siblingIDSet.contains($0) }\nguard !siblingIDs.isEmpty else { continue }",
+      "grep_command": "rg -n -A 3 'let siblingIDs = stage.windowIDs.filter' Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "references": [
+        "Constitution Article XVIII"
+      ]
+    },
+    {
+      "id": "REL-302",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DisplayParkingService.swift",
+      "line": 232,
+      "title": "La reconnexion d’un écran fusionne les stages de bureaux différents",
+      "description": "Le regroupement des stages garés utilise seulement logicalDisplayID. Le bureau du premier stage devient ensuite l’unique targetScope pour tous les stages du groupe. Chaque stage porte pourtant son propre origin.desktopID.",
+      "evidence": "        let grouped = Dictionary(grouping: parkedStages) { stage in\n            stage.origin!.logicalDisplayID\n        }\n\n        for (logicalDisplayID, stages) in grouped {\n            guard let origin = stages.compactMap(\\.origin).first else { continue }\n            let fingerprint = fingerprintForRestore(",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Sur un écran externe, créer un stage avec une fenêtre sur le bureau Roadie 1 et un autre sur le bureau 2. Débrancher puis rebrancher l’écran avant matérialisation des stages garés. restoreParkedStages les range tous deux dans le bureau du premier origin.",
+      "impact": "Les stages du second bureau changent de bureau après reconnexion ; les identifiants identiques peuvent aussi être renommés avec un suffixe restored.",
+      "path_type": "hot",
+      "remediation": "Regrouper par identité logique de l’écran et bureau d’origine, ou restaurer séparément chaque sous-groupe desktopID. Ne retirer que les stages effectivement restaurés.",
+      "verification": "Ajouter un test aller-retour de parking avec deux desktopID pour le même logicalDisplayID et vérifier toutes les associations initiales.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+          "line": 264
+        },
+        {
+          "file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+          "line": 282
+        }
+      ]
+    },
+    {
+      "id": "REL-303",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 1860,
+      "title": "Les règles de placement ignorent le rôle AX de la fenêtre",
+      "description": "Le contexte passé au moteur de règles ne renseigne ni role ni subrole. WindowRuleMatcher compare ces critères uniquement avec le contexte, sans reprendre les champs de window. Une règle de placement qui impose role ou subrole ne correspond donc jamais dans le maintainer.",
+      "evidence": "        for entry in snapshot.windows where entry.window.isOnScreen {\n            let context = WindowRuleMatchContext(\n                display: entry.scope?.displayID.rawValue,\n                desktop: entry.scope.map { String($0.desktopID.rawValue) },\n                stage: entry.scope?.stageID.rawValue\n            )\n            let application = ruleEngine.evaluate(window: entry.window, context: context)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Définir une règle app=\"Terminal\", role=\"AXWindow\", assign_stage=\"dev\", puis ouvrir une nouvelle fenêtre Terminal de rôle AXWindow. La policy du snapshot peut reconnaître le rôle mais evaluateRules reçoit context.role=nil et ne place pas la fenêtre.",
+      "impact": "Les critères exposés par la configuration et par rules explain n’ont pas le même comportement que le placement réel.",
+      "path_type": "hot",
+      "remediation": "Renseigner role: entry.window.role et subrole: entry.window.subrole lors de la création du contexte. Définir et transmettre aussi la source réelle d’isFloating au lieu de laisser ce critère toujours nil.",
+      "verification": "Tester LayoutMaintainer avec une fenêtre dont le rôle est réellement renseigné et une règle role/subrole, puis un rôle différent. Éviter un test limité au matcher recevant un contexte construit à la main.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+          "line": 42
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 827
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/WindowRuleMatcherTests.swift",
+          "line": 23
+        }
+      ]
+    },
+    {
+      "id": "REL-304",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 3087,
+      "title": "Les placements de plusieurs écrans empêchent de sauver leurs dispositions",
+      "description": "persistLayoutIntent initialise les placements d’un seul scope puis ajoute toutes les fenêtres appliquées sur tous les scopes. La garde compare ensuite cet ensemble pollué aux seuls IDs du stage. Elle abandonne dès qu’une autre fenêtre a été placée ailleurs pendant la même passe.",
+      "evidence": "            var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in\n                guard entry.scope == scope, entry.window.isTileCandidate else { return nil }\n                return (entry.window.id, entry.window.frame)\n            })\n            for (id, frame) in resultFrames {\n                placements[id] = frame\n            }\n            guard Set(placements.keys) == Set(stage.windowIDs) else { continue }\n            service.saveLayoutIntent(scope: scope, windowIDs: stage.windowIDs, placements: placements)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Préparer deux écrans avec des stages bsp ou masterStack sans intent, chacun nécessitant une écriture. Lancer une passe qui réussit sur les deux écrans. Pour chaque scope, resultFrames contient aussi les IDs de l’autre ; aucune disposition de cette passe n’est sauvegardée.",
+      "impact": "La mémorisation des dispositions varie selon les écritures simultanées sur un autre écran. Une commande de masquage d’un stage inactif suffit également à introduire un ID étranger.",
+      "path_type": "hot",
+      "remediation": "Ne fusionner que les resultFrames des IDs du scope courant. Grouper les résultats par scope en amont pour éviter de reparcourir tout le résultat pour chaque scope.",
+      "verification": "Test de deux écrans avec placements simultanés : chaque intent doit contenir uniquement ses membres et toutes ses frames appliquées.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "remediation_code": "for id in placements.keys {\n    if let frame = resultFrames[id] { placements[id] = frame }\n}"
+    },
+    {
+      "id": "REL-305",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+      "line": 178,
+      "title": "Enregistrer une affinité supprime les autres actions des règles générées",
+      "description": "saveAffinity et removeAppAffinity chargent puis réécrivent toutes les règles du fichier generated. render ne sérialise que les affectations et follow. Les actions manage, exclude, floating, layout, gap_override, scratchpad et emit_event des autres règles disparaissent.",
+      "evidence": "            lines.append(\"\")\n            lines.append(\"[rules.action]\")\n            append(\"assign_desktop\", rule.action.assignDesktop, to: &lines)\n            append(\"assign_display\", rule.action.assignDisplay, to: &lines)\n            append(\"assign_stage\", rule.action.assignStage, to: &lines)\n            if let follow = rule.action.follow {\n                lines.append(\"follow = \\(follow ? \"true\" : \"false\")\")\n            }\n            lines.append(\"\")",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Dans le fichier generated, conserver une règle id=\"manual-rule\" avec match.app=\"App A\" et action.exclude=true. Ajouter une affinité pour App B par le menu. La règle manual-rule est encore présente, mais son action exclude a disparu après sauvegarde.",
+      "impact": "Perte de configuration sans erreur. Le commentaire du fichier promet seulement l’écrasement des règles affinity-* correspondantes, alors que les autres règles sont aussi altérées.",
+      "path_type": "cold",
+      "remediation": "Préserver les règles non modifiées ou sérialiser tous les champs du modèle RuleAction avec un encodeur TOML. Vérifier un aller-retour exact avant écriture atomique.",
+      "verification": "Précharger une règle non-affinity avec toutes les actions, enregistrer puis retirer une autre affinité et comparer la règle initiale après décodage.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 42
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 72
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 155
+        }
+      ]
+    },
+    {
+      "id": "REL-306",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "line": 1049,
+      "title": "Le focus annonce un succès lorsque AXRaise échoue sans délai dépassé",
+      "description": "focus renvoie l’inverse de noteResult pour AXRaise. Or noteResult renvoie vrai uniquement pour cannotComplete. Les erreurs failure, invalidUIElement et actionUnsupported deviennent donc un succès. L’erreur de modification AXFocusedWindow est également ignorée hors cannotComplete.",
+      "evidence": "        guard !registry.isQuarantined(pid) else { return false }\n        let app = AXMessaging.application(pid)\n        if registry.noteResult(AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, element), pid: pid) {\n            return false\n        }\n        return !registry.noteResult(AXUIElementPerformAction(element, kAXRaiseAction as CFString), pid: pid)\n    }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "La fenêtre est résolue, puis disparaît avant AXRaise, ou son application refuse l’action avec actionUnsupported. AXRaise renvoie cette erreur ; focus retourne néanmoins true.",
+      "impact": "Les appelants croient avoir activé la cible alors que l’action a échoué. Ils ne peuvent pas déclencher le repli ou signaler correctement l’échec.",
+      "path_type": "hot",
+      "remediation": "Enregistrer chaque AXError dans la quarantaine, mais comparer séparément le résultat final avec .success. Garder un repli seulement s’il est confirmé par une lecture du focus.",
+      "verification": "Injecter une action AX retournant success, failure, invalidUIElement, actionUnsupported et cannotComplete ; seul le succès confirmé doit donner true.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 295
+        },
+        {
+          "file": "Tests/RoadieAXTests/AXUnresponsiveAppsTests.swift",
+          "line": 30
+        }
+      ],
+      "remediation_code": "let error = AXUIElementPerformAction(element, kAXRaiseAction as CFString)\nregistry.noteResult(error, pid: pid)\nreturn error == .success"
+    },
+    {
+      "id": "REL-307",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 1867,
+      "title": "Une règle différée faute d’écran cible n’est jamais retentée",
+      "description": "evaluateRules inscrit systématiquement la fenêtre dans observedRulePlacementWindowIDs, même quand applyRulePlacement renvoie nil pour destination indisponible. Aux passes suivantes, la garde window already managed intervient avant de résoudre à nouveau la destination.",
+      "evidence": "            appendRuleEvents(application, window: entry.window)\n            if let placement = applyRulePlacement(application, entry: entry, snapshot: snapshot) {\n                placements.append(placement)\n            }\n            observedRulePlacementWindowIDs.insert(entry.window.id)\n        }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Ouvrir une fenêtre correspondant à assign_display=\"External\" alors que l’écran External est débranché. La première passe publie rule.placement_deferred. Rebrancher External en gardant la fenêtre ouverte et visible : son ID reste observé et la règle est désormais ignorée.",
+      "impact": "Le placement annoncé comme différé est abandonné jusqu’à disparition puis réapparition de la fenêtre dans le relevé ou redémarrage du maintainer.",
+      "path_type": "hot",
+      "remediation": "Distinguer une décision définitive d’une décision deferred. Ne marquer l’ID traité qu’après un placement ou un refus définitif ; retenter une destination indisponible au changement de topologie.",
+      "verification": "Étendre tickDefersPlacementWhenDisplayIsMissing : ajouter ensuite l’écran à un fournisseur mutable, avancer le délai de stabilisation et vérifier le placement.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture du flux complet ; scénario non exécuté sur les fenêtres réelles",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2043
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2088
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/WindowRuleMaintainerTests.swift",
+          "line": 540
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    "Sources/RoadieAX/SystemSnapshotProvider.swift:243-299 : délai AX court et quarantaine par PID protégée par NSLock ; arrêt au premier cannotComplete.",
+    "Sources/RoadieAX/SystemSnapshotProvider.swift:938-982 : écritures groupées par PID, index de fenêtres réutilisé, protection fraîche du plein écran natif et restauration AXEnhancedUserInterface dans defer.",
+    "Sources/RoadieDaemon/TickScheduler.swift:139-168 : demandes coalescées, unique minuteur, pas de réarmement en boucle lorsque la souris bloque.",
+    "Sources/RoadieDaemon/RestoreSafetyService.swift:295-321 : réservation de la reprise sous verrou, appels AX hors verrou et revérification du propriétaire avant validation.",
+    "Tests/RoadieAXTests/ReactiveTilingAXTests.swift : tests des codes AX en échec, du budget de tentatives, du plein écran frais et de l’énumération unique par PID. Ce ne sont pas seulement des tests du scénario nominal.",
+    "Tests/RoadieDaemonTests/TickSchedulerTests.swift:90-336 : horloge et minuteur contrôlés ; vérification des échéances dépassées, coalescence, absence de boucle pendant le geste et reprise au relâchement.",
+    "Tests/RoadieDaemonTests/RestoreSafetyServiceTests.swift:328-641 : distingue PID vivant/mort/inconnu, fenêtre native plein écran, restauration ajustée mais encore cachée, reprise hors verrou et marqueur repris par une nouvelle instance. Les assertions vérifient les effets visibles et l’état de reprise."
+  ],
+  "minimalism": {
+    "estimated_removable_lines": 0,
+    "conclusion": "Aucune suppression prouvée à comportement constant dans ce périmètre. Les doublons de protocole assurent surtout la compatibilité des doubles de test. Les états de protection ont des conditions et tests distincts ; le volume seul ne justifie pas leur retrait. scratchpadMarkers n’a pas de consommateur production détecté, mais son API publique et ses tests empêchent de chiffrer honnêtement une suppression sans décision produit."
+  },
+  "future_cognitive_load": "LayoutMaintainer concentre 3 644 lignes et deux algorithmes de disposition avec de nombreux états temporels. Les invariants et tolérances sont explicités, mais les résultats montrent que les frontières scope/écran/bureau restent faciles à confondre. Préférer des corrections ciblées et tests multi-scope ; aucune origine LLM n’est déduite de la forme du code.",
+  "not_verified": [
+    "Pas de swift build ni swift test dans ce sous-audit : réservés au parent.",
+    "Aucun appel AX actif sur les applications, aucune minimisation réelle, aucun débranchement écran exécuté.",
+    "Tests associés non lus intégralement hors les six fichiers listés ; inventaire et extraits ne valent pas couverture de toutes les branches.",
+    "Pas de mesure runtime de latence ni de course mémoire. La concurrence @unchecked Sendable n’est pas déclarée défectueuse sans chemin réel.",
+    "Course théorique currentConfig/reload écartée des constats : le routeur utilise une instance éphémère ; aucun appel concurrent production sur la même instance reload n’est démontré.",
+    "L’échappement TOML des retours à la ligne et le cache regex non borné sont des pistes observées, non élevées en constats faute de scénario métier prioritaire confirmé."
+  ]
+}

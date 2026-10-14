@@ -105,7 +105,9 @@ The nav rail also supports mouse interactions:
 
 - drag a thumbnail to a stage;
 - drag a thumbnail into the active workspace;
-- drag an application window by its title bar onto a stage or empty rail space.
+- drag an application window by its title bar onto a stage or empty rail space;
+- drag a stage with the right mouse button to reorder it;
+- right-click a stage to open its menu (rename, send to another display).
 
 ## Safety And Generated Files
 
@@ -330,7 +332,7 @@ the rail in pixels.
 
 ## Shortcuts
 
-Roadie has no hotkey engine. Use a tool that runs a command on a key press. The folder `examples/` has ready-to-use files:
+Roadie has no hotkey engine. The only exception is `search_hotkey`, the global shortcut for search mode (see `[experimental.target_mode]`). For everything else, use a tool that runs a command on a key press. The folder `examples/` has ready-to-use files:
 
 - `examples/skhd/skhdrc`: shortcuts for [skhd](https://github.com/koekeishiya/skhd). Copy it to `~/.config/skhd/skhdrc`, then run `skhd --reload`.
 - `examples/karabiner/roadie.json`: rules for Karabiner-Elements. Copy it to `~/.config/karabiner/assets/complex_modifications/`, then enable the rules in Karabiner-Elements > Complex Modifications > Add predefined rule.

@@ -4,13 +4,17 @@ import RoadieCore
 import RoadieStages
 import RoadieTiler
 
-public struct LayoutCommandResult: Equatable, Sendable {
+public struct LayoutCommandResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil
+    /// (statut non posé, code de sortie lu dans le message).
+    public var outcome: CommandOutcome?
 
-    public init(message: String, changed: Bool) {
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
         self.message = message
         self.changed = changed
+        self.outcome = outcome ?? (changed ? .changed : nil)
     }
 }
 
@@ -30,15 +34,46 @@ public struct LayoutCommandService {
     public func balance() -> LayoutCommandResult {
         let generation = PlacementGeneration.shared.next()
         let snapshot = service.snapshot()
-        service.removeLayoutIntents(in: snapshot)
         let treeScopes = snapshot.displays.compactMap { display -> StageScope? in
             guard let scope = snapshot.state.activeScope(on: display.id),
                   snapshot.state.stage(scope: scope)?.mode.usesTreeEngine == true
             else { return nil }
             return scope
         }
-        let treeResults = treeScopes.map { scope in
-            treeCommand("balance", label: "balance", scope: scope, snapshot: snapshot, generation: generation) { tree, _ in tree.balanced() }
+        // Toutes les écritures avant le premier effet AX (REL-021, R2-01) : un refus n'a rien
+        // déplacé. Intents retirés d'abord ; en cas d'échec, ceux déjà retirés reviennent, sinon
+        // la maintenance redisposerait les écrans sans intent après l'échec annoncé.
+        let removedIntents = snapshot.displays.compactMap { display in
+            snapshot.state.activeScope(on: display.id).flatMap(service.effectiveIntentStore.intent(for:))
+        }
+        let changedTrees: Set<StageScope>
+        do {
+            try service.removeLayoutIntents(in: snapshot)
+            // Une seule transaction pour tous les arbres : écrits ensemble ou pas du tout.
+            changedTrees = treeScopes.isEmpty ? [] : try service.effectiveStageStore.mutateChecked { state -> Set<StageScope> in
+                var changed = Set<StageScope>()
+                for scope in treeScopes {
+                    let existing = state.bspTree(for: scope) ?? .empty
+                    let balanced = existing.balanced()
+                    guard balanced != existing else { continue }
+                    state.setBSPTree(balanced, for: scope)
+                    changed.insert(scope)
+                }
+                return changed
+            }
+        } catch {
+            do {
+                for intent in removedIntents { try service.effectiveIntentStore.saveChecked(intent) }
+            } catch let rollback {
+                return .persistenceFailure("balance", PartialCommitError(cause: "\(error)", rollback: rollback))
+            }
+            return .persistenceFailure("balance", error)
+        }
+        let treeChanged = treeScopes.map { scope in
+            let tick = service.applyTreeScope(scope, cause: "balance", generation: generation)
+            let changed = changedTrees.contains(scope) || tick.applied + tick.clamped > 0
+            emit(command: "balance", changed: changed || tick.failed == 0)
+            return changed
         }
         let scopesByWindowID = Dictionary(
             snapshot.windows.compactMap { entry in entry.scope.map { (entry.window.id, $0) } },
@@ -48,16 +83,16 @@ public struct LayoutCommandService {
             scopesByWindowID[command.window.id].map { !treeScopes.contains($0) } ?? true
         })
         let result = service.apply(plan, generation: generation)
-        return LayoutCommandResult(
-            message: "balance: trees=\(treeScopes.count) commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
-            changed: treeResults.contains { $0.changed } || result.failed < result.attempted || plan.commands.isEmpty
+        return LayoutCommandResult.changedOrFailed(
+            "balance: trees=\(treeScopes.count) commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+            changed: treeChanged.contains(true) || result.failed < result.attempted || plan.commands.isEmpty
         )
     }
 
     public func flatten() -> LayoutCommandResult {
         let generation = PlacementGeneration.shared.next()
         guard let context = activeContext() else {
-            return LayoutCommandResult(message: "layout flatten: no active scope", changed: false)
+            return LayoutCommandResult(message: "layout flatten: no active scope", changed: false, outcome: .noOp)
         }
         // Mode arbre : `layout flatten` équivaut à `balance` (R12).
         if context.stage.mode.usesTreeEngine {
@@ -65,13 +100,17 @@ public struct LayoutCommandService {
                 tree.balanced()
             }
         }
-        service.removeLayoutIntent(scope: context.scope)
+        do {
+            try service.removeLayoutIntentChecked(scope: context.scope)
+        } catch {
+            return .persistenceFailure("layout flatten", error)
+        }
         let ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
         let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered, generation: generation)
         let result = service.apply(plan, generation: generation)
         emit(command: "layout.flatten", changed: result.failed < result.attempted || plan.commands.isEmpty)
-        return LayoutCommandResult(
-            message: "layout flatten: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return LayoutCommandResult.changedOrFailed(
+            "layout flatten: commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed < result.attempted || plan.commands.isEmpty
         )
     }
@@ -79,16 +118,16 @@ public struct LayoutCommandService {
     public func split(_ axis: String) -> LayoutCommandResult {
         let generation = PlacementGeneration.shared.next()
         guard axis == "horizontal" || axis == "vertical" else {
-            return LayoutCommandResult(message: "layout split: requires horizontal|vertical", changed: false)
+            return LayoutCommandResult(message: "layout split: requires horizontal|vertical", changed: false, outcome: .failed)
         }
         guard let context = activeContext() else {
-            return LayoutCommandResult(message: "layout split: no active scope", changed: false)
+            return LayoutCommandResult(message: "layout split: no active scope", changed: false, outcome: .noOp)
         }
         // Mode arbre : impose le sens du split parent de la fenêtre active. Vocabulaire Roadie :
         // `horizontal` = côte à côte (frontière verticale), `vertical` = empilées.
         if context.stage.mode.usesTreeEngine {
             guard let activeID = activeWindowID(in: context) else {
-                return LayoutCommandResult(message: "layout split: no active window", changed: false)
+                return LayoutCommandResult(message: "layout split: no active window", changed: false, outcome: .noOp)
             }
             let orientation: BSPOrientation = axis == "horizontal" ? .vertical : .horizontal
             return treeCommand("layout.split", label: "layout split \(axis)", scope: context.scope, snapshot: context.snapshot, generation: generation) { tree, absent in
@@ -96,9 +135,8 @@ public struct LayoutCommandService {
             }
         }
         guard let display = context.snapshot.displays.first(where: { $0.id == context.scope.displayID }) else {
-            return LayoutCommandResult(message: "layout split: no active display", changed: false)
+            return LayoutCommandResult(message: "layout split: no active display", changed: false, outcome: .noOp)
         }
-        service.removeLayoutIntent(scope: context.scope)
         let ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
         let placements = linearPlacements(
             ordered,
@@ -115,11 +153,21 @@ public struct LayoutCommandService {
             return ApplyCommand(window: window, frame: Rect(frame.integral))
         }
         let plan = ApplyPlan(commands: commands)
-        let result = service.apply(plan, generation: generation)
-        persist(scope: context.scope, ordered: ordered, snapshot: context.snapshot, result: result)
+        let result: ApplyResult
+        do {
+            result = try applyAfterIntent(
+                scope: context.scope,
+                windowIDs: ordered,
+                placements: plannedPlacements(scope: context.scope, snapshot: context.snapshot, plan: plan),
+                plan: plan,
+                generation: generation
+            )
+        } catch {
+            return .persistenceFailure("layout split \(axis)", error)
+        }
         emit(command: "layout.split", changed: result.failed < result.attempted || plan.commands.isEmpty)
-        return LayoutCommandResult(
-            message: "layout split \(axis): commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return LayoutCommandResult.changedOrFailed(
+            "layout split \(axis): commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed < result.attempted || plan.commands.isEmpty
         )
     }
@@ -129,13 +177,13 @@ public struct LayoutCommandService {
     public func toggleSplit(_ direction: Direction? = nil) -> LayoutCommandResult {
         let generation = PlacementGeneration.shared.next()
         guard let context = activeContext() else {
-            return LayoutCommandResult(message: "layout toggle-split: no active scope", changed: false)
+            return LayoutCommandResult(message: "layout toggle-split: no active scope", changed: false, outcome: .noOp)
         }
         guard context.stage.mode.usesTreeEngine else {
-            return LayoutCommandResult(message: "layout toggle-split: requires spatialBsp", changed: false)
+            return LayoutCommandResult(message: "layout toggle-split: requires spatialBsp", changed: false, outcome: .failed)
         }
         guard let activeID = activeWindowID(in: context) else {
-            return LayoutCommandResult(message: "layout toggle-split: no active window", changed: false)
+            return LayoutCommandResult(message: "layout toggle-split: no active window", changed: false, outcome: .noOp)
         }
         return treeCommand("layout.toggle_split", label: "layout toggle-split", scope: context.scope, snapshot: context.snapshot, generation: generation) { tree, absent in
             tree.togglingSplit(of: activeID, excluding: absent)
@@ -151,11 +199,11 @@ public struct LayoutCommandService {
         guard let context = activeContext(),
               let activeID = context.snapshot.focusedWindowID ?? context.stage.focusedWindowID ?? context.stage.windowIDs.last
         else {
-            return LayoutCommandResult(message: "layout \(verb): no active window", changed: false)
+            return LayoutCommandResult(message: "layout \(verb): no active window", changed: false, outcome: .noOp)
         }
         // Mode arbre : refus explicite (R12) ; « unavailable » donne un code de sortie non nul.
         if context.stage.mode.usesTreeEngine {
-            return LayoutCommandResult(message: "layout \(verb): unavailable in tree mode (spatialBsp), use warp", changed: false)
+            return LayoutCommandResult(message: "layout \(verb): unavailable in tree mode (spatialBsp), use warp", changed: false, outcome: .failed)
         }
         var ordered = service.orderedWindowIDs(in: context.scope, from: context.snapshot)
         ordered.removeAll { $0 == activeID }
@@ -166,11 +214,21 @@ public struct LayoutCommandService {
             ordered.append(activeID)
         }
         let plan = service.applyPlan(from: context.snapshot, scope: context.scope, orderedWindowIDs: ordered, generation: generation)
-        let result = service.apply(plan, generation: generation)
-        persist(scope: context.scope, ordered: ordered, snapshot: context.snapshot, result: result)
+        let result: ApplyResult
+        do {
+            result = try applyAfterIntent(
+                scope: context.scope,
+                windowIDs: ordered,
+                placements: plannedPlacements(scope: context.scope, snapshot: context.snapshot, plan: plan),
+                plan: plan,
+                generation: generation
+            )
+        } catch {
+            return .persistenceFailure("layout \(verb) \(direction.rawValue)", error)
+        }
         emit(command: "layout.insert", changed: result.failed < result.attempted || plan.commands.isEmpty)
-        return LayoutCommandResult(
-            message: "layout insert \(direction.rawValue): commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return LayoutCommandResult.changedOrFailed(
+            "layout insert \(direction.rawValue): commands=\(plan.commands.count) applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed < result.attempted || plan.commands.isEmpty
         )
     }
@@ -182,20 +240,25 @@ public struct LayoutCommandService {
               let entry = context.snapshot.windows.first(where: { $0.window.id == activeID }),
               let display = context.snapshot.displays.first(where: { $0.id == context.scope.displayID })
         else {
-            return LayoutCommandResult(message: "layout zoom-parent: no active window", changed: false)
+            return LayoutCommandResult(message: "layout zoom-parent: no active window", changed: false, outcome: .noOp)
         }
         let plan = ApplyPlan(commands: [ApplyCommand(window: entry.window, frame: display.visibleFrame)])
-        let result = service.apply(plan, generation: generation)
-        service.saveLayoutIntent(
-            scope: context.scope,
-            windowIDs: [activeID],
-            placements: [activeID: result.items.first?.actual ?? display.visibleFrame],
-            source: .command,
-            zoomedWindowID: activeID
-        )
+        let result: ApplyResult
+        do {
+            result = try applyAfterIntent(
+                scope: context.scope,
+                windowIDs: [activeID],
+                placements: [activeID: display.visibleFrame],
+                zoomedWindowID: activeID,
+                plan: plan,
+                generation: generation
+            )
+        } catch {
+            return .persistenceFailure("layout zoom-parent", error)
+        }
         emit(command: "layout.zoom-parent", changed: result.failed < result.attempted)
-        return LayoutCommandResult(
-            message: "layout zoom-parent: applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
+        return LayoutCommandResult.changedOrFailed(
+            "layout zoom-parent: applied=\(result.applied) clamped=\(result.clamped) failed=\(result.failed)",
             changed: result.failed < result.attempted
         )
     }
@@ -223,18 +286,23 @@ public struct LayoutCommandService {
         let live = Set(snapshot.windows.compactMap { entry in
             entry.scope == scope && entry.window.isTileCandidate ? entry.window.id : nil
         })
-        let treeChanged = service.effectiveStageStore.mutate { state -> Bool in
-            let existing = state.bspTree(for: scope) ?? .empty
-            let mutated = mutation(existing, Set(existing.windowIDs).subtracting(live))
-            guard mutated != existing else { return false }
-            state.setBSPTree(mutated, for: scope)
-            return true
+        let treeChanged: Bool
+        do {
+            treeChanged = try service.effectiveStageStore.mutateChecked { state -> Bool in
+                let existing = state.bspTree(for: scope) ?? .empty
+                let mutated = mutation(existing, Set(existing.windowIDs).subtracting(live))
+                guard mutated != existing else { return false }
+                state.setBSPTree(mutated, for: scope)
+                return true
+            }
+        } catch {
+            return .persistenceFailure(label, error)
         }
         let tick = service.applyTreeScope(scope, cause: command, generation: generation)
         let changed = treeChanged || tick.applied + tick.clamped > 0
         emit(command: command, changed: changed || tick.failed == 0)
-        return LayoutCommandResult(
-            message: "\(label): tree changed=\(treeChanged) commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)",
+        return LayoutCommandResult.changedOrFailed(
+            "\(label): tree changed=\(treeChanged) commands=\(tick.commands) applied=\(tick.applied) clamped=\(tick.clamped) failed=\(tick.failed)",
             changed: changed
         )
     }
@@ -261,15 +329,60 @@ public struct LayoutCommandService {
         return nil
     }
 
-    private func persist(scope: StageScope, ordered: [WindowID], snapshot: DaemonSnapshot, result: ApplyResult) {
+    /// Cadres du scope après le plan : cadres observés, remplacés par ceux que le plan demande.
+    // O(w + c) - w = fenêtres du snapshot, c = commandes du plan.
+    private func plannedPlacements(scope: StageScope, snapshot: DaemonSnapshot, plan: ApplyPlan) -> [WindowID: Rect] {
         var placements = Dictionary(uniqueKeysWithValues: snapshot.windows.compactMap { entry -> (WindowID, Rect)? in
             guard entry.scope == scope else { return nil }
             return (entry.window.id, entry.window.frame)
         })
-        for item in result.items where item.status != .failed {
-            placements[item.windowID] = item.actual ?? item.requested
+        for command in plan.commands {
+            placements[command.window.id] = command.frame
         }
-        service.saveLayoutIntent(scope: scope, windowIDs: ordered, placements: placements, source: .command)
+        return placements
+    }
+
+    /// Intent de la commande écrit avant tout effet AX (REL-021) : une écriture refusée ne
+    /// déplace rien (erreur levée). Si l'application refuse tous les cadres, l'intent précédent
+    /// revient, sinon la maintenance réappliquerait la disposition refusée ; ce retour arrière
+    /// impossible lève `PartialCommitError`. Les cadres ajustés par les applications remplacent
+    /// ensuite les cadres demandés, au mieux : l'intent écrit reste cohérent, l'observation le recale.
+    // O(c) écritures AX groupées + O(c) - c = commandes du plan.
+    private func applyAfterIntent(
+        scope: StageScope,
+        windowIDs: [WindowID],
+        placements: [WindowID: Rect],
+        zoomedWindowID: WindowID? = nil,
+        plan: ApplyPlan,
+        generation: UInt64
+    ) throws -> ApplyResult {
+        let previous = service.effectiveIntentStore.intent(for: scope)
+        try service.saveLayoutIntentChecked(
+            scope: scope, windowIDs: windowIDs, placements: placements, source: .command, zoomedWindowID: zoomedWindowID
+        )
+        let result = service.apply(plan, generation: generation)
+        if result.attempted > 0, result.failed == result.attempted {
+            do {
+                if let previous {
+                    try service.effectiveIntentStore.saveChecked(previous)
+                } else {
+                    try service.removeLayoutIntentChecked(scope: scope)
+                }
+            } catch {
+                throw PartialCommitError(cause: "frames refused by the application", rollback: error)
+            }
+            return result
+        }
+        var applied = placements
+        for item in result.items where item.status != .failed {
+            applied[item.windowID] = item.actual ?? item.requested
+        }
+        if applied != placements {
+            try? service.saveLayoutIntentChecked(
+                scope: scope, windowIDs: windowIDs, placements: applied, source: .command, zoomedWindowID: zoomedWindowID
+            )
+        }
+        return result
     }
 
     private func linearPlacements(_ ordered: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {
@@ -331,6 +444,59 @@ struct CommandPlacement {
     var restoring: [WindowID: CGRect] = [:]
     /// Scopes à disposer ; seuls ceux actifs dans le snapshot du plan sont posés. nil : tous.
     var layoutScopes: Set<StageScope>? = []
+}
+
+/// Échec d'une commande dont le retour arrière a lui aussi échoué (REL-021) : une écriture reste.
+struct PartialCommitError: Error, CustomStringConvertible {
+    let cause: String
+    let rollback: Error
+
+    var description: String { "\(cause); partial, rollback failed: \(rollback)" }
+}
+
+/// L'état des stages a changé depuis l'écriture à annuler : l'annuler écraserait ce changement.
+private struct StageStateChangedError: Error, CustomStringConvertible {
+    var description: String { "stage state changed since the command wrote it" }
+}
+
+extension SnapshotService {
+    /// Transfert entre scopes (REL-021) : `body` écrit l'état des stages, puis les intents des
+    /// scopes rendus par `clearing` sont retirés en une seule écriture. Si ce retrait échoue,
+    /// l'état reprend sa valeur précédente : la commande refusée ne laisse aucune écriture.
+    /// Retour arrière impossible : `PartialCommitError`.
+    // O(S) - S = taille de l'état des stages (copie et comparaison).
+    func commitStageTransfer<R>(
+        in store: StageStore,
+        _ body: (inout PersistentStageState) throws -> R,
+        clearingIntentsOf clearing: (R) -> [StageScope]
+    ) throws -> R {
+        var before: PersistentStageState?
+        var after: PersistentStageState?
+        let output = try store.mutateChecked { state -> R in
+            before = state
+            let output = try body(&state)
+            after = state
+            return output
+        }
+        let keys = Set(clearing(output).map(\.description))
+        do {
+            try effectiveIntentStore.mutateChecked { stored in
+                for key in keys { stored.removeValue(forKey: key) }
+            }
+        } catch {
+            guard let before, let after, before != after else { throw error }
+            do {
+                try store.mutateChecked { state in
+                    guard state == after else { throw StageStateChangedError() }
+                    state = before
+                }
+            } catch let rollback {
+                throw PartialCommitError(cause: "\(error)", rollback: rollback)
+            }
+            throw error
+        }
+        return output
+    }
 }
 
 extension SnapshotService {

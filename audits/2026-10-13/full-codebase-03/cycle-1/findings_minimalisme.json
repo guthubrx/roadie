@@ -1,0 +1,121 @@
+{
+  "module": "12",
+  "findings": [
+    {
+      "id": "MIN-006",
+      "category": "minimalism",
+      "subcategory": "unreachable_branch",
+      "severity": "LOW",
+      "file": "Sources/RoadieCore/Config.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 1081,
+      "title": "Le contrôle items.isEmpty est impossible après ajout systématique d’un avertissement",
+      "evidence": "        guard FileManager.default.fileExists(atPath: resolved) else {\n            items.append(\n                ConfigValidationItem(level: .warning, path: resolved, message: \"config file not found; defaults will be used\")\n            )\n            items.append(contentsOf: validateGeneratedRules(path: generatedPath))\n            if items.isEmpty {\n                items.append(ConfigValidationItem(level: .ok, path: resolved, message: \"config is valid\"))\n            }\n            return ConfigValidationReport(items: items)",
+      "description": "Dans le chemin où le fichier de configuration manque, items reçoit toujours un avertissement avant le contrôle isEmpty. validateGeneratedRules ajoute des éléments, sans retirer l’avertissement. Le bloc qui ajoute un succès est inatteignable.",
+      "proof": "Lecture intégrale du chargeur et de validateGeneratedRules. Aucun chemin ne retire les éléments de items entre les lignes 1077 et 1081.",
+      "exploitability": "N/A",
+      "status": "open",
+      "path_type": "cold",
+      "scenario": "Valider un chemin de configuration absent. Le tableau contient toujours au moins l’avertissement « config file not found ».",
+      "impact": "Trois lignes inutiles entretiennent l’idée incorrecte qu’un succès peut être ajouté dans cette branche.",
+      "remediation": "Supprimer uniquement le if items.isEmpty et son corps aux lignes 1081-1083.",
+      "remediation_code": "items.append(contentsOf: validateGeneratedRules(path: generatedPath))\nreturn ConfigValidationReport(items: items)",
+      "verification": "Les sorties de validate(path:) pour un chemin absent restent identiques, avec ou sans règles générées.",
+      "removable_lines_estimate": 3,
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "v14 module 12, checklist 1"
+      ],
+      "source_id": "MODEL-NEW-003",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-models-completion.json",
+      "verification_status": "confirmé par lecture ; scénario système non exécuté",
+      "exploitation_scenario": "Valider un chemin de configuration absent. Le tableau contient toujours au moins l’avertissement « config file not found ».",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "e5cc3a340586"
+    },
+    {
+      "id": "MIN-007",
+      "category": "minimalism",
+      "subcategory": "dead_parameter",
+      "severity": "LOW",
+      "file": "scripts/start-modular",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/start-modular",
+      "line": 61,
+      "title": "Le paramètre args de launch_component est extrait mais jamais utilisé",
+      "description": "Le tableau COMPONENTS encode les composants sous la forme 'nom:args' (ex. 'tiler:run-tiler --yes'). La boucle extrait les deux parties et passe $args comme second paramètre à launch_component, mais la fonction ne lit jamais $args : elle détermine la sous-commande roadied à partir de $name seul et ajoute --yes en dur pour le tiler. La partie ':run-tiler --yes', ':run-rail', etc. est donc du code mort.",
+      "evidence": "  local name=\"$1\"\n  local args=\"$2\"\n  local session=\"roadie-${name}\"",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture ; scénario non exécuté",
+      "exploitation_scenario": "Lire scripts/start-modular complet : $args est déclaré (local args=\"$2\") mais aucune ligne du reste de la fonction ne l'utilise. Le suffixe ':run-tiler --yes' de chaque entrée de COMPONENTS n'a aucun effet.",
+      "impact": "Aucun impact fonctionnel. Les entrées COMPONENTS portent des valeurs fantômes qui ne correspondent à aucune sous-commande roadied valide ('run-tiler' n'existe pas) et pourraient induire en erreur un mainteneur qui tenterait de les modifier.",
+      "path_type": "cold",
+      "remediation": "Supprimer la partie ':args' des entrées COMPONENTS et le paramètre $args de la signature de launch_component. Conserver uniquement le nom du composant.",
+      "remediation_code": "",
+      "verification": "Vérifier la liste et les arguments avec une doublure de tmux dans les tests shell. Ne pas lancer les composants réels pour vérifier cette simplification.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "scripts/start-modular",
+          "line": 103,
+          "note": "Boucle d'appel : name et args extraits, args ignoré"
+        }
+      ],
+      "removable_lines_estimate": 2,
+      "source_id": "MIN-002",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-security-completion.json",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "4d84bc6a00fa"
+    },
+    {
+      "id": "MIN-008",
+      "category": "minimalism",
+      "subcategory": "redundant_screen_selection",
+      "severity": "LOW",
+      "status": "open",
+      "exploitability": "N/A",
+      "file": "Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+      "line": 25,
+      "title": "La sélection géométrique d’un écran ne change pas le résultat de conversion",
+      "description": "Les deux fonctions screenMapping construisent des cadres dérivés de primaryHeight, puis cherchent un écran. Dans les formules finales, le décalage de cet écran s’annule. Pour toute géométrie normale d’écran, le résultat dépend seulement de primaryHeight et du point ou rectangle. Le choix par inclusion, intersection et recouvrement horizontal n’ajoute donc aucun comportement utile. Aucune justification spécifique n’a été trouvée dans les commentaires ni dans la spécification, le plan et les références de la fonction consultés. La simplification vaut aussi pour un écran au-dessus du principal : H=600, écran secondaire y=600 hauteur=800 et point global y=700 donnent yAX=-100, avec ou sans sélection. Les coordonnées NS restent globales ; il ne s’agit pas de coordonnées locales à chaque écran.",
+      "evidence": "        let localTop = rect.minY - mapping.axFrame.minY\n        return CGRect(\n            x: rect.minX,\n            y: mapping.nsFrame.maxY - localTop - rect.height,\n            width: rect.width,\n            height: rect.height\n        )",
+      "scenario": "Poser H=primaryHeight et S=mapping.nsFrame.maxY. axFrame.minY=H-S. La sortie y devient S-(rect.minY-(H-S))-rect.height = H-rect.minY-rect.height, quel que soit l’écran retenu. Pour un point, axFrame.maxY=H-nsFrame.minY, donc y=H-point.y. Ces résultats sont aussi exactement ceux des branches de repli sans écran.",
+      "impact": "Deux sélecteurs, un type intermédiaire et deux helpers CGRect augmentent le code à comprendre pour une simple inversion verticale. Ils allouent et parcourent une liste d’écrans à chaque conversion. Aucun gain chiffré de latence n’est revendiqué.",
+      "path_type": "hot",
+      "removable_lines_estimate": 58,
+      "remediation": "Réduire les deux conversions aux formules globales, puis supprimer ScreenMapping, screenMapping et les helpers CGRect privés devenus inutiles. Éviter aussi de construire screenFrames dans les deux wrappers de production. Conserver les cas de test multiécrans.",
+      "remediation_code": "static func nsPointToAX(_ point: CGPoint, screenFrames _: [CGRect], primaryHeight: CGFloat) -> CGPoint {\n    CGPoint(x: point.x, y: primaryHeight - point.y)\n}\n\nstatic func axRectToNS(_ rect: CGRect, screenFrames _: [CGRect], primaryHeight: CGFloat) -> CGRect {\n    CGRect(x: rect.minX, y: primaryHeight - rect.minY - rect.height, width: rect.width, height: rect.height)\n}",
+      "verification": "Conserver les trois tests de RoadieScreenCoordinateTests et ajouter des rectangles à cheval sur deux écrans, hors écran et avec une liste vide. Vérifier l’équivalence sur des cadres d’écran valides. Aucun test exécuté ici. Si un comportement réel différent apparaît, rétablir les fonctions actuelles avant de poursuivre la simplification. Les tests existants lus couvrent le point d’un écran secondaire situé au-dessus du principal (RoadieScreenCoordinateTests.swift:20-33), ainsi que le retour AX vers NS (lignes 36-46).",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "block_release": false,
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+          "line": 50,
+          "note": "La conversion de cadre d’écran est axFrame.y = primaryHeight - frame.maxY."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+          "line": 62,
+          "note": "Même définition pour le sélecteur de rectangle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 729,
+          "note": "Une autre conversion déjà utilisée dans le dépôt applique directement les mêmes deux formules, sans sélection d’écran."
+        }
+      ],
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)",
+      "source_id": "UI-NEW-003",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-ui-completion.json",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+      "exploitation_scenario": "Poser H=primaryHeight et S=mapping.nsFrame.maxY. axFrame.minY=H-S. La sortie y devient S-(rect.minY-(H-S))-rect.height = H-rect.minY-rect.height, quel que soit l’écran retenu. Pour un point, axFrame.maxY=H-nsFrame.minY, donc y=H-point.y. Ces résultats sont aussi exactement ceux des branches de repli sans écran.",
+      "origin": "nouveau pour les audits 01/02 ; date d’introduction non déduite",
+      "fingerprint": "1785d5b02bc4"
+    }
+  ]
+}

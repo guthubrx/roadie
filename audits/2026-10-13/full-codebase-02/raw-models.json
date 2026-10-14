@@ -1,0 +1,453 @@
+{
+  "original_statuses": [
+    {
+      "id": "PERF-002",
+      "status": "résolu",
+      "reason": "Le chemin normal spatialBsp utilise un Set de feuilles, sans contains récursif par fenêtre. BSPTree.windowIDs remplit un accumulateur unique. La réconciliation amont retire les feuilles en un passage et utilise aussi un Set. Les insertions de secours restent un chemin distinct explicitement documenté.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+          "line": 28,
+          "note": "Collecte puis intersection des feuilles et Set.insert dans la boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPTree.swift",
+          "line": 56,
+          "note": "windowIDs et appendWindowIDs : parcours avec accumulateur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 662,
+          "note": "reconciledTree projette puis réutilise leaves."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 56,
+          "note": "Arbre complet, projection, feuilles manquantes et doublons comparés à une référence."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 36,
+          "note": "Ordre des feuilles identique sur chaînes et arbre équilibré."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 100,
+          "note": "400 cas déterministes de réconciliation comparés à la référence ; chaîne de 50 feuilles sans changement."
+        }
+      ]
+    },
+    {
+      "id": "REL-011",
+      "status": "résolu",
+      "reason": "decodeFlexibleDouble ne confond plus type invalide et clé absente. Il propage la première erreur quand le repli entier échoue. load et validate utilisent ce décodage ; le rattrapage textuel ancien a disparu.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1611,
+          "note": "Erreur propagée, entier accepté uniquement si son décodage réussit."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1082,
+          "note": "validate décode avant ses contrôles complémentaires."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 20,
+          "note": "Booléens, chaînes des deux formes, tableau et table inline refusés par load et validate."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 43,
+          "note": "Absence, entier et décimal gardent leur comportement voulu."
+        }
+      ]
+    },
+    {
+      "id": "REL-030",
+      "status": "résolu",
+      "reason": "masterRatio fait partie de LayoutRequest, est transmis par les producteurs de layout et de réparation, puis utilisé par MasterStackLayoutStrategy. Les fenêtres nouvelles sont exclues de la géométrie à préserver ; les fenêtres existantes et les priorités conservent leur ratio manuel.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutTypes.swift",
+          "line": 79,
+          "note": "La stratégie reçoit request.masterRatio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1685,
+          "note": "Le plan courant reçoit config.tiling.masterRatio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1876,
+          "note": "Le calcul de la surface canonique reçoit aussi le ratio."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2707,
+          "note": "La réparation des voisines reçoit le ratio de la configuration active."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+          "line": 94,
+          "note": "Les fenêtres nouvelles ne fournissent pas de largeur observée candidate."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 103,
+          "note": "Ratios 0,8 et 0,7, défaut 0,6 et décodage depuis TOML."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 105,
+          "note": "Fenêtres nouvelles, géométrie existante et groupes mixtes."
+        }
+      ]
+    },
+    {
+      "id": "REL-031",
+      "status": "résolu",
+      "reason": "Le cas initial masterStack avec espacement 600 dans 1000×500 est corrigé par des espacements horizontal et vertical bornés. BSPTree dispose aussi de cette borne. Le mode historique bsp garde un défaut analogue distinct, enregistré comme REL-MODELS-001.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+          "line": 30,
+          "note": "Espacements bornés selon largeur, hauteur et nombre de fenêtres de pile."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPTree.swift",
+          "line": 131,
+          "note": "Borne géométrique commune aux enfants du BSP persistant."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+          "line": 142,
+          "note": "Reprend exactement gap=600 dans 1000×500 avec 3 fenêtres ; couvre aussi infini, normal et une seule fenêtre."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+          "line": 60,
+          "note": "Les deux orientations du BSP persistant restent dans le conteneur avec gros gaps."
+        }
+      ]
+    },
+    {
+      "id": "MIN-003",
+      "status": "résolu",
+      "reason": "Les quatre branches de plage sur maxDepth, rows et columns ont été retirées. Les initialisateurs conservent les bornes antérieures. Une autre garde inatteignable préexistante, sur les raccourcis normalisés, est relevée séparément dans MIN-MODELS-001.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1531,
+          "note": "validateAppTargets ne vérifie plus maxDepth déjà borné."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1557,
+          "note": "validateTargetGrid ne vérifie plus rows, columns ou maxDepth déjà bornés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 779,
+          "note": "Bornes maintenues dans TargetGridConfig.init."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 83,
+          "note": "Valeurs hors plages normalisées sans erreur, comportement conservé."
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "PERF-MODELS-001",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+      "line": 151,
+      "title": "Le BSP dwindle parcourt quadratiquement les fenêtres même sans redimensionnement prioritaire",
+      "description": "La politique dwindle divise en une fenêtre et toutes les suivantes. splitRatio parcourt chaque sous-liste par contains, puis unionFrame. Lorsque priorityWindowIDs est vide, aucune largeur prioritaire ne peut exister et tous les chemins retournent 0,5, mais les parcours ont déjà été exécutés. Le travail est O(n²) pour un plan ordinaire dwindle. Le compromis commenté dans BSPTree concerne le moteur à arbre persistant, pas cette stratégie, et aucune borne numérique imposée ne limite ici la liste.",
+      "evidence": "        let anyPriority = left.contains { priorityWindowIDs.contains($0) }\n            || right.contains { priorityWindowIDs.contains($0) }\n        if !anyPriority {\n            let leftHasNew = left.contains { newWindowIDs.contains($0) }\n            let rightHasNew = right.contains { newWindowIDs.contains($0) }\n            if leftHasNew || rightHasNew {\n                return 0.5",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture intégrale et analyse des parcours ; non profilé",
+      "exploitation_scenario": "Appeler LayoutPlanner.plan avec mode=.bsp, splitPolicy=\"dwindle\", windowIDs=[1,...,n], currentFrames quelconque et priorityWindowIDs/newWindowIDs vides. Les sous-listes de tailles n, n-1, ..., 2 sont reparcourues ; aucune priorité ne peut changer le ratio 0,5. Ces paramètres proviennent du plan courant lorsque split_policy=\"dwindle\" est configuré.",
+      "impact": "CPU et allocations évitables à chaque calcul de disposition dans cette politique. HIGH suit la convention algorithmique v14 appliquée lors du premier audit ; aucun gel ni temps absolu n’est revendiqué.",
+      "path_type": "hot",
+      "complexity_current": "O(n²) pour dwindle sans priorité ; O(n log n) pour balanced sans priorité",
+      "complexity_target": "O(n) pour le plan sans priorité",
+      "remediation": "Retourner 0,5 dès l’entrée de splitRatio lorsque l’ensemble des fenêtres prioritaires est vide. La correction complète de cette méthode ci-dessous élimine le cas prouvé. Le chemin avec priorités doit être étudié séparément avec des agrégats de sous-arbres avant toute promesse de complexité globale.",
+      "remediation_code": "    private func splitRatio(\n        left: ArraySlice<WindowID>,\n        right: ArraySlice<WindowID>,\n        rect: CGRect,\n        horizontal: Bool,\n        innerGap: CGFloat,\n        currentFrames: [WindowID: CGRect],\n        priorityWindowIDs: Set<WindowID>,\n        newWindowIDs: Set<WindowID>\n    ) -> CGFloat {\n        // Sans redimensionnement prioritaire, tous les chemins rendent déjà 0,5.\n        guard !priorityWindowIDs.isEmpty else { return 0.5 }\n        // Nouvelle fenetre : split 50/50 plutot qu'heriter de la frame macOS arbitraire.\n        // Exception : si un resize explicite (priority)\n        // est en cours dans ce split, on laisse le calcul priority habituel.\n        let anyPriority = left.contains { priorityWindowIDs.contains($0) }\n            || right.contains { priorityWindowIDs.contains($0) }\n        if !anyPriority {\n            let leftHasNew = left.contains { newWindowIDs.contains($0) }\n            let rightHasNew = right.contains { newWindowIDs.contains($0) }\n            if leftHasNew || rightHasNew {\n                return 0.5\n            }\n        }\n\n        guard let leftFrame = unionFrame(for: left, in: currentFrames),\n              let rightFrame = unionFrame(for: right, in: currentFrames)\n        else { return 0.5 }\n\n        let usableExtent = horizontal ? rect.width - innerGap : rect.height - innerGap\n        guard usableExtent > 0 else { return 0.5 }\n\n        let priorityLeftFrame = unionPriorityFrame(for: left, in: currentFrames, priorityWindowIDs: priorityWindowIDs)\n        let priorityRightFrame = unionPriorityFrame(for: right, in: currentFrames, priorityWindowIDs: priorityWindowIDs)\n\n        guard isManagedSplit(leftFrame: leftFrame, rightFrame: rightFrame, rect: rect, horizontal: horizontal) else {\n            if let priorityLeftFrame {\n                let extent = horizontal ? priorityLeftFrame.width : priorityLeftFrame.height\n                return (extent / usableExtent).clamped(to: 0.1...0.9)\n            }\n            if let priorityRightFrame {\n                let extent = horizontal ? priorityRightFrame.width : priorityRightFrame.height\n                return ((usableExtent - extent) / usableExtent).clamped(to: 0.1...0.9)\n            }\n            return 0.5\n        }\n\n        let leftEdge = horizontal ? leftFrame.maxX - rect.minX : leftFrame.maxY - rect.minY\n        let rightEdge = horizontal ? rightFrame.minX - innerGap - rect.minX : rightFrame.minY - innerGap - rect.minY\n\n        if let priorityLeftFrame {\n            let priorityExtent = horizontal ? priorityLeftFrame.width : priorityLeftFrame.height\n            let ratio = containsOnlyPriority(left, priorityWindowIDs) ? leftEdge / usableExtent : priorityExtent / usableExtent\n            return ratio.clamped(to: 0.1...0.9)\n        }\n        if let priorityRightFrame {\n            let priorityExtent = horizontal ? priorityRightFrame.width : priorityRightFrame.height\n            let ratio = containsOnlyPriority(right, priorityWindowIDs) ? rightEdge / usableExtent : (usableExtent - priorityExtent) / usableExtent\n            return ratio.clamped(to: 0.1...0.9)\n        }\n        return 0.5\n    }",
+      "verification": "Comparer les placements avant/après pour les deux politiques, frames absentes ou présentes, fenêtres nouvelles et priorités. Profiler séparément le chemin sans priorité pour des tailles croissantes, en suivant durée CPU et allocations. Tous les tests LayoutPlannerTests doivent conserver leurs attentes. Correction fournie non compilée ici.",
+      "performance_validation": "Mesure avant/après sur exactement les mêmes requêtes ; vérifier croissance linéaire du cas sans priorité et identité des placements. Revenir sur cette seule garde si un résultat change ou si les mesures régressent.",
+      "measurement_status": "Analyse statique seulement ; aucun benchmark ni profilage exécuté par cet agent.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII",
+        "Module v14 04-complexite-algorithmique"
+      ],
+      "discovery_command": "rg -n 'dwindle|contains|unionFrame' Sources/RoadieTiler/BSPLayoutStrategy.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 43,
+          "evidence": "        let leftCount = splitPolicy == \"dwindle\" ? 1 : windows.count / 2\n        let leftWindows = windows.prefix(leftCount)\n        let rightWindows = windows.dropFirst(leftCount)\n        let horizontal = rect.width >= rect.height"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1677,
+          "evidence": "            container: display.visibleFrame.cgRect,\n            windowIDs: liveOrderedWindowIDs,\n            currentFrames: currentFrames,\n            priorityWindowIDs: priorityWindowIDs,\n            newWindowIDs: newWindowIDs,\n            splitPolicy: config.tiling.splitPolicy,\n            outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),\n            innerGap: config.tiling.gapsInner,\n            masterRatio: config.tiling.masterRatio"
+        },
+        {
+          "file": "Tests/RoadieTilerTests/LayoutPlannerTests.swift",
+          "line": 66
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "REL-MODELS-001",
+      "category": "reliability",
+      "subcategory": "layout_geometry",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+      "line": 97,
+      "title": "Le mode bsp conserve un espacement qui pousse ses tuiles hors du conteneur",
+      "description": "La correction des espacements couvre masterStack et BSPTree. BSPLayoutStrategy reste appelée pour le mode bsp. Elle ramène la dimension utile à zéro mais ajoute encore tout innerGap à la position du second enfant. Aucune borne amont n’empêche une configuration gaps_inner supérieure au conteneur.",
+      "evidence": "        let leftWidth = floor(usableWidth * ratio)\n        let rightWidth = usableWidth - leftWidth\n        let leftRect = CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height)\n        let rightRect = CGRect(x: rect.minX + leftWidth + innerGap, y: rect.minY, width: rightWidth, height: rect.height)\n\n        split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)\n        split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et calcul géométrique ; aucune application AX exécutée",
+      "exploitation_scenario": "LayoutPlanner.plan avec mode=.bsp, conteneur (0,0,1000,500), deux fenêtres, innerGap=1500, sans marges. usableWidth=0 ; la première tuile a une largeur nulle et la seconde commence à x=1500, hors du conteneur. La variante verticale existe avec un conteneur haut et gap supérieur à sa hauteur.",
+      "impact": "Une configuration numérique acceptée produit des cadres vides ou hors écran ; le résultat AX peut être refusé ou ajusté. Ce défaut est distinct du cas masterStack corrigé dans REL-031.",
+      "path_type": "hot",
+      "remediation": "Borner l’écart à la dimension de chaque split avant de calculer les deux cadres ; réutiliser BSPTree.gap(for:in:innerGap:), déjà présent dans le même module. Transmettre l’écart effectif au calcul du ratio et conserver l’écart demandé pour les splits descendants.",
+      "remediation_code": "    private func splitHorizontally(\n        leftWindows: ArraySlice<WindowID>,\n        rightWindows: ArraySlice<WindowID>,\n        rect: CGRect,\n        innerGap: CGFloat,\n        currentFrames: [WindowID: CGRect],\n        priorityWindowIDs: Set<WindowID>,\n        newWindowIDs: Set<WindowID>,\n        splitPolicy: String,\n        placements: inout [WindowID: CGRect]\n    ) {\n        let effectiveGap = BSPTree.gap(for: .vertical, in: rect, innerGap: innerGap)\n        let usableWidth = max(0, rect.width - effectiveGap)\n        let ratio = splitRatio(\n            left: leftWindows,\n            right: rightWindows,\n            rect: rect,\n            horizontal: true,\n            innerGap: effectiveGap,\n            currentFrames: currentFrames,\n            priorityWindowIDs: priorityWindowIDs,\n            newWindowIDs: newWindowIDs\n        )\n        let leftWidth = floor(usableWidth * ratio)\n        let rightWidth = usableWidth - leftWidth\n        let leftRect = CGRect(x: rect.minX, y: rect.minY, width: leftWidth, height: rect.height)\n        let rightRect = CGRect(x: rect.minX + leftWidth + effectiveGap, y: rect.minY, width: rightWidth, height: rect.height)\n\n        split(windows: leftWindows, rect: leftRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)\n        split(windows: rightWindows, rect: rightRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)\n    }\n\n    private func splitVertically(\n        topWindows: ArraySlice<WindowID>,\n        bottomWindows: ArraySlice<WindowID>,\n        rect: CGRect,\n        innerGap: CGFloat,\n        currentFrames: [WindowID: CGRect],\n        priorityWindowIDs: Set<WindowID>,\n        newWindowIDs: Set<WindowID>,\n        splitPolicy: String,\n        placements: inout [WindowID: CGRect]\n    ) {\n        let effectiveGap = BSPTree.gap(for: .horizontal, in: rect, innerGap: innerGap)\n        let usableHeight = max(0, rect.height - effectiveGap)\n        let ratio = splitRatio(\n            left: topWindows,\n            right: bottomWindows,\n            rect: rect,\n            horizontal: false,\n            innerGap: effectiveGap,\n            currentFrames: currentFrames,\n            priorityWindowIDs: priorityWindowIDs,\n            newWindowIDs: newWindowIDs\n        )\n        let topHeight = floor(usableHeight * ratio)\n        let bottomHeight = usableHeight - topHeight\n        let topRect = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: topHeight)\n        let bottomRect = CGRect(x: rect.minX, y: rect.minY + topHeight + effectiveGap, width: rect.width, height: bottomHeight)\n\n        split(windows: topWindows, rect: topRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)\n        split(windows: bottomWindows, rect: bottomRect, innerGap: innerGap, currentFrames: currentFrames, priorityWindowIDs: priorityWindowIDs, newWindowIDs: newWindowIDs, splitPolicy: splitPolicy, placements: &placements)\n    }",
+      "verification": "Ajouter des cas .bsp balanced et dwindle avec conteneurs 1000×500 et 500×1000 et gap=1500. Pour les conteneurs non dégénérés, vérifier des cadres non vides et dans le conteneur. Conserver les attentes des gaps 0 et 10.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "references": [],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 86,
+          "evidence": "    ) {\n        let usableWidth = max(0, rect.width - innerGap)\n        let ratio = splitRatio(\n            left: leftWindows,\n            right: rightWindows,\n            rect: rect,\n            horizontal: true,"
+        },
+        {
+          "file": "Sources/RoadieTiler/BSPLayoutStrategy.swift",
+          "line": 117,
+          "evidence": "        let effectiveGap = max(innerGap, titleBarSeamGap)\n        let usableHeight = max(0, rect.height - effectiveGap)\n        let ratio = splitRatio(\n            left: topWindows,\n            right: bottomWindows,\n            rect: rect,\n            horizontal: false,\n            innerGap: effectiveGap,"
+        },
+        {
+          "file": "Sources/RoadieTiler/LayoutTypes.swift",
+          "line": 76
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1684
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "REL-MODELS-002",
+      "category": "reliability",
+      "subcategory": "configuration_validation",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieCore/Config.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 164,
+      "title": "Une valeur default_strategy inconnue est déclarée valide puis remplacée par bsp",
+      "description": "Le décodeur transforme toute valeur de stratégie non reconnue en bsp. Le validateur ne vérifie que les noms de clés pour tiling et ne contrôle pas la valeur brute de default_strategy. Le rechargement voit donc un rapport sans erreur et publie cette configuration.",
+      "evidence": "    public init(from decoder: Decoder) throws {\n        let c = try decoder.container(keyedBy: CodingKeys.self)\n        let rawStrategy = try c.decodeIfPresent(String.self, forKey: .defaultStrategy) ?? \"bsp\"\n        self.defaultStrategy = WindowManagementMode(tomlValue: rawStrategy) ?? .bsp\n        self.splitPolicy = try c.decodeIfPresent(String.self, forKey: .splitPolicy) ?? \"largest_dim\"\n        self.gapsOuter = try c.decodeFlexibleDouble(forKey: .gapsOuter) ?? 8\n        self.gapsOuterTop = try c.decodeFlexibleDouble(forKey: .gapsOuterTop)",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture du décodage, du validateur et du rechargement ; scénario non exécuté",
+      "exploitation_scenario": "Fichier contenant [tiling] puis default_strategy = \"spatial_bspp\". RoadieConfigLoader.validate décode sans erreur et ne produit aucun diagnostic pour cette valeur ; RoadieConfigLoader.load rend .bsp. ConfigReloadService.reload l’accepte.",
+      "impact": "Une faute dans une valeur de configuration peut sélectionner un autre moteur de disposition sans diagnostic, au lieu de conserver la configuration précédente.",
+      "path_type": "cold",
+      "remediation": "Réserver bsp au cas où la clé est absente. Lever DecodingError.dataCorruptedError quand une chaîne présente n’est pas un mode ou alias connu.",
+      "remediation_code": "let rawStrategy = try c.decodeIfPresent(String.self, forKey: .defaultStrategy) ?? \"bsp\"\nguard let strategy = WindowManagementMode(tomlValue: rawStrategy) else {\n    throw DecodingError.dataCorruptedError(forKey: .defaultStrategy, in: c, debugDescription: \"unknown default_strategy: \\(rawStrategy)\")\n}\nself.defaultStrategy = strategy",
+      "verification": "Tester une clé absente, chacun des modes et alias autorisés, puis \"spatial_bspp\". La faute doit faire échouer load et validate ; reload doit garder la configuration active.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1274
+        },
+        {
+          "file": "Sources/RoadieDaemon/ConfigReloadService.swift",
+          "line": 187
+        }
+      ],
+      "status": "open"
+    },
+    {
+      "id": "MIN-MODELS-001",
+      "category": "minimalism",
+      "subcategory": "unreachable_validation",
+      "severity": "LOW",
+      "file": "Sources/RoadieCore/Config.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 1566,
+      "title": "Le contrôle des raccourcis vides reste inatteignable après leur normalisation",
+      "description": "Le seul appel de validateTargetGrid reçoit la configuration décodée. Son initialiseur remplace déjà les quatre touches vides ou composées d’espaces par space/r/backspace/escape. La branche qui recherche encore une touche vide ne peut donc produire son erreur. Aucune contrainte documentée ne nécessite ce doublon.",
+      "evidence": "        if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.target_grid.*_key\",\n                message: \"recursive grid keys must not be empty\"\n            ))\n        }",
+      "exploitability": "N/A",
+      "verification_status": "confirmé par lecture du seul appel privé, du décodage et de normalizedKey",
+      "exploitation_scenario": "Décoder [experimental.target_grid] confirm_action_key=\"\" ou une valeur uniquement composée d’espaces. normalizedKey applique une touche de repli non vide avant validateTargetGrid ; la branche ne s’exécute pas.",
+      "impact": "Sept lignes de validation sans effet entretiennent une règle qui semble rejeter les touches vides alors qu’elles sont normalisées en amont.",
+      "path_type": "cold",
+      "removable_lines_estimate": 7,
+      "remediation": "Supprimer la branche sur les quatre touches vides. Garder les valeurs de repli existantes ; si un rejet est voulu plus tard, valider avant normalisation dans une modification fonctionnelle distincte.",
+      "remediation_code": "private static func validateTargetGrid(_ config: TargetGridConfig) -> [ConfigValidationItem] {\n    var items: [ConfigValidationItem] = []\n    if config.hintCharacters.count < config.rows * config.columns {\n        items.append(ConfigValidationItem(\n            level: .error,\n            path: \"experimental.target_grid.hint_characters\",\n            message: \"must contain at least rows*columns characters\"\n        ))\n    }\n    return items\n}",
+      "verification": "Comparer les rapports de validate pour des touches vides, blanches, absentes et valides ; le résultat doit rester identique.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XIX.2"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 783,
+          "evidence": "        self.confirmActionKey = Self.normalizedKey(confirmActionKey, fallback: \"space\")\n        self.resetKey = Self.normalizedKey(resetKey, fallback: \"r\")\n        self.backKey = Self.normalizedKey(backKey, fallback: \"backspace\")\n        self.exitKey = Self.normalizedKey(exitKey, fallback: \"escape\")"
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 859,
+          "evidence": "    static func normalizedKey(_ value: String, fallback: String) -> String {\n        let cleaned = value\n            .trimmingCharacters(in: .whitespacesAndNewlines)\n            .lowercased()\n            .replacingOccurrences(of: \" \", with: \"\")\n        guard !cleaned.isEmpty else { return fallback }\n        let parts = cleaned.split(separator: \"+\").map(String.init).map { part in"
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1284
+        }
+      ],
+      "status": "open"
+    }
+  ],
+  "positive_findings": [
+    {
+      "module": "04",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "line": 28,
+      "description": "La collecte linéaire des feuilles et les ensembles suppriment le coût quadratique du placement normal du moteur à arbre."
+    },
+    {
+      "module": "06",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+      "line": 100,
+      "description": "La réconciliation optimisée est comparée à une référence sur 400 cas déterministes, y compris suppressions et insertions."
+    },
+    {
+      "module": "05",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 1611,
+      "description": "Le décodage numérique distingue une clé absente d’une valeur de type invalide et propage l’erreur."
+    },
+    {
+      "module": "12",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutStrategy.swift",
+      "line": 1,
+      "description": "Le protocole de disposition a quatre implémentations réellement sélectionnées par LayoutPlanner ; cette abstraction répond à des usages présents."
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationEvent.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationEventCatalog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/AutomationSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Geometry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/LayoutCommandIntent.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/LayoutTolerance.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/WindowManagementMode.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/WindowRule.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieStages/RoadieState.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPTree.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/FloatLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutGeometry.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/LayoutTypes.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/MasterStackLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022LotCTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/Audit022R2LotFTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/LayoutPlannerTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieTilerTests/SpatialBSPLayoutStrategyTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieStagesTests/RoadieStateTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieStagesTests/WindowGroupStateTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/spec.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r1.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r2.md"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        "615-682",
+        "1328-1390",
+        "1636-1695",
+        "1850-1888",
+        "2155-2215"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "ranges": [
+        "2643-2725"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+      "ranges": [
+        "1-220"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ConfigTests.swift",
+      "ranges": [
+        "390-505"
+      ]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/configuration-rules.md",
+      "ranges": [
+        "1-100"
+      ]
+    }
+  ],
+  "warnings": [
+    "Aucun build, test, benchmark ou processus lancé/arrêté par cet agent. Les vérifications runtime sont réservées au coordinateur.",
+    "Les autres tests BSPTree, mutations et moteur n’ont pas été lus intégralement par cet agent ; certains emplacements ont été localisés par rg seulement.",
+    "La prise en charge des nombres TOML non finis et les conteneurs géométriques dégénérés n’ont pas fait l’objet d’une sonde ; aucun constat spécifique non fini n’est affirmé.",
+    "Les parcours O(n²) des mutations du BSP persistant ont une justification écrite dans BSPTree.swift:38-45 ; la limite observée ~50 n’est pas une limite imposée par le type. Le nouveau PERF-MODELS-001 vise un autre chemin et un coût facilement évitable.",
+    "Le contre-audit indépendant de PERF-MODELS-001 est confié au coordinateur avant toute inclusion finale.",
+    "Les recherches documentaires par rg ne constituent pas une lecture intégrale de tous les fichiers de specs mentionnés dans les résultats."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 7,
+    "conclusion": "Checklist 1-6 exécutée sur les modèles et moteurs attribués : une garde morte confirmée, pas d’interface superflue démontrée ni de dépendance remplaçable trivialement. Les nouveaux tests comparent des placements utiles et des cas d’erreur.",
+    "future_responsibility": "Les invariants et les tests rendent les corrections compréhensibles. Les modèles de configuration demeurent volumineux mais correspondent à des clés utilisées ou explicitement signalées sans effet. BSPTree.correctingForMinimumSize concentre une logique géométrique complexe ; aucun stub ou comportement opaque n’a été prouvé. Aucun soupçon d’origine automatique du code n’est présenté comme un fait."
+  }
+}

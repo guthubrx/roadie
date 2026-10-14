@@ -1,0 +1,196 @@
+{
+  "agent": "models_full",
+  "role": "contre-audit indépendant",
+  "candidate": "CMD-NEW-PERF / futur PERF-012",
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation",
+  "verdict": "CONFIRME",
+  "severity": "HIGH",
+  "exploitability": "CONFIRMED",
+  "status": "confirmé par lecture",
+  "primary_file": "Sources/RoadieDaemon/StageStore.swift",
+  "primary_line": 1519,
+  "title": "Le rapprochement des fenêtres rescane les mêmes candidats pour chaque membre absent",
+  "conclusion": "Le candidat est confirmé. La complexité O(M+W) annoncée est incorrecte. Le coût O(m*w log w) appartient aux passes avec candidats non revendiqués ; après leur adoption, un coût O(m*w) reste répété jusqu’à la purge des anciens membres. HIGH retenu pour cette répétition dans la boucle de snapshots sous verrou, pas sur la seule hypothèse d’un redémarrage rare.",
+  "independence": "Aucune conclusion de commands_full consultée. Analyse faite depuis le brief candidat, puis lecture actuelle intégrale du fichier et de ses appelants pertinents.",
+  "files_read_full": [
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "lines": 1542,
+      "chunks": [
+        "1-320",
+        "321-650",
+        "651-990",
+        "991-1300",
+        "1301-1542"
+      ]
+    }
+  ],
+  "files_read_partial": [
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        "62-100",
+        "200-314",
+        "347-382",
+        "415-525"
+      ],
+      "note": "Verrou, fréquence d’appel, purge et adoption des fenêtres nouvelles. La tranche 415-525 avait été lue dans la mission précédente par ce même auditeur."
+    },
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "ranges": [
+        "108-190"
+      ],
+      "note": "tick -> producerSnapshot."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+      "ranges": [
+        "125-225"
+      ],
+      "note": "Tests de distances et d’ambiguïté."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/StatePersistenceTests.swift",
+      "ranges": [
+        "275-309"
+      ],
+      "note": "Garde PID vivant et cas PID absent/mort."
+    }
+  ],
+  "evidence": [
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 639,
+      "evidence": "                for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {\n                    let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]\n                    guard !liveWindowIDs.contains(member.windowID),\n                          member.pid.map(isProcessAlive) != true,\n                          let replacement = bestReplacement(\n                              for: member,\n                              in: windowsBySignature[StableWindowSignature(member: member)] ?? [],\n                              claimed: claimedWindowIDs\n                          )"
+    },
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 1519,
+      "evidence": "    let available = candidates.filter { !claimed.contains($0.id) }\n    guard !available.isEmpty else { return nil }\n\n    // Proximité de cadre exigée même pour un candidat unique (SPEC-016 FR-006) : un titre\n    // identique ne suffit pas.\n    let scored = available\n        .map { window in (window: window, score: frameDistance(member.frame, window.frame)) }\n        .sorted { lhs, rhs in lhs.score < rhs.score }\n    guard let best = scored.first else { return nil }\n    let second = scored.dropFirst().first?.score ?? .greatestFiniteMagnitude"
+    },
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 1529,
+      "evidence": "    guard best.score <= 360,\n          second - best.score >= 120\n    else { return nil }\n    return best.window"
+    },
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 620,
+      "evidence": "        let tileableWindows = liveWindows.filter(\\.isTileCandidate)\n        let liveWindowIDs = Set(tileableWindows.map(\\.id))\n        var claimedWindowIDs = Set<WindowID>()\n        for scope in scopes {\n            for stage in scope.stages {\n                for member in stage.members where liveWindowIDs.contains(member.windowID) {\n                    claimedWindowIDs.insert(member.windowID)\n                }"
+    },
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+      "line": 631,
+      "evidence": "        var windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]\n        for window in tileableWindows {\n            windowsBySignature[StableWindowSignature(window: window), default: []].append(window)\n        }"
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 264,
+      "evidence": "        let result: Reconciliation\n        if persistStateChanges {\n            intentStore.prune(keepingDisplayIDs: liveDisplayIDs)\n            result = stageStore.mutate { persistedStages in\n                reconcile(&persistedStages, input: input)\n            }"
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 369,
+      "evidence": "        let liveWindowIDs = stageManagedWindowIDs\n        let mouseLocation = input.mouseLocation\n        persistedStages.reconcileWindowIDs(with: windows.filter { stageManagedWindowIDs.contains($0.id) })\n        let missingWindows = persistedStages.pruneMissingWindows(\n            keeping: liveWindowIDs,\n            liveDisplayIDs: liveDisplayIDs,\n            missingGrace: Self.stageMembershipMissingGrace,\n            lastObservedAt: input.lastObservedWindowAt,\n            now: now"
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 70,
+      "evidence": "public struct SnapshotService {\n    // AX/macOS peut faire disparaitre des fenetres pendant un plein ecran, un changement\n    // de desktop, un redemarrage du daemon ou une reconfiguration display. Une absence\n    // courte n'est donc pas une preuve de fermeture : si on prune trop vite, la fenetre\n    // revient comme \"nouvelle\" et peut etre reassignee au mauvais ecran/stage.\n    private static let stageMembershipMissingGrace: TimeInterval = 30 * 60"
+    },
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 177,
+      "evidence": "    public func tick(cause: String) -> MaintenanceTick {\n        let startedAt = Date()\n        var scans = 1\n        var snapshot = service.producerSnapshot(cycle: intervalSeconds)"
+    }
+  ],
+  "refutations_checked": [
+    {
+      "hypothesis": "Le code ne tourne qu’au redémarrage : chemin froid.",
+      "verdict": "REFUTEE",
+      "reason": "DaemonSnapshot.reconcile appelle reconcileWindowIDs à chaque reconstruction. LayoutMaintainer.tick appelle producerSnapshot à la ligne 180. Le producteur reconstruit via la méthode snapshot privée, sans cache de remplacement. Le cas stable où tous les identifiants sont connus évite le helper ; le cas des membres orphelins, lui, persiste."
+    },
+    {
+      "hypothesis": "La garde PID empêche tout coût important.",
+      "verdict": "LIMITATION REELLE MAIS INSUFFISANTE",
+      "reason": "La garde élimine les membres dont le PID est vivant. Un PID mort ou nil atteint bestReplacement. Le cas nil est explicitement compatible avec les anciens états persistés."
+    },
+    {
+      "hypothesis": "L’ambiguïté arrête la recherche tôt.",
+      "verdict": "REFUTEE",
+      "reason": "Le test de proximité et de séparation des scores est après le filter, le map et le sorted. Les candidats ambigus ne sont pas revendiqués, donc le membre suivant reparcourt et retrie le même groupe."
+    },
+    {
+      "hypothesis": "Une fenêtre revendiquée est retirée du groupe candidat.",
+      "verdict": "REFUTEE",
+      "reason": "windowsBySignature conserve toutes les fenêtres tileable ; le Set claimedWindowIDs n’est appliqué que dans candidates.filter, à chaque membre. Après adoption des fenêtres neuves, chaque membre absent rescane toujours w fenêtres avant de rendre nil."
+    },
+    {
+      "hypothesis": "La purge limite le défaut à une seule passe.",
+      "verdict": "REFUTEE",
+      "reason": "La purge suit le rapprochement. SnapshotService passe un délai de 30 minutes. Les scopes d’écrans absents ne sont pas purgés par la surcharge utilisée. Aucun délai bref ni purge immédiate au PID mort n’existe dans ce chemin."
+    },
+    {
+      "hypothesis": "Le nombre de membres est borné à 60-100.",
+      "verdict": "REFUTEE COMME BORNE EFFECTIVE",
+      "reason": "StageStore.swift:1167 porte un commentaire de précondition sur PersistentStageScope.assign, sans garde de quantité. Le décodage accepte des tableaux de taille arbitraire aux lignes 299 et 1429. reconcileWindowIDs ne possède ni borne ni commentaire acceptant le coût non linéaire ; il annonce au contraire O(M+W)."
+    },
+    {
+      "hypothesis": "Le tri est mutualisé ou le résultat est mémorisé.",
+      "verdict": "REFUTEE",
+      "reason": "bestReplacement alloue et trie à chaque appel. Aucun stockage du résultat ou du score n’existe entre appels. Le cache de snapshot partagé concerne les lecteurs du processus ; il ne dispense pas le producteur de la réconciliation de chaque tick."
+    },
+    {
+      "hypothesis": "Les tests invalident le scénario.",
+      "verdict": "REFUTEE",
+      "reason": "Les tests lus démontrent le maintien des anciens membres quand les candidats sont ambigus ou trop éloignés. Ils couvrent 1 membre et 2 candidats, et ne vérifient pas une borne de scans ou un benchmark de complexité."
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "Première passe avec candidats ambigus",
+      "steps": [
+        "Un état contient m anciens membres de même bundleID/titre normalisés, identifiants différents des fenêtres vivantes, PID absent ou mort.",
+        "Le relevé contient w nouvelles fenêtres de la même signature. Choisir les géométries afin que les deux meilleurs scores aient un écart inférieur à 120 pour tous les anciens membres.",
+        "Appeler reconcileWindowIDs ou produire un snapshot. Aucun remplacement n’est retenu, donc chaque membre examine le même groupe."
+      ],
+      "complexity": "O(M+W+m*w log w) au pire ; O(m*w) minimum de parcours même si le tri bénéficie d’un ordre favorable."
+    },
+    {
+      "name": "Passes répétées après adoption",
+      "steps": [
+        "Les fenêtres neuves sont désormais affectées à une stage par la suite de DaemonSnapshot.reconcile. Les anciens membres n’ont pas encore atteint leur délai de purge.",
+        "Au snapshot suivant, claimedWindowIDs contient les w fenêtres vivantes, et windowsBySignature les contient toujours.",
+        "Pour chacun des m anciens membres, candidates.filter teste les w identifiants et rend []. Le tri ne tourne plus, mais les m*w tests se répètent."
+      ],
+      "complexity": "O(M+W+m*w) par réconciliation pendant la conservation des anciens membres."
+    }
+  ],
+  "severity_reason": "HIGH maintenu : recherche linéaire dans une boucle sur un chemin fréquent réellement appelé par tick et sous le verrou de mutation. Le coût ne se limite pas au tri du premier redémarrage. Aucun plafond effectif ni compromis documenté sur ce chemin. Aucune mesure de millisecondes, blocage réel ou seuil de panne n’est alléguée.",
+  "remediation": "Construire une fois les groupes uniquement avec les fenêtres initialement non revendiquées. Remplacer le tri complet par une recherche des deux meilleurs scores en un passage. Conserver le Set des revendications de la passe pour empêcher les doubles attributions. Pour de gros groupes non résolus, un index géométrique ou une mémoïsation invalidée par les changements est nécessaire si une borne linéaire globale est exigée ; ne pas supprimer la garde d’ambiguïté.",
+  "remediation_code": "private func bestReplacement(\n    for member: PersistentStageMember,\n    in candidates: [WindowSnapshot],\n    claimed: Set<WindowID>\n) -> WindowSnapshot? {\n    var best: WindowSnapshot?\n    var bestScore = Double.greatestFiniteMagnitude\n    var secondScore = Double.greatestFiniteMagnitude\n    for window in candidates where !claimed.contains(window.id) {\n        let score = frameDistance(member.frame, window.frame)\n        if best == nil || score < bestScore {\n            secondScore = bestScore\n            best = window\n            bestScore = score\n        } else if score < secondScore {\n            secondScore = score\n        }\n    }\n    guard let best, bestScore <= 360, secondScore - bestScore >= 120 else { return nil }\n    return best\n}\n// Construire les listes après claimedWindowIDs, en excluant une fois les fenêtres déjà revendiquées :\nvar windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]\nfor window in tileableWindows where !claimedWindowIDs.contains(window.id) {\n    windowsBySignature[StableWindowSignature(window: window), default: []].append(window)\n}\n// Conserver claimedWindowIDs pendant la passe pour interdire toute double réattribution.\n// Mettre à jour la documentation : O(M + W + somme des tailles des groupes candidats examinés),\n// pas O(M + W) pour une phase de rapprochement géométrique avec plusieurs homonymes.",
+  "target_complexity": "Passe avec tous les candidats déjà revendiqués : O(M+W) ; rapprochement avec groupes homonymes non revendiqués : O(M+W+m*w) au pire après suppression du tri, à documenter honnêtement.",
+  "verification_recommended": [
+    "Conserver les tests de PID vivant/mort, proximité, ambiguïté et candidat nettement meilleur.",
+    "Ajouter une série de m anciens membres et w fenêtres nouvelles homonymes ambiguës ; instrumenter les visites de candidats.",
+    "Répéter après adoption des w fenêtres. Le second appel ne doit plus visiter w candidats par ancien membre.",
+    "Tester qu’aucune fenêtre ne peut être revendiquée par deux anciens membres et que les égalités de scores restent refusées."
+  ],
+  "not_verified": [
+    "Aucun test ni benchmark exécuté ; aucun effet système déclenché.",
+    "Fréquence réelle des redémarrages d’applications et volume de fenêtres de cet utilisateur non mesurés.",
+    "Correction proposée non compilée."
+  ],
+  "source_mutations": 0,
+  "required_warning": "contre-audit CMD-NEW-PERF / PERF-012: CONFIRME (HIGH). O(m*w log w) sur première passe ambiguë ; O(m*w) répété après adoption pendant la conservation des orphelins."
+}

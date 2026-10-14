@@ -1,0 +1,21 @@
+{
+  "removed_generated_files_only": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/build",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/package",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/modules",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/tmp",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/cache",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/config",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/security",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/(A Document Being Saved By swift-build 2)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/(A Document Being Saved By swift-build)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/validation/AuditPureTests"
+  ],
+  "retained": [
+    "logs",
+    "probe source",
+    "probe data",
+    "commands.json"
+  ],
+  "reason": "Retrait des copies et caches volumineux créés par cet audit après fin de toutes les validations; aucun processus terminé."
+}

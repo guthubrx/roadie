@@ -1,0 +1,9 @@
+exit-code 1 stage create failed: already exists
+exit-code 0 stage create demo: already exists
+exit-code 0 stage create not visible: already exists
+bsp-excessive-gap 1 (0.0, 0.0, 0.0, 500.0) origin-outside false
+bsp-excessive-gap 2 (1500.0, 0.0, 0.0, 500.0) origin-outside true
+stage-max-accepted 9223372036854775807 next-overflows true
+drag-before-release true
+drag-after-release true
+events-tail-utf8 []

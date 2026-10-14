@@ -7,6 +7,110 @@ label="com.roadie.roadied"
 plist="$HOME/Library/LaunchAgents/$label.plist"
 pidfile="$HOME/.roadies/roadied.pid"
 statusfile="$HOME/.roadies/daemon-status.json"
+# Composants lancés à côté du tiler par scripts/start-modular (même liste que COMPONENTS, sans le
+# tiler). Chacun écrit ~/.roadies/<nom>.pid (verrou d'instance, voir ComponentLockFile).
+modular_components=(rail border focus-mouse titlebar-menu target-mode)
+# Délai maximal d'attente de la fin d'un composant après SIGTERM, en dixièmes de seconde.
+component_wait_ticks=50
+
+# Vrai si l'exécutable du PID est un roadied de Roadie. L'ouverture de Roadie.app sans arguments
+# lance aussi le daemon : son exécutable suffit.
+is_roadied_executable() {
+  case "$1" in
+    "$HOME/Applications/Roadie.app/Contents/MacOS/roadied"|"$HOME/.local/bin/roadied"|\
+    "$repo_root/bin/roadied"|"$repo_root/.build/debug/roadied"|"$repo_root/.build/release/roadied"|\
+    "$repo_root"/.build/*/debug/roadied|"$repo_root"/.build/*/release/roadied)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+# Arrête le tiler (LaunchAgent, pidfile). Retourne 1 s'il reste vivant ou non identifiable.
+stop_tiler() {
+  local pid executable
+  if [[ -f "$pidfile" ]]; then
+    pid="$(cat "$pidfile")"
+  elif [[ -f "$statusfile" ]]; then
+    # Une ancienne commande stop a pu supprimer le pidfile d'un daemon encore vivant.
+    pid="$(plutil -extract pid raw -o - "$statusfile")" || {
+      echo "Impossible de lire le PID dans $statusfile" >&2
+      return 1
+    }
+  else
+    return 0
+  fi
+
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "PID roadied invalide : $pid" >&2
+    return 1
+  fi
+
+  executable="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+  if [[ -n "$executable" ]]; then
+    if ! is_roadied_executable "$executable"; then
+      echo "Refus d'arrêter le PID $pid : exécutable non reconnu ($executable)." >&2
+      return 1
+    fi
+
+    kill -TERM "$pid" || {
+      if ps -p "$pid" -o comm= >/dev/null 2>&1; then
+        echo "Impossible d'arrêter roadied PID $pid ; pidfile conservé." >&2
+        return 1
+      fi
+    }
+    # Le daemon remet les fenêtres en place avant de libérer son verrou d'instance.
+    sleep 3
+    if ps -p "$pid" -o comm= >/dev/null 2>&1; then
+      echo "roadied PID $pid est encore vivant ; pidfile conservé." >&2
+      return 1
+    fi
+    echo "roadied pid $pid stopped"
+  fi
+
+  if [[ -f "$pidfile" ]] && [[ "$(cat "$pidfile")" == "$pid" ]]; then
+    rm -f "$pidfile"
+  fi
+}
+
+# Arrête un composant modulaire (rail, border...) d'après son pidfile. Même contrôle que le tiler :
+# l'exécutable doit être un roadied, sinon le PID a pu être réutilisé et on n'y touche pas.
+# Attente bornée. Retourne 1 si le composant reste vivant ou non identifiable.
+stop_component() {
+  local name="$1"
+  local component_pidfile="$HOME/.roadies/$name.pid"
+  local pid executable tick
+  [[ -f "$component_pidfile" ]] || return 0
+  pid="$(cat "$component_pidfile")"
+  if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "PID $name invalide : $pid" >&2
+    return 1
+  fi
+
+  executable="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
+  if [[ -n "$executable" ]]; then
+    if ! is_roadied_executable "$executable"; then
+      echo "Refus d'arrêter le composant $name (PID $pid) : exécutable non reconnu ($executable)." >&2
+      return 1
+    fi
+    kill -TERM "$pid" 2>/dev/null || true
+    for ((tick = 0; tick < component_wait_ticks; tick++)); do
+      ps -p "$pid" -o comm= >/dev/null 2>&1 || break
+      sleep 0.1
+    done
+    if ps -p "$pid" -o comm= >/dev/null 2>&1; then
+      echo "Le composant $name (PID $pid) est encore vivant ; pidfile conservé." >&2
+      return 1
+    fi
+    echo "$name pid $pid stopped"
+  fi
+
+  if [[ -f "$component_pidfile" ]] && [[ "$(cat "$component_pidfile")" == "$pid" ]]; then
+    rm -f "$component_pidfile"
+  fi
+}
 
 if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
   launchctl bootout "gui/$(id -u)/$label"
@@ -19,52 +123,11 @@ if [[ -f "$plist" ]]; then
   echo "plist kept: $plist"
 fi
 
-if [[ -f "$pidfile" ]]; then
-  pid="$(cat "$pidfile")"
-elif [[ -f "$statusfile" ]]; then
-  # Une ancienne commande stop a pu supprimer le pidfile d'un daemon encore vivant.
-  pid="$(plutil -extract pid raw -o - "$statusfile")" || {
-    echo "Impossible de lire le PID dans $statusfile" >&2
-    exit 1
-  }
-else
-  exit 0
-fi
-
-if [[ ! "$pid" =~ ^[1-9][0-9]*$ ]]; then
-  echo "PID roadied invalide : $pid" >&2
-  exit 1
-fi
-
-# L'ouverture de Roadie.app sans arguments lance aussi le daemon. Son exécutable suffit.
-executable="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
-if [[ -n "$executable" ]]; then
-  case "$executable" in
-    "$HOME/Applications/Roadie.app/Contents/MacOS/roadied"|"$HOME/.local/bin/roadied"|\
-    "$repo_root/bin/roadied"|"$repo_root/.build/debug/roadied"|"$repo_root/.build/release/roadied"|\
-    "$repo_root"/.build/*/debug/roadied|"$repo_root"/.build/*/release/roadied)
-      ;;
-    *)
-      echo "Refus d'arrêter le PID $pid : exécutable non reconnu ($executable)." >&2
-      exit 1
-      ;;
-  esac
-
-  kill -TERM "$pid" || {
-    if ps -p "$pid" -o comm= >/dev/null 2>&1; then
-      echo "Impossible d'arrêter roadied PID $pid ; pidfile conservé." >&2
-      exit 1
-    fi
-  }
-  # Le daemon remet les fenêtres en place avant de libérer son verrou d'instance.
-  sleep 3
-  if ps -p "$pid" -o comm= >/dev/null 2>&1; then
-    echo "roadied PID $pid est encore vivant ; pidfile conservé." >&2
-    exit 1
-  fi
-  echo "roadied pid $pid stopped"
-fi
-
-if [[ -f "$pidfile" ]] && [[ "$(cat "$pidfile")" == "$pid" ]]; then
-  rm -f "$pidfile"
-fi
+# Tout est tenté même après un échec, pour ne laisser vivant que ce qui ne peut pas être arrêté.
+# Le code de sortie non nul demande à l'appelant (uninstall) de ne rien supprimer.
+failed=0
+stop_tiler || failed=1
+for component in "${modular_components[@]}"; do
+  stop_component "$component" || failed=1
+done
+exit "$failed"

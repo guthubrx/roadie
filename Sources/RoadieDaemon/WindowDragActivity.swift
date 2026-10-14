@@ -63,7 +63,7 @@ public final class WindowDragActivity: @unchecked Sendable {
         guard enabled else { return nil }
         lock.lock()
         defer { lock.unlock() }
-        let expiry = max(activeUntil, readLocked()?.expiry ?? .distantPast)
+        let expiry = readLocked()?.expiry ?? activeUntil
         return expiry == .distantPast ? nil : Date(timeIntervalSinceReferenceDate: expiry.timeIntervalSinceReferenceDate.nextUp)
     }
 
@@ -84,7 +84,9 @@ public final class WindowDragActivity: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         let stored = readLocked()
-        activeUntil = max(activeUntil, stored?.expiry ?? .distantPast)
+        // Le fichier partagé fait foi, y compris quand `release` raccourcit l'échéance (REL-036) ;
+        // la mémoire locale ne sert que si le fichier est absent ou illisible.
+        if let stored { activeUntil = stored.expiry }
         if now <= activeUntil {
             return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))
         }

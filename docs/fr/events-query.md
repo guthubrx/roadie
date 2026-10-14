@@ -43,6 +43,7 @@ Semantique :
 - sans `--from-now`, Roadie rejoue le journal puis suit les nouvelles lignes;
 - avec `--from-now`, Roadie commence a la fin du journal courant;
 - avec `--initial-state`, Roadie emet d'abord `state.snapshot`;
+- si des evenements ont pu etre perdus entre deux lectures (ancienne rotation du journal deja supprimee, journal tronque), Roadie emet `events.gap` avant la suite du flux, quels que soient les filtres; son `payload` donne `reason` (`rotated_generation_missing` ou `file_truncated`) et `lostAfterOffset`;
 - les consommateurs doivent ignorer les champs inconnus.
 
 ## Catalogue utile
@@ -97,6 +98,10 @@ Parking d'ecran :
 - `display.parking_restored`
 - `display.parking_ambiguous`
 - `display.parking_noop`
+
+Flux d'evenements :
+
+- `events.gap`
 
 Administration :
 

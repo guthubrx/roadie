@@ -1,0 +1,11 @@
+{
+  "merged": [
+    "REL-001 : assign-empty Int.max et stage summon0, même famille validation",
+    "REL-021 : zoomParent, transferts desktop/window/stage, menu et heal, même contrat de persistance"
+  ],
+  "not_retained": [
+    "Course ConfigReloadService : aucune concurrence réelle de production établie",
+    "Restauration de fenêtre float via menu périmé : contexte non reproduit, non scoré"
+  ],
+  "baseline_suppressions": []
+}

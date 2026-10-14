@@ -1,0 +1,171 @@
+{
+  "original_statuses": [],
+  "findings": [
+    {
+      "id": "UI-NEW-001",
+      "category": "reliability",
+      "subcategory": "configuration_table_scope",
+      "severity": "MEDIUM",
+      "status": "confirmed",
+      "exploitability": "CONFIRMED",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift",
+      "line": 377,
+      "title": "Une table de règles peut écraser les réglages du rail qui la précèdent",
+      "description": "Le parseur propre au rail ne reconnaît que les en-têtes [table]. Lorsqu’il rencontre [[rules]], il conserve current. Les clés de la règle sont alors insérées dans la section précédente jusqu’au prochain en-tête simple. Ce problème préexiste au quatrième tour ; il est nouvellement relevé dans ce complément.",
+      "evidence": "            if trimmed.hasPrefix(\"[\"), trimmed.hasSuffix(\"]\"), !trimmed.hasPrefix(\"[[\") {\n                current = String(trimmed.dropFirst().dropLast())\n                continue\n            }\n            guard let current, let equals = trimmed.firstIndex(of: \"=\") else { continue }\n            let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)\n            let value = trimmed[trimmed.index(after: equals)...]\n                .trimmingCharacters(in: .whitespaces)\n                .trimmingCharacters(in: CharacterSet(charactersIn: \"\\\"\"))\n            sections[current, default: [:]][key] = value",
+      "scenario": "Charger exactement : [fx.rail.stage_labels]\\nenabled = true\\n[[rules]]\\nid = \"disabled-terminal\"\\nenabled = false\\n[rules.match]\\napp = \"Terminal\"\\n[rules.action]\\nfloating = true\\n (remplacer les \\n par des retours à la ligne). Le TOML est composé de tables et clés supportées. RailSettings.load(raw:) renvoie stageLabel.enabled=false car le deuxième enabled écrase le premier. Ajouter ou désactiver cette règle masque donc les noms des stages.",
+      "impact": "Configuration valide mais comportement visuel incorrect et dépendant de l’ordre des tables. Le même écrasement peut toucher un en-tête du rail qui partage une clé avec une table de règles.",
+      "path_type": "cold",
+      "remediation": "Quitter explicitement la section courante lors de tout en-tête [[...]]. À plus long terme, lire ces sections avec TOMLKit, déjà utilisé par la validation, afin de ne pas maintenir deux interprétations de TOML.",
+      "remediation_code": "private static func sections(from raw: String) -> [String: [String: String]] {\n    var sections: [String: [String: String]] = [:]\n    var current: String?\n    for line in raw.components(separatedBy: .newlines) {\n        let trimmed = stripComment(from: line).trimmingCharacters(in: .whitespacesAndNewlines)\n        guard !trimmed.isEmpty else { continue }\n        if trimmed.hasPrefix(\"[[\"), trimmed.hasSuffix(\"]]\") {\n            current = nil\n            continue\n        }\n        if trimmed.hasPrefix(\"[\"), trimmed.hasSuffix(\"]\") {\n            current = String(trimmed.dropFirst().dropLast())\n            continue\n        }\n        guard let current, let equals = trimmed.firstIndex(of: \"=\") else { continue }\n        let key = trimmed[..<equals].trimmingCharacters(in: .whitespaces)\n        let value = trimmed[trimmed.index(after: equals)...]\n            .trimmingCharacters(in: .whitespaces)\n            .trimmingCharacters(in: CharacterSet(charactersIn: \"\\\"\"))\n        sections[current, default: [:]][key] = value\n    }\n    return sections\n}",
+      "verification": "Ajouter un test de RailSettings.load(raw:) avec le scénario : stageLabel.enabled reste true, alors que RoadieConfigLoader lit rules[0].enabled=false. Vérifier aussi deux règles successives et une table [[fx.rail.preview.stage_overrides]]. Aucun de ces tests n’a été exécuté pendant ce complément.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "block_release": false,
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift",
+          "line": 223,
+          "note": "enabled est lu dans la section fx.rail.stage_labels produite par ce parseur."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+          "line": 1090,
+          "note": "La validation utilise TOMLDecoder ; les tables rail et rules ainsi que leurs clés enabled sont connues aux lignes 1180, 1191, 1229 et 1244."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 820,
+          "note": "Le rafraîchissement charge RailSettings puis RailVisualConfig directement."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailVisualConfig.swift",
+          "line": 302,
+          "note": "enabled est transmis tel quel à RailStageLabelConfig."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 181,
+          "note": "Le dessin des noms est conditionné par config.stageLabel.enabled."
+        }
+      ]
+    },
+    {
+      "id": "UI-NEW-003",
+      "category": "minimalism",
+      "subcategory": "redundant_screen_selection",
+      "severity": "LOW",
+      "status": "confirmed",
+      "exploitability": "N/A",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+      "line": 57,
+      "title": "La sélection géométrique d’un écran ne change pas le résultat de conversion",
+      "description": "Les deux fonctions screenMapping construisent des cadres dérivés de primaryHeight, puis cherchent un écran. Dans les formules finales, le décalage de cet écran s’annule. Pour toute géométrie normale d’écran, le résultat dépend seulement de primaryHeight et du point ou rectangle. Le choix par inclusion, intersection et recouvrement horizontal n’ajoute donc aucun comportement utile. Aucune justification spécifique n’a été trouvée dans les commentaires ni dans la spécification, le plan et les références de la fonction consultés. La simplification vaut aussi pour un écran au-dessus du principal : H=600, écran secondaire y=600 hauteur=800 et point global y=700 donnent yAX=-100, avec ou sans sélection. Les coordonnées NS restent globales ; il ne s’agit pas de coordonnées locales à chaque écran.",
+      "evidence": "        let localTop = rect.minY - mapping.axFrame.minY\n        return CGRect(\n            x: rect.minX,\n            y: mapping.nsFrame.maxY - localTop - rect.height,\n            width: rect.width,\n            height: rect.height\n        )",
+      "scenario": "Poser H=primaryHeight et S=mapping.nsFrame.maxY. axFrame.minY=H-S. La sortie y devient S-(rect.minY-(H-S))-rect.height = H-rect.minY-rect.height, quel que soit l’écran retenu. Pour un point, axFrame.maxY=H-nsFrame.minY, donc y=H-point.y. Ces résultats sont aussi exactement ceux des branches de repli sans écran.",
+      "impact": "Deux sélecteurs, un type intermédiaire et deux helpers CGRect augmentent le code à comprendre pour une simple inversion verticale. Ils allouent et parcourent une liste d’écrans à chaque conversion. Aucun gain chiffré de latence n’est revendiqué.",
+      "path_type": "hot",
+      "removable_lines_estimate": 58,
+      "remediation": "Réduire les deux conversions aux formules globales, puis supprimer ScreenMapping, screenMapping et les helpers CGRect privés devenus inutiles. Éviter aussi de construire screenFrames dans les deux wrappers de production. Conserver les cas de test multiécrans.",
+      "remediation_code": "static func nsPointToAX(_ point: CGPoint, screenFrames _: [CGRect], primaryHeight: CGFloat) -> CGPoint {\n    CGPoint(x: point.x, y: primaryHeight - point.y)\n}\n\nstatic func axRectToNS(_ rect: CGRect, screenFrames _: [CGRect], primaryHeight: CGFloat) -> CGRect {\n    CGRect(x: rect.minX, y: primaryHeight - rect.minY - rect.height, width: rect.width, height: rect.height)\n}",
+      "verification": "Conserver les trois tests de RoadieScreenCoordinateTests et ajouter des rectangles à cheval sur deux écrans, hors écran et avec une liste vide. Vérifier l’équivalence sur des cadres d’écran valides. Aucun test exécuté ici. Si un comportement réel différent apparaît, rétablir les fonctions actuelles avant de poursuivre la simplification. Les tests existants lus couvrent le point d’un écran secondaire situé au-dessus du principal (RoadieScreenCoordinateTests.swift:20-33), ainsi que le retour AX vers NS (lignes 36-46).",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "block_release": false,
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+          "line": 50,
+          "note": "La conversion de cadre d’écran est axFrame.y = primaryHeight - frame.maxY."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+          "line": 62,
+          "note": "Même définition pour le sélecteur de rectangle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 729,
+          "note": "Une autre conversion déjà utilisée dans le dépôt applique directement les mêmes deux formules, sans sélection d’écran."
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    "RailRuntimeStateStore.mutate renvoie nil en cas d’erreur de persistance et écrit le diagnostic sur stderr ; les setters de commandes exposent ce résultat (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailRuntimeState.swift:85-94).",
+    "RailFileWatcher ne ferme le descripteur que dans le cancel handler et écarte les événements d’une ancienne source (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailFileWatchers.swift:30-44).",
+    "RailThumbnailStore limite les captures concurrentes à un lot et à un budget explicite ; les vignettes sont réduites et le test de vide échantillonne 32×32 pixels (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailThumbnailStore.swift:65-82, 127-130, 193-197).",
+    "RailSettings met en cache les lectures réussies par chemin et signature, avec accès au cache sous NSLock (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift:124-135, 495-510).",
+    "Complexité algorithmique : les neuf fichiers complémentaires ont été vérifiés. Pas de boucle quadratique, N+1 persistant, tri imbriqué ou copie en cascade démontré. Le tri de demandes de capture est O(m log m), documenté. UI-NEW-003 porte sur des calculs géométriques inutiles et non sur un défaut quadratique."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailRuntimeState.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailVisualConfig.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailThumbnailStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailFileWatchers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/MouseFollower.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/NSColorHex.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/Formatters.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/RoadieScreenCoordinateTests.swift"
+  ],
+  "files_read_partial": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowContextActions.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ConfigTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/configuration-rules.md"
+  ],
+  "read_details": {
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailRuntimeState.swift": "1-96 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailSettings.swift": "1-510 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailVisualConfig.swift": "1-371 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailThumbnailStore.swift": "1-245 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailFileWatchers.swift": "1-53 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/MouseFollower.swift": "1-26 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/NSColorHex.swift": "1-31 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RoadieScreenCoordinate.swift": "1-87 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/Formatters.swift": "1-530 ; lecture intégrale, par tranches quand nécessaire, sans troncature de source",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift": "90-160, 245-280, 805-895",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift": "135-168, 267-375",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift": "600-665",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowContextActions.swift": "1-58",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetHintService.swift": "705-730",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift": "720-743",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift": "160-225, 470-516",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift": "1040-1127, 1130-1338",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ConfigTests.swift": "245-412",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md": "142-184",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/configuration-rules.md": "115-225",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/RoadieScreenCoordinateTests.swift": "1-48 ; lecture intégrale"
+  },
+  "warnings": [
+    "Complément de couverture UI : les neuf fichiers production lus intégralement totalisent 1949 lignes. Les fichiers FloatLayoutStrategy.swift et WindowContextActions.swift ne sont pas revendiqués comme lus intégralement ici, conformément à la répartition du coordinateur.",
+    "Aucun statut d’origine réévalué ici : ces statuts appartiennent à raw-ui.json et aux autres lots. original_statuses est volontairement vide.",
+    "Aucun build, test Swift, lancement d’application, capture écran, profilage ou interaction avec un daemon exécuté. Aucun processus arrêté ou relancé. Les constats confirmed reposent sur des chemins déterministes lus dans le code, pas sur une reproduction AppKit réelle.",
+    "Les permissions Screen Recording, les erreurs ScreenCaptureKit, le coût mémoire réel des images et les scénarios de course avec recyclage d’identifiants de fenêtres n’ont pas été reproduits.",
+    "Les fonctions de formatage ont été lues intégralement ; les producteurs de tous leurs modèles de données ne font pas partie de ce complément.",
+    "Le comportement de rail labels hide lorsque visibility_seconds=0 a été examiné : le code conserve les labels visibles. La documentation définit 0 comme toujours visible. Aucun constat supplémentaire n’est retenu sans contrat plus explicite.",
+    "Les deux nouveaux constats retenus sont préexistants au quatrième tour de corrections ; ils ne sont pas présentés comme des régressions de ce tour.",
+    "Les modules v14 01, 04, 05, 08, 11 et 12 ont été lus. Les aspects web, base de données, cloud et FinOps de leurs checklists ne s’appliquent pas à ces neuf composants natifs.",
+    "UI-NEW-002 écarté du scoring après contrelecture : gap=0 est effectivement remplacé par layout.spacing, mais aucune documentation ni spec consultée ne garantit que zéro signifie un espacement nul plutôt que le repli de compatibilité explicitement codé. La borne minimale 0 du parseur ne suffit pas à établir le contrat utilisateur. Le ternaire est présent dans RailVisualConfig.swift:99 et TargetHintService.swift:721."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 58,
+    "conclusion": "UI-NEW-003 démontre une simplification à comportement constant des conversions de coordonnées : deux sélecteurs complets s’annulent algébriquement. Le reste du volume lu porte principalement les options de rendu, la conversion de leurs types et le formatage de sorties CLI. Les closures de MouseFollower permettent l’injection des effets et le cache de RailSettings évite la relecture, donc ils ne sont pas classés comme wrappers décoratifs.",
+    "future_responsibility": [
+      "La charge cognitive peut diminuer en supprimant les sélecteurs de coordonnées et en unifiant ultérieurement la lecture TOML ; UI-NEW-001 et UI-NEW-003 en donnent les raisons concrètes.",
+      "Les nombreuses propriétés de RailSettings correspondent aux options de rendu consommées. Aucun décompte de code généré ou de dette fondé sur la seule taille des fichiers n’est produit.",
+      "RailFileWatcher est partagé entre trois surveillances dans RailController.startWatchers ; son extraction porte aussi les règles de propriété du descripteur.",
+      "Le cache de vignettes documente le budget, les permissions et la réduction. Les intentions sont explicables ; les comportements système n’ont toutefois pas été observés ici.",
+      "Aucune zone n’est qualifiée d’incomprise par ses mainteneurs. Les limites de lecture sont explicites dans warnings."
+    ]
+  }
+}

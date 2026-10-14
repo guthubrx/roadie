@@ -24,7 +24,7 @@ public struct DesktopCommandService {
     public func list() -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop list: no display", changed: false)
+            return StageCommandResult(message: "desktop list: no display", changed: false, outcome: .noOp)
         }
         let state = store.state()
         let current = state.currentDesktopID(for: display.id)
@@ -37,29 +37,34 @@ public struct DesktopCommandService {
             let label = state.label(displayID: display.id, desktopID: id) ?? "-"
             lines.append("\(id == current ? "*" : "")\t\(id.rawValue)\t\(label)\t\(stageCount)\t\(windowCount)")
         }
-        return StageCommandResult(message: lines.joined(separator: "\n"), changed: false)
+        return StageCommandResult(message: lines.joined(separator: "\n"), changed: false, outcome: .noOp)
     }
 
     public func current() -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop current: no display", changed: false)
+            return StageCommandResult(message: "desktop current: no display", changed: false, outcome: .noOp)
         }
         let state = store.state()
         let current = state.currentDesktopID(for: display.id)
         let label = state.label(displayID: display.id, desktopID: current) ?? "-"
-        return StageCommandResult(message: "desktop current \(current.rawValue) \(label)", changed: false)
+        return StageCommandResult(message: "desktop current \(current.rawValue) \(label)", changed: false, outcome: .noOp)
     }
 
     public func label(_ desktopID: DesktopID, as label: String) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop label: no display", changed: false)
+            return StageCommandResult(message: "desktop label: no display", changed: false, outcome: .noOp)
         }
-        let state = store.mutate { state in
-            _ = state.scope(displayID: display.id, desktopID: desktopID)
-            state.setLabel(label, displayID: display.id, desktopID: desktopID)
-            return state
+        let state: PersistentStageState
+        do {
+            state = try store.mutateChecked { state in
+                _ = state.scope(displayID: display.id, desktopID: desktopID)
+                state.setLabel(label, displayID: display.id, desktopID: desktopID)
+                return state
+            }
+        } catch {
+            return .persistenceFailure("desktop label \(desktopID.rawValue)", error)
         }
         let visibleLabel = state.label(displayID: display.id, desktopID: desktopID) ?? "-"
         return StageCommandResult(message: "desktop label \(desktopID.rawValue) \(visibleLabel)", changed: true)
@@ -68,7 +73,7 @@ public struct DesktopCommandService {
     public func focus(_ desktopID: DesktopID) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop focus: no display", changed: false)
+            return StageCommandResult(message: "desktop focus: no display", changed: false, outcome: .noOp)
         }
         return switchDisplay(display, to: desktopID, snapshot: snapshot)
     }
@@ -76,13 +81,18 @@ public struct DesktopCommandService {
     public func cycle(_ direction: StageCycleDirection) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop \(direction.rawValue): no display", changed: false)
+            return StageCommandResult(message: "desktop \(direction.rawValue): no display", changed: false, outcome: .noOp)
         }
-        let state = store.mutate { state in
-            for id in (1...6).map({ DesktopID(rawValue: $0) }) {
-                _ = state.scope(displayID: display.id, desktopID: id)
+        let state: PersistentStageState
+        do {
+            state = try store.mutateChecked { state in
+                for id in (1...6).map({ DesktopID(rawValue: $0) }) {
+                    _ = state.scope(displayID: display.id, desktopID: id)
+                }
+                return state
             }
-            return state
+        } catch {
+            return .persistenceFailure("desktop \(direction.rawValue)", error)
         }
         let ids = desktopIDs(for: display.id, in: state)
         let current = state.currentDesktopID(for: display.id)
@@ -100,11 +110,11 @@ public struct DesktopCommandService {
     public func last() -> StageCommandResult {
         let snapshot = service.snapshot(followFocus: false)
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop last: no display", changed: false)
+            return StageCommandResult(message: "desktop last: no display", changed: false, outcome: .noOp)
         }
         let state = store.state()
         guard let last = state.lastDesktopID(for: display.id) else {
-            return StageCommandResult(message: "desktop last: none", changed: false)
+            return StageCommandResult(message: "desktop last: none", changed: false, outcome: .noOp)
         }
         return switchDisplay(display, to: last, snapshot: snapshot)
     }
@@ -116,7 +126,7 @@ public struct DesktopCommandService {
     public func summon(_ desktopID: DesktopID) -> StageCommandResult {
         let snapshot = service.snapshot()
         guard let display = activeDisplay(in: snapshot) else {
-            return StageCommandResult(message: "desktop summon: no display", changed: false)
+            return StageCommandResult(message: "desktop summon: no display", changed: false, outcome: .noOp)
         }
         return switchDisplay(display, to: desktopID, snapshot: snapshot)
     }
@@ -130,62 +140,13 @@ public struct DesktopCommandService {
               let displayID = active.scope?.displayID ?? displayID(containing: active.window.frame.center, in: snapshot.displays),
               let display = snapshot.displays.first(where: { $0.id == displayID })
         else {
-            return StageCommandResult(message: "window desktop \(desktopID.rawValue): no active window", changed: false)
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): no active window", changed: false, outcome: .noOp)
         }
-
-        let sourceScope = active.scope
-        let stageManager = ConfigReloadService.shared.currentConfig().stageManager
-        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
-            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageManager)
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: active.window.id)
-            }
-            targetScope.assign(window: active.window, to: targetScope.activeStageID)
-            state.update(targetScope)
-            let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-            let removedPin = sourceScope == targetStageScope ? nil : state.removePin(windowID: active.window.id)
-            if sourceScope != targetStageScope {
-                state.suppressRulePlacement(window: active.window)
-            }
-            return (targetStageScope, removedPin)
+        // Bureau cible = bureau actuel de la fenêtre : rien à écrire (REL-016), comme `assign(windowID:...)`.
+        guard active.scope?.desktopID != desktopID || active.scope?.displayID != displayID else {
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false, outcome: .noOp)
         }
-
-        if let sourceScope {
-            service.removeLayoutIntent(scope: sourceScope)
-        }
-        service.removeLayoutIntent(scope: targetStageScope)
-
-        if follow {
-            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)
-        }
-
-        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
-        let (_, result) = service.applyCommandPlacement(
-            CommandPlacement(
-                hiding: [active.window.id: HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays)],
-                layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
-            ),
-            cause: "desktop.assign_window",
-            generation: generation,
-            events: events
-        )
-        let hidden = !result.items.contains { $0.windowID == active.window.id && $0.status == .failed }
-        events.append(RoadieEvent(
-            type: "window_desktop",
-            scope: targetStageScope,
-            details: [
-                "windowID": String(active.window.id.rawValue),
-                "follow": String(follow),
-                "layout": String(result.attempted),
-                "unpinned": String(removedPin != nil),
-            ]
-        ))
-        appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
-        return StageCommandResult(
-            message: "window desktop \(desktopID.rawValue): hidden=\(hidden) layout=\(result.attempted)",
-            changed: hidden || result.attempted > 0
-        )
+        return moveWindow(active, to: desktopID, on: display, snapshot: snapshot, follow: follow, generation: generation, messageLabel: "")
     }
 
     public func assign(
@@ -201,48 +162,83 @@ public struct DesktopCommandService {
         guard let entry = snapshot.windows.first(where: { $0.window.id == windowID }),
               let display = snapshot.displays.first(where: { $0.id == displayID })
         else {
-            return StageCommandResult(message: "window desktop \(desktopID.rawValue): window or display unavailable", changed: false)
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): window or display unavailable", changed: false, outcome: .failed)
         }
         guard entry.scope?.desktopID != desktopID || entry.scope?.displayID != displayID else {
-            return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false)
+            return StageCommandResult(message: "window desktop \(desktopID.rawValue): already on target desktop", changed: false, outcome: .noOp)
         }
+        return moveWindow(entry, to: desktopID, on: display, snapshot: snapshot, follow: follow, generation: generation, messageLabel: "window=\(windowID.rawValue) ")
+    }
 
+    /// Corps commun des deux entrées publiques (MIN-004) : mutation des scopes, retrait du pin,
+    /// intentions de layout, puis masquage (bureau cible non affiché) et disposition en un seul plan.
+    /// Les validations propres à chaque entrée restent chez l'appelant.
+    private func moveWindow(
+        _ entry: ScopedWindowSnapshot,
+        to desktopID: DesktopID,
+        on display: DisplaySnapshot,
+        snapshot: DaemonSnapshot,
+        follow: Bool,
+        generation: UInt64,
+        messageLabel: String
+    ) -> StageCommandResult {
+        let displayID = display.id
         let sourceScope = entry.scope
         let stageManager = ConfigReloadService.shared.currentConfig().stageManager
-        let (targetStageScope, removedPin) = store.mutate { state -> (StageScope, PersistentWindowPin?) in
-            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageManager)
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: entry.window.id)
-            }
-            targetScope.assign(window: entry.window, to: targetScope.activeStageID)
-            state.update(targetScope)
-            let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
-            let removedPin = state.removePin(windowID: entry.window.id)
-            state.suppressRulePlacement(window: entry.window)
-            return (targetStageScope, removedPin)
+        let transaction: (StageScope, PersistentWindowPin?, Bool, CGRect?)
+        do {
+            // Affectation écrite puis intents retirés ; si ce retrait échoue, l'affectation et le pin
+            // reviennent (REL-021) : le refus annoncé ne laisse rien.
+            transaction = try service.commitStageTransfer(in: store, { state -> (StageScope, PersistentWindowPin?, Bool, CGRect?) in
+                // Cadre mémorisé avant le retrait : sert à replacer une fenêtre garée (REL-016).
+                let rememberedFrame = state.scopes.lazy
+                    .flatMap { $0.stages.lazy.flatMap { $0.members } }
+                    .first { $0.windowID == entry.window.id }?.frame.cgRect
+                var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+                targetScope.applyConfiguredStages(stageManager)
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: entry.window.id)
+                }
+                targetScope.assign(window: entry.window, to: targetScope.activeStageID)
+                state.update(targetScope)
+                let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: targetScope.activeStageID)
+                let removedPin = state.removePin(windowID: entry.window.id)
+                state.suppressRulePlacement(window: entry.window)
+                return (targetStageScope, removedPin, state.currentDesktopID(for: displayID) == desktopID, rememberedFrame)
+            }, clearingIntentsOf: { [sourceScope, $0.0].compactMap { $0 } })
+        } catch {
+            return .persistenceFailure("window desktop \(desktopID.rawValue)", error)
         }
-
-        if let sourceScope {
-            service.removeLayoutIntent(scope: sourceScope)
-        }
-        service.removeLayoutIntent(scope: targetStageScope)
+        let (targetStageScope, removedPin, targetIsVisible, rememberedFrame) = transaction
 
         if follow {
             return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)
         }
 
         // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.
+        // Un bureau cible déjà affiché garde la fenêtre visible (REL-016) : une fenêtre garée y reçoit
+        // un cadre visible explicite. Les modes à arbre le remplacent par leur disposition ; le mode
+        // `float` garde sinon la géométrie courante, donc la fenêtre resterait hors écran.
+        var hiding: [WindowID: CGRect] = [:]
+        var restoring: [WindowID: CGRect] = [:]
+        if targetIsVisible {
+            if let frame = Self.visibleRestoreFrame(current: entry.window.frame.cgRect, remembered: rememberedFrame, on: display, among: snapshot.displays) {
+                restoring[entry.window.id] = frame
+            }
+        } else {
+            hiding[entry.window.id] = HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)
+        }
         let (_, result) = service.applyCommandPlacement(
             CommandPlacement(
-                hiding: [entry.window.id: HiddenWindowPlacement.frame(for: entry.window.frame.cgRect, on: display, among: snapshot.displays)],
+                hiding: hiding,
+                restoring: restoring,
                 layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })
             ),
             cause: "desktop.assign_window",
             generation: generation,
             events: events
         )
-        let hidden = !result.items.contains { $0.windowID == entry.window.id && $0.status == .failed }
+        let hidden = !targetIsVisible && !result.items.contains { $0.windowID == entry.window.id && $0.status == .failed }
         events.append(RoadieEvent(
             type: "window_desktop",
             scope: targetStageScope,
@@ -254,10 +250,33 @@ public struct DesktopCommandService {
             ]
         ))
         appendManualPinRemovalEvent(removedPin, targetScope: targetStageScope)
-        return StageCommandResult(
-            message: "window desktop \(desktopID.rawValue): window=\(windowID.rawValue) hidden=\(hidden) layout=\(result.attempted)",
+        return StageCommandResult.changedOrNoOp(
+            "window desktop \(desktopID.rawValue): \(messageLabel)hidden=\(hidden) layout=\(result.attempted)",
             changed: hidden || result.attempted > 0
         )
+    }
+
+    /// Cadre visible pour une fenêtre garée (masquée) arrivant sur un bureau affiché : le cadre
+    /// mémorisé s'il est visible et sur l'écran, sinon la taille courante centrée dans la zone
+    /// visible de l'écran. nil si la fenêtre n'est pas garée. O(d), d = nombre d'écrans.
+    static func visibleRestoreFrame(
+        current: CGRect,
+        remembered: CGRect?,
+        on display: DisplaySnapshot,
+        among displays: [DisplaySnapshot]
+    ) -> CGRect? {
+        guard HiddenWindowPlacement.isHiddenOrLegacyOffscreen(current, in: displays) else { return nil }
+        let area = display.visibleFrame.cgRect
+        if let remembered, !HiddenWindowPlacement.isHiddenOrLegacyOffscreen(remembered, in: displays), area.intersects(remembered) {
+            return remembered
+        }
+        let size = CGSize(width: min(current.width, area.width), height: min(current.height, area.height))
+        return CGRect(
+            x: area.midX - size.width / 2,
+            y: area.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        ).integral
     }
 
     private func appendManualPinRemovalEvent(_ pin: PersistentWindowPin?, targetScope: StageScope) {
@@ -289,38 +308,43 @@ public struct DesktopCommandService {
         }
 
         // Scopes relus et modifiés sous verrou (FR-013) ; le bloc renvoie ce que l'AX fera ensuite.
-        let plan = store.mutate { state -> DesktopSwitchPlan? in
-            let previousDesktopID = state.currentDesktopID(for: display.id)
-            guard previousDesktopID != desktopID else { return nil }
-            var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
-            var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageConfig)
-            for window in visibleWindows {
-                previousScope.updateFrame(window: window)
+        let plan: DesktopSwitchPlan?
+        do {
+            plan = try store.mutateChecked { state -> DesktopSwitchPlan? in
+                let previousDesktopID = state.currentDesktopID(for: display.id)
+                guard previousDesktopID != desktopID else { return nil }
+                var previousScope = state.scope(displayID: display.id, desktopID: previousDesktopID)
+                var targetScope = state.scope(displayID: display.id, desktopID: desktopID)
+                targetScope.applyConfiguredStages(stageConfig)
+                for window in visibleWindows {
+                    previousScope.updateFrame(window: window)
+                }
+                let previousWindowIDs = Set(previousScope.stages.flatMap { $0.members.map(\.windowID) })
+                let targetStage = targetScope.stages.first { $0.id == targetScope.activeStageID }
+                let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
+                let hiddenIDs = previousWindowIDs.subtracting(targetWindowIDs)
+                state.update(previousScope)
+                state.update(targetScope)
+                state.switchDesktop(displayID: display.id, to: desktopID)
+                state.protectCommandFocus(
+                    displayID: display.id,
+                    desktopID: desktopID,
+                    stageID: targetScope.activeStageID,
+                    windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
+                    staleFocusedWindowID: snapshot.focusedWindowID.flatMap { hiddenIDs.contains($0) ? $0 : nil }
+                )
+                return DesktopSwitchPlan(
+                    previousDesktopID: previousDesktopID,
+                    targetStageID: targetScope.activeStageID,
+                    hiddenIDs: hiddenIDs,
+                    targetStage: targetStage
+                )
             }
-            let previousWindowIDs = Set(previousScope.stages.flatMap { $0.members.map(\.windowID) })
-            let targetStage = targetScope.stages.first { $0.id == targetScope.activeStageID }
-            let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])
-            let hiddenIDs = previousWindowIDs.subtracting(targetWindowIDs)
-            state.update(previousScope)
-            state.update(targetScope)
-            state.switchDesktop(displayID: display.id, to: desktopID)
-            state.protectCommandFocus(
-                displayID: display.id,
-                desktopID: desktopID,
-                stageID: targetScope.activeStageID,
-                windowID: targetStage?.focusedWindowID ?? targetStage?.members.last?.windowID,
-                staleFocusedWindowID: snapshot.focusedWindowID.flatMap { hiddenIDs.contains($0) ? $0 : nil }
-            )
-            return DesktopSwitchPlan(
-                previousDesktopID: previousDesktopID,
-                targetStageID: targetScope.activeStageID,
-                hiddenIDs: hiddenIDs,
-                targetStage: targetStage
-            )
+        } catch {
+            return .persistenceFailure("desktop focus \(desktopID.rawValue)", error)
         }
         guard let plan else {
-            return StageCommandResult(message: "desktop focus \(desktopID.rawValue): already active", changed: false)
+            return StageCommandResult(message: "desktop focus \(desktopID.rawValue): already active", changed: false, outcome: .noOp)
         }
         let targetStage = plan.targetStage
         let targetWindowIDs = Set(targetStage?.members.map(\.windowID) ?? [])

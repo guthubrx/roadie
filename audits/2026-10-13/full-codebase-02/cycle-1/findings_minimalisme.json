@@ -1,0 +1,53 @@
+{
+  "module": "12",
+  "findings": [
+    {
+      "id": "MIN-005",
+      "category": "minimalism",
+      "subcategory": "unreachable_validation",
+      "severity": "LOW",
+      "file": "Sources/RoadieCore/Config.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "line": 1566,
+      "title": "Le contrôle des raccourcis vides reste inatteignable après leur normalisation",
+      "description": "Le seul appel de validateTargetGrid reçoit la configuration décodée. Son initialiseur remplace déjà les quatre touches vides ou composées d’espaces par space/r/backspace/escape. La branche qui recherche encore une touche vide ne peut donc produire son erreur. Aucune contrainte documentée ne nécessite ce doublon.",
+      "evidence": "        if config.confirmActionKey.isEmpty || config.resetKey.isEmpty || config.backKey.isEmpty || config.exitKey.isEmpty {\n            items.append(ConfigValidationItem(\n                level: .error,\n                path: \"experimental.target_grid.*_key\",\n                message: \"recursive grid keys must not be empty\"\n            ))\n        }",
+      "exploitability": "N/A",
+      "verification_status": "confirmé par lecture du seul appel privé, du décodage et de normalizedKey",
+      "exploitation_scenario": "Décoder [experimental.target_grid] confirm_action_key=\"\" ou une valeur uniquement composée d’espaces. normalizedKey applique une touche de repli non vide avant validateTargetGrid ; la branche ne s’exécute pas.",
+      "impact": "Sept lignes de validation sans effet entretiennent une règle qui semble rejeter les touches vides alors qu’elles sont normalisées en amont.",
+      "path_type": "cold",
+      "removable_lines_estimate": 7,
+      "remediation": "Supprimer la branche sur les quatre touches vides. Garder les valeurs de repli existantes ; si un rejet est voulu plus tard, valider avant normalisation dans une modification fonctionnelle distincte.",
+      "remediation_code": "private static func validateTargetGrid(_ config: TargetGridConfig) -> [ConfigValidationItem] {\n    var items: [ConfigValidationItem] = []\n    if config.hintCharacters.count < config.rows * config.columns {\n        items.append(ConfigValidationItem(\n            level: .error,\n            path: \"experimental.target_grid.hint_characters\",\n            message: \"must contain at least rows*columns characters\"\n        ))\n    }\n    return items\n}",
+      "verification": "Comparer les rapports de validate pour des touches vides, blanches, absentes et valides ; le résultat doit rester identique.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XIX.2"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 783,
+          "evidence": "        self.confirmActionKey = Self.normalizedKey(confirmActionKey, fallback: \"space\")\n        self.resetKey = Self.normalizedKey(resetKey, fallback: \"r\")\n        self.backKey = Self.normalizedKey(backKey, fallback: \"backspace\")\n        self.exitKey = Self.normalizedKey(exitKey, fallback: \"escape\")"
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 859,
+          "evidence": "    static func normalizedKey(_ value: String, fallback: String) -> String {\n        let cleaned = value\n            .trimmingCharacters(in: .whitespacesAndNewlines)\n            .lowercased()\n            .replacingOccurrences(of: \" \", with: \"\")\n        guard !cleaned.isEmpty else { return fallback }\n        let parts = cleaned.split(separator: \"+\").map(String.init).map { part in"
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1284
+        }
+      ],
+      "status": "open",
+      "source_id": "MIN-MODELS-001",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-models.json",
+      "remediation_applied": false,
+      "origin": "nouveau constat de cet audit; antériorité Git non attribuée sauf précision",
+      "fingerprint": "c1e2a748b71c"
+    }
+  ]
+}

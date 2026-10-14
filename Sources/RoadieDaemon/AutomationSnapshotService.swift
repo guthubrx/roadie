@@ -88,6 +88,7 @@ public struct AutomationSnapshotService: Sendable {
             }
     }
 
+    /// Une ligne par stage, avec son écran : `id` et `desktopId` se répètent d'un écran à l'autre (REL-013).
     private func stageSnapshots(from state: RoadieState) -> [AutomationStageSnapshot] {
         state.displays.values
             .sorted { $0.id.rawValue < $1.id.rawValue }
@@ -100,6 +101,7 @@ public struct AutomationSnapshotService: Sendable {
                             .map { stage in
                                 AutomationStageSnapshot(
                                     id: stage.id.rawValue,
+                                    displayId: display.id.rawValue,
                                     desktopId: String(desktop.id.rawValue),
                                     name: stage.name,
                                     mode: stage.mode.rawValue,
@@ -124,7 +126,9 @@ public struct AutomationSnapshotService: Sendable {
                 stageId: scoped.scope?.stageID.rawValue,
                 frame: scoped.window.frame,
                 isFocused: scoped.window.id == snapshot.focusedWindowID,
-                isFloating: scoped.scope == nil,
+                // Classification unique des règles (REL-007) ; inconnu (fenêtre gardée pour un
+                // écran débranché) rendu `false` pour garder un booléen dans le JSON public.
+                isFloating: LayoutMaintainer.ruleFloatingState(of: scoped, in: snapshot.state) ?? false,
                 presentationState: states[scoped.window.id] ?? .normal
             )
         }
@@ -138,6 +142,8 @@ public struct AutomationSnapshotService: Sendable {
                         stage.groups.map { group in
                             AutomationGroupSnapshot(
                                 id: group.id,
+                                displayId: display.id.rawValue,
+                                desktopId: String(desktop.id.rawValue),
                                 stageId: stage.id.rawValue,
                                 memberIds: group.windowIDs.map { String($0.rawValue) },
                                 activeMemberId: group.activeWindowID.map { String($0.rawValue) },

@@ -1,0 +1,517 @@
+{
+  "scope": "documentation, tests UI, rail, border, focus souris, menu de titre, glisser; hors Target*",
+  "mode": "readonly",
+  "findings": [
+    {
+      "id": "REL-DQ-001",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/RailController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailController.swift",
+      "line": 776,
+      "title": "Le dépôt entre deux rails échoue si leurs stages portent le même identifiant",
+      "description": "Le contrôle de non-déplacement compare seulement les identifiants de stage. Ces identifiants sont locaux au couple écran/desktop. La destination a déjà été résolue sur le bon écran, mais la garde arrête la commande avant son exécution.",
+      "evidence": "        guard target.stageID != drag.sourceStageID else { return }\n        print(\"rail drag window \\(drag.windowID.rawValue) -> stage \\(target.stageID.rawValue) index \\(target.insertionIndex)\")\n        fflush(stdout)\n        perform(.moveWindow(drag.windowID, target.stageID, target.insertionIndex, false), displayID: targetDisplayID)\n        rebuildPanels()",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Sur deux écrans, garder une stage 1 contenant une fenêtre sur chaque écran. Faire glisser une vignette du rail de la stage 1 du premier écran sur la carte stage 1 du second. target.stageID et drag.sourceStageID valent tous deux 1 : aucun déplacement ne part.",
+      "impact": "Un transfert courant entre écrans est ignoré sans message. Les tests de DropPreviewEngine entre écrans contournent ce chemin du rail.",
+      "path_type": "hot",
+      "remediation": "Comparer au minimum le couple écran/stage. Conserver le contexte desktop de départ si un changement de desktop pendant le geste doit être accepté.",
+      "verification": "Tester le dépôt entre écrans avec identifiants égaux, avec identifiants différents, puis le dépôt sur la même stage du même écran.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "remediation_code": "guard targetDisplayID != drag.displayID || target.stageID != drag.sourceStageID else { return }",
+      "related_locations": [
+        {
+          "file": "Tests/RoadieDaemonTests/DropPreviewEngineTests.swift",
+          "line": 54,
+          "note": "Les deux scopes de la fixture ont stageID 1 mais passent directement par le moteur."
+        }
+      ]
+    },
+    {
+      "id": "REL-DQ-002",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+      "line": 249,
+      "title": "Le focus souris sélectionne une fenêtre cachée derrière une autre",
+      "description": "Le sélecteur filtre les fenêtres gérées puis choisit la plus petite surface. Il ne respecte pas leur ordre avant/arrière et ne vérifie pas isOnScreen. Le démarrage du glisser utilise la même logique de sélection par surface, après filtrage sur une bande de titre.",
+      "evidence": "        snapshot.windows\n            .filter { entry in\n                guard let scope = entry.scope else { return false }\n                return entry.window.isTileCandidate\n                    && snapshot.state.activeScope(on: scope.displayID) == scope\n                    && entry.window.frame.cgRect.contains(point)\n            }\n            .min { lhs, rhs in\n                lhs.window.frame.width * lhs.window.frame.height < rhs.window.frame.width * rhs.window.frame.height\n            }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Activer focus_follows_mouse. En mode float, placer une grande fenêtre au premier plan par-dessus une petite fenêtre de la même stage. Déplacer le curseur de plus de 2 points dans la zone commune : la petite fenêtre est sélectionnée et focalisée, alors que la grande est visible. Pour le glisser, placer la bande de titre de la petite sous le contenu de la grande : un glisser dans ce contenu peut être interprété comme un glisser de la fenêtre masquée.",
+      "impact": "Le focus et les gestes peuvent agir sur une fenêtre différente de celle montrée à l’utilisateur.",
+      "path_type": "hot",
+      "remediation": "Identifier d’abord la première fenêtre visible contenant le point dans l’ordre CoreGraphics. Puis vérifier son éligibilité. Une fenêtre non gérée ou un panneau situé devant doit bloquer la recherche des fenêtres derrière.",
+      "verification": "Ajouter des snapshots avec grande fenêtre devant petite, panneau non géré devant, fenêtre isOnScreen=false et bande de titre masquée.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 611,
+          "evidence": "        let candidates = snapshot.windows.compactMap { entry -> (WindowSnapshot, StageScope)? in\n            guard let scope = entry.scope,\n                  snapshot.state.activeScope(on: scope.displayID) == scope,\n                  WindowDragReorderEligibility.accepts(entry.window),\n                  titleBarHitRect(for: entry.window.frame.cgRect).contains(axPoint)\n            else { return nil }\n            return (entry.window, scope)\n        }\n        return candidates.sorted { $0.0.frame.cgRect.area < $1.0.frame.cgRect.area }.first"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 316,
+          "note": "Le menu de titre utilise déjà la première fenêtre visible dans l’ordre CG."
+        }
+      ]
+    },
+    {
+      "id": "PERF-DQ-001",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "line": 205,
+      "title": "Le menu désactivé déclenche quand même un relevé complet à chaque clic droit",
+      "description": "start installe ses deux moniteurs sans garde enabled. handleRightMouseDown appelle snapshot avant hitTest, seule fonction qui refuse le mode désactivé. snapshot interroge provider.windows et réconcilie l’état; ce travail tourne sur MainActor.",
+      "evidence": "    public func handleRightMouseDown(at point: CGPoint, source: String = \"unknown\") -> Bool {\n        let settings = TitlebarContextMenuSettings(config: configLoader().experimental.titlebarContextMenu)\n        let snapshot = snapshotService.snapshot()\n        let axPoint = Self.appKitPointToAX(point)\n        let hit = Self.hitTest(point: axPoint, snapshot: snapshot, settings: settings)\n        traceClick(source: source, rawPoint: point, axPoint: axPoint, hit: hit, snapshot: snapshot, settings: settings)\n        guard hit.isEligible, let window = hit.window, let windowID = hit.windowID else {\n            logIgnored(hit: hit, window: hit.window)\n            return false",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Conserver experimental.titlebar_context_menu.enabled=false, valeur par défaut. Démarrer le daemon standard sans --no-titlebar-menu. Faire un clic droit dans une autre application : le moniteur global appelle snapshot avant de conclure disabled.",
+      "impact": "Coût Accessibility et accès aux fichiers inutiles sur le fil de l’interface. Aucune latence en millisecondes n’a été mesurée.",
+      "path_type": "hot",
+      "remediation": "Placer guard settings.enabled else { return false } avant le snapshot. Garder les moniteurs si nécessaire pour le rechargement à chaud.",
+      "verification": "Injecter un provider compteur. Appeler handleRightMouseDown avec enabled=false et vérifier zéro appel windows/displays et zéro écriture de store.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 170,
+          "evidence": "        guard monitors.isEmpty else { return }\n        NSApplication.shared.setActivationPolicy(.accessory)\n        let config = configLoader().experimental.titlebarContextMenu\n        debug(\"start enabled=\\(config.enabled) height=\\(config.height) leading=\\(config.leadingExclusion) trailing=\\(config.trailingExclusion)\")\n        if let local = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] event in\n            guard let self else { return event }\n            return self.handleRightMouseDown(at: NSEvent.mouseLocation, source: \"local\") ? nil : event"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 224,
+          "evidence": "        let permissions = provider.permissions(prompt: promptForPermissions)\n        let displays = provider.displays()\n        if producer, persistStateChanges, processState.claimLegacyTreeMigration() {\n            migrateLegacyTreeModes(displays: displays)\n        }\n        let rawWindows = provider.windows()"
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 443,
+          "note": "Composant lancé sauf --no-titlebar-menu."
+        }
+      ]
+    },
+    {
+      "id": "PERF-DQ-002",
+      "category": "performance",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift",
+      "line": 480,
+      "title": "La géométrie de groupe copie et fusionne des suffixes en O(n²) pendant le glisser",
+      "description": "Chaque appel récursif construit un nouveau tableau de n−1 fenêtres puis fusionne un dictionnaire de n−1 placements. La somme des tailles traitées est quadratique. La chaîne candidate → structuralPlacements → planGroup reste active pour bsp/masterStack. activeEntries vient de toutes les fenêtres de la stage, sans plafond explicite.",
+      "evidence": "    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n        guard let first = windowIDs.first else { return [:] }\n        guard windowIDs.count > 1 else { return [first: rect.integral] }\n\n        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)\n        var placements = [first: parts.first.integral]\n        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }\n        return placements",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Utiliser bsp ou masterStack avec plusieurs fenêtres redimensionnables dans la même stage. Glisser une fenêtre vers le bord d’une autre, avec au moins une fenêtre dans chaque groupe géométrique. Chaque mise à jour d’aperçu calcule planGroup. Augmenter la taille du groupe augmente le nombre de copies et de fusions selon n(n−1)/2.",
+      "impact": "Travail quadratique et profondeur de pile linéaire dans les mises à jour du glisser. La dégradation effective de latence reste à mesurer. Le mode spatialBsp emprunte un autre chemin.",
+      "path_type": "hot",
+      "remediation": "Conserver un rectangle restant, une orientation et un index. Ajouter chaque placement directement dans un seul dictionnaire. Cette passe réalise les mêmes découpes en O(n).",
+      "verification": "Comparer les rectangles de la version récursive et de la version itérative pour n=0,1,2,3,10,100, orientations et gaps variés. Vérifier que les changements d’orientation et les arrondis restent identiques. Mesurer séparément le temps d’aperçu.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "subcategory": "algorithmic_complexity",
+      "counter_audit": "PENDING",
+      "grep_command": "rg -n 'planGroup|structuralPlacements|Array\\(windowIDs.dropFirst' Sources/RoadieDaemon/DropPreviewController.swift",
+      "remediation_code": "private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n    var placements: [WindowID: CGRect] = [:]\n    placements.reserveCapacity(windowIDs.count)\n    var remainingRect = rect\n    var isHorizontal = horizontal\n    for (index, windowID) in windowIDs.enumerated() {\n        let remainingCount = windowIDs.count - index\n        let frame: CGRect\n        if remainingCount == 1 {\n            frame = remainingRect.integral\n        } else {\n            let parts = split(remainingRect, horizontally: isHorizontal, gap: gap,\n                              firstCount: 1, secondCount: remainingCount - 1)\n            frame = parts.first.integral\n            remainingRect = parts.second\n            isHorizontal.toggle()\n        }\n        if placements[windowID] == nil { placements[windowID] = frame }\n    }\n    return placements\n}",
+      "references": [
+        "Constitution Article XVIII.2"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 181,
+          "evidence": "        let activeEntries = snapshot.windows.filter { entry in\n            entry.scope == scope && entry.window.isTileCandidate\n        }\n        var ordered = service.orderedWindowIDs(in: scope, from: snapshot, mode: stage.mode)\n        if !ordered.contains(sourceWindowID) {\n            ordered.append(sourceWindowID)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 389,
+          "evidence": "\n        var result: [WindowID: CGRect] = [:]\n        result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }\n        result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }\n        return result"
+        }
+      ]
+    },
+    {
+      "id": "TEST-DQ-001",
+      "category": "tests",
+      "severity": "MEDIUM",
+      "file": "Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift",
+      "line": 20,
+      "title": "Le test de l’indicateur de groupe ne couvre aucun rendu réellement utilisé",
+      "description": "Le test crée un snapshot sans fenêtre et vérifie seulement la chaîne produite par groupIndicator. La recherche des appels ne trouve aucun appel en production. BorderController.refresh transmet uniquement frame, color, thickness et cornerRadius au panneau. La tâche T068 de la SPEC-002 est pourtant cochée comme indicateur visuel livré.",
+      "evidence": "        let snapshot = DaemonSnapshot(\n            permissions: PermissionSnapshot(accessibilityTrusted: true),\n            displays: [powerDisplay()],\n            windows: [],\n            state: state\n        )\n\n        let indicator = BorderController().groupIndicator(for: WindowID(rawValue: 1), snapshot: snapshot)\n\n        #expect(indicator == \"docs:2/2\")",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Créer un groupe de deux fenêtres puis focaliser l’une d’elles. Le test reste vert même si groupIndicator n’est jamais relié à la vue. Le chemin de rendu actuel ne transmet aucun identifiant de groupe ni membre actif.",
+      "impact": "La présence du test ne protège pas l’exigence de retour visuel FR-012. Une fonction de présentation isolée donne une fausse impression de couverture de l’interface.",
+      "path_type": "hot",
+      "remediation": "Brancher un modèle visuel de groupe sur le panneau et tester le modèle effectivement transmis au rendu. Si cette fonction n’est plus dans le produit, corriger explicitement le statut de la SPEC-002.",
+      "verification": "Un test doit échouer quand on retire la transmission de l’état de groupe au panneau. Couvrir groupe présent, membre actif et dissolution.",
+      "effort": "M",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/BorderController.swift",
+          "line": 51,
+          "evidence": "        let color = entry.pin == nil ? activeColor(for: entry.scope?.stageID, config: config) : .systemRed\n        panel.render(\n            frame: Self.axToNS(entry.window.frame.cgRect),\n            color: color,\n            thickness: CGFloat(max(1, config.thickness)),\n            cornerRadius: CGFloat(max(0, config.cornerRadius))\n        )"
+        },
+        {
+          "file": "specs/002-roadie-ecosystem-upgrade/tasks.md",
+          "line": 157,
+          "note": "T068 indicateur visuel de groupe coché."
+        }
+      ]
+    },
+    {
+      "id": "DUP-DQ-001",
+      "category": "quality",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "line": 421,
+      "title": "Le menu recopie trois fois l’exécution et le journal d’une action",
+      "description": "Les trois constructeurs de menus recréent la même closure : construire WindowContextAction, appeler execute, puis publier les mêmes champs de résultat. Seul le type de destination change. Leur raison de changer est commune et une extraction locale suffit.",
+      "evidence": "        let target = TitlebarMenuActionTarget { [weak self] targetID in\n            guard let self else { return }\n            let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)\n            let result = self.actions.execute(action)\n            self.events.append(RoadieEvent(\n                type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                scope: sourceScope,\n                details: [\n                    \"windowID\": String(windowID.rawValue),\n                    \"kind\": kind.rawValue,",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Lors d’une évolution de l’événement titlebar_context_menu.action ou du traitement d’un échec, modifier seulement l’un des trois constructeurs produit trois comportements différents selon le sous-menu.",
+      "impact": "Charge de maintenance évitable et risque de divergence entre actions ordinaires, destinations et desktop/stage.",
+      "path_type": "cold",
+      "remediation": "Extraire une méthode privée executeAndLog(_ action: WindowContextAction). Garder la construction des menus et leurs filtres distincts.",
+      "verification": "Vérifier un événement identique pour les trois familles de menu avec succès et échec.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "subcategory": "duplication",
+      "duplication_type": "RENAMED",
+      "occurrences_count": 3,
+      "removable_lines_estimate": 30,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 457,
+          "evidence": "            let target = TitlebarMenuActionTarget { [weak self] targetID in\n                guard let self else { return }\n                let action = WindowContextAction(windowID: windowID, kind: kind, targetID: targetID, sourceScope: sourceScope)\n                let result = self.actions.execute(action)\n                self.events.append(RoadieEvent(\n                    type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                    scope: sourceScope,\n                    details: [\n                        \"windowID\": String(windowID.rawValue),\n                        \"kind\": kind.rawValue,"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 506,
+          "evidence": "                let target = TitlebarMenuActionTarget { [weak self] targetID in\n                    guard let self else { return }\n                    let action = WindowContextAction(windowID: windowID, kind: .desktopStage, targetID: targetID, sourceScope: sourceScope)\n                    let result = self.actions.execute(action)\n                    self.events.append(RoadieEvent(\n                        type: result.changed ? \"titlebar_context_menu.action\" : \"titlebar_context_menu.failed\",\n                        scope: sourceScope,\n                        details: [\n                            \"windowID\": String(windowID.rawValue),\n                            \"kind\": WindowContextActionKind.desktopStage.rawValue,"
+        }
+      ]
+    },
+    {
+      "id": "MIN-DQ-001",
+      "category": "minimalism",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/RailPanel.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailPanel.swift",
+      "line": 374,
+      "title": "Le rail recopie des helpers disponibles et conserve un double adaptateur de menu",
+      "description": "action, stageID et stageDragPayload refont le parcours déjà fourni par stageCard(at:). StageCardView recalcule la mosaïque dans hitPreviewItems malgré mosaicPreviewFrames utilisé au rendu. RailStageRenameMenuTarget est identique à RailMenuActionTarget. Aucune contrainte de compatibilité ou justification de séparation n’est indiquée aux sites ou dans les ADR lus.",
+      "evidence": "        guard let contentView, acceptsRailInteraction(at: screenPoint) else { return nil }\n        let windowPoint = convertPoint(fromScreen: screenPoint)\n        let contentPoint = contentView.convert(windowPoint, from: nil)\n        var view = contentView.hitTest(contentPoint)\n        while let current = view {\n            if let card = current as? StageCardView {\n                let local = card.convert(contentPoint, from: contentView)\n                return card.action(at: local)\n            }\n            view = current.superview",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Une modification de la zone cliquable ou de la géométrie de mosaïque doit être répétée dans le rendu et le hit-test. Les helpers privés actuels permettent déjà de partager ces calculs.",
+      "impact": "Environ 80 lignes supprimables sans nouvelle couche : ~30 pour les hit-tests du panneau, ~25 pour la mosaïque/icônes, ~15 pour le double adaptateur, ~10 pour les délégations et variables redondantes adjacentes. Estimation de refactor, pas diff exécuté.",
+      "path_type": "hot",
+      "remediation": "Réutiliser stageCard(at:), mosaicPreviewFrames(in:) et iconPreviewFrames(in:). Employer RailMenuActionTarget pour Renommer. Supprimer le relais hitPreviewItemsFrontToBack en déplaçant son commentaire utile sur hitPreviewItems.",
+      "verification": "Conserver les résultats de hit-test et la géométrie pour chaque mode, y compris les cartes vides et les bords. Compiler pour vérifier les sélecteurs Objective-C.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "removable_lines_estimate": 80,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCardView.swift",
+          "line": 669,
+          "evidence": "        case .mosaic:\n            let count = min(visualMembers.count, 6)\n            let cols = count <= 2 ? count : 2\n            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))\n            let gap: CGFloat = 6\n            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))\n            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))\n            return (0..<count).map { index in\n                let col = index % cols\n                let row = index / cols"
+        },
+        {
+          "file": "Sources/RoadieDaemon/RailController.swift",
+          "line": 1293,
+          "evidence": "final class RailStageRenameMenuTarget: NSObject {\n    private let handler: () -> Void\n\n    init(handler: @escaping () -> Void) {\n        self.handler = handler\n    }\n\n    @objc func choose(_ sender: NSMenuItem) {\n        handler()\n    }"
+        }
+      ],
+      "references": [
+        "Constitution Article XIX.1",
+        "Constitution Article XX.1"
+      ]
+    },
+    {
+      "id": "QUAL-DQ-001",
+      "category": "quality",
+      "severity": "LOW",
+      "file": "README.fr.md",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/README.fr.md",
+      "line": 528,
+      "title": "Les guides décrivent des interactions qui ne correspondent plus au code",
+      "description": "Les README français et anglais décrivent des chevrons de réorganisation absents du rendu actuel. RailController réalise cette action au glisser du bouton droit. Les guides de fonctions attribuent aussi le drag/drop au composant titlebar-menu, alors que son contrôleur appartient à RailController.",
+      "evidence": "- Un clic dans une zone vide du rail ne fait rien par défaut, pour qu’un clic raté ne masque pas la stage active. Mets `empty_click_hide_active = true` seulement si tu veux qu’une zone vide bascule vers une stage vide.\n- Drag une thumbnail vers une autre stage pour y déplacer la fenêtre.\n- Drag une thumbnail vers la scène active pour la ramener.\n- Drag une thumbnail vers une zone vide du rail pour la placer dans une stage vide ou nouvellement créée.\n- Utiliser les chevrons au-dessus et au-dessous d’une stage pour réordonner les stages.",
+      "exploitability": "N/A",
+      "exploitation_scenario": "Suivre README.fr.md pour réordonner une stage : chercher les chevrons annoncés. En exécution modulaire, suivre docs/fr/features.md pour lancer titlebar-menu seul en espérant obtenir le glisser-déposer : WindowDragReorderController n’est créé que par RailController.",
+      "impact": "La documentation oriente vers des commandes ou gestes inutilisables dans le composant décrit.",
+      "path_type": "cold",
+      "remediation": "Mettre à jour les versions FR/EN : décrire le glisser au bouton droit et attribuer le drag/drop au rail. Relire aussi la phrase aucun moteur de raccourcis dans les pages CLI pour mentionner l’exception search_hotkey.",
+      "verification": "Comparer la liste des interactions aux branches handleRightMouse et aux points de création des contrôleurs. Garder les pages FR/EN cohérentes.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "README.md",
+          "line": 540,
+          "evidence": "- Drag an application window by its title bar onto a stage to move it there.\n- Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.\n- Use the chevrons above and below a stage to reorder stages.\n- Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.\n"
+        },
+        {
+          "file": "docs/fr/features.md",
+          "line": 40,
+          "evidence": "- `rail` : affiche le navrail et les thumbnails;\n- `border` : dessine la bordure de focus;\n- `focus-mouse` : gere le focus-follows-mouse;\n- `titlebar-menu` : gere drag/drop et actions de barre de titre;\n- `target-mode` : expose les cibles clavier, grilles et activations de cible.\n"
+        },
+        {
+          "file": "docs/en/features.md",
+          "line": 40,
+          "evidence": "- `rail`: renders the stage rail and thumbnails;\n- `border`: draws the focus border overlay;\n- `focus-mouse`: handles focus-follows-mouse;\n- `titlebar-menu`: handles title-bar drag/drop and context actions;\n- `target-mode`: exposes keyboard targets, grids, and target activation.\n"
+        }
+      ]
+    }
+  ],
+  "files_read": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailController.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailPanel.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailFileWatchers.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailThumbnailStore.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageCardView.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/BorderController.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/MouseFollower.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailRuntimeState.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailSettings.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/RailVisualConfig.swift",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/README.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/README.fr.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/README.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/en/README.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/cli.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/en/cli.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/configuration-rules.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/en/configuration-rules.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/events-query.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/en/events-query.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/features.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/use-cases.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/fr/gains-mode-cibles.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/en/features.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/ResizeHandlePickerTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/DropPreviewEngineTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/roadied/main.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Package.swift",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/specs/002-roadie-ecosystem-upgrade/spec.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/specs/002-roadie-ecosystem-upgrade/tasks.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.specify/memory/constitution.md",
+      "coverage": "lecture ciblée ou documentaire; pas validation de toutes les commandes annoncées"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/004-titlebar-context-menu-controller.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/005-window-pins-persistence.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/006-display-stage-parking.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/007-cli-daemon-socket.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/008-state-transactions.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/009-authoritative-tree-single-pass.md",
+      "coverage": "lecture complète"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/docs/decisions/010-private-space-type-read.md",
+      "coverage": "lecture complète"
+    }
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 110,
+    "statement": "Potentiel minimalisme : ~110 lignes suppressibles à comportement constant",
+    "basis": [
+      {
+        "finding": "MIN-DQ-001",
+        "lines": 80
+      },
+      {
+        "finding": "DUP-DQ-001",
+        "lines": 30
+      }
+    ],
+    "caveat": "Estimation statique conservatrice; aucun refactor réalisé. APIs publiques, compatibilité TOML et synchronisation ne sont pas comptées comme supprimables."
+  },
+  "llm_virtues": {
+    "cognitive_load": "Architecture des composants et fonctions pures lisible. Charge future accrue localement par les trois copies de menus, les géométries recopiées et les docs décalées (DUP-DQ-001, MIN-DQ-001, QUAL-DQ-001).",
+    "volume": "La majorité du volume lu correspond à des fonctions effectivement exposées : quatre rendus rail, configurations, capture asynchrone et interactions multi-écrans. Aucun motif probant pour supprimer une fonctionnalité entière. Environ 110 lignes de duplication ou délégation locale sont simplifiables.",
+    "abstractions": "MainActor, cache de captures, snapshot partagé et watcher ont une contrainte concrète. Aucun framework de plugins ni dépendance évitable identifié dans ce sous-périmètre; TOMLKit porte le format utilisateur. Un adaptateur de menu en double n’apporte pas de règle.",
+    "human_accountability": "Les commentaires, ADR et tests géométriques expliquent l’intention. Les sélections avant/arrière et l’indicateur non branché restent des points où le comportement livré ne suit pas le contrat.",
+    "generation_claim": "Aucune origine IA inférée du style. Aucun usage LLM externe ou génération opaque audité; ne pas conclure sur l’auteur."
+  },
+  "positive_findings": [
+    "RailFileWatcher.swift:42-44 ferme le descripteur exclusivement dans le cancel handler et ignore les anciennes sources (ligne 35).",
+    "RailThumbnailStore.swift:96-126 capture de façon asynchrone, limite le lot, fournit un fallback sans autorisation et purge les caches de fenêtres hors périmètre.",
+    "RailController.swift:823-928 évite de reconstruire les panneaux quand signature et paramètres ne changent pas.",
+    "Tests/RoadieDaemonTests/DropPreviewEngineTests.swift vérifie des géométries et mutations réelles avec providers simulés; ce ne sont pas des tests de simple égalité de mocks.",
+    "Tests/RoadieDaemonTests/ResizeHandlePickerTests.swift couvre des coordonnées négatives, les bords entre fenêtres et l’exclusion des stages inactives."
+  ],
+  "warnings": [
+    "Aucun build, test, benchmark, processus GUI ou daemon lancé par ce sous-agent. Le parent prend en charge les validations autorisées.",
+    "PERF-DQ-002 attend le contre-audit indépendant obligatoire avant inclusion HIGH.",
+    "Aucune mesure de couverture exécutée; l’absence de tests UI est établie par recherche d’appels, pas par un pourcentage inventé.",
+    "La documentation FR/EN a été lue et comparée sur les fonctions étudiées; toutes les commandes de tous les guides n’ont pas été exécutées.",
+    "Le cache icons de RailThumbnailStore et appIconCache de StageCardView n’est pas purgé, mais dépend du nombre d’applications; aucun problème mémoire mesuré, donc pas de finding.",
+    "JSCPD non exécuté par ce sous-agent; duplications établies par lecture. Aucun taux global de duplication revendiqué.",
+    "Autres composants et fichiers Target* confiés aux autres agents."
+  ],
+  "high_counter_audit_brief": "Contester PERF-DQ-002 en cherchant un plafond n avant planGroup ou un chemin mort bsp/masterStack; vérifier equivalence de la correction iterative. Le fichier DropPreviewController.swift a été lu intégralement par cet auteur."
+}

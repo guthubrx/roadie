@@ -1,0 +1,287 @@
+{
+  "original_statuses": [
+    {
+      "id": "OBS-001",
+      "status": "résolu",
+      "reason": "Déjà confirmé résolu en audit02. Le code de rotation de FileAdministration.swift copie vers .1 puis tronque le fichier courant (inode conservé). La logique et les tests sont inchangés entre audit02 et le HEAD du tour 4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 150,
+          "note": "copyThenTruncate : copie préalable obligatoire, applied=false si la copie échoue"
+        }
+      ],
+      "verified_at_commit": "HEAD (tour 4)"
+    },
+    {
+      "id": "OBS-002",
+      "status": "résolu",
+      "reason": "Le commit 13bc4f5a du tour 4 corrige EventLog.tail. La sélection des dernières lignes se fait désormais sur les octets bruts (data.split(separator: 10)) AVANT le décodage UTF-8, avec décodage tolérant (String(decoding:as:)). Un préfixe UTF-8 incomplet en tête du tampon ne vide plus le résultat.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/EventLog.swift",
+          "line": 233,
+          "note": "return data.split(separator: 10).suffix(limit).map { String(decoding: $0, as: UTF8.self) } — commentaire REL-OBS-002 présent sur les lignes 228-231"
+        }
+      ],
+      "verified_at_commit": "13bc4f5a (tour 4)"
+    },
+    {
+      "id": "OBS-003",
+      "status": "résolu",
+      "reason": "Le commit 13bc4f5a du tour 4 introduit removeReporting dans FileAdministration. Toutes les branches de suppression utilisent ce helper : applied est positionné à true uniquement après removeItem réussi ; un échec écrit sur stderr et retourne false. Le commentaire OBS-003 est présent en ligne 225.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 227,
+          "note": "removeReporting : do { try manager.removeItem(at: url); return true } catch { fputs(...); return false }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 121,
+          "note": "action.applied = removeReporting(backup) — backup d'événements"
+        },
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 203,
+          "note": "action.applied = removeReporting(url) — .DS_Store"
+        },
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 219,
+          "note": "action.applied = removeReporting(url) — deleteOlder"
+        }
+      ],
+      "verified_at_commit": "13bc4f5a (tour 4)"
+    },
+    {
+      "id": "REL-014",
+      "status": "résolu",
+      "reason": "Le commit 74ee1ab9 du tour 4 corrige ce problème. CLICommandRouter injecte maintenant configReload: ConfigReloadService = .shared dans son init (ligne 114) et stocke la référence (ligne 119). requiresDaemon retourne true pour 'config reload' (lignes 348-350). La commande reload appelle configReload.reload(...) qui est l'instance partagée du daemon. Le commentaire 'REL-014' est présent ligne 348.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 114,
+          "note": "configReload: ConfigReloadService = .shared dans l'init"
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 348,
+          "note": "case \"config\": return args.dropFirst().first == \"reload\" — routé au daemon"
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 579,
+          "note": "let result = configReload.reload(path: ...) — instance partagée injectée"
+        }
+      ],
+      "verified_at_commit": "74ee1ab9 (tour 4)"
+    },
+    {
+      "id": "REL-015",
+      "status": "résolu",
+      "reason": "Déjà confirmé résolu en audit02. La CLI prend une réservation partagée (reserveLocalExecution) avant tout repli local, le daemon prend le verrou en exclusif avant son PID. La logique de CommandSocketServer.execute est inchangée entre audit02 et le HEAD du tour 4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 224,
+          "note": "let localLockPath = ComponentLockFile.localExecutionLockPath(forLockPath: lockPath)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 225,
+          "note": "switch reserveLocalExecution(path: localLockPath) — réservation avant local()"
+        }
+      ],
+      "verified_at_commit": "HEAD (tour 4)"
+    },
+    {
+      "id": "REL-018",
+      "status": "résolu",
+      "reason": "Déjà confirmé résolu en audit02. EventSubscriptionService associe décalage et inode, avance le curseur uniquement sur lignes terminées, déduplique les inodes et émet events.gap sur rotation ou troncature. La logique est inchangée entre audit02 et le HEAD du tour 4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 99,
+          "note": "Rotation : lecture des générations intermédiaires, gap si génération manquante"
+        },
+        {
+          "file": "Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 125,
+          "note": "guard let lastNewline — curseur avancé uniquement sur lignes terminées"
+        },
+        {
+          "file": "Sources/RoadieDaemon/EventSubscriptionService.swift",
+          "line": 183,
+          "note": "Déduplication des inodes dans scanGenerations"
+        }
+      ],
+      "verified_at_commit": "HEAD (tour 4)"
+    },
+    {
+      "id": "REL-032",
+      "status": "résolu",
+      "reason": "Le commit 13bc4f5a du tour 4 étend scripts/stop pour couvrir les composants modulaires. stop_component arrête rail, border, focus-mouse, titlebar-menu et target-mode depuis leurs fichiers .pid avec attente bornée (50 × 0.1 s) et contrôle d'exécutable. scripts/stop retourne 1 si un composant reste vivant ; scripts/uninstall s'arrête alors sans supprimer. Le commentaire dans uninstall mentionne explicitement 'composants du mode modulaire'.",
+      "evidence": [
+        {
+          "file": "scripts/stop",
+          "line": 12,
+          "note": "modular_components=(rail border focus-mouse titlebar-menu target-mode)"
+        },
+        {
+          "file": "scripts/stop",
+          "line": 81,
+          "note": "stop_component : validation PID, is_roadied_executable, SIGTERM, attente bornée, return 1 si vivant"
+        },
+        {
+          "file": "scripts/stop",
+          "line": 130,
+          "note": "for component in \"${modular_components[@]}\"; do stop_component \"$component\" || failed=1 ; done"
+        },
+        {
+          "file": "scripts/uninstall",
+          "line": 31,
+          "note": "if ! \"$script_dir/stop\"; then ... exit 1 ; fi — désinstallation bloquée si un composant reste actif"
+        }
+      ],
+      "verified_at_commit": "13bc4f5a (tour 4)"
+    },
+    {
+      "id": "REL-301",
+      "status": "résolu",
+      "reason": "ID interne audit02 de REL-032. Voir REL-032 ci-dessus.",
+      "note": "REL-301 est le source_id de REL-032 dans raw-security.json audit02."
+    },
+    {
+      "id": "REL-041",
+      "status": "résolu",
+      "reason": "Le commit 13bc4f5a du tour 4 retire exec de scripts/test. La dernière ligne est désormais HOME=\"$tmp_home\" \"$script_dir/with-xcode\" swift test \"$@\" sans exec, ce qui permet au shell parent d'exécuter son trap cleanup EXIT. Le commentaire 'Pas de exec (REL-041)' est présent ligne 11.",
+      "evidence": [
+        {
+          "file": "scripts/test",
+          "line": 11,
+          "note": "# Pas de `exec` (REL-041) : il remplacerait ce shell et le trap EXIT ne supprimerait jamais tmp_home."
+        },
+        {
+          "file": "scripts/test",
+          "line": 13,
+          "note": "HOME=\"$tmp_home\" \"$script_dir/with-xcode\" swift test \"$@\" — sans exec"
+        }
+      ],
+      "verified_at_commit": "13bc4f5a (tour 4)"
+    },
+    {
+      "id": "REL-302",
+      "status": "résolu",
+      "reason": "ID interne audit02 de REL-041. Voir REL-041 ci-dessus.",
+      "note": "REL-302 est le source_id de REL-041 dans raw-security.json audit02."
+    },
+    {
+      "id": "PERF-007",
+      "status": "résolu",
+      "reason": "Déjà confirmé résolu en audit02. readLine cherche le saut de ligne dans le seul fragment reçu (CommandSocketServer.swift:393). La logique est inchangée entre audit02 et le HEAD du tour 4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/CommandSocketServer.swift",
+          "line": 393,
+          "note": "Recherche du newline limitée au nouveau fragment — O(fragment) et non O(n²) cumulé"
+        }
+      ],
+      "verified_at_commit": "HEAD (tour 4)"
+    },
+    {
+      "id": "OBS-301",
+      "status": "résolu",
+      "reason": "ID interne audit02 de OBS-002. Voir OBS-002 ci-dessus.",
+      "note": "OBS-301 est le source_id de OBS-002 dans raw-security.json audit02."
+    },
+    {
+      "id": "OBS-302",
+      "status": "résolu",
+      "reason": "ID interne audit02 de OBS-003. Voir OBS-003 ci-dessus.",
+      "note": "OBS-302 est le source_id de OBS-003 dans raw-security.json audit02."
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    {
+      "module": "03",
+      "text": "scripts/stop valide le PID et l'exécutable avant d'envoyer SIGTERM à un composant modulaire. Un PID réutilisé par un autre programme ne peut pas être tué par mégarde.",
+      "evidence": {
+        "file": "scripts/stop",
+        "line": 94,
+        "note": "is_roadied_executable vérifié avant kill -TERM"
+      }
+    },
+    {
+      "module": "03",
+      "text": "scripts/test n'exporte plus de HOME temporaire vers with-xcode via exec ; le shell parent nettoie le répertoire dans tous les cas (succès et échec).",
+      "evidence": {
+        "file": "scripts/test",
+        "line": 9,
+        "note": "trap cleanup EXIT + appel sans exec"
+      }
+    },
+    {
+      "module": "03",
+      "text": "La seule dépendance Swift tierce (TOMLKit 0.6.0) est verrouillée sur une révision exacte (ec6198d37d495efc6acd4dffbd262cdca7ff9b3f) dans Package.resolved. Aucune autre dépendance réseau déclarée.",
+      "evidence": {
+        "file": "Package.resolved",
+        "line": 9,
+        "note": "revision fixée, version 3 du format"
+      }
+    },
+    {
+      "module": "03",
+      "text": "removeReporting dans FileAdministration émet un diagnostic sur stderr en cas d'échec de suppression — les faux positifs de nettoyage (OBS-003) sont éliminés et l'erreur reste observable.",
+      "evidence": {
+        "file": "Sources/RoadieDaemon/FileAdministration.swift",
+        "line": 232,
+        "note": "fputs(\"roadie: cleanup failed for ...\", stderr)"
+      }
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventLog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventSubscriptionService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/stop",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/uninstall",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/test",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Package.resolved",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-security.json",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "ranges": ["92-128", "218-250", "380-400"]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": ["90-130", "340-360", "495-590"]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/with-xcode",
+      "ranges": ["40-48"]
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+      "ranges": ["1278-1360"]
+    }
+  ],
+  "warnings": [
+    "Aucun build, test ni commande de cycle de vie exécuté. Les constats de résolution sont établis par lecture du code produit dans le tour 4 (git log 2f4dedce..HEAD).",
+    "Double scan sécurité réalisé avec deux groupes de motifs distincts : (1) password/secret/token/Process/posix_spawn/URLSession/exec ; (2) O_CREAT/umask/chmod/FileManager/createFile/eval/system/popen. Aucun secret ni vecteur d'injection confirmé dans les sources et scripts du périmètre attribué.",
+    "Modèle de menace local uniquement : socket Unix AF_UNIX, même compte. Aucune API HTTP, authentification web, paiement ou intégration LLM dans ce périmètre.",
+    "TOMLKit 0.6.0 verrouillé sur révision exacte ; aucun scan CVE externe exécuté — des vulnérabilités dans la bibliothèque ou sa chaîne de dépendances ne peuvent pas être exclues sans advisory check.",
+    "Historique Git complet non scanné pour secrets par ce sous-agent ; seuls les sources/scripts présents à HEAD ont été parcourus.",
+    "with-xcode utilise en interne exec \"$@\" mais cela ne pose pas de problème : scripts/test l'appelle sans exec, le shell parent exécute son trap EXIT normalement.",
+    "REL-014 est vérifié dans CLICommandRouter.swift bien que la note de mission indique que le CLI router est relu par le coordinateur. Le domaine de ce constat (cycle de vie config reload) relève du périmètre de ce sous-agent ; aucun autre finding du fichier n'est émis.",
+    "Aucun doublon de propriété détecté avec les autres sous-agents pour les IDs listés."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "note": "Les ajouts du tour 4 dans le périmètre attribué (stop_component, removeReporting, correction EventLog.tail) sont tous fonctionnels. Aucune ligne à comportement constant identifiée dans les fichiers lus intégralement."
+  }
+}

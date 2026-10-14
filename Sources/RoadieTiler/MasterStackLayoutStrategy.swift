@@ -4,6 +4,11 @@ import RoadieCore
 public struct MasterStackLayoutStrategy: LayoutStrategy {
     public var masterRatio: CGFloat
 
+    /// Étendue minimale (points) gardée par chaque tuile quand l'espacement est trop grand
+    /// pour le conteneur (REL-031). 10 points : avec un ratio borné à 0,1...0,9, chaque côté
+    /// d'un partage garde au moins 1 point.
+    static let minimumTileExtent: CGFloat = 10
+
     public init(masterRatio: CGFloat = 0.6) {
         self.masterRatio = masterRatio.clamped(to: 0.1...0.9)
     }
@@ -19,15 +24,23 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
         }
 
         let stack = windows.dropFirst()
-        let usableWidth = max(0, rect.width - gap)
+        // REL-031 : un espacement plus grand que le conteneur poussait des tuiles hors de
+        // `rect`. Chaque espacement est borné pour laisser `minimumTileExtent` à chaque tuile ;
+        // un espacement qui tient déjà dans le conteneur reste inchangé.
+        let horizontalGap = min(gap, max(0, rect.width - 2 * Self.minimumTileExtent))
+        let verticalGap = stack.count > 1
+            ? min(gap, max(0, (rect.height - CGFloat(stack.count) * Self.minimumTileExtent) / CGFloat(stack.count - 1)))
+            : 0
+        let usableWidth = max(0, rect.width - horizontalGap)
         let ratio = adaptiveMasterRatio(
             master: master,
             stack: stack,
             rect: rect,
-            gap: gap,
+            gap: horizontalGap,
             usableWidth: usableWidth,
             currentFrames: request.currentFrames,
-            priorityWindowIDs: request.priorityWindowIDs
+            priorityWindowIDs: request.priorityWindowIDs,
+            newWindowIDs: request.newWindowIDs
         )
         let masterWidth = floor(usableWidth * ratio)
         let stackWidth = usableWidth - masterWidth
@@ -35,19 +48,19 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
             master: CGRect(x: rect.minX, y: rect.minY, width: masterWidth, height: rect.height).integral
         ]
 
-        let usableHeight = max(0, rect.height - gap * CGFloat(stack.count - 1))
+        let usableHeight = max(0, rect.height - verticalGap * CGFloat(stack.count - 1))
         let baseHeight = floor(usableHeight / CGFloat(stack.count))
         var y = rect.minY
         for (index, windowID) in stack.enumerated() {
             let isLast = index == stack.count - 1
             let height = isLast ? rect.maxY - y : baseHeight
             placements[windowID] = CGRect(
-                x: rect.minX + masterWidth + gap,
+                x: rect.minX + masterWidth + horizontalGap,
                 y: y,
                 width: stackWidth,
                 height: height
             ).integral
-            y += height + gap
+            y += height + verticalGap
         }
 
         return LayoutPlan(placements: placements)
@@ -60,7 +73,8 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
         gap: CGFloat,
         usableWidth: CGFloat,
         currentFrames: [WindowID: CGRect],
-        priorityWindowIDs: Set<WindowID>
+        priorityWindowIDs: Set<WindowID>,
+        newWindowIDs: Set<WindowID>
     ) -> CGFloat {
         guard usableWidth > 0 else { return masterRatio }
 
@@ -73,11 +87,15 @@ public struct MasterStackLayoutStrategy: LayoutStrategy {
             return ((stackFrame.minX - gap - rect.minX) / usableWidth).clamped(to: 0.1...0.9)
         }
 
+        // REL-030 : la largeur d'une fenêtre tout juste découverte est arbitraire (position donnée
+        // par macOS à la création). Seules les fenêtres déjà disposées fixent une géométrie à
+        // préserver ; sans elles, le ratio configuré s'applique.
         var candidates: [CGFloat] = []
-        if let masterFrame = currentFrames[master] {
+        if !newWindowIDs.contains(master), let masterFrame = currentFrames[master] {
             candidates.append(masterFrame.width / usableWidth)
         }
-        if let stackFrame = unionFrame(for: stack, in: currentFrames), stackFrame.maxX.isClose(to: rect.maxX) {
+        let knownStack = stack.filter { !newWindowIDs.contains($0) }
+        if let stackFrame = unionFrame(for: knownStack[...], in: currentFrames), stackFrame.maxX.isClose(to: rect.maxX) {
             candidates.append((stackFrame.minX - gap - rect.minX) / usableWidth)
         }
 

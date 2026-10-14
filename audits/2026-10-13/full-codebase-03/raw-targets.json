@@ -1,0 +1,332 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-003",
+      "status": "résolu",
+      "reason": "La fermeture startInteractive résout la lettre depuis overlay.report.targets.first(where: label.caseInsensitiveCompare) puis transmet cette cible conservée à targets.activate(target:selected, action:). Inchangé depuis audit02 ; confirmé par lecture directe du tour4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 256,
+          "note": "Résolution par label depuis la liste affichée, puis activate(target: selected)."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103"
+      ]
+    },
+    {
+      "id": "REL-004",
+      "status": "résolu",
+      "reason": "startGridInteractive utilise rootFor : une fermeture qui retourne frozenRoot pour l'écran initial et grid.root(displayIndex:scope:.display) pour tout autre écran. stateProvider et activate lisent la même rootFor. Inchangé depuis audit02 ; confirmé par lecture directe du tour4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 348,
+          "note": "let rootFor : closure retournant frozenRoot ou nouvel écran."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 358,
+          "note": "stateProvider lit rootFor(selectedDisplayIndex)."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+          "line": 372,
+          "note": "activate lit la même rootFor."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:124",
+        "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147"
+      ]
+    },
+    {
+      "id": "REL-010",
+      "status": "résolu",
+      "reason": "AXFocusDecision.succeeded exige raise == .success en premier opérande. Les conditions frontmost et focusedWindow sont vérifiées après. Une écriture AX refusée mais confirmée par relecture reste acceptée. Inchangé depuis audit02.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 322,
+          "note": "raise == .success && (frontmost == .success || appIsActive) && (focusedWindow == .success || focusedWindowConfirmed)."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieAXTests/Audit022LotJTests.swift:10",
+        "Tests/RoadieAXTests/Audit022R2LotGTests.swift:31"
+      ]
+    },
+    {
+      "id": "REL-012",
+      "status": "résolu",
+      "reason": "Tour4 : frontmostWindowCandidates obtient le windowID de la fenêtre focalisée via axWindowElements et échoue avec no_focused_window si aucune correspondance. Chaque cible porte ce windowID (targets(from:config:windowID:)). La fonction click exige windowId non nil avant tout focus ou événement souris.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 436,
+          "note": "guard window + axWindowElements match -> windowID ; sinon no_focused_window."
+        },
+        {
+          "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 445,
+          "note": "targets(from:config:windowID:) propage le windowID à chaque cible."
+        },
+        {
+          "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+          "line": 813,
+          "note": "guard windowID = target.scope.windowId else { return stale_target }."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:15",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:59",
+        "Tests/RoadieDaemonTests/Audit022R3LotBTests.swift:17"
+      ]
+    },
+    {
+      "id": "REL-013",
+      "status": "résolu",
+      "reason": "AutomationStageSnapshot porte displayId et desktopId depuis audit02. AutomationGroupSnapshot porte displayId, desktopId et stageId. Inchangé dans le tour4 ; confirmé par lecture.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 104,
+          "note": "displayId: display.id.rawValue, desktopId: String(desktop.id.rawValue) dans AutomationStageSnapshot."
+        },
+        {
+          "file": "Sources/RoadieDaemon/AutomationSnapshotService.swift",
+          "line": 144,
+          "note": "displayId et desktopId dans AutomationGroupSnapshot."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotATests.swift:78",
+        "Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ]
+    },
+    {
+      "id": "REL-024",
+      "status": "résolu",
+      "reason": "replay(events:) tente semanticClickTarget + semanticAction avant toute émission. Si la cible applicative est résolue et l'action sémantique réussit, les deux événements (down+up) sont consommés sans émettre de bruts. Inchangé dans le tour4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 337,
+          "note": "if let target = semanticClickTarget(down:up:), let action = semanticAction(for:) { activateTarget... index += 2; continue }"
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotFTests.swift:61",
+        "Tests/RoadieDaemonTests/Audit022LotFTests.swift:78"
+      ]
+    },
+    {
+      "id": "REL-025",
+      "status": "résolu",
+      "reason": "semanticAction(for:) ne reconnaît que .click (.left/[]), .rightClick (.right/[]) et .commandClick (.left/.maskCommand). Toute autre combinaison de bouton et drapeaux retourne nil et le replay brut conserve les drapeaux complets. Inchangé dans le tour4.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 387,
+          "note": "switch (mouseButton, modifiers) : seules trois combinaisons sont sémantiques ; les autres retournent nil."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022LotFTests.swift:101",
+        "Tests/RoadieDaemonTests/Audit022R2LotETests.swift:120",
+        "Tests/RoadieDaemonTests/Audit022R2LotETests.swift:159"
+      ]
+    },
+    {
+      "id": "REL-037",
+      "status": "résolu",
+      "reason": "Tour4 : activateSwitch et activateSendActive appellent refusedOutsideCurrentDesktop avant d'agir. Ce helper compare target.scope.desktopId (Int?) au currentDesktopID courant de l'écran. Les cibles de stage portent toujours desktopId (ligne 627 de TargetHintService). Les stages d'autres bureaux n'exposent que [.inspect] dans leur liste d'actions ; la garde double-protège les activations directes.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 483,
+          "note": "if let refused = refusedOutsideCurrentDesktop(target, displayID:) { return refused } dans activateSwitch."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 495,
+          "note": "Même garde dans activateSendActive."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 508,
+          "note": "guard target.scope.desktopId != stageStore.state().currentDesktopID(for:).rawValue else { return nil }."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 627,
+          "note": "TargetScopeSnapshot(displayId:desktopId: scope.desktopID.rawValue, stageId:) - desktopId toujours renseigné."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetHintService.swift",
+          "line": 632,
+          "note": "actions: onCurrentDesktop ? [.switch, .sendActive, .inspect] : [.inspect] - protection à la liste."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:99",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:110"
+      ]
+    },
+    {
+      "id": "REL-038",
+      "status": "résolu",
+      "reason": "Tour4 : replay(events:) maintient un tableau held de TargetMacroEvent bruts appuyés. defer relâche en ordre inverse chaque élément de held en inversant le kind (mouseDown→mouseUp, keyDown→keyUp). track retire l'appui correspondant à chaque relâchement normal, évitant tout doublon de relâchement.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 319,
+          "note": "var held: [TargetMacroEvent] = []"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 320,
+          "note": "defer { for var press in held.reversed() { press.kind = ... .mouseUp : .keyUp; replay(press) } }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 347,
+          "note": "Self.track(event, held: &held) après chaque replay brut."
+        },
+        {
+          "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+          "line": 354,
+          "note": "track retire l'appui correspondant quand un relâchement est émis, ou ajoute l'appui."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:136",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:151"
+      ]
+    },
+    {
+      "id": "TEST-001",
+      "status": "résolu",
+      "reason": "QueryCommandTests décode les réponses en types métier et vérifie IDs, scopes, membres et règles. Inchangé dans le tour4.",
+      "evidence": [
+        {
+          "file": "Tests/RoadieDaemonTests/QueryCommandTests.swift",
+          "line": 52,
+          "note": "Décodage et assertions non triviaux sur les cinq familles de réponses."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/QueryCommandTests.swift:10",
+        "Tests/RoadieDaemonTests/QueryCommandTests.swift:32"
+      ]
+    },
+    {
+      "id": "TEST-002",
+      "status": "résolu",
+      "reason": "TargetModeRuntimeControllerTests instancie un vrai contrôleur avec présentateur espion. Les fermetures activate et stateProvider sont exercées. Audit022R4LotT4Tests couvre REL-012/REL-037/REL-038 avec émetteur espion et aucun clic système. Limite explicite maintenue : les frontières Carbon/AX/CGEventTap nécessitent une validation manuelle.",
+      "evidence": [
+        {
+          "file": "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 103,
+          "note": "interactiveLetterActivatesTargetOfDisplayedFilteredList : label résolu depuis la liste filtrée."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+          "line": 147,
+          "note": "gridActivationClicksShownCellOfSelectedDisplayThenFinishes : CGEvent construits, vérifiés."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift",
+          "line": 14,
+          "note": "Clic sans windowId : zéro événement, erreur stale_target."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift",
+          "line": 110,
+          "note": "Stage d'un autre bureau : erreur target_desktop_not_active, état inchangé."
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift",
+          "line": 136,
+          "note": "Macro tronquée : relâchements émis en ordre inverse."
+        }
+      ],
+      "tests": [
+        "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:103",
+        "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift:147",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:14",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:110",
+        "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift:136"
+      ]
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    "Tour4 : frontmostWindowCandidates retourne une erreur explicite (no_focused_window) quand la fenêtre focalisée ne peut pas être associée à un CGWindowID. Il est impossible de cliquer avec une identité ambiguë (AppTargetQueryService.swift:436-440).",
+    "Double protection REL-037 : les stages d'autres bureaux ne reçoivent que [.inspect] à la liste (TargetHintService.swift:632) et refusedOutsideCurrentDesktop bloque l'activation directe même si une cible est construite manuellement avec un autre desktopId (TargetHintService.swift:507-514).",
+    "Le defer de relâchement REL-038 est aussi correct pour les séquences équilibrées : held est vide après un down/up normal, donc aucun relâchement fantôme n'est émis (TargetMacroService.swift:320-325, vérifié par Audit022R4LotT4Tests.swift:151).",
+    "Les cibles de la portée visible_windows portent le windowID de leur fenêtre depuis audit02 (AppTargetQueryService.swift:511) ; visibleWindowsCandidates bénéficie ainsi de la même vérification de focus que frontmost_window (AppTargetQueryService.swift:813)."
+  ],
+  "files_read_full": [
+    "Tests/RoadieDaemonTests/Audit022R4LotT4Tests.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "ranges": ["245-384"],
+      "purpose": "Fermetures activate et rootFor pour REL-003/REL-004."
+    },
+    {
+      "file": "Sources/RoadieDaemon/AppTargetQueryService.swift",
+      "ranges": ["415-514", "795-870"],
+      "purpose": "frontmostWindowCandidates, visibleWindowsCandidates, click pour REL-012."
+    },
+    {
+      "file": "Sources/RoadieDaemon/TargetHintService.swift",
+      "ranges": ["430-515", "585-640"],
+      "purpose": "activateSwitch/activateSendActive, refusedOutsideCurrentDesktop, construction scopes pour REL-037."
+    },
+    {
+      "file": "Sources/RoadieDaemon/TargetMacroService.swift",
+      "ranges": ["270-400"],
+      "purpose": "replay(events:), semanticClickTarget, semanticAction, track pour REL-024/REL-025/REL-038."
+    },
+    {
+      "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "ranges": ["310-326"],
+      "purpose": "AXFocusDecision.succeeded pour REL-010."
+    },
+    {
+      "file": "Sources/RoadieDaemon/AutomationSnapshotService.swift",
+      "ranges": ["95-158"],
+      "purpose": "stageSnapshots et groupSnapshots avec displayId/desktopId pour REL-013."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift",
+      "ranges": ["1-179"],
+      "purpose": "Tests REL-003/REL-004 (TEST-002)."
+    },
+    {
+      "file": "audits/2026-10-13/full-codebase-02/raw-targets.json",
+      "ranges": ["intégral"],
+      "purpose": "Statuts et findings de l'audit02 pour tous les IDs assignés."
+    },
+    {
+      "file": "audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json",
+      "ranges": ["1-705"],
+      "purpose": "Findings agrégés de l'audit02 pour contexte."
+    }
+  ],
+  "warnings": [
+    "Aucun build, aucun test exécuté par cet agent. Lecture statique uniquement ; exécution centralisée par le coordinateur.",
+    "Aucun clic, focus, événement clavier réel ni interruption de processus. Les frontières Carbon/AX/CGEventTap/CGEvent nécessitent une validation manuelle.",
+    "Les fichiers du domaine non modifiés par le tour4 (TargetGridService.swift, TargetSearchModel.swift, TargetInspectionService.swift, TargetOverlayPresenter.swift, TargetSearchHotkey.swift, AXWindowEventObserver.swift, SpaceProbe.swift, WrittenFrameRegistry.swift, AutomationQueryService.swift) ont été audités dans leur intégralité par audit02. Aucune modification de tour4 ne les touche ; leur statut est inchangé.",
+    "Pas d'authentification, paiement, PII, migration DB ni intégration LLM dans ce domaine. Nom de macro, permissions AX et données capturées relus lors d'audit02 ; aucun problème de sécurité identifié. Aucune nouvelle surface créée par le tour4.",
+    "refusedOutsideCurrentDesktop : si target.scope.desktopId est nil (Optional<Int>.none), nil != Int est true en Swift et l'action est refusée. Ce cas ne peut survenir sur les cibles actuelles (desktopId toujours renseigné ligne 627 de TargetHintService.swift) ; si un ancien JSON dé-sérialisé omettait ce champ, l'action serait refusée plutôt qu'acceptée - comportement défensif acceptable."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Les ajouts du tour4 (windowID dans frontmostWindowCandidates, refusedOutsideCurrentDesktop, held + defer dans replay) répondent directement aux trois constats résiduels REL-012/REL-037/REL-038. Aucune abstraction superflue, aucun champ non utilisé, aucune duplication détectée dans les zones lues."
+  }
+}

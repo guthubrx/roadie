@@ -1,0 +1,282 @@
+{
+  "schema_version": 1,
+  "audit": "v14 phase 2bis",
+  "mode": "readonly",
+  "scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "posture": "Contestation des constats avant validation : recherche de gardes, limites, branches inactives et tests opposables.",
+  "methodology": "/Users/moi/Nextcloud/10.Scripts/00.Generic/audit-code-v14/01-anti-hallucination.md",
+  "findings": [
+    {
+      "counter_id": "CA-01",
+      "source_id": null,
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageStore.swift",
+      "relative_file": "Sources/RoadieDaemon/StageStore.swift",
+      "line": 1135,
+      "title": "stage reorder Int.min provoque un débordement avant la limitation de position",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "    public mutating func reorderStage(_ id: StageID, to position: Int) -> Bool {\n        guard let index = stages.firstIndex(where: { $0.id == id }) else { return false }\n        let stage = stages.remove(at: index)\n        let targetIndex = min(max(position - 1, 0), stages.count)\n        stages.insert(stage, at: targetIndex)\n        return true\n    }",
+      "reason": "position - 1 est évalué avant max et min. Sur macOS 64 bits, Int.min - 1 déclenche un arrêt Swift. Le garde de présence du stage ne protège pas la valeur position.",
+      "refutation_attempts": [
+        "CLICommandRouter.runStageCommand ne vérifie que la conversion Int (985–993).",
+        "StageCommandService.reorder cherche un écran puis transmet position sans borne (332–344).",
+        "Le socket accepte les commandes stage et transmet argv sans retirer les chaînes vides ni modifier les valeurs numériques (CommandSocketServer 171–177 ; CLICommandRouter 265–270).",
+        "Le do/catch du routeur intercepte Error, pas un trap Swift."
+      ],
+      "scenario": "Avec un écran et un stage 1 existant : roadie stage reorder 1 -9223372036854775808. Si le daemon tourne, le routeur exécuté dans le daemon atteint le débordement. Commande NON exécutée pendant l'audit.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/SnapshotServiceTests.swift:2669 : réordonnancement position 1.",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift:89 : réordonnancement position 1.",
+        "Recherche Int.min/reorder dans les tests : aucun cas de position minimale trouvé."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CLICommandRouter.swift:985",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageCommands.swift:340",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CommandSocketServer.swift:171"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "Valider la position positive dans le routeur et les entrées publiques. Protéger aussi la primitive : let targetIndex = min(max(position, 1) - 1, stages.count). Cette expression borne avant de soustraire. Proposition non compilée."
+    },
+    {
+      "counter_id": "CA-02",
+      "source_id": null,
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Identifiers.swift",
+      "relative_file": "Sources/RoadieCore/Identifiers.swift",
+      "line": 29,
+      "title": "stage create avec identifiant vide atteint une précondition fatale",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "public struct StageID: RawRepresentable, Hashable, Codable, Sendable, Comparable, CustomStringConvertible {\n    public let rawValue: String\n\n    public init(rawValue: String) {\n        precondition(!rawValue.isEmpty, \"StageID must not be empty\")\n        self.rawValue = rawValue\n    }",
+      "reason": "StageID.init impose un identifiant non vide par precondition. Le routeur vérifie seulement que argv contient une valeur. StageCommands.create construit StageID avec cette valeur après la garde écran.",
+      "refutation_attempts": [
+        "CommandLine.arguments et le tableau JSON argv conservent un argument vide.",
+        "CLICommandRouter.swift:971 utilise guard let sans !isEmpty.",
+        "StageCommands.swift:293–297 ne refuse que l’absence d’écran.",
+        "Aucune validation de contenu des arguments stage dans le transport socket."
+      ],
+      "scenario": "Avec un écran présent : roadie stage create ''. Cette commande atteint StageID(rawValue: \"\"). Si le daemon tourne, il exécute la précondition. Commande NON exécutée pendant l'audit.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/CLICommandRouterTests.swift:85 : erreurs d’usage, aucun test d’identifiant vide trouvé."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CLICommandRouter.swift:970",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageCommands.swift:291",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/roadie/main.swift:6"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "Refuser explicitement les identifiants vides avant toute construction StageID dans chaque commande publique. Retourner une erreur d’usage au lieu de dépendre de precondition. Ne pas supprimer la précondition interne sans remplacer la validation."
+    },
+    {
+      "counter_id": "CA-03",
+      "source_id": "REL-201",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "relative_file": "Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "line": 151,
+      "title": "La lettre interactive est résolue dans une autre liste que celle affichée",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "        ]))\n        currentSession = TargetOverlayPresenter.startInteractive(\n            overlay,\n            duration: duration,\n            activate: { label in\n                targets.activate(label, action: action)\n            },",
+      "reason": "Le contrôleur conserve options pour construire overlay, mais transmet seulement label à activate(String). Cette méthode reconstruit source all sans filtre et avec includeAppTargets issu de la configuration. Les écrans sont ajoutés avant les cibles applicatives. La première lettre applicative peut donc sélectionner un écran.",
+      "refutation_attempts": [
+        "Lecture intégrale TargetModeRuntimeController.swift et TargetHintService.swift.",
+        "TargetInteractiveSession fige seulement son jeu de lettres et transmet encore String à la fermeture (TargetOverlayPresenter 243–373).",
+        "La surcharge activate(target:) existe et est utilisée par startTargetsSearch : elle protège bien SPEC-021 recherche, mais pas startTargetsInteractive.",
+        "La commande interactive transmet bien les options source/filter/includeAppTargets au contrôleur (CLICommandRouter 1417–1434)."
+      ],
+      "scenario": "Activer target_mode et son overlay. Afficher une application possédant une cible AX. Lancer roadie targets interactive --source app --include-app-targets puis valider A. La résolution source all commence par un écran ; avec action click, elle peut répondre unsupported_action.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/TargetModeRuntimeControllerTests.swift : sérialisation commande et GridFocusPicker ; aucune activation de lettre source app."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetHintService.swift:378",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetHintService.swift:384",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetHintService.swift:563",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetOverlayPresenter.swift:372"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "La correction proposée qui résout la lettre dans overlay.report.targets puis appelle activate(target:) couvre la cause. La recherche SPEC-021 n’est pas affectée."
+    },
+    {
+      "counter_id": "CA-04",
+      "source_id": "REL-301 (raw-runtime.json ; identifier par fichier car collision avec raw-security.json)",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StateAudit.swift",
+      "relative_file": "Sources/RoadieDaemon/StateAudit.swift",
+      "line": 224,
+      "title": "heal supprime les membres absents de l’écran sans preuve de fermeture",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "            for stageIndex in state.scopes[scopeIndex].stages.indices {\n                let beforeCount = state.scopes[scopeIndex].stages[stageIndex].members.count\n                state.scopes[scopeIndex].stages[stageIndex].members.removeAll { member in\n                    if !liveWindowIDs.contains(member.windowID) {\n                        return true\n                    }\n                    if seenWindowIDs.contains(member.windowID) {\n                        return true",
+      "reason": "repairScopes retire immédiatement chaque membre absent de liveManagedWindowIDs. Le fournisseur ne relève que les fenêtres on-screen. SnapshotService préserve les absents trente minutes dans les membres persistants mais ne les ajoute pas aux ScopedWindowSnapshot. Cette préservation amont ne protège donc pas heal.",
+      "refutation_attempts": [
+        "Lecture intégrale StateAudit.swift, StageStore.swift et DaemonSnapshot.swift.",
+        "provider.windows emploie optionOnScreenOnly à SystemSnapshotProvider.swift:612.",
+        "La grâce de trente minutes existe dans DaemonSnapshot.swift:75 et 371–377, mais heal n’en tient pas compte.",
+        "scope nil est aussi exclu du set à StateAudit.swift:79 ; aucune garde de permissions, PID vivant ou preuve AX avant suppression."
+      ],
+      "scenario": "Associer une fenêtre à un stage distinct, la minimiser, lancer roadie state heal immédiatement, puis la réafficher. Son association persistante a été retirée. Aucun essai sur les fenêtres réelles.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/SnapshotServiceTests.swift:3332–3382 : le test exige justement la suppression du membre non fourni ; il ne distingue pas fermeture et minimisation.",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/StatePersistenceTests.swift:419 : cohérence transactionnelle de heal, pas préservation d’un membre vivant absent."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieAX/SystemSnapshotProvider.swift:612",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift:371",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/CLICommandRouter.swift:347"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "La preuve de destruction est préférable. Le correctif fourni conserve les absents à PID vivant ou inconnu et déduplique indépendamment de la présence ; il couvre le scénario. Il reste à tester la politique de PID recyclé et les groupes/focus. Chemin de commande froid ; gravité retenue pour une suppression persistante par une réparation."
+    },
+    {
+      "counter_id": "CA-05",
+      "source_id": "REL-302 (raw-runtime.json)",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DisplayParkingService.swift",
+      "relative_file": "Sources/RoadieDaemon/DisplayParkingService.swift",
+      "line": 232,
+      "title": "La restauration multi-bureaux emploie le bureau du premier stage",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "MEDIUM",
+      "evidence": "        let grouped = Dictionary(grouping: parkedStages) { stage in\n            stage.origin!.logicalDisplayID\n        }\n\n        for (logicalDisplayID, stages) in grouped {\n            guard let origin = stages.compactMap(\\.origin).first else { continue }\n            let fingerprint = fingerprintForRestore(\n                state: state,",
+      "reason": "Les stages garés d’un écran sont groupés uniquement par logicalDisplayID. origin provient du premier stage. Un unique targetScope est construit avec origin.desktopID (264), puis tous les stages du groupe y sont ajoutés (270–282).",
+      "refutation_attempts": [
+        "Lecture intégrale DisplayParkingService.swift et StageStore.swift.",
+        "Le parking parcourt toutes les scopes déconnectées et mémorise bien desktopID séparément dans chaque StageOrigin (131–161).",
+        "L’unicité des identifiants de stage évite une collision, mais renomme le second stage au lieu de rétablir son bureau.",
+        "Le délai de matérialisation à soixante secondes limite certains scénarios tardifs ; il ne protège pas une reconnexion rapide."
+      ],
+      "scenario": "Sur un écran externe, placer des fenêtres dans deux bureaux Roadie. Débrancher puis rebrancher avant matérialisation, après parking effectif des deux stages. À la restauration, les deux stages rejoignent le bureau du premier origin.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/DisplayParkingServiceTests.swift:289–338 : restauration mono-bureau.",
+        "Recherche desktopID dans ce fichier de tests : fixtures de restauration utilisent le bureau 1."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DisplayParkingService.swift:264",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DisplayParkingService.swift:282",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageStore.swift:338"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "Restaurer par couple logicalDisplayID/desktopID, ou subdiviser chaque groupe écran par bureau. Aucun changement de stage utilisateur voulu ne doit être perdu."
+    },
+    {
+      "counter_id": "CA-06",
+      "source_id": "PERF-201",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "relative_file": "Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+      "line": 24,
+      "title": "Le plan spatial BSP effectue n recherches de feuilles même sans insertion",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "        let requested = Set(windows)\n        let full = request.bspTree ?? .empty\n        var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))\n        var previous: WindowID?\n        for id in windows where !tree.contains(id) {\n            tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)\n            previous = id\n        }",
+      "reason": "tree.contains parcourt récursivement l’arbre. Avec les n feuilles déjà présentes, la boucle appelle cette recherche n fois sans aucune insertion : complexité quadratique. windowIDs concatène aussi les sous-tableaux ; sur un arbre en chaîne, ses copies peuvent être quadratiques.",
+      "refutation_attempts": [
+        "Lecture intégrale SpatialBSPLayoutStrategy.swift et vérification BSPTree.swift:54–74.",
+        "Le commentaire dit n borné et le commentaire BSPTree cite un plafond observé ~50, mais aucun plafond imposé n’est trouvé dans les entrées du plan, la liste de membres ou le routage.",
+        "La projection filtre les absents ; elle ne crée pas d’index de présence.",
+        "La sortie guard windows.isEmpty ne borne pas n.",
+        "La sévérité HIGH suit Article XVIII.2/4 : lookup linéaire répété sans borne par construction. Elle ne décrit pas une latence mesurée."
+      ],
+      "scenario": "Construire un arbre complet de n feuilles et demander exactement ces n identifiants à plan. Le test de présence effectue les n recherches bien qu’aucun élément ne manque.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/SpatialBSPLayoutStrategyTests.swift : lu en entier ; tests fonctionnels sur deux ou trois feuilles, aucun coût de recherche contrôlé."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/BSPTree.swift:54",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/BSPTree.swift:65",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift:1540"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "Le Set présent proposé supprime la recherche répétée et préserve l’ordre/previous des seuls identifiants manquants. Le collecteur à accumulateur corrige windowIDs. Le coût des insertions elles-mêmes reste distinct. Pas de compilation ni benchmark dans ce contre-audit."
+    },
+    {
+      "counter_id": "CA-07",
+      "source_id": "PERF-SNAPSHOT-001",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "relative_file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1692,
+      "title": "Le test des trous de disposition peut parcourir n cadres dans O(n²) cellules",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "            for yIndex in 0..<max(0, yEdges.count - 1) {\n                let minY = yEdges[yIndex]\n                let maxY = yEdges[yIndex + 1]\n                let height = maxY - minY\n                guard height > tolerance else { continue }\n                let cell = CGRect(x: minX, y: minY, width: width, height: height)\n                guard container.contains(cell, tolerance: 1),\n                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })\n                else { continue }\n                return true",
+      "reason": "framesLeaveLargeUntiledCells combine les bords X et Y puis appelle frames.contains pour chaque cellule assez grande. La famille de colonnes scindées à des hauteurs différentes décrite par l’auditeur couvre toutes les cellules, donc ne déclenche aucune sortie anticipée et atteint O(n³).",
+      "refutation_attempts": [
+        "Lecture intégrale DaemonSnapshot.swift.",
+        "Les cadres sont contrôlés dans le conteneur et sans recouvrement important en amont ; la famille proposée satisfait ces gardes.",
+        "Les intentions command contournent le minimum de taille ; pour les autres intents, ce contrôle de taille arrive après le balayage de cellules.",
+        "Les cellules de largeur/hauteur inférieure à tolerance sont ignorées ; choisir des bandes de largeur 100 et hauteur 50 avec gap 0 respecte les seuils actuels.",
+        "Le mode arbre sans zoom ne valide pas les intents ordinaires. Le constat concerne les modes sans arbre ; pas tous les plans BSP spatiaux.",
+        "Nom initial hasUncoveredArea inexact : la fonction réelle est framesLeaveLargeUntiledCells."
+      ],
+      "scenario": "n=2m fenêtres dans m colonnes. Chaque colonne comprend deux rectangles contigus, scindés à une hauteur distincte. Le conteneur est entièrement couvert, avec bandes dépassant tolerance. Sauver un intent command et appeler hasValidLayoutIntent ou applyPlan.",
+      "tests_reviewed": [
+        "Recherche des tests intent dans SnapshotServiceTests.swift : validation fonctionnelle et refus des trous ; aucun comptage asymptotique trouvé."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift:1620",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift:1655",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift:1684"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "La proposition de grille de différences enlève la recherche linéaire par cellule, mais consomme O(n²) mémoire. La conserver comme proposition à comparer à un balayage par intervalles. Aucun temps ni mémoire d’exécution mesuré."
+    },
+    {
+      "counter_id": "CA-08",
+      "source_id": "PERF-DQ-002",
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift",
+      "relative_file": "Sources/RoadieDaemon/DropPreviewController.swift",
+      "line": 479,
+      "title": "planGroup copie et fusionne les suffixes pendant chaque mise à jour de glisser",
+      "verdict": "CONFIRMED",
+      "recommended_severity": "HIGH",
+      "evidence": "\n    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n        guard let first = windowIDs.first else { return [:] }\n        guard windowIDs.count > 1 else { return [first: rect.integral] }\n\n        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)\n        var placements = [first: parts.first.integral]\n        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }\n        return placements",
+      "reason": "Chaque niveau construit Array(dropFirst()) puis fusionne les n−1 résultats suivants. La somme des tailles copiées et fusionnées est quadratique. Le contrôleur recalcule candidate sur les événements de déplacement avant de comparer à lastCandidate.",
+      "refutation_attempts": [
+        "Lecture intégrale DropPreviewController.swift.",
+        "Le contexte de drag fige le snapshot mais pas la géométrie calculée.",
+        "La branche usesTreeEngine emprunte treeCandidate, donc spatialBsp est exclu de ce constat. Les modes bsp et masterStack restent atteignables.",
+        "structuralPlacements impose un groupe source et un groupe cible non vides, sans borne supérieure.",
+        "activeEntries contient toutes les fenêtres du scope ; aucun préfixe limité avant planGroup."
+      ],
+      "scenario": "En bsp/masterStack, disposer au moins quatre fenêtres pour garder un groupe de chaque côté. Glisser la source vers le bord d’une cible. Répéter avec davantage de fenêtres dans un groupe ; chaque mouvement reconstruit tous les suffixes de ce groupe.",
+      "tests_reviewed": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/DropPreviewEngineTests.swift : scénarios arbre et cross-display ; aucune vérification du coût de planGroup trouvée."
+      ],
+      "related_locations": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift:181",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift:391",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift:569"
+      ],
+      "target_file_read_entirely": true,
+      "runtime_reproduced": false,
+      "remediation_review": "La passe itérative proposée préserve le rectangle restant non arrondi, alterne l’orientation et conserve la première valeur en cas d’identifiant dupliqué comme merge. Équivalence examinée statiquement ; tests géométriques à exécuter avant intégration."
+    }
+  ],
+  "counts": {
+    "confirmed": 8,
+    "refuted": 0
+  },
+  "warnings": [
+    "Constats confirmés statiquement. Aucune reproduction GUI, commande de crash, construction Swift, test Swift, arrêt de processus ou modification source exécuté par ce contre-auditeur.",
+    "La sévérité HIGH des trois constats algorithmiques suit les règles de l’Article XVIII. Aucune dégradation de latence réelle n’est affirmée.",
+    "PERF-301 de raw-runtime.json (LayoutMaintainer.swift:2647) est délégué par le parent à un autre contre-auditeur ; absent du présent verdict.",
+    "Les identifiants REL-301/PERF-301 se répètent dans plusieurs raw : corréler les verdicts par fichier/ligne/titre.",
+    "Les remédiations ont été examinées statiquement ; elles n’ont pas été intégrées ni compilées."
+  ],
+  "files_read_entirely": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StageStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TargetHintService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/StateAudit.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DisplayParkingService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieTiler/SpatialBSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DropPreviewController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieTilerTests/SpatialBSPLayoutStrategyTests.swift"
+  ]
+}

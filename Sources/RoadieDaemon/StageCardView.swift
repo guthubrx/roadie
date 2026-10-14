@@ -579,12 +579,18 @@ final class StageCardView: NSControl {
     }
 
     private func applyParallaxTransform(for rect: CGRect, in context: CGContext) {
-        let angle = min(config.parallaxRotation, 75) * .pi / 180
+        context.concatenate(Self.parallaxTransform(for: rect, rotation: config.parallaxRotation))
+    }
+
+    /// Compression horizontale et cisaillement d'un aperçu parallax autour de son centre, communs au dessin
+    /// et au test du clic (REL-040). Déterminant = xScale >= 0,45 : toujours inversible.
+    static func parallaxTransform(for rect: CGRect, rotation: CGFloat) -> CGAffineTransform {
+        let angle = min(rotation, 75) * .pi / 180
         let xScale = max(0.45, cos(angle))
         let perspective = sin(angle) * 0.12
-        context.translateBy(x: rect.midX, y: rect.midY)
-        context.concatenate(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
-        context.translateBy(x: -rect.midX, y: -rect.midY)
+        return CGAffineTransform(translationX: -rect.midX, y: -rect.midY)
+            .concatenating(CGAffineTransform(a: xScale, b: perspective, c: 0, d: 1, tx: 0, ty: 0))
+            .concatenating(CGAffineTransform(translationX: rect.midX, y: rect.midY))
     }
 
     private func opacity(for index: Int) -> CGFloat {
@@ -618,8 +624,8 @@ final class StageCardView: NSControl {
                 ? nativeFullscreenFocusAction(for: hit.member)
                 : nil,
             grabUnit: CGPoint(
-                x: min(1, max(0, (point.x - hit.rect.minX) / max(1, hit.rect.width))),
-                y: min(1, max(0, (point.y - hit.rect.minY) / max(1, hit.rect.height)))
+                x: min(1, max(0, (hit.localPoint.x - hit.rect.minX) / max(1, hit.rect.width))),
+                y: min(1, max(0, (hit.localPoint.y - hit.rect.minY) / max(1, hit.rect.height)))
             )
         )
     }
@@ -641,12 +647,17 @@ final class StageCardView: NSControl {
         return min(max(Int((unitFromTop * CGFloat(count)).rounded()), 0), count)
     }
 
-    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect)? {
-        for item in hitPreviewItemsFrontToBack() {
-            guard item.rect.contains(point),
+    /// `localPoint` est le point dans le repère de l'aperçu avant transformation : en parallax, le clic est
+    /// ramené par l'inverse de la transformée du dessin, pour viser la forme réellement visible (REL-040).
+    private func hitPreview(at point: CGPoint) -> (member: PersistentStageMember, rect: CGRect, localPoint: CGPoint)? {
+        for item in hitPreviewItems() {
+            let localPoint = config.mode == .parallax
+                ? point.applying(Self.parallaxTransform(for: item.rect, rotation: config.parallaxRotation).inverted())
+                : point
+            guard item.rect.contains(localPoint),
                   let member = visualMembers[safe: item.index]
             else { continue }
-            return (member, item.rect)
+            return (member, item.rect, localPoint)
         }
         return nil
     }
@@ -655,11 +666,8 @@ final class StageCardView: NSControl {
         .focusNativeFullscreen(member.windowID, member.bundleID, stageID)
     }
 
-    private func hitPreviewItemsFrontToBack() -> [(index: Int, rect: CGRect)] {
-        // Stacked/parallax previews are drawn back-to-front, so index 0 is visually on top.
-        hitPreviewItems()
-    }
-
+    /// Aperçus dans l'ordre de test du clic, du dessus vers le dessous : en stacked/parallax, dessinés
+    /// de l'arrière vers l'avant, l'index 0 est visuellement au-dessus. Mêmes cadres que le dessin (MIN-001).
     private func hitPreviewItems() -> [(index: Int, rect: CGRect)] {
         let cardRect = bounds.insetBy(dx: contentInset, dy: 12)
         let rect = config.mode == .icons ? cardRect.insetBy(dx: 8, dy: 18) : previewArea(in: cardRect, visibleCount: visiblePreviewCount)
@@ -667,29 +675,9 @@ final class StageCardView: NSControl {
         case .stacked, .parallax:
             return previewItems(in: rect, maxCount: 5)
         case .mosaic:
-            let count = min(visualMembers.count, 6)
-            let cols = count <= 2 ? count : 2
-            let rows = Int(ceil(Double(count) / Double(max(cols, 1))))
-            let gap: CGFloat = 6
-            let cellW = (rect.width - CGFloat(max(cols - 1, 0)) * gap) / CGFloat(max(cols, 1))
-            let cellH = (rect.height - 34 - CGFloat(max(rows - 1, 0)) * gap) / CGFloat(max(rows, 1))
-            return (0..<count).map { index in
-                let col = index % cols
-                let row = index / cols
-                return (
-                    index,
-                    CGRect(
-                        x: rect.minX + CGFloat(col) * (cellW + gap),
-                        y: rect.minY + CGFloat(row) * (cellH + gap),
-                        width: cellW,
-                        height: cellH
-                    )
-                )
-            }
+            return Array(mosaicPreviewFrames(in: rect).enumerated()).map { ($0.offset, $0.element) }
         case .icons:
-            return Array(visualMembers.prefix(6)).enumerated().map { index, _ in
-                (index, CGRect(x: rect.minX + CGFloat(index) * 32, y: rect.midY - 12, width: 24, height: 24))
-            }
+            return Array(iconPreviewFrames(in: rect).enumerated()).map { ($0.offset, $0.element) }
         }
     }
 

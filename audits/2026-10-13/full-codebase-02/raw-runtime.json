@@ -1,0 +1,552 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-002",
+      "status": "résolu",
+      "reason": "La réparation ne retire plus un membre absent qu’avec un PID connu et déclaré mort. La déduplication reste indépendante de la visibilité. La grâce de réconciliation de 30 minutes reste la politique générale du snapshot ; elle n’est pas une nouvelle preuve de fermeture.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+          "line": 237,
+          "note": "Garde liveWindowIDs + PID mort avant retrait ; ordre conservé pour les membres gardés."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 89,
+          "name": "absentMemberWithLiveProcessKeepsMembershipOrderAndFocus",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 116,
+          "name": "memberOfDisconnectedDisplayWithLiveProcessIsKept",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 133,
+          "name": "absentMemberWithDeadProcessIsRemoved",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 147,
+          "name": "absentMemberWithoutKnownPidIsKept",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+          "line": 160,
+          "name": "duplicateAbsentMemberIsDeduplicated",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "PERF-001",
+      "status": "résolu",
+      "reason": "La recherche parmi tous les cadres pour chaque cellule a disparu. Les intervalles de centres sont calculés une fois ; chaque colonne cumule les intervalles de lignes dans un tableau de différences. Complexité O(n²), mémoire O(n), au lieu de O(n³). Aucun gain de latence mesuré dans cette revue.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1794,
+          "note": "framesLeaveLargeUntiledCells : intervalles préindexés et cumul par colonne."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1821,
+          "note": "Pas de frames.contains dans la boucle des cellules."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 191,
+          "name": "untiledCellDetectionMatchesReference : 600 cas déterministes, pavages et trous",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 233,
+          "name": "columnFamilyWithoutHoleStaysValid : famille du constat initial",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "PERF-004",
+      "status": "résolu",
+      "reason": "L’intersection de la stage et des voisines utilise un Set construit une seule fois. Le filtre conserve l’ordre initial de la stage et devient O(n+m). Un autre parcours répété, distinct, est signalé dans PERF-901.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2689,
+          "note": "siblingIDSet puis stage.windowIDs.filter(siblingIDSet.contains)."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 177,
+          "name": "clampedSiblingRepairKeepsRequestedFrames : ordre et cadres exacts",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-005",
+      "status": "résolu",
+      "reason": "La réconciliation fusionne les stages persistées, même vides, avec leur nom et leur mode. Elle reporte les labels des desktops et l’activeStageID des desktops non courants. Les modes des stages runtime déjà créées sont aussi mis à jour ; les décisions de focus du desktop courant sont conservées.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 564,
+          "note": "Fusion après la décision de focus et la réconciliation des arbres."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 582,
+          "note": "applyPersistedMetadata copie noms, modes, stages vides, desktop actif et labels."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 27,
+          "name": "automationSnapshotKeepsPersistedNamesEmptyStagesAndDesktopLabel",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 52,
+          "name": "runtimeStateUsesRenamedStageName",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 29,
+          "name": "emptyInactiveStageKeepsPersistedMode",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+          "line": 57,
+          "name": "inactiveDesktopKeepsPersistedActiveStage",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-006",
+      "status": "résolu",
+      "reason": "Le comparateur dépend désormais de clés de bandes calculées avant le tri, puis de l’ID. Il n’alterne plus les axes selon chaque paire. Les permutations du triplet initial conduisent au même ordre.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2116,
+          "note": "spatialSortOrder calcule des bandes fixes puis trie le triplet bande principale, bande secondaire, ID."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 124,
+          "name": "spatialOrderIsIndependentOfInputOrder",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 159,
+          "name": "spatialOrderKeepsColumnsThenRows",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-007",
+      "status": "résolu",
+      "reason": "Le contexte de placement reçoit role et subrole depuis la fenêtre AX. Il reçoit aussi une classification flottante explicite : hors mosaïque, épinglée ou stage float ; une candidate en attente d’écran conserve nil.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1882,
+          "note": "Passage des rôles et de isFloating à WindowRuleMatchContext."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1813,
+          "note": "Classification commune ruleFloatingState."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 15,
+          "name": "rulePlacementMatchesWindowRoleAndSubrole",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 33,
+          "name": "rulePlacementIgnoresWindowWithAnotherRole",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 87,
+          "name": "isFloatingFalseRuleMatchesTiledWindow",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 115,
+          "name": "isFloatingTrueRuleMatchesWindowOfFloatStage",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+          "line": 147,
+          "name": "isFloatingRuleNeverMovesWindowWaitingForUnpluggedDisplay",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift",
+          "line": 219,
+          "name": "automationIsFloatingFollowsRuleClassification",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-008",
+      "status": "résolu",
+      "reason": "Le résultat de placement distingue placed, deferred et settled. Une destination indisponible provoque continue avant l’insertion dans observedRulePlacementWindowIDs. La fenêtre reste donc retentable après retour de l’écran.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1892,
+          "note": "La branche deferred saute le marquage observé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2129,
+          "note": "Une destination indisponible rend explicitement deferred."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 53,
+          "name": "deferredPlacementIsRetriedWhenTargetDisplayAppears",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 90,
+          "name": "placedRuleIsNotReappliedAfterDeferredRetry",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-009",
+      "status": "résolu",
+      "reason": "La fusion des résultats d’écriture ne parcourt que les IDs de la stage courante. Les résultats des autres écrans ne polluent plus placements avant la garde d’égalité.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3135,
+          "note": "Seuls stage.windowIDs peuvent recevoir resultFrames avant sauvegarde."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+          "line": 132,
+          "name": "layoutIntentsAreSavedForEveryDisplayWrittenInTheSamePass",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "REL-029",
+      "status": "résolu",
+      "reason": "Le rendu réécrit désormais tous les champs d’action du modèle : manage, exclude, floating, layout, gap_override, scratchpad et emit_event, en plus des affectations et follow. Le défaut initial de suppression systématique de ces actions est corrigé. REL-901 relève un défaut distinct de conservation des valeurs chaîne.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 181,
+          "note": "Sérialisation explicite des booléens, chaînes et entier de toutes les actions."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+          "line": 226,
+          "name": "saveAndRemoveAffinityKeepEveryActionOfOtherRules : comparaison du modèle complet avant/après ajout et retrait",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    },
+    {
+      "id": "MIN-002",
+      "status": "résolu",
+      "reason": "Les neuf surcharges sont remplacées par une seule fonction générique Encodable, avec les mêmes réglages JSON.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2231,
+          "note": "SnapshotEncoding.json<T: Encodable>."
+        }
+      ],
+      "tests": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+          "line": 245,
+          "name": "snapshotEncodingKeepsFormat : compact, indenté, deux modèles et JSON vide exact",
+          "verification": "lu ; exécution déléguée au coordinateur"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "PERF-901",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 2781,
+      "title": "La réparation des refus reparcourt tous les résultats pour chaque fenêtre",
+      "description": "resolveInfeasibleClampedScopes appelle knownMinimumSize pour chaque ID du scope. Ce helper parcourt à chaque fois tous les éléments de result.items, même ceux des autres scopes. Le coût de préparation des minimums est O(n·r), avant le rejet par aire de minimumSizeArrangement. Aucun plafond de n ou r ne précède ce parcours ; le commentaire « n petit » ne donne aucune borne.",
+      "evidence": "                .compactMap { requestedFrames[$0] ?? liveFrames[$0] }\n                .reduce(CGRect.null) { $0.union($1) }\n                .intersection(visibleFrame)\n            var minimumSizes = orderedIDs.reduce(into: [WindowID: CGSize]()) { sizes, id in\n                sizes[id] = knownMinimumSize(of: id, in: result)\n            }\n            // Deux essais au plus : le premier peut révéler de nouveaux minimums.\n            var arranged = false\n            for _ in 0..<2 {",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Préparer un stage actif .bsp avec n fenêtres visibles et un writer qui renvoie, pour deux fenêtres, le cadre plein écran au lieu de la taille demandée ; pour les autres, il rend le cadre demandé. Les deux refus se chevauchent, leur union ne laisse pas de conteneur pour réparer les voisines. La passe atteint resolveInfeasibleClampedScopes puis effectue n parcours de r=n résultats. Le test existant mutuallyClampedOversizedWindowsIsolateLargestWindowInsteadOfThrashing couvre cette branche à deux fenêtres ; agrandir son fournisseur démontre la croissance.",
+      "impact": "Travail CPU quadratique évitable dans une passe synchrone de réparation. La fréquence réelle et la latence n’ont pas été mesurées. Sévérité HIGH selon le minimum v14 de l’anti-pattern recherche linéaire répétée, comme PERF-004 initial ; aucun gel mesuré n’est allégué.",
+      "path_type": "hot",
+      "remediation": "Construire les tailles connues par ID en un passage des fenêtres puis des résultats, et supprimer le helper à recherche répétée. Pour plusieurs scopes, l’index des résultats peut aussi être partagé hors de leur boucle.",
+      "remediation_code": "// Dans resolveInfeasibleClampedScopes, remplacer le reduce par :\nvar minimumSizes = knownMinimumSizes(of: orderedIDs, in: result)\n\n// Remplacer knownMinimumSize par ce helper ; O(n + r) par scope.\nprivate func knownMinimumSizes(of windowIDs: [WindowID], in result: ApplyResult) -> [WindowID: CGSize] {\n    let floor = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)\n    var sizes: [WindowID: CGSize] = [:]\n    for id in windowIDs {\n        var size = floor\n        if let known = clampedFrames[id.rawValue] {\n            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))\n        }\n        sizes[id] = size\n    }\n    for item in result.items where item.status == .clamped {\n        guard let actual = item.actual, let current = sizes[item.windowID] else { continue }\n        sizes[item.windowID] = Self.largest(current, Self.minimumSize(requested: item.requested, actual: actual))\n    }\n    return sizes\n}",
+      "verification": "Comparer les dictionnaires de minimums avant/après avec 10, 100 et 1000 fenêtres synthétiques, plusieurs refus du même ID et des résultats de scopes distincts. Vérifier aussi les cadres et l’ordre des tests de réparation existants. Compter les visites de result.items ; attendu r par scope au lieu de n·r. Mesurer la préparation isolée, puis la passe entière. Revenir au helper précédent si les tailles ou les placements diffèrent.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "verification_status": "confirmé par lecture statique ; scénario décrit, non exécuté par ce sous-audit",
+      "status": "open",
+      "remediation_applied": false,
+      "complexity_current": "O(n·r) par scope, quadratique quand r≈n",
+      "complexity_target": "O(n+r) par scope",
+      "measurement_status": "Complexité établie par lecture ; aucun benchmark exécuté.",
+      "performance_validation": "Mesurer temps et visites du tableau sur entrées identiques ; rollback du seul changement si résultat ou ordre régresse.",
+      "counter_audit_required": true,
+      "grep_command": "rg -n 'knownMinimumSize|minimumSizes = orderedIDs' Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2852,
+          "evidence": "        var size = CGSize(width: LayoutTolerance.minimumTileSide, height: LayoutTolerance.minimumTileSide)\n        if let known = clampedFrames[windowID.rawValue] {\n            size = Self.largest(size, Self.minimumSize(requested: known.requested, actual: known.actual))\n        }\n        for item in result.items where item.windowID == windowID && item.status == .clamped {\n            if let actual = item.actual {\n                size = Self.largest(size, Self.minimumSize(requested: item.requested, actual: actual))\n            }\n        }"
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+          "line": 1792
+        }
+      ],
+      "references": [
+        "Constitution Article XVIII",
+        "audit-code-v14 module 04 anti-pattern 2"
+      ]
+    },
+    {
+      "id": "REL-901",
+      "category": "reliability",
+      "subcategory": "lossy_toml_serialization",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+      "line": 197,
+      "title": "L’enregistrement d’une affinité altère encore certaines chaînes de règles",
+      "description": "append confond une chaîne vide avec l’absence du champ. toml n’échappe que les barres obliques inverses et les guillemets ; un retour à la ligne décodé reste brut dans une chaîne TOML entre guillemets simples de délimitation. saveRules remplace atomiquement le fichier sans contrôler le résultat décodé. Les actions omises par REL-029 sont rétablies, mais cet aller-retour reste destructif pour certaines valeurs valides.",
+      "evidence": "    private func append(_ key: String, _ value: String?, to lines: inout [String]) {\n        guard let value, !value.isEmpty else { return }\n        lines.append(\"\\(key) = \\\"\\(toml(value))\\\"\")\n    }\n\n    private func appendBool(_ key: String, _ value: Bool?, to lines: inout [String]) {\n        guard let value else { return }\n        lines.append(\"\\(key) = \\(value ? \"true\" : \"false\")\")",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Dans le fichier generated, conserver une règle id=\"empty-title\" avec match.app=\"Terminal\", match.title=\"\", action.assign_stage=\"dev\". Enregistrer une affinité pour une autre application : le champ title disparaît et cette règle correspond désormais à tous les titres Terminal. Variante : une chaîne TOML valide contenant l’échappement \\n est décodée en LF puis réécrite avec un LF brut ; loadRulesFile échoue ensuite. Ces séquences ne requièrent pas qu’une application macOS fournisse réellement un titre multiligne.",
+      "impact": "Une opération sans rapport élargit une règle exacte ou rend le fichier de règles illisible. Le résultat de l’ajout annonce changed=true après l’écriture du texte, sans validation de son contenu.",
+      "path_type": "cold",
+      "remediation": "Conserver toutes les chaînes non nil, y compris vides. Encoder tous les caractères de contrôle TOML ou employer un encodeur existant. Décoder le texte produit et comparer les règles avant le remplacement atomique.",
+      "remediation_code": "private func append(_ key: String, _ value: String?, to lines: inout [String]) {\n    guard let value else { return }\n    lines.append(\"\\(key) = \\\"\\(toml(value))\\\"\")\n}\n\nprivate func toml(_ value: String) -> String {\n    var escaped = \"\"\n    for scalar in value.unicodeScalars {\n        switch scalar.value {\n        case 0x22: escaped += \"\\\\\\\"\"\n        case 0x5C: escaped += \"\\\\\\\\\"\n        case 0x00...0x1F, 0x7F: escaped += String(format: \"\\\\u%04X\", scalar.value)\n        default: escaped.unicodeScalars.append(scalar)\n        }\n    }\n    return escaped\n}",
+      "verification": "Étendre saveAndRemoveAffinityKeepEveryActionOfOtherRules avec titre vide, LF, CR, tabulation, guillemet et barre inverse. Relire avec RoadieConfigLoader.loadRulesFile après ajout et retrait. Comparer les règles exactes et vérifier qu’une règle au titre vide ne correspond pas à un autre titre.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "verification_status": "confirmé par lecture statique ; scénario décrit, non exécuté par ce sous-audit",
+      "status": "open",
+      "remediation_applied": false,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 207,
+          "evidence": "    private func toml(_ value: String) -> String {\n        value\n            .replacingOccurrences(of: \"\\\\\", with: \"\\\\\\\\\")\n            .replacingOccurrences(of: \"\\\"\", with: \"\\\\\\\"\")\n    }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 149
+        },
+        {
+          "file": "Sources/RoadieCore/Config.swift",
+          "line": 1100
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowRuleMatcher.swift",
+          "line": 78
+        }
+      ],
+      "grep_command": "rg -n 'private func append|private func toml|render\\(rules\\)' Sources/RoadieDaemon/WindowRuleAffinityService.swift"
+    },
+    {
+      "id": "REL-902",
+      "category": "reliability",
+      "subcategory": "stale_cross_process_drag_state",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowDragActivity.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+      "line": 87,
+      "title": "Un lecteur garde le glisser actif après son relâchement explicite",
+      "description": "isActive garde le maximum entre l’échéance déjà lue et celle du fichier. release écrit volontairement une échéance plus courte, mais un consommateur qui a lu le glisser actif ne peut plus adopter cette fin anticipée. suspensionEnd applique le même maximum. Le test existant de release ne lit le consommateur qu’après release et ne couvre pas cet état mémorisé.",
+      "evidence": "    public func isActive(now: Date = Date(), includingReleaseGrace: Bool = true) -> Bool {\n        guard enabled else { return false }\n        lock.lock()\n        defer { lock.unlock() }\n        let stored = readLocked()\n        activeUntil = max(activeUntil, stored?.expiry ?? .distantPast)\n        if now <= activeUntil {\n            return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))\n        }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Créer deux WindowDragActivity partageant le même fichier. producteur.markActive(windowID:1, now:t0, holdSeconds:1.5) ; consommateur.isActive(now:t0+0.1) donne true et mémorise t0+1.5. producteur.release(now:t0+0.2) écrit t0+0.2. consommateur.isActive(now:t0+0.3) rend encore true, car max(t0+1.5,t0+0.2)=t0+1.5. Un maintainer avec un scope sans arbre passe includingReleaseGrace=true et conserve cette suspension après le relâchement sans dépôt.",
+      "impact": "La passe de disposition après un glisser sans dépôt peut rester retardée jusqu’à l’ancienne échéance. Le délai du scénario vient du holdSeconds fourni, pas d’une mesure runtime. Les modes exclusivement à arbre, qui passent includingReleaseGrace=false, ne sont pas concernés par ce retard.",
+      "path_type": "hot",
+      "remediation": "Faire du fichier partagé la source de vérité des lectures, y compris pour une échéance raccourcie. Aligner suspensionEnd. Éviter de supprimer le fichier depuis une lecture expirée, car cela peut aussi effacer une prolongation concurrente.",
+      "remediation_code": "// Le fichier partagé fait foi, y compris quand release raccourcit son échéance.\npublic func isActive(now: Date = Date(), includingReleaseGrace: Bool = true) -> Bool {\n    guard enabled else { return false }\n    lock.lock()\n    defer { lock.unlock() }\n    guard let stored = readLocked(), now <= stored.expiry else { return false }\n    return includingReleaseGrace || stored.dragging\n}\n\npublic func suspensionEnd() -> Date? {\n    guard enabled else { return nil }\n    lock.lock()\n    defer { lock.unlock() }\n    guard let expiry = readLocked()?.expiry else { return nil }\n    return Date(timeIntervalSinceReferenceDate: expiry.timeIntervalSinceReferenceDate.nextUp)\n}",
+      "verification": "Étendre releaseWithoutDropEndsDragImmediatelyWithoutGrace : faire lire le consommateur avant release, puis vérifier false immédiatement après et une échéance égale à la release. Ajouter un test du maintainer en bsp avec deux instances. Garder recognizedDropKeepsGraceAndLeavesProofAcrossProcesses vert afin de préserver la grâce des dépôts reconnus.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "verification_status": "confirmé par lecture statique et par sonde indépendante du coordinateur utilisant la classe réelle WindowDragActivity : lecteur actif avant release, encore actif 0,1 s après release",
+      "status": "open",
+      "remediation_applied": false,
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 40,
+          "evidence": "    public func release(now: Date = Date()) {\n        guard enabled else { return }\n        lock.lock()\n        defer { lock.unlock() }\n        activeWindowID = nil\n        activeUntil = now\n        writeActiveUntilLocked(now, windowID: nil)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 66
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 224
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/CommandSinglePlanTests.swift",
+          "line": 348
+        }
+      ],
+      "grep_command": "rg -n 'activeUntil = max|func release|func suspensionEnd' Sources/RoadieDaemon/WindowDragActivity.swift",
+      "validation_artifacts": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/validation/probe-results.log",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/validation/AuditPureProbes.swift"
+      ]
+    }
+  ],
+  "positive_findings": [
+    "Module 04 : l’intersection des voisines utilise Set et la détection des trous supprime le parcours cubique ; tests d’équivalence déterministes lus dans /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift.",
+    "Module 06 : heal préserve les membres absents sans preuve de PID mort ; rôles AX et destinations différées ont des tests de maintainer, pas seulement de matcher.",
+    "Module 08 : les mémoires de refus et d’échecs sont purgées par présence et ancienneté dans /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift:1562 ; TickScheduler conserve une demande bloquée et borne le réarmement des échéances à 15 ms.",
+    "Module 12 : un seul encodeur générique remplace neuf corps. Les helpers de grille portent un invariant géométrique réel ; le fournisseur de rejeu évite un second relevé AX. Le marqueur scratchpad a une justification contractuelle explicite dans la SPEC-002."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutIntentStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TickScheduler.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleEngine.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleMatcher.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleValidator.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotATests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotBTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotETests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowRuleScratchpadTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/WindowRule.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/spec.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r1.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/022-audit-remediation/counter-review-r2.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/002-roadie-ecosystem-upgrade/contracts/config-rules.toml.md"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "ranges": "1040-1110 ; recherches ciblées du chargement TOML"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowContextActions.swift",
+      "ranges": "150-180"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+      "ranges": "564-620"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+      "ranges": "185-fin"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotATests.swift",
+      "ranges": "1-120"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift",
+      "ranges": "45-180 ; noms de tests repérés par rg"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift",
+      "ranges": "200-320"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+      "ranges": "500-560, 1788-1840, 3255-3332 ; recherches ciblées des tests de refus"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/CommandSinglePlanTests.swift",
+      "ranges": "345-380"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "ranges": "recherches rg ciblées, pas lecture intégrale"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowRuleMaintainerTests.swift",
+      "ranges": "recherches rg ciblées, pas lecture intégrale"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/configuration-rules.md",
+      "ranges": "recherches rg ciblées sur le contrat des règles"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/specs/008-window-rule-placement/spec.md",
+      "ranges": "recherches rg ciblées sur compatibilité des règles"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+      "ranges": "10 constats attribués extraits en intégralité ; recherche ciblée scratchpad"
+    }
+  ],
+  "warnings": [
+    "Aucun build, test ou benchmark exécuté par cet agent, conformément au brief. Le coordinateur gère swift build/test et le nettoyage du scratch-path.",
+    "Aucune fenêtre réelle déplacée ; aucun processus arrêté, relancé ou interrogé pour en modifier l’état.",
+    "PERF-901 requiert un contre-audit indépendant avant de figurer en HIGH dans le rapport final. La lecture entière de LayoutMaintainer.swift a été faite ; les gardes ont été examinées.",
+    "REL-901 est confirmé par lecture statique ; REL-902 a aussi été reproduit par une sonde indépendante du coordinateur, sans déplacement réel de fenêtre.",
+    "REL-021 hors attribution : signalement au coordinateur de StateAuditService.heal utilisant mutate non checked, et de restoreZoomLayoutIntentChecked supprimant puis réécrivant en deux transactions. Non dupliqués dans les findings de cet artefact.",
+    "Pas de profil CPU/mémoire ; aucune latence chiffrée ni économie mesurée attribuée au code.",
+    "Le scan des chaînes TODO/FIXME, états dérivés, wrappers, verrous et recherches répétées a couvert les onze fichiers de production attribués. Pas d’abstraction à retirer sans modifier un contrat observé."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Checklists 1-6 appliquées sur les onze fichiers : pas de suppression additionnelle prouvée à comportement constant. Le refactoring de SnapshotEncoding réduit la maintenance. Les états de suspension, de refus et de génération servent des règles documentées. Le volume du maintainer reste important mais porte des mécanismes réels ; les trois constats nouveaux signalent des coûts ou pertes de cohérence concrets plutôt qu’un découpage arbitraire. Le code peut être expliqué par ses invariants et ses tests ; aucune origine LLM déduite du style."
+  }
+}

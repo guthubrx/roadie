@@ -1,0 +1,405 @@
+{
+  "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie",
+  "audit_mode": "readonly",
+  "responsibility": "Commandes, état persistant, transactions, géométrie et tests associés",
+  "findings": [
+    {
+      "id": "REL-101",
+      "category": "reliability",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "line": 1135,
+      "title": "Une position Int.min fait tomber le daemon dans stage reorder",
+      "description": "La position reçue est diminuée avant son bornage. Int.min - 1 déclenche un arrêt fatal Swift. Le routeur CLI accepte cet entier et le service de commande ne le contrôle pas.",
+      "evidence": "    public mutating func reorderStage(_ id: StageID, to position: Int) -> Bool {\n        guard let index = stages.firstIndex(where: { $0.id == id }) else { return false }\n        let stage = stages.remove(at: index)\n        let targetIndex = min(max(position - 1, 0), stages.count)\n        stages.insert(stage, at: targetIndex)\n        return true\n    }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Avec un écran actif et la stage 1 existante : roadie stage reorder 1 -9223372036854775808. La conversion Int réussit dans CLICommandRouter.swift:988, puis reorderStage calcule Int.min - 1. Ne pas lancer contre le daemon de travail.",
+      "impact": "Arrêt du processus qui traite la commande; les services du daemon deviennent indisponibles.",
+      "path_type": "cold",
+      "remediation": "Borner la valeur avant toute soustraction. Contrôler aussi les paramètres CLI, mais conserver la protection dans le modèle persistant.",
+      "verification": "Ajouter des cas purs pour Int.min, 0, 1 et Int.max; vérifier un classement valide sans trap et les règles de bornage existantes.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "integer_overflow",
+      "remediation_code": "public mutating func reorderStage(_ id: StageID, to position: Int) -> Bool {\n    guard let index = stages.firstIndex(where: { $0.id == id }) else { return false }\n    let stage = stages.remove(at: index)\n    let targetIndex = position <= 1 ? 0 : min(position - 1, stages.count)\n    stages.insert(stage, at: targetIndex)\n    return true\n}",
+      "grep_command": "rg -n 'position - 1|reorder|Int\\(rawPosition\\)' Sources/RoadieDaemon/{StageStore,StageCommands,CLICommandRouter}.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 985,
+          "evidence": "        case \"reorder\":\n            guard let stageID = args.dropFirst().first,\n                  let rawPosition = args.dropFirst(2).first,\n                  let position = Int(rawPosition)\n            else {\n                err(\"roadie: stage reorder requires a stage id and numeric position\")\n                return 64\n            }\n            let result = StageCommandService(service: service).reorder(stageID, to: position)\n            return finish(result.message, changed: result.changed)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 340,
+          "evidence": "    public func reorder(_ rawStageID: String, to position: Int, displayID: DisplayID) -> StageCommandResult {\n        let stageID = StageID(rawValue: rawStageID)\n        let reordered = store.mutate { state -> Bool in\n            var scope = activeScope(displayID: displayID, in: &state)\n            guard scope.reorderStage(stageID, to: position) else { return false }\n            state.update(scope)\n            return true\n        }"
+        }
+      ],
+      "counter_audit_needed": true
+    },
+    {
+      "id": "REL-102",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+      "line": 163,
+      "title": "Déplacer une fenêtre vers son bureau actuel la masque",
+      "description": "assignActiveWindow ne traite pas le cas où le bureau cible est déjà celui de la fenêtre. Il envoie toujours une frame de masquage quand follow est faux. Le masquage prime sur le placement calculé du même scope.",
+      "evidence": "        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.\n        let (_, result) = service.applyCommandPlacement(\n            CommandPlacement(\n                hiding: [active.window.id: HiddenWindowPlacement.frame(for: active.window.frame.cgRect, on: display, among: snapshot.displays)],\n                layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 })\n            ),\n            cause: \"desktop.assign_window\",\n            generation: generation,\n            events: events\n        )",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Une fenêtre active appartient au bureau Roadie 1. Lancer roadie window desktop 1 sans --follow. La fonction construit une commande HiddenWindowPlacement pour cette même fenêtre.",
+      "impact": "La fenêtre est déplacée hors de sa zone visible alors que son bureau reste actif. La récupération ultérieure par le maintien de disposition n’a pas été vérifiée.",
+      "path_type": "cold",
+      "remediation": "Retourner sans écriture si la fenêtre appartient déjà au bureau demandé, comme le fait assign(windowID:to:displayID:). Choisir le masquage selon la visibilité réelle du scope cible.",
+      "verification": "Fixture avec une fenêtre sur le bureau actif : assignActiveWindow vers ce bureau doit laisser frames, ordre et groupes inchangés.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "incorrect_visibility",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 206,
+          "evidence": "        guard entry.scope?.desktopID != desktopID || entry.scope?.displayID != displayID else {\n            return StageCommandResult(message: \"window desktop \\(desktopID.rawValue): already on target desktop\", changed: false)\n        }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 369,
+          "evidence": "        var targets = placement.restoring\n        let layout = placement.layoutScopes?.isEmpty == true ? [] : applyPlan(from: working, generation: generation).commands\n        for command in layout where laidOut(command.window.id) {\n            targets[command.window.id] = command.frame.cgRect\n        }\n        targets.merge(placement.hiding) { _, hidden in hidden }\n        let windowsByID = Dictionary(observed.windows.map { ($0.window.id, $0.window) }, uniquingKeysWith: { first, _ in first })\n        let plan = ApplyPlan(commands: targets.keys.sorted().compactMap { id -> ApplyCommand? in"
+        }
+      ]
+    },
+    {
+      "id": "REL-103",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "line": 586,
+      "title": "Le déplacement --no-follow rend visible une stage inactive",
+      "description": "Le déplacement préserve la stage active de l’écran cible quand followFocus est faux. Pourtant, toutes les fenêtres déplacées sont inscrites dans restoring avec une frame centrée visible. Le plan de disposition global ne traite que les stages actives et ne retire donc pas ces restaurations.",
+      "evidence": "        let windowsByID = Dictionary(uniqueKeysWithValues: snapshot.windows.map { ($0.window.id, $0.window) })\n        // Plan unique (A15, T212) : membres transférés et disposition des deux écrans en une écriture.\n        var placement = CommandPlacement(layoutScopes: nil)\n        for member in movingStage.members where windowsByID[member.windowID] != nil {\n            placement.restoring[member.windowID] = centeredFrame(member.frame.cgRect, in: targetDisplay.visibleFrame.cgRect)\n        }\n        var failed = movingStage.members.count - placement.restoring.count\n        service.removeLayoutIntent(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))\n        service.removeLayoutIntent(scope: targetScopeID)\n        let result = service.applyCommandPlacement(placement, cause: \"stage.move_display\", generation: generation, events: events).result",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Deux écrans : stage 1 active sur écran A; stage 9 active avec une fenêtre sur écran B. Lancer roadie stage move-to-display 2 --no-follow. La stage 1 reste inactive sur B, mais ses fenêtres reçoivent des frames au centre de B.",
+      "impact": "Des fenêtres d’une stage inactive apparaissent sur le contexte courant et peuvent recouvrir les fenêtres de la stage active.",
+      "path_type": "cold",
+      "remediation": "Quand la stage déplacée n’est pas activée, enregistrer ses frames de retour mais envoyer des frames de masquage. Ne restaurer immédiatement que la stage rendue active.",
+      "verification": "Étendre noFollowKeepsFocusDisplayAndTargetActiveStage : vérifier les frames finales des membres déplacés et leur invisibilité, puis les restaurer en activant la stage.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "incorrect_visibility",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 548,
+          "evidence": "            if effectiveFollow {\n                targetScope.activeStageID = movingStage.id\n            } else if targetScope.activeStageID == movingStage.id {\n                targetScope.activeStageID = targetScope.stages.first { $0.id != movingStage.id }?.id\n                    ?? nextAvailableStageID(preferred: StageID(rawValue: \"1\"), in: targetScope)\n                targetScope.ensureStage(targetScope.activeStageID)\n            }\n            if sourceScope.stages.isEmpty {\n                sourceScope.ensureStage(StageID(rawValue: \"1\"))"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1191,
+          "evidence": "        var commands: [ApplyCommand] = []\n        for display in snapshot.displays {\n            guard let scope = snapshot.state.activeScope(on: display.id) else { continue }\n\n            guard let stage = snapshot.state.stage(scope: scope) else { continue }\n            let effectiveMode = mode ?? stage.mode\n            if effectiveMode.usesTreeEngine {\n                commands.append(contentsOf: treeApplyPlan(for: scope, in: snapshot, mode: effectiveMode, generation: generation).commands)\n            } else if effectiveMode.isTiled || intentStore.intent(for: scope)?.zoomedWindowID != nil,"
+        },
+        {
+          "file": "Tests/RoadieDaemonTests/StageDisplayMoveTests.swift",
+          "line": 102,
+          "evidence": "        let service = SnapshotService(provider: provider, frameWriter: writer, config: RoadieConfig(), stageStore: store)\n\n        let result = StageCommandService(service: service, store: store, config: RoadieConfig())\n            .moveActiveStageToDisplay(index: 2, followFocus: false)\n\n        var state = store.state()\n        #expect(result.changed)\n        #expect(state.activeDisplayID == main.id)\n        #expect(state.scope(displayID: side.id).activeStageID.rawValue == \"9\")\n        #expect(state.scope(displayID: side.id).memberIDs(in: StageID(rawValue: \"1\")) == [moved.id])"
+        }
+      ]
+    },
+    {
+      "id": "REL-104",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+      "line": 38,
+      "title": "La commande width sélectionne toujours le premier écran",
+      "description": "Le scope est choisi depuis snapshot.displays.first au lieu du scope de la fenêtre focalisée. La fenêtre réellement focalisée est sélectionnée ensuite, mais seulement dans la liste du premier écran.",
+      "evidence": "        guard let display = snapshot.displays.first,\n              let scope = snapshot.state.activeScope(on: display.id),\n              let stage = snapshot.state.stage(scope: scope)\n        else {\n            return WidthAdjustmentResult(changed: false, message: \"width: unsupported layout\")\n        }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Deux écrans avec fenêtres en bsp. Focaliser une fenêtre sur le deuxième écran puis lancer roadie layout width ratio 0.67. L’ID focalisé ne figure pas dans entries du premier écran; la commande retourne no target window. Avec --all, elle redimensionne les fenêtres du premier écran.",
+      "impact": "La commande échoue sur les écrans secondaires ou applique --all sur un écran différent de celui choisi par l’utilisateur.",
+      "path_type": "cold",
+      "remediation": "Résoudre d’abord la fenêtre active, puis son scope et son écran. Partager la règle de sélection avec les autres commandes de disposition.",
+      "verification": "Ajouter une fixture à deux écrans, focus sur le second : seule la fenêtre du second doit changer sans --all; les fenêtres de ce même scope doivent changer avec --all.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "wrong_display",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 593,
+          "evidence": "    public func displays() -> [DisplaySnapshot] {\n        let mainID = NSScreen.main.flatMap(Self.displayID(for:))\n        return NSScreen.screens.enumerated().compactMap { index, screen in\n            guard let id = Self.displayID(for: screen) else { return nil }\n            let frame = Self.nsToAX(screen.frame)\n            let visibleFrame = Self.visibleAXFrame(for: screen, displayFrame: frame)\n            return DisplaySnapshot(\n                id: id,"
+        },
+        {
+          "file": "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 57,
+          "evidence": "        let currentRatio = entries.first.map { $0.window.frame.width / display.visibleFrame.width } ?? 0.5\n        let ratio = targetRatio(from: intent, current: currentRatio)\n        let activeID = snapshot.focusedWindowID ?? stage.focusedWindowID ?? entries.first?.window.id\n        let targets = intent.scope == .allWindows ? entries : entries.filter { $0.window.id == activeID }\n        guard !targets.isEmpty else {\n            return WidthAdjustmentResult(changed: false, message: \"width: no target window\")"
+        }
+      ]
+    },
+    {
+      "id": "REL-105",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+      "line": 57,
+      "title": "Les ajustements relatifs utilisent la largeur de la première fenêtre",
+      "description": "currentRatio est calculé depuis entries.first avant la résolution de activeID. Quand la fenêtre focalisée n’est pas la première entrée, next, prev et nudge partent de la largeur d’une autre fenêtre.",
+      "evidence": "        let currentRatio = entries.first.map { $0.window.frame.width / display.visibleFrame.width } ?? 0.5\n        let ratio = targetRatio(from: intent, current: currentRatio)\n        let activeID = snapshot.focusedWindowID ?? stage.focusedWindowID ?? entries.first?.window.id\n        let targets = intent.scope == .allWindows ? entries : entries.filter { $0.window.id == activeID }\n        guard !targets.isEmpty else {\n            return WidthAdjustmentResult(changed: false, message: \"width: no target window\")",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Fixture sur un écran de largeur 1000 : la première entrée mesure 300, la seconde mesure 600 et porte le focus. Appliquer nudge delta 0.05. Le calcul demande 350 pour la seconde fenêtre, au lieu de 650.",
+      "impact": "Un ordre qui demande d’agrandir peut rétrécir fortement la fenêtre active.",
+      "path_type": "cold",
+      "remediation": "Calculer le ratio courant depuis l’entrée portant activeID. Définir explicitement la référence pour --all.",
+      "verification": "Ajouter deux fenêtres de largeurs différentes; focaliser celle qui n’est pas entries.first et vérifier les modes nudge, next et prev.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "wrong_reference_window"
+    },
+    {
+      "id": "REL-106",
+      "category": "reliability",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+      "line": 52,
+      "title": "Focaliser une fenêtre temporairement absente efface son signet",
+      "description": "L’absence de la fenêtre dans un seul snapshot entraîne removeBookmark immédiatement. Le fournisseur système ne remonte que les fenêtres CG actuellement à l’écran. Une fenêtre minimisée ou sur un autre Space peut donc perdre son signet alors qu’elle existe encore. Le délai de grâce présent dans StageStore n’est pas consulté.",
+      "evidence": "        guard let targetEntry = snapshot.windows.first(where: { $0.window.id == bookmark.windowID }) else {\n            let removed = store.mutate { $0.removeBookmark(named: name) }\n            if let removed {\n                events.append(RoadieEvent(\n                    type: \"window.bookmark_pruned\",\n                    scope: removed.scope,\n                    details: eventDetails(removed).merging([\"reason\": \"focus_stale\"], uniquingKeysWith: { lhs, _ in lhs })\n                ))\n            }\n            return WindowCommandResult(message: \"bookmark focus \\(name): stale bookmark removed\", changed: true)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Créer un signet work pour une fenêtre, minimiser celle-ci, puis lancer roadie bookmark focus work. La fenêtre est absente du snapshot on-screen; la commande supprime le signet immédiatement.",
+      "impact": "Perte d’un raccourci utilisateur à cause d’une absence temporaire. La fonction renvoie changed=true pour cette suppression.",
+      "path_type": "cold",
+      "remediation": "Conserver le signet pendant le délai de grâce. Tenter de rappeler la fenêtre de l’application via ses informations persistées. Réserver la suppression à une fermeture confirmée ou à la purge différée.",
+      "verification": "Provider sans la fenêtre pendant un seul snapshot : focus(work) ne doit pas supprimer le signet. Tester ensuite la réapparition et l’expiration de la grâce.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "premature_state_deletion",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageStore.swift",
+          "line": 455,
+          "evidence": "    public mutating func pruneMissingBookmarks(\n        keeping liveWindowIDs: Set<WindowID>,\n        missingGrace: TimeInterval = LayoutTolerance.missingWindowGraceSeconds,\n        now: Date = Date()\n    ) -> [PersistentWindowBookmark] {\n        var pruned: [PersistentWindowBookmark] = []\n        for index in windowBookmarks.indices {\n            // Seules les transitions (début et fin d'absence) modifient l'état : au repos, rien\n            // ne change et le fichier n'est pas réécrit (SPEC-016 FR-014).\n            if liveWindowIDs.contains(windowBookmarks[index].windowID) {"
+        },
+        {
+          "file": "Sources/RoadieAX/SystemSnapshotProvider.swift",
+          "line": 610,
+          "evidence": "    // O(n + Σm) : n fenetres CG, une enumeration kAXWindows (m elements) par application.\n    public func windows() -> [WindowSnapshot] {\n        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]\n        guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {\n            return []\n        }"
+        }
+      ]
+    },
+    {
+      "id": "PERF-101",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "line": 1503,
+      "title": "Les commandes répètent des recherches linéaires évitables",
+      "description": "Le filtrage des stages restantes fait contains sur la liste visible pour chaque candidate. Deux autres helpers de dépôt font le même type de recherche répétée dans scopedIDs ou ordered. Les listes n’ont pas de borne appliquée dans le code.",
+      "evidence": "    private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {\n        let candidates = scope.stages.filter(isSelectableStage)\n        let visible = candidates.filter { !$0.members.isEmpty }.map(\\.id)\n        let remaining = candidates.map(\\.id).filter { !visible.contains($0) }\n        let ordered = visible + remaining\n        let index = position - 1\n        guard ordered.indices.contains(index) else { return nil }\n        return ordered[index]",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Appeler stage assign-position sur un scope comportant s stages visibles : chaque candidate parcourt visible. Les helpers de dépôt répètent le motif pour les identifiants de fenêtres.",
+      "impact": "Coût O(s²) au lieu de O(s) pour une opération simple; pas de latence mesurée et charge limitée en usage ordinaire.",
+      "path_type": "cold",
+      "remediation": "Filtrer directement les stages vides; convertir scopedIDs et ordered en Set avant leurs boucles. Conserver l’ordre original dans les tableaux.",
+      "verification": "Vérifier le même ordre pour stages vides, non vides et parkées. Contrôler par lecture qu’aucun contains linéaire ne reste dans les boucles de ces trois helpers.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "algorithmic_complexity",
+      "complexity_current": "O(s²) / O(n²)",
+      "complexity_target": "O(s) / O(n)",
+      "severity_rationale": "Chemin froid de commande utilisateur : déclassement HIGH vers MEDIUM selon module 01; aucune mesure de ralentissement.",
+      "remediation_code": "private func stageID(atAssignablePosition position: Int, in scope: PersistentStageScope) -> StageID? {\n    guard position > 0 else { return nil }\n    let candidates = scope.stages.filter(isSelectableStage)\n    let visible = candidates.filter { !$0.members.isEmpty }.map(\\.id)\n    let remaining = candidates.filter { $0.members.isEmpty }.map(\\.id)\n    let ordered = visible + remaining\n    let index = position - 1\n    guard ordered.indices.contains(index) else { return nil }\n    return ordered[index]\n}",
+      "references": [
+        "Constitution Article XVIII"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1398,
+          "evidence": "        var seen: Set<WindowID> = []\n        var result: [WindowID] = []\n        for id in orderedWindowIDs where scopedIDs.contains(id) || id == windowID {\n            guard !seen.contains(id) else { continue }\n            result.append(id)\n            seen.insert(id)\n        }\n        for id in scopedIDs where !seen.contains(id) {"
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1448,
+          "evidence": "        })\n        let current = LayoutPlan(placements: currentFrames)\n        let commands = LayoutDiff.commands(previous: current, next: layout).compactMap { command -> ApplyCommand? in\n            guard ordered.contains(command.windowID),\n                  let window = windowsByID[command.windowID]\n            else { return nil }\n            return ApplyCommand(window: window, frame: Rect(command.frame))\n        }\n        return ApplyPlan(commands: commands)"
+        }
+      ]
+    },
+    {
+      "id": "PERF-102",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowCommands.swift",
+      "line": 1159,
+      "title": "planGroup recopie toute la queue et les placements à chaque récursion",
+      "description": "Chaque niveau matérialise Array(windowIDs.dropFirst()), puis fusionne le dictionnaire entier renvoyé par le niveau suivant. Le nombre total d’éléments copiés est quadratique. Le découpage lui-même ne demande qu’un passage.",
+      "evidence": "    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n        guard let first = windowIDs.first else { return [:] }\n        guard windowIDs.count > 1 else { return [first: rect.integral] }\n\n        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)\n        var placements = [first: parts.first.integral]\n        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }\n        return placements\n    }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Une commande warp en mode sans arbre avec un groupe de n fenêtres appelle planGroup; les sous-tableaux ont les tailles n-1, n-2, …, 1.",
+      "impact": "Allocations et copies inutiles en O(n²), et profondeur de pile O(n). Aucune latence réelle mesurée.",
+      "path_type": "cold",
+      "remediation": "Faire une boucle sur les indices avec un conteneur restant et une orientation alternée; écrire chaque frame une seule fois dans un dictionnaire.",
+      "verification": "Comparer les frames de la version itérative aux fixtures warp existantes pour 0, 1, 2 et plusieurs fenêtres; préserver les arrondis.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "algorithmic_complexity",
+      "complexity_current": "O(n²)",
+      "complexity_target": "O(n)",
+      "remediation_code": "private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {\n    var placements: [WindowID: CGRect] = [:]\n    placements.reserveCapacity(windowIDs.count)\n    var remaining = rect\n    var axis = horizontal\n    for (index, id) in windowIDs.enumerated() {\n        let tailCount = windowIDs.count - index - 1\n        if tailCount == 0 {\n            placements[id] = remaining.integral\n        } else {\n            let parts = split(remaining, horizontally: axis, gap: gap, firstCount: 1, secondCount: tailCount)\n            placements[id] = parts.first.integral\n            remaining = parts.second\n            axis.toggle()\n        }\n    }\n    return placements\n}",
+      "references": [
+        "Constitution Article XVIII"
+      ]
+    },
+    {
+      "id": "TEST-101",
+      "category": "tests",
+      "severity": "MEDIUM",
+      "file": "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+      "line": 15,
+      "title": "Le test des commandes de groupe ne contrôle que changed",
+      "description": "Le test exécute create, add, focus, remove et dissolve mais ne relit aucun membre ni activeWindowID. Un ajout ou une focalisation incorrecte peut passer tant que la commande renvoie changed=true; la dissolution finale ne vérifie pas les étapes intermédiaires.",
+      "evidence": "        #expect(groups.create(id: \"terminals\", windowIDs: [WindowID(rawValue: 1), WindowID(rawValue: 2)]).changed)\n        #expect(groups.add(windowID: WindowID(rawValue: 3), to: \"terminals\").changed)\n        #expect(groups.focus(windowID: WindowID(rawValue: 3), in: \"terminals\").changed)\n        #expect(groups.remove(windowID: WindowID(rawValue: 2), from: \"terminals\").changed)\n        #expect(groups.dissolve(id: \"terminals\").changed)",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Mutation conceptuelle : supprimer group.add ou group.focus tout en conservant la création du groupe et les valeurs de retour. Les attentes montrées restent satisfaites.",
+      "impact": "Le test donne peu de protection sur le comportement métier du seul pipeline complet de commandes de groupe.",
+      "path_type": "cold",
+      "remediation": "Après chaque commande, vérifier la liste exacte des membres, le membre actif et la disparition finale. Ajouter un identifiant absent et une création invalide.",
+      "verification": "Une mutation de add, focus ou remove doit faire échouer une attente sur le contenu de l’état, même si changed reste vrai.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "weak_assertions",
+      "verification_status_override": "lecture statique; mutation testing non exécuté"
+    },
+    {
+      "id": "MIN-101",
+      "category": "minimalism",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+      "line": 154,
+      "title": "Deux pipelines presque identiques gèrent les déplacements de bureau",
+      "description": "assignActiveWindow et assign(windowID:to:displayID:) répètent la mutation des scopes, la suppression des intentions, le placement, l’événement et le résultat. Une divergence existe déjà : seul le second refuse le bureau courant.",
+      "evidence": "        if let sourceScope {\n            service.removeLayoutIntent(scope: sourceScope)\n        }\n        service.removeLayoutIntent(scope: targetStageScope)\n\n        if follow {\n            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)\n        }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Pour modifier la politique de visibilité ou de retrait des pins, le mainteneur doit modifier deux blocs équivalents dans le même fichier.",
+      "impact": "Charge cognitive et risque de correction appliquée à une seule entrée. Estimation locale : environ 60 lignes suppressibles après extraction du corps partagé.",
+      "path_type": "cold",
+      "remediation": "Conserver les deux points d’entrée publics et extraire un helper privé recevant la fenêtre, le snapshot et le bureau cible. Conserver les différences de validation explicites aux entrées.",
+      "verification": "Les tests existants de transfert, de retrait de pin et de transaction doivent conserver leur résultat; ajouter les scénarios du bureau courant et de l’écran cible actif.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture du code; scénario non exécuté",
+      "subcategory": "duplicated_command_pipeline",
+      "estimated_removable_lines": 60,
+      "references": [
+        "Constitution Article XIX",
+        "Constitution Article XX"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 230,
+          "evidence": "\n        if follow {\n            return switchDisplay(display, to: desktopID, snapshot: snapshot, generation: generation)\n        }\n\n        // Plan unique (A15, T212) : fenêtre masquée et scope d'origine disposé en une écriture groupée.\n        let (_, result) = service.applyCommandPlacement(\n            CommandPlacement("
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "line": 187,
+      "text": "Les modifications passent par JSONPersistence.mutate; les fonctions de commande relisent les scopes dans la transaction et font les appels AX après celle-ci."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+      "line": 1226,
+      "text": "Les tests de concurrence desktopSwitchKeepsConcurrentChangeMadeDuringAX et bookmarkFocusKeepsConcurrentChangeMadeDuringAX injectent une vraie mutation de store pendant une écriture AX simulée et vérifient sa conservation."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/PowerUserLayoutCommandTests.swift",
+      "line": 56,
+      "text": "Les commandes arbre sont vérifiées sur l’arbre final, les frames exactes et le nombre d’écritures; ce sont des assertions de comportement utiles."
+    },
+    {
+      "file": "Sources/RoadieDaemon/StageStore.swift",
+      "line": 205,
+      "text": "La migration mutableBsp vers spatialBsp garde une copie .pre-017 avant sa première modification et ne l’écrase pas."
+    }
+  ],
+  "files_read_fully": [
+    "Sources/RoadieDaemon/StageStore.swift",
+    "Sources/RoadieDaemon/StageCommands.swift",
+    "Sources/RoadieDaemon/WindowCommands.swift",
+    "Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+    "Sources/RoadieDaemon/WindowGroupCommands.swift",
+    "Sources/RoadieDaemon/LayoutCommandService.swift",
+    "Sources/RoadieDaemon/DesktopCommands.swift",
+    "Sources/RoadieDaemon/DisplayCommands.swift",
+    "Sources/RoadieDaemon/WidthAdjustmentService.swift",
+    "Tests/RoadieDaemonTests/WidthAdjustmentTests.swift",
+    "Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+    "Tests/RoadieDaemonTests/WindowGroupStoreTests.swift",
+    "Sources/RoadieCore/Identifiers.swift"
+  ],
+  "files_read_partially": [
+    "Sources/RoadieDaemon/CLICommandRouter.swift",
+    "Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "Sources/RoadieAX/SystemSnapshotProvider.swift",
+    "Sources/RoadieDaemon/RailController.swift",
+    "Sources/RoadieCore/LayoutCommandIntent.swift",
+    "Tests/RoadieDaemonTests/PowerUserDesktopCommandTests.swift",
+    "Tests/RoadieDaemonTests/PersistentStageStateTests.swift",
+    "Tests/RoadieDaemonTests/StageDisplayMoveTests.swift",
+    "Tests/RoadieDaemonTests/PowerUserLayoutCommandTests.swift",
+    "Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift",
+    "README.fr.md",
+    "docs/fr/features.md",
+    "docs/fr/cli.md"
+  ],
+  "lines_read_primary_sources": 5899,
+  "minimalism_estimate_lines": 60,
+  "cognitive_load": "Les transactions et les noms de fonctions rendent les commandes explicables. Les gros services accumulent néanmoins sélection, mutation, disposition et journalisation; les pipelines dupliqués augmentent la charge future. La géométrie et les tests arbre justifient une partie du volume. Ne pas attribuer ces patterns à une IA sans preuve.",
+  "limitations": [
+    "Aucune commande de mutation ni action sur le daemon réel exécutée.",
+    "Aucun build/test lancé par cet agent, conformément à la répartition de travail. Le parent centralise ces validations.",
+    "Aucun benchmark, profilage ni mesure de couverture des branches.",
+    "Tests volumineux lus par scénarios et inventaire de fonctions, pas intégralement.",
+    "Le HIGH REL-101 nécessite encore le verdict de contre-audit indépendant du parent."
+  ],
+  "additional_candidates_not_promoted": [
+    {
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "line": 1544,
+      "status": "confirmé statiquement sous condition",
+      "text": "nextGeneratedStageID fait max(numericIDs)+1. Une stage nommée 9223372036854775807 provoque un overflow si assign-empty doit générer un ID. Pas de scénario CLI complet exécuté; le code UI équivalent RailController.swift:591 choisit un ID libre sans addition."
+    },
+    {
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 821,
+      "status": "plausible",
+      "text": "Double(raw) accepte NaN et inf. Leur effet exact à travers min/max et le writer AX doit être vérifié avant de signaler un crash."
+    },
+    {
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 970,
+      "status": "confirmé statiquement",
+      "text": "stage create reçoit une chaîne vide sans garde; StageID init impose une précondition nonempty. Transmis au parent pour fusion avec la validation CLI générale."
+    }
+  ]
+}

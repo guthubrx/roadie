@@ -368,8 +368,9 @@ struct DropPreviewEngine {
         })
         var targetGroupWindows = activeEntries.map(\.window).filter { targetSideIDs.contains($0.id) || $0.id == target.id }
         targetGroupWindows.removeAll { $0.id == sourceID }
+        // O(n) : appartenance au groupe cible lue dans l'ensemble, sans recherche linéaire par fenêtre.
         let sourceGroupWindows = activeEntries.map(\.window).filter { entry in
-            entry.id != sourceID && !targetGroupWindows.contains(where: { $0.id == entry.id })
+            entry.id != sourceID && entry.id != target.id && !targetSideIDs.contains(entry.id)
         }
         guard !targetGroupWindows.isEmpty, !sourceGroupWindows.isEmpty else { return nil }
 
@@ -381,13 +382,13 @@ struct DropPreviewEngine {
         )
         let sourceGroup = spatiallySorted(sourceGroupWindows, in: union(sourceGroupWindows.map { $0.frame.cgRect }) ?? sourceFrame)
         let targetFirst = operation == .insertLeft || operation == .insertUp
-        let rects = split(container, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
+        let rects = DropGroupGeometry.split(container, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: 1)
         let targetRect = targetFirst ? rects.first : rects.second
         let sourceRect = targetFirst ? rects.second : rects.first
 
         var result: [WindowID: CGRect] = [:]
-        result.merge(planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
-        result.merge(planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
+        result.merge(DropGroupGeometry.planGroup(targetGroup, in: targetRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
+        result.merge(DropGroupGeometry.planGroup(sourceGroup, in: sourceRect, horizontal: !horizontal, gap: gap)) { _, rhs in rhs }
         return result
     }
 
@@ -450,8 +451,12 @@ struct DropPreviewEngine {
             return false
         }
     }
+}
 
-    private func split(
+/// Découpe géométrique d'un groupe de fenêtres pour l'aperçu de dépôt : la première fenêtre
+/// prend une part du rectangle, le reste est découpé dans l'orientation alternée.
+enum DropGroupGeometry {
+    static func split(
         _ rect: CGRect,
         horizontally: Bool,
         gap: CGFloat,
@@ -477,13 +482,29 @@ struct DropPreviewEngine {
         )
     }
 
-    private func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {
-        guard let first = windowIDs.first else { return [:] }
-        guard windowIDs.count > 1 else { return [first: rect.integral] }
-
-        let parts = split(rect, horizontally: horizontal, gap: gap, firstCount: 1, secondCount: windowIDs.count - 1)
-        var placements = [first: parts.first.integral]
-        placements.merge(planGroup(Array(windowIDs.dropFirst()), in: parts.second, horizontal: !horizontal, gap: gap)) { lhs, _ in lhs }
+    /// Passe unique sur un rectangle restant et une orientation alternée. Mêmes découpes que
+    /// l'ancienne récursion ; en cas d'identifiant répété, la première occurrence garde sa place.
+    // O(n) - n = fenêtres du groupe (avant : O(n²), copie et fusion d'un suffixe à chaque niveau).
+    static func planGroup(_ windowIDs: [WindowID], in rect: CGRect, horizontal: Bool, gap: CGFloat) -> [WindowID: CGRect] {
+        var placements: [WindowID: CGRect] = [:]
+        placements.reserveCapacity(windowIDs.count)
+        var remaining = rect
+        var isHorizontal = horizontal
+        for (index, windowID) in windowIDs.enumerated() {
+            let remainingCount = windowIDs.count - index
+            let frame: CGRect
+            if remainingCount == 1 {
+                frame = remaining.integral
+            } else {
+                let parts = split(remaining, horizontally: isHorizontal, gap: gap, firstCount: 1, secondCount: remainingCount - 1)
+                frame = parts.first.integral
+                remaining = parts.second
+                isHorizontal.toggle()
+            }
+            if placements[windowID] == nil {
+                placements[windowID] = frame
+            }
+        }
         return placements
     }
 }
@@ -609,19 +630,24 @@ final class WindowDragReorderController {
     }
 
     private func sourceWindowForDragStart(at point: CGPoint, in snapshot: DaemonSnapshot) -> (window: WindowSnapshot, scope: StageScope)? {
-        let axPoint = ScreenCoordinate.nsPointToAX(point)
-        let candidates = snapshot.windows.compactMap { entry -> (WindowSnapshot, StageScope)? in
-            guard let scope = entry.scope,
-                  snapshot.state.activeScope(on: scope.displayID) == scope,
-                  WindowDragReorderEligibility.accepts(entry.window),
-                  titleBarHitRect(for: entry.window.frame.cgRect).contains(axPoint)
-            else { return nil }
-            return (entry.window, scope)
-        }
-        return candidates.sorted { $0.0.frame.cgRect.area < $1.0.frame.cgRect.area }.first
+        Self.dragSourceWindow(atAXPoint: ScreenCoordinate.nsPointToAX(point), in: snapshot)
     }
 
-    private func titleBarHitRect(for frame: CGRect) -> CGRect {
+    /// Fenêtre dont la bande de titre est visible sous le point : la première fenêtre vue dans
+    /// l'ordre CoreGraphics doit être éligible et le point doit tomber dans sa bande de titre. Une
+    /// bande de titre recouverte par le contenu d'une autre fenêtre ne démarre aucun glisser.
+    // O(n) - n = fenêtres du snapshot (avant : filtre puis tri par surface, O(n log n)).
+    nonisolated static func dragSourceWindow(atAXPoint axPoint: CGPoint, in snapshot: DaemonSnapshot) -> (window: WindowSnapshot, scope: StageScope)? {
+        guard let entry = FocusFollowsMousePicker.frontWindow(at: axPoint, in: snapshot),
+              let scope = entry.scope,
+              snapshot.state.activeScope(on: scope.displayID) == scope,
+              WindowDragReorderEligibility.accepts(entry.window),
+              titleBarHitRect(for: entry.window.frame.cgRect).contains(axPoint)
+        else { return nil }
+        return (entry.window, scope)
+    }
+
+    private nonisolated static func titleBarHitRect(for frame: CGRect) -> CGRect {
         CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: min(44, frame.height))
     }
 }

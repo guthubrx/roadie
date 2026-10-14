@@ -144,7 +144,15 @@ struct PowerUserFocusCommandTests {
         let provider = PowerUserProvider(windows: [powerWindow(1, x: 100)])
         let store = StageStore(path: tempPath("power-bookmark-stale"))
         let scope = StageScope(displayID: display, desktopID: DesktopID(rawValue: 1), stageID: StageID(rawValue: "1"))
-        store.save(PersistentStageState(windowBookmarks: [
+        // REL-028 : le signet n'est retiré que sur preuve de fermeture (processus connu et mort).
+        store.save(PersistentStageState(scopes: [
+            PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "1"), stages: [
+                PersistentStage(id: StageID(rawValue: "1"), members: [
+                    PersistentStageMember(windowID: WindowID(rawValue: 99), bundleID: "app.gone", title: "Gone",
+                                          frame: Rect(x: 0, y: 0, width: 100, height: 100), pid: 4242),
+                ]),
+            ]),
+        ], windowBookmarks: [
             PersistentWindowBookmark(
                 name: "gone",
                 windowID: WindowID(rawValue: 99),
@@ -156,7 +164,7 @@ struct PowerUserFocusCommandTests {
         ]))
         let service = SnapshotService(provider: provider, frameWriter: PowerUserWriter(provider: provider), stageStore: store)
 
-        let result = WindowBookmarkCommandService(service: service, store: store).focus("gone")
+        let result = WindowBookmarkCommandService(service: service, store: store, isProcessAlive: { _ in false }).focus("gone")
 
         #expect(result.changed)
         #expect(store.state().bookmark(named: "gone") == nil)

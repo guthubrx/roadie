@@ -1,0 +1,15 @@
+[0/1] Planning build
+Test Suite 'Selected tests' started at 2026-10-13 12:06:08.480.
+Test Suite 'roadiePackageTests.xctest' started at 2026-10-13 12:06:08.487.
+Test Suite 'roadiePackageTests.xctest' passed at 2026-10-13 12:06:08.487.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-10-13 12:06:08.487.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.007) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 1501
+􀄵  Target Platform: arm64e-apple-macos14.0
+􀟈  Suite ConfigTests started.
+􀟈  Test shippedExampleConfigIsValidWithoutWarning() started.
+􁁛  Test shippedExampleConfigIsValidWithoutWarning() passed after 0.002 seconds.
+􁁛  Suite ConfigTests passed after 0.002 seconds.
+􁁛  Test run with 1 test in 1 suite passed after 0.002 seconds.

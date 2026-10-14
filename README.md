@@ -83,7 +83,7 @@ Keyboard Targets provide labels, search, inspection, activation, and JSON output
 
 The modular runtime splits `tiler`, `rail`, `border`, `focus-mouse`, `titlebar-menu`, and `target-mode` into separate processes. The standard modular launcher starts the full set. Using Roadie as a stage-only or overlay-only companion to another window manager still needs dedicated startup profiles.
 
-Native Spaces management, built-in global shortcut bindings, and a notarized public installer remain outside the current scope. Some listed CLI commands, such as `window close` and `toggle floating`, explicitly report that they are not implemented. The abandoned pin-popover redesign is not part of the delivered features.
+Native Spaces management, a general built-in shortcut engine, and a notarized public installer remain outside the current scope. The only global shortcut built into Roadie is `search_hotkey`, which opens search mode. Some listed CLI commands, such as `window close` and `toggle floating`, explicitly report that they are not implemented. The abandoned pin-popover redesign is not part of the delivered features.
 
 ## Documentation
 
@@ -537,7 +537,8 @@ Supported interactions:
 - Drag a thumbnail to an empty rail area to place it in an empty or newly created stage.
 - Drag an application window by its title bar onto a stage to move it there.
 - Drag an application window by its title bar onto empty rail space to place it in an empty or newly created stage.
-- Use the chevrons above and below a stage to reorder stages.
+- Drag a stage with the right mouse button to reorder stages.
+- Right-click a stage without dragging to open its menu: rename the stage, send the stage to another display, or send a window to another stage.
 - Clicks in macOS-reserved areas such as the menu bar are ignored by rail empty-click handling.
 
 Rail rendering is configured in `~/.config/roadies/roadies.toml`.

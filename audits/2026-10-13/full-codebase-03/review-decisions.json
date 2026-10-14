@@ -1,0 +1,106 @@
+{
+  "id_map": {
+    "raw-models-completion.json:MODEL-NEW-001": "PERF-010",
+    "raw-runtime-completion.json:RUNTIME-NEW-001": "PERF-011",
+    "raw-commands-completion.json:CMD-NEW-02": "PERF-012",
+    "raw-commands-completion.json:REL-021": "REL-021",
+    "raw-commands-completion.json:CMD-NEW-01": "REL-043",
+    "raw-targets-completion.json:TARGETS-NEW-001": "REL-044",
+    "raw-models-completion.json:MODEL-NEW-002": "REL-045",
+    "raw-runtime-completion.json:RUNTIME-NEW-002": "REL-046",
+    "raw-targets-completion.json:TARGETS-NEW-002": "REL-047",
+    "raw-targets-completion.json:TARGETS-NEW-003": "REL-048",
+    "raw-ui-completion.json:UI-NEW-001": "REL-049",
+    "raw-security-completion.json:REL-401": "REL-050",
+    "raw-models-completion.json:MODEL-NEW-003": "MIN-006",
+    "raw-security-completion.json:MIN-002": "MIN-007",
+    "raw-ui-completion.json:UI-NEW-003": "MIN-008"
+  },
+  "excluded": {
+    "raw-security-completion.json:MIN-001": "Non retenu : double appel dans self-test froid, aucun effet visible démontré ; le remplacement par une variable ne supprime pas de complexité significative.",
+    "raw-security-completion.json:REL-402": "Scénario réfuté : scripts/install:35-40 rejette une identité nommée inconnue avant copie ou signature. Un autre échec de codesign n’a pas été reproduit. Le pseudo-code de preuve contenait aussi des commentaires absents du source.",
+    "raw-security-completion.json:SEC-001": "Scénario réfuté tel que formulé : un répertoire 0755 ne permet pas à un autre utilisateur de créer le fichier stop. Précréation du chemin ou lien symbolique du journal prévisible restent des pistes non vérifiées, sans conclusion d’absence de risque.",
+    "raw-ui-completion.json:UI-NEW-002": "Non retenu : gap=0 interprété comme repli vers layout.spacing ; contrat utilisateur insuffisant pour affirmer que ce comportement est erroné."
+  },
+  "overrides": {
+    "raw-commands-completion.json:CMD-NEW-02": {
+      "title": "Le rapprochement rescane les mêmes candidats pour chaque membre absent",
+      "line": 1519,
+      "verification_status": "confirmé par lecture et contre-audit indépendant ; aucun benchmark exécuté",
+      "severity_review_required": false,
+      "remediation": "Construire une fois les groupes uniquement avec les fenêtres initialement non revendiquées. Remplacer le tri complet par une recherche des deux meilleurs scores en un passage. Conserver le Set des revendications de la passe pour empêcher les doubles attributions. Pour de gros groupes non résolus, un index géométrique ou une mémoïsation invalidée par les changements est nécessaire si une borne linéaire globale est exigée ; ne pas supprimer la garde d’ambiguïté.",
+      "remediation_code": "private func bestReplacement(\n    for member: PersistentStageMember,\n    in candidates: [WindowSnapshot],\n    claimed: Set<WindowID>\n) -> WindowSnapshot? {\n    var best: WindowSnapshot?\n    var bestScore = Double.greatestFiniteMagnitude\n    var secondScore = Double.greatestFiniteMagnitude\n    for window in candidates where !claimed.contains(window.id) {\n        let score = frameDistance(member.frame, window.frame)\n        if best == nil || score < bestScore {\n            secondScore = bestScore\n            best = window\n            bestScore = score\n        } else if score < secondScore {\n            secondScore = score\n        }\n    }\n    guard let best, bestScore <= 360, secondScore - bestScore >= 120 else { return nil }\n    return best\n}\n// Construire les listes après claimedWindowIDs, en excluant une fois les fenêtres déjà revendiquées :\nvar windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]\nfor window in tileableWindows where !claimedWindowIDs.contains(window.id) {\n    windowsBySignature[StableWindowSignature(window: window), default: []].append(window)\n}\n// Conserver claimedWindowIDs pendant la passe pour interdire toute double réattribution.\n// Mettre à jour la documentation : O(M + W + somme des tailles des groupes candidats examinés),\n// pas O(M + W) pour une phase de rapprochement géométrique avec plusieurs homonymes.",
+      "complexity_target": "Passe avec tous les candidats déjà revendiqués : O(M+W) ; rapprochement avec groupes homonymes non revendiqués : O(M+W+m*w) au pire après suppression du tri, à documenter honnêtement.",
+      "counter_audit_pending": false,
+      "verification": "Conserver les tests de PID vivant/mort, proximité, ambiguïté et candidat nettement meilleur. Ajouter une série de m anciens membres et w fenêtres nouvelles homonymes ambiguës ; instrumenter les visites de candidats. Répéter après adoption des w fenêtres. Le second appel ne doit plus visiter w candidats par ancien membre. Tester qu’aucune fenêtre ne peut être revendiquée par deux anciens membres et que les égalités de scores restent refusées."
+    },
+    "raw-runtime-completion.json:RUNTIME-NEW-002": {
+      "verification_status": "plausible : entrelacement interprocessus établi par lecture ; course non reproduite",
+      "exploitability": "LIKELY"
+    },
+    "raw-security-completion.json:REL-401": {
+      "title": "Le démarrage peut être annoncé en échec avant la fin de son initialisation",
+      "verification_status": "plausible : délai fixe confirmé ; démarrage lent non reproduit",
+      "exploitability": "LIKELY",
+      "verification": "Ajouter un test shell avec faux daemon et écriture du PID retardée. Vérifier succès après convergence et message de délai dépassé si le processus reste en initialisation. Ne pas lancer le vrai daemon pour ce test.",
+      "remediation": "Sonder le PID et le verrou avec un délai borné configurable, puis annoncer explicitement une absence de disponibilité dans ce délai. Ne pas annoncer avec certitude un échec du processus encore vivant.",
+      "remediation_code": ""
+    },
+    "raw-security-completion.json:MIN-002": {
+      "line": 61,
+      "evidence": "  local name=\"$1\"\n  local args=\"$2\"\n  local session=\"roadie-${name}\"",
+      "remediation_code": "",
+      "verification": "Vérifier la liste et les arguments avec une doublure de tmux dans les tests shell. Ne pas lancer les composants réels pour vérifier cette simplification.",
+      "removable_lines_estimate": 2
+    },
+    "raw-ui-completion.json:UI-NEW-003": {
+      "line": 25,
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)"
+    },
+    "raw-models-completion.json:MODEL-NEW-002": {
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)"
+    },
+    "raw-targets-completion.json:TARGETS-NEW-003": {
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)"
+    },
+    "raw-ui-completion.json:UI-NEW-001": {
+      "verification_status": "confirmé par lecture et sonde Swift pure exécutée (/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/validation/probe.log)"
+    }
+  },
+  "status_overrides": {
+    "REL-014": {
+      "id": "REL-014",
+      "status": "résolu",
+      "reason": "config reload est routé au daemon par isDaemonRouted ; le routeur utilise le ConfigReloadService partagé injecté. Le rechargement modifie donc le service actif.",
+      "evidence": [
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 348,
+          "note": "Routage de config reload au daemon."
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 579,
+          "note": "Appel au service de rechargement injecté."
+        }
+      ]
+    }
+  },
+  "counter_audits": {
+    "PERF-010": {
+      "verdict": "CONFIRMED",
+      "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-snapshot.json"
+    },
+    "PERF-011": {
+      "verdict": "CONFIRMED",
+      "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-layout.json"
+    },
+    "PERF-012": {
+      "verdict": "CONFIRMED",
+      "artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/counter-reconcile.json"
+    }
+  },
+  "complexity_note": "PERF-010 : reconstruction O(w²) par scans de suppression répétés ; construire les appartenances en une passe. PERF-011 : O(k×n²), donc O(n³) si k≈n ; dédupliquer les scopes avant validation pour revenir à une validation O(n²) par scope. PERF-012 : première passe O(m×w log w), puis O(m×w) répété pour les membres orphelins ; exclure une fois les candidats déjà revendiqués et chercher les deux meilleurs sans tri. Cette dernière correction ne garantit pas O(M+W) pour les groupes homonymes non résolus. Aucune borne effective ni choix de coût documenté ne neutralise ces chemins fréquents. Trois contre-audits indépendants confirment le niveau HIGH.",
+  "minimalism_lines": 63,
+  "minimalism_note": "MIN-006 : 3 lignes inaccessibles. MIN-007 : ~2 lignes de paramètre/extraction inutiles, plus simplification des six entrées. MIN-008 : ~58 lignes de sélection d’écran algébriquement redondantes. Estimation indicative, sans modification du source."
+}

@@ -1,0 +1,88 @@
+{
+  "module": "03",
+  "findings": [
+    {
+      "id": "OBS-002",
+      "category": "observability",
+      "subcategory": "utf8_tail",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/EventLog.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventLog.swift",
+      "line": 228,
+      "title": "Un caractère UTF-8 coupé rend la fin du journal entièrement vide",
+      "description": "tail lit des blocs de 64 Kio depuis la fin puis décode tous les octets collectés avant de sélectionner les dernières lignes. La frontière du bloc peut couper un caractère UTF-8 de la première ligne partielle. Le décodage échoue alors et retourne une liste vide, même lorsque les dernières lignes demandées sont complètes et valides.",
+      "evidence": "            let lineCount = data.reduce(0) { $0 + ($1 == 10 ? 1 : 0) }\n            if lineCount > limit { break }\n        }\n\n        guard let raw = String(data: data, encoding: .utf8) else { return [] }\n        return Array(raw.split(separator: \"\\n\").suffix(limit).map(String.init))",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture et sonde isolée utilisant le code compilé de la branche; aucun effet sur le bureau",
+      "exploitation_scenario": "Créer un journal UTF-8 de plus de 64 Kio dont les deux dernières lignes se trouvent dans le dernier bloc et dont l’octet situé à taille-65536 est le second octet de « é ». Appeler EventLog(path: chemin).tail(limit: 1). Les deux newlines arrêtent la lecture après un bloc; String(data:encoding:) échoue sur le préfixe UTF-8 incomplet et retourne [].",
+      "impact": "events tail et les synthèses de performance qui utilisent envelopes peuvent annoncer un journal vide ou zéro échantillon par intermittence.",
+      "path_type": "cold",
+      "remediation": "Sélectionner les dernières lignes sur les octets avant le décodage UTF-8. Ainsi le préfixe partiel qui ne fait pas partie du résultat n’invalide pas les lignes finales.",
+      "remediation_code": "return data.split(separator: 0x0A)\n    .suffix(limit)\n    .compactMap { String(data: Data($0), encoding: .utf8) }",
+      "verification": "Ajouter un journal de plus de 64 Kio avec la coupe au milieu de é puis d’un emoji, suivi de plusieurs lignes JSON complètes. Exiger les dernières lignes demandées et les événements décodés, sans résultat vide.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/EventLog.swift",
+          "line": 213
+        },
+        {
+          "file": "Sources/RoadieDaemon/PerformanceLogService.swift",
+          "line": 54
+        }
+      ],
+      "runtime_evidence": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/validation/probe-results.log",
+      "source_id": "OBS-301",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-security.json",
+      "remediation_applied": false,
+      "origin": "nouveau constat de cet audit; antériorité Git non attribuée sauf précision",
+      "fingerprint": "8dedcbbb8b68"
+    },
+    {
+      "id": "OBS-003",
+      "category": "observability",
+      "subcategory": "false_cleanup_success",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/FileAdministration.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileAdministration.swift",
+      "line": 220,
+      "title": "Le nettoyage annonce applied malgré une suppression refusée",
+      "description": "Plusieurs branches ignorent l’erreur de removeItem puis placent applied à true sans vérifier le résultat. Le rapport texte et le JSON annoncent alors une suppression réussie alors que le fichier existe encore. Le correctif de rotation stdout/stderr ne couvre pas ces branches de suppression.",
+      "evidence": "            var action = FileAdminAction(\n                kind: .delete,\n                path: url.path,\n                reason: reason,\n                sizeBytes: recursiveSize(url)\n            )\n            if !dryRun {\n                try? manager.removeItem(at: url)\n                action.applied = true\n            }",
+      "exploitability": "CONFIRMED",
+      "verification_status": "confirmé par lecture; scénario non exécuté",
+      "exploitation_scenario": "Dans un dossier de configuration temporaire non inscriptible, conserver plus de trois sauvegardes roadies.toml.bak-* puis appeler FileAdministrationService(configPath: chemin).run(dryRun: false) sans privilèges administrateur. removeItem échoue mais chaque action concernée porte applied=true.",
+      "impact": "Le diagnostic de nettoyage fournit une fausse réussite et masque les fichiers qui occupent encore le disque.",
+      "path_type": "cold",
+      "remediation": "Positionner applied uniquement après réussite de la suppression et conserver une erreur explicite dans le rapport ou stderr. Appliquer le même traitement aux sauvegardes d’événements et aux .DS_Store.",
+      "remediation_code": "if !dryRun {\n    do {\n        try manager.removeItem(at: url)\n        action.applied = true\n    } catch {\n        action.applied = false\n        fputs(\"roadie: cleanup failed for \\(url.path): \\(error)\\n\", stderr)\n    }\n}",
+      "verification": "Tester une suppression refusée par les permissions ou un FileManager simulé en échec. Exiger applied=false, un diagnostic et le fichier encore présent; conserver le test de suppression réussie.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [],
+      "status": "open",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 120
+        },
+        {
+          "file": "Sources/RoadieDaemon/FileAdministration.swift",
+          "line": 203
+        },
+        {
+          "file": "Sources/RoadieDaemon/Formatters.swift",
+          "line": 369
+        }
+      ],
+      "source_id": "OBS-302",
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-security.json",
+      "remediation_applied": false,
+      "origin": "nouveau constat de cet audit; antériorité Git non attribuée sauf précision",
+      "fingerprint": "ad1dbe725296"
+    }
+  ]
+}

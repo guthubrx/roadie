@@ -880,9 +880,11 @@ struct SnapshotServiceTests {
 
         #expect(snapshot.state.stage(scope: scope)?.mode == .masterStack)
         #expect(commands.map(\.window.id) == windows.map(\.id))
-        #expect(commands[0].frame == Rect(x: 0, y: 0, width: 100, height: 500))
-        #expect(commands[1].frame == Rect(x: 110, y: 0, width: 890, height: 245))
-        #expect(commands[2].frame == Rect(x: 110, y: 255, width: 890, height: 245))
+        // Fenêtres tout juste découvertes (stage sans membres) : leur largeur de 100 points est
+        // arbitraire, le `master_ratio` par défaut (0,6) s'applique : 594 = floor((1000 - 10) * 0,6).
+        #expect(commands[0].frame == Rect(x: 0, y: 0, width: 594, height: 500))
+        #expect(commands[1].frame == Rect(x: 604, y: 0, width: 396, height: 245))
+        #expect(commands[2].frame == Rect(x: 604, y: 255, width: 396, height: 245))
         try? FileManager.default.removeItem(atPath: stagePath)
         try? FileManager.default.removeItem(atPath: intentPath)
     }
@@ -3336,7 +3338,7 @@ struct SnapshotServiceTests {
                 PersistentStageScope(displayID: display, activeStageID: StageID(rawValue: "missing"), stages: [
                     PersistentStage(id: StageID(rawValue: "1"), focusedWindowID: WindowID(rawValue: 99), members: [
                         PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
-                        PersistentStageMember(windowID: stale.id, bundleID: stale.bundleID, title: stale.title, frame: stale.frame),
+                        PersistentStageMember(windowID: stale.id, bundleID: stale.bundleID, title: stale.title, frame: stale.frame, pid: stale.pid),
                     ]),
                     PersistentStage(id: StageID(rawValue: "2"), members: [
                         PersistentStageMember(windowID: live.id, bundleID: live.bundleID, title: live.title, frame: live.frame),
@@ -3366,7 +3368,7 @@ struct SnapshotServiceTests {
             stageStore: stageStore
         )
 
-        let report = StateAuditService(service: service, stageStore: stageStore).heal()
+        let report = StateAuditService(service: service, stageStore: stageStore).heal(isProcessAlive: { $0 != stale.pid })  // REL-002 : retrait sur preuve de fermeture
         var healed = stageStore.state()
         let scope = healed.scope(displayID: display, desktopID: DesktopID(rawValue: 1))
 
@@ -4437,5 +4439,79 @@ struct ConfigHotReloadTests {
         try write("[tiling]\ngaps_inner = 12\n", to: url)
         #expect(service.currentConfig().tiling.gapsInner == 12)
         #expect(service.state.lastValidation == .success)
+    }
+}
+
+/// REL-030 : `master_ratio` de la configuration arrive au plan master-stack du daemon.
+/// Deux cas :
+/// - géométrie existante (fenêtres déjà membres de la stage) : le moteur garde une largeur en place
+///   (maître actuel, ou bord de la pile collé au bord droit) et se sert du ratio configuré pour
+///   choisir entre elles : ici 30 % ou 70 % ;
+/// - nouvelles fenêtres (tout juste découvertes, largeur arbitraire donnée par macOS) : leur largeur
+///   est ignorée et le ratio configuré s'applique : ici 80 % ou 20 %.
+@Suite
+struct MasterRatioWiringTests {
+    @Test
+    func configuredMasterRatioDrivesTheMasterStackPlan() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let master = powerWindow(10, x: 0, y: 0)
+        let other = powerWindow(20, x: 700, y: 0)
+        func masterWidth(_ ratio: Double) -> Double? {
+            let store = StageStore(path: tempPath("master-ratio-wiring-\(ratio)"))
+            store.save(PersistentStageState(
+                scopes: [
+                    PersistentStageScope(displayID: display.id, activeStageID: StageID(rawValue: "1"), stages: [
+                        PersistentStage(id: StageID(rawValue: "1"), mode: .masterStack, members: [
+                            PersistentStageMember(windowID: master.id, bundleID: master.bundleID, title: master.title, frame: master.frame),
+                            PersistentStageMember(windowID: other.id, bundleID: other.bundleID, title: other.title, frame: other.frame),
+                        ]),
+                    ]),
+                ],
+                activeDisplayID: display.id
+            ))
+            let service = SnapshotService(
+                provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [master, other]),
+                frameWriter: RecordingWriter(),
+                config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .masterStack, gapsOuter: 0, gapsInner: 0, masterRatio: ratio)),
+                // Stockage dédié : sinon une disposition mémorisée par un autre test remplace le plan.
+                intentStore: LayoutIntentStore(path: tempPath("master-ratio-intents-\(ratio)")),
+                stageStore: store
+            )
+            let plan = service.applyPlan(from: service.snapshot(followFocus: false))
+            return plan.commands.first { $0.window.id == master.id }?.frame.width
+        }
+
+        #expect(masterWidth(0.8) == 300)
+        #expect(masterWidth(0.2) == 700)
+    }
+
+    @Test
+    func configuredMasterRatioAppliesToNewlyDiscoveredWindows() {
+        let display = powerDisplay("display-main", index: 1, x: 0)
+        let master = powerWindow(10, x: 0, y: 0)
+        let other = powerWindow(20, x: 700, y: 0)
+        func frames(_ ratio: Double) -> (master: Double?, other: Double?, otherX: Double?) {
+            // Stockage vide : les deux fenêtres sont découvertes pendant ce snapshot (isNewlyScoped).
+            let service = SnapshotService(
+                provider: FakeProvider(displaySnapshots: [display], windowSnapshots: [master, other]),
+                frameWriter: RecordingWriter(),
+                config: RoadieConfig(tiling: TilingConfig(defaultStrategy: .masterStack, gapsOuter: 0, gapsInner: 0, masterRatio: ratio)),
+                intentStore: LayoutIntentStore(path: tempPath("master-ratio-new-intents-\(ratio)")),
+                stageStore: StageStore(path: tempPath("master-ratio-new-\(ratio)"))
+            )
+            let snapshot = service.snapshot(followFocus: false)
+            let allNew = snapshot.windows.allSatisfy { $0.isNewlyScoped }
+            #expect(allNew)
+            let plan = service.applyPlan(from: snapshot)
+            let masterCommand = plan.commands.first { $0.window.id == master.id }
+            let otherCommand = plan.commands.first { $0.window.id == other.id }
+            return (masterCommand?.frame.width, otherCommand?.frame.width, otherCommand?.frame.x)
+        }
+
+        let wide = frames(0.8)
+        #expect(wide.master == 800)
+        #expect(wide.other == 200)
+        #expect(wide.otherX == 800)
+        #expect(frames(0.2).master == 200)
     }
 }

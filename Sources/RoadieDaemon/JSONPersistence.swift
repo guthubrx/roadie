@@ -47,7 +47,9 @@ enum JSONPersistence {
     ///   sur le meme fichier pris depuis `body` (via `mutate`, `writeThrowing` ou un store) ouvrirait
     ///   un autre descripteur et bloquerait le processus sur lui-meme.
     /// - Erreurs d'I/O (verrou, encodage, ecriture) : journalisees sur stderr, rien n'est ecrit,
-    ///   aucune exception (seules les erreurs de `body` sont propagees).
+    ///   aucune exception (seules les erreurs de `body` sont propagees). Le resultat de `body` est
+    ///   donc rendu meme si rien n'a ete persiste : un appelant qui doit le savoir utilise
+    ///   `mutateChecked` (REL-021).
     /// - Fichier illisible : `body` travaille sur `defaultValue`, rien n'est ecrit (FR-015).
     /// - Le signalement (copie, stderr, evenement) a lieu apres la sortie du verrou.
     /// - Valeur inchangee (`Equatable`) : ni encodage ni ecriture (FR-014). Fichier absent : la valeur
@@ -59,6 +61,50 @@ enum JSONPersistence {
         at url: URL,
         default defaultValue: T,
         label: String,
+        _ body: (inout T) throws -> R
+    ) rethrows -> R {
+        try mutateCore(type, at: url, default: defaultValue, label: label, onFailure: { fputs("roadie: \($0)\n", stderr) }, body)
+    }
+
+    /// Erreur de persistance rendue par `mutateChecked` : la modification n'est pas sur disque.
+    struct PersistenceError: Error, CustomStringConvertible {
+        let description: String
+    }
+
+    /// Message d'une commande dont l'état n'a pas été écrit (REL-021), journalisé sur stderr.
+    /// Le code de sortie vient du statut `failed` du résultat (`CommandResult`), pas de ce texte.
+    static func commandFailureMessage(_ command: String, _ error: Error) -> String {
+        fputs("roadie: \(command): \(error)\n", stderr)
+        return "\(command): failed, \(error)"
+    }
+
+    /// Comme `mutate`, mais une modification non persistee (verrou impossible, fichier illisible,
+    /// ecriture en echec) leve `PersistenceError` au lieu d'un succes silencieux (REL-021).
+    /// Verrou impossible ou fichier illisible : `body` n'est pas execute. Ecriture en echec :
+    /// `body` a ete execute, son resultat est perdu et le fichier d'origine reste intact.
+    @discardableResult
+    static func mutateChecked<T: Codable & Equatable, R>(
+        _ type: T.Type,
+        at url: URL,
+        default defaultValue: T,
+        label: String,
+        _ body: (inout T) throws -> R
+    ) throws -> R {
+        try mutateCore(
+            type, at: url, default: defaultValue, label: label,
+            onFailure: { throw PersistenceError(description: $0) },
+            body
+        )
+    }
+
+    /// Corps commun. `onFailure` recoit le message d'un echec de persistance : `mutate` le
+    /// journalise et continue, `mutateChecked` leve.
+    private static func mutateCore<T: Codable & Equatable, R>(
+        _ type: T.Type,
+        at url: URL,
+        default defaultValue: T,
+        label: String,
+        onFailure: (String) throws -> Void,
         _ body: (inout T) throws -> R
     ) rethrows -> R {
         var corruptError: Error?
@@ -74,7 +120,7 @@ enum JSONPersistence {
             )
             try lock.acquire(mode: .exclusive)
         } catch {
-            fputs("roadie: \(label) not persisted, lock failed: \(error)\n", stderr)
+            try onFailure("\(label) not persisted, lock failed: \(error)")
             var value = load(type, from: url, default: defaultValue)
             return try body(&value)
         }
@@ -88,7 +134,7 @@ enum JSONPersistence {
             original = nil
         case .corrupt(let error):
             corruptError = error
-            fputs("roadie: \(label) not persisted, state file is unreadable\n", stderr)
+            try onFailure("\(label) not persisted, state file is unreadable")
             var fallback = defaultValue
             return try body(&fallback)
         }
@@ -99,7 +145,7 @@ enum JSONPersistence {
             try writeLocked(value, to: url, existing: nil)
             publish(value, at: url, signature: FileSignature(path: url.path))
         } catch {
-            fputs("roadie: failed to persist \(label): \(error)\n", stderr)
+            try onFailure("failed to persist \(label): \(error)")
         }
         return output
     }

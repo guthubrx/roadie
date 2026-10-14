@@ -1,0 +1,49 @@
+{
+  "module": "08",
+  "findings": [
+    {
+      "id": "PERF-006",
+      "category": "performance",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+      "line": 205,
+      "title": "Le menu désactivé déclenche quand même un relevé complet à chaque clic droit",
+      "description": "start installe ses deux moniteurs sans garde enabled. handleRightMouseDown appelle snapshot avant hitTest, seule fonction qui refuse le mode désactivé. snapshot interroge provider.windows et réconcilie l’état; ce travail tourne sur MainActor.",
+      "evidence": "    public func handleRightMouseDown(at point: CGPoint, source: String = \"unknown\") -> Bool {\n        let settings = TitlebarContextMenuSettings(config: configLoader().experimental.titlebarContextMenu)\n        let snapshot = snapshotService.snapshot()\n        let axPoint = Self.appKitPointToAX(point)\n        let hit = Self.hitTest(point: axPoint, snapshot: snapshot, settings: settings)\n        traceClick(source: source, rawPoint: point, axPoint: axPoint, hit: hit, snapshot: snapshot, settings: settings)\n        guard hit.isEligible, let window = hit.window, let windowID = hit.windowID else {\n            logIgnored(hit: hit, window: hit.window)\n            return false",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Conserver experimental.titlebar_context_menu.enabled=false, valeur par défaut. Démarrer le daemon standard sans --no-titlebar-menu. Faire un clic droit dans une autre application : le moniteur global appelle snapshot avant de conclure disabled.",
+      "impact": "Coût Accessibility et accès aux fichiers inutiles sur le fil de l’interface. Aucune latence en millisecondes n’a été mesurée.",
+      "path_type": "hot",
+      "remediation": "Placer guard settings.enabled else { return false } avant le snapshot. Garder les moniteurs si nécessaire pour le rechargement à chaud.",
+      "verification": "Injecter un provider compteur. Appeler handleRightMouseDown avec enabled=false et vérifier zéro appel windows/displays et zéro écriture de store.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; scénario UI non exécuté",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 170,
+          "evidence": "        guard monitors.isEmpty else { return }\n        NSApplication.shared.setActivationPolicy(.accessory)\n        let config = configLoader().experimental.titlebarContextMenu\n        debug(\"start enabled=\\(config.enabled) height=\\(config.height) leading=\\(config.leadingExclusion) trailing=\\(config.trailingExclusion)\")\n        if let local = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown], handler: { [weak self] event in\n            guard let self else { return event }\n            return self.handleRightMouseDown(at: NSEvent.mouseLocation, source: \"local\") ? nil : event"
+        },
+        {
+          "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 224,
+          "evidence": "        let permissions = provider.permissions(prompt: promptForPermissions)\n        let displays = provider.displays()\n        if producer, persistStateChanges, processState.claimLegacyTreeMigration() {\n            migrateLegacyTreeModes(displays: displays)\n        }\n        let rawWindows = provider.windows()"
+        },
+        {
+          "file": "Sources/roadied/main.swift",
+          "line": 443,
+          "note": "Composant lancé sauf --no-titlebar-menu."
+        }
+      ],
+      "source_artifact": "/Users/moi/Nextcloud/10.Scripts/39.roadie/audits/2026-10-13/full-codebase-01/raw-docs-quality.json",
+      "source_id": "PERF-DQ-001",
+      "remediation_applied": false,
+      "measurement_status": "Complexité établie par lecture; aucune latence ni allocation mesurée sur le bureau réel.",
+      "performance_validation": "Comparer durée et allocations sur la même entrée, avant/après. Vérifier les résultats et leur ordre. Retirer le correctif ciblé si un comportement ou une mesure régresse.",
+      "fingerprint": "249a153738c4"
+    }
+  ]
+}

@@ -561,6 +561,7 @@ public struct SnapshotService {
             focusedID = activeFocusedWindowID(in: state, scopedWindows: scopedWindows, displays: displays)
         }
         reconcileTrees(in: &persistedStages, input: input)
+        applyPersistedMetadata(to: &state, from: persistedStages)
         return Reconciliation(
             state: state,
             scopedWindows: scopedWindows,
@@ -571,13 +572,47 @@ public struct SnapshotService {
         )
     }
 
+    /// REL-005 : l'état runtime reprend, pour chaque écran présent, les desktops, labels et stages
+    /// persistés (nom et mode), stages vides comprises. Sans cela, il ne contient que la stage
+    /// active et celles des fenêtres vivantes, sous un nom générique. Une stage déjà créée (stage 1
+    /// par défaut d'un desktop, stage d'une fenêtre vivante) reçoit aussi le nom et le mode
+    /// persistés ; ses fenêtres et son focus ne changent pas. Un desktop non courant reprend sa
+    /// stage active persistée ; celle du desktop courant reste celle décidée plus haut (focus suivi).
+    // O(s + d·l) - s stages persistées, d desktops runtime, l labels persistés (bornés).
+    private func applyPersistedMetadata(to state: inout RoadieState, from persistedStages: PersistentStageState) {
+        var displays = state.displays
+        for scope in persistedStages.scopes {
+            guard let display = displays[scope.displayID] else { continue }
+            var desktop = display.desktops[scope.desktopID]
+                ?? DesktopState(id: scope.desktopID, activeStageID: scope.activeStageID)
+            for persisted in scope.stages {
+                if desktop.stages[persisted.id] == nil {
+                    desktop.stages[persisted.id] = StageState(id: persisted.id, name: persisted.name, mode: persisted.mode)
+                } else {
+                    desktop.stages[persisted.id]?.name = persisted.name
+                    desktop.stages[persisted.id]?.mode = persisted.mode
+                }
+            }
+            if scope.desktopID != display.currentDesktopID, desktop.stages[scope.activeStageID] != nil {
+                desktop.activeStageID = scope.activeStageID
+            }
+            displays[scope.displayID]?.desktops[scope.desktopID] = desktop
+        }
+        for (displayID, display) in displays {
+            for desktopID in display.desktops.keys {
+                displays[displayID]?.desktops[desktopID]?.label = persistedStages.label(displayID: displayID, desktopID: desktopID)
+            }
+        }
+        state = RoadieState(displays: displays)
+    }
+
     /// Réconciliation unique des arbres des stages à arbre, sous le verrou du snapshot (SPEC-017
     /// T081, A9). La feuille d'un membre absent (plein écran natif, autre bureau) est gardée tant que
     /// le membre existe, donc pendant sa grâce réelle de 30 min : la fenêtre reprend sa place à son
     /// retour (FR-007). Elle est retirée à la purge du membre, à son départ de la stage, à son
     /// épinglage ou sur destruction confirmée. Une fenêtre vivante sans feuille coupe la feuille
     /// active selon la forme de cette feuille (R3). Ne lit aucune géométrie de fenêtre (FR-003).
-    // O(Σ m·f) - m membres et f feuilles par stage à arbre (insertion O(f)), bornés.
+    // O(Σ (f + m)) par stage à arbre sans insertion, voir `reconciledTree`.
     private func reconcileTrees(in persistedStages: inout PersistentStageState, input: ReconciliationInput) {
         let side: BSPInsertionSide = input.config.windowPlacement.newWindowSide == "left" ? .left : .right
         let innerGap = CGFloat(input.config.tiling.gapsInner)
@@ -589,28 +624,53 @@ public struct SnapshotService {
             for stageIndex in persistentScope.stages.indices where persistentScope.stages[stageIndex].mode.usesTreeEngine {
                 let stage = persistentScope.stages[stageIndex]
                 let kept = Set(stage.members.map(\.windowID)).subtracting(input.destroyedWindowIDs).subtracting(pinned)
-                var tree = stage.bspTree ?? .empty
-                for id in tree.windowIDs where !kept.contains(id) {
-                    tree = tree.removing(id)
-                }
-                let absent = Set(tree.windowIDs).subtracting(input.stageManagedWindowIDs)
-                var anchor = Self.bspInsertionAnchor(
-                    tree: tree,
+                let tree = Self.reconciledTree(
+                    stage.bspTree ?? .empty,
+                    stage: stage,
+                    kept: kept,
                     live: input.stageManagedWindowIDs,
                     globalFocus: input.providerFocusedID,
-                    stage: stage
+                    side: side,
+                    container: container,
+                    innerGap: innerGap
                 )
-                for member in stage.members where kept.contains(member.windowID)
-                    && input.stageManagedWindowIDs.contains(member.windowID)
-                    && !tree.contains(member.windowID) {
-                    tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
-                    anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
-                }
                 let next: BSPTree? = tree.isEmpty && stage.bspTree == nil ? nil : tree
                 guard next != stage.bspTree else { continue }
                 persistedStages.scopes[scopeIndex].stages[stageIndex].bspTree = next
             }
         }
+    }
+
+    /// Arbre d'une stage après réconciliation : feuilles hors de `kept` retirées, puis membres
+    /// vivants sans feuille insérés dans l'ordre des membres. Les feuilles sont collectées une
+    /// seule fois ; l'ensemble `leaves` sert à l'appartenance et suit les insertions (PERF-002).
+    /// La projection retire toutes les feuilles d'un coup, avec le même arbre que des retraits
+    /// successifs : chaque retrait remplace un split par son côté restant.
+    // Avant : O(f² + k·f + m·f) sur un arbre en chaîne (deux lectures de `windowIDs`, un `removing`
+    // par feuille retirée, un `contains` par membre). Après : O(f + m) sans insertion, plus
+    // O(f²) par insertion réelle (`inserting`, voir BSPTree) - f feuilles, k retirées, m membres.
+    static func reconciledTree(
+        _ initial: BSPTree,
+        stage: PersistentStage,
+        kept: Set<WindowID>,
+        live: Set<WindowID>,
+        globalFocus: WindowID?,
+        side: BSPInsertionSide,
+        container: CGRect,
+        innerGap: CGFloat
+    ) -> BSPTree {
+        var leaves = Set(initial.windowIDs)
+        let removed = leaves.subtracting(kept)
+        var tree = initial.projected(excluding: removed)
+        leaves.subtract(removed)
+        let absent = leaves.subtracting(live)
+        var anchor = bspInsertionAnchor(leaves: leaves, live: live, globalFocus: globalFocus, stage: stage)
+        for member in stage.members where kept.contains(member.windowID) && live.contains(member.windowID) {
+            guard leaves.insert(member.windowID).inserted else { continue }
+            tree = tree.inserting(member.windowID, at: anchor, side: side, in: container, innerGap: innerGap, excluding: absent)
+            anchor = member.windowID // une rafale se greffe à côté de la dernière insérée
+        }
+        return tree
     }
 
     /// Migration SPEC-017 (T082, A8) des stages `mutableBsp`, une fois par processus producteur :
@@ -1317,13 +1377,33 @@ public extension SnapshotService {
 
     /// Quitte le zoom par le mécanisme propre au mode : arbre, intent valide ou cadres float.
     /// O(w log w) en mode arbre ; O(w²) pour valider les placements sans arbre.
+    /// Maintenance : un échec d'écriture des intents est journalisé et la sortie de zoom continue.
     func restoreZoomLayoutIntent(
         scope: StageScope,
         from snapshot: DaemonSnapshot,
         generation: UInt64 = PlacementGeneration.shared.current
     ) -> ApplyPlan {
+        restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.remove(scope:), save: intentStore.save)
+    }
+
+    /// Variante des commandes (REL-021) : lève si l'intent n'a pas été écrit, avant tout plan.
+    func restoreZoomLayoutIntentChecked(
+        scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        generation: UInt64 = PlacementGeneration.shared.current
+    ) throws -> ApplyPlan {
+        try restoreZoom(scope: scope, from: snapshot, generation: generation, remove: intentStore.removeChecked(scope:), save: intentStore.saveChecked)
+    }
+
+    private func restoreZoom(
+        scope: StageScope,
+        from snapshot: DaemonSnapshot,
+        generation: UInt64,
+        remove: (StageScope) throws -> Void,
+        save: (LayoutIntent) throws -> Void
+    ) rethrows -> ApplyPlan {
         let zoom = commandLayoutIntent(scope: scope)
-        removeLayoutIntent(scope: scope)
+        try remove(scope)
         let entries = snapshot.windows.filter { $0.scope == scope && $0.window.isTileCandidate }
         let mode = snapshot.state.stage(scope: scope)?.mode
         if let saved = zoom?.restorePlacements, mode == .float {
@@ -1337,7 +1417,7 @@ public extension SnapshotService {
             let liveIDs = Set(entries.map(\.window.id))
             let ordered = zoom.windowIDs.filter(liveIDs.contains)
             if liveIDs == Set(ordered), liveIDs.isSubset(of: Set(saved.keys)) {
-                intentStore.save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))
+                try save(LayoutIntent(scope: scope, windowIDs: ordered, placements: saved, source: .command))
                 _ = validIntent(for: scope, from: snapshot)
             }
         }
@@ -1369,6 +1449,7 @@ public extension SnapshotService {
         saveLayoutIntent(scope: scope, windowIDs: windowIDs, placements: placements, source: .auto)
     }
 
+    /// Maintenance : un échec d'écriture est journalisé sur stderr, comme `LayoutIntentStore.save`.
     func saveLayoutIntent(
         scope: StageScope,
         windowIDs: [WindowID],
@@ -1376,11 +1457,33 @@ public extension SnapshotService {
         source: LayoutIntent.Source,
         zoomedWindowID: WindowID? = nil
     ) {
+        do {
+            try saveLayoutIntentChecked(
+                scope: scope,
+                windowIDs: windowIDs,
+                placements: placements,
+                source: source,
+                zoomedWindowID: zoomedWindowID
+            )
+        } catch {
+            fputs("roadie: \(error)\n", stderr)
+        }
+    }
+
+    /// Variante des commandes (REL-021) : lève `JSONPersistence.PersistenceError` si l'intent
+    /// n'a pas été écrit, au lieu d'un succès silencieux.
+    func saveLayoutIntentChecked(
+        scope: StageScope,
+        windowIDs: [WindowID],
+        placements: [WindowID: Rect],
+        source: LayoutIntent.Source,
+        zoomedWindowID: WindowID? = nil
+    ) throws {
         // Une observation automatique actualise les cadres acceptés sans remplacer le zoom
         // logique ni sa disposition à restaurer (nouvelle voisine, recalage de largeur du rail).
         if source == .auto, zoomedWindowID == nil,
            commandLayoutIntent(scope: scope)?.zoomedWindowID != nil {
-            intentStore.mutate { stored in
+            try intentStore.mutateChecked { stored in
                 guard var zoom = stored[scope.description], zoom.source == .command,
                       zoom.zoomedWindowID != nil else { return }
                 let liveIDs = Set(windowIDs)
@@ -1399,7 +1502,7 @@ public extension SnapshotService {
                .stages.first(where: { $0.id == scope.stageID })?.mode.usesTreeEngine == true {
             return
         }
-        intentStore.save(LayoutIntent(
+        try intentStore.saveChecked(LayoutIntent(
             scope: scope,
             windowIDs: windowIDs,
             placements: placements,
@@ -1408,14 +1511,21 @@ public extension SnapshotService {
         ))
     }
 
+    /// Maintenance : échec journalisé par le store, sans effet sur l'appelant.
     func removeLayoutIntent(scope: StageScope) {
         intentStore.remove(scope: scope)
     }
 
-    func removeLayoutIntents(in snapshot: DaemonSnapshot) {
+    /// Variante des commandes (REL-021) : lève si la suppression n'a pas été écrite.
+    func removeLayoutIntentChecked(scope: StageScope) throws {
+        try intentStore.removeChecked(scope: scope)
+    }
+
+    /// Commande `balance` (REL-021) : lève dès qu'une suppression n'a pas été écrite.
+    func removeLayoutIntents(in snapshot: DaemonSnapshot) throws {
         for display in snapshot.displays {
             guard let scope = snapshot.state.activeScope(on: display.id) else { continue }
-            intentStore.remove(scope: scope)
+            try intentStore.removeChecked(scope: scope)
         }
     }
 
@@ -1571,7 +1681,8 @@ public extension SnapshotService {
             newWindowIDs: newWindowIDs,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: liveOrderedWindowIDs.count, display: display),
-            innerGap: config.tiling.gapsInner
+            innerGap: config.tiling.gapsInner,
+            masterRatio: config.tiling.masterRatio
         ))
     }
 
@@ -1579,14 +1690,14 @@ public extension SnapshotService {
     /// de l'arbre parmi le focus global, le focus de la stage et son focus précédent ; `nil` sinon
     /// (insertion sur la première feuille). Le focus global seul ne suffit pas : c'est souvent la
     /// nouvelle fenêtre elle-même, et la stage l'a déjà adoptée comme focus (le précédent reste).
-    // O(f) - f = feuilles de l'arbre.
+    // O(f) - f = feuilles de l'arbre, déjà collectées par l'appelant.
     fileprivate static func bspInsertionAnchor(
-        tree: BSPTree,
+        leaves: Set<WindowID>,
         live: Set<WindowID>,
         globalFocus: WindowID?,
         stage: PersistentStage
     ) -> WindowID? {
-        let anchors = Set(tree.windowIDs).intersection(live)
+        let anchors = leaves.intersection(live)
         return [globalFocus, stage.focusedWindowID, stage.previousFocusedWindowID]
             .lazy
             .compactMap { $0 }
@@ -1653,7 +1764,7 @@ public extension SnapshotService {
         guard frames.count == intent.windowIDs.count else { return false }
         guard frames.allSatisfy({ container.contains($0, tolerance: LayoutTolerance.intentContainerSlack) }) else { return false }
         guard !framesContainSignificantOverlap(frames) else { return false }
-        guard !framesLeaveLargeUntiledCells(
+        guard !Self.framesLeaveLargeUntiledCells(
             frames,
             in: container,
             allowedGap: CGFloat(config.tiling.gapsInner) + LayoutTolerance.intentUntiledGapSlack
@@ -1674,7 +1785,13 @@ public extension SnapshotService {
         }
     }
 
-    private func framesLeaveLargeUntiledCells(
+    /// Vrai si une cellule de la grille des bords (largeur et hauteur > tolérance, dans le
+    /// conteneur) n'a son centre dans aucun cadre élargi de 1 pt : un trou de disposition.
+    /// Chaque cadre couvre un intervalle contigu de colonnes et un de lignes de centres, trouvés une
+    /// fois par dichotomie. Chaque colonne cumule ensuite les intervalles de lignes des cadres qui la
+    /// couvrent (tableau de différences) au lieu de tester tous les cadres pour chaque cellule.
+    // Avant : O(n³) (O(n²) cellules × n cadres). Après : O(n²) temps, O(n) mémoire - n cadres.
+    static func framesLeaveLargeUntiledCells(
         _ frames: [CGRect],
         in container: CGRect,
         allowedGap: CGFloat
@@ -1683,36 +1800,61 @@ public extension SnapshotService {
         let tolerance = max(LayoutTolerance.untiledCell, allowedGap)
         let xEdges = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })
         let yEdges = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })
+        let columnCount = max(0, xEdges.count - 1)
+        let rowCount = max(0, yEdges.count - 1)
+        guard columnCount > 0, rowCount > 0 else { return false }
+        // Centres calculés comme `midX`/`midY` de la cellule : mêmes valeurs que le test point par point.
+        let xCenters = (0..<columnCount).map {
+            CGRect(x: xEdges[$0], y: 0, width: xEdges[$0 + 1] - xEdges[$0], height: 0).midX
+        }
+        let yCenters = (0..<rowCount).map {
+            CGRect(x: 0, y: yEdges[$0], width: 0, height: yEdges[$0 + 1] - yEdges[$0]).midY
+        }
+        // Centres c avec minimum - 1 <= c <= maximum + 1 (tolérance 1 pt), centres triés.
+        let spans: [(columns: Range<Int>, rows: Range<Int>)] = frames.compactMap { frame in
+            let columns = centerRange(xCenters, from: frame.minX - 1, to: frame.maxX + 1)
+            let rows = centerRange(yCenters, from: frame.minY - 1, to: frame.maxY + 1)
+            return columns.isEmpty || rows.isEmpty ? nil : (columns, rows)
+        }
 
-        for xIndex in 0..<max(0, xEdges.count - 1) {
-            let minX = xEdges[xIndex]
-            let maxX = xEdges[xIndex + 1]
-            let width = maxX - minX
+        var rowDelta = [Int](repeating: 0, count: rowCount + 1)
+        for column in 0..<columnCount {
+            let width = xEdges[column + 1] - xEdges[column]
             guard width > tolerance else { continue }
-            for yIndex in 0..<max(0, yEdges.count - 1) {
-                let minY = yEdges[yIndex]
-                let maxY = yEdges[yIndex + 1]
-                let height = maxY - minY
-                guard height > tolerance else { continue }
-                let cell = CGRect(x: minX, y: minY, width: width, height: height)
-                guard container.contains(cell, tolerance: 1),
-                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })
-                else { continue }
-                return true
+            for index in rowDelta.indices { rowDelta[index] = 0 }
+            for span in spans where span.columns.contains(column) {
+                rowDelta[span.rows.lowerBound] += 1
+                rowDelta[span.rows.upperBound] -= 1
+            }
+            var coveringFrames = 0
+            for row in 0..<rowCount {
+                coveringFrames += rowDelta[row]
+                let height = yEdges[row + 1] - yEdges[row]
+                guard coveringFrames == 0, height > tolerance else { continue }
+                let cell = CGRect(x: xEdges[column], y: yEdges[row], width: width, height: height)
+                if container.contains(cell, tolerance: 1) { return true }
             }
         }
         return false
     }
 
-    private func frameContainsCellCenter(_ frame: CGRect, cell: CGRect, tolerance: CGFloat) -> Bool {
-        let point = CGPoint(x: cell.midX, y: cell.midY)
-        return point.x >= frame.minX - tolerance
-            && point.y >= frame.minY - tolerance
-            && point.x <= frame.maxX + tolerance
-            && point.y <= frame.maxY + tolerance
+    /// Indices des valeurs triées comprises dans [lower, upper]. O(log n) par dichotomie.
+    private static func centerRange(_ sorted: [CGFloat], from lower: CGFloat, to upper: CGFloat) -> Range<Int> {
+        func firstIndex(where isPast: (CGFloat) -> Bool) -> Int {
+            var low = 0
+            var high = sorted.count
+            while low < high {
+                let middle = (low + high) / 2
+                if isPast(sorted[middle]) { high = middle } else { low = middle + 1 }
+            }
+            return low
+        }
+        let start = firstIndex { $0 >= lower }
+        let end = firstIndex { $0 > upper }
+        return start < end ? start..<end : start..<start
     }
 
-    private func sortedEdges(_ values: [CGFloat]) -> [CGFloat] {
+    private static func sortedEdges(_ values: [CGFloat]) -> [CGFloat] {
         let sorted = values.sorted()
         return sorted.reduce(into: [CGFloat]()) { result, value in
             if result.last.map({ abs($0 - value) > 1 }) ?? true {
@@ -1730,7 +1872,8 @@ public extension SnapshotService {
             windowIDs: intent.windowIDs,
             splitPolicy: config.tiling.splitPolicy,
             outerGaps: outerGaps(windowCount: intent.windowIDs.count, display: display),
-            innerGap: config.tiling.gapsInner
+            innerGap: config.tiling.gapsInner,
+            masterRatio: config.tiling.masterRatio
         ))
         return plan.placements.values.reduce(CGFloat(0)) { $0 + $1.area }
     }
@@ -1944,9 +2087,7 @@ private extension SnapshotService {
 
         let horizontal = container.width >= container.height
         let leftCount = windowIDs.count / 2
-        let sorted = windowIDs.sorted { lhs, rhs in
-            spatiallyComesBefore(lhs, rhs, frames: frames, horizontal: horizontal)
-        }
+        let sorted = spatialSortOrder(windowIDs, frames: frames, horizontal: horizontal)
         let left = Array(sorted.prefix(leftCount))
         let right = Array(sorted.dropFirst(leftCount))
 
@@ -1966,31 +2107,45 @@ private extension SnapshotService {
             + spatiallyOrdered(right, frames: frames, container: rightRect)
     }
 
-    func spatiallyComesBefore(
-        _ lhs: WindowID,
-        _ rhs: WindowID,
-        frames: [WindowID: CGRect],
-        horizontal: Bool
-    ) -> Bool {
-        guard let lhsFrame = frames[lhs], let rhsFrame = frames[rhs] else {
-            return lhs < rhs
+    /// Ordre total (REL-006). L'ancien comparateur changeait d'axe selon l'écart de deux centres :
+    /// relation non transitive, résultat dépendant de l'ordre d'entrée. Les bandes sont formées une
+    /// seule fois sur l'axe principal, puis sur l'axe secondaire dans chaque bande principale. Tri par
+    /// bande principale, bande secondaire, puis ID : comme avant, deux fenêtres alignées sur les deux
+    /// axes restent dans l'ordre de leurs ID. Fenêtre sans cadre : après les autres, par ID.
+    // O(n log n) - n fenêtres du conteneur.
+    func spatialSortOrder(_ windowIDs: [WindowID], frames: [WindowID: CGRect], horizontal: Bool) -> [WindowID] {
+        let placed = windowIDs.compactMap { id in
+            frames[id].map { (id: id, primary: horizontal ? $0.midX : $0.midY, secondary: horizontal ? $0.midY : $0.midX) }
         }
-        if horizontal {
-            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midX < rhsFrame.midX
+        .sorted { ($0.primary, $0.id) < ($1.primary, $1.id) }
+        let primaryBands = alignmentBands(placed.map(\.primary))
+        var keys: [(primary: Int, secondary: Int, id: WindowID)] = []
+        var runStart = 0
+        while runStart < placed.count {
+            var runEnd = runStart + 1
+            while runEnd < placed.count, primaryBands[runEnd] == primaryBands[runStart] { runEnd += 1 }
+            let run = placed[runStart..<runEnd].sorted { ($0.secondary, $0.id) < ($1.secondary, $1.id) }
+            for (entry, secondaryBand) in zip(run, alignmentBands(run.map(\.secondary))) {
+                keys.append((primaryBands[runStart], secondaryBand, entry.id))
             }
-            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midY < rhsFrame.midY
-            }
-        } else {
-            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midY < rhsFrame.midY
-            }
-            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {
-                return lhsFrame.midX < rhsFrame.midX
-            }
+            runStart = runEnd
         }
-        return lhs < rhs
+        let unplaced = windowIDs.filter { frames[$0] == nil }.sorted()
+        return keys.sorted { ($0.primary, $0.secondary, $0.id) < ($1.primary, $1.secondary, $1.id) }.map(\.id) + unplaced
+    }
+
+    /// Bande de chaque valeur triée : une bande s'ouvre quand une valeur dépasse de plus de
+    /// `spatialAlignment` la valeur qui a ouvert la bande courante. O(n).
+    func alignmentBands(_ sortedValues: [CGFloat]) -> [Int] {
+        var band = 0
+        var bandStart = sortedValues.first ?? 0
+        return sortedValues.map { value in
+            if value - bandStart > LayoutTolerance.spatialAlignment {
+                band += 1
+                bandStart = value
+            }
+            return band
+        }
     }
 
     func rects(for windowIDs: [WindowID], in frames: [WindowID: CGRect]) -> [CGRect] {
@@ -2072,66 +2227,11 @@ private extension CGRect {
 }
 
 public enum SnapshotEncoding {
-    public static func json(_ snapshot: DaemonSnapshot, pretty: Bool = true) throws -> String {
+    /// Encodage JSON commun des sorties CLI : clés triées, indenté par défaut.
+    public static func json<T: Encodable>(_ value: T, pretty: Bool = true) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(snapshot)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ plan: ApplyPlan, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(plan)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ result: ApplyResult, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(result)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: StateAuditReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: StateHealReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: DaemonHealthReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ report: DaemonHealReport, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(report)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ metrics: RoadieMetrics, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(metrics)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    public static func json(_ dump: TreeDump, pretty: Bool = true) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
-        let data = try encoder.encode(dump)
+        let data = try encoder.encode(value)
         return String(decoding: data, as: UTF8.self)
     }
 }

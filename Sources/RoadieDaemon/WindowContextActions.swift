@@ -4,13 +4,17 @@ import RoadieAX
 import RoadieCore
 import RoadieStages
 
-public struct WindowContextActionResult: Equatable, Sendable {
+public struct WindowContextActionResult: CommandResult, Equatable, Sendable {
     public var message: String
     public var changed: Bool
+    /// Statut explicite (REL-042). Sans valeur donnée : `.changed` si `changed`, sinon nil
+    /// (statut non posé, code de sortie lu dans le message).
+    public var outcome: CommandOutcome?
 
-    public init(message: String, changed: Bool) {
+    public init(message: String, changed: Bool, outcome: CommandOutcome? = nil) {
         self.message = message
         self.changed = changed
+        self.outcome = outcome ?? (changed ? .changed : nil)
     }
 }
 
@@ -71,7 +75,7 @@ public struct WindowContextActions {
         guard let entry = snapshot.windows.first(where: { $0.window.id == action.windowID }),
               let scope = entry.scope
         else {
-            return WindowContextActionResult(message: "window disappeared", changed: false)
+            return WindowContextActionResult(message: "window disappeared", changed: false, outcome: .noOp)
         }
 
         switch action.kind {
@@ -81,7 +85,7 @@ public struct WindowContextActions {
                 stageStore: stageStore,
                 events: eventLog
             ).toggleMaximize(windowID: action.windowID)
-            return WindowContextActionResult(message: result.message, changed: result.changed)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         case .affinityApp:
             return saveAffinity(kind: .app, window: entry.window, scope: scope, snapshot: snapshot)
         case .affinityAppTitle:
@@ -100,35 +104,35 @@ public struct WindowContextActions {
                   destination.isAvailable,
                   !destination.isCurrent
             else {
-                return WindowContextActionResult(message: "stage destination unavailable", changed: false)
+                return WindowContextActionResult(message: "stage destination unavailable", changed: false, outcome: .failed)
             }
             let result = StageCommandService(
                 service: snapshotService,
                 store: stageStore,
                 events: eventLog
             ).assign(windowID: action.windowID, to: action.targetID, displayID: scope.displayID, focusAssignedWindow: false)
-            return WindowContextActionResult(message: result.message, changed: result.changed)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         case .desktop:
             guard let desktopID = Int(action.targetID).map(DesktopID.init(rawValue:)),
                   let destination = desktopDestinations(in: snapshot, scope: scope).first(where: { $0.id == action.targetID }),
                   destination.isAvailable,
                   !destination.isCurrent
             else {
-                return WindowContextActionResult(message: "desktop destination unavailable", changed: false)
+                return WindowContextActionResult(message: "desktop destination unavailable", changed: false, outcome: .failed)
             }
             let result = DesktopCommandService(
                 service: snapshotService,
                 store: stageStore,
                 events: eventLog
             ).assign(windowID: action.windowID, to: desktopID, displayID: scope.displayID, follow: false)
-            return WindowContextActionResult(message: result.message, changed: result.changed)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         case .desktopStage:
             guard let targetScope = parseDesktopStageID(action.targetID),
                   let destination = desktopStageDestinations(in: snapshot, scope: scope).first(where: { $0.id == action.targetID }),
                   destination.isAvailable,
                   !destination.isCurrent
             else {
-                return WindowContextActionResult(message: "desktop/stage destination unavailable", changed: false)
+                return WindowContextActionResult(message: "desktop/stage destination unavailable", changed: false, outcome: .failed)
             }
             let result = assign(
                 windowID: action.windowID,
@@ -136,20 +140,20 @@ public struct WindowContextActions {
                 desktopID: targetScope.desktopID,
                 displayID: scope.displayID
             )
-            return WindowContextActionResult(message: result.message, changed: result.changed)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         case .display:
             guard let destination = displayDestinations(in: snapshot, scope: scope).first(where: { $0.id == action.targetID }),
                   destination.isAvailable,
                   !destination.isCurrent
             else {
-                return WindowContextActionResult(message: "display destination unavailable", changed: false)
+                return WindowContextActionResult(message: "display destination unavailable", changed: false, outcome: .failed)
             }
             let result = WindowCommandService(
                 service: snapshotService,
                 stageStore: stageStore,
                 events: eventLog
             ).send(windowID: action.windowID, toDisplayID: DisplayID(rawValue: action.targetID), focusMovedWindow: false)
-            return WindowContextActionResult(message: result.message, changed: result.changed)
+            return WindowContextActionResult(message: result.message, changed: result.changed, outcome: result.outcome)
         }
     }
 
@@ -160,7 +164,7 @@ public struct WindowContextActions {
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
         guard let display = snapshot.displays.first(where: { $0.id == scope.displayID }) else {
-            return WindowContextActionResult(message: "affinite non creee: ecran introuvable", changed: false)
+            return WindowContextActionResult(message: "affinite non creee: ecran introuvable", changed: false, outcome: .noOp)
         }
         let result = affinityService.saveAffinity(kind: kind, window: window, scope: scope, display: display)
         return WindowContextActionResult(message: result.message, changed: result.changed)
@@ -173,8 +177,13 @@ public struct WindowContextActions {
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
         let homeScope = snapshot.state.activeScope(on: sourceScope.displayID) ?? sourceScope
-        let mutation = stageStore.mutate { state in
-            state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+        let mutation: PinMutation
+        do {
+            mutation = try stageStore.mutateChecked { state in
+                state.setPin(window: window, homeScope: homeScope, pinScope: pinScope)
+            }
+        } catch {
+            return .persistenceFailure("pin", error)
         }
 
         let eventType = mutation.created ? "window.pin_added" : (mutation.scopeChanged ? "window.pin_scope_changed" : "window.pin_added")
@@ -193,21 +202,26 @@ public struct WindowContextActions {
         sourceScope: StageScope,
         snapshot: DaemonSnapshot
     ) -> WindowContextActionResult {
-        let removal = stageStore.mutate { state -> (pin: PersistentWindowPin, target: StageScope)? in
-            guard let removed = state.removePin(windowID: window.id) else { return nil }
-            let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
-            let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: window.id)
+        let removal: (pin: PersistentWindowPin, target: StageScope)?
+        do {
+            removal = try stageStore.mutateChecked { state -> (pin: PersistentWindowPin, target: StageScope)? in
+                guard let removed = state.removePin(windowID: window.id) else { return nil }
+                let targetScope = snapshot.state.activeScope(on: removed.homeScope.displayID)
+                let target = removed.visibility(in: targetScope).shouldBeVisible ? (targetScope ?? sourceScope) : removed.homeScope
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: window.id)
+                }
+                var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
+                persistentScope.ensureStage(target.stageID)
+                persistentScope.assign(window: window, to: target.stageID)
+                state.update(persistentScope)
+                return (removed, target)
             }
-            var persistentScope = state.scope(displayID: target.displayID, desktopID: target.desktopID)
-            persistentScope.ensureStage(target.stageID)
-            persistentScope.assign(window: window, to: target.stageID)
-            state.update(persistentScope)
-            return (removed, target)
+        } catch {
+            return .persistenceFailure("unpin", error)
         }
         guard let (removed, target) = removal else {
-            return WindowContextActionResult(message: "window is not pinned", changed: false)
+            return WindowContextActionResult(message: "window is not pinned", changed: false, outcome: .noOp)
         }
 
         eventLog.append(RoadieEvent(
@@ -339,13 +353,17 @@ public struct WindowContextActions {
         let generation = PlacementGeneration.shared.next()
         let snapshot = snapshotService.snapshot()
         guard let display = snapshot.displays.first(where: { $0.id == displayID }) else {
-            return StageCommandResult(message: "desktop/stage assign: unknown display", changed: false)
+            return StageCommandResult(message: "desktop/stage assign: unknown display", changed: false, outcome: .failed)
         }
         guard let window = snapshot.windows.first(where: { $0.window.id == windowID })?.window else {
-            stageStore.mutate { state in
-                for scopeIndex in state.scopes.indices {
-                    state.scopes[scopeIndex].remove(windowID: windowID)
+            do {
+                try stageStore.mutateChecked { state in
+                    for scopeIndex in state.scopes.indices {
+                        state.scopes[scopeIndex].remove(windowID: windowID)
+                    }
                 }
+            } catch {
+                return .persistenceFailure("desktop/stage assign", error)
             }
             return StageCommandResult(message: "desktop/stage assign: stale window pruned", changed: true)
         }
@@ -354,20 +372,25 @@ public struct WindowContextActions {
         let stageManagerConfig = ConfigReloadService.shared.currentConfig().stageManager
         let targetStageScope = StageScope(displayID: displayID, desktopID: desktopID, stageID: stageID)
         let sourceScope = snapshot.windows.first(where: { $0.window.id == windowID })?.scope
-        let targetIsVisible = stageStore.mutate { state -> Bool in
-            for scopeIndex in state.scopes.indices {
-                state.scopes[scopeIndex].remove(windowID: windowID)
-            }
-            var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
-            targetScope.applyConfiguredStages(stageManagerConfig)
-            targetScope.ensureStage(stageID)
-            targetScope.assign(window: window, to: stageID)
-            state.update(targetScope)
-            state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
-            return state.currentDesktopID(for: displayID) == desktopID && targetScope.activeStageID == stageID
+        let targetIsVisible: Bool
+        do {
+            // Affectation écrite puis intent cible retiré ; si ce retrait échoue, l'affectation
+            // revient (REL-021) : le refus annoncé ne laisse rien.
+            targetIsVisible = try snapshotService.commitStageTransfer(in: stageStore, { state -> Bool in
+                for scopeIndex in state.scopes.indices {
+                    state.scopes[scopeIndex].remove(windowID: windowID)
+                }
+                var targetScope = state.scope(displayID: displayID, desktopID: desktopID)
+                targetScope.applyConfiguredStages(stageManagerConfig)
+                targetScope.ensureStage(stageID)
+                targetScope.assign(window: window, to: stageID)
+                state.update(targetScope)
+                state.updatePinHomeScope(windowID: windowID, to: targetStageScope)
+                return state.currentDesktopID(for: displayID) == desktopID && targetScope.activeStageID == stageID
+            }, clearingIntentsOf: { _ in [targetStageScope] })
+        } catch {
+            return .persistenceFailure("desktop/stage assign \(desktopID.rawValue)/\(stageID.rawValue)", error)
         }
-
-        snapshotService.removeLayoutIntent(scope: targetStageScope)
         // Plan unique (A15, T223) : masquage (si la cible n'est pas affichée) et disposition des
         // scopes touchés en une écriture groupée. Une cible affichée est posée par la disposition.
         var placement = CommandPlacement(layoutScopes: Set([sourceScope, targetStageScope].compactMap { $0 }))

@@ -74,6 +74,9 @@ public struct AutomationDesktopSnapshot: Codable, Equatable, Sendable {
 
 public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
     public var id: String
+    /// Écran de la stage : `id` et `desktopId` se répètent d'un écran à l'autre (REL-013).
+    /// Optionnel pour décoder les anciens JSON.
+    public var displayId: String?
     public var desktopId: String
     public var name: String
     public var mode: String
@@ -82,6 +85,7 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
 
     public init(
         id: String,
+        displayId: String? = nil,
         desktopId: String,
         name: String,
         mode: String,
@@ -89,6 +93,7 @@ public struct AutomationStageSnapshot: Codable, Equatable, Sendable {
         focusedWindowId: String? = nil
     ) {
         self.id = id
+        self.displayId = displayId
         self.desktopId = desktopId
         self.name = name
         self.mode = mode
@@ -160,13 +165,26 @@ public struct AutomationWindowSnapshot: Codable, Equatable, Sendable {
 
 public struct AutomationGroupSnapshot: Codable, Equatable, Sendable {
     public var id: String
+    /// Écran et desktop de la stage du groupe (REL-013). Optionnels pour décoder les anciens JSON.
+    public var displayId: String?
+    public var desktopId: String?
     public var stageId: String
     public var memberIds: [String]
     public var activeMemberId: String?
     public var presentation: String
 
-    public init(id: String, stageId: String, memberIds: [String], activeMemberId: String? = nil, presentation: String = "stack") {
+    public init(
+        id: String,
+        displayId: String? = nil,
+        desktopId: String? = nil,
+        stageId: String,
+        memberIds: [String],
+        activeMemberId: String? = nil,
+        presentation: String = "stack"
+    ) {
         self.id = id
+        self.displayId = displayId
+        self.desktopId = desktopId
         self.stageId = stageId
         self.memberIds = memberIds
         self.activeMemberId = activeMemberId

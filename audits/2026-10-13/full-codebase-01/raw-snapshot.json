@@ -1,0 +1,295 @@
+{
+  "$schema": "audit-code-v14/raw-findings",
+  "scope": "snapshot, automation, actions contextuelles, présentation et parking",
+  "audit_mode": "readonly",
+  "findings": [
+    {
+      "id": "REL-SNAPSHOT-001",
+      "category": "reliability",
+      "subcategory": "multidisplay_geometry",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+      "line": 34,
+      "title": "Un écran placé à gauche est confondu avec une ancienne zone de masquage",
+      "description": "Le prédicat classe toute fenêtre dont maxX < -1000 comme cachée. Il ne compare pas cette branche à la géométrie des écrans présents. Les observateurs de snapshots et les bordures emploient ce prédicat.",
+      "evidence": "    /// `isHidden` plus l'ancienne position de masquage très loin à gauche (versions précédentes).\n    /// Test unique pour tous les appelants qui filtrent les fenêtres réellement visibles.\n    static func isHiddenOrLegacyOffscreen(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {\n        frame.maxX < -1000 || frame.minX < -10000 || isHidden(frame, in: displays)\n    }",
+      "fingerprint": "4ed52b5014ed",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Placer un écran de 3840 points à gauche du principal (x=-3840). Une fenêtre entièrement visible avec x=-3000 et width=1000 a maxX=-2000. Le prédicat renvoie true alors que l'écran contient la fenêtre.",
+      "impact": "La bordure de focus est masquée (BorderController.swift:44). Les déplacements de cette fenêtre n'actualisent plus ses cadres persistés, ni ceux du pin/signets (DaemonSnapshot.swift:470–500). Une restauration peut donc utiliser un cadre ancien.",
+      "path_type": "hot",
+      "remediation": "N'appliquer les coordonnées historiques qu'aux cadres hors des écrans actuellement présents. Garder le test des positions de parking actuelles.",
+      "remediation_code": "static func isHiddenOrLegacyOffscreen(_ frame: CGRect, in displays: [DisplaySnapshot]) -> Bool {\n    if isHidden(frame, in: displays) { return true }\n    let legacyPosition = frame.maxX < -1000 || frame.minX < -10000\n    let intersectsDisplay = displays.contains { $0.frame.cgRect.intersects(frame) }\n    return legacyPosition && !intersectsDisplay\n}",
+      "verification": "Ajouter un cas écran secondaire x=-3840 et fenêtre x=-3000,width=1000. Vérifier prédicat false, bordure permise et mise à jour du membre/signets après déplacement.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée"
+    },
+    {
+      "id": "PERF-SNAPSHOT-001",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1692,
+      "title": "La validation des trous de disposition parcourt les fenêtres dans chaque cellule",
+      "description": "Les bords X et Y ont chacun O(n) valeurs. Le produit de ces axes crée O(n²) cellules. Pour chaque cellule, frames.contains parcourt jusqu'à n cadres. Les intentions de commande contournent le minimum de taille des tuiles (1620–1622), et aucune limite du nombre de fenêtres n'est imposée.",
+      "evidence": "            for yIndex in 0..<max(0, yEdges.count - 1) {\n                let minY = yEdges[yIndex]\n                let maxY = yEdges[yIndex + 1]\n                let height = maxY - minY\n                guard height > tolerance else { continue }\n                let cell = CGRect(x: minX, y: minY, width: width, height: height)\n                guard container.contains(cell, tolerance: 1),\n                      !frames.contains(where: { frameContainsCellCenter($0, cell: cell, tolerance: 1) })\n                else { continue }\n                return true",
+      "fingerprint": "1e88a8f2a195",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Créer un intent .command sans gap avec n=2m fenêtres : m colonnes de largeur 100, hauteur totale 50*(m+1). Dans la colonne i (0..<m), une fenêtre couvre y=0..50*(i+1), l'autre couvre y=50*(i+1)..hauteur. Toutes les cellules sont couvertes et mesurent 100x50 : le retour anticipé ne s'active jamais. Sauver cet intent puis appeler hasValidLayoutIntent ou applyPlan.",
+      "impact": "Coût cubique confirmé par les boucles. Cette validation appartient au maintien de disposition via LayoutMaintainer.swift:633 et 3104. La latence pratique n'a pas été mesurée.",
+      "path_type": "hot",
+      "remediation": "Calculer une seule fois la couverture des centres de cellules. Le tableau de différences ci-dessous supprime le parcours des n cadres pour chaque cellule, en conservant les mêmes seuils. Mesurer avant de choisir entre cette grille O(n²) mémoire et un balayage d'intervalles.",
+      "remediation_code": "private func framesLeaveLargeUntiledCells(\n    _ frames: [CGRect], in container: CGRect, allowedGap: CGFloat\n) -> Bool {\n    guard frames.count > 1 else { return false }\n    let tolerance = max(LayoutTolerance.untiledCell, allowedGap)\n    let xs = sortedEdges([container.minX, container.maxX] + frames.flatMap { [$0.minX, $0.maxX] })\n    let ys = sortedEdges([container.minY, container.maxY] + frames.flatMap { [$0.minY, $0.maxY] })\n    let nx = max(0, xs.count - 1), ny = max(0, ys.count - 1)\n    guard nx > 0, ny > 0 else { return false }\n    let xc = (0..<nx).map { (xs[$0] + xs[$0 + 1]) / 2 }\n    let yc = (0..<ny).map { (ys[$0] + ys[$0 + 1]) / 2 }\n    func bound(_ values: [CGFloat], _ target: CGFloat, upper: Bool) -> Int {\n        var lo = 0, hi = values.count\n        while lo < hi {\n            let mid = lo + (hi - lo) / 2\n            if values[mid] < target || (upper && values[mid] == target) { lo = mid + 1 }\n            else { hi = mid }\n        }\n        return lo\n    }\n    // Différences de couverture, puis sommes cumulées : O(n² + n log n).\n    let stride = ny + 1\n    var coverage = Array(repeating: 0, count: (nx + 1) * stride)\n    for frame in frames {\n        let x0 = bound(xc, frame.minX - 1, upper: false)\n        let x1 = bound(xc, frame.maxX + 1, upper: true)\n        let y0 = bound(yc, frame.minY - 1, upper: false)\n        let y1 = bound(yc, frame.maxY + 1, upper: true)\n        guard x0 < x1, y0 < y1 else { continue }\n        coverage[x0 * stride + y0] += 1\n        coverage[x1 * stride + y0] -= 1\n        coverage[x0 * stride + y1] -= 1\n        coverage[x1 * stride + y1] += 1\n    }\n    for x in 0..<nx {\n        for y in 0..<ny {\n            let index = x * stride + y\n            if x > 0 { coverage[index] += coverage[(x - 1) * stride + y] }\n            if y > 0 { coverage[index] += coverage[index - 1] }\n            if x > 0 && y > 0 { coverage[index] -= coverage[(x - 1) * stride + y - 1] }\n            let cell = CGRect(x: xs[x], y: ys[y], width: xs[x + 1] - xs[x], height: ys[y + 1] - ys[y])\n            if coverage[index] == 0, cell.width > tolerance, cell.height > tolerance,\n               container.contains(cell, tolerance: 1) { return true }\n        }\n    }\n    return false\n}",
+      "verification": "Comparer l'ancienne et la nouvelle fonction sur des dispositions complètes, trouées et à marges. Ajouter la famille de colonnes décrite avec m croissant et compter les comparaisons. Compiler la proposition avant intégration.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée",
+      "complexity_current": "O(n³)",
+      "complexity_target": "O(n² + n log n)",
+      "counter_audit_required": true,
+      "references": [
+        "Constitution Article XVIII"
+      ],
+      "grep_command": "rg -n 'framesLeaveLargeUntiledCells|frames.contains|hasValidLayoutIntent' Sources/RoadieDaemon/DaemonSnapshot.swift Sources/RoadieDaemon/LayoutMaintainer.swift"
+    },
+    {
+      "id": "REL-SNAPSHOT-002",
+      "category": "reliability",
+      "subcategory": "invalid_sort_comparator",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1978,
+      "title": "Le tri spatial utilise une relation non transitive",
+      "description": "Le tri change d'axe selon l'écart entre deux centres. Une tolérance de proximité ne définit pas une classe d'équivalence transitive. Le mode bsp appelle ce comparateur via orderedWindowIDs et spatiallyOrdered.",
+      "evidence": "        if horizontal {\n            if abs(lhsFrame.midX - rhsFrame.midX) > LayoutTolerance.spatialAlignment {\n                return lhsFrame.midX < rhsFrame.midX\n            }\n            if abs(lhsFrame.midY - rhsFrame.midY) > LayoutTolerance.spatialAlignment {\n                return lhsFrame.midY < rhsFrame.midY\n            }\n        } else {",
+      "fingerprint": "18520f10b502",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Avec un conteneur horizontal et trois fenêtres A=(centre 500,600), B=(540,550), C=(580,500), seuil spatialAlignment=48 : B<A par Y, C<B par Y, mais A<C par X. Le cycle viole le contrat de tri.",
+      "impact": "L'ordre spatial calculé dépend du parcours du tri et peut déplacer les fenêtres de façon incohérente. Le cycle de comparaison est confirmé par le code. Aucun crash ou saut visuel n'a été reproduit.",
+      "path_type": "hot",
+      "remediation": "Définir un ordre total : soit comparer les centres lexicographiquement sans seuil, soit former les bandes spatiales une fois puis trier par clé de bande, centre secondaire et ID.",
+      "remediation_code": "",
+      "verification": "Ajouter un test de transitivité pour le triplet ci-dessus et ses permutations. Le test public peut comparer orderedWindowIDs sur [A,B], [B,C] et [A,C] avec mode .bsp, même conteneur horizontal et RoadieState reconstruit pour chaque paire.",
+      "effort": "S",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée"
+    },
+    {
+      "id": "REL-SNAPSHOT-003",
+      "category": "reliability",
+      "subcategory": "automation_identity",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/AutomationSnapshotService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/AutomationSnapshotService.swift",
+      "line": 101,
+      "title": "La réponse stages ne précise pas l’écran de chaque stage",
+      "description": "Les stages sont aplaties depuis les écrans et desktops. La sortie transporte seulement id et desktopId, alors que ces deux valeurs sont réutilisées sur différents écrans. AutomationStageSnapshot ne possède aucun displayId (Sources/RoadieCore/AutomationSnapshot.swift:75–97).",
+      "evidence": "                                AutomationStageSnapshot(\n                                    id: stage.id.rawValue,\n                                    desktopId: String(desktop.id.rawValue),\n                                    name: stage.name,\n                                    mode: stage.mode.rawValue,\n                                    windowIds: stage.windowIDs.map { String($0.rawValue) },\n                                    focusedWindowId: stage.focusedWindowID.map { String($0.rawValue) }\n                                )",
+      "fingerprint": "f1c29bf9c66e",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Deux écrans possèdent chacun leur desktop 1/stage 1 vide. `query stages` retourne deux lignes de même id/desktopId, sans champ qui permette de les rattacher à leur écran. Un renommage ou mode différent ne résout pas l'identité.",
+      "impact": "Un client d'automatisation ne peut pas identifier sans ambiguïté une stage, notamment si elle est vide. Il ne peut pas associer fiablement un changement de stage au bon écran.",
+      "path_type": "hot",
+      "remediation": "Ajouter displayId à AutomationStageSnapshot, le remplir depuis display.id dans stageSnapshots et adapter le contrat de décodage. Inclure également desktopId/displayId dans AutomationGroupSnapshot pour les mêmes références composites.",
+      "remediation_code": "",
+      "verification": "Construire deux écrans avec chacun desktop 1/stage 1 et des noms distincts. Vérifier que les réponses stages permettent de reconstituer le StageScope complet de chaque ligne.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée"
+    },
+    {
+      "id": "REL-SNAPSHOT-004",
+      "fingerprint": "22cd1c9e929a",
+      "category": "reliability",
+      "subcategory": "automation_metadata",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 394,
+      "title": "Le snapshot d’automatisation perd les noms et les stages vides persistées",
+      "description": "La réconciliation reconstruit RoadieState avec des noms génériques, sans label de desktop. Elle crée la stage active et les stages rencontrées dans les fenêtres visibles. Les stages inactives vides, même nommées, ne sont pas transférées. AutomationSnapshotService lit ce RoadieState pour les réponses stages/desktops sans compléter ces métadonnées depuis StageStore.",
+      "evidence": "            let activePersistentStage = persistentScope.stages.first { $0.id == persistentScope.activeStageID }\n            let activeMode = activePersistentStage?.mode ?? config.tiling.defaultStrategy\n            try? state.createStage(\n                id: persistentScope.activeStageID,\n                name: \"Stage \\(persistentScope.activeStageID.rawValue)\",\n                mode: activeMode,\n                in: display.id,\n                desktopID: currentDesktopID\n            )",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Configurer StageDefinition(id: \"1\", displayName: \"Work\") et StageDefinition(id: \"2\", displayName: \"Com\"), sans fenêtre et stage 1 active. Le store contient les deux noms (test SnapshotServiceTests:943–967), mais SnapshotService.snapshot().automationSnapshot().stages ne contient que Stage 1, avec le nom générique. Même perte après renommage d’une stage ou label d’un desktop.",
+      "impact": "Les clients query state/stages/desktops obtiennent des noms inexacts et une liste incomplète des espaces configurés. Une interface d’automatisation ne peut pas proposer toutes les destinations existantes.",
+      "path_type": "hot",
+      "remediation": "Construire la hiérarchie runtime depuis les scopes, noms, labels et stages persistés avant d’y associer les fenêtres live. Garder séparés les membres absents et les métadonnées toujours valides. Une alternative est de compléter uniquement le modèle automation depuis le même état persisté cohérent.",
+      "remediation_code": "",
+      "verification": "Étendre le test configWorkspacesSeedPersistentStageNames pour vérifier le snapshot automation, les deux stages nommées sans fenêtres, un desktop nommé et une stage renommée. Ne pas se limiter au store.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture de la chaîne snapshot -> automationSnapshot -> query; aucun test exécuté"
+    },
+    {
+      "id": "TEST-SNAPSHOT-001",
+      "category": "tests",
+      "subcategory": "decorative_assertions",
+      "severity": "MEDIUM",
+      "file": "Tests/RoadieDaemonTests/QueryCommandTests.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Tests/RoadieDaemonTests/QueryCommandTests.swift",
+      "line": 36,
+      "title": "Le test des requêtes vérifie seulement le nom recopié dans la réponse",
+      "description": "Ce test prépare un groupe réel, puis vérifie seulement .kind. AutomationQueryService.result recopie directement ce nom depuis l'entrée. Les cinq assertions resteraient vertes si toutes les données étaient .null ou des tableaux vides.",
+      "evidence": "        let query = AutomationQueryService(service: snapshotService, configPath: try fixturePath())\n\n        #expect(query.query(\"displays\").kind == \"displays\")\n        #expect(query.query(\"desktops\").kind == \"desktops\")\n        #expect(query.query(\"stages\").kind == \"stages\")\n        #expect(query.query(\"groups\").kind == \"groups\")\n        #expect(query.query(\"rules\").kind == \"rules\")",
+      "fingerprint": "d0c322128472",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Remplacer mentalement les cinq charges utiles par .null : les attentes .kind aux lignes 38–42 sont inchangées. Le groupe 'pair' préparé aux lignes 32–35 n'est jamais vérifié dans le résultat.",
+      "impact": "Le test annonce couvrir cinq charges utiles sans détecter leur absence, leur mauvais contenu ou leur mauvaise association écran/desktop.",
+      "path_type": "cold",
+      "remediation": "Décoder les charges utiles et vérifier au minimum les IDs attendus, les deux membres du groupe, sa stage et les règles chargées. Garder une assertion séparée pour le nom de réponse.",
+      "remediation_code": "",
+      "verification": "Introduire une mutation locale dans une copie d'audit qui remplace groups.data par .null : le test renforcé doit échouer.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée"
+    },
+    {
+      "id": "MIN-SNAPSHOT-001",
+      "category": "minimalism",
+      "subcategory": "repeated_serialization",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 2075,
+      "title": "Neuf surcharges répètent le même encodeur JSON",
+      "description": "SnapshotEncoding répète neuf fois le même corps pour neuf types Encodable. Seul le type du paramètre change. Une fonction générique conserve les appels existants et centralise les options d'encodage.",
+      "evidence": "    public static func json(_ snapshot: DaemonSnapshot, pretty: Bool = true) throws -> String {\n        let encoder = JSONEncoder()\n        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n        let data = try encoder.encode(snapshot)\n        return String(decoding: data, as: UTF8.self)\n    }\n\n    public static func json(_ plan: ApplyPlan, pretty: Bool = true) throws -> String {\n        let encoder = JSONEncoder()\n        encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n        let data = try encoder.encode(plan)\n        return String(decoding: data, as: UTF8.self)",
+      "fingerprint": "4a3bef8c5af9",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Modifier une option d'encodage : il faut synchroniser neuf corps identiques, de 2075 à 2136.",
+      "impact": "Charge de maintenance évitable, sans différence métier entre les surcharges.",
+      "path_type": "cold",
+      "remediation": "Remplacer les neuf surcharges par json<T: Encodable>(_ value: T, pretty: Bool = true).",
+      "remediation_code": "public static func json<T: Encodable>(_ value: T, pretty: Bool = true) throws -> String {\n    let encoder = JSONEncoder()\n    encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]\n    let data = try encoder.encode(value)\n    return String(decoding: data, as: UTF8.self)\n}",
+      "verification": "Comparer les sorties JSON actuelles et génériques pour les neuf types, en modes compact et pretty.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture; pas de reproduction macOS exécutée",
+      "suppressible_lines_estimate": 56
+    }
+  ],
+  "positive_findings": [
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 222,
+      "text": "Énumération AX explicitement hors du verrou de StageStore.mutate; mutation persistée transactionnelle."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 277,
+      "text": "Les destructions confirmées sont gardées jusqu’à ce que la liste AX/CG ait convergé; la grâce conserve les feuilles BSP temporairement absentes."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 2156,
+      "text": "Le registre commun utilise OSAllocatedUnfairLock; Published, fenêtres cachées et classifications sont toutes protégées par NSLock."
+    },
+    {
+      "file": "Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "line": 1917,
+      "text": "Une écriture AX partiellement en échec invalide le snapshot publié. Les écritures réussies actualisent les cadres sans prolonger artificiellement l’âge du cache."
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "line": 3936,
+      "text": "La matrice de topologie couvre observation, absence courte et écriture partielle; elle vérifie membres, pins et signets."
+    }
+  ],
+  "minimalism_potential_lines": 56,
+  "llm_virtues": "Les types d’état et les invariants commentés aident la maintenance. DaemonSnapshot.swift mélange toutefois réconciliation, planification, validation géométrique, encodage et cache global sur 2357 lignes. Les contrats de complexité incomplets ou inexacts et la duplication de l’encodage augmentent la charge future. Le périmètre métier des abstractions de snapshot est réel. Les tests métier sont substantiels; les assertions kind seules constituent l’exception faible documentée.",
+  "files_read_entirely": [
+    "Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "Sources/RoadieDaemon/AutomationSnapshotService.swift",
+    "Sources/RoadieDaemon/AutomationQueryService.swift",
+    "Sources/RoadieDaemon/WindowContextActions.swift",
+    "Sources/RoadieDaemon/WindowPresentationStateResolver.swift",
+    "Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+    "Sources/RoadieDaemon/TreeDump.swift",
+    "Sources/RoadieCore/AutomationSnapshot.swift",
+    "Sources/RoadieCore/WindowManagementMode.swift",
+    "Tests/RoadieDaemonTests/AutomationSnapshotTests.swift",
+    "Tests/RoadieDaemonTests/QueryCommandTests.swift",
+    "Tests/RoadieDaemonTests/QueryHealthEventsTests.swift",
+    "Tests/RoadieDaemonTests/WindowPresentationStateResolverTests.swift",
+    "Tests/RoadieDaemonTests/TitlebarContextMenuTests.swift",
+    "Sources/RoadieStages/RoadieState.swift"
+  ],
+  "files_read_partially": [
+    {
+      "file": "Sources/RoadieDaemon/BorderController.swift",
+      "ranges": [
+        [
+          1,
+          112
+        ]
+      ]
+    },
+    {
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "ranges": [
+        [
+          605,
+          640
+        ],
+        [
+          3088,
+          3110
+        ]
+      ]
+    },
+    {
+      "file": "Sources/RoadieCore/LayoutTolerance.swift",
+      "ranges": [
+        [
+          25,
+          46
+        ]
+      ]
+    },
+    {
+      "file": "Tests/RoadieDaemonTests/SnapshotServiceTests.swift",
+      "ranges": [
+        [
+          1242,
+          1475
+        ],
+        [
+          3880,
+          4119
+        ],
+        [
+          942,
+          970
+        ],
+        [
+          2648,
+          2688
+        ]
+      ],
+      "other": "Tous noms de tests inventoriés; ciblage absence AX, topologie, cache, intents, tri."
+    }
+  ],
+  "warnings": [
+    "Aucun build/test exécuté par ce sous-agent, conformément à son mandat. Les validations exécutables sont centralisées par le parent.",
+    "PERF-SNAPSHOT-001 exige contre-audit indépendant avant publication HIGH; le correctif proposé est non compilé.",
+    "Les autres constats décrivent des conséquences déduites du code; aucune interaction avec les fenêtres réelles ni le daemon.",
+    "SnapshotService conserve les membres absents mais ne recrée pas leur entrée snapshot.windows. Cette preuve a été transmise à audit_runtime pour le finding StateAudit.heal, sans le dupliquer ici.",
+    "Constat initial sur écriture utilisateur des tests réfuté par le parent : StageStore.defaultPath isole les tests via TestEnvironment. Aucun finding associé."
+  ],
+  "counter_audit_requests": [
+    "PERF-SNAPSHOT-001"
+  ],
+  "lines_read_entire_files": 5000
+}

@@ -109,15 +109,28 @@ public struct TargetGridService {
     private let service: SnapshotService
     private let stageStore: StageStore
     private let config: TargetGridConfig
+    /// Émission des événements souris et molette. Point d'injection des tests (TEST-002) : clic
+    /// observé sans événement réel, comme `LiveAppTargetProvider`.
+    private let postEvent: (CGEvent) -> Void
 
     public init(
         service: SnapshotService = SnapshotService(),
         stageStore: StageStore? = nil,
         config: TargetGridConfig? = nil
     ) {
+        self.init(service: service, stageStore: stageStore, config: config, postEvent: { $0.post(tap: .cghidEventTap) })
+    }
+
+    init(
+        service: SnapshotService,
+        stageStore: StageStore? = nil,
+        config: TargetGridConfig? = nil,
+        postEvent: @escaping (CGEvent) -> Void
+    ) {
         self.service = service
         self.stageStore = stageStore ?? service.effectiveStageStore
         self.config = config ?? service.effectiveConfig.experimental.targetGrid
+        self.postEvent = postEvent
     }
 
     public func report(displayIndex: Int? = nil, parentPath: String = "", scope: TargetGridScope? = nil) -> TargetGridReport {
@@ -447,22 +460,22 @@ public struct TargetGridService {
         let upEvent = CGEvent(mouseEventSource: nil, mouseType: up, mouseCursorPosition: point, mouseButton: button)
         downEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
         upEvent?.setIntegerValueField(.mouseEventClickState, value: clickCount)
-        downEvent?.post(tap: .cghidEventTap)
-        upEvent?.post(tap: .cghidEventTap)
+        if let downEvent { postEvent(downEvent) }
+        if let upEvent { postEvent(upEvent) }
     }
 
     private func postScroll(at point: CGPoint, delta: Int32) {
         CGWarpMouseCursorPosition(point)
         let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0)
-        event?.post(tap: .cghidEventTap)
+        if let event { postEvent(event) }
     }
 
     private func postDrag(from source: CGPoint, to destination: CGPoint) {
         let down = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: source, mouseButton: .left)
         let drag = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: destination, mouseButton: .left)
         let up = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: destination, mouseButton: .left)
-        down?.post(tap: .cghidEventTap)
-        drag?.post(tap: .cghidEventTap)
-        up?.post(tap: .cghidEventTap)
+        for event in [down, drag, up].compactMap({ $0 }) {
+            postEvent(event)
+        }
     }
 }

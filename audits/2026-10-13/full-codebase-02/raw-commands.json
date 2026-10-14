@@ -1,0 +1,447 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-001",
+      "status": "partiel",
+      "reason": "Les deux scénarios initiaux sont corrigés : reorder borne avant soustraction, et les entrées publiques contrôlent les identifiants vides. Un autre argument stage provoque encore un dépassement fatal : une stage nommée Int.max mène à Int.max + 1 lors de assign-empty. Voir REL-101.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 1153,
+          "note": "Bornage sans soustraction pour les positions <= 1."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 318,
+          "note": "Identifiant vide refusé avant StageID."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1704,
+          "note": "Dépassement résiduel dans la génération de stage."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: reorderStageClampsExtremePositionsWithoutTrap; stageCommandsRefuseEmptyStageIDAndExtremePosition"
+      ]
+    },
+    {
+      "id": "REL-016",
+      "status": "résolu",
+      "reason": "Les deux entrées publiques refusent le bureau actuel. Le corps partagé ne masque que si le bureau cible est invisible. Il restaure explicitement une fenêtre garée sur un bureau affiché, y compris en mode float.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 146,
+          "note": "Garde pour le bureau actuel."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 224,
+          "note": "Décision de visibilité et frame de restauration avant plan commun."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: assignActiveWindowToCurrentDesktopDoesNothing; assignActiveWindowToOtherDesktopStillHidesWindow; assignWindowToDisplayedDesktopDoesNotHideIt; assignParkedWindowToDisplayedFloatDesktopRestoresVisibleFrame"
+      ]
+    },
+    {
+      "id": "REL-017",
+      "status": "résolu",
+      "reason": "Après reconnaissance de l’écran, la restauration partitionne les stages par origin.desktopID et construit un targetScope distinct par bureau.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayParkingService.swift",
+          "line": 260,
+          "note": "Regroupement secondaire par bureau puis scope propre."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: reconnectRestoresStagesIntoTheirOwnDesktops"
+      ]
+    },
+    {
+      "id": "REL-020",
+      "status": "résolu",
+      "reason": "La détection historique des coordonnées négatives vérifie désormais l’absence d’intersection avec tous les écrans présents. La fenêtre visible sur un écran à gauche n’est plus exclue.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+          "line": 38,
+          "note": "Test géométrique après seuil legacy."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: leftDisplayWindowIsNotLegacyOffscreen; legacyOffscreenFrameIsStillHidden"
+      ]
+    },
+    {
+      "id": "REL-021",
+      "status": "partiel",
+      "reason": "mutateChecked et les commandes contrôlées propagent les erreurs. Les tests de rail pin et de panne initiale sont utiles. Des commandes effectuent encore des écritures durables ou des effets AX avant une seconde persistance faillible, puis annoncent changed=false sans restaurer : zoomParent, transfert de bureau, transfert de fenêtre et de stage. Voir REL-102, à fusionner avec les occurrences StateAudit/UI collectées par le coordinateur.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+          "line": 86,
+          "note": "Variante contrôlée qui lève PersistenceError."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift",
+          "line": 230,
+          "note": "Effet AX avant saveLayoutIntentChecked."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 190,
+          "note": "Changement durable de bureau avant retrait des intents."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift: mutateCheckedPersistsAndReturnsOutput; mutateCheckedRefusesUnreadableFileWithoutRunningBodyOrTouchingFile; mutateCheckedReportsLockFailureAndKeepsFile; railPinExitsNonZeroWhenStateIsNotPersisted",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift: create/assign/switch/moveToDisplay : erreurs de persistance",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift: échecs initiaux fenêtre/bureau/signet/groupe/écran/disposition",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotATests.swift: zoomOn; mode; balance avec refus des écritures et restauration"
+      ]
+    },
+    {
+      "id": "REL-023",
+      "status": "résolu",
+      "reason": "Une stage déplacée sans activation produit maintenant des frames de masquage. Les frames de retour sont recentrées sur le scope exact et seulement pour les membres transférés encore présents, ce qui couvre R1-14.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 664,
+          "note": "Branches restoring/hiding selon activation effective."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 686,
+          "note": "Scope exact et ensemble movedIDs pour les frames mémorisées."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: noFollowMoveKeepsMovedStageHiddenThenRestoresItOnTargetDisplay; followMoveStillShowsMovedStageCenteredOnTargetDisplay",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift: noFollowMoveRecentersInExactTargetScopeAfterConcurrentDesktopSwitch; noFollowMoveRecentersOnlyTransferredMembers"
+      ]
+    },
+    {
+      "id": "REL-026",
+      "status": "résolu",
+      "reason": "Le scope et l’écran sont dérivés de la fenêtre focalisée lorsqu’elle est une candidate de la stage active. Le repli sur le premier écran reste réservé à l’absence de cette fenêtre.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 40,
+          "note": "Sélection focusedEntry avant écran/scope."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: widthTargetsFocusedWindowOnSecondDisplay; widthAllWindowsUsesFocusedDisplay"
+      ]
+    },
+    {
+      "id": "REL-027",
+      "status": "résolu",
+      "reason": "Le ratio de référence est celui de activeID, avant le calcul de nudge/preset. La règle pour allWindows utilise explicitement cette même fenêtre active.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+          "line": 68,
+          "note": "activeID puis referenceEntry puis currentRatio."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: relativeWidthStartsFromFocusedWindow; presetNextStartsFromFocusedWindow"
+      ]
+    },
+    {
+      "id": "REL-028",
+      "status": "résolu",
+      "reason": "L’absence ponctuelle conserve le signet et produit un échec explicite. La suppression immédiate exige désormais un PID mémorisé dont le processus est mort. La purge différée conserve sa grâce.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+          "line": 64,
+          "note": "Conservation sans preuve de mort du processus."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+          "line": 212,
+          "note": "Résolution du PID depuis le membre persistant."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+          "line": 473,
+          "note": "Purge seulement après expiration de missingGrace."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift: absentWindowWithLiveProcessKeepsBookmark; absentWindowWithoutKnownPidKeepsBookmark; absentWindowWithDeadProcessRemovesBookmark; bookmarkSurvivesTemporaryAbsenceAndFocusesOnReturn"
+      ]
+    },
+    {
+      "id": "PERF-005",
+      "status": "résolu",
+      "reason": "Les trois recherches répétées citées sont supprimées. Le classement des stages partitionne sur members.isEmpty; normalizedOrder et applyPlan construisent leurs ensembles hors boucle. Les résultats restent ordonnés.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1553,
+          "note": "scopedIDSet construit hors boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1608,
+          "note": "orderedSet construit hors boucle."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1666,
+          "note": "Partition directe entre stages pleines et vides."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift: assignPositionKeepsVisibleThenEmptyOrderAndSkipsParked"
+      ]
+    },
+    {
+      "id": "TEST-003",
+      "status": "résolu",
+      "reason": "Le test relit désormais les membres exacts et activeWindowID après create/add/focus/remove, puis l’absence du groupe après dissolve. Des tests séparés couvrent retrait du membre actif, dissolution sous deux membres, identifiants absents et déduplication.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+          "line": 26,
+          "note": "Contrôles métier intermédiaires depuis le store réel."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift: fichier intégral : 6 tests et helpers"
+      ]
+    },
+    {
+      "id": "MIN-004",
+      "status": "résolu",
+      "reason": "assignActiveWindow et assign(windowID:...) délèguent au même corps moveWindow. Les gardes restent aux entrées, et les règles de placement/pin/intent sont centralisées.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 149,
+          "note": "Premier appel au helper partagé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 170,
+          "note": "Deuxième appel au même helper."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 176,
+          "note": "Unique corps de déplacement."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift: transferts de bureau par les deux entrées publiques"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "REL-101",
+      "category": "reliability",
+      "subcategory": "integer_overflow",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/StageCommands.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+      "line": 1704,
+      "title": "assign-empty peut arrêter Roadie après création d’une stage Int.max",
+      "description": "Les identifiants de stage sont des chaînes non vides sans borne numérique. nextGeneratedStageID convertit ceux qui représentent un Int puis ajoute 1 au plus grand sans contrôler le dépassement. Une stage dont l’identifiant vaut Int.max fait donc échouer assign-empty dès que les stages vides non personnalisées sont épuisées.",
+      "evidence": "    private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {\n        let numericIDs = scope.stages.compactMap { Int($0.id.rawValue) }\n        let next = (numericIDs.max() ?? scope.stages.count) + 1\n        return StageID(rawValue: String(next))\n    }",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Dans un état isolé avec un écran, une fenêtre gérée active dans la seule stage 1 et aucune workspace configurée : exécuter roadie stage create 9223372036854775807 Limite puis roadie stage assign-empty. La stage 1 est occupée et la stage Limite porte un nom personnalisé : nextEmptyStageID appelle nextGeneratedStageID; Int.max + 1 déclenche une erreur fatale Swift. Ne pas exécuter contre le daemon de travail.",
+      "impact": "Arrêt du processus qui traite la commande; le routage daemon rend le gestionnaire indisponible et peut interrompre la gestion des fenêtres.",
+      "path_type": "hot",
+      "remediation": "Contrôler l’addition avec addingReportingOverflow et choisir un identifiant non numérique libre en cas de dépassement. Tester la commande complète avec Int.max en processus isolé.",
+      "remediation_code": "private func nextGeneratedStageID(in scope: PersistentStageScope) -> StageID {\n    let used = Set(scope.stages.map { $0.id.rawValue })\n    let numericIDs = used.compactMap { Int($0) }\n    let (next, overflow) = (numericIDs.max() ?? scope.stages.count).addingReportingOverflow(1)\n    if !overflow {\n        return StageID(rawValue: String(next))\n    }\n    var candidate = \"stage-\\(UUID().uuidString)\"\n    while used.contains(candidate) {\n        candidate = \"stage-\\(UUID().uuidString)\"\n    }\n    return StageID(rawValue: candidate)\n}",
+      "verification": "Fixture avec la stage 1 occupée et une stage personnalisée Int.max : assignEmpty doit renvoyer un résultat normal et un nouvel ID libre, sans arrêt. Garder aussi les cas aucun ID numérique, ID maximum ordinaire et présence d’une stage vide réutilisable.",
+      "effort": "XS",
+      "regression_risk": "LOW",
+      "status": "open",
+      "verification_status": "confirmé par lecture complète des fichiers; scénario fatal volontairement non exécuté",
+      "original_related_ids": [
+        "REL-001"
+      ],
+      "counter_audit_pending": true,
+      "discovery_command": "rg -n \"nextGeneratedStageID|numericIDs|nextEmptyStageID\" Sources/RoadieDaemon/StageCommands.swift",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 1695,
+          "evidence": "    private func nextEmptyStageID(in scope: PersistentStageScope) -> StageID {\n        if let empty = scope.stages.first(where: { isSelectableStage($0) && $0.members.isEmpty && !isCustomStageName($0.name, id: $0.id) }) {\n            return empty.id\n        }\n        return nextGeneratedStageID(in: scope)\n    }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 989,
+          "evidence": "        case \"create\":\n            guard let stageID = args.dropFirst().first, !stageID.isEmpty else {\n                err(\"roadie: stage create requires a stage id\")\n                return 64\n            }\n            let name = args.dropFirst(2).isEmpty ? nil : args.dropFirst(2).joined(separator: \" \")\n            let result = StageCommandService(service: service).create(stageID, name: name)\n            return finish(result.message, changed: result.changed)"
+        },
+        {
+          "file": "Sources/RoadieCore/Identifiers.swift",
+          "line": 29,
+          "evidence": "public struct StageID: RawRepresentable, Hashable, Codable, Sendable, Comparable, CustomStringConvertible {\n    public let rawValue: String\n\n    public init(rawValue: String) {\n        precondition(!rawValue.isEmpty, \"StageID must not be empty\")\n        self.rawValue = rawValue\n    }\n"
+        }
+      ]
+    },
+    {
+      "id": "REL-102",
+      "category": "reliability",
+      "subcategory": "partial_commit_reported_as_failure",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/LayoutCommandService.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift",
+      "line": 230,
+      "title": "Des commandes annoncent un échec après leurs effets ou leur première écriture",
+      "description": "zoomParent agrandit la fenêtre avant de persister l’intent. Si cette écriture échoue, la commande retourne changed=false sans retour arrière. Les transferts de bureau, de fenêtre et de stage ont la variante inverse : l’affectation est déjà sur disque lorsque le retrait d’intent échoue; ils retournent le même résultat de refus. R2-01 a corrigé toggleZoom/setMode/balance, mais le défaut reste dans les autres points d’entrée.",
+      "evidence": "        let plan = ApplyPlan(commands: [ApplyCommand(window: entry.window, frame: display.visibleFrame)])\n        let result = service.apply(plan, generation: generation)\n        do {\n            try service.saveLayoutIntentChecked(\n                scope: context.scope,\n                windowIDs: [activeID],\n                placements: [activeID: result.items.first?.actual ?? display.visibleFrame],\n                source: .command,\n                zoomedWindowID: activeID",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Fixture PowerUserProvider/PowerUserWriter avec fenêtre active non agrandie, stages valides et LayoutIntentStore dont le fichier contient « { pas du json ». Appeler LayoutCommandService.zoomParent : writer.frames reçoit la taille de l’écran avant saveChecked, puis le résultat porte changed=false et failed. Variante : même fichier d’intents corrompu, appeler DesktopCommandService.assignActiveWindow(to:2); l’appartenance persistée passe au bureau 2 et le pin est retiré avant le refus annoncé.",
+      "impact": "L’utilisateur reçoit un refus alors que son écran ou son affectation a changé. Un réessai peut être ignoré comme déjà effectué, et le maintien peut appliquer l’état partiellement validé.",
+      "path_type": "cold",
+      "remediation": "Persister la décision avant l’effet AX. Regrouper les écritures dépendantes ou restaurer les valeurs précédentes si une étape échoue; si un retour arrière échoue, exposer explicitement un résultat partiel. Étendre aux transferts la stratégie déjà appliquée à setMode et balance.",
+      "remediation_code": "// Exemple pour zoomParent : écrire l'intent avant l'effet AX.\nlet previous = service.effectiveIntentStore.intent(for: context.scope)\ndo {\n    try service.saveLayoutIntentChecked(\n        scope: context.scope,\n        windowIDs: [activeID],\n        placements: [activeID: display.visibleFrame],\n        source: .command,\n        zoomedWindowID: activeID\n    )\n} catch {\n    return persistenceFailure(\"layout zoom-parent\", error)\n}\nlet plan = ApplyPlan(commands: [ApplyCommand(window: entry.window, frame: display.visibleFrame)])\nlet result = service.apply(plan, generation: generation)\nif result.failed == result.attempted {\n    do {\n        if let previous { try service.effectiveIntentStore.saveChecked(previous) }\n        else { try service.effectiveIntentStore.removeChecked(scope: context.scope) }\n    } catch {\n        return LayoutCommandResult(message: \"layout zoom-parent: failed, rollback failed: \\(error)\", changed: true)\n    }\n}",
+      "verification": "Injecter séparément un intent illisible et un échec d’écriture tardif. Vérifier le résultat, writer.frames, le bureau/stage du membre, son pin et l’intent précédent. Après refus sans résultat partiel, ces valeurs doivent être inchangées; une passe de maintien ne doit pas déclencher l’opération refusée.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture des chaînes complètes; injection runtime non exécutée par ce sous-agent",
+      "original_related_ids": [
+        "REL-021"
+      ],
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/DesktopCommands.swift",
+          "line": 205,
+          "evidence": "                return (targetStageScope, removedPin, state.currentDesktopID(for: displayID) == desktopID, rememberedFrame)\n            }\n            if let sourceScope {\n                try service.removeLayoutIntentChecked(scope: sourceScope)\n            }\n            try service.removeLayoutIntentChecked(scope: transaction.0)\n        } catch {\n            return .persistenceFailure(\"window desktop \\(desktopID.rawValue)\", error)\n        }"
+        },
+        {
+          "file": "Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 776,
+          "evidence": "                state.update(targetScope)\n                let pin = state.removePin(windowID: active.window.id)\n                state.suppressRulePlacement(window: transferredWindow)\n                return pin\n            }\n            if let sourceScope {\n                try service.removeLayoutIntentChecked(scope: sourceScope)\n            }\n            try service.removeLayoutIntentChecked(scope: targetScopeID)"
+        },
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 672,
+          "evidence": "        var failed = movingStage.members.count - placed\n        do {\n            try intentStore.removeChecked(scope: StageScope(displayID: sourceDisplay.id, desktopID: move.sourceDesktopID, stageID: requestedStageID))\n            try intentStore.removeChecked(scope: targetScopeID)\n        } catch {\n            return .persistenceFailure(\"stage move-to-display \\(requestedStageID.rawValue)\", error)\n        }\n        let result = service.applyCommandPlacement(placement, cause: \"stage.move_display\", generation: generation, events: events).result"
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift:86 : mutation contrôlée distincte, refus de fichier corrompu avant exécution du corps et conservation des octets.",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift:176 : pipeline de transfert partagé et validation du bureau courant aux entrées.",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift:1553 : ensembles construits une fois pour conserver un ordre linéaire.",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift:26 : vérification des membres et du membre actif après chaque étape métier.",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RestoreSafetyService.swift:147 : restauration distingue les Spaces plein écran natifs et les fenêtres absentes sans preuve de fermeture."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DesktopCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowGroupCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowBookmarkCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WidthAdjustmentService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RulesCommandService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayParkingService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FileLock.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RestoreSafetyService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/HiddenWindowPlacement.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowPresentationStateResolver.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DisplayTopology.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotDTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotGTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupCommandTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotBTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotATests.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotJTests.swift",
+      "ranges": [
+        "100-245"
+      ],
+      "purpose": "signets absents et réapparition"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+      "ranges": [
+        "287-420"
+      ],
+      "purpose": "mutateChecked et rail pin"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3Tests.swift",
+      "ranges": [
+        "1-215"
+      ],
+      "purpose": "commandes avec pannes de persistance"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/PowerUserFocusCommandTests.swift",
+      "ranges": [
+        "130-188"
+      ],
+      "purpose": "suppression de signet seulement avec processus mort"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "ranges": [
+        "1448-1542"
+      ],
+      "purpose": "save/remove intent vérifiés jusqu’au store"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutIntentStore.swift",
+      "ranges": [
+        "65-119"
+      ],
+      "purpose": "saveChecked/removeChecked"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "ranges": [
+        "960-1080"
+      ],
+      "purpose": "validation arguments et appel assign-empty"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+      "ranges": [
+        "29-55"
+      ],
+      "purpose": "préconditions StageID et WindowID"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Config.swift",
+      "ranges": [
+        "273-305"
+      ],
+      "purpose": "workspaces vide par défaut"
+    }
+  ],
+  "warnings": [
+    "Aucun build ou test exécuté par ce sous-agent; exécution centralisée par le coordinateur.",
+    "Pas de déplacement AX réel ni de débranchement écran; comportement système évalué par lecture et tests de fixtures lus.",
+    "Contre-audit indépendant nécessaire pour REL-101 avant agrégation finale; le coordinateur a reçu le signalement.",
+    "Duplication : inspection manuelle des fichiers attribués; aucun pourcentage JSCPD produit par ce sous-agent.",
+    "Minimalisme : checklists 1-6 appliquées au périmètre; pas de nouveau code supprimable sans changer un comportement démontré. Les paramètres API de compatibilité ne sont pas comptés comme code inutile.",
+    "REL-102 doit être fusionné avec les occurrences de persistance UI/StateAudit déjà signalées au coordinateur.",
+    "Signal supplémentaire transmis au coordinateur CLI : stage summon 0 construit WindowID(0) après conversion UInt32 sans garde >0; non dupliqué ici."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "L’extraction DesktopCommands.moveWindow supprime la duplication initiale. Les autres pipelines ont des règles distinctes (switch, placement, zoom, reprise). Les fusionner en framework augmenterait les branches et le nombre de paramètres. Le volume porte des fonctionnalités réelles et des contraintes macOS documentées. La charge future reste accrue par l’ordre des écritures dépendantes (REL-102), plutôt que par une abstraction inutile. Rien ne permet d’attribuer une origine de génération au code."
+  }
+}

@@ -105,7 +105,9 @@ Le navrail accepte aussi les interactions souris :
 
 - drag d'une miniature vers une stage;
 - drag d'une miniature vers l'espace actif;
-- drag d'une fenetre d'application par sa barre de titre vers une stage ou une zone vide.
+- drag d'une fenetre d'application par sa barre de titre vers une stage ou une zone vide;
+- drag d'une stage avec le bouton droit pour la reordonner;
+- clic droit sur une stage pour ouvrir son menu (renommer, envoyer vers un autre ecran).
 
 ## Securite et fichiers generes
 
@@ -332,7 +334,7 @@ distance au bas du rail en pixels.
 
 ## Raccourcis
 
-Roadie n'a pas de moteur de raccourcis clavier. Utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
+Roadie n'a pas de moteur de raccourcis clavier. La seule exception est `search_hotkey`, le raccourci global du mode recherche (voir `[experimental.target_mode]`). Pour le reste, utilise un outil qui lance une commande à l'appui d'une touche. Le dossier `examples/` contient des fichiers prêts à l'emploi :
 
 - `examples/skhd/skhdrc` : raccourcis pour [skhd](https://github.com/koekeishiya/skhd). Copie-le vers `~/.config/skhd/skhdrc`, puis lance `skhd --reload`.
 - `examples/karabiner/roadie.json` : règles pour Karabiner-Elements. Copie-le vers `~/.config/karabiner/assets/complex_modifications/`, puis active les règles dans Karabiner-Elements > Complex Modifications > Add predefined rule.

@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "build": "succeeded via swift test",
+  "swift_tests": 1112,
+  "safe_t6_tests": 4,
+  "distinct_swift_tests": 1116,
+  "excluded_tests": 47,
+  "pure_probes": 4,
+  "pure_probes_exit_code": 0,
+  "warnings": [
+    "internal redondant dans une extension private : Sources/RoadieDaemon/DaemonSnapshot.swift:2193",
+    "SwiftPM : option --skip-update dépréciée"
+  ],
+  "limitations": [
+    "47 des 1163 tests annoncés n’ont pas été exécutés : 42 tests des suites CLICommandRouterTests, Audit022LotITests et Audit022R2LotCTests utilisent des sockets hors du scratch ; 5 tests de cycle de vie dans Audit022R4LotT6Tests arrêtent leurs propres processus. Le test réseau intermittent cité fait partie des exclusions.",
+    "Aucune interaction réelle avec les fenêtres, clics, glisser-déposer, hotkeys, écrans, Accessibilité macOS ou capture. Les scénarios système restent vérifiés par lecture ; les sondes ajoutées sont pures.",
+    "Aucun démarrage, arrêt ou redémarrage de daemon/composant/application. Scripts d’installation, signature, désinstallation et cycle de vie seulement lus. Aucun make install.",
+    "Aucun profil CPU/mémoire ni benchmark de latence. Les coûts algorithmiques sont établis par les boucles et leurs appelants, sans revendication de durée observée.",
+    "Aucun scan externe CVE, audit exhaustif du code de TOMLKit ni scan complet des secrets dans l’historique Git. Permissions réelles du HOME, précréation de chemins et protections système contre les liens symboliques non certifiées.",
+    "Les 96 fichiers Swift de production sont lus intégralement. Tests, scripts, documentation, specs et ressources sont contrôlés selon les risques. Aucun taux instrumenté de couverture de tests, mutation testing ou taux global de duplication calculé.",
+    "La course interprocessus de REL-046 et le démarrage lent de REL-050 n’ont pas été reproduits ; ils restent plausibles.",
+    "Le pointeur audits/latest et les artefacts des audits précédents restent inchangés, conformément au périmètre d’écriture autorisé.",
+    "Les exemples de correction du rapport n’ont pas été appliqués ni compilés. Seules les sondes de comportement courant ont été compilées et exécutées."
+  ]
+}

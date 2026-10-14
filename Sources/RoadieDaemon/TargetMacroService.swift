@@ -14,6 +14,12 @@ public enum TargetMacroEventKind: String, Codable, Equatable, Sendable {
     case scroll
 }
 
+/// Bouton de souris d'un événement de macro (REL-025).
+public enum TargetMacroMouseButton: String, Codable, Equatable, Sendable {
+    case left
+    case right
+}
+
 public struct TargetMacroEvent: Codable, Equatable, Sendable {
     public var t: Double
     public var kind: TargetMacroEventKind
@@ -24,6 +30,8 @@ public struct TargetMacroEvent: Codable, Equatable, Sendable {
     public var scrollDeltaY: Int32?
     public var target: RoadieTarget?
     public var gridPath: String?
+    /// Absent des fichiers antérieurs à REL-025 : clic gauche.
+    public var button: TargetMacroMouseButton?
 
     public init(
         t: Double,
@@ -34,7 +42,8 @@ public struct TargetMacroEvent: Codable, Equatable, Sendable {
         modifiers: UInt64 = 0,
         scrollDeltaY: Int32? = nil,
         target: RoadieTarget? = nil,
-        gridPath: String? = nil
+        gridPath: String? = nil,
+        button: TargetMacroMouseButton? = nil
     ) {
         self.t = t
         self.kind = kind
@@ -45,6 +54,11 @@ public struct TargetMacroEvent: Codable, Equatable, Sendable {
         self.scrollDeltaY = scrollDeltaY
         self.target = target
         self.gridPath = gridPath
+        self.button = button
+    }
+
+    public var mouseButton: TargetMacroMouseButton {
+        button ?? .left
     }
 }
 
@@ -138,15 +152,33 @@ public struct TargetMacroService {
     private let config: TargetRecordConfig
     private let gridConfig: TargetGridConfig
     private let manager = FileManager.default
+    /// Points d'injection des tests (REL-024, REL-025, TEST-002) : émission des événements et clic
+    /// sémantique d'une cible, sans CGEvent ni AX réels.
+    private let postEvent: (CGEvent) -> Void
+    private let activateTarget: (RoadieTarget, TargetActionVerb) -> TargetActionResult
 
     public init(
         service: SnapshotService = SnapshotService(),
         config: TargetRecordConfig? = nil,
         gridConfig: TargetGridConfig? = nil
     ) {
+        self.init(service: service, config: config, gridConfig: gridConfig, postEvent: { $0.post(tap: .cghidEventTap) })
+    }
+
+    init(
+        service: SnapshotService,
+        config: TargetRecordConfig? = nil,
+        gridConfig: TargetGridConfig? = nil,
+        postEvent: @escaping (CGEvent) -> Void,
+        activateTarget: ((RoadieTarget, TargetActionVerb) -> TargetActionResult)? = nil
+    ) {
         self.service = service
         self.config = config ?? service.effectiveConfig.experimental.targetRecord
         self.gridConfig = gridConfig ?? service.effectiveConfig.experimental.targetGrid
+        self.postEvent = postEvent
+        self.activateTarget = activateTarget ?? { target, action in
+            TargetHintService(service: service).activate(target.id, action: action)
+        }
     }
 
     public func list() -> TargetMacroListReport {
@@ -257,15 +289,9 @@ public struct TargetMacroService {
         }
         do {
             let recording = try inspect(name)
-            let startedAt = Date()
-            for event in recording.events {
-                let targetTime = startedAt.addingTimeInterval(event.t)
-                if targetTime > Date() {
-                    Thread.sleep(forTimeInterval: targetTime.timeIntervalSinceNow)
-                }
-                replay(event)
-            }
-            return TargetActionResult(changed: true, message: "replayed \(name) events=\(recording.events.count)")
+            let fallbacks = replay(events: recording.events)
+            let suffix = fallbacks > 0 ? " semantic_fallbacks=\(fallbacks)" : ""
+            return TargetActionResult(changed: true, message: "replayed \(name) events=\(recording.events.count)\(suffix)")
         } catch {
             return TargetActionResult(changed: false, message: "replay failed: \(error.localizedDescription)", error: "replay_failed")
         }
@@ -282,20 +308,98 @@ public struct TargetMacroService {
             .first
     }
 
-    private func replay(_ event: TargetMacroEvent) {
-        if let target = event.target,
-           target.kind == .appElement,
-           event.kind == .mouseUp {
-            _ = TargetHintService(service: service).activate(target.id, action: .click)
-            return
+    /// Rejoue les événements à leur instant enregistré. Renvoie le nombre de clics sémantiques rejoués
+    /// aux coordonnées faute de cible résolue. O(n * h), n = nombre d'événements, h = appuis bruts
+    /// encore tenus (quelques-uns au plus).
+    func replay(events: [TargetMacroEvent]) -> Int {
+        let startedAt = Date()
+        var fallbacks = 0
+        // REL-038 : appuis bruts émis sans leur relâchement. Une capture tronquée (max_events, durée
+        // écoulée) peut finir sur un appui ; il est relâché en fin de replay, du dernier au premier.
+        var held: [TargetMacroEvent] = []
+        defer {
+            for var press in held.reversed() {
+                press.kind = press.kind == .mouseDown ? .mouseUp : .keyUp
+                replay(press)
+            }
+        }
+        var index = 0
+        while index < events.count {
+            let event = events[index]
+            let targetTime = startedAt.addingTimeInterval(event.t)
+            if targetTime > Date() {
+                Thread.sleep(forTimeInterval: targetTime.timeIntervalSinceNow)
+            }
+            // REL-024 : un clic complet sur une cible applicative est une unité, résolue avant toute
+            // émission. Clic sémantique réussi : ni down ni up bruts. Échec : paire down/up aux
+            // coordonnées enregistrées, le relâchement n'est jamais perdu. REL-025 : un geste sans
+            // action sémantique fidèle (Maj-clic, Cmd-clic droit…) est rejoué en brut, drapeaux complets.
+            if index + 1 < events.count, let target = Self.semanticClickTarget(down: event, up: events[index + 1]),
+               let action = Self.semanticAction(for: event) {
+                let result = activateTarget(target, action)
+                if result.changed, result.error == nil {
+                    index += 2
+                    continue
+                }
+                fallbacks += 1
+            }
+            replay(event)
+            Self.track(event, held: &held)
+            index += 1
+        }
+        return fallbacks
+    }
+
+    /// Même bouton ou même touche : un relâchement libère l'appui correspondant (REL-038). O(h).
+    private static func track(_ event: TargetMacroEvent, held: inout [TargetMacroEvent]) {
+        let pairs: (TargetMacroEvent) -> Bool = { press in
+            switch (press.kind, event.kind) {
+            case (.mouseDown, .mouseDown), (.mouseDown, .mouseUp): press.mouseButton == event.mouseButton
+            case (.keyDown, .keyDown), (.keyDown, .keyUp): press.keyCode == event.keyCode
+            default: false
+            }
         }
         switch event.kind {
-        case .mouseDown:
+        case .mouseDown where event.point != nil, .keyDown where event.keyCode != nil:
+            held.removeAll(where: pairs)
+            held.append(event)
+        case .mouseUp where event.point != nil, .keyUp where event.keyCode != nil:
+            held.removeAll(where: pairs)
+        default:
+            break
+        }
+    }
+
+    /// Cible d'un clic complet : down puis up immédiat, même bouton, même cible applicative.
+    static func semanticClickTarget(down: TargetMacroEvent, up: TargetMacroEvent) -> RoadieTarget? {
+        guard down.kind == .mouseDown, up.kind == .mouseUp,
+              down.mouseButton == up.mouseButton,
+              let target = down.target, target.kind == .appElement,
+              up.target?.id == target.id
+        else { return nil }
+        return target
+    }
+
+    /// Action sémantique fidèle au clic enregistré (REL-025) : clic, clic droit ou Commande-clic, sans
+    /// autre modificateur. Nil pour toute autre combinaison (Maj, Option, Contrôle, Cmd-clic droit) :
+    /// aucune action ne la représente, le replay la rejoue en brut. Les bits sans effet sur un clic
+    /// (verrouillage majuscule, événement non fusionné) sont ignorés.
+    static func semanticAction(for event: TargetMacroEvent) -> TargetActionVerb? {
+        let modifiers = CGEventFlags(rawValue: event.modifiers)
+            .intersection([.maskShift, .maskControl, .maskAlternate, .maskCommand])
+        switch (event.mouseButton, modifiers) {
+        case (.left, []): return .click
+        case (.right, []): return .rightClick
+        case (.left, .maskCommand): return .commandClick
+        default: return nil
+        }
+    }
+
+    private func replay(_ event: TargetMacroEvent) {
+        switch event.kind {
+        case .mouseDown, .mouseUp:
             guard let point = event.point?.cgPoint else { return }
-            postMouse(type: .leftMouseDown, point: point)
-        case .mouseUp:
-            guard let point = event.point?.cgPoint else { return }
-            postMouse(type: .leftMouseUp, point: point)
+            postMouse(event, at: point)
         case .mouseMove:
             guard let point = event.point?.cgPoint else { return }
             CGDisplayMoveCursorToPoint(CGMainDisplayID(), point)
@@ -307,20 +411,34 @@ public struct TargetMacroService {
             postKey(type: .keyUp, keyCode: CGKeyCode(code), modifiers: CGEventFlags(rawValue: event.modifiers))
         case .scroll:
             guard let delta = event.scrollDeltaY else { return }
-            let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0)
-            scroll?.post(tap: .cghidEventTap)
+            if let scroll = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0) {
+                postEvent(scroll)
+            }
         }
     }
 
-    private func postMouse(type: CGEventType, point: CGPoint) {
-        let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: .left)
-        event?.post(tap: .cghidEventTap)
+    /// REL-025 : bouton et modificateurs enregistrés.
+    private func postMouse(_ recorded: TargetMacroEvent, at point: CGPoint) {
+        let isDown = recorded.kind == .mouseDown
+        let type: CGEventType
+        let button: CGMouseButton
+        switch recorded.mouseButton {
+        case .left:
+            type = isDown ? .leftMouseDown : .leftMouseUp
+            button = .left
+        case .right:
+            type = isDown ? .rightMouseDown : .rightMouseUp
+            button = .right
+        }
+        guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point, mouseButton: button) else { return }
+        event.flags = CGEventFlags(rawValue: recorded.modifiers)
+        postEvent(event)
     }
 
     private func postKey(type: CGEventType, keyCode: CGKeyCode, modifiers: CGEventFlags) {
-        let event = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: type == .keyDown)
-        event?.flags = modifiers
-        event?.post(tap: .cghidEventTap)
+        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: type == .keyDown) else { return }
+        event.flags = modifiers
+        postEvent(event)
     }
 
     private func recordsDirectory() -> URL {
@@ -437,12 +555,12 @@ private func macroTapCallback(
     let point = event.location
     let modifiers = event.flags.rawValue
     switch type {
-    case .leftMouseDown, .rightMouseDown:
+    case .leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp:
+        // REL-025 : le bouton est conservé avec le geste.
+        let kind: TargetMacroEventKind = type == .leftMouseDown || type == .rightMouseDown ? .mouseDown : .mouseUp
+        let button: TargetMacroMouseButton = type == .rightMouseDown || type == .rightMouseUp ? .right : .left
         let context = box.targetContext.context(for: point, includeAXContext: box.includeAXContext)
-        box.append(TargetMacroEvent(t: elapsed, kind: .mouseDown, point: CGPointCodable(point), modifiers: modifiers, target: context.0, gridPath: context.1))
-    case .leftMouseUp, .rightMouseUp:
-        let context = box.targetContext.context(for: point, includeAXContext: box.includeAXContext)
-        box.append(TargetMacroEvent(t: elapsed, kind: .mouseUp, point: CGPointCodable(point), modifiers: modifiers, target: context.0, gridPath: context.1))
+        box.append(TargetMacroEvent(t: elapsed, kind: kind, point: CGPointCodable(point), modifiers: modifiers, target: context.0, gridPath: context.1, button: button))
     case .mouseMoved:
         guard box.includeMouseMoves else { break }
         box.append(TargetMacroEvent(t: elapsed, kind: .mouseMove, point: CGPointCodable(point), modifiers: modifiers))

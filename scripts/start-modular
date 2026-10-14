@@ -44,6 +44,8 @@ if command -v tmux >/dev/null 2>&1 && tmux has-session -t roadied 2>/dev/null; t
 fi
 
 # Liste des composants a lancer. Pour exclure un composant, retirer sa ligne.
+# Tout composant ajouté ici doit aussi figurer dans modular_components de scripts/stop (REL-032) :
+# sans cela, `make stop` et la désinstallation le laisseraient vivant.
 COMPONENTS=(
   "tiler:run-tiler --yes"
   "rail:run-rail"
@@ -107,4 +109,4 @@ done
 echo ""
 echo "roadie status: \$ roadie query components"
 echo "stop one:     \$ tmux kill-session -t roadie-<NAME>"
-echo "stop all:     \$ for s in \$(tmux ls -F '#S' | grep ^roadie-); do tmux kill-session -t \$s; done"
+echo "stop all:     \$ make stop   (ou : for s in \$(tmux ls -F '#S' | grep ^roadie-); do tmux kill-session -t \$s; done)"

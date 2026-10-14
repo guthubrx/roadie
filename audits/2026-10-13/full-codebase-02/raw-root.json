@@ -1,0 +1,102 @@
+{
+  "original_statuses": [
+    {
+      "id": "REL-014",
+      "status": "résolu",
+      "reason": "config reload appelle le ConfigReloadService partagé du daemon, publie activePath/config et maintient la configuration précédente en cas de validation refusée. Le cache des règles compare la liste des règles réellement actives, y compris après chargement d’un autre fichier.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 296,
+          "note": "Routage config reload au daemon."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+          "line": 516,
+          "note": "Appel effectif configReload.reload."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+          "line": 183,
+          "note": "Publication de la configuration chargée et de son chemin actif."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1826,
+          "note": "Cache du moteur construit depuis effectiveConfig.rules."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotITests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotDTests.swift"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "REL-ROOT-001",
+      "category": "reliability",
+      "subcategory": "exit_code_from_user_text",
+      "severity": "LOW",
+      "file": "Sources/RoadieDaemon/CLICommandRouter.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 272,
+      "title": "Les mots contenus dans un identifiant peuvent transformer un succès sans effet en échec",
+      "description": "actionExitCode recherche ses marqueurs dans tout le message, y compris les valeurs utilisateur. Après création d’une stage failed, sa création répétée renvoie already exists et changed=false mais le code de sortie vaut 1. Le retrait du seul marqueur not visible ne règle pas la cause.",
+      "evidence": "    nonisolated static func actionExitCode(changed: Bool, message: String) -> Int32 {\n        guard !changed else { return 0 }\n        let failureMarkers = [\"not found\", \"unknown\", \"requires\", \"failed\", \"unavailable\", \"must \"]\n        let lowered = message.lowercased()\n        return failureMarkers.contains { lowered.contains($0) } ? 1 : 0\n    }\n",
+      "exploitability": "CONFIRMED",
+      "exploitation_scenario": "Sur un écran actif : roadie stage create failed puis même commande. Le second résultat already exists devient code 1, tandis que la même opération sur demo retourne 0. La sonde appelle la fonction réelle sur ces messages, sans toucher au bureau.",
+      "impact": "Un script reçoit un faux échec pour une action idempotente, selon le nom choisi. Aucun changement destructeur supplémentaire n’est démontré.",
+      "path_type": "cold",
+      "remediation": "Ajouter un statut explicite succès/sans-effet/échec dans les résultats métier et calculer le code sur ce statut. Ne plus déduire le statut du texte affiché.",
+      "remediation_code": "enum CommandOutcome { case changed, noOp, failed }\nfunc actionExitCode(outcome: CommandOutcome) -> Int32 {\n    outcome == .failed ? 1 : 0\n}\n// Ajouter outcome aux résultats et le renseigner à chaque point de retour.",
+      "verification": "Tester create répété avec identifiants failed, not found, unknown, requires, unavailable, must x et demo : code 0 pour tous les already exists; conserver code1 sur échec réel de persistance.",
+      "effort": "M",
+      "regression_risk": "MEDIUM",
+      "status": "open",
+      "verification_status": "confirmé par lecture et reproduction isolée de la fonction réelle",
+      "origin": "préexistant à la session; résiduel connu FR-039/R2-06, nouveau dans la liste de l’audit complet",
+      "related_locations": [
+        {
+          "file": "Sources/RoadieDaemon/StageCommands.swift",
+          "line": 348,
+          "note": "Message already exists interpole stageID."
+        }
+      ]
+    }
+  ],
+  "positive_findings": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "line": 517,
+      "description": "Le rechargement CLI agit sur le service partagé et renvoie un code non nul en cas de validation refusée."
+    }
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/ConfigReloadService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieCore/Identifiers.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TestEnvironment.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/CLICommandRouterTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/ConfigReloadTests.swift"
+  ],
+  "files_read_partial": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/EventLog.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieTiler/BSPLayoutStrategy.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandService.swift"
+  ],
+  "warnings": [
+    "Aucun scénario AX réel exécuté; aucun processus existant arrêté ou relancé.",
+    "Validation : compilation + 1044 tests passés; 42 tests de trois suites exclus pour respecter les chemins autorisés.",
+    "Les sondes isolées ont confirmé les codes CLI, le débordement géométrique bsp, le cache de glisser et tail UTF-8. Aucun crash du daemon provoqué."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Le statut métier explicite est nécessaire; ajouter une liste croissante de mots-clés augmenterait la dette. Aucun helper supplémentaire à supprimer identifié dans ce périmètre."
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "audit_meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-13T14:29:42.559673+00:00",
+    "scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation",
+    "scope_mode": "full",
+    "mode": "M / STANDARD",
+    "grid": "all",
+    "head": "4643ae4df4b3390218e9d9acebaa87f878c40b9c",
+    "parallelism_note": "Six lectures thématiques Sonnet, compléments par six réviseurs natifs, consolidation et trois contre-audits indépendants. Aucun agent ne modifie le code audité."
+  },
+  "repo": {
+    "files_count": 203,
+    "production_swift_count": 96,
+    "test_swift_count": 105,
+    "languages": [
+      "Swift",
+      "Python",
+      "Shell"
+    ],
+    "frameworks": [
+      "AppKit",
+      "ApplicationServices",
+      "Swift Testing",
+      "TOMLKit"
+    ],
+    "type": "macOS desktop daemon + CLI",
+    "has_ui": true,
+    "has_llm_integration": false,
+    "db_type": "JSON files",
+    "ci_system": null,
+    "container": false
+  },
+  "sampling": null,
+  "hot_paths": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CommandSocketServer.swift",
+      "entry": "serve/respond"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/CLICommandRouter.swift",
+      "entry": "run"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "entry": "tick"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+      "entry": "windows/focus"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+      "entry": "SnapshotService"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+      "entry": "refresh"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TargetModeRuntimeController.swift",
+      "entry": "handle"
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+      "entry": "mutate"
+    }
+  ],
+  "threat_model": {
+    "assets": [
+      "État persistant des fenêtres",
+      "Focus et géométrie du bureau",
+      "Titres de fenêtres et captures",
+      "Configuration et journaux"
+    ],
+    "attackers": [
+      "Processus local du même utilisateur",
+      "Autre compte local",
+      "Dépendance compromise"
+    ],
+    "surface": [
+      "Socket Unix",
+      "Commandes CLI",
+      "Fichiers TOML/JSON",
+      "Accessibilité macOS et événements clavier/souris"
+    ],
+    "internet_listener": false
+  },
+  "slos": {
+    "defined": false,
+    "proposed": {
+      "note": "Mesurer latence des commandes et du placement sur bureau représentatif; aucune valeur inventée."
+    }
+  },
+  "modules_actifs": [
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "09",
+    "10",
+    "11",
+    "12"
+  ]
+}

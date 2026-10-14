@@ -1,0 +1,28 @@
+{
+  "command": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/scripts/with-xcode",
+    "swift",
+    "test",
+    "--skip-build",
+    "--scratch-path",
+    "/tmp/roadie-build-022-audit3",
+    "--cache-path",
+    "/tmp/roadie-build-022-audit3/cache",
+    "--config-path",
+    "/tmp/roadie-build-022-audit3/config",
+    "--security-path",
+    "/tmp/roadie-build-022-audit3/security",
+    "--disable-sandbox",
+    "--skip-update",
+    "--force-resolved-versions",
+    "--filter",
+    "Audit022R4LotT6Tests/(tailSurvives|tailKeeps|refusedRemoval|successfulRemoval)",
+    "--jobs",
+    "4"
+  ],
+  "environment_overrides": {
+    "TMPDIR": "/tmp/roadie-build-022-audit3/tmp/",
+    "CLANG_MODULE_CACHE_PATH": "/tmp/roadie-build-022-audit3/module-cache",
+    "SWIFTPM_MODULECACHE_OVERRIDE": "/tmp/roadie-build-022-audit3/module-cache"
+  }
+}

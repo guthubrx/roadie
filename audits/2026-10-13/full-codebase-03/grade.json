@@ -1,0 +1,101 @@
+{
+  "grade": "A",
+  "date": "2026-10-13",
+  "spec": "all",
+  "scope": "Tout le dépôt Roadie à HEAD 4643ae4d, worktree 022-audit-remediation",
+  "coverage_percent": 100.0,
+  "score_numeric": 94.47,
+  "release_blocked": true,
+  "justification": "Score canonique v14 des constats actifs. Lecture intégrale production; tests/docs par risque. Les HIGH bloquent indépendamment du score global.",
+  "metrics": {
+    "security": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "supply_chain": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "observability": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "reliability": {
+      "grade": "B",
+      "numeric": 79,
+      "findings_count": 9,
+      "by_severity": {
+        "MEDIUM": 6,
+        "LOW": 3
+      }
+    },
+    "tests": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "performance": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "complexity": {
+      "grade": "C",
+      "numeric": 70,
+      "findings_count": 3,
+      "by_severity": {
+        "HIGH": 3
+      }
+    },
+    "quality": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "architecture": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "ai_hygiene": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "duplication": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "minimalism": {
+      "grade": "A",
+      "numeric": 97,
+      "findings_count": 3,
+      "by_severity": {
+        "LOW": 3
+      }
+    },
+    "ux": {
+      "grade": "A",
+      "numeric": 100,
+      "findings_count": 0,
+      "by_severity": {}
+    },
+    "llm_security": {
+      "grade": "N/A",
+      "findings_count": 0
+    }
+  }
+}

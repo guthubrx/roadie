@@ -14,7 +14,9 @@ import RoadieCore
 public struct SpatialBSPLayoutStrategy: LayoutStrategy {
     public init() {}
 
-    // O(n²) au pire (insertions de secours) - n = fenêtres du stage, borné.
+    // O(n) quand toutes les fenêtres ont une feuille (cas normal) ; avant PERF-002, O(n²) :
+    // un `contains` récursif par fenêtre. O(n²) au pire avec des insertions de secours
+    // (`inserting` est O(n²), voir BSPTree) - n = fenêtres du stage, borné.
     public func plan(_ request: LayoutRequest) -> LayoutPlan {
         let windows = request.windowIDs
         guard !windows.isEmpty else { return LayoutPlan(placements: [:]) }
@@ -23,9 +25,13 @@ public struct SpatialBSPLayoutStrategy: LayoutStrategy {
         let gap = CGFloat(request.innerGap)
         let requested = Set(windows)
         let full = request.bspTree ?? .empty
-        var tree = full.projected(excluding: Set(full.windowIDs).subtracting(requested))
+        let leaves = Set(full.windowIDs)
+        var tree = full.projected(excluding: leaves.subtracting(requested))
+        // Feuilles de l'arbre projeté = feuilles demandées : un test d'appartenance O(1)
+        // remplace le parcours de l'arbre pour chaque fenêtre.
+        var present = leaves.intersection(requested)
         var previous: WindowID?
-        for id in windows where !tree.contains(id) {
+        for id in windows where present.insert(id).inserted {
             tree = tree.inserting(id, at: previous, side: .right, in: rect, innerGap: gap)
             previous = id
         }

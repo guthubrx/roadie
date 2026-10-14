@@ -1,0 +1,272 @@
+{
+  "original_statuses": [
+    {
+      "id": "PERF-003",
+      "status": "résolu",
+      "reason": "Les deux appelants utilisent DropGroupGeometry.planGroup. Une passe unique remplit un seul dictionnaire, sans copie de suffixe ni fusion récursive : O(n). Le calcul de structuralPlacements utilise aussi un Set pour le groupe cible. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 488,
+          "note": "Passe unique, capacité réservée, première occurrence conservée. Commentaire O(n) présent."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+          "line": 1146,
+          "note": "Les deux groupes partagent le même helper linéaire."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:25 perf003PlanGroupMatchesRecursiveVersion",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:39 perf003RepeatedIdentifierKeepsFirstPlacement",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:48 perf003StructuralPreviewKeepsPlacements"
+      ]
+    },
+    {
+      "id": "DUP-001",
+      "status": "résolu",
+      "reason": "Les trois familles de menus appellent actionTarget, qui délègue à une seule méthode executeAndLog. La construction des destinations reste distincte. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 481,
+          "note": "Fabrique commune de cible AppKit, retenue dans menuTargets."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 490,
+          "note": "Exécution et journal centralisés."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:170 dup001EveryMenuFamilyLogsTheSameFailureEvent",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:192 dup001SuccessfulActionLogsActionEvent"
+      ]
+    },
+    {
+      "id": "MIN-001",
+      "status": "résolu",
+      "reason": "RailPanel réutilise stageCard pour les actions et les charges de glisser (ligne 376). StageCardView partage les cadres de mosaïque et d'icônes entre rendu et sélection (hitPreviewItems ligne 671 réutilise mosaicPreviewFrames/iconPreviewFrames). Le double adaptateur de renommage a disparu. Le partage de la transformation parallax (tour4 REL-040) renforce ce constat. Aucune régression après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+          "line": 376,
+          "note": "action appelle stageCard(at:) ; même helper pour stageID, dragPayload, stageDragPayload."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 671,
+          "note": "hitPreviewItems réutilise mosaicPreviewFrames et iconPreviewFrames. Commentaire MIN-001 présent."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 422,
+          "note": "Le renommage utilise RailMenuActionTarget — plus de double adaptateur."
+        }
+      ],
+      "tests": []
+    },
+    {
+      "id": "PERF-006",
+      "status": "résolu",
+      "reason": "La garde enabled précède snapshot et le reste du traitement. Les moniteurs restent installés pour le rechargement à chaud. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+          "line": 209,
+          "note": "Retour avant snapshot si menu désactivé. Commentaire explicatif présent."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:149 perf006DisabledMenuSkipsSnapshot",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:159 perf006EnabledMenuStillReadsSnapshot"
+      ]
+    },
+    {
+      "id": "REL-019",
+      "status": "résolu",
+      "reason": "La première fenêtre à l'écran dans l'ordre du snapshot est choisie avant le filtre d'éligibilité. Une fenêtre non gérée masque donc les fenêtres derrière. Le focus et le départ du glisser partagent cette sélection. Le fournisseur conserve l'ordre CG et inclut les fenêtres non candidates. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+          "line": 261,
+          "note": "Premier élément isOnScreen dont le cadre contient le point ; ordre CG documenté en commentaire."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 641,
+          "note": "Éligibilité puis bande de titre appliquées à la première fenêtre (FocusFollowsMousePicker.frontWindow)."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:88 rel019FocusPicksFrontWindowOverSmallerHiddenOne",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:98 rel019UnmanagedFrontWindowBlocksWindowsBehind",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:110 rel019OffscreenWindowDoesNotBlock",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:120 rel019DragStartIgnoresTitlebarCoveredByAnotherWindow"
+      ]
+    },
+    {
+      "id": "REL-022",
+      "status": "résolu",
+      "reason": "La garde compare le couple écran/stage. Deux stages de même identifiant sur des écrans distincts déclenchent le déplacement. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 776,
+          "note": "Le chemin réel de dépôt appelle railDropMovesWindow."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+          "line": 1107,
+          "note": "Comparaison de sourceDisplayID/targetDisplayID et des stages : sourceDisplayID != targetDisplayID || sourceStageID != targetStageID."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022LotHTests.swift:134 rel022RailDropComparesDisplayAndStage"
+      ]
+    },
+    {
+      "id": "TEST-004",
+      "status": "résolu",
+      "reason": "refresh transmet groupLabel dans BorderRenderModel au panneau réel. BorderView le dessine. Les tests observent les modèles envoyés par refresh. La borne de la pastille est présente. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift",
+          "line": 85,
+          "note": "groupLabel inclus dans le modèle de rendu."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift",
+          "line": 225,
+          "note": "Dessin réel de la pastille et du texte ; géométrie bornée."
+        }
+      ],
+      "tests": [
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R2LotHTests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R3LotDTests.swift",
+        "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift"
+      ]
+    },
+    {
+      "id": "QUAL-001",
+      "status": "résolu",
+      "reason": "Les README FR/EN décrivent le glisser au bouton droit. Les deux guides attribuent le drag/drop au rail. Les pages CLI documentent l'exception search_hotkey. Les gestes concordent avec le code. Aucune régression détectée après tour4.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.fr.md",
+          "line": 534,
+          "note": "Glisser au bouton droit."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.md",
+          "line": 540,
+          "note": "Right mouse button."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md",
+          "line": 40,
+          "note": "Drag/drop attribué au rail."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/features.md",
+          "line": 40,
+          "note": "Même correction anglaise."
+        }
+      ],
+      "tests": []
+    },
+    {
+      "id": "REL-039",
+      "status": "résolu",
+      "reason": "Commit 33a18411. La méthode statique persistentReorderPosition calcule le rang dans l'ordre complet des stages (orderedStageIDs, y compris les stages vides), pas seulement parmi les cartes affichées. Les stages vides absentes du rail conservent leur place dans le rang transmis à PersistentStageScope.reorderStage.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+          "line": 397,
+          "note": "stageReorderPosition transmet orderedStageIDs (liste complète dont les stages vides) à persistentReorderPosition."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+          "line": 410,
+          "note": "persistentReorderPosition : remaining = orderedStageIDs.filter { $0 != sourceStageID } ; rang calculé sur cet ordre complet. Commentaire REL-039 présent."
+        }
+      ],
+      "tests": []
+    },
+    {
+      "id": "REL-040",
+      "status": "résolu",
+      "reason": "Commit 33a18411. Une méthode statique partagée parallaxTransform(for:rotation:) est utilisée par le dessin (applyParallaxTransform) et le test du clic (hitPreview). hitPreview applique l'inverse de cette transformée au point avant de tester la containance, visant ainsi la forme réellement visible. grabUnit est calculé sur localPoint (dans le repère avant transformation).",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 587,
+          "note": "parallaxTransform static : Translation(-midX,-midY) · Cisaillement · Translation(midX,midY). Déterminant = xScale >= 0.45 : toujours inversible. Commentaire REL-040 présent."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+          "line": 654,
+          "note": "hitPreview : localPoint = point.applying(parallaxTransform.inverted()) si mode parallax. Containance testée sur localPoint, pas sur point brut. grabUnit consomme localPoint (ligne 627)."
+        }
+      ],
+      "tests": []
+    }
+  ],
+  "findings": [],
+  "positive_findings": [
+    "REL-039 : persistentReorderPosition calcule le rang sur l'ordre complet (orderedStageIDs) incluant les stages vides, évitant le glisser silencieusement sans effet : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift:410.",
+    "REL-040 : la transformation affine parallax est définie une seule fois et partagée entre dessin et test du clic ; l'inverse est correctement appliqué au point ; le déterminant est borné à xScale >= 0.45 pour garantir l'inversibilité : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift:587.",
+    "PERF-003 : géométrie du dépôt commune et linéaire, avec test de comparaison contre la version récursive à plusieurs tailles : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift:488.",
+    "Le menu désactivé évite tout snapshot ; les trois familles partagent exécution et journal : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift:209 et :490.",
+    "Le panneau de bordure consomme un modèle testable réellement produit par refresh ; la pastille est bornée : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift:85 et :225.",
+    "Les dix IDs assignés sont résolus après tour4 sans introducing de nouvelles régressions dans le périmètre UI/rail/drag."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/RailPanel.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCardView.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/BorderController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/FocusFollowsMouseController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TitlebarContextMenuController.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/WindowGroupIndicatorTests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-ui.json",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json"
+  ],
+  "files_read_partial": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.fr.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/features.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/cli.md",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/cli.md"
+  ],
+  "read_details": {
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowCommands.swift": "1140-1150 (appel DropGroupGeometry.planGroup)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageCommands.swift": "375-410 (reorderStage)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StageStore.swift": "1142-1165 (reorderStage)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieAX/SystemSnapshotProvider.swift": "630-711 (ordre CG, compactMap)",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.fr.md": "515-543",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/README.md": "523-545",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/features.md": "34-44",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/features.md": "34-44",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/fr/cli.md": "100-113, 328-337",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/docs/en/cli.md": "100-113, 326-335"
+  },
+  "warnings": [
+    "Aucun swift build/swift test lancé par cet agent. Exécution éventuelle centralisée par le coordinateur. Les tests cités ont été lus, pas déclarés verts ici.",
+    "Aucune interaction AppKit réelle. REL-040 : la correction mathématique (transformée inverse) a été vérifiée par lecture du code ; aucune capture ScreenCaptureKit ni glisser réel exécuté.",
+    "REL-039 : la correction a été vérifiée par lecture du chemin complet (RailPanel → stageReorderPosition → persistentReorderPosition → orderedStageIDs → StageCommands → StageStore.reorderStage). Aucune UI ni geste réel.",
+    "MIN-001 : aucun test spécifique StageCardView/hitPreviewItems/stageReorderPosition trouvé dans Tests. La factorisation a été vérifiée à la lecture des fichiers sources.",
+    "Les IDs REL-039 et REL-040 correspondent aux IDs temporaires REL-UI-001 et REL-UI-002 de l'audit02. Les versions finales suivent la numérotation canonique de full-codebase-01."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Les checklists Article XIX et XX ont été appliquées au périmètre UI/rail/drag après tour4. Le commit 33a18411 a extrait persistentReorderPosition (méthode statique testable et partageable) et parallaxTransform (méthode statique commune au dessin et au test du clic), ce qui réduit la charge future. Aucun wrapper passthrough, aucun état dérivé redondant, aucune abstraction prématurée et aucun code mort identifié dans ce périmètre. Le volume du rendu natif AppKit et du contrôle des gestes reste explicable par les fonctions demandées."
+  }
+}

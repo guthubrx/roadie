@@ -1,0 +1,429 @@
+{
+  "scope": "Complément de lecture intégrale des modules runtime de full-codebase-03 ; worktree 022-audit-remediation uniquement.",
+  "head": "4643ae4df4b3390218e9d9acebaa87f878c40b9c",
+  "mode": "readonly",
+  "original_statuses": [
+    {
+      "id": "REL-002",
+      "status": "résolu",
+      "reason": "Le retrait des membres absents exige un PID connu déclaré mort. Les autres membres restent présents ; la déduplication utilise un Set indépendant de la visibilité.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+          "line": 255,
+          "note": "Garde absence + PID mort avant suppression ; sinon seule une duplication justifie le retrait."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-005",
+      "status": "résolu",
+      "reason": "Les métadonnées persistées sont recopiées dans le RoadieState construit. La fusion ajoute les stages vides, copie nom et mode, conserve les décisions de focus du desktop courant et restaure la stage active des autres desktops et leurs labels.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 564,
+          "note": "Appel avant le retour du snapshot réconcilié."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 582,
+          "note": "Lecture intégrale de applyPersistedMetadata, lignes 582–607."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-006",
+      "status": "résolu",
+      "reason": "Le tri calcule les bandes avant toute comparaison. Chaque fenêtre possède une clé fixe (bande principale, bande secondaire, ID), et les fenêtres sans cadre suivent par ID. Le comparateur ne change plus d’axe selon la paire.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2116,
+          "note": "Clés pré-calculées et tri total ; alignmentBands à 2139."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-007",
+      "status": "résolu",
+      "reason": "Le contexte du moteur reçoit role, subrole, display, desktop, stage et isFloating. La classification flottante distingue les fenêtres hors mosaïque, épinglées et membres de stages float ; une candidate sans scope retourne nil.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1882,
+          "note": "Contexte transmis à ruleEngine.evaluate."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1813,
+          "note": "Classification ruleFloatingState explicite et partagée."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-008",
+      "status": "résolu",
+      "reason": "Une destination indisponible produit deferred. evaluateRules exécute alors continue avant le marquage de la fenêtre comme déjà observée ; la destination peut donc être retentée.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 1892,
+          "note": "Branche deferred et insertion uniquement après le switch."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2102,
+          "note": "Résolution de destination nil => deferred ; rendu à 2129."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-009",
+      "status": "résolu",
+      "reason": "La fusion des résultats d’écriture dans les placements se limite aux membres de la stage courante. Les cadres d’autres écrans ne peuvent plus faire échouer la comparaison des ensembles d’IDs.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3142,
+          "note": "Boucle sur stage.windowIDs et lecture directe de resultFrames[id]."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-029",
+      "status": "résolu",
+      "reason": "Le rendu des règles sérialise toutes les actions du modèle, dont manage, exclude, floating, layout, gap_override, scratchpad et emit_event. Elles survivent à la sauvegarde d’une affinité.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 187,
+          "note": "Bloc rules.action complet jusqu’à 202."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "PERF-001",
+      "status": "résolu",
+      "reason": "La détection des trous pré-calcule les intervalles de centres des cadres. Chaque colonne cumule les couvertures par un tableau de différences. Le test frames.contains par cellule a disparu : O(n²) temps et O(n) mémoire. La répétition de cette validation par un appelant est un nouveau défaut distinct, RUNTIME-NEW-001.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1814,
+          "note": "Intervalles préindexés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1821,
+          "note": "Une passe des cadres puis une passe des lignes par colonne."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "PERF-004",
+      "status": "résolu",
+      "reason": "La réparation du voisinage construit un Set des IDs des voisines avant le filtre de stage.windowIDs. Le filtre conserve l’ordre et coûte O(n+m).",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2690,
+          "note": "siblingIDSet puis stage.windowIDs.filter(siblingIDSet.contains)."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "MIN-002",
+      "status": "résolu",
+      "reason": "SnapshotEncoding contient une seule fonction générique Encodable. Les réglages clés triées et indentation optionnelle sont communs.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 2231,
+          "note": "public static func json<T: Encodable>, lignes 2231–2236."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "PERF-009",
+      "status": "résolu",
+      "reason": "refusedMinimumSizes indexe une fois tous les résultats avant la boucle des scopes. Chaque minimum du scope combine le plancher, refusedMinimums[id] et clampedFrames[id]. Il n’existe plus de knownMinimumSize parcourant le résultat à chaque fenêtre. Préparation O(r + somme des n des scopes).",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2751,
+          "note": "Index commun construit avant for clampedScopes."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2787,
+          "note": "Lookups directs par ID."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 2864,
+          "note": "Un seul reduce des éléments de résultat."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-035",
+      "status": "résolu",
+      "reason": "Les chaînes vides sont conservées. Le rendu échappe les guillemets, les barres inverses et les caractères de contrôle. saveRules recharge le TOML temporaire et compare les règles avant l’écriture atomique finale.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 150,
+          "note": "Contrôle du rechargement et de l’égalité avant remplacement."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 207,
+          "note": "Seul nil est ignoré."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+          "line": 219,
+          "note": "Échappement des scalaires de contrôle, guillemets et barres inverses."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    },
+    {
+      "id": "REL-036",
+      "status": "résolu",
+      "reason": "Le lecteur adopte l’échéance du fichier même si elle raccourcit sa valeur locale. suspensionEnd lit aussi le fichier sans maximum avec l’ancienne échéance. Les max restants dans markActive et finish concernent la prolongation à l’écriture, pas le défaut de lecture initial.",
+      "evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 89,
+          "note": "if let stored { activeUntil = stored.expiry }."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 66,
+          "note": "Échéance stockée prioritaire pour suspensionEnd."
+        }
+      ],
+      "verification": "Lecture directe du code courant ; aucune ligne reprise sans relecture."
+    }
+  ],
+  "findings": [
+    {
+      "id": "RUNTIME-NEW-001",
+      "category": "performance",
+      "subcategory": "algorithmic_complexity",
+      "severity": "HIGH",
+      "file": "Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+      "line": 3354,
+      "title": "La même disposition est revalidée pour chaque fenêtre modifiée du scope",
+      "description": "authoritativeModelScopes valide l’intent dans compactMap, avant de dédupliquer les scopes avec Set. Pour k fenêtres modifiées d’un scope de n membres, les mêmes placements passent k fois par validIntent puis intentStillTilesCurrentContainer. Le contrôle des chevauchements parcourt toutes les paires lorsque l’intent est valide ; la détection des trous coûte également O(n²) au pire. Le coût peut donc atteindre O(k·n²), soit O(n³) lorsque k=n. Le cache de JSONPersistence ne mémorise que le JSON décodé ; il ne mémorise pas la validation géométrique.",
+      "evidence": "        Set(snapshot.windows.compactMap { entry -> StageScope? in\n            guard windowIDs.contains(entry.window.id),\n                  let scope = entry.scope,\n                  let stage = snapshot.state.stage(scope: scope),\n                  stage.mode == .bsp,\n                  snapshot.state.activeScope(on: scope.displayID) == scope,\n                  service.hasValidLayoutIntent(scope: scope, in: snapshot)\n            else { return nil }\n            return scope\n        })",
+      "exploitability": "CONFIRMED",
+      "path_type": "hot",
+      "status": "open",
+      "confirmation": "Lecture statique de la chaîne complète ; aucun benchmark exécuté.",
+      "exploitation_scenario": "1. Avoir un scope actif en mode bsp, n fenêtres et un intent de commande valide avec les mêmes n IDs. 2. Faire varier les cadres de k fenêtres au-delà de observedChange entre deux relevés, en gardant leurs centres sur le même écran, sans bouton de souris enfoncé, garde de topologie ou commande active. Une application peut repositionner plusieurs fenêtres avant la passe. 3. changedWindows ajoute tous les IDs modifiés (3332–3341), sans borne k. adoptManualDisplayMoves ne les déplace pas (2166–2167) et le rapprochement des dérives est sauté puisque changedWindowIDs n’est pas vide (278). 4. changedFramesMatchSavedIntent est faux parce que les cadres observés ont changé ; nonTreeLayout appelle authoritativeModelScopes à 744, avant sa garde changedWindowIDs.count >= 2 à 756. 5. L’intent reste géométriquement valide : validIntent contrôle ses placements enregistrés et les IDs présents, pas les cadres courants. Le même calcul est donc exécuté k fois.",
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 740,
+          "note": "Validation du modèle avant la garde de cardinalité à 756."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 3332,
+          "note": "changedWindows retient tous les IDs modifiés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1569,
+          "note": "hasValidLayoutIntent délègue à validIntent sans cache de validation."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1707,
+          "note": "Identités vivantes puis validation des placements mémorisés."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1766,
+          "note": "Contrôle des chevauchements et des trous."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+          "line": 1884,
+          "note": "Pour un intent valide sans chevauchement, toutes les paires sont comparées."
+        }
+      ],
+      "complexity_current": "O(w + k·n²) pour un scope : w fenêtres du snapshot, k fenêtres modifiées, n membres de la disposition valide ; O(n³) pour w=k=n.",
+      "complexity_target": "O(w + somme(n_s²)) : validation une seule fois par scope candidat s ; O(n²) pour un scope.",
+      "impact": "Travail CPU redondant dans la passe de disposition. Le coût croît d’un facteur k pendant les changements groupés. Aucune latence ni consommation chiffrée n’a été mesurée.",
+      "remediation": "Construire l’ensemble des scopes BSP actifs concernés, puis valider chaque scope une seule fois. Conserver les mêmes critères et la même vérification de validité.",
+      "remediation_code": "private func authoritativeModelScopes(\n    for windowIDs: Set<WindowID>,\n    in snapshot: DaemonSnapshot\n) -> Set<StageScope> {\n    let candidates = Set(snapshot.windows.compactMap { entry -> StageScope? in\n        guard windowIDs.contains(entry.window.id),\n              let scope = entry.scope,\n              snapshot.state.stage(scope: scope)?.mode == .bsp,\n              snapshot.state.activeScope(on: scope.displayID) == scope\n        else { return nil }\n        return scope\n    })\n    return Set(candidates.filter { scope in\n        service.hasValidLayoutIntent(scope: scope, in: snapshot)\n    })\n}",
+      "verification": "Étendre le scénario externalResizeAfterRecentCommandIntentSnapsBackToCommandLayout à 10, 50 puis 100 fenêtres du même scope et changer plusieurs cadres dans le second relevé. Vérifier les mêmes placements et instrumenter le nombre de validations : une par scope, quelle que soit la quantité de fenêtres modifiées. Comparer le temps de la passe avant/après avec les mêmes fixtures. Tests non exécutés par ce sous-agent.",
+      "rollback": "Rétablir uniquement authoritativeModelScopes si la liste des scopes retenus ou les placements diffèrent des résultats avant correction.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "Constitution Article XVIII",
+        "Audit v14 module 04, recherche répétée en boucle"
+      ],
+      "counter_audit_required": true
+    },
+    {
+      "id": "RUNTIME-NEW-002",
+      "category": "reliability",
+      "subcategory": "concurrency",
+      "severity": "MEDIUM",
+      "file": "Sources/RoadieDaemon/WindowDragActivity.swift",
+      "absolute_file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+      "line": 95,
+      "title": "Un lecteur peut supprimer une nouvelle activité de glisser écrite par un autre processus",
+      "description": "isActive lit le fichier partagé puis le supprime s’il était expiré au moment de la lecture. NSLock protège seulement cette instance. Ni l’écriture atomique du producteur ni le lecteur d’un autre processus ne partagent ce verrou. Le rename du producteur peut donc être suivi par la suppression basée sur l’ancienne lecture. La course est distincte de REL-036, qui corrige le cache de l’échéance.",
+      "evidence": "        let stored = readLocked()\n        // Le fichier partagé fait foi, y compris quand `release` raccourcit l'échéance (REL-036) ;\n        // la mémoire locale ne sert que si le fichier est absent ou illisible.\n        if let stored { activeUntil = stored.expiry }\n        if now <= activeUntil {\n            return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))\n        }\n        activeWindowID = nil\n        activeUntil = .distantPast\n        try? FileManager.default.removeItem(at: url)",
+      "exploitability": "LIKELY",
+      "path_type": "hot",
+      "status": "open",
+      "confirmation": "Plausible : ordre concurrent déduit du code ; aucun test concurrent ni processus réel exécuté.",
+      "exploitation_scenario": "Processus A : lire à la ligne 86 un fichier dont l’échéance est passée, puis être suspendu avant la ligne 95. Processus B : exécuter markActive ou finish ; writeActiveUntilLocked écrit par rename une nouvelle échéance, et finish peut aussi écrire la preuve de dépôt. Processus A : reprendre et supprimer le chemin à la ligne 95. Le nouveau contenu de B est perdu. Le lecteur A ou un troisième lecteur voit ensuite un fichier absent et n’a pas l’échéance récente en mémoire. En mode séparé, la preuve de dépôt lue par lastDrop peut aussi être perdue.",
+      "supporting_evidence": [
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 7,
+          "note": "NSLock local à chaque instance."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+          "line": 101,
+          "note": "Écriture atomique sans FileLock partagé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 225,
+          "note": "L’activité suspend les passes avant le plan."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+          "line": 252,
+          "note": "lastDrop empêche de retraiter un geste déjà consommé."
+        },
+        {
+          "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+          "line": 617,
+          "note": "Le contrôleur termine un dépôt en publiant droppedWindowID."
+        }
+      ],
+      "impact": "La nouvelle suspension ou la preuve de dépôt peut disparaître. La garde globale de bouton de souris limite les écritures pendant l’appui ; elle ne restaure pas la grâce de relâchement ni la preuve perdue après le dépôt.",
+      "remediation": "Garder isActive en lecture seule : ignorer l’échéance expirée sans supprimer le fichier, comme LayoutCommandActivity.activity. Le prochain producteur remplace le petit fichier. Si une purge physique est exigée, elle doit être coordonnée avec les écritures par le même verrou interprocessus.",
+      "remediation_code": "public func isActive(now: Date = Date(), includingReleaseGrace: Bool = true) -> Bool {\n    guard enabled else { return false }\n    lock.lock()\n    defer { lock.unlock() }\n    let stored = readLocked()\n    if let stored { activeUntil = stored.expiry }\n    if now <= activeUntil {\n        return includingReleaseGrace || (stored?.dragging ?? (activeWindowID != nil))\n    }\n    activeWindowID = nil\n    activeUntil = .distantPast\n    return false\n}",
+      "verification": "Test avec deux instances partageant un fichier et une barrière entre lecture et branche expirée du lecteur : écrire une nouvelle activité puis laisser le lecteur finir. Vérifier que le fichier récent et la preuve de dépôt sont conservés. Vérifier aussi les tests REL-036 et les scénarios de dépôt interprocessus.",
+      "effort": "S",
+      "regression_risk": "LOW",
+      "references": [
+        "SPEC-017 A17 et T216 : preuve de dépôt partagée",
+        "LayoutCommandActivity.swift:66–78 : lecture sans suppression"
+      ]
+    }
+  ],
+  "aliases": {
+    "PERF-901": "PERF-009",
+    "REL-901": "REL-035",
+    "REL-902": "REL-036"
+  },
+  "positive_findings": [
+    "PERF-009 : index unique des refus construit à LayoutMaintainer.swift:2751 et consommé par lookup à 2787 ; lecture directe du helper à 2864.",
+    "REL-035 : la comparaison des règles relues à WindowRuleAffinityService.swift:156 précède tout remplacement du fichier de règles.",
+    "REL-005 : la fusion de métadonnées à DaemonSnapshot.swift:582 préserve les stages vides et leurs modes sans remplacer les fenêtres runtime."
+  ],
+  "files_read_full": [
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DaemonSnapshot.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutMaintainer.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutIntentStore.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/LayoutCommandActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/TickScheduler.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleEngine.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleMatcher.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleValidator.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/StateAudit.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowRuleAffinityService.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/WindowDragActivity.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT2Tests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT5Tests.swift",
+    "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/Audit022R4LotT7Tests.swift"
+  ],
+  "files_read_partial": [
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/JSONPersistence.swift",
+      "ranges": "1–145 ; persistance, transactions, cache du JSON décodé ; pas lecture intégrale."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Sources/RoadieDaemon/DropPreviewController.swift",
+      "ranges": "524–665 ; publication et consommation de la preuve de dépôt ; pas lecture intégrale."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/Tests/RoadieDaemonTests/LayoutMaintainerTests.swift",
+      "ranges": "908–974 ; externalResizeAfterRecentCommandIntentSnapsBackToCommandLayout ; recherches rg ciblées sur autres tests."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/raw-runtime.json",
+      "ranges": "files_read_full, statuts attribués et avertissements consultés ; première sortie tronquée, non compté en lecture intégrale."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-03/raw-runtime.json",
+      "ranges": "Statuts, listes de fichiers et avertissements lus ; métadonnées de la première revue utilisées seulement pour définir le complément."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-01/cycle-1/aggregated-findings.json",
+      "ranges": "IDs, titres et localisations des constats attribués et des constats PERF, extraits par JSON."
+    },
+    {
+      "file": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/022-audit-remediation/audits/2026-10-13/full-codebase-02/cycle-1/aggregated-findings.json",
+      "ranges": "IDs, titres et localisations des constats attribués et des constats PERF, extraits par JSON."
+    }
+  ],
+  "reading_ranges": {
+    "DaemonSnapshot.swift": [
+      "1–480",
+      "481–960",
+      "961–1440",
+      "1441–1920",
+      "1921–2457"
+    ],
+    "LayoutMaintainer.swift": [
+      "1–460",
+      "461–920",
+      "921–1380",
+      "1381–1840",
+      "1841–2300",
+      "2301–2780",
+      "2781–3240",
+      "3241–3695"
+    ]
+  },
+  "warnings": [
+    "Aucun build, test, benchmark, profil CPU/mémoire ni scénario Accessibility réel exécuté, selon l’attribution. Aucun processus arrêté ou relancé.",
+    "Le nouveau HIGH RUNTIME-NEW-001 doit recevoir un contre-audit indépendant avant son inclusion dans le rapport final. La lecture intégrale des deux fichiers de sa chaîne est terminée ; aucune borne de cardinalité ni cache de validation ne supprime la répétition.",
+    "RUNTIME-NEW-002 est plausible et non reproduit en concurrence ; le fichier partagé et la preuve de dépôt sont démontrés par lecture, mais la fréquence de la course n’est pas connue.",
+    "Piste quadratique assignWindow dans DaemonSnapshot.swift:516 transmise à models_full, qui en reste propriétaire. Non dupliquée dans cet artefact.",
+    "REL-021 hors attribution : restoreZoomLayoutIntentChecked (DaemonSnapshot.swift:1390) supprime puis peut recréer un intent en deux transactions (1406 puis 1420). Le défaut a été transmis à commands_full pour consolidation sous REL-021, sans nouveau finding dupliqué.",
+    "Les lignes et raisons des 13 statuts ont été revérifiées au HEAD. Les alias temporaires PERF-901, REL-901 et REL-902 ne sont pas comptés comme trois constats supplémentaires.",
+    "Les modules 01, 04, 05, 08, 11 et 12 ainsi que la commande canonique et l’orchestrateur ont été lus. La production du grade global et le gate de validation de session relèvent du coordinateur."
+  ],
+  "minimalism": {
+    "removable_lines_estimate": 0,
+    "conclusion": "Checklists 1–6 appliquées sur les onze fichiers runtime lus entièrement. Les états de génération, de refus, de suspension et de geste portent des règles réelles. Les helpers génériques d’encodage et les méthodes de persistance contrôlée préservent des contrats explicites. Aucun retrait à comportement constant n’est démontré. La suppression d’une ligne proposée dans RUNTIME-NEW-002 corrige un comportement concurrent erroné ; elle ne compte pas comme nettoyage à comportement constant.",
+    "future_responsibility": "Le code décrit les invariants et les durées ; cela facilite sa maintenance. Les corrections d’index et de comparaison des règles simplifient la vérification. La répétition de validation et la suppression concurrente restent des charges évitables. Aucun constat sur l’origine humaine ou générée du code n’est tiré du style."
+  }
+}

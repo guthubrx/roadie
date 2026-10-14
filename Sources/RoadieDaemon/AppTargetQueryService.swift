@@ -249,6 +249,17 @@ public struct AppTargetQueryService {
         return pid_t(target.id[target.id.index(target.id.startIndex, offsetBy: 4)..<slash])
     }
 
+    /// L'élément occupe-t-il encore le cadre affiché par l'overlay (REL-012) ? Chaque bord doit rester
+    /// à `tolerance` points près : un décalage d'arrondi passe, un défilement ou un déplacement de
+    /// fenêtre non. `current` nil : élément introuvable. O(1).
+    public static func isStillInPlace(_ shown: Rect, current: Rect?, tolerance: Double = 4) -> Bool {
+        guard let current else { return false }
+        let a = shown.cgRect
+        let b = current.cgRect
+        return abs(a.minX - b.minX) <= tolerance && abs(a.minY - b.minY) <= tolerance
+            && abs(a.maxX - b.maxX) <= tolerance && abs(a.maxY - b.maxY) <= tolerance
+    }
+
     public static func isHintable(_ visible: Rect) -> Bool {
         visible.width > 4 && visible.height > 4
     }
@@ -270,7 +281,10 @@ public struct AppTargetQueryService {
             .joined(separator: ",")
     }
 
-    public static func targets(from candidates: [AppElementCandidate], config: AppTargetsConfig) -> [RoadieTarget] {
+    /// `windowID` : fenêtre parcourue, portée par chaque cible ; le clic exige cette identité (REL-012).
+    public static func targets(
+        from candidates: [AppElementCandidate], config: AppTargetsConfig, windowID: UInt32? = nil
+    ) -> [RoadieTarget] {
         let allowedRoles = Set(config.includeRoles)
         return candidates
             .filter { allowedRoles.contains($0.role) || !$0.actions.isEmpty || $0.isFocusableLeaf }
@@ -284,6 +298,7 @@ public struct AppTargetQueryService {
                     subtitle: [candidate.role, candidate.value].compactMap(\.self).joined(separator: " - "),
                     source: .app,
                     matchText: RoadieTarget.normalizedMatchText([candidate.id, candidate.role, title, candidate.value ?? "", candidate.searchText]),
+                    scope: TargetScopeSnapshot(windowId: windowID),
                     frame: candidate.frame,
                     actions: [.click, .doubleClick, .rightClick, .commandClick, .inspect],
                     diagnostics: candidate.actions.map { "action=\($0)" } + ["role=\(candidate.role)"],
@@ -311,6 +326,48 @@ public struct CFIdentitySet {
     }
 }
 
+/// Éléments AX des cibles du dernier parcours, par id de cible (R2-02). Le clic relit l'élément
+/// affiché lui-même, pas l'élément qui occupe aujourd'hui le même rang : un élément remplacé, même
+/// au même cadre, devient invalide et ne se relit plus. En mémoire seulement, remplacée à chaque
+/// parcours ; protégée par un verrou, car la portée `visible_windows` remplit la table depuis un fil
+/// par fenêtre. Un parcours plus récent rend les ajouts d'un ancien sans effet (numéro de parcours).
+final class AppTargetElementRegistry: @unchecked Sendable {
+    static let shared = AppTargetElementRegistry()
+
+    struct Entry {
+        var element: AXUIElement
+        /// Premier contenu visible d'une feuille focalisable : l'élément sous `clickFrame`.
+        var clickElement: AXUIElement?
+        var window: AXUIElement
+    }
+
+    private let lock = NSLock()
+    private var generation = 0
+    private var entries: [String: Entry] = [:]
+
+    /// Début d'un parcours : vide la table et rend le numéro du parcours. O(1), hors libération.
+    func begin() -> Int {
+        lock.withLock {
+            generation += 1
+            entries = [:]
+            return generation
+        }
+    }
+
+    /// Éléments d'une fenêtre lue ; sans effet si un autre parcours a commencé depuis. O(k).
+    func add(_ new: [String: Entry], generation: Int) {
+        lock.withLock {
+            guard generation == self.generation else { return }
+            entries.merge(new) { _, latest in latest }
+        }
+    }
+
+    /// O(1) en moyenne.
+    func entry(for id: String) -> Entry? {
+        lock.withLock { entries[id] }
+    }
+}
+
 /// Résultat du parcours d'une fenêtre visible (SPEC-021) ; `order` : rang de la fenêtre, de l'avant
 /// vers l'arrière.
 public struct VisibleWindowScan: Sendable {
@@ -320,8 +377,41 @@ public struct VisibleWindowScan: Sendable {
     public var partial: Bool
 }
 
+/// Issue de l'attente du focus avant un clic sur la cible d'une fenêtre (REL-012).
+public enum AppWindowFocusWait: Equatable, Sendable {
+    case focused
+    /// La fenêtre n'existe plus dans son application.
+    case windowGone
+    /// La fenêtre n'est pas devenue active dans le délai.
+    case timedOut
+}
+
 public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
-    public init() {}
+    /// Points d'injection des tests (REL-012, TEST-002) : attente du focus et émission des événements
+    /// souris, sans AX ni CGEvent réels.
+    private let waitForFocus: @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait
+    private let postEvent: @Sendable (CGEvent) -> Void
+    /// Cadre visible actuel de la zone cliquée d'une cible (`clickFrame`, sinon `frame`), relu après
+    /// le focus (REL-012, R2-02) ; nil : élément introuvable, remplacé ou illisible.
+    private let currentFrame: @Sendable (RoadieTarget) -> Rect?
+
+    public init() {
+        self.init(
+            waitForFocus: { Self.waitUntilFocused(windowID: $0, pid: $1, timeout: $2) },
+            postEvent: { $0.post(tap: .cghidEventTap) },
+            currentFrame: { Self.currentVisibleFrame(of: $0, in: .shared, readFrame: Self.readFrame) }
+        )
+    }
+
+    init(
+        waitForFocus: @escaping @Sendable (CGWindowID, pid_t, TimeInterval) -> AppWindowFocusWait,
+        postEvent: @escaping @Sendable (CGEvent) -> Void,
+        currentFrame: @escaping @Sendable (RoadieTarget) -> Rect?
+    ) {
+        self.waitForFocus = waitForFocus
+        self.postEvent = postEvent
+        self.currentFrame = currentFrame
+    }
 
     public func candidates(config: AppTargetsConfig) -> AppTargetQueryReport {
         guard AXIsProcessTrusted() else {
@@ -342,13 +432,19 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             return AppTargetQueryReport(error: "no_frontmost_application")
         }
         let appElement = AXUIElementCreateApplication(app.processIdentifier)
-        guard let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute) else {
+        // REL-012 : identité de la fenêtre, pour que le clic vérifie son focus. O(m), m fenêtres de l'application.
+        guard let window = Self.copyElementAttribute(appElement, kAXFocusedWindowAttribute),
+              let windowID = axWindowElements(pid: app.processIdentifier).first(where: { CFEqual($0.value, window) })?.key
+        else {
             return AppTargetQueryReport(error: "no_focused_window")
         }
+        let generation = AppTargetElementRegistry.shared.begin()
         let result = scanWindow(window, app: app, rootPath: "0", config: config, startedAt: Date())
+        AppTargetElementRegistry.shared.add(result.pass.elements, generation: generation)
         let partial = result.pass.stopReason != "complete"
+        let targets = AppTargetQueryService.targets(from: result.pass.candidates, config: config, windowID: windowID)
         return AppTargetQueryReport(
-            targets: Self.labeled(AppTargetQueryService.targets(from: result.pass.candidates, config: config), config: config),
+            targets: Self.labeled(targets, config: config),
             partial: partial,
             error: partial ? "partial_timeout_or_limit" : nil,
             scan: result.stats
@@ -383,6 +479,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         onWindow: @Sendable (VisibleWindowScan) -> Void = { _ in }
     ) -> (results: [VisibleWindowScan], skipped: [AppTargetScanStats]) {
         guard AXIsProcessTrusted() else { return ([], []) }
+        let generation = AppTargetElementRegistry.shared.begin()
         let windows = Self.visibleWindows()
         var elementsByPID: [pid_t: [CGWindowID: AXUIElement]] = [:]
         var jobs: [(order: Int, id: CGWindowID, element: AXUIElement, app: NSRunningApplication)] = []
@@ -411,15 +508,13 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             let job = batch.jobs[index]
             let scan = scanWindow(job.element, app: job.app, rootPath: "w\(job.id)", config: config, startedAt: startedAt)
             let inFront = Array(frames.prefix(job.order))
-            var targets: [RoadieTarget] = []
-            for var target in AppTargetQueryService.targets(from: scan.pass.candidates, config: config)
-            where !AppTargetQueryService.isCovered(target, by: inFront) {
-                target.scope.windowId = job.id
-                targets.append(target)
-            }
+            let targets = AppTargetQueryService.targets(from: scan.pass.candidates, config: config, windowID: job.id)
+                .filter { !AppTargetQueryService.isCovered($0, by: inFront) }
             let result = VisibleWindowScan(order: job.order, targets: targets, stats: scan.stats,
                                            partial: scan.pass.stopReason != "complete")
             batch.results[index] = result
+            // Avant `onWindow` : une cible affichée peut être cliquée aussitôt (mode recherche).
+            AppTargetElementRegistry.shared.add(scan.pass.elements, generation: generation)
             onWindow(result)
         }
         return (Array(batch.results).compactMap(\.self), skipped)
@@ -544,11 +639,13 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         var focusableAdded = 0
         var rejectedRoles: [String: Int] = [:]
         var stopReason = "complete"
+        /// Élément AX de chaque candidat, par id de cible (`app:<pid>/<chemin>`, R2-02).
+        var elements: [String: AppTargetElementRegistry.Entry] = [:]
     }
 
     /// Complexité : O(n + m + p + u * d), n = éléments lus ; voir `focusableLeaves` pour m, p, u, d.
     private func scan(window: AXUIElement, rootPath: String, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
-        let windowFrame = copyFrame(window)
+        let windowFrame = Self.copyFrame(window)
         // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.
         // `textOwner` : chemin du plus proche candidat web, qui reçoit le texte des `AXStaticText` (SPEC-021).
         var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?)] =
@@ -558,12 +655,12 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         let ignoredActions: Set<String> = ["AXShowMenu", "AXScrollToVisible", "AXShowDefaultUI", "AXShowAlternateUI"]
         let includedRoles = Set(config.includeRoles)
         // SPEC-020 : feuilles focalisables en attente et marqueurs de zone web, en préordre.
-        var pending: [(candidate: AppElementCandidate, path: String)] = []
+        var pending: [(candidate: AppElementCandidate, path: String, element: AXUIElement)] = []
         var markers: [String] = []
         var texts: [String: [String]] = [:]
         var historicPaths: [String] = []
         // Premier contenu visible (préordre) de chaque candidat web : point de clic des feuilles.
-        var contentFrames: [String: Rect] = [:]
+        var contents: [String: (frame: Rect, element: AXUIElement)] = [:]
 
         while let entry = stack.popLast() {
             let (element, path, depth, parentInWeb, retainedFrame, textOwner) = entry
@@ -602,11 +699,11 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             var retained = false
             var retainedVisible: Rect?
             // Zone web : le cadre est lu pour tous, afin de ne pas descendre dans un élément invisible.
-            let frame = isCandidate || isPending || (inWeb && !isWebArea) ? copyFrame(element) : nil
+            let frame = isCandidate || isPending || (inWeb && !isWebArea) ? Self.copyFrame(element) : nil
             let visibleFrame = frame.flatMap { AppTargetQueryService.visibleFrame($0, in: windowFrame) }
-            if inWeb, role == "AXImage" || role == "AXStaticText", let owner = textOwner, contentFrames[owner] == nil,
+            if inWeb, role == "AXImage" || role == "AXStaticText", let owner = textOwner, contents[owner] == nil,
                let visible = visibleFrame, AppTargetQueryService.isHintable(visible) {
-                contentFrames[owner] = visible
+                contents[owner] = (visible, element)
             }
             if isCandidate || isPending, frame != nil {
                 if let visible = visibleFrame,
@@ -622,9 +719,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                         isFocusableLeaf: isPending
                     )
                     if isPending {
-                        pending.append((candidate, path))
+                        pending.append((candidate, path, element))
                     } else {
                         pass.candidates.append(candidate)
+                        pass.elements["app:\(candidate.id)"] = .init(element: element, window: window)
                         historicPaths.append(path)
                         retained = true
                         retainedVisible = visible
@@ -650,7 +748,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                 if AppTargetQueryService.hidesContent(visibleFrame) { markers.append(path + ".?") }
                 continue
             }
-            let (children, unreadable) = copyChildren(element, boost: boost && !inWeb)
+            let (children, unreadable) = Self.copyChildren(element, boost: boost && !inWeb)
             if inWeb && unreadable { markers.append(path + ".?") }
             for (index, child) in children.enumerated().reversed() {
                 stack.append((child, "\(path).\(index)", depth + 1, inWeb, inWeb && retained ? retainedVisible : retainedFrame,
@@ -685,8 +783,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         }
         for item in pending where leaves.contains(item.path) && pass.candidates.count < config.maxTargets {
             var leaf = withText(item.candidate, at: item.path)
-            leaf.clickFrame = contentFrames[item.path]
+            let content = contents[item.path]
+            leaf.clickFrame = content?.frame
             pass.candidates.append(leaf)
+            pass.elements["app:\(leaf.id)"] = .init(element: item.element, clickElement: content?.element, window: window)
             pass.focusableAdded += 1
             pass.rejectedRoles[item.candidate.role, default: 0] -= 1
         }
@@ -703,11 +803,28 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     public func click(_ target: RoadieTarget, action: TargetActionVerb) -> TargetActionResult {
         // Feuille web sans action : son centre peut tomber hors des zones qui réagissent (ligne de
         // l'Historique Bluejay, où seuls vignette, titre et auteur ont un gestionnaire de clic).
-        guard let frame = (target.clickFrame ?? target.frame)?.cgRect else {
+        guard let shown = target.clickFrame ?? target.frame else {
             return TargetActionResult(changed: false, message: "app click: no frame", target: target, error: "no_frame")
         }
-        if let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) {
-            waitUntilFocused(windowID: windowID, pid: pid, timeout: 0.5)
+        let frame = shown.cgRect
+        // REL-012 : sans fenêtre active, le clic tomberait sur une autre fenêtre ou application. Toute
+        // cible porte sa fenêtre ; sans elle, le focus ne se vérifie pas et rien n'est cliqué. Fenêtre
+        // déjà active (cas courant) : l'attente répond dès la première lecture, sans délai.
+        guard let windowID = target.scope.windowId, let pid = AppTargetQueryService.pid(of: target) else {
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        }
+        switch waitForFocus(windowID, pid, 0.5) {
+        case .focused:
+            break
+        case .windowGone:
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
+        case .timedOut:
+            return TargetActionResult(changed: false, message: "focus_failed: \(target.id)", target: target, error: "focus_failed")
+        }
+        // REL-012 : l'overlay a pu rester ouvert, la fenêtre bouger ou la page défiler pendant l'attente.
+        // Le point de clic n'est sûr que si la zone cliquée occupe encore le cadre affiché (R2-02).
+        guard AppTargetQueryService.isStillInPlace(shown, current: currentFrame(target)) else {
+            return TargetActionResult(changed: false, message: "stale_target: \(target.id)", target: target, error: "stale_target")
         }
         let point = CGPoint(x: frame.midX, y: frame.midY)
         switch action {
@@ -728,9 +845,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
 
     /// Cible d'une autre fenêtre (SPEC-021) : `TargetHintService` vient de la focaliser. Le clic attend
     /// que son application soit active et que la fenêtre soit la sienne, sinon une application peut
-    /// ne prendre le premier clic que pour s'activer. Au-delà du délai, le clic part quand même.
-    private func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) {
-        guard let expected = axWindowElements(pid: pid)[windowID] else { return }
+    /// ne prendre le premier clic que pour s'activer. Fenêtre disparue ou délai dépassé : pas de clic
+    /// (REL-012).
+    private static func waitUntilFocused(windowID: CGWindowID, pid: pid_t, timeout: TimeInterval) -> AppWindowFocusWait {
+        guard let expected = axWindowElements(pid: pid)[windowID] else { return .windowGone }
         let system = AXUIElementCreateSystemWide()
         let appElement = AXUIElementCreateApplication(pid)
         let deadline = Date().addingTimeInterval(timeout)
@@ -739,10 +857,50 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             if let app = copyElementAttribute(system, kAXFocusedApplicationAttribute),
                AXUIElementGetPid(app, &focusedPID) == .success, focusedPID == pid,
                let window = copyElementAttribute(appElement, kAXFocusedWindowAttribute), CFEqual(window, expected) {
-                return
+                return .focused
             }
             Thread.sleep(forTimeInterval: 0.02)
         } while Date() < deadline
+        return .timedOut
+    }
+
+    /// Relecture de la zone cliquée d'une cible (REL-012, R2-02, R2-03) : l'élément conservé par le
+    /// dernier parcours, jamais re-résolu par son chemin, puis le cadre de sa fenêtre pour le rogner
+    /// comme dans `scan`. Échéance commune `budget` ; un échec de lecture de l'élément abandonne aussitôt.
+    /// Complexité : 2 appels AX au plus (avant : énumération des fenêtres, un appel par niveau, jusqu'à
+    /// 8 sur un niveau illisible, puis 4 pour les deux cadres).
+    static func currentVisibleFrame(
+        of target: RoadieTarget,
+        in registry: AppTargetElementRegistry,
+        readFrame: (AXUIElement, TimeInterval) -> Rect?,
+        budget: TimeInterval = 0.3
+    ) -> Rect? {
+        guard let entry = registry.entry(for: target.id) else { return nil }
+        let deadline = Date().addingTimeInterval(budget)
+        guard let frame = readFrame(entry.clickElement ?? entry.element, budget) else { return nil }
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0 else { return nil }
+        return AppTargetQueryService.visibleFrame(frame, in: readFrame(entry.window, remaining))
+    }
+
+    /// Cadre d'un élément en un seul aller-retour AX (position et taille), en `timeout` secondes au plus.
+    /// nil si l'élément est invalide (remplacé, fermé), ne répond pas ou n'a pas de cadre.
+    private static func readFrame(_ element: AXUIElement, timeout: TimeInterval) -> Rect? {
+        AXUIElementSetMessagingTimeout(element, Float(timeout))
+        var raw: CFArray?
+        let attributes = [kAXPositionAttribute, kAXSizeAttribute] as CFArray
+        guard AXUIElementCopyMultipleAttributeValues(element, attributes, AXCopyMultipleAttributeOptions(rawValue: 0), &raw) == .success,
+              let values = raw as? [AnyObject], values.count == 2,
+              values.allSatisfy({ CFGetTypeID($0) == AXValueGetTypeID() })
+        else { return nil }
+        var point = CGPoint.zero
+        var size = CGSize.zero
+        // Une erreur par attribut arrive comme un AXValue de type `.axError` : la conversion échoue.
+        guard AXValueGetValue(values[0] as! AXValue, .cgPoint, &point),
+              AXValueGetValue(values[1] as! AXValue, .cgSize, &size),
+              size.width > 0, size.height > 0
+        else { return nil }
+        return Rect(CGRect(origin: point, size: size))
     }
 
     private func postClick(
@@ -761,11 +919,11 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             downEvent?.flags = flags
             upEvent?.flags = flags
         }
-        downEvent?.post(tap: .cghidEventTap)
-        upEvent?.post(tap: .cghidEventTap)
+        if let downEvent { postEvent(downEvent) }
+        if let upEvent { postEvent(upEvent) }
     }
 
-    private func copyElementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+    private static func copyElementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
               let value
@@ -786,7 +944,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     }
 
     /// `unreadable` : `AXChildren` a échoué pour une autre raison qu'une absence d'enfants.
-    private func copyChildren(_ element: AXUIElement, boost: Bool) -> (children: [AXUIElement], unreadable: Bool) {
+    private static func copyChildren(_ element: AXUIElement, boost: Bool) -> (children: [AXUIElement], unreadable: Bool) {
         let attributes = boost ? [
             kAXChildrenAttribute,
             "AXVisibleChildren",
@@ -828,7 +986,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         return names
     }
 
-    private func copyFrame(_ element: AXUIElement) -> Rect? {
+    private static func copyFrame(_ element: AXUIElement) -> Rect? {
         var positionRef: CFTypeRef?
         var sizeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
