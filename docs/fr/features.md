@@ -326,7 +326,7 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 - **Toutes les fenetres visibles** : la barre s'ouvre tout de suite avec les
   cibles Roadie. Les fenetres de l'espace courant sont lues en parallele en
   arriere-plan (2 s par fenetre au moins) et chacune s'ajoute des qu'elle est
-  lue ; la barre affiche `lecture…` en attendant. Un element cache par une
+  lue ; le compteur se met a jour dans la pastille a droite. Un element cache par une
   fenetre placee devant n'a pas de label. Les cibles de l'ecran du pointeur
   passent en premier.
 - **Correspondance** : casse, accents et espaces ignores (`watchlater` trouve
@@ -342,7 +342,8 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 | Touche | Effet |
 |--------|-------|
 | lettres, chiffres, espace | filtrer |
-| Tab, Fleche bas, Ctrl-N | resultat suivant |
+| Tab | completer le titre du resultat choisi, sans clic |
+| Fleche bas, Ctrl-N | resultat suivant |
 | Maj-Tab, Fleche haut, Ctrl-P | resultat precedent |
 | Maj + etiquette | choisir ce resultat (`Maj+S` avec peu de resultats) |
 | Retour | clic |
@@ -355,6 +356,11 @@ du pointeur. Chaque lettre filtre les cibles ; Retour clique la cible en vert.
 
 La recherche se ferme seule apres 60 s sans frappe. Les clics exigent
 `app_mouse_actions_enabled = true` et la barre `overlay_enabled = true`.
+
+La barre reste centree en bas sur l'ecran d'ouverture, avec une largeur de 640 points reduite si l'ecran
+est plus etroit. Le texte long est tronque sans deplacer la barre ni recouvrir
+le compteur. Elle utilise une police systeme proportionnelle et un contour fin.
+Les tailles de saisie et de suggestions restent reglables independamment.
 
 Une feuille web sans action (regle des elements focalisables) est cliquee au
 centre de sa premiere image ou de son premier texte visible, pas au centre de
@@ -378,8 +384,8 @@ En mode commande :
 - la barre liste les commandes avec une courte description ; la liste se filtre
   pendant la frappe (casse et accents ignorés) ;
 - **Tab** complète la commande ou l'argument (commande, numéro ou nom de stage,
-  nom de bookmark, nom de réglage, catégorie, direction), ou avance dans la
-  liste. Maj-Tab revient en arrière ;
+  nom de bookmark, nom de réglage, catégorie, direction) en insérant la suggestion
+  sélectionnée. Les Tab suivants parcourent les alternatives. Maj-Tab remonte la sélection ;
 - **Flèche haut** et **Flèche bas** parcourent l'historique des 50 dernières
   commandes. L'historique est conservé après un redémarrage, dans
   `~/.local/state/roadies/command-history.json` ;

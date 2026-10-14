@@ -319,8 +319,8 @@ letter filters the targets; Return clicks the green target.
   a keyboard layout change. `roadie targets search` opens the same session.
 - **All visible windows**: the bar opens immediately with the Roadie targets.
   Windows of the current Space are read in parallel in the background (at least
-  2 s per window) and each one is added as soon as it is read; the bar shows
-  `lecture…` meanwhile. An element hidden by a window in front gets no label.
+  2 s per window) and each one is added as soon as it is read; the bar
+  updates the count chip on the right. An element hidden by a window in front gets no label.
   Targets on the pointer's display come first.
 - **Matching** ignores case, accents, and spaces (`watchlater` finds
   `Watch Later`). It covers the title, value, role and, for web targets, the
@@ -334,7 +334,8 @@ letter filters the targets; Return clicks the green target.
 | Key | Effect |
 |-----|--------|
 | letters, digits, space | filter |
-| Tab, Down, Ctrl-N | next result |
+| Tab | complete the selected result's title without clicking |
+| Down, Ctrl-N | next result |
 | Shift-Tab, Up, Ctrl-P | previous result |
 | Shift + label | select that result (`Shift+S` with few results) |
 | Return | click |
@@ -347,6 +348,11 @@ letter filters the targets; Return clicks the green target.
 
 Search closes by itself after 60 s without a key press. Clicks require
 `app_mouse_actions_enabled = true` and the bar requires `overlay_enabled = true`.
+
+The bar stays centered at the bottom of the opening display, with a width of 640 points reduced on
+narrower screens. Long text is truncated without moving the bar or overlapping
+the count chip. It uses a proportional system font and a thin outline.
+Input and suggestion font sizes remain independently adjustable.
 
 A web leaf without an action (focusable-element rule) is clicked at the center
 of its first visible image or text, not at the center of the element: the center
@@ -369,8 +375,8 @@ In command mode:
 - the bar lists the commands with a short description; the list filters as you
   type (case and accents ignored);
 - **Tab** completes the command or argument (command, stage number or name,
-  bookmark name, setting name, category, direction), or moves through the list.
-  Shift-Tab goes back;
+  bookmark name, setting name, category, direction) by inserting the selected
+  suggestion. Subsequent Tab presses cycle through alternatives. Shift-Tab moves the selection back;
 - **Up** and **Down** browse the history of the last 50 commands. The history
   survives a restart, in `~/.local/state/roadies/command-history.json`;
 - **Return** runs the command on the window, stage, display and desktop that are

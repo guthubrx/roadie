@@ -14,6 +14,10 @@ Chaque entrée décrit la version correspondante. Les README présentent les sou
 - Tailles de police indépendantes dans les paramètres, le rail, les lettres,
   la grille et la recherche. Curseurs et saisie valide appliquent les changements
   immédiatement ; les fenêtres et sessions déjà visibles sont redessinées.
+- Barre Caps+F stable et sobre : largeur fixe bornée à l'écran, police proportionnelle,
+  bordure fine, loupe retirée et compteur dans une pastille à droite.
+- Tab complète le titre du résultat de recherche choisi sans cliquer. En mode
+  commande, Tab accepte la suggestion sélectionnée avant de parcourir les alternatives.
 
 ## 0.4.0 — 2026-10-14
 

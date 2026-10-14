@@ -9,3 +9,4 @@
 
 | 024 | Implémentée et publiée en v0.4.0 | `session-024-release-performance` (fusionnée, supprimée) | `specs/024-release-performance` | Trois HIGH corrigés, mesures, revue, 1 354 tests Swift, DMG vérifié |
 | 025 | Clôturée, installée et validée | `session-025-settings-readability` (fusionnée, conservée pour la conversation T3) | `specs/025-settings-readability` | Polices indépendantes et immédiates, choix de tuilage lisibles, 1 372 tests Swift et 26 tests des scripts, revue sans défaut bloquant, test utilisateur confirmé |
+| 026 | Clôturée, installée et validée | `session-026-command-bar` (fusionnée) | `specs/026-command-bar` | Tab complète la sélection, barre fixe et sobre, 1 384 tests Swift, revue sans défaut bloquant, test utilisateur confirmé |

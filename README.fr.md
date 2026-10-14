@@ -558,11 +558,16 @@ saisie : tape quelques lettres d'un element de n'importe quelle fenetre visible,
 puis Retour pour le cliquer (Maj-Retour clic droit, Cmd-Retour Cmd-clic, deux
 Retour double-clic).
 
+`Tab` complète le titre du résultat sélectionné sans le cliquer. Les flèches et
+Ctrl-N/Ctrl-P changent de résultat. La barre garde sa position et sa largeur sur l'écran d'ouverture,
+avec un compteur dans une pastille à droite, une bordure fine et une police proportionnelle.
+
 ### Boîte de commandes et fenêtre de réglages
 
 Un `/` en premier caractère passe la barre en **mode commande**. Les suggestions
 complètent les commandes, les directions, les stages, les signets et les réglages.
-`Tab` complète la suggestion. Les flèches haut et bas parcourent l'historique.
+`Tab` insère la suggestion sélectionnée ; les Tab suivants parcourent les alternatives.
+Les flèches haut et bas parcourent l'historique.
 `Retour` exécute la commande ; `Échap` ferme la barre. Les raccourcis système restent
 interceptés pendant la saisie de commande.
 

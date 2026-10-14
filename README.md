@@ -564,10 +564,15 @@ or agents.
 few letters of any element in any visible window, then press Return to click it
 (Shift-Return right-click, Cmd-Return Cmd-click, Return twice double-click).
 
+`Tab` completes the selected result's title without clicking it. Arrow keys and
+Ctrl-N/Ctrl-P change results. The bar keeps its position and width on the opening display, with a count
+chip on the right, a thin border, and a proportional font.
+
 ### Command box and settings window
 
 A leading `/` switches the bar to **command mode**. Suggestions complete commands,
-directions, stages, bookmarks, and settings. `Tab` completes a suggestion. Arrow
+directions, stages, bookmarks, and settings. `Tab` inserts the selected suggestion;
+subsequent Tab presses cycle through alternatives. Arrow
 keys navigate history. `Return` runs a command; `Esc` closes the
 bar. System shortcuts remain intercepted while entering a command.
 
