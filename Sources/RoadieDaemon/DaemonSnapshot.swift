@@ -412,6 +412,7 @@ public struct SnapshotService {
         let fallbackDisplayID = displays.first?.id
         // Pre-compute inverse index O(total_members) pour eviter O(w * scopes * stages * members) sur le hot path.
         var stageIndex = persistedStages.stageScopeIndex()
+        var initialMemberships: [(WindowID, StageScope)] = []
         for window in windows {
             guard stageManagedWindowIDs.contains(window.id) else {
                 scopedWindows.append(ScopedWindowSnapshot(window: window, scope: nil))
@@ -513,7 +514,7 @@ public struct SnapshotService {
             )
             try? state.setMode(persistedStage?.mode ?? config.tiling.defaultStrategy, for: scope)
             if window.isTileCandidate, pin == nil {
-                try? state.assignWindow(window.id, to: scope)
+                initialMemberships.append((window.id, scope))
             }
             try? state.setGroups(persistedStage?.groups ?? [], for: scope)
             scopedWindows.append(ScopedWindowSnapshot(
@@ -523,6 +524,8 @@ public struct SnapshotService {
                 isNewlyScoped: isNewlyScoped
             ))
         }
+        // PERF-010 : l'état est neuf ; éviter removeWindow/insert pour chaque fenêtre.
+        try? state.initializeWindowMemberships(initialMemberships)
         correctSoloMaximizedStates(
             in: &persistedStages, scopedWindows: scopedWindows, hiddenWindowIDs: input.hiddenWindowIDs,
             displays: displays, config: config

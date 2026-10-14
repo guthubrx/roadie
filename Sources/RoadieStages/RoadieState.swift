@@ -83,6 +83,29 @@ public struct RoadieState: Equatable, Codable, Sendable {
         displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?.focusedWindowID = windowID
     }
 
+    /// Construction d'un état neuf : aucune fenêtre ne doit déjà être affectée.
+    /// O(w + s), w affectations et s stages. Le dernier doublon garde sa position.
+    /// Valide tous les scopes avant d'écrire ; conserve modes, noms et groupes.
+    public mutating func initializeWindowMemberships(_ assignments: [(WindowID, StageScope)]) throws {
+        precondition(displays.values.allSatisfy { display in
+            display.desktops.values.allSatisfy { desktop in
+                desktop.stages.values.allSatisfy { $0.windowIDs.isEmpty }
+            }
+        }, "Window memberships must be initialized on a fresh state")
+        var reversedIDs: [StageScope: [WindowID]] = [:]
+        var seen: Set<WindowID> = []
+        for (windowID, scope) in assignments.reversed() {
+            guard stage(scope: scope) != nil else { throw RoadieStateError.unknownStage(scope) }
+            if seen.insert(windowID).inserted {
+                reversedIDs[scope, default: []].append(windowID)
+            }
+        }
+        for (scope, ids) in reversedIDs {
+            displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID]?
+                .initializeWindowIDs(Array(ids.reversed()))
+        }
+    }
+
     public mutating func setFocusedWindow(_ windowID: WindowID, for scope: StageScope) throws {
         guard let stage = displays[scope.displayID]?.desktops[scope.desktopID]?.stages[scope.stageID],
               stage.windowIDs.contains(windowID)
@@ -171,6 +194,11 @@ public struct StageState: Equatable, Codable, Sendable {
     public mutating func insert(_ windowID: WindowID) {
         windowIDs.removeAll { $0 == windowID }
         windowIDs.append(windowID)
+    }
+
+    fileprivate mutating func initializeWindowIDs(_ ids: [WindowID]) {
+        windowIDs = ids
+        focusedWindowID = ids.last
     }
 
     public mutating func remove(_ windowID: WindowID) {
