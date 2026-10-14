@@ -8,7 +8,7 @@
 - [x] T006 Exécuter les tests ciblés, comparer les mesures et documenter les coûts.
 - [x] T007 Revue indépendante, corrections ciblées et clôture des objections.
 - [x] T008 Exécuter la suite Swift complète et les tests des scripts.
-- [ ] T009 Produire les preuves de clôture des trois HIGH et actualiser le changelog/brouillon.
-- [ ] T010 Commiter, fusionner dans main, pousser et supprimer la branche fusionnée.
+- [x] T009 Produire les preuves de clôture des trois HIGH et actualiser le changelog/brouillon.
+- [x] T010 Commiter, fusionner dans main, pousser et supprimer la branche fusionnée.
 - [x] T011 Aligner les versions 0.4.0, construire et vérifier le DMG et sa somme de contrôle.
-- [ ] T012 Actualiser le brouillon GitHub et publier la release validée.
+- [x] T012 Actualiser le brouillon GitHub et publier la release validée.

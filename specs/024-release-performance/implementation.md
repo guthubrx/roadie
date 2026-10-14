@@ -23,3 +23,11 @@ DMG : 8 038 154 octets, signature ad hoc vérifiée, hdiutil verify valide.
 Montage en lecture seule : versions des deux binaires, contenu et lien Applications vérifiés.
 SHA-256 : 3203832da406a7a39ce95c7dc59e76e51b21edc19653f507301ff77e328dcc3b.
 Le daemon de travail n'a pas été remplacé ni redémarré.
+
+## Livraison
+
+Fusion en fast-forward dans main, push réussi et branche de session supprimée.
+Release v0.4.0 publiée le 2026-10-14, au commit 5ab0ab9544de68edbd6642f58ac6140ef8a07f1e.
+DMG et fichier SHA-256 joints ; empreinte calculée par GitHub identique à l'empreinte locale.
+URL : https://github.com/guthubrx/roadie/releases/tag/v0.4.0
+Les douze constats MEDIUM/LOW restent ouverts et sont déclarés dans les notes.

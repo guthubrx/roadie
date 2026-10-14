@@ -1,6 +1,6 @@
 # Spécification 024 — Corrections de performance avant v0.4.0
 
-**Branche** : `session-024-release-performance` | **Créée** : 2026-10-14 | **Statut** : en cours
+**Branche** : `session-024-release-performance` | **Créée** : 2026-10-14 | **Statut** : implémentée, fusionnée et publiée en v0.4.0
 **Demande validée** : corriger PERF-010, PERF-011 et PERF-012 avant la release proposée.
 
 ## Scénarios utilisateur et tests

@@ -62,6 +62,10 @@
     "signature": "ad-hoc verified deep/strict",
     "disk_image": "hdiutil verify passed; mounted read-only; bundled binaries and Applications link verified",
     "checksum_file": "shasum -a 256 -c passed",
-    "versioned_swift_full_tests": 1354
+    "versioned_swift_full_tests": 1354,
+    "published": true,
+    "url": "https://github.com/guthubrx/roadie/releases/tag/v0.4.0",
+    "tag_commit": "5ab0ab9544de68edbd6642f58ac6140ef8a07f1e",
+    "github_asset_digest_matches": true
   }
 }
