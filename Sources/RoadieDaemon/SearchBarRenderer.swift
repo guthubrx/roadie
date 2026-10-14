@@ -17,6 +17,11 @@ struct SearchBarLayout: Equatable {
     var suggestionRows: [CGRect]
     var messageRows: [CGRect]
 
+    /// Seules les surfaces visibles gardent la recherche ouverte ; l'espace entre elles reste extérieur.
+    func contains(_ point: CGPoint) -> Bool {
+        bar.contains(point) || panel?.contains(point) == true
+    }
+
     /// La largeur du contenu ne déplace plus la barre. Faute de place, les suggestions cèdent la
     /// place au message. Complexité : O(s + m), s ≤ 8 et m ≤ 12.
     static func make(
@@ -72,6 +77,22 @@ struct TargetSearchBar {
     }
 
     var counterText: String? { commandInput == nil ? String(max(0, matchCount)) : nil }
+
+    /// Contenu commun au dessin et à la géométrie du panneau.
+    var messageTextLines: [String] {
+        switch message {
+        case .info(let lines): return Array(lines.prefix(SearchBarLayout.maxMessageLines))
+        case .error(let text, let usage): return [text] + (usage.map { ["Usage : \($0)"] } ?? [])
+        case nil: return []
+        }
+    }
+
+    /// Même géométrie pour le dessin et les clics, y compris après un réglage de police.
+    func layout(in bounds: CGRect, style: TargetOverlayStyle) -> SearchBarLayout {
+        return SearchBarLayout.make(bounds: bounds, suggestions: suggestions.count,
+                                    messageLines: messageTextLines.count, searchTextFontSize: style.searchTextFontSize,
+                                    commandTextFontSize: style.commandTextFontSize)
+    }
 }
 
 /// Réserve le compteur à droite ; le texte long ne peut ni le recouvrir ni déplacer son cadre.
@@ -98,10 +119,9 @@ enum SearchBarRenderer {
         // Résoudre les deux familles une fois par dessin, hors des boucles de suggestions.
         let inputFont = font(family: style.searchFontFamily, size: style.searchTextFontSize)
         let commandFont = font(family: style.commandFontFamily, size: style.commandTextFontSize)
-        let messages = messageLines(state.message, font: commandFont)
-        let layout = SearchBarLayout.make(bounds: bounds, suggestions: state.suggestions.count,
-                                          messageLines: messages.count, searchTextFontSize: style.searchTextFontSize,
-                                          commandTextFontSize: style.commandTextFontSize)
+        let messageColor: NSColor = if case .error = state.message { .systemRed } else { .white }
+        let messages = state.messageTextLines.map { line($0, font: commandFont, color: messageColor) }
+        let layout = state.layout(in: bounds, style: style)
         guard layout.bar.width > 0, layout.bar.height > 0 else { return }
         drawSurface(layout.bar)
         let counter = state.counterText.map {
@@ -182,17 +202,6 @@ enum SearchBarRenderer {
             result.append(line("   " + suggestion.detail, font: font, color: NSColor(calibratedWhite: 0.55, alpha: 1)))
         }
         return result
-    }
-
-    private static func messageLines(_ message: SlashMessage?, font: NSFont) -> [NSAttributedString] {
-        switch message {
-        case .info(let lines):
-            return lines.prefix(SearchBarLayout.maxMessageLines).map { line($0, font: font, color: .white) }
-        case .error(let text, let usage):
-            return ([text] + (usage.map { ["Usage : \($0)"] } ?? [])).map { line($0, font: font, color: .systemRed) }
-        case nil:
-            return []
-        }
     }
 
     private static func draw(_ line: NSAttributedString, in rect: CGRect, centered: Bool = false) {

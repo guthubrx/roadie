@@ -280,7 +280,7 @@ extension KeyEventTapSession {
     }
 
     func installEventTap() -> Bool {
-        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        let mask = TargetSearchDismissal.eventMask(search: self is TargetSearchSession)
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon,
                   let session = Unmanaged<AnyObject>.fromOpaque(refcon).takeUnretainedValue() as? any KeyEventTapSession
@@ -288,6 +288,12 @@ extension KeyEventTapSession {
             // macOS desactive le tap s'il repond trop lentement ou sur saisie utilisateur : on le reactive.
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 Task { @MainActor in session.reenableEventTap() }
+                return Unmanaged.passUnretained(event)
+            }
+            if TargetSearchDismissal.isMouseDown(type), let search = session as? TargetSearchSession {
+                // installEventTap est isolé sur MainActor : cette source appartient à la boucle
+                // principale. Fermer ici, avant un timer de Retour, sans consommer le clic.
+                MainActor.assumeIsolated { search.handleMouseDown(at: event.location) }
                 return Unmanaged.passUnretained(event)
             }
             guard type == .keyDown else { return Unmanaged.passUnretained(event) }
@@ -825,6 +831,29 @@ private final class TargetGridInteractiveSession: TargetOverlaySessionHandle, Ke
     }
 }
 
+/// Politique du clic extérieur (SPEC-028), partagée avec les tests sans installer de tap système.
+enum TargetSearchDismissal {
+    static func isMouseDown(_ type: CGEventType) -> Bool {
+        type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown
+    }
+
+    static func eventMask(search: Bool) -> CGEventMask {
+        let keyboard = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        guard search else { return keyboard }
+        let mouseTypes: [CGEventType] = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        return mouseTypes.reduce(keyboard) { mask, type in
+            mask | CGEventMask(1 << type.rawValue)
+        }
+    }
+
+    /// Annuler le Retour différé avant la fermeture empêche une activation après le clic.
+    static func cancelIfOutside(at point: CGPoint, layout: SearchBarLayout?, model: inout TargetSearchModel) -> Bool {
+        guard let layout, !layout.contains(point) else { return false }
+        model.cancelPendingReturn()
+        return true
+    }
+}
+
 /// Session du mode recherche (SPEC-021). La logique est dans `TargetSearchModel` ; la session lit les
 /// touches, met à jour l'affichage et active la cible figée au moment de la validation.
 /// Une requête qui commence par `/` passe en mode commande (SPEC-023) : les touches vont alors à
@@ -852,6 +881,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     var runLoopSource: CFRunLoopSource?
     private var timer: Timer?
     private var windows: [TargetOverlayWindow] = []
+    private var searchBarLayout: SearchBarLayout?
     /// Écran du pointeur à l'ouverture, celui de la barre.
     private let pointerScreen: CGRect?
     /// Des fenêtres sont encore en cours de lecture.
@@ -921,10 +951,18 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
         guard !finished, self.style != style else { return }
         self.style = style
         windows.forEach { $0.updateStyle(style) }
+        render()
     }
 
     func cancel() {
         finish(TargetActionResult(changed: false, message: "target_search_cancelled", error: "cancelled"))
+    }
+
+    fileprivate func handleMouseDown(at point: CGPoint) {
+        guard !finished else { return }
+        let nsPoint = RoadieScreenCoordinate.axRectToNS(CGRect(origin: point, size: .zero)).origin
+        guard TargetSearchDismissal.cancelIfOutside(at: nsPoint, layout: searchBarLayout, model: &model) else { return }
+        cancel()
     }
 
     /// Exigé par `KeyEventTapSession` ; la recherche reçoit `SearchKeyInput` via `handleSearch`.
@@ -1070,6 +1108,7 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
 
     private func show(badges: [TargetOverlayBadge], bar: TargetSearchBar) {
         let barWindow = pointerScreen.flatMap { screen in windows.first { $0.frame == screen } } ?? windows.first
+        searchBarLayout = barWindow.map { bar.layout(in: $0.frame, style: style) }
         for window in windows {
             window.update(badges: badges, searchBar: window === barWindow ? bar : nil)
         }
@@ -1090,6 +1129,8 @@ private final class TargetSearchSession: TargetOverlaySessionHandle, KeyEventTap
     }
 
     private func cleanup() {
+        model.cancelPendingReturn()
+        searchBarLayout = nil
         timer?.invalidate()
         timer = nil
         keyMode.withLock { $0 = .search }
