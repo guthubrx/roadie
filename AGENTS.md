@@ -1,11 +1,11 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `027-settings-complete`.
+Current SpecKit feature: `028-search-dismissal`.
 
 Contexte :
-- `specs/027-settings-complete/spec.md`
-- `specs/027-settings-complete/plan.md`
-- `specs/027-settings-complete/research.md`
-- `specs/027-settings-complete/tasks.md`
+- `specs/028-search-dismissal/spec.md`
+- `specs/028-search-dismissal/plan.md`
+- `specs/028-search-dismissal/research.md`
+- `specs/028-search-dismissal/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
