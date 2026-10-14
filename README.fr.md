@@ -582,9 +582,23 @@ La fenêtre de réglages propose des catégories, une recherche et des changemen
 appliqués immédiatement. Les listes et les tableaux de tables restent en lecture
 seule. L'interface est en français. Les commentaires du fichier TOML sont conservés.
 Une sauvegarde précède la première modification de la session. Une écriture invalide
-est refusée. La taille des étiquettes est réglable de 8 à 48 points, avec 13 par défaut,
-pour les lettres et la recherche (`target_mode.label_font_size`) et la grille
-(`target_grid.label_font_size`).
+est refusée. Les tailles de police sont indépendantes. Les curseurs, le pas à pas
+et la saisie d'une taille valide les appliquent immédiatement. Les sessions ouvertes
+gardent leur saisie lors du changement.
+
+| Zone | Identifiants des réglages |
+|---|---|
+| Paramètres : textes, aides, titres | `interface.settings_text_font_size`, `interface.settings_help_font_size`, `interface.settings_title_font_size` |
+| Étiquettes du mode lettres | `target_mode.label_font_size` |
+| Étiquettes de la grille | `target_grid.label_font_size` |
+| Recherche : étiquettes, saisie, suggestions | `target_mode.search_label_font_size`, `target_mode.search_text_font_size`, `target_mode.command_text_font_size` |
+| Rail : écran, bureau, textes de stage | `rail.header.display.font_size`, `rail.header.desktop.font_size`, `rail.stage_labels.font_size` |
+
+Par exemple, `/set interface.settings_text_font_size 20` modifie la fenêtre des paramètres.
+Ses textes, aides et titres ont des défauts de 16, 14 et 22 points. Les étiquettes des
+lettres, de la grille et de la recherche ont un défaut de 13 points. Les cartes du rail
+adaptent leur taille à la police. Les infobulles et messages de dialogue natifs de macOS
+gardent la police du système.
 
 La barre et les réglages exigent un daemon démarré et `overlay_enabled = true`.
 Dans la table existante du fichier de configuration, active au minimum :

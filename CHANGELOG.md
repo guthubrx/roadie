@@ -3,6 +3,18 @@
 Ce journal décrit les changements visibles depuis la dernière release publiée.
 Chaque entrée décrit la version correspondante. Les README présentent les sources courantes.
 
+## À publier
+
+### Corrections
+
+- Réglages plus lisibles : textes et champs agrandis, fenêtre plus grande et
+  explications au-dessus des contrôles. Les modes de tuilage portent des noms français.
+- La valeur héritée `balanced` apparaît dans le menu de découpage de l'espace.
+  Ouvrir les réglages conserve le fichier de configuration existant.
+- Tailles de police indépendantes dans les paramètres, le rail, les lettres,
+  la grille et la recherche. Curseurs et saisie valide appliquent les changements
+  immédiatement ; les fenêtres et sessions déjà visibles sont redessinées.
+
 ## 0.4.0 — 2026-10-14
 
 Comparaison : [v0.3.0 → sources intégrées](https://github.com/guthubrx/roadie/compare/v0.3.0...96c3d462).

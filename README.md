@@ -586,9 +586,21 @@ bar. System shortcuts remain intercepted while entering a command.
 The settings window provides categories, search, and immediate changes. Lists and
 arrays of tables remain read-only. The interface is in French. TOML comments are
 preserved. A backup precedes the first change of the session. Invalid writes are
-rejected. Label font sizes range from 8 to 48 points, with a default of 13, for
-letters and search (`target_mode.label_font_size`) and the grid
-(`target_grid.label_font_size`).
+rejected. Font sizes are independent and apply immediately through sliders,
+steppers, or valid typed values. Open sessions retain their input when fonts change.
+
+| Surface | Setting IDs |
+|---|---|
+| Settings: text, help, titles | `interface.settings_text_font_size`, `interface.settings_help_font_size`, `interface.settings_title_font_size` |
+| Letter labels | `target_mode.label_font_size` |
+| Grid labels | `target_grid.label_font_size` |
+| Search labels, input, command suggestions | `target_mode.search_label_font_size`, `target_mode.search_text_font_size`, `target_mode.command_text_font_size` |
+| Rail display, desktop, stage text | `rail.header.display.font_size`, `rail.header.desktop.font_size`, `rail.stage_labels.font_size` |
+
+For example, `/set interface.settings_text_font_size 20` updates the settings window.
+The settings text, help and title defaults are 16, 14 and 22 points. Letters,
+grid and search labels default to 13 points. Rail cards adapt their size to the font.
+Native macOS tooltips and system dialog messages keep their system font.
 
 The bar and settings require a running daemon and `overlay_enabled = true`.
 In the existing configuration table, enable at least:
