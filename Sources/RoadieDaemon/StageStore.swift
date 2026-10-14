@@ -612,7 +612,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     /// (SPEC-016 FR-006, R11). Jamais si le pid connu du membre est encore vivant : la fenêtre
     /// neuve est alors une autre fenêtre de la même application. Sans pid connu (anciens
     /// fichiers) ou pid mort, il faut aussi la proximité de cadre (cf. `bestReplacement`).
-    /// O(M + W), M = membres, W = fenêtres vivantes.
+    /// O(M + W) sans recherche ; index homonymes O(Σ g log² g), mémoire O(W).
+    /// Requête finie habituellement sublinéaire, pire O(g) ; total O(M × W) + construction.
+    /// Repli historique non fini : O(g log g) par requête, donc O(M × W log W) au pire.
+    /// L'index est éphémère : aucun scan des candidats déjà adoptés, ni tri par membre (PERF-012).
     public mutating func reconcileWindowIDs(
         with liveWindows: [WindowSnapshot],
         isProcessAlive: (Int32) -> Bool = ProcessLiveness.isAlive
@@ -629,9 +632,10 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
         }
 
         var windowsBySignature: [StableWindowSignature: [WindowSnapshot]] = [:]
-        for window in tileableWindows {
+        for window in tileableWindows where !claimedWindowIDs.contains(window.id) {
             windowsBySignature[StableWindowSignature(window: window), default: []].append(window)
         }
+        var indexesBySignature: [StableWindowSignature: WindowReplacementIndex] = [:]
 
         var remapped: [WindowID: WindowID] = [:]
         for scopeIndex in scopes.indices {
@@ -639,16 +643,18 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                 for memberIndex in scopes[scopeIndex].stages[stageIndex].members.indices {
                     let member = scopes[scopeIndex].stages[stageIndex].members[memberIndex]
                     guard !liveWindowIDs.contains(member.windowID),
-                          member.pid.map(isProcessAlive) != true,
-                          let replacement = bestReplacement(
-                              for: member,
-                              in: windowsBySignature[StableWindowSignature(member: member)] ?? [],
-                              claimed: claimedWindowIDs
-                          )
+                          member.pid.map(isProcessAlive) != true
                     else { continue }
+                    let signature = StableWindowSignature(member: member)
+                    guard let candidates = windowsBySignature[signature], !candidates.isEmpty else { continue }
+                    // Construire l'index seulement si un ancien membre peut demander cette signature.
+                    let index = indexesBySignature[signature] ?? WindowReplacementIndex(candidates)
+                    indexesBySignature[signature] = index
+                    guard let replacement = index.bestReplacement(for: member, claimed: claimedWindowIDs) else { continue }
 
                     remapped[member.windowID] = replacement.id
                     claimedWindowIDs.insert(replacement.id)
+                    index.remove(replacement.id)
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].windowID = replacement.id
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].bundleID = replacement.bundleID
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].title = replacement.title
@@ -1511,7 +1517,7 @@ private struct StableWindowSignature: Hashable {
     }
 }
 
-private func bestReplacement(
+private func bestReplacementByScan(
     for member: PersistentStageMember,
     in candidates: [WindowSnapshot],
     claimed: Set<WindowID>
@@ -1539,4 +1545,123 @@ private func frameDistance(_ lhs: Rect, _ rhs: Rect) -> Double {
         + abs(lhsRect.midY - rhsRect.midY)
         + abs(lhs.width - rhs.width) / 2
         + abs(lhs.height - rhs.height) / 2
+}
+
+/// Arbre géométrique équilibré local à une réconciliation (PERF-012).
+/// Quatre coordonnées rendent la distance L1 égale au score historique.
+/// Références partagées entre requêtes : les retraits ne recopient pas les tableaux.
+private final class WindowReplacementIndex {
+    private struct Candidate {
+        let window: WindowSnapshot
+        let point: [Double]
+    }
+
+    private struct Node {
+        let window: WindowSnapshot
+        var minimum: [Double]
+        var maximum: [Double]
+        let parent: Int?
+        var left: Int?
+        var right: Int?
+        var active = true
+        var count = 1
+    }
+
+    private let candidates: [WindowSnapshot]
+    private var nodes: [Node] = []
+    private var nodesByID: [WindowID: [Int]] = [:]
+    private var root: Int?
+
+    init(_ candidates: [WindowSnapshot]) {
+        self.candidates = candidates
+        let entries = candidates.map { Candidate(window: $0, point: Self.point($0.frame)) }
+        guard entries.allSatisfy({ $0.point.allSatisfy(\.isFinite) }) else { return }
+        nodes.reserveCapacity(candidates.count)
+        root = build(entries, parent: nil, depth: 0)
+    }
+
+    private static func point(_ frame: Rect) -> [Double] {
+        [Double(frame.cgRect.midX), Double(frame.cgRect.midY), frame.width / 2, frame.height / 2]
+    }
+
+    /// Tri par niveau : O(g log² g), profondeur O(log g), mémoire finale O(g).
+    private func build(_ windows: [Candidate], parent: Int?, depth: Int) -> Int? {
+        guard !windows.isEmpty else { return nil }
+        let axis = depth % 4
+        let sorted = windows.sorted { $0.point[axis] < $1.point[axis] }
+        let middle = sorted.count / 2
+        let point = sorted[middle].point
+        let index = nodes.count
+        nodes.append(Node(window: sorted[middle].window, minimum: point, maximum: point, parent: parent))
+        nodesByID[sorted[middle].window.id, default: []].append(index)
+        let left = build(Array(sorted[..<middle]), parent: index, depth: depth + 1)
+        let right = build(Array(sorted[(middle + 1)...]), parent: index, depth: depth + 1)
+        nodes[index].left = left
+        nodes[index].right = right
+        for child in [left, right].compactMap({ $0 }) {
+            nodes[index].count += nodes[child].count
+            for coordinate in 0..<4 {
+                nodes[index].minimum[coordinate] = min(nodes[index].minimum[coordinate], nodes[child].minimum[coordinate])
+                nodes[index].maximum[coordinate] = max(nodes[index].maximum[coordinate], nodes[child].maximum[coordinate])
+            }
+        }
+        return index
+    }
+
+    /// Borne arrondie vers le bas : aucun candidat n'est perdu par arrondi près de 360/120.
+    private func lowerBound(_ index: Int, to point: [Double]) -> Double {
+        var distance = 0.0
+        for axis in 0..<4 {
+            let delta = max(nodes[index].minimum[axis] - point[axis], point[axis] - nodes[index].maximum[axis], 0)
+            distance = max(0, (distance + max(0, delta.nextDown)).nextDown)
+        }
+        return distance
+    }
+
+    func bestReplacement(for member: PersistentStageMember, claimed: Set<WindowID>) -> WindowSnapshot? {
+        let point = Self.point(member.frame)
+        guard let root, point.allSatisfy(\.isFinite) else {
+            // Géométrie non finie : garder le comportement historique, sans index invalide.
+            return bestReplacementByScan(for: member, in: candidates, claimed: claimed)
+        }
+        var best: WindowSnapshot?
+        var bestScore = Double.greatestFiniteMagnitude
+        // Un second score >= 480 ne peut rendre ambigu un premier <= 360 (écart >= 120).
+        var secondScore = 480.0
+        func visit(_ index: Int) {
+            guard nodes[index].count > 0, lowerBound(index, to: point) < secondScore else { return }
+            let node = nodes[index]
+            if node.active, !claimed.contains(node.window.id) {
+                let score = frameDistance(member.frame, node.window.frame)
+                if score < bestScore {
+                    secondScore = min(secondScore, bestScore)
+                    best = node.window
+                    bestScore = score
+                } else if score < secondScore {
+                    secondScore = score
+                }
+            }
+            let children = [node.left, node.right].compactMap { $0 }
+            if children.count == 2, lowerBound(children[1], to: point) < lowerBound(children[0], to: point) {
+                visit(children[1]); visit(children[0])
+            } else {
+                for child in children { visit(child) }
+            }
+        }
+        visit(root)
+        guard bestScore <= 360, secondScore - bestScore >= 120 else { return nil }
+        return best
+    }
+
+    /// Retrait logique O(log g) par occurrence ; les sous-arbres vides sont ignorés.
+    func remove(_ id: WindowID) {
+        for index in nodesByID[id] ?? [] where nodes[index].active {
+            nodes[index].active = false
+            var ancestor: Int? = index
+            while let current = ancestor {
+                nodes[current].count -= 1
+                ancestor = nodes[current].parent
+            }
+        }
+    }
 }
