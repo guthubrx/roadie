@@ -1,12 +1,11 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `024-release-performance`.
+Current SpecKit feature: `025-settings-readability`.
 
 Contexte :
-- `specs/024-release-performance/spec.md`
-- `specs/024-release-performance/plan.md`
-- `specs/024-release-performance/research.md`
-- `specs/024-release-performance/data-model.md`
-- `specs/024-release-performance/tasks.md`
+- `specs/025-settings-readability/spec.md`
+- `specs/025-settings-readability/plan.md`
+- `specs/025-settings-readability/research.md`
+- `specs/025-settings-readability/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->
