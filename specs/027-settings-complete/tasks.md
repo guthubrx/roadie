@@ -8,7 +8,7 @@
 - [x] T006 Ajouter les familles de police Caps+F et leur changement immédiat.
 - [x] T007 Intégrer, tester, inspecter les rendus et traiter la revue.
 - [x] T008 Installer, redémarrer et vérifier la santé.
-- [ ] T009 Recueillir le test manuel, documenter, committer et fusionner.
+- [x] T009 Recueillir le test manuel, documenter, committer et fusionner.
 
 ## Point de validation
 
@@ -20,4 +20,6 @@ et testé dans les deux moteurs, avec reprise au retour et borne conservée.
 
 T008 : version finale installée et redémarrée, PID 47508, quatre contrôles de
 santé OK. Certificat et permissions macOS conservés.
-T009 : test utilisateur confirmé (« Oui, tout fonctionne »). Livraison Git en cours.
+T009 : test utilisateur confirmé (« Oui, tout fonctionne »). Commit `6190f4de`
+fusionné dans `main`, branches 026 et 027 supprimées. Le worktree de cette
+conversation est conservé, avec sa branche 025 alignée sur `main`.

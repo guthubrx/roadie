@@ -1,7 +1,7 @@
 # Spécification 027 — Réglages complets et application immédiate
 
 **Branche** : `session-027-settings-complete` | **Date** : 2026-10-14
-**Statut** : implémentée, installée et validée | **Validation** : « Go, avec des agents », puis « Oui, tout fonctionne »
+**Statut** : clôturée, installée et validée | **Validation** : « Go, avec des agents », puis « Oui, tout fonctionne »
 
 ## Besoin
 

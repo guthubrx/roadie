@@ -1,6 +1,6 @@
 # Implémentation — session 027
 
-**Statut : implémentée, installée et validée ; livraison Git en cours.**
+**Statut : clôturée, installée et validée.**
 
 La session a été validée par « Go, avec des agents ». Elle couvre l'application
 immédiate des réglages, l'édition intégrée des collections et les familles de
@@ -113,7 +113,9 @@ ni deuxième notification des paramètres ni boucle de nouvelle tentative.
 - Cette installation inclut le dernier correctif de transition. Sa santé est vérifiée.
 - Validation utilisateur : « Oui, tout fonctionne ». Les espacements sans Retour,
   les listes et noms de stages, les polices Caps+F immédiates et la fluidité sont confirmés.
-- Le commit et la fusion de clôture sont en cours.
+- Commit de livraison : `6190f4de`, fusionné dans `main` sans conflit.
+- Les branches fusionnées 026 et 027 sont supprimées. Le worktree lié à la
+  conversation et sa branche 025 sont conservés et alignés sur `main`.
 
 ## Limites connues
 
