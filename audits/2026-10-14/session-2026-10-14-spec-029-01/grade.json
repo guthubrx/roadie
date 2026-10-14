@@ -1,0 +1,18 @@
+{
+  "grade": "A",
+  "date": "2026-10-14",
+  "spec": "029",
+  "scope": "SPEC-029 : fermeture de fenêtre et actualisation immédiate du navrail",
+  "coverage_percent": 100,
+  "justification": "Aucun finding actif sur les cinq fichiers Swift modifiés. Les reprises sont bornées, les courses sont couvertes et 1466 tests passent.",
+  "metrics": {
+    "security": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "quality": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "performance": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "reliability": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "tests": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "duplication": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "ai_hygiene": {"grade": "A", "numeric": 100, "findings_count": 0},
+    "minimalism": {"grade": "A", "numeric": 100, "findings_count": 0}
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "module": "08",
+  "findings": [],
+  "positive_findings": [
+    "La reprise est plafonnée à 500 ms de délais cumulés par preuve, hors coût des relevés.",
+    "Le rafraîchissement du rail conserve son debounce existant de 20 ms."
+  ]
+}

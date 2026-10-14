@@ -686,6 +686,8 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].title = replacement.title
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].frame = replacement.frame
                     scopes[scopeIndex].stages[stageIndex].members[memberIndex].pid = replacement.pid
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].confirmedClosedAt = nil
+                    scopes[scopeIndex].stages[stageIndex].members[memberIndex].missingSince = nil
                 }
             }
         }
@@ -756,6 +758,15 @@ public struct PersistentStageState: Equatable, Codable, Sendable {
     public mutating func remove(windowID: WindowID) {
         for scopeIndex in scopes.indices {
             scopes[scopeIndex].remove(windowID: windowID)
+        }
+    }
+
+    /// Marque les fenêtres dont la fermeture AX est confirmée sans supprimer leur appartenance.
+    /// SPEC-016 peut ainsi rattacher une fenêtre restaurée après relance de l'application.
+    public mutating func markConfirmedClosed(windowIDs: Set<WindowID>, at date: Date) {
+        guard !windowIDs.isEmpty else { return }
+        for scopeIndex in scopes.indices {
+            scopes[scopeIndex].markConfirmedClosed(windowIDs: windowIDs, at: date)
         }
     }
 
@@ -1275,6 +1286,20 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
         }
     }
 
+    /// Une fermeture confirmée est un état de présentation du rail. Le membre reste disponible
+    /// pour le remappage après relance et suit la purge normale par `missingSince`.
+    public mutating func markConfirmedClosed(windowIDs: Set<WindowID>, at date: Date) {
+        guard !windowIDs.isEmpty else { return }
+        for stageIndex in stages.indices {
+            for memberIndex in stages[stageIndex].members.indices
+                where windowIDs.contains(stages[stageIndex].members[memberIndex].windowID) {
+                if stages[stageIndex].members[memberIndex].confirmedClosedAt == nil {
+                    stages[stageIndex].members[memberIndex].confirmedClosedAt = date
+                }
+            }
+        }
+    }
+
     public mutating func setFocusedWindow(_ windowID: WindowID, in stageID: StageID) {
         guard let index = stages.firstIndex(where: { $0.id == stageID }),
               stages[index].members.contains(where: { $0.windowID == windowID })
@@ -1317,6 +1342,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
             member.bundleID = window.bundleID
             member.title = window.title
             member.pid = window.pid
+            member.confirmedClosedAt = nil
             if let presentationState {
                 member.presentationState = presentationState
             }
@@ -1343,6 +1369,7 @@ public struct PersistentStageScope: Equatable, Codable, Sendable {
                 let windowID = stages[stageIndex].members[memberIndex].windowID
                 // Seules les transitions modifient l'état (FR-014, pas de réécriture au repos).
                 if liveWindowIDs.contains(windowID) {
+                    stages[stageIndex].members[memberIndex].confirmedClosedAt = nil
                     if stages[stageIndex].members[memberIndex].missingSince != nil {
                         report.restoredWindowIDs.insert(windowID)
                         stages[stageIndex].members[memberIndex].lastSeenAt = now
@@ -1498,6 +1525,8 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
     public var presentationState: WindowPresentationState?
     public var lastSeenAt: Date?
     public var missingSince: Date?
+    /// Fermeture confirmée par AX. Le navrail masque ce membre, mais SPEC-016 peut le remapper.
+    public var confirmedClosedAt: Date?
     /// pid observé du processus propriétaire (SPEC-016 FR-006). Optionnel : absent des anciens fichiers.
     public var pid: Int32?
 
@@ -1509,6 +1538,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         presentationState: WindowPresentationState? = nil,
         lastSeenAt: Date? = nil,
         missingSince: Date? = nil,
+        confirmedClosedAt: Date? = nil,
         pid: Int32? = nil
     ) {
         self.windowID = windowID
@@ -1518,6 +1548,7 @@ public struct PersistentStageMember: Equatable, Codable, Sendable {
         self.presentationState = presentationState
         self.lastSeenAt = lastSeenAt
         self.missingSince = missingSince
+        self.confirmedClosedAt = confirmedClosedAt
         self.pid = pid
     }
 }

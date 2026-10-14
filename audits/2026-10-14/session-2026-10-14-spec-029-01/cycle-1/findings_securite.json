@@ -1,0 +1,8 @@
+{
+  "module": "03",
+  "findings": [],
+  "positive_findings": [
+    "La feature ne crée aucune entrée réseau, commande système ou donnée sensible.",
+    "La preuve de fermeture reste confinée à un identifiant de fenêtre et à une date."
+  ]
+}

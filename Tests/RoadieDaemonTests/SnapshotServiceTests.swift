@@ -3,7 +3,7 @@ import Foundation
 import Testing
 import RoadieAX
 import RoadieCore
-import RoadieDaemon
+@testable import RoadieDaemon
 import RoadieStages
 import RoadieTiler
 
@@ -3821,7 +3821,8 @@ private final class StabilizationClock: @unchecked Sendable {
 
 private final class SnapshotCallCountingProvider: SystemSnapshotProviding, @unchecked Sendable {
     let display: DisplaySnapshot
-    let windowList: [WindowSnapshot]
+    var windowList: [WindowSnapshot]
+    var onWindows: (() -> Void)?
     private(set) var windowsCalls = 0
 
     init(display: DisplaySnapshot, windows: [WindowSnapshot]) {
@@ -3833,6 +3834,7 @@ private final class SnapshotCallCountingProvider: SystemSnapshotProviding, @unch
     func displays() -> [DisplaySnapshot] { [display] }
     func windows() -> [WindowSnapshot] {
         windowsCalls += 1
+        onWindows?()
         return windowList
     }
     func focusedWindowID() -> WindowID? { nil }
@@ -4137,6 +4139,213 @@ struct SnapshotStabilizationTests {
         #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now + 10).members.map(\.windowID) == [b.id])
         #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now + 16).members.isEmpty)
         #expect(stage.members.map(\.windowID) == [b.id])
+    }
+
+    @Test
+    func confirmedDestructionHidesRailMemberAndEmptyStageImmediately() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])
+        let eventPath = tempPath("confirmed-close-events")
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: eventPath),
+            clock: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        snapshotService.noteWindowDestroyed(b.id)
+        provider.windowList = [a]
+        clock.now += 0.02
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        let scope = try #require(store.state().scopes.first)
+        let stage = try #require(scope.stages.first { $0.id.rawValue == "2" })
+        let member = try #require(stage.members.first)
+        #expect(member.confirmedClosedAt == clock.now)
+        #expect(member.missingSince == clock.now)
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now).members.isEmpty)
+        #expect(!RailController.railVisibleStageIDs(in: scope, liveWindowIDs: [a.id], now: clock.now).contains(stage.id))
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id, b.id], now: clock.now).members.map(\.windowID) == [b.id])
+        #expect(stage.members.map(\.windowID) == [b.id])
+        let events = try String(contentsOfFile: eventPath, encoding: .utf8)
+        #expect(events.contains("\"type\":\"windows.missing_reconciled\""))
+        #expect(events.contains("\"markedMissingIDs\":\"2\""))
+    }
+
+    @Test
+    func destructionDuringWindowScanStillMarksMemberClosed() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: tempPath("in-scan-close-events")),
+            clock: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+        provider.onWindows = {
+            provider.onWindows = nil
+            clock.now += 0.02
+            snapshotService.noteWindowDestroyed(b.id)
+            provider.windowList = [a]
+        }
+
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        let stage = try #require(store.state().scopes.flatMap(\.stages).first { $0.id.rawValue == "2" })
+        #expect(stage.members.first?.confirmedClosedAt != nil)
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now).members.isEmpty)
+    }
+
+    @Test
+    func confirmedCloseChangesStageStoreRailSignature() {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        var state = store.state()
+        let before = RailController.railSignature(for: state)
+
+        state.markConfirmedClosed(windowIDs: [b.id], at: Date(timeIntervalSince1970: 123))
+
+        #expect(RailController.railSignature(for: state) != before)
+    }
+
+    @Test
+    func remappedWindowClearsConfirmedCloseMarker() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        var state = store.state()
+        let closedAt = Date(timeIntervalSince1970: 123)
+        state.markConfirmedClosed(windowIDs: [b.id], at: closedAt)
+        var restored = b
+        restored.id = WindowID(rawValue: 22)
+        restored.pid = 222
+
+        state.reconcileWindowIDs(with: [a, restored], isProcessAlive: { _ in false })
+
+        let member = try #require(state.scopes.flatMap(\.stages).flatMap(\.members).first { $0.windowID == restored.id })
+        #expect(member.confirmedClosedAt == nil)
+        #expect(member.missingSince == nil)
+    }
+
+    @Test
+    func confirmedDestructionKeepsOtherRailMembersInTheirOrder() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let c = powerWindow(3, x: 700)
+        let store = twoStageStore(a: a, b: b, c: c)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b, c])
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: tempPath("confirmed-close-order-events")),
+            clock: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        snapshotService.noteWindowDestroyed(c.id)
+        provider.windowList = [a, b]
+        clock.now += 0.02
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        let scope = try #require(store.state().scopes.first)
+        let stage = try #require(scope.stages.first { $0.id.rawValue == "1" })
+        #expect(stage.members.map(\.windowID) == [a.id, c.id])
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id, b.id], now: clock.now).members.map(\.windowID) == [a.id])
+    }
+
+    @Test
+    func staleDestructionKeepsTransientRailGrace() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: tempPath("stale-close-events")),
+            clock: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+        snapshotService.noteWindowDestroyed(b.id)
+
+        clock.now += 6
+        provider.windowList = [a]
+        _ = snapshotService.producerSnapshot(cycle: 2)
+
+        let stage = try #require(store.state().scopes.flatMap(\.stages).first { $0.id.rawValue == "2" })
+        #expect(stage.members.first?.confirmedClosedAt == nil)
+        #expect(RailController.railDisplayStage(stage, liveWindowIDs: [a.id], now: clock.now).members.map(\.windowID) == [b.id])
+    }
+
+    @Test
+    func onlyWriterSnapshotsConsumeTenRetriesPerDestroyedWindow() {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: tempPath("close-retry-events")),
+            clock: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+        snapshotService.noteWindowDestroyed(b.id)
+
+        _ = snapshotService.snapshot(followFocus: false)
+        #expect(snapshotService.destroyedWindowRetryDeadline(now: clock.now) == nil)
+
+        for pass in 0...10 {
+            _ = snapshotService.producerSnapshot(cycle: 2)
+            if pass == 5 { snapshotService.noteWindowDestroyed(b.id) }
+            if pass < 10 {
+                let retryAt = clock.now.addingTimeInterval(0.05)
+                #expect(snapshotService.destroyedWindowRetryDeadline(now: clock.now) == retryAt)
+                if pass == 0 {
+                    _ = snapshotService.producerSnapshot(cycle: 2)
+                    #expect(snapshotService.destroyedWindowRetryDeadline(now: clock.now) == retryAt)
+                }
+            } else {
+                #expect(snapshotService.destroyedWindowRetryDeadline(now: clock.now) == nil)
+            }
+            clock.now += 0.051
+        }
+    }
+
+    @Test
+    func elapsedDestroyedWindowRetryRemainsRunnable() throws {
+        let a = powerWindow(1, x: 100)
+        let b = powerWindow(2, x: 400)
+        let store = twoStageStore(a: a, b: b)
+        let clock = StabilizationClock()
+        let provider = SnapshotCallCountingProvider(display: display, windows: [a, b])
+        let snapshotService = SnapshotService(
+            provider: provider, frameWriter: RecordingWriter(), config: RoadieConfig(),
+            stageStore: store, events: EventLog(path: tempPath("elapsed-close-retry-events")),
+            clock: { clock.now }
+        )
+        let maintainer = LayoutMaintainer(
+            service: snapshotService,
+            dragActivity: WindowDragActivity(path: tempPath("elapsed-close-retry-drag"), enabled: false),
+            commandActivity: LayoutCommandActivity(path: tempPath("elapsed-close-retry-command"), enabled: false),
+            episodes: EpisodeContext(now: { clock.now }),
+            now: { clock.now }
+        )
+        _ = snapshotService.producerSnapshot(cycle: 2)
+        snapshotService.noteWindowDestroyed(b.id)
+        _ = snapshotService.producerSnapshot(cycle: 2)
+        let retryAt = try #require(snapshotService.destroyedWindowRetryDeadline(now: clock.now))
+
+        clock.now += 0.10
+
+        #expect(maintainer.nextDeadline(now: clock.now) == retryAt)
     }
 
     @Test

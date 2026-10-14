@@ -1,11 +1,19 @@
 <!-- SPECKIT START -->
-Current SpecKit feature: `028-search-dismissal`.
+Session 029 implémentée le 2026-10-14 : fermeture confirmée propagée au StageStore,
+grâce transitoire de 15 secondes conservée, cible p95 inférieure à 400 ms.
+Tests ciblés : 117 succès. Suite complète : 1466 succès. Revue finale approuvée.
+Audit v14 : A, aucun finding, validateur conforme. Build Release installé et signé.
+Runtime Roadie actif sur le PID 93111. Une fermeture réelle a produit le marqueur
+`confirmedClosedAt` et un rafraîchissement du rail 90 ms après la détection.
+Worktree avant intégration : /Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/029-navrail-fermeture.
+Artefacts : specs/029-navrail-fermeture/. Livraison Git encore à finaliser.
+Current SpecKit feature: `029-navrail-fermeture`.
 
 Contexte :
-- `specs/028-search-dismissal/spec.md`
-- `specs/028-search-dismissal/plan.md`
-- `specs/028-search-dismissal/research.md`
-- `specs/028-search-dismissal/tasks.md`
+- `specs/029-navrail-fermeture/spec.md`
+- `specs/029-navrail-fermeture/plan.md`
+- `specs/029-navrail-fermeture/research.md`
+- `specs/029-navrail-fermeture/tasks.md`
 <!-- SPECKIT END -->
 
 <!-- SPECKIT-USER START -->

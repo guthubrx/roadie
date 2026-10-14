@@ -1,0 +1,106 @@
+{
+  "$schema": "audit-code-v14/aggregated-findings",
+  "meta": {
+    "version": "v14.0",
+    "timestamp": "2026-10-14T08:12:00Z",
+    "start_timestamp": "2026-10-14T08:10:40Z",
+    "end_timestamp": "2026-10-14T08:12:00Z",
+    "duration_ms": 80000,
+    "audit_scope": "/Users/moi/Nextcloud/10.Scripts/39.roadie/.worktrees/029-navrail-fermeture (SPEC-029, cinq fichiers Swift modifiés)",
+    "audit_mode": "readonly",
+    "audit_grid": "all (périmètre feature)",
+    "modules_actifs": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "10", "11", "12"],
+    "score_global": "A",
+    "release_blocked": false,
+    "scores": {
+      "security": "A",
+      "supply_chain": "A",
+      "observability": "A",
+      "reliability": "A",
+      "tests": "A",
+      "performance": "A",
+      "complexity": "A",
+      "quality": "A",
+      "architecture": "A",
+      "ai_hygiene": "A",
+      "duplication": "A",
+      "minimalism": "A",
+      "ux": "A",
+      "llm_security": "N/A"
+    },
+    "repository": {
+      "files_count": 250,
+      "languages": ["swift"],
+      "frameworks": ["AppKit", "ApplicationServices", "Swift Testing", "TOMLKit"],
+      "type": "macOS desktop daemon + CLI",
+      "has_ui": true,
+      "has_llm_integration": false,
+      "db_type": "JSON files",
+      "ci_system": null,
+      "container": false
+    }
+  },
+  "execution_metrics": {
+    "files_scanned": 5,
+    "files_total": 5,
+    "lines_analyzed": 382,
+    "tools_used": ["rg", "git diff", "swift test", "jscpd", "swift-format lint", "cross-provider review"],
+    "coverage_estimate_percent": 100,
+    "sampling_method": null,
+    "phases_completed": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "10", "11", "12"],
+    "phases_skipped": ["09 (readonly)"],
+    "warnings": [
+      "Aucun scan CVE externe ni scan complet des secrets dans l’historique Git : aucun changement de dépendance ou de secret dans le périmètre.",
+      "Le formateur swift-format signale de nombreux écarts historiques sur les fichiers complets ; il n’est pas configuré comme gate du dépôt.",
+      "JSCPD mesure 5,77 % sur les cinq fichiers complets ; aucun clone ne touche les lignes de production ajoutées. Les répétitions nouvelles de tests font 7 à 8 lignes.",
+      "Phase 2bis : aucun finding CRITICAL ou HIGH à contre-auditer.",
+      "La validation native avec une vraie fermeture de fenêtre est prévue après installation ; l’audit readonly s’appuie sur les tests déterministes et les trois revues de code."
+    ]
+  },
+  "summary": {
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "total": 0,
+    "by_category": {}
+  },
+  "supply_chain": {
+    "slsa_level": null,
+    "slsa_target": 2,
+    "sbom_ready": false,
+    "vulnerable_deps_count": null,
+    "license_issues_count": null,
+    "note": "Aucune dépendance modifiée dans SPEC-029."
+  },
+  "duplicated_code": {
+    "jscpd_percentage": 5.767884642307155,
+    "duplicated_lines": 824,
+    "max_block_lines": null,
+    "total_occurrences": 101,
+    "critical_blocks": [],
+    "method": "JSCPD sur les cinq fichiers complets ; revue ciblée des clones qui croisent les lignes modifiées."
+  },
+  "ai_hygiene": {
+    "suspected_ai_ratio_percent": null,
+    "dead_code_files": 0,
+    "incomplete_implementations": 0,
+    "critical_todos": 0
+  },
+  "llm_governance": {"applicable": false},
+  "slos": {
+    "defined": true,
+    "targets": {"confirmed_close_navrail_p95_ms": 400, "retry_delay_ms": 50, "retry_limit": 10}
+  },
+  "findings": [],
+  "suppressed": [],
+  "positive_findings": [
+    "La capture pending/recent est atomique sous le verrou du process state (Sources/RoadieDaemon/DaemonSnapshot.swift:2435).",
+    "Les reprises sont limitées en nombre et en durée (Sources/RoadieDaemon/DaemonSnapshot.swift:2461).",
+    "Le membre persistant reste disponible pour le remappage et le marqueur est effacé au retour de la fenêtre (Sources/RoadieDaemon/StageStore.swift:1369).",
+    "Le rail redessine sur le changement du marqueur et masque seulement les fenêtres absentes confirmées (Sources/RoadieDaemon/RailController.swift:180 et 1234).",
+    "La suite complète passe avec 1466 tests dans 156 suites."
+  ],
+  "roadmap": {"immediate": [], "short_term": [], "medium_term": [], "long_term": []}
+}

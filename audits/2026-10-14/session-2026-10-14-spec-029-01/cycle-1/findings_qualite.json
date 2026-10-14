@@ -1,0 +1,8 @@
+{
+  "module": "05",
+  "findings": [],
+  "positive_findings": [
+    "Les noms confirmedClosedAt et DestroyedWindowEvidence expriment l’intention et la durée de vie.",
+    "Les commentaires expliquent la conservation du membre pour le remappage."
+  ]
+}

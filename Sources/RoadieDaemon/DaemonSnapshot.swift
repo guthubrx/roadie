@@ -213,7 +213,12 @@ public struct SnapshotService {
     /// Destruction confirmée d'une fenêtre (`kAXUIElementDestroyedNotification`, SPEC-017 A9) : sa
     /// feuille est retirée de l'arbre au prochain snapshot écrivain, sans attendre la purge du membre.
     public func noteWindowDestroyed(_ windowID: WindowID) {
-        processState.noteDestroyed(windowID)
+        processState.noteDestroyed(windowID, at: clock())
+    }
+
+    /// Prochaine relecture courte d'une fermeture que CoreGraphics présente encore.
+    func destroyedWindowRetryDeadline(now: Date) -> Date? {
+        processState.destroyedWindowRetryDeadline(now: now)
     }
 
     /// Dernière application d'arbre demandée par une commande pour ce scope (A15). Le maintainer
@@ -250,7 +255,11 @@ public struct SnapshotService {
         // postérieure à la dernière disparition de fenêtre et hors des 500 ms qui la suivent.
         let observation = processState.recordLiveWindows(stageManagedWindowIDs, now: now)
         let focusChangeAllowed = userInput.allowsFocusChange(now: now, lastDisappearanceAt: observation.lastDisappearanceAt)
-        let destroyedWindowIDs = processState.destroyedWindowIDs()
+        // Le relevé peut recevoir une notification AX après `now`. Capture les identifiants et
+        // leur fraîcheur ensemble, avec une heure relue après l'énumération CoreGraphics.
+        let destructionSnapshot = processState.destructionSnapshot(now: clock())
+        let destroyedWindowIDs = destructionSnapshot.pending
+        let recentDestroyedWindowIDs = destructionSnapshot.recent
         let input = ReconciliationInput(
             config: config,
             displays: displays,
@@ -264,6 +273,7 @@ public struct SnapshotService {
             followFocus: followFocus,
             focusChangeAllowed: focusChangeAllowed,
             destroyedWindowIDs: destroyedWindowIDs,
+            recentDestroyedWindowIDs: recentDestroyedWindowIDs,
             now: now
         )
 
@@ -280,8 +290,11 @@ public struct SnapshotService {
             appendReconciliationEvents(result)
             // Une destruction est consommée quand la fenêtre a quitté la liste vivante : avant,
             // elle bloque seulement sa réinsertion (liste CoreGraphics en retard sur AX).
-            processState.recordTreeReconciliation(
-                consumedDestroyed: destroyedWindowIDs.subtracting(stageManagedWindowIDs)
+            processState.recordDestructionReconciliation(
+                observedDestroyedWindowIDs: destroyedWindowIDs,
+                liveWindowIDs: stageManagedWindowIDs,
+                at: clock(),
+                advancesRetry: producer
             )
         } else {
             var persistedStages = stageStore.state()
@@ -320,6 +333,7 @@ public struct SnapshotService {
         let followFocus: Bool
         let focusChangeAllowed: Bool
         let destroyedWindowIDs: Set<WindowID>
+        let recentDestroyedWindowIDs: Set<WindowID>
         let now: Date
     }
 
@@ -381,6 +395,10 @@ public struct SnapshotService {
             missingGrace: Self.stageMembershipMissingGrace,
             lastObservedAt: input.lastObservedWindowAt,
             now: now
+        )
+        persistedStages.markConfirmedClosed(
+            windowIDs: input.recentDestroyedWindowIDs.subtracting(stageManagedWindowIDs),
+            at: now
         )
         let prunedPins = persistedStages.pruneMissingPins(keeping: liveWindowIDs, now: now)
         let prunedBookmarks = persistedStages.pruneMissingBookmarks(keeping: liveWindowIDs, now: now)
@@ -2263,6 +2281,10 @@ final class SnapshotProcessState: @unchecked Sendable {
     static let producerMargin: TimeInterval = 0.1
     /// Validité maximale d'un snapshot du tiler, quel que soit son intervalle.
     static let producerMaxAgeCap: TimeInterval = 0.6
+    /// Une preuve AX ancienne ne doit pas transformer une future absence transitoire en fermeture.
+    static let destroyedMembershipEvidenceMaxAge: TimeInterval = 5
+    static let destroyedWindowRetryDelay: TimeInterval = 0.05
+    static let destroyedWindowRetryLimit = 10
 
     static func producerMaxAge(cycle: TimeInterval) -> TimeInterval {
         min(max(cycle, 0) + producerMargin, producerMaxAgeCap)
@@ -2288,6 +2310,12 @@ final class SnapshotProcessState: @unchecked Sendable {
         let config: RoadieConfig
     }
 
+    private struct DestroyedWindowEvidence {
+        let observedAt: Date
+        var scheduledRetries: Int
+        var retryAt: Date?
+    }
+
     private let lock = NSLock()
     /// Clé : option `followFocus` du snapshot publié.
     private var published: [Bool: Published] = [:]
@@ -2302,6 +2330,7 @@ final class SnapshotProcessState: @unchecked Sendable {
     /// Arbres (SPEC-017) : destructions confirmées en attente, dernière application par commande,
     /// migration déjà tentée.
     private var destroyed: Set<WindowID> = []
+    private var destroyedEvidence: [WindowID: DestroyedWindowEvidence] = [:]
     private var treeAppliedAt: [StageScope: Date] = [:]
     private var legacyTreeMigrationClaimed = false
     /// Rang de la dernière passe de commande dans son épisode (`pass` de `layout_apply`, A12).
@@ -2392,16 +2421,71 @@ final class SnapshotProcessState: @unchecked Sendable {
         }
     }
 
-    func noteDestroyed(_ id: WindowID) {
-        lock.withLock { _ = destroyed.insert(id) }
+    func noteDestroyed(_ id: WindowID, at date: Date) {
+        lock.withLock {
+            guard destroyed.insert(id).inserted else { return }
+            destroyedEvidence[id] = DestroyedWindowEvidence(
+                observedAt: date,
+                scheduledRetries: 0,
+                retryAt: nil
+            )
+        }
     }
 
-    func destroyedWindowIDs() -> Set<WindowID> {
-        lock.withLock { destroyed }
+    func destructionSnapshot(now: Date) -> (pending: Set<WindowID>, recent: Set<WindowID>) {
+        lock.withLock {
+            let recent = Set(destroyedEvidence.compactMap { id, evidence in
+                let age = now.timeIntervalSince(evidence.observedAt)
+                return age >= 0 && age <= Self.destroyedMembershipEvidenceMaxAge ? id : nil
+            })
+            return (destroyed, recent)
+        }
     }
 
-    func recordTreeReconciliation(consumedDestroyed: Set<WindowID>) {
-        lock.withLock { destroyed.subtract(consumedDestroyed) }
+    /// Consomme les fermetures disparues. Un snapshot producteur programme au plus dix relectures
+    /// par identifiant quand CoreGraphics présente encore la fenêtre. Les lecteurs ne comptent pas.
+    func recordDestructionReconciliation(
+        observedDestroyedWindowIDs: Set<WindowID>,
+        liveWindowIDs: Set<WindowID>,
+        at date: Date,
+        advancesRetry: Bool
+    ) {
+        lock.withLock {
+            // Le relevé et cette décision forment une même photographie. Une destruction arrivée
+            // pendant le relevé reste donc en attente de la passe suivante.
+            let observed = destroyed.intersection(observedDestroyedWindowIDs)
+            let consumed = observed.subtracting(liveWindowIDs)
+            destroyed.subtract(consumed)
+            for id in consumed { destroyedEvidence[id] = nil }
+            guard advancesRetry else { return }
+            for id in observed.intersection(liveWindowIDs) {
+                guard var evidence = destroyedEvidence[id] else { continue }
+                let age = date.timeIntervalSince(evidence.observedAt)
+                guard age >= 0,
+                      age <= Self.destroyedMembershipEvidenceMaxAge,
+                      evidence.scheduledRetries < Self.destroyedWindowRetryLimit
+                else {
+                    evidence.retryAt = nil
+                    destroyedEvidence[id] = evidence
+                    continue
+                }
+                if let retryAt = evidence.retryAt, date < retryAt { continue }
+                evidence.scheduledRetries += 1
+                evidence.retryAt = date.addingTimeInterval(Self.destroyedWindowRetryDelay)
+                destroyedEvidence[id] = evidence
+            }
+        }
+    }
+
+    func destroyedWindowRetryDeadline(now: Date) -> Date? {
+        lock.withLock {
+            destroyedEvidence.values.compactMap { evidence in
+                let age = now.timeIntervalSince(evidence.observedAt)
+                return age >= 0 && age <= Self.destroyedMembershipEvidenceMaxAge
+                    ? evidence.retryAt
+                    : nil
+            }.min()
+        }
     }
 
     func noteTreeScopeApplied(_ scope: StageScope, at date: Date) {

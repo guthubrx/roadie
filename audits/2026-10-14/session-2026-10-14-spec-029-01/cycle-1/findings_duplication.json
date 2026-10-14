@@ -1,0 +1,8 @@
+{
+  "module": "07",
+  "findings": [],
+  "positive_findings": [
+    "JSCPD ne trouve aucun bloc dupliqué dans les lignes de production ajoutées.",
+    "Les seuls blocs nouveaux répétés sont des préparations de tests de 7 à 8 lignes."
+  ]
+}
