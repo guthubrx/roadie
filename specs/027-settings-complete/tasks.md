@@ -23,3 +23,10 @@ santé OK. Certificat et permissions macOS conservés.
 T009 : test utilisateur confirmé (« Oui, tout fonctionne »). Commit `6190f4de`
 fusionné dans `main`, branches 026 et 027 supprimées. Le worktree de cette
 conversation est conservé, avec sa branche 025 alignée sur `main`.
+
+## Suivi de publication demandé après clôture
+
+- [x] T010 Publier v0.5.0, actualiser les README et les guides, réécrire les notes
+  0.4.0, vérifier le DMG et contrôler les notes et fichiers publiés sur GitHub.
+
+La publication et ses preuves sont consignées dans release-0.5.0.md.

@@ -55,5 +55,16 @@ Version 0.5.0 installée et redémarrée : PID 85924, quatre contrôles de sant�
 configuration valide et permissions Accessibilité et capture d'écran conservées.
 Certificat habituel conservé : `78a75e8032f190a20072eb91cc2919aac344ef78`.
 
-Publication et contrôle distant restent à faire. Les vérifications préalables
-et la relecture sont terminées.
+## Publication vérifiée
+
+Release v0.5.0 publiée le 14 octobre 2026 à 05:52:19 UTC, au commit
+`7c61ef7a6fc57faecf1616c1c3e722eed18d6f6a`, après fusion et push de main.
+URL : https://github.com/guthubrx/roadie/releases/tag/v0.5.0
+
+Le DMG et son fichier SHA-256 sont joints. Un nouveau téléchargement depuis
+GitHub passe le contrôle d'intégrité ; taille et empreinte distantes correspondent
+au paquet vérifié. La version 0.5.0 est déclarée comme dernière release.
+
+Le corps de la release v0.4.0 est actualisé et correspond au texte français
+réécrit. Son tag reste `5ab0ab9544de68edbd6642f58ac6140ef8a07f1e` et ses pièces
+jointes gardent leurs identifiants, leur taille et leur empreinte d'origine.

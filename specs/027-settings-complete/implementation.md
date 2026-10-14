@@ -116,6 +116,8 @@ ni deuxième notification des paramètres ni boucle de nouvelle tentative.
 - Commit de livraison : `6190f4de`, fusionné dans `main` sans conflit.
 - Les branches fusionnées 026 et 027 sont supprimées. Le worktree lié à la
   conversation et sa branche 025 sont conservés et alignés sur `main`.
+- Publication ultérieure demandée par l'utilisateur : v0.5.0 publiée et vérifiée,
+  notes 0.4.0 réécrites. Voir release-0.5.0.md pour les contrôles et les empreintes.
 
 ## Limites connues
 
