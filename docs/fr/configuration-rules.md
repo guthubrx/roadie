@@ -1,5 +1,19 @@
 # Configuration et rules
 
+## Modifier les réglages dans Roadie
+
+La commande `/settings` ouvre la fenêtre de paramètres. Les valeurs valides
+s'appliquent pendant la saisie, sans Retour. Les listes, stages, règles et
+exceptions disposent d'éditeurs intégrés. Les fragments complexes exigent un
+enregistrement explicite dans l'éditeur avancé.
+Les `signals.hooks` peuvent être enregistrés dans cet éditeur, mais Roadie ne
+les exécute pas actuellement.
+
+Une modification de marge ou d'espacement retuile les fenêtres. Les valeurs
+par écran ou par côté gardent leur priorité sur la marge générale. Le fichier
+reste disponible pour les usages avancés ; son édition n'est pas nécessaire
+pour les réglages courants.
+
 ## Fichier de configuration
 
 Roadie lit sa configuration utilisateur ici :
@@ -61,7 +75,10 @@ master_ratio = 0.6
 smart_gaps_solo = true
 ```
 
-`default_strategy` accepte `bsp`, `mutableBsp`, `masterStack` ou `float`.
+`default_strategy` accepte `bsp`, `spatialBsp`, `masterStack` ou `float`.
+`mutableBsp` et `yabai` restent des alias de `spatialBsp`.
+Le menu de découpage propose `largest_dim`, `dwindle` et `balanced`.
+Ce dernier choix reste disponible pour les configurations anciennes.
 
 Cas d'usage :
 
@@ -127,6 +144,29 @@ Cas d'usage :
 - passer rapidement d'une demi-largeur a deux tiers d'ecran;
 - nudger une fenetre par petits pas;
 - borner les ratios pour eviter des frames absurdes.
+
+## Typographie
+
+Les tailles de la fenêtre de paramètres et celles des autres surfaces sont
+indépendantes. Elles s'appliquent aux interfaces déjà ouvertes.
+
+```toml
+[interface]
+settings_text_font_size = 16
+settings_help_font_size = 14
+settings_title_font_size = 22
+
+[experimental.target_mode]
+search_text_font_size = 15
+command_text_font_size = 13
+search_font_family = "system"
+command_font_family = "system"
+```
+
+Dans Recherche, choisir séparément la famille et la taille de la saisie Caps+F
+et des suggestions. Le menu liste les familles installées. `system`, une valeur
+vide ou une famille absente utilise la police macOS.
+Voir la [référence des tailles d'interface](features.md).
 
 ## Mode Cibles Et Grilles
 
@@ -226,8 +266,8 @@ Une rule doit avoir au moins un champ de match.
 - `assign_stage` : stage cible, resolue par ID puis par nom visible. Si elle n'existe pas, Roadie la cree.
 - `follow` : active la destination et focalise la fenetre apres placement si `true`. Par defaut `false`.
 - `floating` : comportement flottant.
-- `layout` : indication de layout.
-- `gap_override` : override de gaps.
+- `layout` : indication enregistrée, sans effet sur le tuilage actuellement.
+- `gap_override` : valeur enregistrée, sans effet sur les marges actuellement.
 - `scratchpad` : marqueur scratchpad expose dans l'evaluation.
 - `emit_event` : marqueur de politique evenementielle.
 

@@ -13,7 +13,7 @@ Roadie is written in Swift. It groups windows into stages and tiles the active s
 
 **Status:** active development. Commands and configuration can still change. This README describes the current sources: reactive tiling, search across visible windows, the command box, the settings window, and reliability fixes. Build from `main` to use this code.
 
-Release [v0.4.0](https://github.com/guthubrx/roadie/releases/tag/v0.4.0) adds search, the command box, and settings. See the [changelog](CHANGELOG.md) and [release notes](docs/releases/v0.4.0.md) for features, migration steps, and known limits.
+Version [0.5.0](https://github.com/guthubrx/roadie/releases/tag/v0.5.0) brings live settings, built-in editors and a Caps+F bar with Tab completion and customizable fonts. See the [changelog](CHANGELOG.md) and [release notes](docs/releases/v0.5.0.en.md).
 
 <p align="center">
   <img src="docs/assets/screenshot-multi-display.png" alt="Roadie desktop with tiling, nav rail, and CLI" width="100%">

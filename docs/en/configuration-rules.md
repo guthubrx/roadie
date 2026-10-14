@@ -1,5 +1,17 @@
 # Configuration And Rules
 
+## Editing Settings in Roadie
+
+`/settings` opens the settings window. Valid values apply as you type, without
+Return. Lists, stages, rules and overrides have built-in editors. Complex
+fragments require explicit saving in the advanced editor.
+`signals.hooks` can be stored in this editor, but Roadie does not currently
+execute them.
+
+Margin and spacing changes retile windows. Display and side overrides retain
+priority over general margins. The file remains available for advanced use;
+editing it is not required for common settings.
+
 ## Configuration File
 
 Roadie reads user configuration from:
@@ -60,7 +72,10 @@ master_ratio = 0.6
 smart_gaps_solo = true
 ```
 
-`default_strategy` accepts `bsp`, `mutableBsp`, `masterStack`, or `float`.
+`default_strategy` accepts `bsp`, `spatialBsp`, `masterStack`, or `float`.
+`mutableBsp` and `yabai` remain aliases of `spatialBsp`.
+The split menu offers `largest_dim`, `dwindle` and `balanced`.
+The latter remains available for existing configurations.
 
 Use cases:
 
@@ -126,6 +141,29 @@ Use cases:
 - quickly move from half width to two thirds of the screen;
 - nudge a window by small steps;
 - bound ratios to avoid absurd frames.
+
+## Typography
+
+Settings-window font sizes and other interface sizes are independent.
+Changes apply to interfaces that are already open.
+
+```toml
+[interface]
+settings_text_font_size = 16
+settings_help_font_size = 14
+settings_title_font_size = 22
+
+[experimental.target_mode]
+search_text_font_size = 15
+command_text_font_size = 13
+search_font_family = "system"
+command_font_family = "system"
+```
+
+Under Recherche, choose separate families and sizes for Caps+F input and
+suggestions. The menu lists installed families. `system`, an empty value or a
+missing family falls back to the macOS font.
+See the [interface size reference](features.md).
 
 ## Keyboard Targets And Grids
 
@@ -225,8 +263,8 @@ A rule must have at least one match field.
 - `assign_stage`: target stage, resolved by ID then visible name. If it does not exist, Roadie creates it.
 - `follow`: activates the destination and focuses the window after placement when `true`. Defaults to `false`.
 - `floating`: floating behavior.
-- `layout`: layout hint.
-- `gap_override`: gap override.
+- `layout`: stored hint; it does not currently affect tiling.
+- `gap_override`: stored value; it does not currently affect margins.
 - `scratchpad`: scratchpad marker exposed by evaluation.
 - `emit_event`: event policy marker.
 

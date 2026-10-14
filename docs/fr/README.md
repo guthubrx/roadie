@@ -9,6 +9,7 @@ Guides français pour les sources actuelles de `main`. Le [README principal](../
 - [Configuration et règles](configuration-rules.md)
 - [Événements et API de requêtes](events-query.md)
 - [Cas d’usage](use-cases.md)
+- [Notes de release 0.5.0](../releases/v0.5.0.md)
 
 `roadie toggle maximize` agrandit la fenêtre active en gardant la bande du navrail visible libre. Relance la commande pour restaurer la disposition. Les voisines de la même stage sont cachées pendant la maximisation. Activer une autre fenêtre de cette stage restaure directement la disposition. Changer de stage conserve le zoom sauvegardé. Avec le masquage automatique, le rail masqué laisse toute la zone utile, comme le plein écran Roadie. Quand il revient au survol ou avec `roadie rail pin`, la fenêtre se redimensionne pour lui laisser la place, sans quitter la maximisation. Le menu de titre propose aussi « Fenêtre → Maximiser / restaurer (garder le navrail) » lorsqu'il est activé.
 
@@ -25,7 +26,7 @@ Roadie combine tiling automatique, stages nommés et bureaux virtuels Roadie. Ch
 - **Outils de fenêtre :** bordure de focus, focus à la souris, actions de barre de titre, épinglages, signets et groupes persistants.
 - **Exécution fiable :** socket local, écritures atomiques, cache partagé, rechargement validé de la configuration, récupération des fenêtres masquées et requêtes de santé.
 - **Automatisation :** CLI, règles TOML, requêtes JSON, événements JSONL et diagnostics de performance en lecture seule.
-- **Boîte de commandes et réglages :** `/` dans la recherche, suggestions et historique, fenêtre `/settings`, lecture et écriture avec `/set`, taille des étiquettes de 8 à 48 points.
+- **Boîte de commandes et réglages :** `/` dans la recherche, complétion par Tab et historique. `/settings` propose la saisie immédiate, les éditeurs de listes, de stages et de règles, ainsi que les polices indépendantes. `/set` permet aussi de lire, modifier ou rétablir une valeur.
 - **Modes facultatifs :** cibles clavier, recherche dans toutes les fenêtres visibles, découverte expérimentale des zones applicatives, grilles écran/fenêtre et macros courtes.
 - **Exécution modulaire :** processus séparés pour le tiling, le rail, la bordure, le focus, les actions de barre de titre et les cibles. Les profils limités au rôle de compagnon restent à définir.
 
