@@ -386,6 +386,15 @@ public enum AppWindowFocusWait: Equatable, Sendable {
     case timedOut
 }
 
+/// Frontière AX injectable : les fixtures exécutent le même parcours sans permission macOS.
+struct AppTargetScanReader {
+    var string: (AXUIElement, String) -> String?
+    var actions: (AXUIElement) -> [String]
+    var frame: (AXUIElement) -> Rect?
+    var children: (AXUIElement, Bool) -> (children: [AXUIElement], unreadable: Bool)
+    var focusSettable: (AXUIElement) -> Bool
+}
+
 public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     /// Points d'injection des tests (REL-012, TEST-002) : attente du focus et émission des événements
     /// souris, sans AX ni CGEvent réels.
@@ -629,7 +638,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             ? "enabled" : "unsupported"
     }
 
-    private struct ScanPass {
+    struct ScanPass {
         var candidates: [AppElementCandidate] = []
         var visited = 0
         var offscreen = 0
@@ -644,16 +653,24 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
     }
 
     /// Complexité : O(n + m + p + u * d), n = éléments lus ; voir `focusableLeaves` pour m, p, u, d.
-    private func scan(window: AXUIElement, rootPath: String, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date) -> ScanPass {
-        let windowFrame = Self.copyFrame(window)
+    func scan(window: AXUIElement, rootPath: String, pid: pid_t, config: AppTargetsConfig, boost: Bool, deadline: Date,
+              reader: AppTargetScanReader? = nil) -> ScanPass {
+        let readString = reader?.string ?? copyStringAttribute
+        let readActions = reader?.actions ?? copyActionNames
+        let readFrame = reader?.frame ?? Self.copyFrame
+        let readChildren = reader?.children ?? Self.copyChildren
+        let readFocusSettable = reader?.focusSettable ?? isFocusSettable
+        let windowFrame = readFrame(window)
         // `inWeb` : sous une `AXWebArea` ; `retainedFrame` : cadre visible de la plus proche cible web ajoutée.
-        // `textOwner` : chemin du plus proche candidat web, qui reçoit le texte des `AXStaticText` (SPEC-021).
-        var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?)] =
-            [(window, rootPath, 0, false, nil, nil)]
+        // Le texte natif reste dans le cadre de son contrôle ; les zones web gardent leur règle SPEC-021.
+        var stack: [(element: AXUIElement, path: String, depth: Int, inWeb: Bool, retainedFrame: Rect?, textOwner: String?, textOwnerFrame: Rect?)] =
+            [(window, rootPath, 0, false, nil, nil, nil)]
         var pass = ScanPass()
         var seen = CFIdentitySet()
         let ignoredActions: Set<String> = ["AXShowMenu", "AXScrollToVisible", "AXShowDefaultUI", "AXShowAlternateUI"]
         let includedRoles = Set(config.includeRoles)
+        let nativeTextRoles: Set<String> = ["AXRow", "AXCell", "AXButton", "AXLink", "AXCheckBox", "AXRadioButton",
+                                            "AXPopUpButton", "AXMenuItem", "AXTextField", "AXComboBox", "AXTab"]
         // SPEC-020 : feuilles focalisables en attente et marqueurs de zone web, en préordre.
         var pending: [(candidate: AppElementCandidate, path: String, element: AXUIElement)] = []
         var markers: [String] = []
@@ -663,7 +680,7 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         var contents: [String: (frame: Rect, element: AXUIElement)] = [:]
 
         while let entry = stack.popLast() {
-            let (element, path, depth, parentInWeb, retainedFrame, textOwner) = entry
+            let (element, path, depth, parentInWeb, retainedFrame, textOwner, textOwnerFrame) = entry
             guard seen.insert(element) else { continue }
             if pass.candidates.count >= config.maxTargets {
                 pass.stopReason = "limit"
@@ -677,19 +694,24 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             }
             pass.visited += 1
             pass.maxDepthReached = max(pass.maxDepthReached, depth)
-            let role = copyStringAttribute(element, kAXRoleAttribute) ?? "AXUnknown"
+            let role = readString(element, kAXRoleAttribute) ?? "AXUnknown"
             let isWebArea = role == "AXWebArea"
             let inWeb = parentInWeb || isWebArea
             pass.sawWebArea = pass.sawWebArea || isWebArea
-            let title = copyStringAttribute(element, kAXTitleAttribute)
-                ?? copyStringAttribute(element, kAXDescriptionAttribute)
-                ?? ""
-            let value = copyStringAttribute(element, kAXValueAttribute)
-            let actions = copyActionNames(element).filter { !ignoredActions.contains($0) }
+            // Une liste native peut publier des centaines de lignes hors fenêtre. Leur cadre suffit
+            // à les rejeter : ne pas dépenser le budget en libellés/actions, mais lire encore les enfants.
+            let readsNativeFrame = !inWeb && (role == "AXRow" || role == "AXCell" || role == "AXStaticText")
+            let nativeFrame = readsNativeFrame ? readFrame(element) : nil
+            let skipsMetadata = nativeFrame != nil && nativeFrame.flatMap { AppTargetQueryService.visibleFrame($0, in: windowFrame) } == nil
+            let rawTitle = skipsMetadata ? nil : readString(element, kAXTitleAttribute)
+            let preferredTitle = inWeb ? rawTitle : Self.nonempty(rawTitle)
+            let title = skipsMetadata ? "" : preferredTitle ?? readString(element, kAXDescriptionAttribute) ?? ""
+            let value = skipsMetadata ? nil : readString(element, kAXValueAttribute)
+            let actions = skipsMetadata ? [] : readActions(element).filter { !ignoredActions.contains($0) }
             let isCandidate = !actions.isEmpty || includedRoles.contains(role)
             // SolidJS, React... délèguent les clics au document : Chromium ne donne pas d'action aux
             // éléments cliquables, mais les expose focalisables (mesure Bluejay, research.md).
-            let isPending = !isCandidate && inWeb && !isWebArea && depth < config.maxDepth && isFocusSettable(element)
+            let isPending = !isCandidate && inWeb && !isWebArea && depth < config.maxDepth && readFocusSettable(element)
             if inWeb && (isCandidate || isPending) {
                 markers.append(path)
             }
@@ -699,8 +721,14 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
             var retained = false
             var retainedVisible: Rect?
             // Zone web : le cadre est lu pour tous, afin de ne pas descendre dans un élément invisible.
-            let frame = isCandidate || isPending || (inWeb && !isWebArea) ? Self.copyFrame(element) : nil
+            let needsFrame = isCandidate || isPending || (inWeb && !isWebArea) || (textOwner != nil && role == "AXStaticText")
+            let frame = readsNativeFrame ? nativeFrame : (needsFrame ? readFrame(element) : nil)
             let visibleFrame = frame.flatMap { AppTargetQueryService.visibleFrame($0, in: windowFrame) }
+            if !inWeb, role == "AXStaticText", let owner = textOwner, let ownerFrame = textOwnerFrame,
+               let visible = visibleFrame, !visible.cgRect.intersection(ownerFrame.cgRect).isEmpty,
+               let text = Self.nonempty(value) ?? Self.nonempty(title) {
+                texts[owner, default: []].append(text)
+            }
             if inWeb, role == "AXImage" || role == "AXStaticText", let owner = textOwner, contents[owner] == nil,
                let visible = visibleFrame, AppTargetQueryService.isHintable(visible) {
                 contents[owner] = (visible, element)
@@ -748,11 +776,13 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
                 if AppTargetQueryService.hidesContent(visibleFrame) { markers.append(path + ".?") }
                 continue
             }
-            let (children, unreadable) = Self.copyChildren(element, boost: boost && !inWeb)
+            let (children, unreadable) = readChildren(element, boost && !inWeb)
             if inWeb && unreadable { markers.append(path + ".?") }
+            let ownsNativeText = !inWeb && retained && nativeTextRoles.contains(role)
             for (index, child) in children.enumerated().reversed() {
                 stack.append((child, "\(path).\(index)", depth + 1, inWeb, inWeb && retained ? retainedVisible : retainedFrame,
-                              inWeb && (isCandidate || isPending) ? path : textOwner))
+                              (inWeb && (isCandidate || isPending)) || ownsNativeText ? path : textOwner,
+                              ownsNativeText ? retainedVisible : textOwnerFrame))
             }
         }
 
@@ -792,6 +822,10 @@ public struct LiveAppTargetProvider: AppTargetProviding, Sendable {
         }
         pass.rejectedRoles = pass.rejectedRoles.filter { $0.value > 0 }
         return pass
+    }
+
+    private static func nonempty(_ text: String?) -> String? {
+        text.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
     }
 
     private func isFocusSettable(_ element: AXUIElement) -> Bool {
